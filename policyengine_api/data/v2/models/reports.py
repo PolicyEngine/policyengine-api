@@ -25,6 +25,8 @@ from policyengine_api.data.v2.models.users import User
 
 
 class ReportRunStatus(StrEnum):
+    """Lifecycle state of a report run; finished runs record a completion time."""
+
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -32,12 +34,16 @@ class ReportRunStatus(StrEnum):
 
 
 class ReportRunTrigger(StrEnum):
+    """Why a report run started: the report's first run, a manual or a system rerun."""
+
     INITIAL = "initial"
     MANUAL = "manual"
     SYSTEM = "system"
 
 
 class OutputStatus(StrEnum):
+    """Lifecycle state of one computed output row of a report run."""
+
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -45,12 +51,16 @@ class OutputStatus(StrEnum):
 
 
 class AggregateType(StrEnum):
+    """How an aggregate combines a variable's values."""
+
     SUM = "sum"
     MEAN = "mean"
     COUNT = "count"
 
 
 class DecileType(StrEnum):
+    """Whether deciles rank by income or by wealth."""
+
     INCOME = "income"
     WEALTH = "wealth"
 
@@ -232,6 +242,11 @@ class ReportRun(TimestampedModel, table=True):
 
 
 class AggregateOutput(IdentifiedModel, table=True):
+    """A sum, mean or count of one variable in one simulation of a report run.
+
+    ``filter_config`` optionally restricts which entities are included.
+    """
+
     __tablename__ = "aggregates"
     __table_args__ = (
         sa.Index("ix_aggregates_report_run_status", "report_run_id", "status"),
@@ -262,6 +277,12 @@ class AggregateOutput(IdentifiedModel, table=True):
 
 
 class ChangeAggregate(IdentifiedModel, table=True):
+    """An aggregate of a variable's change from baseline to reform in a report run.
+
+    ``change_geq`` and ``change_leq`` optionally restrict it to entities whose
+    change falls within those bounds.
+    """
+
     __tablename__ = "change_aggregates"
     __table_args__ = (
         sa.Index(
@@ -302,6 +323,11 @@ class ChangeAggregate(IdentifiedModel, table=True):
 
 
 class BudgetSummary(IdentifiedModel, table=True):
+    """Baseline and reform totals of one budget variable for a report run.
+
+    One row per run, variable and entity.
+    """
+
     __tablename__ = "budget_summary"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -334,6 +360,12 @@ class BudgetSummary(IdentifiedModel, table=True):
 
 
 class DecileImpact(IdentifiedModel, table=True):
+    """Mean income change and better/worse-off counts in one income quantile.
+
+    ``decile`` runs from 1 to ``quantiles``; there is one row per run, income
+    variable, entity, quantile count and decile.
+    """
+
     __tablename__ = "decile_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -379,6 +411,11 @@ class DecileImpact(IdentifiedModel, table=True):
 
 
 class IntraDecileImpact(IdentifiedModel, table=True):
+    """Shares of one decile whose income rises or falls by more or less than 5%.
+
+    One row per run, decile type and decile, where ``decile`` is 0 to 10.
+    """
+
     __tablename__ = "intra_decile_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -420,6 +457,8 @@ class IntraDecileImpact(IdentifiedModel, table=True):
 
 
 class Inequality(IdentifiedModel, table=True):
+    """Gini and top/bottom income shares for one simulation of a report run."""
+
     __tablename__ = "inequality"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -450,6 +489,8 @@ class Inequality(IdentifiedModel, table=True):
 
 
 class Poverty(IdentifiedModel, table=True):
+    """Poverty headcount and rate of one type for one simulation of a report run."""
+
     __tablename__ = "poverty"
     __table_args__ = (
         sa.Index(
@@ -479,6 +520,11 @@ class Poverty(IdentifiedModel, table=True):
 
 
 class ProgramStatistics(IdentifiedModel, table=True):
+    """Baseline and reform totals, counts, winners and losers for one program.
+
+    One row per run, program and entity; ``is_tax`` marks taxes.
+    """
+
     __tablename__ = "program_statistics"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -536,6 +582,11 @@ class GeographicImpactBase(IdentifiedModel):
 
 
 class CongressionalDistrictImpact(GeographicImpactBase, table=True):
+    """Household income change and population in one US congressional district.
+
+    One row per run and district GEOID.
+    """
+
     __tablename__ = "congressional_district_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -555,6 +606,11 @@ class CongressionalDistrictImpact(GeographicImpactBase, table=True):
 
 
 class ConstituencyImpact(GeographicImpactBase, table=True):
+    """Household income change in one UK constituency, with its map coordinates.
+
+    One row per run and constituency code.
+    """
+
     __tablename__ = "constituency_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -573,6 +629,11 @@ class ConstituencyImpact(GeographicImpactBase, table=True):
 
 
 class LocalAuthorityImpact(GeographicImpactBase, table=True):
+    """Household income change in one UK local authority, with its map coordinates.
+
+    One row per run and local authority code.
+    """
+
     __tablename__ = "local_authority_impacts"
     __table_args__ = (
         sa.UniqueConstraint(

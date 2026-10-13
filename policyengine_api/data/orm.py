@@ -29,6 +29,11 @@ _cloud_sql_connector: Connector | None = None
 
 
 def get_remote_database_config() -> dict[str, str]:
+    """Read the Cloud SQL instance, user and database name from the environment.
+
+    Raise KeyError when POLICYENGINE_DB_INSTANCE_CONNECTION_NAME is unset; the
+    user and database name default to ``policyengine``.
+    """
     return {
         "instance_connection_name": os.environ[
             "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME"

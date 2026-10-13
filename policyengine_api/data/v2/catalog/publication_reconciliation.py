@@ -48,6 +48,7 @@ COUNTRY_ID = sa.bindparam("country_id")
 
 
 def version_exists(connection: Connection, country: CountryCatalog) -> bool:
+    """Return whether the model name and version of this country are already stored."""
     statement = (
         sa.select(MODEL_VERSIONS.c.id)
         .select_from(
@@ -284,6 +285,11 @@ def assert_country_matches(
     connection: Connection,
     country: CountryCatalog,
 ) -> None:
+    """Raise CatalogPublicationError if the stored version differs from the staged one.
+
+    Rows are compared as sets in both directions, so a missing row and an extra
+    row both fail.
+    """
     for staged, actual in _comparison_pairs(country):
         if _sets_differ(connection, staged, actual):
             raise CatalogPublicationError(
@@ -626,11 +632,20 @@ SET_BASED_INSERT_STATEMENTS = (
 
 
 def publish_new_country(connection: Connection, country: CountryCatalog) -> None:
+    """Insert one country's staged catalog into the v2 tables, parents first.
+
+    The model row is reused if one with the same name already exists.
+    """
     for statement in SET_BASED_INSERT_STATEMENTS:
         connection.execute(statement, {"country_id": country.country_id})
 
 
 def assert_canonical_value_uniqueness(connection: Connection) -> None:
+    """Raise CatalogPublicationError if a parameter has duplicate current-law values.
+
+    Current-law values are those with neither a policy nor a dynamic; each
+    parameter may have only one per start date.
+    """
     duplicates = (
         sa.select(PARAMETER_VALUES.c.parameter_id)
         .where(

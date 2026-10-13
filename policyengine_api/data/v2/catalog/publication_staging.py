@@ -290,6 +290,7 @@ def copy_rows(
 
 
 def create_staging_tables(connection: Connection) -> None:
+    """Create the temporary staging tables, which Postgres drops at commit."""
     STAGING_METADATA.create_all(connection, checkfirst=False)
 
 
@@ -299,6 +300,11 @@ def stage_catalog(
     *,
     checkpoint: Callable[[str, Connection], None] | None = None,
 ) -> dict[str, int]:
+    """COPY every country's records into the staging tables and return rows per table.
+
+    Raise CatalogPublicationError if the copied counts differ from the
+    catalog's own counts.
+    """
     observed = {table.name: 0 for table in STAGING_TABLES}
     for country in catalog.countries:
         for table, rows in _catalog_rows(country).items():

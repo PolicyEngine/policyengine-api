@@ -11,6 +11,11 @@ from policyengine_api.data.v2.models.base import enum_type, utc_now
 
 
 class Stage12RunStatus(StrEnum):
+    """Lifecycle state of a Stage 12 run and of each of its simulations.
+
+    Failed and skipped rows always carry an error code.
+    """
+
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -20,6 +25,11 @@ class Stage12RunStatus(StrEnum):
 
 
 class Stage12AggregationStatus(StrEnum):
+    """Progress of combining a Stage 12 run's simulations into its aggregate.
+
+    A run can only succeed once its aggregation has succeeded.
+    """
+
     NOT_STARTED = "not_started"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -27,6 +37,11 @@ class Stage12AggregationStatus(StrEnum):
 
 
 class Stage12ResultComparisonStatus(StrEnum):
+    """Outcome of comparing a Stage 12 aggregate exactly with the production result.
+
+    Direct submissions have no production result, so they stay ``not_requested``.
+    """
+
     NOT_REQUESTED = "not_requested"
     PENDING = "pending"
     RUNNING = "running"
@@ -36,6 +51,8 @@ class Stage12ResultComparisonStatus(StrEnum):
 
 
 class Stage12SimulationRole(StrEnum):
+    """Role of a Stage 12 simulation in its run: baseline, reform or standalone."""
+
     BASELINE = "baseline"
     REFORM = "reform"
     STANDALONE = "standalone"

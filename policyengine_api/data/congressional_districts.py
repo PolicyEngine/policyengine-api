@@ -1,4 +1,4 @@
-"""US Congressional District Metadata
+"""Metadata for every US congressional district and helpers that use it.
 
 This module defines the metadata for all 435 US Congressional districts
 based on the 2020 Census apportionment, effective for the 118th Congress
@@ -620,7 +620,7 @@ def _format_district_number(number: int) -> str:
 
 
 def _build_district_name(state_code: str, number: int) -> str:
-    """Build the district name in the format: congressional_district/<STATE_CODE>-<DISTRICT_NUMBER>
+    """Build a district's region name, ``congressional_district/<STATE>-<NN>``.
 
     Examples:
         ("CA", 5) -> "congressional_district/CA-05"
@@ -632,8 +632,10 @@ def _build_district_name(state_code: str, number: int) -> str:
 
 
 def _build_district_label(state_code: str, number: int) -> str:
-    """Build the district label in the format: <STATE>'s <DISTRICT_NUMBER>th congressional district
-    For at-large districts (states with only 1 district), use: <STATE>'s at-large congressional district
+    """Build a district's display label, such as "Texas's 3rd congressional district".
+
+    At-large districts (states with only one district) are labelled
+    "<STATE>'s at-large congressional district" instead of numbered.
 
     Examples:
         ("CA", 1) -> "California's 1st congressional district"
@@ -652,7 +654,7 @@ def _build_district_label(state_code: str, number: int) -> str:
 
 
 def build_congressional_district_metadata() -> list[dict]:
-    """Build the complete congressional district metadata structure for use in country.py.
+    """Build the congressional district region entries that country.py publishes.
 
     Returns a list of dictionaries with 'name', 'label', 'type', 'state_abbreviation',
     and 'state_name' keys, formatted as:
@@ -701,7 +703,7 @@ def get_valid_state_codes() -> set[str]:
 
 
 def get_valid_congressional_districts() -> set[str]:
-    """Get the set of valid congressional district identifiers (lowercase for case-insensitive matching).
+    """Return every valid district identifier, lowercased for case-insensitive matching.
 
     Format: "<state_code>-<district_number>" (e.g., "ca-37", "tx-01")
 

@@ -28,10 +28,12 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class V1Base(DeclarativeBase):
-    pass
+    """Declarative base whose metadata is the v1 schema Alembic compares against."""
 
 
 class Household(V1Base):
+    """A saved v1 household input, with its JSON hash and country package version."""
+
     __tablename__ = "household"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     country_id: Mapped[str] = mapped_column(String(3))
@@ -95,6 +97,11 @@ class HouseholdMirrorEvent(V1Base):
 
 
 class ComputedHousehold(V1Base):
+    """A legacy cached household calculation, keyed by household, policy and country.
+
+    Mapped so Alembic sees the table; the API no longer reads or writes it.
+    """
+
     __tablename__ = "computed_household"
     household_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     policy_id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -105,6 +112,8 @@ class ComputedHousehold(V1Base):
 
 
 class Policy(V1Base):
+    """A saved v1 policy reform, identified within a country by its id and JSON hash."""
+
     __tablename__ = "policy"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     country_id: Mapped[str] = mapped_column(String(3), primary_key=True)
@@ -115,6 +124,11 @@ class Policy(V1Base):
 
 
 class Economy(V1Base):
+    """A legacy cached economy-wide result for one policy and options hash.
+
+    Mapped so Alembic sees the table; the API no longer reads or writes it.
+    """
+
     __tablename__ = "economy"
     economy_id: Mapped[int] = mapped_column(
         Integer, primary_key=True, autoincrement=True
@@ -132,6 +146,12 @@ class Economy(V1Base):
 
 
 class ReformImpact(V1Base):
+    """A cached economy comparison of a reform against a baseline, with its job status.
+
+    Rows are keyed by policies, region, dataset, time period, options hash and
+    API version, and record the simulation execution that computes them.
+    """
+
     __tablename__ = "reform_impact"
     reform_impact_id: Mapped[int] = mapped_column(
         Integer, primary_key=True, autoincrement=True
@@ -154,6 +174,11 @@ class ReformImpact(V1Base):
 
 
 class Analysis(V1Base):
+    """A legacy AI-analysis prompt and its generated text.
+
+    Mapped so Alembic sees the table; the API no longer reads or writes it.
+    """
+
     __tablename__ = "analysis"
     prompt_id: Mapped[int] = mapped_column(
         Integer, primary_key=True, autoincrement=True
@@ -166,6 +191,12 @@ class Analysis(V1Base):
 
 
 class UserPolicy(V1Base):
+    """A user's saved reform/baseline pair and how they set it up.
+
+    ``mirror_revision`` increases on every change so v2 mirroring applies
+    events in order.
+    """
+
     __tablename__ = "user_policies"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     country_id: Mapped[str] = mapped_column(String(3))
@@ -253,6 +284,8 @@ class UserPolicyMirrorEvent(V1Base):
 
 
 class UserProfile(V1Base):
+    """A user's profile, unique by Auth0 id and by username when one is set."""
+
     __tablename__ = "user_profiles"
     user_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     auth0_id: Mapped[str] = mapped_column(String(255), unique=True)
@@ -262,6 +295,12 @@ class UserProfile(V1Base):
 
 
 class Simulation(V1Base):
+    """A v1 simulation of one policy on a household or geography population.
+
+    Holds the latest output inline, plus pointers to its active and latest
+    successful runs in ``simulation_runs``.
+    """
+
     __tablename__ = "simulations"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     country_id: Mapped[str] = mapped_column(String(3))
@@ -279,6 +318,12 @@ class Simulation(V1Base):
 
 
 class ReportOutput(V1Base):
+    """A v1 report comparing one or two simulations, with its latest output inline.
+
+    Also stores the report spec and pointers to its active and latest
+    successful runs in ``report_output_runs``.
+    """
+
     __tablename__ = "report_outputs"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     country_id: Mapped[str] = mapped_column(String(3))
@@ -298,6 +343,8 @@ class ReportOutput(V1Base):
 
 
 class ReportOutputRun(V1Base):
+    """One numbered execution of a report output, with the versions it ran against."""
+
     __tablename__ = "report_output_runs"
     __table_args__ = (
         UniqueConstraint(
@@ -332,6 +379,8 @@ class ReportOutputRun(V1Base):
 
 
 class SimulationRun(V1Base):
+    """One numbered execution of a simulation, possibly as an input to a report run."""
+
     __tablename__ = "simulation_runs"
     __table_args__ = (
         UniqueConstraint(
@@ -366,6 +415,8 @@ class SimulationRun(V1Base):
 
 
 class LegacyReportOutputAlias(V1Base):
+    """Redirect from a duplicate legacy report output id to its canonical one."""
+
     __tablename__ = "legacy_report_output_aliases"
     legacy_report_output_id: Mapped[int] = mapped_column(
         Integer,

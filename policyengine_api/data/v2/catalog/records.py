@@ -13,6 +13,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ModelRecord:
+    """One country's tax-benefit model as named in the catalog."""
+
     id: UUID
     country_id: str
     name: str
@@ -21,6 +23,12 @@ class ModelRecord:
 
 @dataclass(frozen=True, slots=True)
 class ModelVersionRecord:
+    """The model version a catalog was extracted from.
+
+    Also carries the country's current-law policy id and the years its metadata
+    covers.
+    """
+
     id: UUID
     model_id: UUID
     version: str
@@ -31,6 +39,8 @@ class ModelVersionRecord:
 
 @dataclass(frozen=True, slots=True)
 class VariableRecord:
+    """One model variable, with its entity, type and the variables it sums."""
+
     id: UUID
     model_version_id: UUID
     name: str
@@ -46,6 +56,8 @@ class VariableRecord:
 
 @dataclass(frozen=True, slots=True)
 class ParameterNodeRecord:
+    """A non-leaf node of the parameter tree; it groups parameters and has no values."""
+
     id: UUID
     model_version_id: UUID
     name: str
@@ -55,6 +67,8 @@ class ParameterNodeRecord:
 
 @dataclass(frozen=True, slots=True)
 class ParameterValueRecord:
+    """A parameter's value from ``start_date`` until ``end_date``, or indefinitely."""
+
     id: UUID
     parameter_id: UUID
     value_json: Any
@@ -64,6 +78,8 @@ class ParameterValueRecord:
 
 @dataclass(frozen=True, slots=True)
 class ParameterRecord:
+    """A leaf parameter with its unit and every value it has held over time."""
+
     id: UUID
     model_version_id: UUID
     name: str
@@ -76,6 +92,8 @@ class ParameterRecord:
 
 @dataclass(frozen=True, slots=True)
 class DatasetRecord:
+    """A logical input dataset, referenced by name; ``storage_path`` is always None."""
+
     id: UUID
     model_version_id: UUID
     name: str
@@ -87,6 +105,12 @@ class DatasetRecord:
 
 @dataclass(frozen=True, slots=True)
 class RegionRecord:
+    """A region that can be simulated, with the dataset it uses by default.
+
+    Regions that need a subset of that dataset (``requires_filter``) also name
+    the variable, value and strategy that select their households.
+    """
+
     id: UUID
     model_version_id: UUID
     default_dataset_id: UUID
@@ -104,6 +128,11 @@ class RegionRecord:
 
 @dataclass(frozen=True, slots=True)
 class FallbackSummary:
+    """How many US sub-national regions of one type fell back to the default dataset.
+
+    These regions had no dataset path of their own.
+    """
+
     region_type: str
     count: int
 
@@ -125,6 +154,8 @@ def iter_batches(
 
 @dataclass(frozen=True, slots=True)
 class CountryCatalog:
+    """Every record the catalog publishes for one country's model version."""
+
     country_id: str
     model: ModelRecord
     model_version: ModelVersionRecord
@@ -171,6 +202,8 @@ class CountryCatalog:
 
 @dataclass(frozen=True, slots=True)
 class NormalizedCatalog:
+    """A complete extracted catalog for one PolicyEngine.py version, all countries."""
+
     policyengine_version: str
     dependency_versions: tuple[tuple[str, str], ...]
     countries: tuple[CountryCatalog, ...]

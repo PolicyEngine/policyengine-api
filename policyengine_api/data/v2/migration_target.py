@@ -36,6 +36,11 @@ class V2MigrationTargetError(V2ConfigurationError):
 
 @dataclass(frozen=True)
 class ConfiguredSupabaseTarget:
+    """The persistent Supabase database v2 Alembic may migrate, and its required role.
+
+    The freshness audit fields gate the first migration of an unstamped database.
+    """
+
     environment: str
     project_ref: str
     database_name: str
@@ -46,6 +51,11 @@ class ConfiguredSupabaseTarget:
 
 @dataclass(frozen=True)
 class V2AlembicSettings:
+    """The URL v2 Alembic connects to, and whether it is the disposable test database.
+
+    ``target`` is None only in disposable test mode.
+    """
+
     url: URL
     disposable_test: bool
     target: ConfiguredSupabaseTarget | None

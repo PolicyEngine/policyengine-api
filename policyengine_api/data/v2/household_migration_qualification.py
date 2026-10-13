@@ -54,9 +54,11 @@ class HouseholdDataCounts:
 
     @property
     def total(self) -> int:
+        """The number of affected rows; anything but zero stops the migration."""
         return sum(self.as_dict().values())
 
     def as_dict(self) -> dict[str, int]:
+        """Return the counts keyed by the names used in evidence and errors."""
         return {
             "households": self.households,
             "user_household_associations": self.user_household_associations,
@@ -76,6 +78,10 @@ class HouseholdMigrationQualification:
     required: bool = True
 
     def as_dict(self) -> dict[str, object]:
+        """Return the evidence as the JSON object the qualification command prints.
+
+        ``qualification`` is "not-required" when the revision was already applied.
+        """
         return {
             "outcome": "ok",
             "qualification": "performed" if self.required else "not-required",
@@ -89,6 +95,7 @@ class RetainedHouseholdDataError(RuntimeError):
     """Raised when a target contains household data requiring preservation."""
 
     def __init__(self, counts: HouseholdDataCounts) -> None:
+        """Keep the counts and say in the message how to proceed safely."""
         self.counts = counts
         rendered_counts = ", ".join(
             f"{name}={count}" for name, count in counts.as_dict().items()

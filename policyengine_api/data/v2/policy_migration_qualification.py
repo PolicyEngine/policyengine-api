@@ -46,9 +46,11 @@ class PolicyDataCounts:
 
     @property
     def total(self) -> int:
+        """The number of affected rows; anything but zero stops the migration."""
         return self.policies + self.policy_parameter_values + self.user_policies
 
     def as_dict(self) -> dict[str, int]:
+        """Return the counts keyed by the names used in evidence and errors."""
         return {
             "policies": self.policies,
             "policy_parameter_values": self.policy_parameter_values,
@@ -66,6 +68,10 @@ class PolicyMigrationQualification:
     required: bool = True
 
     def as_dict(self) -> dict[str, object]:
+        """Return the evidence as the JSON object the qualification command prints.
+
+        ``qualification`` is "not-required" when the revision was already applied.
+        """
         return {
             "outcome": "ok",
             "qualification": "performed" if self.required else "not-required",
@@ -79,6 +85,7 @@ class RetainedPolicyDataError(RuntimeError):
     """Raised when a target contains policy data requiring preservation."""
 
     def __init__(self, counts: PolicyDataCounts) -> None:
+        """Keep the counts and say in the message how to proceed safely."""
         self.counts = counts
         super().__init__(
             "the configured Supabase target contains retained v2 policy data "

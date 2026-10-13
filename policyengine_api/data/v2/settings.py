@@ -57,6 +57,7 @@ class PostgresConnectionSettings:
         return self._url.render_as_string(hide_password=True)
 
     def __str__(self) -> str:
+        """Return the URL with its password hidden, so printing never leaks it."""
         return self.redacted_url
 
 

@@ -32,6 +32,12 @@ class UserType(StrEnum):
 
 
 class User(IdentifiedModel, table=True):
+    """A v2 user account, unique by email when one is given.
+
+    Deleting a user deletes their saved associations; reports they own are kept
+    without an owner.
+    """
+
     __tablename__ = "users"
     __table_args__ = (
         sa.UniqueConstraint("email", name="uq_users_email"),
