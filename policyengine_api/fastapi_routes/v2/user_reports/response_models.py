@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Generic, Literal, TypeVar
+from typing import Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 from policyengine_api.query_parameters import CountryId
 from policyengine_api.services.v2.user_reports.types import (
+    ReportProvision,
+    ReportValidation,
     UserReportPage,
     UserReportRead,
 )
@@ -29,8 +31,8 @@ class UserReportItem(StrictUserReportAPIModel):
     description: str | None
     user_policy_id: UUID | None
     source_note: str | None
-    provisions: list[Any] | None
-    validation: dict[str, Any] | None
+    provisions: list[ReportProvision] | None
+    validation: ReportValidation | None
     last_run_at: datetime | None
     client_ref: str | None
     created_at: datetime

@@ -13,6 +13,7 @@ from policyengine_api.fastapi_routes.v2.user_resources import (
 )
 from policyengine_api.query_parameters import CountryId
 from policyengine_api.services.v2.user_policies.types import (
+    PolicyProvenance,
     UserPolicyBaseline,
     UserPolicyPage,
     UserPolicyRead,
@@ -34,7 +35,7 @@ class UserPolicyItem(StrictUserPolicyAPIModel):
     name: str | None
     description: str | None
     baseline: UserPolicyBaseline | None
-    provenance: dict[str, Any] | None
+    provenance: PolicyProvenance | None
     client_ref: str | None
     created_at: datetime
     updated_at: datetime

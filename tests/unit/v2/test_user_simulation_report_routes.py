@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -300,3 +301,68 @@ def test_report_patch_accepts_only_contract_fields() -> None:
         "provisions",
         "last_run_at",
     }
+
+
+def test_report_snapshots_echo_stored_keys_with_contract_nulls() -> None:
+    sparse_provision = {
+        "path": "gov.irs.credits.ctc.amount",
+        "breadcrumb": "Child Tax Credit amount",
+        "baseline_value": 2000,
+        "value": 3000,
+        "intervals": [
+            {"start_date": "2026-01-01", "end_date": "2026-12-31", "value": 3000}
+        ],
+    }
+    sparse_validation = {"matched_at": "2026-02-01T12:00:00Z", "map_model_version": "1"}
+    reports = RecordingService(
+        lambda _name, _kwargs: replace(
+            _report_read(),
+            provisions=[sparse_provision],
+            validation=sparse_validation,
+        )
+    )
+    client, _flask_calls = user_route_client(
+        v2_user_report_service_factory=lambda: reports
+    )
+
+    item = client.get(f"/v2/user-reports/{REPORT_ASSOCIATION_ID}?country_id=us").json()[
+        "result"
+    ]["item"]
+
+    # Nullable contract keys are present; the optional interval parameter
+    # stays absent rather than null.
+    assert item["provisions"] == [{**sparse_provision, "unit": None}]
+    assert "parameter" not in item["provisions"][0]["intervals"][0]
+    assert item["validation"] == {
+        **sparse_validation,
+        "calibration": None,
+        "scorecard": None,
+    }
+
+
+def test_openapi_types_report_and_policy_snapshots() -> None:
+    client, _simulations, _reports = _clients()
+
+    schemas = client.get("/v2/openapi.json").json()["components"]["schemas"]
+
+    def property_refs(schema_name: str, field_name: str) -> set[str]:
+        field = schemas[schema_name]["properties"][field_name]
+        options = field.get("anyOf", [field])
+        refs = set()
+        for option in options:
+            target = option.get("items", option)
+            if "$ref" in target:
+                refs.add(target["$ref"].rsplit("/", 1)[-1])
+        return refs
+
+    report_item = next(name for name in schemas if name.startswith("UserReportItem"))
+    policy_item = next(name for name in schemas if name.startswith("UserPolicyItem"))
+    assert {
+        name.split("-")[0] for name in property_refs(report_item, "provisions")
+    } == {"ReportProvision"}
+    assert {
+        name.split("-")[0] for name in property_refs(report_item, "validation")
+    } == {"ReportValidation"}
+    assert {
+        name.split("-")[0] for name in property_refs(policy_item, "provenance")
+    } == {"PolicyProvenance"}

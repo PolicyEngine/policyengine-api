@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import json
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import (
@@ -45,7 +45,8 @@ class StrictUserReportModel(BaseModel):
 
 
 class ReportProvisionInterval(StrictUserReportModel):
-    parameter: str | None = None
+    # The contract makes this key optional rather than nullable.
+    parameter: str | None = Field(default=None, exclude_if=lambda value: value is None)
     start_date: IsoDate
     end_date: IsoDate
     value: JsonValue
@@ -207,8 +208,8 @@ class UserReportRead:
     description: str | None
     user_policy_id: UUID | None
     source_note: str | None
-    provisions: list[Any] | None
-    validation: dict[str, Any] | None
+    provisions: list[StoredJSONObject] | None
+    validation: StoredJSONObject | None
     last_run_at: datetime | None
     client_ref: str | None
     created_at: datetime
