@@ -237,7 +237,7 @@ class SimulationEntrypointClient:
                     "GATEWAY_AUTH_CLIENT_SECRET."
                 )
                 raise GatewayAuthError(msg)
-            print(
+            print(  # noqa: T201  # the unauthenticated-client warning goes to stderr whatever the logging setup
                 "SimulationEntrypointClient initialized without gateway auth; "
                 "all GATEWAY_AUTH_* env vars are unset and "
                 "GATEWAY_AUTH_REQUIRED is not enabled.",

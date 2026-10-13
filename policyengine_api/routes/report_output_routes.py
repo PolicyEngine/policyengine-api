@@ -1,6 +1,7 @@
 """Flask routes for creating, reading and updating v1 report outputs."""
 
 import json
+import logging
 
 import jsonschema
 import pydantic
@@ -14,6 +15,8 @@ from policyengine_api.services.report_output_service import (
     ReportOutputView,
 )
 from policyengine_api.utils.payload_validators import validate_country
+
+logger = logging.getLogger(__name__)
 
 report_output_bp = Blueprint("report_output", __name__)
 report_output_service = ReportOutputService()
@@ -62,7 +65,6 @@ def create_report_output(country_id: str) -> Response:
         - year (str | None): The year for the report (optional)
 
     """
-    print(f"Creating report output for country {country_id}")
     payload = request.json
     if payload is None:
         msg = "Payload missing from request"
@@ -146,8 +148,6 @@ def get_report_output(country_id: str, report_id: int) -> Response:
         report_id (int): The report output ID.
 
     """
-    print(f"Getting report output {report_id} for country {country_id}")
-
     view = report_output_service.resolve_report_output(country_id, report_id)
     if view is None:
         msg = f"Report #{report_id} not found."
@@ -193,7 +193,7 @@ def update_report_output(country_id: str) -> Response:
     report_id = payload.get("id")
     output = payload.get("output")
     error_message = payload.get("error_message")
-    print(f"Updating report #{report_id} for country {country_id}")
+    logger.debug("Updating report #%s for country %s", report_id, country_id)
 
     # Validate status if provided
     if status is not None and status not in [

@@ -10,7 +10,7 @@ start_time = time.time()
 def log_timing(message: str) -> None:
     """Print a startup milestone to stderr with the seconds since import began."""
     elapsed = time.time() - start_time
-    print(f"[{elapsed:.2f}s] {message}", file=sys.stderr, flush=True)
+    print(f"[{elapsed:.2f}s] {message}", file=sys.stderr, flush=True)  # noqa: T201  # startup timings go straight to stderr while the app imports
 
 
 log_timing("Basic imports completed")
