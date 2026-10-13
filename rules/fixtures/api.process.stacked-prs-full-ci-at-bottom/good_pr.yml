@@ -1,0 +1,27 @@
+# Proof fixture: a PR workflow where every job is gated. Root jobs carry the
+# stack condition, jobs that need them are skipped with them, and the CI
+# complete gate needs every job.
+name: Pull request
+
+on: pull_request
+
+jobs:
+  ci-complete:
+    name: CI complete
+    if: ${{ always() }}
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - run: bash .github/scripts/check_ci_complete.sh
+  lint:
+    name: Lint
+    if: ${{ !github.event.pull_request.stack || github.event.pull_request.stack.base.ref == github.event.pull_request.base.ref }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: ruff format --check .
+  test:
+    name: Test
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - run: make test

@@ -78,6 +78,18 @@ def test_gate_check_rejects_an_ungated_job() -> None:
     ]
 
 
+def test_rule_proof_gate_check() -> None:
+    fixtures = REPO / "rules" / "fixtures" / "api.process.stacked-prs-full-ci-at-bottom"
+    bad = yaml.safe_load((fixtures / "bad_pr.yml").read_text())
+    good = yaml.safe_load((fixtures / "good_pr.yml").read_text())
+
+    assert gate_violations(bad) == [
+        f"{GATE_JOB} does not need test",
+        f"test must have if: {FULL_CI_CONDITION}",
+    ]
+    assert gate_violations(good) == []
+
+
 def _run_gate(
     job_results: dict[str, str],
     *,

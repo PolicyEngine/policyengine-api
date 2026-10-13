@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 35 | 0 | 2 | 11 | 48 |
+| mechanical | 36 | 0 | 2 | 11 | 49 |
 | metric | 0 | 0 | 0 | 0 | 0 |
 | judgment | 0 | 0 | 0 | 0 | 0 |
 
-**Blocking:** 35 of 48 rules.
+**Blocking:** 36 of 49 rules.
 
 ## Gaps
 
@@ -331,6 +331,7 @@ flowchart LR
 | `api.process.makefile-phony` | Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed. | mechanical | doc-only | no | nothing | — | — |
 | `api.process.rule-machinery-code-owned` | Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author. | mechanical | doc-only | no | nothing | — | — |
 | `api.process.rules-registry` | Every rule is registered in rules/registry.toml, is enforced where it claims to be, and its rendered views are current. | mechanical | enforced | yes | quality guard `rules-registry` | `pr.yml:quality-guards` | **unproven** |
+| `api.process.stacked-prs-full-ci-at-bottom` | In a stack of pull requests, only the lowest unmerged one runs the full PR workflow. Every pr.yml job is needed by the CI complete gate, which fails on the pull requests above it and otherwise passes only when every job passed, so a stack merges bottom-up and nothing merges untested. | mechanical | enforced | yes | pytest `tests/unit/test_ci_complete_gate.py` | `pr.yml:test`, `pr.yml:ci-complete` | yes |
 
 ```mermaid
 flowchart LR
@@ -350,6 +351,10 @@ flowchart LR
   r_api_process_rules_registry("api.process.rules-registry (enforced)")
   e_quality_guard_rules_registry["quality guard rules-registry"]
   j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
+  r_api_process_stacked_prs_full_ci_at_bottom("api.process.stacked-prs-full-ci-at-bottom (enforced)")
+  e_pytest_tests_unit_test_ci_complete_gate_py["pytest tests/unit/test_ci_complete_gate.py"]
+  j_CI_pr_yml_test["CI pr.yml:test"]
+  j_CI_pr_yml_ci_complete["CI pr.yml:ci-complete"]
   r_api_process_agents_never_bypass -.-> gap_unenforced
   r_api_process_changelog_fragment --> e_CI_job_check_changelog
   e_CI_job_check_changelog --> j_CI_pr_yml_check_changelog
@@ -361,4 +366,7 @@ flowchart LR
   r_api_process_rule_machinery_code_owned -.-> gap_unenforced
   r_api_process_rules_registry --> e_quality_guard_rules_registry
   e_quality_guard_rules_registry --> j_CI_pr_yml_quality_guards
+  r_api_process_stacked_prs_full_ci_at_bottom --> e_pytest_tests_unit_test_ci_complete_gate_py
+  e_pytest_tests_unit_test_ci_complete_gate_py --> j_CI_pr_yml_test
+  e_pytest_tests_unit_test_ci_complete_gate_py --> j_CI_pr_yml_ci_complete
 ```

@@ -828,6 +828,34 @@ autofix = false
 kind = "none"
 
 [[rule]]
+id = "api.process.stacked-prs-full-ci-at-bottom"
+category = "process"
+statement = "In a stack of pull requests, only the lowest unmerged one runs the full PR workflow. Every pr.yml job is needed by the CI complete gate, which fails on the pull requests above it and otherwise passes only when every job passed, so a stack merges bottom-up and nothing merges untested."
+rationale = "docs/engineering/skills/github-prs.md#stacked-prs-and-ci"
+scope = [".github/workflows/pr.yml", ".github/scripts/check_ci_complete.sh"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/test_ci_complete_gate.py::test_pr_workflow_is_gated"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "ci-complete"
+invocation = "check_ci_complete.sh"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.process.stacked-prs-full-ci-at-bottom/bad_pr.yml"
+good_fixture = "rules/fixtures/api.process.stacked-prs-full-ci-at-bottom/good_pr.yml"
+test = "tests/unit/test_ci_complete_gate.py::test_rule_proof_gate_check"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
 id = "api.process.makefile-phony"
 category = "process"
 statement = "Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed."
