@@ -35,13 +35,11 @@ if TYPE_CHECKING:
 
     from sqlalchemy.orm import Session, sessionmaker
 
-    from policyengine_api.spm import SPMSelection
-
 
 def household_storage_json(
     country_id: str,
     household_json: dict,
-    spm: SPMSelection | dict | None = None,
+    spm: object = None,
 ) -> dict:
     """Keep the measurement selection in the same atomic JSON/hash as inputs.
 
@@ -164,7 +162,7 @@ class HouseholdService:
         label: str | None,
         *,
         record_mirror_event: bool = False,
-        spm: dict | None = None,
+        spm: object = None,
     ) -> HouseholdCreateResult:
         # Validate before the persistence boundary so typed input failures remain 400.
         household_json = household_storage_json(country_id, household_json, spm)

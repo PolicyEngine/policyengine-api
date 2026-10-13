@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -10,7 +10,9 @@ if TYPE_CHECKING:
     from policyengine_api.json_types import JSONValue
 
 
-def make_hashable(o: object) -> object:
+def make_hashable(
+    o: object,
+) -> Any:  # noqa: ANN401  # returns scalars unchanged, and callers sort them
     if isinstance(o, (tuple, list)):
         return tuple(make_hashable(e) for e in o)
 

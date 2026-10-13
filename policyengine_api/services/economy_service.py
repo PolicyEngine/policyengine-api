@@ -925,7 +925,7 @@ class EconomyService:
             severity="INFO",
         )
 
-        most_recent_impact: dict | None = self._get_most_recent_impact(
+        most_recent_impact: CachedReformImpact | None = self._get_most_recent_impact(
             setup_options=setup_options
         )
         if most_recent_impact and self._should_refresh_cached_impact(
@@ -1186,7 +1186,7 @@ class EconomyService:
     def _get_most_recent_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
-    ) -> dict | None:
+    ) -> CachedReformImpact | None:
         """
         Get the first impact from the reform_impacts table based on the provided setup options.
         Returns the first impact if it exists, otherwise returns None.
@@ -1213,7 +1213,7 @@ class EconomyService:
 
     def _determine_impact_action(
         self,
-        most_recent_impact: ReformImpact | None,
+        most_recent_impact: CachedReformImpact | None,
     ) -> ImpactAction:
         if not most_recent_impact:
             return ImpactAction.CREATE
@@ -1560,7 +1560,7 @@ class EconomyService:
             return f"{escaped_options_hash[:-1]}&%"
         return f"{escaped_options_hash}%"
 
-    def _extract_cached_result(self, most_recent_impact: ReformImpact) -> dict:
+    def _extract_cached_result(self, most_recent_impact: CachedReformImpact) -> dict:
         try:
             return self._parse_json_object(most_recent_impact.reform_impact_json)
         except (TypeError, ValueError):
@@ -1569,7 +1569,7 @@ class EconomyService:
     def _should_refresh_cached_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
-        most_recent_impact: ReformImpact,
+        most_recent_impact: CachedReformImpact,
     ) -> bool:
         if most_recent_impact.status == ImpactStatus.COMPUTING.value:
             return False
@@ -1607,7 +1607,7 @@ class EconomyService:
 
     def _with_policyengine_bundle(
         self,
-        result: dict,
+        result: dict | None,
         setup_options: EconomicImpactSetupOptions,
         execution: ModalSimulationExecution | None = None,
     ) -> dict:

@@ -476,7 +476,7 @@ def _selected_forecast(expected_sha256: str) -> SPMForecast:
 
 def normalize_spm_selection(
     country_id: str,
-    selection: SPMSelection | dict | None,
+    selection: object,
     *,
     stored: bool = False,
 ) -> dict | None:

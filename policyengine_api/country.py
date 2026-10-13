@@ -9,9 +9,8 @@ from pathlib import Path
 from typing import Any
 
 import dpath
-import numpy as np
 import pandas as pd
-from policyengine_core.model_api import Enum, Reform
+from policyengine_core.model_api import Enum, Reform, Variable
 from policyengine_core.parameters import (
     Parameter,
     ParameterNode,
@@ -23,7 +22,7 @@ from policyengine_core.periods import instant
 from policyengine_core.populations import Population
 from policyengine_core.simulations import Simulation
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
-from policyengine_core.variables import Variable
+from policyengine_core.types import ArrayLike
 
 from policyengine_api.constants import (
     get_bundle_default_dataset_option,
@@ -66,7 +65,7 @@ def _serialize_float(value: object) -> float | str:
 
 
 def _serialize_axis_result(
-    result: np.ndarray,
+    result: ArrayLike,
     variable: Variable,
     entity_index: int,
     count_entities: int,
@@ -74,7 +73,9 @@ def _serialize_axis_result(
     if variable.value_type == Enum:
         result = result.decode_to_str()
 
-    entity_values = result.reshape((-1, count_entities)).T[entity_index].tolist()
+    entity_values: list[object] = (
+        result.reshape((-1, count_entities)).T[entity_index].tolist()
+    )
 
     if variable.value_type is float:
         return [_serialize_float(value) for value in entity_values]
@@ -153,7 +154,10 @@ class PolicyEngineCountry:
             )
         )
 
-    def _json_safe(self, value: object) -> object:
+    def _json_safe(
+        self,
+        value: object,
+    ) -> Any:  # noqa: ANN401  # other values pass through, assumed JSON-safe
         if isinstance(value, Path):
             return str(value)
         if isinstance(value, (date, datetime)):

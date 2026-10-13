@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+from typing import Any
 
 import flask
 
@@ -18,7 +19,7 @@ def make_cache_key(*args: object, **kwargs: object) -> str:
     different across workers/restarts; that made same-input requests
     miss the cache in production.
     """
-    data = ""
+    data: Any = ""
     if flask.request.content_type == "application/json":
         data = flask.request.get_json()
     elif flask.request.content_type in [
