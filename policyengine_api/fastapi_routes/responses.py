@@ -22,4 +22,5 @@ class LegacyJSONResponse(Response):
     media_type = "application/json"
 
     def render(self, content: JSONValue) -> bytes:
+        """Encode ``content`` byte-for-byte as the Flask metadata route does."""
         return render_legacy_json(content)

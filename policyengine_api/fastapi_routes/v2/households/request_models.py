@@ -26,6 +26,7 @@ class HouseholdCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_country_document(self) -> HouseholdCreateRequest:
+        """Reject ``household_data`` whose collections belong to the other country."""
         expected_type = (
             USHouseholdDocument if self.country_id == "us" else UKHouseholdDocument
         )
@@ -34,6 +35,7 @@ class HouseholdCreateRequest(BaseModel):
         return self
 
     def to_service_input(self) -> NativeHouseholdCreationInput:
+        """Convert the request to the household service's creation input."""
         return NativeHouseholdCreationInput.model_validate(
             self.model_dump(mode="python")
         )

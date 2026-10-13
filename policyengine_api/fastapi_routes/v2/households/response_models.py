@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
 
 class StrictHouseholdAPIModel(BaseModel):
+    """Base for household responses; rejects unknown fields and NaN or infinity."""
+
     model_config = ConfigDict(
         extra="forbid",
         allow_inf_nan=False,
@@ -30,6 +32,12 @@ class StrictHouseholdAPIModel(BaseModel):
 
 
 class HouseholdItem(StrictHouseholdAPIModel):
+    """A stored household.
+
+    Households are immutable and deduplicated: creating one with identical
+    content returns the existing household and its ``id``.
+    """
+
     id: UUID
     country_id: CountryId
     default_year: DefaultYear | None
@@ -39,14 +47,23 @@ class HouseholdItem(StrictHouseholdAPIModel):
 
     @classmethod
     def from_read(cls, item: HouseholdRead) -> HouseholdItem:
+        """Build the response item by validating the service read record's fields."""
         return cls.model_validate(item)
 
 
 class HouseholdDetailResult(StrictHouseholdAPIModel):
+    """Result holding one household in ``item``."""
+
     item: HouseholdItem
 
 
 class HouseholdPageResult(StrictHouseholdAPIModel):
+    """One page of households, oldest first.
+
+    ``offset`` and ``limit`` echo the request; when ``has_more`` is true, ask
+    for the next page with ``offset + limit``.
+    """
+
     items: list[HouseholdItem]
     offset: int
     limit: int
@@ -54,6 +71,7 @@ class HouseholdPageResult(StrictHouseholdAPIModel):
 
     @classmethod
     def from_page(cls, page: HouseholdPage) -> HouseholdPageResult:
+        """Build the response page from a service page, converting each item."""
         return cls(
             items=[HouseholdItem.from_read(item) for item in page.items],
             offset=page.offset,
@@ -66,17 +84,19 @@ ResultT = TypeVar("ResultT")
 
 
 class HouseholdSuccessResponse(StrictHouseholdAPIModel, Generic[ResultT]):
+    """Success envelope: ``status`` "ok", a null ``message`` and the ``result``."""
+
     status: Literal["ok"] = "ok"
     message: None = None
     result: ResultT
 
 
 class HouseholdDetailResponse(HouseholdSuccessResponse[HouseholdDetailResult]):
-    pass
+    """Success response holding one household."""
 
 
 class HouseholdPageResponse(HouseholdSuccessResponse[HouseholdPageResult]):
-    pass
+    """Success response holding one page of households."""
 
 
 HOUSEHOLD_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {

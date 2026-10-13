@@ -88,13 +88,24 @@ if TYPE_CHECKING:
 class MetadataReader(Protocol):
     """Read the already-loaded metadata document for a country."""
 
-    def get_metadata(self, country_id: str) -> JSONObject: ...
+    def get_metadata(self, country_id: str) -> JSONObject:
+        """Return the loaded v1 metadata document for a supported country."""
+        ...
 
 
 class V2MetadataResourceReader(Protocol):
-    """Own the database session used by one v2 metadata resource request."""
+    """Own the database session used by one v2 metadata resource request.
 
-    def close(self) -> None: ...
+    Every read selects one country catalog: the one published for
+    ``policyengine_version``, or the running package's catalog when it is None.
+    Absent resources raise ``MetadataResourceNotFoundError``, and list reads
+    raise ``InvalidMetadataPageError`` unless ``offset >= 0`` and
+    ``1 <= limit <= 500``.
+    """
+
+    def close(self) -> None:
+        """Release the request's database session, even after a failed read."""
+        ...
 
     def list_models(
         self,
@@ -103,20 +114,26 @@ class V2MetadataResourceReader(Protocol):
         *,
         offset: int = 0,
         limit: int = 100,
-    ) -> MetadataPageResult[MetadataModel]: ...
+    ) -> MetadataPageResult[MetadataModel]:
+        """Return a page holding the selected catalog's single tax-benefit model."""
+        ...
 
     def get_model(
         self,
         country_id: str,
         model_id: UUID,
         policyengine_version: str | None = None,
-    ) -> MetadataDetailResult[MetadataModel]: ...
+    ) -> MetadataDetailResult[MetadataModel]:
+        """Return the selected catalog's model when ``model_id`` is its UUID."""
+        ...
 
     def get_model_by_country(
         self,
         country_id: str,
         policyengine_version: str | None = None,
-    ) -> MetadataModelSelectionResult: ...
+    ) -> MetadataModelSelectionResult:
+        """Return the country's model and the selected catalog's model version."""
+        ...
 
     def list_model_versions(
         self,
@@ -125,14 +142,18 @@ class V2MetadataResourceReader(Protocol):
         *,
         offset: int = 0,
         limit: int = 100,
-    ) -> MetadataPageResult[MetadataModelVersionDetail]: ...
+    ) -> MetadataPageResult[MetadataModelVersionDetail]:
+        """Return a page holding the selected catalog's single model version."""
+        ...
 
     def get_model_version(
         self,
         country_id: str,
         version_id: UUID,
         policyengine_version: str | None = None,
-    ) -> MetadataDetailResult[MetadataModelVersionDetail]: ...
+    ) -> MetadataDetailResult[MetadataModelVersionDetail]:
+        """Return the selected model version when ``version_id`` is its UUID."""
+        ...
 
     def list_variables(
         self,
@@ -142,14 +163,21 @@ class V2MetadataResourceReader(Protocol):
         offset: int = 0,
         limit: int = 100,
         search: str | None = None,
-    ) -> MetadataPageResult[MetadataVariable]: ...
+    ) -> MetadataPageResult[MetadataVariable]:
+        """Return variables in name order, optionally filtered by ``search``.
+
+        ``search`` is a case-insensitive substring of the name, label or description.
+        """
+        ...
 
     def get_variable(
         self,
         country_id: str,
         variable_id: UUID,
         policyengine_version: str | None = None,
-    ) -> MetadataDetailResult[MetadataVariable]: ...
+    ) -> MetadataDetailResult[MetadataVariable]:
+        """Return one variable of the selected catalog by UUID."""
+        ...
 
     def list_parameters(
         self,
@@ -159,14 +187,21 @@ class V2MetadataResourceReader(Protocol):
         offset: int = 0,
         limit: int = 100,
         search: str | None = None,
-    ) -> MetadataPageResult[MetadataParameterSummary]: ...
+    ) -> MetadataPageResult[MetadataParameterSummary]:
+        """Return parameters in name order, optionally filtered by ``search``.
+
+        ``search`` is a case-insensitive substring of the name, label or description.
+        """
+        ...
 
     def get_parameter(
         self,
         country_id: str,
         parameter_id: UUID,
         policyengine_version: str | None = None,
-    ) -> MetadataDetailResult[MetadataParameterSummary]: ...
+    ) -> MetadataDetailResult[MetadataParameterSummary]:
+        """Return one parameter of the selected catalog by UUID."""
+        ...
 
     def list_parameter_children(
         self,
@@ -176,7 +211,12 @@ class V2MetadataResourceReader(Protocol):
         parent_path: str = "",
         offset: int = 0,
         limit: int = 100,
-    ) -> MetadataPageResult[MetadataParameterChild]: ...
+    ) -> MetadataPageResult[MetadataParameterChild]:
+        """Return the nodes and parameters one level below ``parent_path``.
+
+        An empty ``parent_path`` lists the top level of the parameter tree.
+        """
+        ...
 
     def list_parameter_values(
         self,
@@ -188,14 +228,22 @@ class V2MetadataResourceReader(Protocol):
         offset: int = 0,
         limit: int = 100,
         now: datetime | None = None,
-    ) -> MetadataPageResult[MetadataCanonicalParameterValue]: ...
+    ) -> MetadataPageResult[MetadataCanonicalParameterValue]:
+        """Return canonical values, optionally for one parameter.
+
+        With ``current``, only values in effect on the UTC day of ``now`` (default:
+        the present) are returned.
+        """
+        ...
 
     def get_parameter_value(
         self,
         country_id: str,
         value_id: UUID,
         policyengine_version: str | None = None,
-    ) -> MetadataDetailResult[MetadataCanonicalParameterValue]: ...
+    ) -> MetadataDetailResult[MetadataCanonicalParameterValue]:
+        """Return one canonical parameter value of the selected catalog by UUID."""
+        ...
 
     def list_datasets(
         self,
@@ -204,14 +252,18 @@ class V2MetadataResourceReader(Protocol):
         *,
         offset: int = 0,
         limit: int = 100,
-    ) -> MetadataPageResult[MetadataDataset]: ...
+    ) -> MetadataPageResult[MetadataDataset]:
+        """Return the logical input datasets of the selected catalog."""
+        ...
 
     def get_dataset(
         self,
         country_id: str,
         dataset_id: UUID,
         policyengine_version: str | None = None,
-    ) -> MetadataDetailResult[MetadataDataset]: ...
+    ) -> MetadataDetailResult[MetadataDataset]:
+        """Return one logical input dataset of the selected catalog by UUID."""
+        ...
 
     def list_regions(
         self,
@@ -221,27 +273,41 @@ class V2MetadataResourceReader(Protocol):
         region_type: str | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> MetadataPageResult[MetadataRegion]: ...
+    ) -> MetadataPageResult[MetadataRegion]:
+        """Return the catalog's regions by code, optionally of one ``region_type``."""
+        ...
 
     def get_region(
         self,
         country_id: str,
         region_id: UUID,
         policyengine_version: str | None = None,
-    ) -> MetadataDetailResult[MetadataRegion]: ...
+    ) -> MetadataDetailResult[MetadataRegion]:
+        """Return one region of the selected catalog by UUID."""
+        ...
 
     def get_region_by_code(
         self,
         country_id: str,
         region_code: str,
         policyengine_version: str | None = None,
-    ) -> MetadataDetailResult[MetadataRegion]: ...
+    ) -> MetadataDetailResult[MetadataRegion]:
+        """Return one region by code; the national region's code is the country id."""
+        ...
 
     def get_economy_options(
         self,
         country_id: str,
         policyengine_version: str | None = None,
-    ) -> MetadataEconomyOptionsResult: ...
+    ) -> MetadataEconomyOptionsResult:
+        """Return the options a client needs to configure an economy comparison.
+
+        These are the current-law policy id, regions, years and datasets.
+
+        Raise ``MetadataCatalogUnavailableError`` when the national region, its
+        dataset or the model version's options are missing from the catalog.
+        """
+        ...
 
 
 class V2PolicyResourceService(Protocol):
@@ -250,9 +316,20 @@ class V2PolicyResourceService(Protocol):
     def create_policy(
         self,
         command: NativePolicyCreationInput,
-    ) -> NativePolicyCreation: ...
+    ) -> NativePolicyCreation:
+        """Store the policy, or return the identical one already stored.
 
-    def get_policy(self, *, country_id: str, policy_id: UUID) -> PolicyRead: ...
+        Policies are immutable and deduplicated by canonical content hash;
+        ``created`` says whether this call inserted the policy.
+        """
+        ...
+
+    def get_policy(self, *, country_id: str, policy_id: UUID) -> PolicyRead:
+        """Return one policy of the country with its parameter values.
+
+        Raise ``PolicyNotFoundError`` when no such policy exists in that country.
+        """
+        ...
 
     def list_policies(
         self,
@@ -261,7 +338,9 @@ class V2PolicyResourceService(Protocol):
         tax_benefit_model_id: UUID | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> PolicyPage: ...
+    ) -> PolicyPage:
+        """Return a page of the country's policies, optionally for one model."""
+        ...
 
 
 class V2HouseholdResourceService(Protocol):
@@ -270,14 +349,25 @@ class V2HouseholdResourceService(Protocol):
     def create_household(
         self,
         household_input: NativeHouseholdCreationInput,
-    ) -> NativeHouseholdCreation: ...
+    ) -> NativeHouseholdCreation:
+        """Store the household, or return the identical one already stored.
+
+        Households are immutable and deduplicated by canonical content hash;
+        ``created`` says whether this call inserted the household.
+        """
+        ...
 
     def get_household(
         self,
         *,
         country_id: str,
         household_id: UUID,
-    ) -> HouseholdRead: ...
+    ) -> HouseholdRead:
+        """Return one household of the country.
+
+        Raise ``HouseholdNotFoundError`` when no such household exists there.
+        """
+        ...
 
     def list_households(
         self,
@@ -286,7 +376,9 @@ class V2HouseholdResourceService(Protocol):
         default_year: int | None,
         offset: int,
         limit: int,
-    ) -> HouseholdPage: ...
+    ) -> HouseholdPage:
+        """Return a page of the country's households, optionally of one default year."""
+        ...
 
 
 class V2UserPolicyResourceService(Protocol):
@@ -305,7 +397,9 @@ class V2UserPolicyResourceService(Protocol):
         principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-    ) -> UserPolicyRead: ...
+    ) -> UserPolicyRead:
+        """Return the country's association, or raise ``UserPolicyNotFoundError``."""
+        ...
 
     def list_user_policies(
         self,
@@ -316,7 +410,9 @@ class V2UserPolicyResourceService(Protocol):
         legacy_policy_id: int | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> UserPolicyPage: ...
+    ) -> UserPolicyPage:
+        """Return a page of one user's associations, optionally for one policy."""
+        ...
 
     def patch_user_policy(
         self,
@@ -325,7 +421,9 @@ class V2UserPolicyResourceService(Protocol):
         country_id: str,
         association_id: UUID,
         association_input: UserPolicyUpdateInput,
-    ) -> UserPolicyRead: ...
+    ) -> UserPolicyRead:
+        """Update only the supplied presentation fields and return the association."""
+        ...
 
     def delete_user_policy(
         self,
@@ -333,7 +431,9 @@ class V2UserPolicyResourceService(Protocol):
         principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-    ) -> None: ...
+    ) -> None:
+        """Delete the country's association, or raise ``UserPolicyNotFoundError``."""
+        ...
 
 
 class V2UserHouseholdResourceService(Protocol):
@@ -352,7 +452,9 @@ class V2UserHouseholdResourceService(Protocol):
         principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-    ) -> UserHouseholdRead: ...
+    ) -> UserHouseholdRead:
+        """Return the country's association, or raise ``UserHouseholdNotFoundError``."""
+        ...
 
     def list_user_households(
         self,
@@ -363,7 +465,9 @@ class V2UserHouseholdResourceService(Protocol):
         legacy_household_id: int | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> UserHouseholdPage: ...
+    ) -> UserHouseholdPage:
+        """Return a page of one user's associations, optionally for one household."""
+        ...
 
     def patch_user_household(
         self,
@@ -372,7 +476,13 @@ class V2UserHouseholdResourceService(Protocol):
         country_id: str,
         association_id: UUID,
         association_input: UserHouseholdUpdateInput,
-    ) -> UserHouseholdRead: ...
+    ) -> UserHouseholdRead:
+        """Update only the supplied fields and return the association.
+
+        A supplied ``household_id`` re-points the association to another
+        household, which must exist in the association's country.
+        """
+        ...
 
     def delete_user_household(
         self,
@@ -380,7 +490,9 @@ class V2UserHouseholdResourceService(Protocol):
         principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-    ) -> None: ...
+    ) -> None:
+        """Delete the country's association, or raise ``UserHouseholdNotFoundError``."""
+        ...
 
 
 class V2UserSimulationResourceService(Protocol):
@@ -515,7 +627,9 @@ class V2AccountResourceService(Protocol):
 class SimulationGatewayProbe(Protocol):
     """Minimal simulation-entrypoint health-check interface."""
 
-    def health_check(self) -> bool: ...
+    def health_check(self) -> bool:
+        """Return whether the simulation entrypoint's health endpoint returns 200."""
+        ...
 
 
 def _default_readiness_probe() -> bool:

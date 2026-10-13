@@ -40,6 +40,11 @@ class PolicyProvenanceItem(BaseModel):
 
 
 class UserPolicyItem(StrictUserPolicyAPIModel):
+    """A policy saved by a v2 user, with the user's name and description for it.
+
+    Unlike policies, associations can be renamed or deleted.
+    """
+
     id: UUID
     country_id: CountryId
     user_id: UUID
@@ -54,14 +59,23 @@ class UserPolicyItem(StrictUserPolicyAPIModel):
 
     @classmethod
     def from_read(cls, item: UserPolicyRead) -> UserPolicyItem:
+        """Build the response item by validating the service read record's fields."""
         return cls.model_validate(item)
 
 
 class UserPolicyDetailResult(StrictUserPolicyAPIModel):
+    """Result holding one user-policy association in ``item``."""
+
     item: UserPolicyItem
 
 
 class UserPolicyPageResult(StrictUserPolicyAPIModel):
+    """One page of user-policy associations, oldest first.
+
+    ``offset`` and ``limit`` echo the request; when ``has_more`` is true, ask
+    for the next page with ``offset + limit``.
+    """
+
     items: list[UserPolicyItem]
     offset: int
     limit: int
@@ -69,6 +83,7 @@ class UserPolicyPageResult(StrictUserPolicyAPIModel):
 
     @classmethod
     def from_page(cls, page: UserPolicyPage) -> UserPolicyPageResult:
+        """Build the response page from a service page, converting each item."""
         return cls(
             items=[UserPolicyItem.from_read(item) for item in page.items],
             offset=page.offset,
@@ -81,17 +96,19 @@ ResultT = TypeVar("ResultT")
 
 
 class UserPolicySuccessResponse(StrictUserPolicyAPIModel, Generic[ResultT]):
+    """Success envelope: ``status`` "ok", a null ``message`` and the ``result``."""
+
     status: Literal["ok"] = "ok"
     message: None = None
     result: ResultT
 
 
 class UserPolicyDetailResponse(UserPolicySuccessResponse[UserPolicyDetailResult]):
-    pass
+    """Success response holding one user-policy association."""
 
 
 class UserPolicyPageResponse(UserPolicySuccessResponse[UserPolicyPageResult]):
-    pass
+    """Success response holding one page of user-policy associations."""
 
 
 USER_POLICY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = (
