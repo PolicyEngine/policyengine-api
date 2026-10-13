@@ -14,23 +14,7 @@ from tests.unit.v2.user_route_support import RecordingService, user_route_client
 
 ISSUER = "https://auth.example.test/"
 AUDIENCE = "https://api.policyengine.org/"
-USER_ROUTE_REQUESTS = (
-    ("GET", "/v2/me?country_id=us", None),
-    ("PATCH", "/v2/me?country_id=us", {"first_name": "Ada"}),
-    ("DELETE", "/v2/me?country_id=us", None),
-    ("GET", "/v2/me/export?country_id=us", None),
-    ("POST", "/v2/me/imports?country_id=us", {}),
-    ("GET", "/v2/user-policies?country_id=us", None),
-    ("POST", "/v2/user-policies?country_id=us", {"country_id": "us"}),
-    ("GET", "/v2/user-households?country_id=us", None),
-    ("GET", "/v2/user-simulations?country_id=us", None),
-    ("GET", "/v2/user-reports?country_id=us", None),
-    (
-        "DELETE",
-        "/v2/user-reports/00000000-0000-0000-0000-000000000001?country_id=us",
-        None,
-    ),
-)
+ASSOCIATION_ID = "00000000-0000-0000-0000-000000000001"
 
 
 class FakeDecoder:
@@ -74,17 +58,33 @@ def _services() -> tuple[dict[str, RecordingService], dict[str, Any]]:
     return services, factories
 
 
-@pytest.mark.parametrize(("method", "path", "body"), USER_ROUTE_REQUESTS)
-def test_every_user_route_fails_closed_without_a_token(
-    method: str, path: str, body: dict | None
-) -> None:
+def _user_operations() -> list[tuple[str, str]]:
+    """Every signed-in operation, read from the built application's OpenAPI."""
+
+    _services_by_name, factories = _services()
+    client, _flask_calls = user_route_client(require_user=None, **factories)
+    paths = client.get("/v2/openapi.json").json()["paths"]
+    operations = sorted(
+        (method.upper(), path.replace("{association_id}", ASSOCIATION_ID))
+        for path, methods in paths.items()
+        if path.startswith(("/v2/me", "/v2/user-"))
+        for method in methods
+        if method in {"get", "post", "patch", "delete"}
+    )
+    # 5 account operations plus 5 for each of the 4 association resources.
+    assert len(operations) >= 25
+    return operations
+
+
+@pytest.mark.parametrize(("method", "path"), _user_operations())
+def test_every_user_route_fails_closed_without_a_token(method: str, path: str) -> None:
     services, factories = _services()
     client, flask_calls = user_route_client(require_user=None, **factories)
 
     response = client.request(
         method,
-        path,
-        json=body,
+        f"{path}?country_id=us",
+        json={} if method in {"POST", "PATCH"} else None,
         headers={"Origin": "https://app.policyengine.org"},
     )
 
