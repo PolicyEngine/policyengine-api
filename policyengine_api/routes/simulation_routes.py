@@ -39,9 +39,10 @@ def _serialize_v1_simulation(simulation: Simulation) -> dict:
         if value is not None and not isinstance(value, str):
             response[field] = json.dumps(value)
 
-    # TODO: Remove this compatibility projection when the v1 contract is
-    # retired. New v2 response models should expose these fields as native JSON
-    # objects instead of carrying the historical JSON-in-a-string shape forward.
+    # This JSON-in-a-string projection exists only for the v1 contract and can
+    # go when that contract is retired. v2 response models should expose these
+    # fields as native JSON objects rather than carry the historical shape
+    # forward.
     return response
 
 

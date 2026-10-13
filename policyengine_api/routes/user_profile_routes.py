@@ -126,8 +126,9 @@ def update_user_profile(country_id: str) -> Response:
         msg = "No user data provided in request"
         raise BadRequest(msg)
 
-    # TODO: we should validate the payload
-    # to ensure type safety https://github.com/PolicyEngine/policyengine-api/issues/2054
+    # The payload's field types are not validated here. Request validation was
+    # proposed in https://github.com/PolicyEngine/policyengine-api/issues/2054,
+    # which was closed as not planned.
     user_id = payload.pop("user_id")
     username = payload.pop("username", None)
     primary_country = payload.pop("primary_country", None)
