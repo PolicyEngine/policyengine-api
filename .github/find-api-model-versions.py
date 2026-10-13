@@ -31,7 +31,7 @@ def _manifest_versions(bundle: dict) -> dict[str, str]:
     packages = bundle.get("packages")
     if not isinstance(packages, dict):
         msg = "PolicyEngine bundle manifest has no package mapping."
-        raise RuntimeError(msg)
+        raise TypeError(msg)
 
     versions = {}
     for package_name in REQUIRED_PACKAGES:
@@ -57,7 +57,7 @@ def find_api_model_versions() -> dict[str, str]:
     bundle = get_current_bundle()
     if not isinstance(bundle, dict):
         msg = "Installed PolicyEngine bundle manifest is not an object."
-        raise RuntimeError(msg)
+        raise TypeError(msg)
 
     manifest_versions = _manifest_versions(bundle)
     for package_name, manifest_version in manifest_versions.items():
