@@ -213,7 +213,7 @@ def main(
                 event_service=event_service,
                 require_pending=True,
             )
-    except Exception as error:  # noqa: BLE001 - command emits a safe result
+    except Exception as error:  # noqa: BLE001  # command emits a safe result
         try:
             _record_command_outcome(
                 identity=identity,
