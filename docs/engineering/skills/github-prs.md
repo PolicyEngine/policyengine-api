@@ -18,6 +18,26 @@ rights: do not merge with `gh pr merge --admin`, and do not use GitHub's option
 to bypass rules. If a required check or review blocks a merge, report it to a
 human instead.
 
+## Stacked PRs and CI
+
+In a stack of pull requests, only the lowest unmerged one runs the full PR
+workflow (`.github/workflows/pr.yml`). The ones above it run only the
+`CI complete` job, which fails and says so. A stack therefore uses one set of
+runners instead of one per layer.
+
+- **`CI complete` is the required check.** It needs every other job. On a
+  pull request that isn't stacked, or is the lowest unmerged one, it passes
+  only when every job passed. Skipped jobs would otherwise count as passing, so
+  a stack can only merge bottom-up, and nothing merges untested.
+- **When the pull request below merges,** GitHub rebases the next one onto
+  the trunk, and that push starts its full run. If no run starts, push again
+  (`gh stack rebase`, then `gh stack push`), or close and reopen the pull
+  request. Re-running the old workflow doesn't help: it reuses the old event,
+  which still describes the pull request as higher in the stack.
+- **When you add a job to `pr.yml`,** add it to `CI complete`'s `needs`. If
+  the job has no `needs` of its own, also give it the same stack condition as
+  the other jobs. `tests/unit/test_ci_complete_gate.py` checks both.
+
 ## Migration PRs
 
 Migration PRs should keep the user experience stable unless the PR explicitly
