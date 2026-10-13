@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
 from types import UnionType
-from typing import Annotated, Any, Literal, TypeVar, Union, get_args, get_origin
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Literal,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+)
 from uuid import UUID
 
 from pydantic import (
@@ -25,6 +33,9 @@ from policyengine_api.utils.budget_window import (
     BUDGET_WINDOW_MAX_END_YEAR,
     BUDGET_WINDOW_MAX_YEARS,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
 
 DEFAULT_QUERY_LIMIT = 100
 MAXIMUM_QUERY_LIMIT = 500

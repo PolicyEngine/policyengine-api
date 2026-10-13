@@ -5,12 +5,12 @@ from __future__ import annotations
 import math
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
-
-from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
-from policyengine_api.data.v2.models import LegacyPolicyMapping
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
+    from policyengine_api.data.v2.models import LegacyPolicyMapping
     from policyengine_api.services.v2.policies.types import (
         PolicyCreationInput,
         ResolvedPolicyCreationInput,

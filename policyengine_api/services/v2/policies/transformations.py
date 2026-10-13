@@ -4,23 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
-from typing import Any
-from uuid import UUID
+from typing import TYPE_CHECKING, Any
 
 from policyengine_core.periods import (  # type: ignore[import-untyped]
     period as parse_policyengine_period,
 )
 
-from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
-from policyengine_api.data.v2.models import (
-    Parameter,
-    ParameterValue,
-    Policy,
-    TaxBenefitModelVersion,
-)
 from policyengine_api.services.v2.policies.types import (
     CanonicalPolicyContent,
     LegacyPolicySnapshot,
@@ -35,6 +26,18 @@ from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyTranslationError,
     validate_policy_catalog,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from uuid import UUID
+
+    from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
+    from policyengine_api.data.v2.models import (
+        Parameter,
+        ParameterValue,
+        Policy,
+        TaxBenefitModelVersion,
+    )
 
 POLICY_CANONICALIZATION_VERSION = 1
 

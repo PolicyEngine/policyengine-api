@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
-from policyengine_api.services.v2.policies.types import PolicyPage, PolicyRead
+
+if TYPE_CHECKING:
+    from policyengine_api.services.v2.policies.types import PolicyPage, PolicyRead
 
 
 class StrictPolicyAPIModel(BaseModel):

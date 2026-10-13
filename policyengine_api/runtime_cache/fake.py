@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from threading import RLock
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class InMemoryCacheBackend:

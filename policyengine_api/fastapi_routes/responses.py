@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 from starlette.responses import Response
 
-from policyengine_api.json_types import JSONValue
+if TYPE_CHECKING:
+    from policyengine_api.json_types import JSONValue
 
 
 def render_legacy_json(content: JSONValue) -> bytes:

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, fields
-from datetime import datetime
-from typing import Any, TypeVar
-from uuid import UUID
+from typing import TYPE_CHECKING, Any, TypeVar
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, Sequence
+    from datetime import datetime
+    from uuid import UUID
 
 
 @dataclass(frozen=True, slots=True)

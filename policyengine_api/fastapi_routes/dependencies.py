@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from functools import lru_cache
 from importlib import metadata as importlib_metadata
 from typing import TYPE_CHECKING, Protocol
-from uuid import UUID
-
-from policyengine_api.json_types import JSONObject
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from datetime import datetime
+    from uuid import UUID
+
+    from policyengine_api.json_types import JSONObject
     from policyengine_api.services.v2.households.types import (
         HouseholdPage,
         HouseholdRead,

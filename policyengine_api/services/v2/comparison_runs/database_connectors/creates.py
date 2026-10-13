@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, col
@@ -15,10 +15,14 @@ from policyengine_api.services.v2.comparison_runs.transformations import (
     report_insert_values,
     simulation_insert_values,
 )
-from policyengine_api.services.v2.comparison_runs.types import (
-    ComparisonReportRecord,
-    ComparisonSimulationRecord,
-)
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.services.v2.comparison_runs.types import (
+        ComparisonReportRecord,
+        ComparisonSimulationRecord,
+    )
 
 
 def create_comparison_report(

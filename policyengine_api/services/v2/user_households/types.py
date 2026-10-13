@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Annotated
-from uuid import UUID
+from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 from policyengine_api.query_parameters import CountryId, ResourceId, UserId
+
+if TYPE_CHECKING:
+    from datetime import datetime
+    from uuid import UUID
 
 AssociationName = Annotated[str, StringConstraints(max_length=255)]
 

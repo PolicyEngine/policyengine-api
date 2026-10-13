@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from policyengine_api.services.v2.comparison_runs.types import (
     ComparisonReportRecord,
@@ -11,6 +11,9 @@ from policyengine_api.services.v2.comparison_runs.types import (
     ComparisonSimulationRecord,
     ResultComparisonStatus,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 
 class ComparisonRunNotFoundError(LookupError):

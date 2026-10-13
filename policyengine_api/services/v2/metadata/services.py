@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.catalog.catalog_selection import (
     SelectedCatalog,
@@ -33,9 +33,6 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_regions imp
 from policyengine_api.services.v2.metadata.database_connectors.reads_variables import (
     read_variable,
     read_variables,
-)
-from policyengine_api.services.v2.metadata.database_session import (
-    MetadataDatabaseSession,
 )
 from policyengine_api.services.v2.metadata.transformations import (
     metadata_dataset,
@@ -70,6 +67,13 @@ from policyengine_api.services.v2.metadata.validators import (
     validate_economy_options,
     validate_metadata_page,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.services.v2.metadata.database_session import (
+        MetadataDatabaseSession,
+    )
 
 
 class V2MetadataService:

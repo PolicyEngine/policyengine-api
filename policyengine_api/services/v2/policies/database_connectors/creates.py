@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, col
 
 from policyengine_api.data.v2.models import LegacyPolicyMapping, ParameterValue, Policy
-from policyengine_api.services.v2.policies.types import ResolvedPolicyCreationInput
+
+if TYPE_CHECKING:
+    from policyengine_api.services.v2.policies.types import ResolvedPolicyCreationInput
 
 
 def create_policy(

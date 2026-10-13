@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.exc import SQLAlchemyError
-from sqlmodel import Session
 
 from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
     SelectedCatalog,
     select_catalog,
 )
+
+if TYPE_CHECKING:
+    from sqlmodel import Session
 
 
 def read_metadata_catalog(

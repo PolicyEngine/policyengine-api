@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import os
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from scripts.rules.load import REGISTRY_PATH, load_text
 from scripts.rules.model import Registry, Status, Violation
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class BaseUnavailable(Exception):

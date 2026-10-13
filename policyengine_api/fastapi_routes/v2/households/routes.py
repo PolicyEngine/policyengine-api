@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -11,10 +10,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import JSONResponse
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.fastapi_routes.dependencies import (
-    NativeRouteDependencies,
-    V2HouseholdResourceService,
-)
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import (
     V2RequestTooLargeError,
@@ -43,6 +38,14 @@ from policyengine_api.services.v2.households.validators import (
     HouseholdNotFoundError,
     HouseholdValidationError,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from policyengine_api.fastapi_routes.dependencies import (
+        NativeRouteDependencies,
+        V2HouseholdResourceService,
+    )
 
 
 async def enforce_household_request_size(request: Request) -> None:

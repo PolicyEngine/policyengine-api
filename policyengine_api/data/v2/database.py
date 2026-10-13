@@ -5,8 +5,8 @@ from __future__ import annotations
 import atexit
 import os
 from threading import Lock
+from typing import TYPE_CHECKING
 
-from sqlalchemy import Engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine
 
@@ -15,6 +15,9 @@ from policyengine_api.data.v2.settings import (
     V2DatabaseSettings,
     load_v2_runtime_database_settings,
 )
+
+if TYPE_CHECKING:
+    from sqlalchemy import Engine
 
 DATABASE_POOL_RECYCLE_SECONDS = 1800
 DATABASE_POOL_SIZE = 5

@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from functools import cache
+from typing import TYPE_CHECKING
 
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 V2_RUNTIME_DATABASE_URL = "V2_RUNTIME_DATABASE_URL"
 V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE = "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE"

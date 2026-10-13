@@ -10,7 +10,10 @@ bodies keep their exact current framing, including Content-Length.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 STREAMING_THRESHOLD_BYTES = 20 * 1024 * 1024
 STREAMING_CHUNK_BYTES = 1024 * 1024

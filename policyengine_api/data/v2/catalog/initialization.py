@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.pool import NullPool
@@ -18,12 +18,16 @@ from policyengine_api.data.v2.catalog.publication import (
     PublicationEvidence,
     publish_catalog,
 )
-from policyengine_api.data.v2.catalog.records import NormalizedCatalog
 from policyengine_api.data.v2.settings import (
     V2ConfigurationError,
     V2DatabaseSettings,
     load_v2_data_write_database_settings,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from policyengine_api.data.v2.catalog.records import NormalizedCatalog
 
 
 def build_data_write_engine(settings: V2DatabaseSettings) -> Engine:

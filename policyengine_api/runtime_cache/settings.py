@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, urlsplit
 
 from pydantic import SecretStr
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 RUNTIME_CACHE_MODE = "RUNTIME_CACHE_MODE"
 RUNTIME_CACHE_URL = "RUNTIME_CACHE_URL"

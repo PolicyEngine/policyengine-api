@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -11,10 +10,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import JSONResponse, Response
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.fastapi_routes.dependencies import (
-    NativeRouteDependencies,
-    V2UserPolicyResourceService,
-)
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import v2_error_response
 from policyengine_api.fastapi_routes.v2.user_policies.request_models import (
@@ -39,6 +34,14 @@ from policyengine_api.services.v2.user_policies.validators import (
     AssociationUserNotFoundError,
     UserPolicyNotFoundError,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from policyengine_api.fastapi_routes.dependencies import (
+        NativeRouteDependencies,
+        V2UserPolicyResourceService,
+    )
 
 
 def _service_factory(

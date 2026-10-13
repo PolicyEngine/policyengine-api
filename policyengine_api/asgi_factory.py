@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
 from a2wsgi import WSGIMiddleware
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from policyengine_observability import ObservabilityRuntime
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Match, Mount
-from starlette.types import ASGIApp
 
 from policyengine_api.constants import VERSION
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
@@ -51,6 +49,12 @@ from policyengine_api.request_context import (
     current_observability_id,
     generate_request_id,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from policyengine_observability import ObservabilityRuntime
+    from starlette.types import ASGIApp
 
 
 def _apply_request_id_header(

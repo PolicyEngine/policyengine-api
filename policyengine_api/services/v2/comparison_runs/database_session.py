@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 
 class ComparisonRunDatabaseSession:

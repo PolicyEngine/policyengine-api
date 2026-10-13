@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -13,7 +13,12 @@ from policyengine_api.fastapi_routes.v2.households.document_models import (
     HouseholdDocument,
 )
 from policyengine_api.query_parameters import CountryId, DefaultYear
-from policyengine_api.services.v2.households.types import HouseholdPage, HouseholdRead
+
+if TYPE_CHECKING:
+    from policyengine_api.services.v2.households.types import (
+        HouseholdPage,
+        HouseholdRead,
+    )
 
 
 class StrictHouseholdAPIModel(BaseModel):

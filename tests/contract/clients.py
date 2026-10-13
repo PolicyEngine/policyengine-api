@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from fastapi.testclient import TestClient
-from flask import Flask
 
 from policyengine_api.asgi_factory import create_asgi_app
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from flask import Flask
 
 
 @dataclass(frozen=True)
