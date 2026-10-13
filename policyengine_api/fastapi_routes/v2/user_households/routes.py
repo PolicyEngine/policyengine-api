@@ -26,7 +26,10 @@ from policyengine_api.fastapi_routes.v2.user_households.response_models import (
     UserHouseholdPageResponse,
     UserHouseholdPageResult,
 )
-from policyengine_api.fastapi_routes.v2.user_resources import user_resource_operation
+from policyengine_api.fastapi_routes.v2.user_resources import (
+    enforce_user_write_request_size,
+    user_resource_operation,
+)
 from policyengine_api.query_parameters import (
     UserHouseholdCollectionQuery,
     UserHouseholdCreateQuery,
@@ -62,7 +65,10 @@ def build_v2_user_household_router(
     router = APIRouter(
         prefix="/v2",
         responses=USER_HOUSEHOLD_ERROR_RESPONSES,
-        dependencies=[Depends(require_user)],
+        dependencies=[
+            Depends(require_user),
+            Depends(enforce_user_write_request_size),
+        ],
     )
     create_query = query_dependency(UserHouseholdCreateQuery)
     detail_query = query_dependency(UserHouseholdDetailQuery)

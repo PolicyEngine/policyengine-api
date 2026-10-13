@@ -12,6 +12,7 @@ from pydantic import (
     AwareDatetime,
     BaseModel,
     ConfigDict,
+    Field,
     JsonValue,
     StringConstraints,
     model_validator,
@@ -20,13 +21,23 @@ from pydantic import (
 from policyengine_api.query_parameters import CountryId, ResourceId, UserId
 from policyengine_api.services.v2.associations.types import (
     AssociationClientRef,
+    AssociationDescription,
     AssociationName,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
 
 
 MAXIMUM_PROVISIONS_BYTES = 64 * 1024
+REPORT_SOURCE_NOTE_MAX_LENGTH = 10_000
+MAXIMUM_CALIBRATION_MATCHES = 500
+MAXIMUM_SCORECARD_PROGRAMS = 200
 IsoDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
+ReportSourceNote = Annotated[
+    str, StringConstraints(max_length=REPORT_SOURCE_NOTE_MAX_LENGTH)
+]
+ShortText = Annotated[str, StringConstraints(max_length=64)]
+LabelText = Annotated[str, StringConstraints(max_length=255)]
+LongLabelText = Annotated[str, StringConstraints(max_length=1024)]
 
 
 class StrictUserReportModel(BaseModel):
@@ -50,14 +61,14 @@ class ReportProvision(StrictUserReportModel):
 
 
 class ReportCalibrationWorst(StrictUserReportModel):
-    name: str
-    source: str
-    geography: str
+    name: LongLabelText
+    source: LongLabelText
+    geography: ShortText
     relative_error: float | None = None
 
 
 class ReportCalibrationMatch(StrictUserReportModel):
-    variable: str
+    variable: LabelText
     depth: int
     ring: Literal["primary", "mechanism", "downstream"]
     target_count: int
@@ -66,19 +77,22 @@ class ReportCalibrationMatch(StrictUserReportModel):
 
 
 class ReportCalibration(StrictUserReportModel):
-    release_id: str | None = None
-    geography: str
+    release_id: LabelText | None = None
+    geography: ShortText
     reached_count: int
-    matches: list[ReportCalibrationMatch]
+    matches: Annotated[
+        list[ReportCalibrationMatch],
+        Field(max_length=MAXIMUM_CALIBRATION_MATCHES),
+    ]
 
 
 class ReportScorecard(StrictUserReportModel):
-    programs: list[str]
+    programs: Annotated[list[LabelText], Field(max_length=MAXIMUM_SCORECARD_PROGRAMS)]
 
 
 class ReportValidation(StrictUserReportModel):
-    matched_at: str
-    map_model_version: str
+    matched_at: ShortText
+    map_model_version: LabelText
     calibration: ReportCalibration | None = None
     scorecard: ReportScorecard | None = None
 
@@ -113,8 +127,8 @@ def stored_validation(
 
 class _ReportPresentationFields(StrictUserReportModel):
     name: AssociationName | None = None
-    description: str | None = None
-    source_note: str | None = None
+    description: AssociationDescription | None = None
+    source_note: ReportSourceNote | None = None
     provisions: list[ReportProvision] | None = None
     validation: ReportValidation | None = None
     last_run_at: AwareDatetime | None = None

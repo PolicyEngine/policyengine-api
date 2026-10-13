@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from policyengine_api.query_parameters import CountryId, ResourceId, UserId
 from policyengine_api.services.v2.associations.types import (
     AssociationClientRef,
+    AssociationDescription,
     AssociationName,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
@@ -27,7 +28,7 @@ class UserHouseholdCreateFields(StrictUserHouseholdInput):
     household_id: ResourceId | None = None
     legacy_household_id: LegacyRecordId | None = None
     name: AssociationName | None = None
-    description: str | None = None
+    description: AssociationDescription | None = None
     client_ref: AssociationClientRef | None = None
 
     @model_validator(mode="after")
@@ -62,7 +63,7 @@ class UserHouseholdCreationInput(StrictUserHouseholdInput):
 class UserHouseholdUpdateInput(StrictUserHouseholdInput):
     legacy_household_id: LegacyRecordId | None = None
     name: AssociationName | None = None
-    description: str | None = None
+    description: AssociationDescription | None = None
 
     @model_validator(mode="after")
     def require_valid_supplied_field(self) -> "UserHouseholdUpdateInput":
@@ -84,7 +85,7 @@ class UserHouseholdImportItem(StrictUserHouseholdInput):
     client_ref: AssociationClientRef
     legacy_household_id: LegacyRecordId
     name: AssociationName | None = None
-    description: str | None = None
+    description: AssociationDescription | None = None
 
 
 @dataclass(frozen=True)

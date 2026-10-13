@@ -18,6 +18,7 @@ from policyengine_api.query_parameters import (
 )
 from policyengine_api.services.v2.associations.types import (
     AssociationClientRef,
+    AssociationDescription,
     AssociationName,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
@@ -47,7 +48,7 @@ class UserPolicyCreateFields(StrictAssociationInput):
     policy_id: ResourceId | None = None
     legacy_policy_id: LegacyRecordId | None = None
     name: AssociationName | None = None
-    description: str | None = None
+    description: AssociationDescription | None = None
     baseline: UserPolicyBaseline | None = None
     provenance: PolicyProvenance | None = None
     client_ref: AssociationClientRef | None = None
@@ -87,7 +88,7 @@ class UserPolicyCreationInput(StrictAssociationInput):
 class UserPolicyUpdateInput(StrictAssociationInput):
     legacy_policy_id: LegacyRecordId | None = None
     name: AssociationName | None = None
-    description: str | None = None
+    description: AssociationDescription | None = None
     baseline: UserPolicyBaseline | None = None
     provenance: PolicyProvenance | None = None
 
@@ -112,7 +113,7 @@ class UserPolicyImportItem(StrictAssociationInput):
     client_ref: AssociationClientRef
     legacy_policy_id: LegacyRecordId
     name: AssociationName | None = None
-    description: str | None = None
+    description: AssociationDescription | None = None
     baseline: UserPolicyBaseline | None = None
     provenance: PolicyProvenance | None = None
 

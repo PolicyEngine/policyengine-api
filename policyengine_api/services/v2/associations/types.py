@@ -25,7 +25,12 @@ AssociationTable: TypeAlias = (
     | UserSimulationAssociation
     | UserReportAssociation
 )
+ASSOCIATION_DESCRIPTION_MAX_LENGTH = 10_000
+
 AssociationName = Annotated[str, StringConstraints(max_length=255)]
+AssociationDescription = Annotated[
+    str, StringConstraints(max_length=ASSOCIATION_DESCRIPTION_MAX_LENGTH)
+]
 AssociationClientRef = Annotated[
     str,
     StringConstraints(min_length=1, max_length=ASSOCIATION_CLIENT_REF_MAX_LENGTH),

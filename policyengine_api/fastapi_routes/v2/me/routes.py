@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse, Response
 
 from policyengine_api.fastapi_routes.dependencies import (
@@ -17,12 +17,8 @@ from policyengine_api.fastapi_routes.dependencies import (
     V2AccountResourceService,
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
-from policyengine_api.fastapi_routes.v2.errors import (
-    V2ErrorResponse,
-    V2RequestTooLargeError,
-)
+from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
 from policyengine_api.fastapi_routes.v2.me.request_models import (
-    MAXIMUM_IMPORT_REQUEST_BYTES,
     AccountImportRequest,
     AccountPatchRequest,
 )
@@ -37,27 +33,12 @@ from policyengine_api.fastapi_routes.v2.me.response_models import (
 )
 from policyengine_api.fastapi_routes.v2.user_resources import (
     USER_RESOURCE_ERROR_RESPONSES,
+    enforce_user_import_request_size,
+    enforce_user_write_request_size,
     user_resource_operation,
 )
 from policyengine_api.query_parameters import CountryQuery
 from policyengine_api.services.v2.identity.types import UserPrincipal
-
-
-async def enforce_import_request_size(request: Request) -> None:
-    """Bound both declared and actual request bytes before service creation."""
-
-    content_length = request.headers.get("content-length")
-    if content_length is not None:
-        try:
-            declared_length = int(content_length)
-        except ValueError as error:
-            raise V2RequestTooLargeError(
-                "Import request Content-Length is invalid"
-            ) from error
-        if declared_length > MAXIMUM_IMPORT_REQUEST_BYTES:
-            raise V2RequestTooLargeError("Import request body exceeds 1 MiB")
-    if len(await request.body()) > MAXIMUM_IMPORT_REQUEST_BYTES:
-        raise V2RequestTooLargeError("Import request body exceeds 1 MiB")
 
 
 def _service_factory(
@@ -115,6 +96,7 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         body: AccountPatchRequest,
         query: CountryQuery = Depends(country_query),
         principal: UserPrincipal = Depends(require_user),
+        _size: None = Depends(enforce_user_write_request_size),
     ) -> MeDetailResponse | JSONResponse:
         def patch() -> MeDetailResponse:
             item = service_factory().update_account(
@@ -179,12 +161,6 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
     @router.post(
         "/me/imports",
         response_model=MeImportResponse,
-        responses={
-            413: {
-                "model": V2ErrorResponse,
-                "description": "The import body exceeds 1 MiB.",
-            }
-        },
         summary="Import browser-local saved records into the signed-in account",
         description=(
             "At most 500 items and 1 MiB. Idempotent on (user, client_ref): an "
@@ -198,7 +174,7 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         body: AccountImportRequest,
         query: CountryQuery = Depends(country_query),
         principal: UserPrincipal = Depends(require_user),
-        _size: None = Depends(enforce_import_request_size),
+        _size: None = Depends(enforce_user_import_request_size),
     ) -> MeImportResponse | JSONResponse:
         def import_() -> MeImportResponse:
             result = service_factory().import_records(

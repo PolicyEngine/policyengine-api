@@ -26,7 +26,10 @@ from policyengine_api.fastapi_routes.v2.user_policies.response_models import (
     UserPolicyPageResponse,
     UserPolicyPageResult,
 )
-from policyengine_api.fastapi_routes.v2.user_resources import user_resource_operation
+from policyengine_api.fastapi_routes.v2.user_resources import (
+    enforce_user_write_request_size,
+    user_resource_operation,
+)
 from policyengine_api.query_parameters import (
     CountryQuery,
     UserPolicyCollectionQuery,
@@ -59,7 +62,10 @@ def build_v2_user_policy_router(
     router = APIRouter(
         prefix="/v2",
         responses=USER_POLICY_ERROR_RESPONSES,
-        dependencies=[Depends(require_user)],
+        dependencies=[
+            Depends(require_user),
+            Depends(enforce_user_write_request_size),
+        ],
     )
     country_query = query_dependency(CountryQuery)
     collection_query = query_dependency(UserPolicyCollectionQuery)

@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from policyengine_api.query_parameters import CountryId, UserId
 from policyengine_api.services.v2.associations.types import (
     AssociationClientRef,
+    AssociationDescription,
     AssociationName,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
@@ -26,7 +27,7 @@ class UserSimulationCreateFields(StrictUserSimulationInput):
     country_id: CountryId
     legacy_simulation_id: LegacyRecordId
     name: AssociationName | None = None
-    description: str | None = None
+    description: AssociationDescription | None = None
     client_ref: AssociationClientRef | None = None
 
 
@@ -42,7 +43,7 @@ class UserSimulationCreationInput(StrictUserSimulationInput):
 class UserSimulationUpdateInput(StrictUserSimulationInput):
     legacy_simulation_id: LegacyRecordId | None = None
     name: AssociationName | None = None
-    description: str | None = None
+    description: AssociationDescription | None = None
 
     @model_validator(mode="after")
     def require_valid_supplied_field(self) -> "UserSimulationUpdateInput":
@@ -65,7 +66,7 @@ class UserSimulationImportItem(StrictUserSimulationInput):
     client_ref: AssociationClientRef
     legacy_simulation_id: LegacyRecordId
     name: AssociationName | None = None
-    description: str | None = None
+    description: AssociationDescription | None = None
 
 
 @dataclass(frozen=True)
