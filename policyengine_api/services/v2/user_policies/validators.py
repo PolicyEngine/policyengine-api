@@ -52,6 +52,7 @@ class LegacyUserPolicyIntegrityError(RuntimeError):
 def require_user_policy(
     association: UserPolicy | None, *, association_id: UUID
 ) -> UserPolicy:
+    """Return the association, or raise UserPolicyNotFoundError if it is None."""
     if association is None:
         raise UserPolicyNotFoundError(
             f"user-policy association {association_id} was not found"
@@ -94,6 +95,7 @@ def resolve_association_policy_id(
 def validate_existing_legacy_user_mapping(
     mapping: LegacyUserMapping, *, user: User | None
 ) -> UUID:
+    """Return the mapped v2 user id, or raise if that user no longer exists."""
     if user is None:
         raise LegacyUserPolicyIntegrityError(
             "legacy user mapping has no referenced v2 user"
@@ -104,6 +106,7 @@ def validate_existing_legacy_user_mapping(
 def validate_legacy_user_mapping_conflict(
     mapping: LegacyUserMapping | None, *, user: User | None
 ) -> UUID:
+    """Return the user id of the mapping that won the race, or raise if unusable."""
     if mapping is None or user is None:
         raise LegacyUserPolicyIntegrityError(
             "legacy user mapping conflict did not resolve to a v2 user"
@@ -117,6 +120,7 @@ def validate_legacy_user_policy_input(
     *,
     source_revision: int,
 ) -> None:
+    """Require a positive revision and a saved policy that uses the reform snapshot."""
     if source_revision <= 0:
         raise LegacyUserPolicyIntegrityError(
             "legacy user-policy source revision must be positive"
@@ -141,6 +145,13 @@ def validate_existing_legacy_user_policy_mapping(
     source_revision: int,
     fingerprint_version: int,
 ) -> tuple[LegacyUserPolicyMappingAction, UserPolicy]:
+    """Decide how to apply a v1 revision to an existing mapping.
+
+    Return the action with the mapped association. Raise
+    LegacyUserPolicyIntegrityError if the association is missing or its user,
+    policy or country changed, if the fingerprint version differs, if a replay
+    has a different fingerprint, or if a revision was skipped.
+    """
     if association is None:
         raise LegacyUserPolicyIntegrityError(
             "legacy user-policy mapping has no association"

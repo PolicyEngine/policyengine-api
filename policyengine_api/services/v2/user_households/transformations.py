@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 def user_household_read(
     association: UserHouseholdAssociation,
 ) -> UserHouseholdRead:
+    """Convert a stored association row to the service's read model."""
     return UserHouseholdRead(
         id=association.id,
         country_id=association.country_id,
@@ -39,6 +40,10 @@ def user_household_page(
     offset: int,
     limit: int,
 ) -> UserHouseholdPage:
+    """Build a page from up to ``limit + 1`` rows.
+
+    The extra row is not returned; it only sets ``has_more``.
+    """
     return UserHouseholdPage(
         items=tuple(user_household_read(row) for row in rows[:limit]),
         offset=offset,

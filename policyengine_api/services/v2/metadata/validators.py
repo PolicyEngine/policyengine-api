@@ -22,6 +22,10 @@ class InvalidMetadataPageError(ValueError):
 
 
 def validate_metadata_page(offset: int, limit: int) -> tuple[int, int]:
+    """Return offset and limit unchanged, or raise InvalidMetadataPageError.
+
+    offset must be at least 0 and limit between 1 and 500.
+    """
     if offset < 0:
         raise InvalidMetadataPageError("offset must be at least 0")
     if not 1 <= limit <= 500:
@@ -35,6 +39,7 @@ ResourceT = TypeVar("ResourceT")
 def require_metadata_resource(
     resource: ResourceT | None, *, description: str
 ) -> ResourceT:
+    """Return resource, or raise MetadataResourceNotFoundError naming description."""
     if resource is None:
         raise MetadataResourceNotFoundError(f"{description} was not found")
     return resource

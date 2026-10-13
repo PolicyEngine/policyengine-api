@@ -99,6 +99,7 @@ def read_user_policy_page(
     limit: int,
     legacy_policy_id: int | None = None,
 ) -> UserPolicyPage:
+    """Return a page of a user's associations, optionally for one policy."""
     rows = read_user_policy_rows(
         session,
         country_id=country_id,
@@ -180,6 +181,11 @@ def resolve_legacy_user_id(
     legacy_user_id: str,
     primary_country: str,
 ) -> UUID:
+    """Return the v2 user id for a v1 user id, creating a transition user if needed.
+
+    If a concurrent transaction maps the v1 id first, the new user is deleted and
+    the winner's user is returned.
+    """
     existing = read_legacy_user_mapping(session, legacy_user_id, lock=True)
     if existing is not None:
         return validate_existing_legacy_user_mapping(
@@ -218,6 +224,12 @@ def apply_existing_legacy_user_policy_mapping(
     changed_fields: frozenset[str],
     source_revision: int,
 ) -> LegacyUserPolicyPersistenceResult:
+    """Apply one v1 revision to an already-mapped association.
+
+    Stale and replayed revisions change nothing. The next revision renames the
+    association only if the v1 reform label changed. Raise
+    LegacyUserPolicyIntegrityError on conflicting or skipped revisions.
+    """
     action, association = validate_existing_legacy_user_policy_mapping(
         mapping,
         association=read_mapped_user_policy(session, mapping),
@@ -345,6 +357,11 @@ def mirror_legacy_user_policy_in_session(
     source_revision: int,
     changed_fields: frozenset[str] = frozenset(),
 ) -> LegacyUserPolicyPersistenceResult:
+    """Copy one revision of a v1 saved policy into v2.
+
+    Copy its reform policy, resolve the v1 user to a v2 user, then create or
+    update the association. Only the v1 reform label is copied, as the name.
+    """
     validate_legacy_user_policy_input(
         snapshot,
         reform_snapshot,
@@ -558,6 +575,7 @@ class V2UserPolicyService:
         source_revision: int,
         changed_fields: frozenset[str],
     ) -> LegacyUserPolicyPersistenceResult:
+        """Copy one v1 saved-policy revision into v2 in its own transaction."""
         with self._database_session.transaction() as session:
             return mirror_legacy_user_policy_in_session(
                 session,

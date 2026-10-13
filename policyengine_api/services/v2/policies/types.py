@@ -45,6 +45,7 @@ class PolicyParameterValueInput(StrictPolicyInput):
 
     @model_validator(mode="after")
     def validate_period(self) -> PolicyParameterValueInput:
+        """Reject a value whose end date precedes its start date."""
         if self.end_date is not None and self.end_date < self.start_date:
             raise ValueError("end_date must not precede start_date")
         return self
@@ -66,6 +67,7 @@ class PolicyCreationInput(StrictPolicyInput):
         cls,
         values: list[PolicyParameterValueInput],
     ) -> list[PolicyParameterValueInput]:
+        """Reject two values for the same parameter with the same start date."""
         identities: set[tuple[UUID, datetime]] = set()
         for value in values:
             identity = (value.parameter_id, value.start_date)
@@ -103,6 +105,7 @@ class LegacyPolicySnapshot(StrictPolicyInput):
     @field_validator("policy_json")
     @classmethod
     def require_parameter_mapping(cls, value: object) -> object:
+        """Reject a v1 policy_json that is not an object keyed by parameter path."""
         if type(value) is not dict:
             raise ValueError("legacy policy_json must be a parameter-path object")
         return value
@@ -136,6 +139,8 @@ class LegacyPolicyPersistenceResult:
 
 @dataclass(frozen=True)
 class PolicyParameterValueRead:
+    """One stored parameter value of a policy, with the parameter's name."""
+
     id: UUID
     parameter_id: UUID
     parameter_name: str
@@ -146,6 +151,8 @@ class PolicyParameterValueRead:
 
 @dataclass(frozen=True)
 class PolicyRead:
+    """A stored v2 policy with its parameter values, as returned to routes."""
+
     id: UUID
     country_id: str
     tax_benefit_model_id: UUID
@@ -157,6 +164,8 @@ class PolicyRead:
 
 @dataclass(frozen=True)
 class PolicyPage:
+    """One page of policies in creation order; ``has_more`` says if more follow."""
+
     items: tuple[PolicyRead, ...]
     offset: int
     limit: int

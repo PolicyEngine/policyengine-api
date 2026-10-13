@@ -58,6 +58,7 @@ if TYPE_CHECKING:
 def normalize_creation_input(
     household_input: HouseholdCreationInput,
 ) -> HouseholdCreationInput:
+    """Return the input with its household document validated and normalized."""
     document = household_input.household_data
     assert isinstance(document, dict)
     return HouseholdCreationInput(
@@ -78,6 +79,11 @@ def create_normalized_household(
         [HouseholdCreationInput], CanonicalHouseholdContent
     ] = canonicalize_household,
 ) -> HouseholdCreationResult:
+    """Store a normalized household, or return the existing one with identical content.
+
+    Raise HouseholdCreationIntegrityError if the hash conflict finds no row, and
+    HouseholdContentHashCollisionError if the stored row's canonical bytes differ.
+    """
     content = canonicalizer(household_input)
     created_id = create_household(
         session,
@@ -108,6 +114,7 @@ def create_normalized_household(
 def read_complete_household(
     session: Session, *, country_id: str, household_id: UUID
 ) -> HouseholdRead:
+    """Return one household of this country, or raise HouseholdNotFoundError."""
     household = read_household_row(
         session,
         country_id=country_id,
@@ -126,6 +133,7 @@ def read_household_page(
     offset: int,
     limit: int,
 ) -> HouseholdPage:
+    """Return a page of households, optionally filtered by default year."""
     return household_page(
         read_household_rows(
             session,
@@ -143,6 +151,12 @@ def mirror_legacy_household_in_session(
     session: Session,
     snapshot: LegacyHouseholdSnapshot,
 ) -> LegacyHouseholdPersistenceResult:
+    """Copy one committed v1 household into v2 and map its v1 id to the result.
+
+    Replaying the same v1 household is idempotent. Raise
+    LegacyHouseholdMappingIntegrityError if the v1 id is already mapped with a
+    different source fingerprint or to a different v2 household.
+    """
     fingerprint = legacy_household_fingerprint(snapshot)
     existing = read_legacy_household_mapping(
         session,
@@ -210,12 +224,19 @@ def mirror_legacy_household_in_session(
 
 
 class V2HouseholdService:
+    """Service for creating, reading and copying immutable v2 households."""
+
     def __init__(self, database_session: HouseholdDatabaseSession) -> None:
+        """Open every session through ``database_session``."""
         self._database_session = database_session
 
     def create_household(
         self, household_input: NativeHouseholdCreationInput
     ) -> NativeHouseholdCreation:
+        """Store native household content, deduplicated by content hash.
+
+        Return the stored household and whether this call created it.
+        """
         normalized = normalize_creation_input(
             HouseholdCreationInput.model_validate(household_input.model_dump())
         )
@@ -229,6 +250,7 @@ class V2HouseholdService:
         return NativeHouseholdCreation(item=item, created=result.created)
 
     def get_household(self, *, country_id: str, household_id: UUID) -> HouseholdRead:
+        """Return one household of this country, or raise HouseholdNotFoundError."""
         with self._database_session.read() as session:
             return read_complete_household(
                 session,
@@ -244,6 +266,7 @@ class V2HouseholdService:
         offset: int,
         limit: int,
     ) -> HouseholdPage:
+        """Return a page of households, optionally filtered by default year."""
         with self._database_session.read() as session:
             return read_household_page(
                 session,
@@ -256,5 +279,6 @@ class V2HouseholdService:
     def mirror_legacy_household(
         self, snapshot: LegacyHouseholdSnapshot
     ) -> LegacyHouseholdPersistenceResult:
+        """Copy one committed v1 household into v2 in its own transaction."""
         with self._database_session.transaction() as session:
             return mirror_legacy_household_in_session(session, snapshot)

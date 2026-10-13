@@ -82,6 +82,8 @@ class UserHouseholdUpdateInput(StrictUserHouseholdInput):
 
 @dataclass(frozen=True)
 class UserHouseholdRead:
+    """A stored user-household association as the service returns it to routes."""
+
     id: UUID
     country_id: str
     user_id: UUID
@@ -95,6 +97,8 @@ class UserHouseholdRead:
 
 @dataclass(frozen=True)
 class UserHouseholdPage:
+    """One page of associations in creation order; ``has_more`` says if more follow."""
+
     items: tuple[UserHouseholdRead, ...]
     offset: int
     limit: int

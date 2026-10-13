@@ -36,6 +36,11 @@ def _validate_retention(created_at: datetime, retention_expires_at: datetime) ->
 
 
 class ComparisonRunLifecycleStatus(StrEnum):
+    """Lifecycle of a comparison report or simulation.
+
+    Succeeded and skipped are final; failed and incomplete runs may restart.
+    """
+
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -45,6 +50,8 @@ class ComparisonRunLifecycleStatus(StrEnum):
 
 
 class ComparisonRunAggregationStatus(StrEnum):
+    """Progress of a comparison report's aggregation step; succeeded is final."""
+
     NOT_STARTED = "not_started"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -52,6 +59,11 @@ class ComparisonRunAggregationStatus(StrEnum):
 
 
 class ResultComparisonStatus(StrEnum):
+    """Outcome of comparing a comparison run's aggregate with the production result.
+
+    Not-requested, matched, different and failed are final.
+    """
+
     NOT_REQUESTED = "not_requested"
     PENDING = "pending"
     RUNNING = "running"
@@ -106,6 +118,13 @@ class ComparisonReportRecord(StrictContractModel):
 
     @model_validator(mode="after")
     def validate_state(self) -> ComparisonReportRecord:
+        """Reject a report whose lifecycle, output and comparison fields disagree.
+
+        The aggregate output fields are all set or all unset; a succeeded report
+        needs successful aggregation, its output and completed_at; a failed or
+        skipped one needs an error_code; and the comparison fields must fit
+        comparison_status. Retention must be timezone-aware and 1-30 days long.
+        """
         _validate_retention(self.created_at, self.retention_expires_at)
         output_fields = (
             self.aggregate_output_uri,
@@ -208,6 +227,13 @@ class ComparisonSimulationRecord(StrictContractModel):
 
     @model_validator(mode="after")
     def validate_state(self) -> ComparisonSimulationRecord:
+        """Reject a simulation whose lifecycle and output fields disagree.
+
+        The output artifact and row-identity fields are all set or all unset,
+        row_identity_columns is non-empty and unique, a succeeded simulation
+        needs its output and completed_at, and a failed or skipped one needs an
+        error_code. Retention must be timezone-aware and 1-30 days long.
+        """
         _validate_retention(self.created_at, self.retention_expires_at)
         output_fields = (
             self.output_uri,
@@ -245,11 +271,15 @@ class ComparisonSimulationRecord(StrictContractModel):
 
 @dataclass(frozen=True)
 class ComparisonReportPersistenceResult:
+    """A stored report record, and whether this call inserted it or found it."""
+
     record: ComparisonReportRecord
     created: bool
 
 
 @dataclass(frozen=True)
 class ComparisonSimulationPersistenceResult:
+    """A stored simulation record, and whether this call inserted it or found it."""
+
     record: ComparisonSimulationRecord
     created: bool

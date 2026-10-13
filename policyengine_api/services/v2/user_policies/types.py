@@ -126,6 +126,12 @@ class LegacyUserPolicySnapshot(StrictAssociationInput):
 
 
 class LegacyUserPolicyMappingAction(StrEnum):
+    """What to do with a v1 saved-policy revision whose row is already mapped.
+
+    STALE is older than the applied revision and is ignored, REPLAY repeats the
+    applied revision, and UPDATE is the next revision, which is applied.
+    """
+
     STALE = "stale"
     REPLAY = "replay"
     UPDATE = "update"
@@ -133,6 +139,8 @@ class LegacyUserPolicyMappingAction(StrEnum):
 
 @dataclass(frozen=True)
 class UserPolicyRead:
+    """A stored user-policy association as the service returns it to routes."""
+
     id: UUID
     country_id: str
     user_id: UUID
@@ -148,6 +156,8 @@ class UserPolicyRead:
 
 @dataclass(frozen=True)
 class UserPolicyPage:
+    """One page of associations in creation order; ``has_more`` says if more follow."""
+
     items: tuple[UserPolicyRead, ...]
     offset: int
     limit: int
@@ -156,6 +166,12 @@ class UserPolicyPage:
 
 @dataclass(frozen=True)
 class LegacyUserPolicyPersistenceResult:
+    """Outcome of copying one v1 saved-policy revision into v2.
+
+    Names the v2 association and policy, and whether this call created the
+    association, renamed it, or created the v1-to-v2 mapping.
+    """
+
     association_id: UUID
     policy_id: UUID
     association_created: bool

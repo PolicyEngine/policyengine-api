@@ -75,11 +75,17 @@ def _canonical_json(
 
 
 def canonical_utc_datetime(value: datetime) -> str:
+    """Render a datetime in UTC with microseconds and a ``Z`` suffix, as hashed."""
     utc_value = value.astimezone(UTC)
     return utc_value.isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def canonical_policy_document(policy_input: ResolvedPolicyCreationInput) -> bytes:
+    """Serialize a resolved policy to the canonical bytes that its content hash covers.
+
+    Values are sorted by parameter id and dates, and keys are sorted, so the same
+    policy always yields the same bytes regardless of input order.
+    """
     parameter_values = sorted(
         policy_input.parameter_values,
         key=lambda value: (
@@ -113,6 +119,7 @@ def canonical_policy_document(policy_input: ResolvedPolicyCreationInput) -> byte
 def canonicalize_policy(
     policy_input: ResolvedPolicyCreationInput,
 ) -> CanonicalPolicyContent:
+    """Return the canonical bytes, SHA-256 hash and canonicalization version."""
     document = canonical_policy_document(policy_input)
     return CanonicalPolicyContent(
         version=POLICY_CANONICALIZATION_VERSION,
@@ -126,6 +133,7 @@ def stored_policy_creation_input(
     model_version: TaxBenefitModelVersion,
     values: list[ParameterValue],
 ) -> ResolvedPolicyCreationInput:
+    """Rebuild a stored policy's input so its canonical bytes can be compared."""
     return ResolvedPolicyCreationInput.model_validate(
         {
             "country_id": policy.country_id,
@@ -149,6 +157,7 @@ def policy_parameter_values_by_policy(
     policy_ids: list[UUID],
     rows: list[tuple[ParameterValue, str]],
 ) -> dict[UUID, tuple[PolicyParameterValueRead, ...]]:
+    """Group named value rows by policy id; every requested policy gets an entry."""
     grouped: dict[UUID, list[PolicyParameterValueRead]] = {
         policy_id: [] for policy_id in policy_ids
     }
@@ -172,6 +181,7 @@ def policy_read(
     policy: Policy,
     values: dict[UUID, tuple[PolicyParameterValueRead, ...]],
 ) -> PolicyRead:
+    """Convert a stored policy and its grouped values to the service's read model."""
     return PolicyRead(
         id=policy.id,
         country_id=policy.country_id,
@@ -190,6 +200,10 @@ def policy_page(
     offset: int,
     limit: int,
 ) -> PolicyPage:
+    """Build a page from up to ``limit + 1`` rows.
+
+    The extra row is not returned; it only sets ``has_more``.
+    """
     policies = rows[:limit]
     return PolicyPage(
         items=tuple(policy_read(policy, values) for policy in policies),
@@ -210,6 +224,11 @@ def _utc_midnight(value: str) -> datetime:
 
 
 def parse_legacy_period(value: str) -> tuple[datetime, datetime]:
+    """Return the UTC-midnight start and end dates of a v1 period key.
+
+    Accept a ``start.end`` ISO date range or a PolicyEngine period such as
+    ``2024``. Raise LegacyPolicyTranslationError for anything else.
+    """
     if not value or value != value.strip():
         raise LegacyPolicyTranslationError("legacy period must be non-empty")
     if "." in value:
@@ -242,6 +261,12 @@ def translate_legacy_policy(
     parameters: Mapping[str, Parameter],
     country_package_versions: Mapping[str, str],
 ) -> ResolvedPolicyCreationInput:
+    """Translate a v1 policy into policy content bound to the running catalog.
+
+    Raise LegacyPolicyTranslationError if the v1 policy was saved under another
+    country package version, names a parameter the catalog lacks, or has
+    invalid or conflicting periods.
+    """
     expected_api_version = country_package_versions.get(snapshot.country_id)
     if expected_api_version is None or snapshot.api_version != expected_api_version:
         raise LegacyPolicyTranslationError(

@@ -21,6 +21,12 @@ def create_policy(
     canonicalization_version: int,
     content_hash: str,
 ) -> UUID | None:
+    """Insert a policy unless one with the same canonical version and hash exists.
+
+    Return the new id, or None when the unique content-hash constraint made the
+    insert a no-op; the caller then reads the existing row. Parameter values are
+    inserted separately by create_parameter_values.
+    """
     policy_id = uuid4()
     statement = (
         insert(Policy)
@@ -44,6 +50,7 @@ def create_parameter_values(
     policy_id: UUID,
     policy_input: ResolvedPolicyCreationInput,
 ) -> None:
+    """Insert a new policy's parameter values and flush them so later reads see them."""
     session.add_all(
         [
             ParameterValue(
@@ -68,6 +75,11 @@ def create_legacy_policy_mapping(
     source_policy_hash: str,
     policy_id: UUID,
 ) -> UUID | None:
+    """Insert the mapping from a v1 policy id to its v2 policy.
+
+    Return the new mapping id, or None when a mapping for this country and v1 id
+    already exists (for example, a concurrent copy won the race).
+    """
     return session.execute(
         insert(LegacyPolicyMapping)
         .values(

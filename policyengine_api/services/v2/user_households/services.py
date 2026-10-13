@@ -280,6 +280,7 @@ class V2UserHouseholdService:
         country_id: str,
         association_id: UUID,
     ) -> None:
+        """Delete this country's association, or raise UserHouseholdNotFoundError."""
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
                 session, principal, country_id=country_id

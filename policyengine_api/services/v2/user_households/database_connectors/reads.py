@@ -21,6 +21,7 @@ def read_household_for_association(
     session: Session,
     household_id: UUID,
 ) -> Household | None:
+    """Return the household with this id in any country, or None."""
     return session.exec(
         select(Household).where(Household.id == household_id)
     ).one_or_none()
@@ -33,6 +34,7 @@ def read_owned_user_household_row(
     country_id: str,
     association_id: UUID,
 ) -> UserHouseholdAssociation | None:
+    """Return the association with this id in this country, or None."""
     return session.exec(
         select(UserHouseholdAssociation).where(
             UserHouseholdAssociation.id == association_id,
@@ -52,6 +54,11 @@ def read_user_household_rows(
     limit: int,
     legacy_household_id: int | None = None,
 ) -> list[UserHouseholdAssociation]:
+    """Return up to ``limit + 1`` of a user's associations in creation order.
+
+    With ``household_id``, only associations to that household are returned. The
+    extra row lets the caller report whether another page exists.
+    """
     statement = select(UserHouseholdAssociation).where(
         UserHouseholdAssociation.country_id == country_id,
         UserHouseholdAssociation.user_id == user_id,

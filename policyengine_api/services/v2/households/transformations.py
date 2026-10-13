@@ -72,6 +72,11 @@ def _canonical_json(
 
 
 def canonical_household_document(household_input: HouseholdCreationInput) -> bytes:
+    """Serialize a household to the canonical bytes that its content hash covers.
+
+    People and entity records are sorted by id and keys are sorted, so the same
+    household always yields the same bytes regardless of input order.
+    """
     content = dict(cast("dict[str, Any]", household_input.household_data))
     for collection, records in content.items():
         if collection in {
@@ -96,6 +101,7 @@ def canonical_household_document(household_input: HouseholdCreationInput) -> byt
 def canonicalize_household(
     household_input: HouseholdCreationInput,
 ) -> CanonicalHouseholdContent:
+    """Return the canonical bytes, SHA-256 hash and canonicalization version."""
     document = canonical_household_document(household_input)
     return CanonicalHouseholdContent(
         version=HOUSEHOLD_CANONICALIZATION_VERSION,
@@ -105,6 +111,7 @@ def canonicalize_household(
 
 
 def stored_household_creation_input(household: Household) -> HouseholdCreationInput:
+    """Rebuild a stored row's creation input so its canonical bytes can be compared."""
     return HouseholdCreationInput.model_validate(
         {
             "country_id": household.country_id,
@@ -115,6 +122,7 @@ def stored_household_creation_input(household: Household) -> HouseholdCreationIn
 
 
 def household_read(household: Household) -> HouseholdRead:
+    """Convert a stored household row to the service's read model."""
     return HouseholdRead(
         id=household.id,
         country_id=household.country_id,
@@ -126,6 +134,10 @@ def household_read(household: Household) -> HouseholdRead:
 
 
 def household_page(rows: list[Household], *, offset: int, limit: int) -> HouseholdPage:
+    """Build a page from up to ``limit + 1`` rows.
+
+    The extra row is not returned; it only sets ``has_more``.
+    """
     displayed = rows[:limit]
     return HouseholdPage(
         items=tuple(household_read(row) for row in displayed),
@@ -176,6 +188,13 @@ def _derive_default_year(values: list[object]) -> int | None:
 def translate_legacy_household(
     snapshot: LegacyHouseholdSnapshot,
 ) -> HouseholdCreationInput:
+    """Translate a v1 household document into normalized v2 household content.
+
+    Named v1 people and groups get stable ids in name order, and group members
+    become person memberships. The default year is derived from the value periods.
+    Raise LegacyHouseholdTranslationError when the v1 document cannot be
+    translated exactly.
+    """
     source = snapshot.household_json
     assert isinstance(source, dict)
     collections = SUPPORTED_ENTITY_COLLECTIONS[snapshot.country_id]
@@ -277,6 +296,7 @@ def translate_legacy_household(
 
 
 def legacy_household_fingerprint(snapshot: LegacyHouseholdSnapshot) -> str:
+    """Return a v1 snapshot's SHA-256 fingerprint, which detects changed v1 content."""
     document = {
         "fingerprint_version": LEGACY_HOUSEHOLD_FINGERPRINT_VERSION,
         **snapshot.model_dump(mode="json"),
