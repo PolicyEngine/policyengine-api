@@ -38,7 +38,7 @@ def _impact(execution_id: str, options_hash: str, day: int) -> CachedReformImpac
         reform_impact_json={},
         status="computing",
         message=None,
-        start_time=datetime(2026, 1, day),
+        start_time=datetime(2026, 1, day),  # noqa: DTZ001  # reform_impact start_time is a naive column
         end_time=None,
         execution_id=execution_id,
     )

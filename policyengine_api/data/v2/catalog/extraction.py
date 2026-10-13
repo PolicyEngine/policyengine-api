@@ -179,7 +179,7 @@ def normalize_json_value(value: object) -> JSONValue:
 
 def _aware_datetime(value: object, *, field_name: str) -> datetime:
     if isinstance(value, date) and not isinstance(value, datetime):
-        value = datetime(value.year, value.month, value.day)
+        value = datetime(value.year, value.month, value.day, tzinfo=UTC)
     if not isinstance(value, datetime):
         msg = f"{field_name} must be a date or datetime"
         raise CatalogExtractionError(msg)

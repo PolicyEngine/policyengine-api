@@ -18,7 +18,7 @@ POST = "POST"
 UPDATE = "UPDATE"
 LIST = "LIST"
 VERSION = "3.38.1"
-CURRENT_YEAR = str(datetime.now().year)
+CURRENT_YEAR = str(datetime.now().year)  # noqa: DTZ005  # the default year is the host's local calendar year
 COUNTRIES = ("uk", "us", "ca", "ng", "il")
 COUNTRY_PACKAGE_NAMES = (
     "policyengine_uk",

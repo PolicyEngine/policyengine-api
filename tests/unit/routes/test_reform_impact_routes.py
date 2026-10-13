@@ -23,7 +23,7 @@ from policyengine_api.runtime_cache.reform_impacts import (
 )
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
 
-COMPLETED_AT = datetime(2026, 1, 1, 1)
+COMPLETED_AT = datetime(2026, 1, 1, 1)  # noqa: DTZ001  # stands in for the service's naive UTC _now()
 
 
 @pytest.fixture
@@ -67,7 +67,7 @@ def _seed_reform_impacts(service: ReformImpactsService, n: int) -> None:
             api_version="1.0.0",
             reform_impact_json={},
             status="computing",
-            start_time=datetime(2026, 1, 1, 0, i // 60, i % 60),
+            start_time=datetime(2026, 1, 1, 0, i // 60, i % 60),  # noqa: DTZ001  # reform_impact start_time is a naive column
             execution_id=execution_id,
         )
         service.set_complete_reform_impact(

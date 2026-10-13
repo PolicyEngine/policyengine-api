@@ -41,7 +41,7 @@ def _create_impact(
         status="computing",
         api_version="1",
         reform_impact_json={},
-        start_time=datetime(2026, 1, day),
+        start_time=datetime(2026, 1, day),  # noqa: DTZ001  # reform_impact start_time is a naive column
         execution_id=execution_id,
     )
 
