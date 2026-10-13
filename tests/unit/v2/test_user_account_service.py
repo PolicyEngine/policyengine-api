@@ -472,6 +472,123 @@ def test_import_skips_items_with_non_finite_numbers_as_invalid(store) -> None:
     ]
 
 
+def test_import_stores_neither_a_valid_nor_an_invalid_repeated_client_ref(
+    store,
+) -> None:
+    accounts, *_ = _services(store)
+
+    result = accounts.import_records(
+        principal=ALICE,
+        country_id="us",
+        import_input=_import_input(
+            policies=[
+                {"client_ref": "rf-repeated", "legacy_policy_id": 1},
+                {"client_ref": "rf-repeated"},
+            ]
+        ),
+    )
+
+    assert result.id_map == {}
+    assert [(skip.client_ref, skip.reason.value) for skip in result.skipped] == [
+        ("rf-repeated", "invalid"),
+        ("rf-repeated", "invalid"),
+    ]
+    with store.sessions() as session:
+        assert session.exec(select(UserPolicy)).all() == []
+
+
+def test_import_stores_neither_of_two_valid_items_sharing_a_client_ref(
+    store,
+) -> None:
+    accounts, *_ = _services(store)
+
+    result = accounts.import_records(
+        principal=ALICE,
+        country_id="us",
+        import_input=_import_input(
+            policies=[
+                {"client_ref": "rf-repeated", "legacy_policy_id": 1, "name": "A"},
+                {"client_ref": "rf-repeated", "legacy_policy_id": 2, "name": "B"},
+            ]
+        ),
+    )
+
+    assert result.id_map == {}
+    assert [(skip.client_ref, skip.reason.value) for skip in result.skipped] == [
+        ("rf-repeated", "invalid"),
+        ("rf-repeated", "invalid"),
+    ]
+    with store.sessions() as session:
+        assert session.exec(select(UserPolicy)).all() == []
+
+
+def test_import_stores_items_beside_a_repeated_client_ref(store) -> None:
+    accounts, *_ = _services(store)
+
+    result = accounts.import_records(
+        principal=ALICE,
+        country_id="us",
+        import_input=_import_input(
+            policies=[
+                {"client_ref": "rf-repeated", "legacy_policy_id": 1},
+                {"client_ref": "rf-kept", "legacy_policy_id": 2},
+                {"client_ref": "rf-repeated", "legacy_policy_id": "1"},
+            ],
+            households=[{"client_ref": "suh-kept", "legacy_household_id": 10}],
+            reports=[
+                {
+                    "client_ref": "lfr-linked",
+                    "legacy_report_id": 615,
+                    "user_policy_client_ref": "rf-kept",
+                },
+                {
+                    "client_ref": "lfr-unlinked",
+                    "legacy_report_id": 616,
+                    "user_policy_client_ref": "rf-repeated",
+                },
+            ],
+        ),
+    )
+
+    assert set(result.id_map) == {"rf-kept", "suh-kept", "lfr-linked", "lfr-unlinked"}
+    assert [(skip.client_ref, skip.reason.value) for skip in result.skipped] == [
+        ("rf-repeated", "invalid"),
+        ("rf-repeated", "invalid"),
+    ]
+    assert not set(result.id_map) & {skip.client_ref for skip in result.skipped}
+    with store.sessions() as session:
+        policies = session.exec(select(UserPolicy)).all()
+        linked = session.get(UserReportAssociation, result.id_map["lfr-linked"])
+        unlinked = session.get(UserReportAssociation, result.id_map["lfr-unlinked"])
+        households = session.exec(select(UserHouseholdAssociation)).all()
+    assert [policy.client_ref for policy in policies] == ["rf-kept"]
+    assert linked.user_policy_id == policies[0].id
+    assert unlinked.user_policy_id is None
+    assert [household.client_ref for household in households] == ["suh-kept"]
+
+
+def test_import_treats_a_client_ref_shared_across_kinds_as_repeated(store) -> None:
+    accounts, *_ = _services(store)
+
+    result = accounts.import_records(
+        principal=ALICE,
+        country_id="us",
+        import_input=_import_input(
+            policies=[{"client_ref": "shared-ref", "legacy_policy_id": 1}],
+            reports=[{"client_ref": "shared-ref", "legacy_report_id": 615}],
+        ),
+    )
+
+    assert result.id_map == {}
+    assert [(skip.client_ref, skip.reason.value) for skip in result.skipped] == [
+        ("shared-ref", "invalid"),
+        ("shared-ref", "invalid"),
+    ]
+    with store.sessions() as session:
+        assert session.exec(select(UserPolicy)).all() == []
+        assert session.exec(select(UserReportAssociation)).all() == []
+
+
 def test_import_input_bounds_the_item_count() -> None:
     with pytest.raises(ValueError, match="at most 500"):
         _import_input(

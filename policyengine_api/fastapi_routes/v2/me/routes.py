@@ -174,7 +174,8 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
             "existing client_ref in the same country returns its stored ID "
             "unchanged. Items with an unknown v1 reference, an invalid shape, or "
             "a client_ref the user already holds in another country are skipped "
-            "and reported."
+            "and reported. A client_ref that appears more than once in the "
+            "request stores none of its items; each is skipped as invalid."
         ),
     )
     def import_records(

@@ -68,6 +68,15 @@ routes. The legacy builder stays browser-only, signed in or not.
   (`client_ref_conflict`), which is never linked across countries. A report's
   `user_policy_client_ref` resolves only against the user's policies in the
   import country.
+
+  A `client_ref` may appear only once in a request, across policies,
+  households, simulations, and reports, because `id_map` is keyed by
+  `client_ref` alone. When one appears more than once, none of its items
+  is stored and each occurrence is reported in `skipped` as `invalid`; the
+  request's other items are imported as usual. `id_map` therefore never
+  holds a `client_ref` that is also in `skipped`, which matters because app
+  v3 removes from the browser every item whose `client_ref` comes back in
+  `id_map`.
 - **Request bounds.** Every `/v2/me*` and `/v2/user-*` write rejects a body
   over 256 KiB with 413 (imports allow 1 MiB). FastAPI reads and parses the
   whole JSON body before any dependency runs, so this check does not limit

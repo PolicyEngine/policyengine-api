@@ -2,9 +2,10 @@
 
 Reads, updates, exports, and imports resolve (and on first use provision) the
 caller's v2 user from the verified session principal. Imports are idempotent
-on ``(user_id, client_ref)``: unknown v1 references, invalid items, and
-client_refs the user already holds in another country are skipped and reported
-rather than failing the request. Deletion removes the
+on ``(user_id, client_ref)``: unknown v1 references, invalid items, items
+whose client_ref appears more than once in the request, and client_refs the
+user already holds in another country are skipped and reported rather than
+failing the request. Deletion removes the
 user's legacy mappings, then the user (identities and associations cascade),
 and finally the Auth0 user when the Management API is configured. Only v2 user
 UUIDs are logged.
@@ -56,6 +57,7 @@ from policyengine_api.services.v2.user_accounts.validators import (
     AccountDeletionUnavailableError,
     AccountIdentityDeletionError,
     client_ref_conflict_skips,
+    duplicated_client_refs,
     partition_import_items,
     partition_known_legacy_items,
     require_account,
@@ -180,17 +182,27 @@ class V2AccountService:
         country_id: str,
         import_input: AccountImportInput,
     ) -> AccountImportResult:
+        # A client_ref sent more than once stores none of its records, so
+        # id_map never returns a client_ref that is also skipped.
+        duplicates = duplicated_client_refs(
+            (
+                import_input.policies,
+                import_input.households,
+                import_input.simulations,
+                import_input.reports,
+            )
+        )
         policies, policy_skips = partition_import_items(
-            import_input.policies, UserPolicyImportItem
+            import_input.policies, UserPolicyImportItem, duplicates=duplicates
         )
         households, household_skips = partition_import_items(
-            import_input.households, UserHouseholdImportItem
+            import_input.households, UserHouseholdImportItem, duplicates=duplicates
         )
         simulations, simulation_skips = partition_import_items(
-            import_input.simulations, UserSimulationImportItem
+            import_input.simulations, UserSimulationImportItem, duplicates=duplicates
         )
         reports, report_skips = partition_import_items(
-            import_input.reports, UserReportImportItem
+            import_input.reports, UserReportImportItem, duplicates=duplicates
         )
 
         existing = require_legacy_reference_checker(
