@@ -101,13 +101,17 @@ def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int
             result=None,
         )
 
-    return _json_response(
-        {
-            "status": result_dict["status"],
-            "message": None,
-            "result": result_dict["data"],
-        }
-    )
+    body = {
+        "status": result_dict["status"],
+        "message": None,
+        "result": result_dict["data"],
+    }
+    # Stage fields from the Simulation Entrypoint, only while computing and
+    # only when the worker reports them, so other bodies keep their shape.
+    run_progress = getattr(economic_impact_result, "run_progress", None)
+    if result_dict["status"] == "computing" and isinstance(run_progress, dict):
+        body.update(run_progress)
+    return _json_response(body)
 
 
 @economy_bp.route(

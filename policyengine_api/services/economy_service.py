@@ -23,7 +23,10 @@ from policyengine_api.data.congressional_districts import (
 from policyengine_api.data.v1_models import ReformImpact
 from policyengine_api.data.places import validate_place_code
 from policyengine_api.gcp_logging import logger
-from policyengine_api.libs.simulation_entrypoint import simulation_entrypoint
+from policyengine_api.libs.simulation_entrypoint import (
+    SimulationRunProgress,
+    simulation_entrypoint,
+)
 from policyengine_api.observability import (
     runtime as observability_runtime,
     set_runtime_context,
@@ -128,6 +131,9 @@ class EconomicImpactResult(BaseModel):
     status: ImpactStatus
     data: Optional[dict] = None
     message: Optional[str] = None
+    # Stage fields relayed from the Simulation Entrypoint while computing.
+    # Kept out of to_dict(); the route adds them only when present.
+    run_progress: Optional[dict] = None
 
     model_config = {"frozen": True}  # Make model immutable
 
@@ -149,11 +155,11 @@ class EconomicImpactResult(BaseModel):
         return cls(status=ImpactStatus.OK, data=data)
 
     @classmethod
-    def computing(cls) -> "EconomicImpactResult":
+    def computing(cls, run_progress: Optional[dict] = None) -> "EconomicImpactResult":
         """
         Create an EconomicImpactResult for a computing impact calculation.
         """
-        return cls(status=ImpactStatus.COMPUTING, data=None)
+        return cls(status=ImpactStatus.COMPUTING, data=None, run_progress=run_progress)
 
     @classmethod
     def error(cls, message: str) -> "EconomicImpactResult":
@@ -1278,7 +1284,14 @@ class EconomyService:
                 {"message": "Sim API execution is still running"},
                 severity="INFO",
             )
-            return EconomicImpactResult.computing()
+            run_progress = getattr(execution, "run_progress", None)
+            return EconomicImpactResult.computing(
+                run_progress=(
+                    run_progress.to_dict()
+                    if isinstance(run_progress, SimulationRunProgress)
+                    else None
+                )
+            )
 
         else:
             raise ValueError(f"Unexpected sim API execution state: {execution_state}")

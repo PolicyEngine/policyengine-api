@@ -26,6 +26,7 @@ from policyengine_api.libs.simulation_entrypoint import (  # noqa: E402
     ModalSimulationExecution,
     SimulationAPIModal,
     SimulationEntrypointClient,
+    SimulationRunProgress,
     resolve_simulation_entrypoint_url,
 )
 from policyengine_api.request_context import (  # noqa: E402
@@ -961,6 +962,84 @@ class TestSimulationAPIModal:
             assert execution.status == MODAL_EXECUTION_STATUS_FAILED
             assert execution.error == "Simulation timed out"
 
+        def test__given_running_job_with_stage_fields__then_reads_run_progress(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            # Given
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data={
+                    **MOCK_POLL_RESPONSE_RUNNING,
+                    "stage": "simulating",
+                    "progress": 5,
+                    "progress_max": 96,
+                    "submitted_at": "2026-10-13T12:00:00Z",
+                    "started_at": "2026-10-13T12:00:10Z",
+                    "stage_started_at": "2026-10-13T12:00:17Z",
+                    "segments": {"completed": 19, "total": 20},
+                    "stage_durations": {"loading_data": 7.0},
+                },
+            )
+            api = SimulationAPIModal()
+
+            # When
+            execution = api.get_execution_by_id(MOCK_MODAL_JOB_ID)
+
+            # Then
+            assert execution.status == MODAL_EXECUTION_STATUS_RUNNING
+            assert execution.run_progress.to_dict() == {
+                "stage": "simulating",
+                "progress": 5,
+                "progress_max": 96,
+                "submitted_at": "2026-10-13T12:00:00Z",
+                "started_at": "2026-10-13T12:00:10Z",
+                "stage_started_at": "2026-10-13T12:00:17Z",
+                "segments": {"completed": 19, "total": 20},
+            }
+
+        def test__given_running_job_without_stage_fields__then_has_no_run_progress(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            # Given
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data=MOCK_POLL_RESPONSE_RUNNING,
+            )
+            api = SimulationAPIModal()
+
+            # When
+            execution = api.get_execution_by_id(MOCK_MODAL_JOB_ID)
+
+            # Then
+            assert execution.run_progress is None
+
+        def test__given_malformed_stage_fields__then_still_returns_status(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            # Given
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data={
+                    **MOCK_POLL_RESPONSE_RUNNING,
+                    "stage": "reform",
+                    "progress": 150,
+                },
+            )
+            api = SimulationAPIModal()
+
+            # When
+            execution = api.get_execution_by_id(MOCK_MODAL_JOB_ID)
+
+            # Then
+            assert execution.status == MODAL_EXECUTION_STATUS_RUNNING
+            assert execution.run_progress is None
+
         def test__given_job_id__then_polls_correct_endpoint(
             self,
             mock_httpx_client,
@@ -1007,6 +1086,17 @@ class TestSimulationAPIModal:
 
             log_payload = mock_modal_logger.log_struct.call_args.args[0]
             assert MOCK_MODAL_JOB_ID in log_payload["message"]
+
+    class TestSimulationRunProgress:
+        def test__given_unknown_stage__then_keeps_it(self):
+            run_progress = SimulationRunProgress.from_status(
+                {"status": "running", "stage": "a_future_stage", "progress": 40}
+            )
+
+            assert run_progress.to_dict() == {
+                "stage": "a_future_stage",
+                "progress": 40,
+            }
 
     class TestGetBudgetWindowBatchById:
         def test__given_running_batch__then_returns_running_status(

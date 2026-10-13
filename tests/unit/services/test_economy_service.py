@@ -20,6 +20,10 @@ from policyengine_api.services.economy_service import (
     ImpactStatus,
     REFORM_IMPACT_START_CLAIM_ATTEMPTS,
 )
+from policyengine_api.libs.simulation_entrypoint import (
+    ModalSimulationExecution,
+    SimulationRunProgress,
+)
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.spm import SPMValidationError
 from tests.fixtures.services.economy_service import (
@@ -2268,6 +2272,49 @@ class TestEconomyService:
             # Then
             assert result.status == ImpactStatus.COMPUTING
             assert result.data is None
+
+        def test__given_modal_running_state_with_run_progress__then_relays_it(
+            self, economy_service, setup_options, mock_logger
+        ):
+            # Given
+            reform_impact = create_mock_reform_impact(status="computing")
+            execution = ModalSimulationExecution(
+                job_id="fc-job-1",
+                status="running",
+                run_progress=SimulationRunProgress(
+                    stage="reform", progress=67, progress_max=96
+                ),
+            )
+
+            # When
+            result = economy_service._handle_execution_state(
+                setup_options, "running", reform_impact, execution
+            )
+
+            # Then
+            assert result.status == ImpactStatus.COMPUTING
+            assert result.run_progress == {
+                "stage": "reform",
+                "progress": 67,
+                "progress_max": 96,
+            }
+            assert "run_progress" not in result.to_dict()
+
+        def test__given_modal_running_state_without_run_progress__then_has_none(
+            self, economy_service, setup_options, mock_logger
+        ):
+            # Given
+            reform_impact = create_mock_reform_impact(status="computing")
+            execution = ModalSimulationExecution(job_id="fc-job-1", status="running")
+
+            # When
+            result = economy_service._handle_execution_state(
+                setup_options, "running", reform_impact, execution
+            )
+
+            # Then
+            assert result.status == ImpactStatus.COMPUTING
+            assert result.run_progress is None
 
         def test__given_modal_submitted_state__then_returns_computing_result(
             self, economy_service, setup_options, mock_logger
