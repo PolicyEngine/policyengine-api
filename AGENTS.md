@@ -35,7 +35,9 @@ When modifying the `Makefile`, read
 ## GitHub PRs
 
 Read `docs/engineering/skills/github-prs.md` before opening, replacing, or
-sharing any pull request.
+sharing any pull request. Every PR needs a tracking issue and
+`Fixes #ISSUE_NUMBER` as the first line of its description. Agents must never
+bypass branch rules (for example with `gh pr merge --admin`).
 
 Before creating or sharing a migration PR, run the focused migration guards:
 

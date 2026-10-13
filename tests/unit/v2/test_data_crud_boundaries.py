@@ -38,55 +38,63 @@ def _imported_modules(path: Path) -> set[str]:
     return modules
 
 
-@pytest.mark.parametrize(
-    "relative_path",
-    (
-        "policies/database_connectors/creates.py",
-        "comparison_runs/database_connectors/creates.py",
-        "user_policies/database_connectors/creates.py",
-        "comparison_runs/database_connectors/updates.py",
-        "user_policies/database_connectors/updates.py",
-        "user_policies/database_connectors/deletes.py",
-    ),
+def _discover(*patterns: str) -> list[str]:
+    """Modules under SERVICES_ROOT matching any pattern, as sorted relative paths.
+
+    Discovering modules (rather than listing them) means a new resource package
+    is checked automatically. An empty result fails at collection, because
+    pytest silently skips a test whose parameter list is empty.
+    """
+    paths = sorted(
+        {
+            path.relative_to(SERVICES_ROOT).as_posix()
+            for pattern in patterns
+            for path in SERVICES_ROOT.glob(pattern)
+        }
+    )
+    assert paths, f"no modules under {SERVICES_ROOT} match {patterns}"
+    return paths
+
+
+MUTATION_CONNECTORS = _discover(
+    "*/database_connectors/creates*.py",
+    "*/database_connectors/updates*.py",
+    "*/database_connectors/deletes*.py",
 )
+READ_CONNECTORS = _discover("*/database_connectors/reads*.py")
+VALIDATION_AND_TRANSFORMATION_MODULES = _discover(
+    "*/validators.py", "*/transformations.py"
+)
+DATABASE_SESSION_MODULES = _discover("*/database_session.py")
+
+
+def test_every_connector_module_is_classified() -> None:
+    connectors = {
+        path
+        for path in _discover("*/database_connectors/*.py")
+        if not path.endswith("/__init__.py")
+    }
+    classified = set(MUTATION_CONNECTORS) | set(READ_CONNECTORS)
+    assert connectors - classified == set(), (
+        "connector modules must be named creates, reads, updates or deletes "
+        "(optionally with a _suffix) so the boundary checks below cover them"
+    )
+
+
+@pytest.mark.parametrize("relative_path", MUTATION_CONNECTORS)
 def test_mutation_connectors_contain_no_database_reads(relative_path: str) -> None:
     calls = _called_names(SERVICES_ROOT / relative_path)
     assert "select" not in calls
     assert "get" not in calls
 
 
-@pytest.mark.parametrize(
-    "relative_path",
-    (
-        "policies/database_connectors/reads.py",
-        "comparison_runs/database_connectors/reads.py",
-        "user_policies/database_connectors/reads.py",
-        "metadata/database_connectors/reads.py",
-        "metadata/database_connectors/reads_datasets.py",
-        "metadata/database_connectors/reads_parameter_tree.py",
-        "metadata/database_connectors/reads_parameters.py",
-        "metadata/database_connectors/reads_regions.py",
-        "metadata/database_connectors/reads_variables.py",
-    ),
-)
+@pytest.mark.parametrize("relative_path", READ_CONNECTORS)
 def test_read_connectors_contain_no_database_mutations(relative_path: str) -> None:
     calls = _called_names(SERVICES_ROOT / relative_path)
     assert calls.isdisjoint({"insert", "add", "add_all", "delete"})
 
 
-@pytest.mark.parametrize(
-    "relative_path",
-    (
-        "policies/validators.py",
-        "policies/transformations.py",
-        "metadata/validators.py",
-        "metadata/transformations.py",
-        "comparison_runs/validators.py",
-        "comparison_runs/transformations.py",
-        "user_policies/validators.py",
-        "user_policies/transformations.py",
-    ),
-)
+@pytest.mark.parametrize("relative_path", VALIDATION_AND_TRANSFORMATION_MODULES)
 def test_validation_and_transformation_modules_have_no_database_query_dependency(
     relative_path: str,
 ) -> None:
@@ -100,15 +108,7 @@ def test_validation_and_transformation_modules_have_no_database_query_dependency
     )
 
 
-@pytest.mark.parametrize(
-    "relative_path",
-    (
-        "policies/database_session.py",
-        "comparison_runs/database_session.py",
-        "metadata/database_session.py",
-        "user_policies/database_session.py",
-    ),
-)
+@pytest.mark.parametrize("relative_path", DATABASE_SESSION_MODULES)
 def test_database_session_modules_do_not_construct_queries(
     relative_path: str,
 ) -> None:
