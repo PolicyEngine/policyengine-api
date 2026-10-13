@@ -72,12 +72,12 @@ def _canonicalize_society_wide_spm_output(
     annual_impacts = output.get("annualImpacts")
     if not isinstance(annual_impacts, list):
         msg = "SPM budget-window output requires annual impact objects"
-        raise ValueError(msg)
+        raise TypeError(msg)
     canonical_rows: list[JSONValue] = []
     for row in annual_impacts:
         if not isinstance(row, dict):
             msg = "SPM budget-window output requires annual impact objects"
-            raise ValueError(msg)
+            raise TypeError(msg)
         row_year = row.get("year")
         canonical_rows.append(
             _canonicalize_annual_spm_output(
@@ -86,6 +86,10 @@ def _canonicalize_society_wide_spm_output(
             )
         )
     return {**typed_output, "annualImpacts": canonical_rows}
+
+
+class InvalidReportOutputIdError(Exception):
+    """Raised when a report output ID is not a non-negative integer."""
 
 
 @dataclass(frozen=True)
@@ -576,7 +580,7 @@ class ReportOutputService:
                 f"Invalid report output ID: {report_output_id}. "
                 "Must be a positive integer."
             )
-            raise Exception(msg)
+            raise InvalidReportOutputIdError(msg)
         return self._select_report_output(session, report_output_id, country_id)
 
     @staticmethod
@@ -669,15 +673,15 @@ class ReportOutputService:
 
         A report stored under an outdated cache version is served as the current report
         for the same simulations and year (created if needed), with the requested ID
-        kept as ``response_id``. Raise Exception for an ID that is not a non-negative
-        int.
+        kept as ``response_id``. Raise InvalidReportOutputIdError for an ID that is not
+        a non-negative int.
         """
         if type(report_output_id) is not int or report_output_id < 0:
             msg = (
                 f"Invalid report output ID: {report_output_id}. "
                 "Must be a positive integer."
             )
-            raise Exception(msg)
+            raise InvalidReportOutputIdError(msg)
         with self._sessions.begin() as session:
             requested = self._get_report_output(session, country_id, report_output_id)
             if requested is None:
