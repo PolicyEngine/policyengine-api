@@ -29,4 +29,3 @@ class ResolvedUser:
 
     user_id: UUID
     email: str | None
-    provisioned: bool

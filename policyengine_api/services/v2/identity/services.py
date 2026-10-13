@@ -57,11 +57,7 @@ def find_principal_user_in_session(
     )
     if identity is None:
         return None
-    return ResolvedUser(
-        user_id=identity.user_id,
-        email=identity.email,
-        provisioned=False,
-    )
+    return ResolvedUser(user_id=identity.user_id, email=identity.email)
 
 
 def resolve_principal_user_in_session(
@@ -87,11 +83,7 @@ def resolve_principal_user_in_session(
                 email=refreshed_identity_email(identity, principal.email),
                 seen_at=seen_at,
             )
-        return ResolvedUser(
-            user_id=identity.user_id,
-            email=identity.email,
-            provisioned=False,
-        )
+        return ResolvedUser(user_id=identity.user_id, email=identity.email)
 
     with provisioning_savepoint(session) as savepoint:
         user = create_provisioned_user(session, primary_country=country_id)
@@ -111,11 +103,7 @@ def resolve_principal_user_in_session(
             "provisioned_v2_user",
             extra={"policyengine_attributes": {"v2_user_id": str(created_user_id)}},
         )
-        return ResolvedUser(
-            user_id=created_user_id,
-            email=principal.email,
-            provisioned=True,
-        )
+        return ResolvedUser(user_id=created_user_id, email=principal.email)
 
     concurrent = require_concurrent_identity(
         read_user_identity(
@@ -124,8 +112,4 @@ def resolve_principal_user_in_session(
             subject=principal.subject,
         )
     )
-    return ResolvedUser(
-        user_id=concurrent.user_id,
-        email=concurrent.email,
-        provisioned=False,
-    )
+    return ResolvedUser(user_id=concurrent.user_id, email=concurrent.email)
