@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import atexit
 import os
+from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
 from google.cloud.sql.connector import Connector, IPTypes
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine.interfaces import DBAPIConnection
 
 load_dotenv()
 
@@ -49,7 +53,7 @@ def _build_remote_engine() -> Engine:
     )
     password = os.environ["POLICYENGINE_DB_PASSWORD"]
 
-    def get_connection():
+    def get_connection() -> DBAPIConnection:
         return connector.connect(
             instance_connection_string=config["instance_connection_name"],
             driver="pymysql",

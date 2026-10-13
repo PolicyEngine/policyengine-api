@@ -135,7 +135,7 @@ def _drop_deprecated_axes(
 
 
 def _is_deprecated_axis(
-    axis, location: str, warnings: list[DeprecatedVariableWarning]
+    axis: object, location: str, warnings: list[DeprecatedVariableWarning]
 ) -> bool:
     if not isinstance(axis, dict):
         return False

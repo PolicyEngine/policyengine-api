@@ -1,7 +1,9 @@
 import json
 import logging
 import time
+from collections.abc import Callable
 from functools import wraps
+from typing import TypeVar
 
 from flask import Blueprint, Response, g, request
 from policyengine_core.errors import SituationParsingError
@@ -22,6 +24,7 @@ from policyengine_api.request_context import (
 )
 from policyengine_api.response_factory import _make_error_response
 from policyengine_api.services.household_calculation_service import (
+    HouseholdCalculationResult,
     HouseholdCalculationService,
     HouseholdNotFoundError,
     InvalidHouseholdInputsError,
@@ -46,6 +49,8 @@ from policyengine_api.utils.payload_validators import (
     validate_country,
     validate_household_payload,
 )
+
+_ViewResult = TypeVar("_ViewResult")
 
 household_bp = Blueprint("household", __name__)
 household_service = HouseholdService()
@@ -133,7 +138,7 @@ def _spm_error_response(error: Exception) -> Response | None:
     return None
 
 
-def _calculation_response(calculation) -> dict:
+def _calculation_response(calculation: HouseholdCalculationResult) -> dict:
     result = dict(status="ok", message=None, result=calculation.household)
     if calculation.warnings:
         result["warnings"] = list(calculation.warnings)
@@ -142,7 +147,7 @@ def _calculation_response(calculation) -> dict:
     return result
 
 
-def _requested_spm(country_id: str, payload: dict):
+def _requested_spm(country_id: str, payload: dict) -> object:
     """Read a chosen selection, treating an explicit null as a malformed one.
 
     A v2 document and a simulation record both refuse an explicit null rather
@@ -169,12 +174,21 @@ def _requested_spm(country_id: str, payload: dict):
     return selection
 
 
-def _validate_calculation_request(*, add_missing: bool):
+def _validate_calculation_request(
+    *, add_missing: bool
+) -> Callable[
+    [Callable[..., _ViewResult]],
+    Callable[..., _ViewResult | Response],
+]:
     """Validate calculation inputs before an HTTP cache can satisfy a request."""
 
-    def decorator(func):
+    def decorator(
+        func: Callable[..., _ViewResult],
+    ) -> Callable[..., _ViewResult | Response]:
         @wraps(func)
-        def wrapped(country_id, *args, **kwargs):
+        def wrapped(
+            country_id: str, *args: object, **kwargs: object
+        ) -> _ViewResult | Response:
             payload = request.get_json()
             if not isinstance(payload, dict):
                 raise BadRequest("Calculation payload must be a JSON object.")
@@ -225,7 +239,7 @@ def _validate_calculation_request(*, add_missing: bool):
     return decorator
 
 
-def _calculation_cache_key(*args, **kwargs):
+def _calculation_cache_key(*args: object, **kwargs: object) -> str:
     country_id = request.view_args["country_id"]
     return hash_object(
         {
@@ -354,7 +368,9 @@ def post_household(country_id: str) -> Response:
     methods=["GET"],
 )
 @validate_country
-def get_household_under_policy(country_id: str, household_id: str, policy_id: str):
+def get_household_under_policy(
+    country_id: str, household_id: str, policy_id: str
+) -> dict | Response:
     """Get a stored household's output under a stored policy."""
     try:
         get_v1_household_read_source()

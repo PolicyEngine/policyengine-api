@@ -22,12 +22,14 @@ from policyengine_api.spm import (
 )
 
 if TYPE_CHECKING:
-    from policyengine_api.json_types import JSONObject
+    from pydantic import BaseModel
+
+    from policyengine_api.json_types import JSONObject, JSONValue
 
 DEFAULT_SPECIFICATION_PATH = Path(__file__).with_name("openapi_spec.yaml")
 
 
-def _openapi_30_schema(value):
+def _openapi_30_schema(value: JSONValue) -> JSONValue:
     """Convert Pydantic's optional JSON Schema fields to OpenAPI 3.0 nullable."""
     if isinstance(value, list):
         return [_openapi_30_schema(item) for item in value]
@@ -47,7 +49,7 @@ def _openapi_30_schema(value):
     return result
 
 
-def _economy_query_parameters(model):
+def _economy_query_parameters(model: type[BaseModel]) -> list[dict[str, object]]:
     """Publish the same complete scalar query contract used by Flask."""
     schema = model.model_json_schema()
     result = []
@@ -70,7 +72,7 @@ def _economy_query_parameters(model):
     return result
 
 
-def _component_schema(model):
+def _component_schema(model: type[BaseModel]) -> JSONValue:
     """Generate one OpenAPI component and publish nested models separately."""
     schema = model.model_json_schema(
         ref_template="#/components/schemas/{model}",

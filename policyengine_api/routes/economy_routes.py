@@ -70,7 +70,9 @@ def _bad_request_response(error: str | ValueError) -> Response:
     methods=["GET"],
 )
 @validate_country
-def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int):
+def get_economic_impact(
+    country_id: str, policy_id: int, baseline_policy_id: int
+) -> Response:
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
         baseline_policy_id or get_current_law_policy_id(country_id)
@@ -125,7 +127,7 @@ def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int
 @validate_country
 def get_budget_window_economic_impact(
     country_id: str, policy_id: int, baseline_policy_id: int
-):
+) -> Response:
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
         baseline_policy_id or get_current_law_policy_id(country_id)

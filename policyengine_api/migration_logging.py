@@ -88,7 +88,7 @@ def register_migration_request_logging(
     """Register request IDs and migration logging for Flask."""
 
     @app.before_request
-    def set_request_migration_context():
+    def set_request_migration_context() -> None:
         flask.g.request_started_at = time.time()
         try:
             captured = runtime.capture_context() if runtime is not None else {}
@@ -108,7 +108,7 @@ def register_migration_request_logging(
                 pass
 
     @app.after_request
-    def log_request_migration_context(response):
+    def log_request_migration_context(response: flask.Response) -> flask.Response:
         request_id = getattr(flask.g, "request_id", None)
         if request_id is not None:
             response.headers[REQUEST_ID_HEADER] = request_id

@@ -47,7 +47,7 @@ def _resolve_distribution_version(
     return "0.0.0"
 
 
-def get_py_manifest():
+def get_py_manifest() -> Path:
     return distribution("policyengine").locate_file(
         "policyengine/data/bundle/manifest.json"
     )

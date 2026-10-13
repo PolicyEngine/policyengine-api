@@ -9,7 +9,7 @@ import time
 start_time = time.time()
 
 
-def log_timing(message):
+def log_timing(message: str) -> None:
     elapsed = time.time() - start_time
     print(f"[{elapsed:.2f}s] {message}", file=sys.stderr, flush=True)
 

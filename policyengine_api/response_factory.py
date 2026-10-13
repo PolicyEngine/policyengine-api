@@ -1,7 +1,6 @@
 """Factories for consistent Flask response construction."""
 
 import json
-from typing import Any
 
 from flask import Response
 
@@ -12,7 +11,7 @@ def _make_error_response(
     *,
     include_status: bool = True,
     mimetype: str | None = "application/json",
-    **payload_fields: Any,
+    **payload_fields: object,
 ) -> Response:
     """Build a JSON error response while preserving legacy payload variants."""
     payload = {"message": str(message), **payload_fields}
