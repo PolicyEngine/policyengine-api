@@ -247,5 +247,5 @@ def check() -> list[str]:
     """Adapter for scripts/run_quality_guards.py."""
     violations, notes = run_check(REPO_ROOT)
     for note in notes:
-        print(f"note: {note}")
+        print(f"note: {note}")  # noqa: T201  # the guard adapter prints its notes
     return [str(violation) for violation in violations]

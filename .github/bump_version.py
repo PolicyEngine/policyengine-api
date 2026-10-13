@@ -3,6 +3,12 @@
 import re
 import sys
 from pathlib import Path
+from typing import TextIO
+
+
+def _report(message: str, *, file: TextIO | None = None) -> None:
+    """Print one line of this command's output, to stdout unless ``file`` is given."""
+    print(message, file=file)
 
 
 def get_current_version(pyproject_path: Path) -> str:
@@ -10,7 +16,7 @@ def get_current_version(pyproject_path: Path) -> str:
     text = pyproject_path.read_text()
     match = re.search(r'^version\s*=\s*"(\d+\.\d+\.\d+)"', text, re.MULTILINE)
     if not match:
-        print(
+        _report(
             "Could not find version in pyproject.toml",
             file=sys.stderr,
         )
@@ -28,7 +34,7 @@ def infer_bump(changelog_dir: Path) -> str:
         f for f in changelog_dir.iterdir() if f.is_file() and f.name != ".gitkeep"
     ]
     if not fragments:
-        print("No changelog fragments found", file=sys.stderr)
+        _report("No changelog fragments found", file=sys.stderr)
         sys.exit(1)
 
     categories = {f.suffix.lstrip(".") for f in fragments}
@@ -63,7 +69,7 @@ def update_file(path: Path, old_version: str, new_version: str) -> None:
     )
     if updated != text:
         path.write_text(updated)
-        print(f"  Updated {path}")
+        _report(f"  Updated {path}")
 
 
 def main() -> None:
@@ -76,7 +82,7 @@ def main() -> None:
     bump = infer_bump(changelog_dir)
     new = bump_version(current, bump)
 
-    print(f"Version: {current} -> {new} ({bump})")
+    _report(f"Version: {current} -> {new} ({bump})")
 
     update_file(pyproject, current, new)
 

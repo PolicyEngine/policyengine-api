@@ -249,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         with connection_context as connection:
             if args.mode == "state":
-                print(database_state(connection).value)
+                print(database_state(connection).value)  # noqa: T201  # the command prints the database state for its caller
             elif args.mode == "verify-head":
                 verify_head_schema(connection)
             else:

@@ -25,6 +25,11 @@ BOOT_TIMEOUT_SECONDS = 600
 HTTP_TIMEOUT_SECONDS = 2
 
 
+def _report(message: str) -> None:
+    """Print one line of the smoke test's output."""
+    print(message)  # noqa: T201  # reporting progress and results is this command's job
+
+
 def find_free_port() -> int:
     """Return a localhost TCP port that was free when checked (nothing reserves it)."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -49,8 +54,8 @@ def fetch(url: str) -> tuple[int, str]:
 
 def print_section(title: str, body: str) -> None:
     """Print a titled block of captured output, or "(empty)" when there is none."""
-    print(f"\n=== {title} ===")
-    print(body.rstrip() if body else "(empty)")
+    _report(f"\n=== {title} ===")
+    _report(body.rstrip() if body else "(empty)")
 
 
 def main() -> int:
@@ -87,12 +92,12 @@ def main() -> int:
     except importlib.metadata.PackageNotFoundError:
         policyengine_version = "not installed"
 
-    print(f"repo: {REPO_ROOT}")
-    print(f"python: {sys.executable}")
-    print(f"policyengine: {policyengine_version}")
-    print(f"port: {port}")
-    print(f"stdout log: {stdout_path}")
-    print(f"stderr log: {stderr_path}")
+    _report(f"repo: {REPO_ROOT}")
+    _report(f"python: {sys.executable}")
+    _report(f"policyengine: {policyengine_version}")
+    _report(f"port: {port}")
+    _report(f"stdout log: {stdout_path}")
+    _report(f"stderr log: {stderr_path}")
 
     with (
         stdout_path.open("w", encoding="utf-8") as stdout_handle,
@@ -142,22 +147,22 @@ def main() -> int:
             ) if process.poll() is not None else process.terminate()
             if process.poll() is None:
                 process.wait(timeout=5)
-            print("\nBoot smoke test failed: app did not become ready.")
+            _report("\nBoot smoke test failed: app did not become ready.")
             print_section("stdout", read_text(stdout_path))
             print_section("stderr", read_text(stderr_path))
             return 1
 
-        print("\nBoot smoke test reached a live app. Probing health endpoints:")
+        _report("\nBoot smoke test reached a live app. Probing health endpoints:")
         for path in HEALTH_PATHS:
             status, body = fetch(f"http://127.0.0.1:{port}{path}")
-            print(f"{path}: {status} {body.strip()}")
+            _report(f"{path}: {status} {body.strip()}")
             if status != 200 or body.strip() != "OK":
-                print("\nHealth endpoint probe failed.")
+                _report("\nHealth endpoint probe failed.")
                 print_section("stdout", read_text(stdout_path))
                 print_section("stderr", read_text(stderr_path))
                 return 1
 
-        print("\nBoot smoke test passed.")
+        _report("\nBoot smoke test passed.")
         return 0
     finally:
         if "process" in locals() and process.poll() is None:

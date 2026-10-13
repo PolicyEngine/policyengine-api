@@ -171,7 +171,7 @@ async def _run(args: argparse.Namespace) -> dict:
                 CALCULATE_PATH, json=throwaway, timeout=args.timeout_calculate
             )
         except httpx.HTTPError as error:
-            print(
+            print(  # noqa: T201  # the command warns on stderr and keeps measuring
                 f"warning: warm-up calculate failed ({type(error).__name__}); "
                 "continuing",
                 file=sys.stderr,
