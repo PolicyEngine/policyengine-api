@@ -265,6 +265,16 @@ parent revision writes.
 | `AUTH0_MANAGEMENT_CLIENT_ID` | GitHub variable (optional, `production` only) | M2M client with `delete:users` |
 | `AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE` | GitHub secret (optional, `production` only) | Secret Manager version holding the M2M client secret |
 
+> **Set the final issuer before the first sign-in.** `user_identities` is
+> keyed by `(issuer, subject)`, so `PUBLIC_API_AUTH_ISSUER` must hold its
+> final value, the custom domain (for example
+> `https://auth.policyengine.org/`) rather than the tenant's `*.auth0.com`
+> domain, before anyone signs in to that environment. Changing it later
+> makes every existing user look new: their next sign-in provisions a new,
+> empty account, and their old account and its saved work are orphaned,
+> with no sign-in that can read, export, or delete them. Nothing re-keys
+> identities automatically.
+
 `readiness.validate_policy_runtime_configuration` validates the
 `PUBLIC_API_AUTH_*` and `AUTH0_MANAGEMENT_*` settings. Inconsistent values fail
 readiness, which is the deploy gate. `validate_cloud_run_deploy_env.sh` requires
@@ -295,7 +305,8 @@ production.
 Configure staging first, then production:
 
 1. **Custom domain** (for example `auth.policyengine.org`). Tokens then carry
-   that issuer.
+   that issuer. Finish this before setting `PUBLIC_API_AUTH_ISSUER`, which
+   must not change once a user has signed in (see "Settings").
 2. **Public API resource server** (RS256), whose identifier becomes
    `PUBLIC_API_AUTH_AUDIENCE`.
 3. **Social connections and SPA applications** for app v3.
@@ -326,11 +337,12 @@ Configure staging first, then production:
    workflow's qualification step passes.
 4. Staging: `PUBLIC_API_AUTH_REQUIRED=1` with the staging issuer and audience.
    The staging candidate must pass the signed-in live test before promotion.
-5. Production: set the production values once production Auth0 is ready. The
-   candidate smoke test checks that anonymous `/v2/me` and `/v2/user-*`
-   requests return 401. After promotion, also check that
-   `curl https://api.policyengine.org/v2/user-policies?country_id=us` returns
-   401.
+5. Production: set the production values once production Auth0, including
+   its custom domain, is ready; the issuer cannot change after the first
+   sign-in (see "Settings"). The candidate smoke test checks that anonymous
+   `/v2/me` and `/v2/user-*` requests return 401. After promotion, also check
+   that `curl https://api.policyengine.org/v2/user-policies?country_id=us`
+   returns 401.
 6. Apply the proposed Cloud Armor throttles in preview
    (`docs/migration/armor/proposed/20261012-pol-api-lb-stage-12a-user-writes.yaml`)
    and enforce them only after the runbook's checks.
