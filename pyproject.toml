@@ -92,7 +92,12 @@ select = [
     "TC",
     # Group 3: annotations.
     "ANN",
+    # Group 4: docstrings.
+    "D",
 ]
+# Mutually exclusive pydocstyle pairs: keep D211 (no blank line before a class
+# docstring) and D212 (summary on the first line).
+ignore = ["D203", "D213"]
 
 [tool.ruff.lint.per-file-ignores]
 # Alembic revisions must stay exactly as Alembic generates them
