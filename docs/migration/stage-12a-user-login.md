@@ -53,8 +53,12 @@ Signed-out behavior is unchanged.
   `user_policy_client_ref` resolves only against the user's policies in the
   import country.
 - **Request bounds.** Every `/v2/me*` and `/v2/user-*` write rejects a body
-  over 256 KiB with 413 (imports allow 1 MiB). The check runs after
-  authentication and before body validation or any service work. Caller
+  over 256 KiB with 413 (imports allow 1 MiB). FastAPI reads and parses the
+  whole JSON body before any dependency runs, so this check does not limit
+  what is read or parsed; Cloud Run's 32 MiB request limit does. The check is
+  a dependency that runs after authentication, so an oversized body gets 413
+  before any body-validation error is reported and before any service or
+  database work, which bounds what can be stored. Caller
   fields are also bounded on single writes and imports alike: `description`
   and `source_note` at 10,000 characters, report `provisions` at 64 KiB
   serialized, and the report `validation` snapshot at 500 calibration matches

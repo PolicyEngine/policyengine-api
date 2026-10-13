@@ -496,6 +496,7 @@ def test_v2_household_resources_log_actual_supabase_read_and_write_sources(
         ("GET", "/v2/me/export", "user_profile", "supabase", None),
         ("POST", "/v2/me/imports", "user_profile", None, "supabase"),
         ("GET", "/v2/user-simulations", "simulation", "supabase", None),
+        ("POST", "/v2/user-households", "household", None, "supabase"),
         ("POST", "/v2/user-simulations", "simulation", None, "supabase"),
         (
             "DELETE",
@@ -552,6 +553,9 @@ def test_signed_in_user_resources_log_supabase_sources(
         "route_impl": "fastapi_native",
         "db_read": db_read,
         "db_write": db_write,
+        # Saved-work CRUD never computes, whatever its route group does.
+        "sim_flow": None,
+        "sim_compute": None,
     }
 
 
@@ -660,3 +664,21 @@ def test_asgi_shell_does_not_add_retired_backend_header_to_fallback():
 
     assert response.status_code == 200
     assert "X-PolicyEngine-Backend" not in response.headers
+
+
+def test_compute_routes_in_the_same_groups_keep_their_compute_labels():
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        log_migration_request(
+            request_id="request",
+            method="POST",
+            path="/us/simulation",
+            status_code=200,
+            started_at=None,
+            country_id="us",
+            route_impl=RouteImplementation.FLASK_FALLBACK,
+        )
+
+    context = mock_logger.log_struct.call_args.args[0]["migration"]
+    assert context["route_group"] == "simulation"
+    assert context["sim_flow"] == "economy"
+    assert context["sim_compute"] is not None

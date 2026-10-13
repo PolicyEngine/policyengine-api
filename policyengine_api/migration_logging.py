@@ -48,6 +48,12 @@ V2_SUPABASE_RESOURCE_SEGMENTS = frozenset(
         "me",
     }
 )
+# Signed-in user resources only store and read saved work. Their route groups
+# (household, simulation, report, user_profile) also compute, but these
+# requests never do, so they log no simulation flow or compute selection.
+V2_USER_RESOURCE_SEGMENTS = frozenset(
+    {"user-policies", "user-households", "user-simulations", "user-reports", "me"}
+)
 V2_RESOURCE_METHODS = frozenset({"GET", "POST", "PATCH", "DELETE"})
 
 
@@ -200,4 +206,5 @@ def _migration_context(
             if is_v2_metadata_read or (is_v2_supabase_resource and method == "GET")
             else None
         ),
+        include_compute=_v2_resource_segment(path) not in V2_USER_RESOURCE_SEGMENTS,
     )
