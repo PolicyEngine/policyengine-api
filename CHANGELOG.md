@@ -1,3 +1,10 @@
+## [5.1.4] - 2026-10-13
+
+### Changed
+
+- Added CODEOWNERS for the rule machinery, pinned CI's ruff to the version in uv.lock with an explicit rule selection, made the v2 CRUD boundary tests discover modules so households and user_households are checked, and documented the tracking-issue, Fixes line and no-bypass PR rules. In a stack of pull requests, only the lowest unmerged one now runs the full PR workflow, behind a new "CI complete" gate job that fails on the others.
+
+
 ## [5.1.3] - 2026-10-09
 
 ### Changed
