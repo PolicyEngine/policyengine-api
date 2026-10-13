@@ -275,9 +275,9 @@ class SimulationEntrypointClient:
             if bundle_version == "latest":
                 from policyengine_api.spm import SPMValidationError
 
-                msg = "SPM_SETTINGS_INVALID"
+                error_code = "SPM_SETTINGS_INVALID"
                 raise SPMValidationError(
-                    msg,
+                    error_code,
                     "Canonical SPM execution requires an exact PolicyEngine version",
                 )
             payload = {
@@ -442,9 +442,9 @@ class SimulationEntrypointClient:
                 else None
             )
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
-            msg = "SPM_CONFIGURATION_UNAVAILABLE"
+            error_code = "SPM_CONFIGURATION_UNAVAILABLE"
             raise SPMValidationError(
-                msg,
+                error_code,
                 "Cannot validate the selected worker's canonical SPM capability",
             ) from exc
 

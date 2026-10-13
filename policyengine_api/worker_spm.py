@@ -60,8 +60,8 @@ def validate_worker_spm(
     try:
         _check_worker_capability(capability, resolved)
     except ValueError as exc:
-        msg = "SPM_CONFIGURATION_UNAVAILABLE"
-        raise SPMValidationError(msg, error_message(exc)) from exc
+        error_code = "SPM_CONFIGURATION_UNAVAILABLE"
+        raise SPMValidationError(error_code, error_message(exc)) from exc
     return resolved
 
 
@@ -110,8 +110,8 @@ def validate_worker_result(
             expected_years=expected_years,
         )
     except (ValueError, TypeError, KeyError) as exc:
-        msg = "SPM_CONFIGURATION_UNAVAILABLE"
-        raise SPMValidationError(msg, error_message(exc)) from exc
+        error_code = "SPM_CONFIGURATION_UNAVAILABLE"
+        raise SPMValidationError(error_code, error_message(exc)) from exc
 
 
 def _check_worker_result(
