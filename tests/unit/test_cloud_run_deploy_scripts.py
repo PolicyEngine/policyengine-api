@@ -2587,6 +2587,29 @@ def test_validate_cloud_run_deploy_env_rejects_unsafe_user_auth_settings(
     assert message in result.stderr
 
 
+def test_validate_cloud_run_deploy_env_keeps_auth0_management_out_of_staging():
+    management = {
+        "AUTH0_MANAGEMENT_DOMAIN": "policyengine.us.auth0.com",
+        "AUTH0_MANAGEMENT_CLIENT_ID": "management-client",
+        "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE": (
+            "projects/p/secrets/auth0-management/versions/latest"
+        ),
+    }
+    staging = _script_env(**_staging_runtime_env(), **management)
+    production = _script_env(**_required_runtime_env(), **management)
+
+    staging_result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh", staging
+    )
+    production_result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh", production
+    )
+
+    assert staging_result.returncode == 1
+    assert "production-only" in staging_result.stderr
+    assert production_result.returncode == 0, production_result.stderr
+
+
 def test_validate_cloud_run_deploy_env_accepts_disabled_user_auth():
     env = _script_env(**_required_runtime_env())
     env["PUBLIC_API_AUTH_REQUIRED"] = "0"
@@ -2608,12 +2631,18 @@ def test_push_workflow_wires_user_auth_settings_and_staging_test_user():
             "PUBLIC_API_AUTH_REQUIRED: ${{ vars.PUBLIC_API_AUTH_REQUIRED }}",
             "PUBLIC_API_AUTH_ISSUER: ${{ vars.PUBLIC_API_AUTH_ISSUER }}",
             "PUBLIC_API_AUTH_AUDIENCE: ${{ vars.PUBLIC_API_AUTH_AUDIENCE }}",
-            "AUTH0_MANAGEMENT_DOMAIN: ${{ vars.AUTH0_MANAGEMENT_DOMAIN }}",
-            "AUTH0_MANAGEMENT_CLIENT_ID: ${{ vars.AUTH0_MANAGEMENT_CLIENT_ID }}",
-            "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE: "
-            "${{ secrets.AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE }}",
         ):
             assert line in job
+    # Management API deletion is production-only: the staging live test
+    # deletes its own account, which would delete the CI user from Auth0.
+    for line in (
+        "AUTH0_MANAGEMENT_DOMAIN: ${{ vars.AUTH0_MANAGEMENT_DOMAIN }}",
+        "AUTH0_MANAGEMENT_CLIENT_ID: ${{ vars.AUTH0_MANAGEMENT_CLIENT_ID }}",
+        "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE: "
+        "${{ secrets.AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE }}",
+    ):
+        assert line in production
+    assert "AUTH0_MANAGEMENT" not in staging
 
     test_step_start = staging.index("- name: Run release tests")
     test_step = staging[test_step_start : staging.index("- name: GCP", test_step_start)]
@@ -2621,9 +2650,6 @@ def test_push_workflow_wires_user_auth_settings_and_staging_test_user():
         "PUBLIC_API_AUTH_REQUIRED",
         "PUBLIC_API_AUTH_ISSUER",
         "PUBLIC_API_AUTH_AUDIENCE",
-        "AUTH0_MANAGEMENT_DOMAIN",
-        "AUTH0_MANAGEMENT_CLIENT_ID",
-        "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE",
     ):
         assert f"-u {name}" in test_step
 

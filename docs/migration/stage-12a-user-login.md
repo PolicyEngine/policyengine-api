@@ -170,15 +170,16 @@ enforces this.
 | `PUBLIC_API_AUTH_REQUIRED` | GitHub variable (`staging`, `production`) | `1` requires issuer and audience; `0` allows them to be absent, so user routes answer 401 or 503 |
 | `PUBLIC_API_AUTH_ISSUER` | GitHub variable | Auth0 issuer URL, normalized to a trailing `/` (the custom domain, for example `https://auth.policyengine.org/`) |
 | `PUBLIC_API_AUTH_AUDIENCE` | GitHub variable | The Public API resource-server identifier |
-| `AUTH0_MANAGEMENT_DOMAIN` | GitHub variable (optional) | Canonical tenant domain (the Management API is not served on custom domains) |
-| `AUTH0_MANAGEMENT_CLIENT_ID` | GitHub variable (optional) | M2M client with `delete:users` |
-| `AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE` | GitHub secret (optional) | Secret Manager version holding the M2M client secret |
+| `AUTH0_MANAGEMENT_DOMAIN` | GitHub variable (optional, `production` only) | Canonical tenant domain (the Management API is not served on custom domains) |
+| `AUTH0_MANAGEMENT_CLIENT_ID` | GitHub variable (optional, `production` only) | M2M client with `delete:users` |
+| `AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE` | GitHub secret (optional, `production` only) | Secret Manager version holding the M2M client secret |
 
 `readiness.validate_policy_runtime_configuration` validates the
 `PUBLIC_API_AUTH_*` and `AUTH0_MANAGEMENT_*` settings. Inconsistent values fail
 readiness, which is the deploy gate. `validate_cloud_run_deploy_env.sh` requires
 `PUBLIC_API_AUTH_REQUIRED` (`0` or `1`) and checks the issuer, audience, and
-all-or-none Management settings. `deploy_cloud_run_candidate.sh` writes them to
+all-or-none Management settings, and it rejects Management settings outside
+production. `deploy_cloud_run_candidate.sh` writes them to
 the revision. The release test step unsets them.
 
 The staging deploy gate (`tests/integration/test_live_v2_policies.py`) also
@@ -193,8 +194,10 @@ needs the following in the GitHub `staging` environment:
 | `STAGING_AUTH0_TEST_REALM` | optional variable; database connection for the password-realm grant |
 
 The live test deletes the test user's PolicyEngine account at the start and the
-end. Leave the `AUTH0_MANAGEMENT_*` settings unset in staging, or the CI user
-would also be removed from Auth0.
+end. With Management API deletion configured, that would also delete the CI
+user from Auth0, so the staging deploy job never receives the
+`AUTH0_MANAGEMENT_*` settings and the deploy validation rejects them outside
+production.
 
 ## Auth0 prerequisites (operator)
 

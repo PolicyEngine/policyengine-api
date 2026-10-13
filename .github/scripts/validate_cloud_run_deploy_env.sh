@@ -148,6 +148,13 @@ if (( auth0_management_count != 0 && auth0_management_count != 3 )); then
   echo "Set AUTH0_MANAGEMENT_DOMAIN, AUTH0_MANAGEMENT_CLIENT_ID, and AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE together, or none" >&2
   exit 1
 fi
+# The staging live test deletes its own account through DELETE /v2/me. With
+# Management API deletion configured, that would delete the CI user from
+# Auth0, so only production may configure it.
+if (( auth0_management_count != 0 )) && [[ "${DEPLOYMENT_ENVIRONMENT}" != "production" ]]; then
+  echo "AUTH0_MANAGEMENT_* settings are production-only; unset them for ${DEPLOYMENT_ENVIRONMENT}" >&2
+  exit 1
+fi
 
 selected_url_env="$(
   simulation_entrypoint_url_env_name "${SIM_ENTRYPOINT}"
