@@ -47,7 +47,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--write-baselines",
         action="store_true",
-        help="ci-scripts only: record today's findings as the baselines (when adopting the rule)",
+        help=(
+            "ci-scripts only: record today's findings as the baselines "
+            "(when adopting the rule)"
+        ),
     )
     args = parser.parse_args(argv)
     root = args.root.resolve()

@@ -48,7 +48,8 @@ def check_adapters(agents: Agents, root: Path) -> list[Violation]:
         if others:
             v(
                 f"references other docs ({', '.join(others)})",
-                f"list skills and rules in {instructions} only; keep {adapter} a pointer",
+                f"list skills and rules in {instructions} only; "
+                f"keep {adapter} a pointer",
             )
         if BEGIN in text:
             v(

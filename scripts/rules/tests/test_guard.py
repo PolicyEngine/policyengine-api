@@ -174,7 +174,8 @@ nodes = ["tests/unit/test_boundaries.py::test_routes_have_no_sql"]
             repo.edit(
                 "rules/registry.toml",
                 'kind = "ruff"\nmode = "format"',
-                'kind = "ruff"\nmode = "format"\n[rule.baseline]\nfile = "rules/baselines/ruff.txt"\ncount = 1',
+                'kind = "ruff"\nmode = "format"\n[rule.baseline]\n'
+                'file = "rules/baselines/ruff.txt"\ncount = 1',
             )
             self.assert_violation(repo, "ruff is never ratcheted")
 
@@ -330,8 +331,10 @@ codes = ["B"]
             repo.edit(
                 "rules/registry.toml",
                 'kind = "mypy"\npaths = ["pkg"]',
-                'kind = "mypy"\npaths = ["pkg"]\n[rule.proof]\nbad_fixture = "rules/fixtures/bad.py"\n'
-                'good_fixture = "rules/fixtures/good.py"\ntest = "tests/unit/test_boundaries.py::test_routes_have_no_sql"',
+                'kind = "mypy"\npaths = ["pkg"]\n[rule.proof]\n'
+                'bad_fixture = "rules/fixtures/bad.py"\n'
+                'good_fixture = "rules/fixtures/good.py"\n'
+                'test = "tests/unit/test_boundaries.py::test_routes_have_no_sql"',
             )
             self.assert_violation(
                 repo, "proof bad_fixture rules/fixtures/bad.py does not exist"
@@ -359,7 +362,8 @@ class ProofCiTest(unittest.TestCase):
             self.with_proof(
                 repo,
                 'nodes = ["tests/unit/test_boundaries.py::test_routes_have_no_sql"]',
-                'bad_fixture = "rules/fixtures/bad.py"\ngood_fixture = "rules/fixtures/good.py"\n'
+                'bad_fixture = "rules/fixtures/bad.py"\n'
+                'good_fixture = "rules/fixtures/good.py"\n'
                 'test = "tests/unit/test_proof.py::test_rule_proof_routes"',
             )
             self.assertEqual(repo.messages(), [])
@@ -373,7 +377,8 @@ class ProofCiTest(unittest.TestCase):
             self.with_proof(
                 repo,
                 'nodes = ["tests/unit/test_boundaries.py::test_routes_have_no_sql"]',
-                'bad_fixture = "rules/fixtures/bad.py"\ngood_fixture = "rules/fixtures/good.py"\n'
+                'bad_fixture = "rules/fixtures/bad.py"\n'
+                'good_fixture = "rules/fixtures/good.py"\n'
                 'test = "tests/contract/test_proof.py::test_rule_proof_routes"',
             )
             messages = "\n".join(repo.messages())
@@ -391,7 +396,8 @@ class ProofCiTest(unittest.TestCase):
             self.with_proof(
                 repo,
                 'paths = ["pkg"]',
-                'bad_fixture = "rules/fixtures/bad.py"\ngood_fixture = "rules/fixtures/good.py"\n'
+                'bad_fixture = "rules/fixtures/bad.py"\n'
+                'good_fixture = "rules/fixtures/good.py"\n'
                 'test = "tests/unit/test_proof.py::test_rule_proof_types"',
             )
             self.assertIn(
@@ -405,7 +411,9 @@ class ProofCiTest(unittest.TestCase):
         )
         files = {
             **self.PROOF_FILES,
-            "tools/tests/test_proof.py": "class TestProof:\n    def test_rule_proof_types(self):\n        pass\n",
+            "tools/tests/test_proof.py": (
+                "class TestProof:\n    def test_rule_proof_types(self):\n        pass\n"
+            ),
         }
         with Repo(files, render=False) as repo:
             repo.write(
@@ -415,10 +423,12 @@ class ProofCiTest(unittest.TestCase):
             repo.edit(
                 "rules/registry.toml",
                 "[discovery]\n",
-                '[discovery]\nignore_jobs = [{ job = "tool-tests", reason = "runs tool tests" }]\n',
+                "[discovery]\n"
+                'ignore_jobs = [{ job = "tool-tests", reason = "runs tool tests" }]\n',
             )
             proof = (
-                'bad_fixture = "rules/fixtures/bad.py"\ngood_fixture = "rules/fixtures/good.py"\n'
+                'bad_fixture = "rules/fixtures/bad.py"\n'
+                'good_fixture = "rules/fixtures/good.py"\n'
                 'test = "tools/tests/test_proof.py::TestProof::test_rule_proof_types"\n'
                 'workflow = ".github/workflows/pr.yml"\njob = "tool-tests"\n'
                 'invocation = "unittest discover -s tools/tests"'
@@ -442,7 +452,8 @@ class HiddenRuleTest(unittest.TestCase):
         with Repo() as repo:
             repo.write(
                 "scripts/run_quality_guards.py",
-                'GUARDS = (("rules-registry", lambda: []), ("secret-guard", lambda: []))\n',
+                'GUARDS = (("rules-registry", lambda: []), '
+                '("secret-guard", lambda: []))\n',
             )
             self.assert_violation(repo, "quality guard 'secret-guard'")
 
@@ -466,7 +477,8 @@ class HiddenRuleTest(unittest.TestCase):
         with Repo() as repo:
             repo.write(
                 "pyproject.toml",
-                '[tool.mypy]\nfiles = ["pkg"]\n\n[tool.ruff.lint.per-file-ignores]\n"pkg/*.py" = ["E501"]\n',
+                '[tool.mypy]\nfiles = ["pkg"]\n\n'
+                '[tool.ruff.lint.per-file-ignores]\n"pkg/*.py" = ["E501"]\n',
             )
             self.assert_violation(repo, "ruff per-file-ignores 'pkg/*.py' has no rule")
 
@@ -551,7 +563,9 @@ class HiddenRuleTest(unittest.TestCase):
             repo.edit(
                 "rules/registry.toml",
                 "[discovery]\n",
-                '[discovery]\nignore_jobs = [{ job = "deploy", reason = "deploys, enforces nothing" }]\n',
+                "[discovery]\n"
+                'ignore_jobs = [{ job = "deploy", '
+                'reason = "deploys, enforces nothing" }]\n',
             )
             repo.render()
             self.assertEqual(repo.messages(), [])
@@ -610,7 +624,8 @@ class ExpiryTest(unittest.TestCase):
             repo.edit(
                 "rules/registry.toml",
                 'kind = "mypy"\npaths = ["pkg"]',
-                'kind = "mypy"\npaths = ["pkg"]\n[[rule.exception]]\npath = "pkg/routes.py"\n'
+                'kind = "mypy"\npaths = ["pkg"]\n[[rule.exception]]\n'
+                'path = "pkg/routes.py"\n'
                 'reason = "migrating"\nexpires = 2026-05-01',
             )
             repo.render()
@@ -625,7 +640,8 @@ class ExpiryTest(unittest.TestCase):
             repo.edit(
                 "rules/registry.toml",
                 'kind = "mypy"\npaths = ["pkg"]',
-                'kind = "mypy"\npaths = ["pkg"]\n[[rule.exception]]\npath = "pkg/routes.py"\n'
+                'kind = "mypy"\npaths = ["pkg"]\n[[rule.exception]]\n'
+                'path = "pkg/routes.py"\n'
                 'reason = "migrating"\nexpires = 2026-12-01',
             )
             repo.render()
@@ -655,9 +671,12 @@ class BaselineTest(unittest.TestCase):
     def test_downgrade_needs_reason(self) -> None:
         base = self.registry("")
         weakened = REGISTRY.replace(
-            'status = "enforced"\nautofix = true\n[rule.enforcer]\nkind = "ruff"\nmode = "format"\n[[rule.ci]]\n'
-            'workflow = ".github/workflows/pr.yml"\njob = "lint"\ninvocation = "ruff format --check"',
-            'status = "advisory"\nautofix = true\n[rule.enforcer]\nkind = "ruff"\nmode = "format"',
+            'status = "enforced"\nautofix = true\n[rule.enforcer]\nkind = "ruff"\n'
+            'mode = "format"\n[[rule.ci]]\n'
+            'workflow = ".github/workflows/pr.yml"\njob = "lint"\n'
+            'invocation = "ruff format --check"',
+            'status = "advisory"\nautofix = true\n[rule.enforcer]\nkind = "ruff"\n'
+            'mode = "format"',
         )
         current, _ = load_text(weakened)
         assert current is not None

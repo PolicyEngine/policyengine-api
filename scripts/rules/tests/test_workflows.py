@@ -1,4 +1,7 @@
-"""Tests for the GitHub Actions subset reader, pinned against both repos' real PR workflows."""
+"""Tests for the GitHub Actions subset reader.
+
+They are pinned against both repos' real PR workflows.
+"""
 
 from __future__ import annotations
 
@@ -55,7 +58,10 @@ jobs:
         self.assertTrue(jobs["build"].invokes("make build"))
 
     def test_comments_are_ignored(self) -> None:
-        text = "jobs:\n  a:\n    steps:\n      # run: make test\n      - run: echo hi # make test\n"
+        text = (
+            "jobs:\n  a:\n    steps:\n      # run: make test\n"
+            "      - run: echo hi # make test\n"
+        )
         jobs, _ = parse_jobs(text)
         self.assertFalse(jobs["a"].invokes("make test"))
 
@@ -67,7 +73,8 @@ jobs:
 
     def test_inline_matrix_list(self) -> None:
         jobs, _ = parse_jobs(
-            'jobs:\n  a:\n    strategy:\n      matrix:\n        python: ["3.12", "3.13"]\n'
+            "jobs:\n  a:\n    strategy:\n      matrix:\n"
+            '        python: ["3.12", "3.13"]\n'
         )
         self.assertEqual(jobs["a"].matrix["python"], ("3.12", "3.13"))
 
