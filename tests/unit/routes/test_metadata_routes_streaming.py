@@ -28,7 +28,6 @@ def _load_metadata_blueprint_with_fake_service():
     import, so the route module is loaded with the fake installed first and
     the module cache is restored afterwards.
     """
-
     sentinel = object()
     original_route_module = sys.modules.get(ROUTE_MODULE, sentinel)
     original_service_module = sys.modules.get(SERVICE_MODULE, sentinel)

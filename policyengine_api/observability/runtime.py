@@ -73,7 +73,6 @@ def get_runtime() -> ObservabilityRuntime:
 
 def set_runtime_context(**attributes: object) -> None:
     """Bind local telemetry attributes without affecting application behavior."""
-
     try:
         runtime.set_context(**attributes)
     except Exception:

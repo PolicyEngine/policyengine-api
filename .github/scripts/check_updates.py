@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Fetch and format changelog entries between two versions of a package.
+"""Fetch and format changelog entries between two versions of a package.
 
 Fetches CHANGELOG.md from the package's GitHub repo and extracts
 entries between the old and new version, formatted as markdown.

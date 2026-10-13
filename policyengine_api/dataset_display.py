@@ -11,7 +11,6 @@ DEFAULT_DATASET_DISPLAY_LABEL = "Certified dataset"
 
 def get_dataset_display_label(dataset_name: object) -> str:
     """Return the public label for an internal logical dataset name."""
-
     normalized_name = str(dataset_name or "")
     for prefix, label in DATASET_FAMILY_DISPLAY_LABELS:
         if normalized_name.startswith(prefix):

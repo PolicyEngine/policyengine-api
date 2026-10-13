@@ -142,14 +142,12 @@ def read_household_data_counts(
 
 def require_no_retained_household_data(counts: HouseholdDataCounts) -> None:
     """Stop the migration when any affected row requires a decision."""
-
     if counts.total:
         raise RetainedHouseholdDataError(counts)
 
 
 def build_qualification_engine(settings: V2DatabaseSettings) -> Engine:
     """Build an isolated connection pool for one qualification attempt."""
-
     return create_engine(settings.connection.url, poolclass=NullPool)
 
 
@@ -165,7 +163,6 @@ def _read_and_require_counts(connection: Connection) -> HouseholdDataCounts:
 
 def household_migration_is_pending(connection: Connection) -> bool:
     """Return whether the Stage 11 household revision is in the upgrade path."""
-
     current_heads = MigrationContext.configure(connection).get_current_heads()
     revisions = ScriptDirectory.from_config(
         Config(V2_ALEMBIC_CONFIG)
@@ -183,7 +180,6 @@ def qualify_household_migration_target(
     ),
 ) -> HouseholdMigrationQualification:
     """Qualify the configured Supabase target without changing it."""
-
     settings = load_v2_migration_database_settings(environ)
     engine = engine_builder(settings)
     try:
@@ -212,7 +208,6 @@ def qualify_household_migration_if_pending(
     pending_checker: Callable[[Connection], bool] = household_migration_is_pending,
 ) -> HouseholdMigrationQualification:
     """Qualify affected rows only while the Stage 11 revision is pending."""
-
     settings = load_v2_migration_database_settings(environ)
     engine = engine_builder(settings)
     try:
@@ -257,7 +252,6 @@ def _error_payload(error: Exception) -> dict[str, object]:
 
 def main() -> int:
     """Run qualification and return a shell-compatible status."""
-
     try:
         evidence = qualify_household_migration_if_pending()
     except Exception as error:  # noqa: BLE001 - command must emit safe evidence

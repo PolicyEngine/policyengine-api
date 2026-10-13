@@ -25,7 +25,6 @@ class _RuntimeLogger:
         labels: Mapping[str, Any] | None = None,
     ) -> None:
         """Record an allowlisted structured message without affecting callers."""
-
         try:
             message = str(info.get("message") or "API event")
             attributes = {

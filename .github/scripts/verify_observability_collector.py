@@ -315,7 +315,6 @@ def verify(
     delivery_timeout_seconds: float = 600.0,
 ) -> VerificationProbe:
     """Export real telemetry, verify storage, and require log rejection."""
-
     started_at = time.time()
     verification_id = f"collector-verify-{uuid.uuid4().hex}"
     trace_request, metric_request, log_request, trace_id = _probe_requests(

@@ -24,7 +24,6 @@ def _serialize_v1_datetime(value: datetime | None) -> str | None:
 
 def _serialize_v1_reform_impact(impact: CachedReformImpact) -> dict[str, object]:
     """Project a cached impact onto the explicit historical v1 response shape."""
-
     return {
         "reform_impact_id": impact.reform_impact_id,
         "baseline_policy_id": impact.baseline_policy_id,

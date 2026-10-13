@@ -45,7 +45,6 @@ DIRECT_SQLALCHEMY_EXCEPTIONS = MappingProxyType(
 
 def utc_now() -> datetime:
     """Return an aware UTC timestamp for application-created rows."""
-
     return datetime.now(UTC)
 
 
@@ -78,7 +77,6 @@ class TimestampedModel(IdentifiedModel):
 
 def enum_type(enum_class: type, name: str) -> sa.Enum:
     """Build a stable lowercase-value Postgres enum for a string Enum."""
-
     # Native named enums and value serialization are SQLAlchemy features that
     # SQLModel intentionally exposes through Field(sa_type=...).
     return sa.Enum(

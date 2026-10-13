@@ -107,7 +107,6 @@ class AggregateReportArtifactPayload(StrictContractModel):
     @model_validator(mode="after")
     def validate_spm_provenance(self) -> AggregateReportArtifactPayload:
         """Reject duplicate or noncanonical SPM data in aggregate artifacts."""
-
         if "spm_config" in self.result:
             raise ValueError("aggregate result must not include legacy spm_config")
         if "spm_provenance" in self.result:

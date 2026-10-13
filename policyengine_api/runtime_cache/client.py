@@ -40,7 +40,6 @@ def get_runtime_cache_client(
     settings: RuntimeCacheSettings | None = None,
 ) -> redis.Redis:
     """Return one client per process without connecting during import."""
-
     process_id = os.getpid()
     if process_id not in _clients:
         with _client_lock:

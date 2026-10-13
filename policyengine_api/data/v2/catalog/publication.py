@@ -93,7 +93,6 @@ def publish_catalog(
     checkpoint: Callable[[str, Connection], None] | None = None,
 ) -> PublicationEvidence:
     """Publish one complete catalog atomically and return non-secret evidence."""
-
     started = time.monotonic()
     with engine.begin() as connection:
         _verify_expected_revision(connection)

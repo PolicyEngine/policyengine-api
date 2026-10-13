@@ -31,7 +31,6 @@ class PolicySetResult:
 
     def __iter__(self) -> Iterator[int | str | bool]:
         """Preserve the established three-value internal unpacking interface."""
-
         yield self.policy_id
         yield self.message
         yield self.is_existing_policy
@@ -95,7 +94,6 @@ class PolicyService:
         policy_id: int,
     ) -> LegacyPolicySnapshot | None:
         """Return detached fields required to mirror one existing v1 policy."""
-
         policy = self.get_policy(country_id, policy_id)
         if policy is None:
             return None

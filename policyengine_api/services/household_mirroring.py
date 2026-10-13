@@ -124,7 +124,6 @@ def process_household_event_after_commit(
     require_pending: bool = False,
 ) -> LegacyHouseholdPersistenceResult:
     """Copy one exact retained create event and then record its completion."""
-
     selected_event_service = event_service or HouseholdService()
     started_at = time.perf_counter()
     destination_result: LegacyHouseholdPersistenceResult | None = None

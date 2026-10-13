@@ -94,7 +94,6 @@ class ReformImpactsService:
         observability_id: str,
     ) -> bool:
         """Fail closed unless this request atomically owns job submission."""
-
         return self._cache.claim_start(
             country_id=country_id,
             reform_policy_id=policy_id,
@@ -123,7 +122,6 @@ class ReformImpactsService:
         target: str,
     ) -> ReformImpactStartClaim | None:
         """Return the current submission owner and diagnostic identifier."""
-
         return self._cache.get_start_claim(
             country_id=country_id,
             reform_policy_id=policy_id,
@@ -152,7 +150,6 @@ class ReformImpactsService:
         observability_id: str,
     ) -> None:
         """Best-effort release; an unavailable cache safely falls back to expiry."""
-
         try:
             self._cache.release_start(
                 country_id=country_id,

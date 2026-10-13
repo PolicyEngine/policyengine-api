@@ -21,7 +21,6 @@ sys.path.append(str(root_dir))
 @pytest.fixture
 def mock_v2_runtime_settings():
     """Avoid external v2 configuration access in ordinary API route tests."""
-
     with patch(
         "policyengine_api.data.v2.settings.load_v2_runtime_database_settings",
         return_value=object(),

@@ -28,7 +28,6 @@ def _spm_override_response(payload: dict) -> Response | None:
 
 def _serialize_v1_simulation(simulation: Simulation) -> dict:
     """Project canonical ORM JSON objects onto the legacy v1 response shape."""
-
     response = {
         column.name: getattr(simulation, column.name)
         for column in Simulation.__table__.columns
@@ -47,8 +46,7 @@ def _serialize_v1_simulation(simulation: Simulation) -> dict:
 @simulation_bp.route("/<country_id>/simulation", methods=["POST"])
 @validate_country
 def create_simulation(country_id: str) -> Response:
-    """
-    Create a new simulation record.
+    """Create a new simulation record.
 
     Args:
         country_id (str): The country ID.
@@ -57,6 +55,7 @@ def create_simulation(country_id: str) -> Response:
         - population_id (str): The population identifier (household or geography ID)
         - population_type (str): Type of population ('household' or 'geography')
         - policy_id (int): The policy ID
+
     """
     print(f"Creating simulation for country {country_id}")
 
@@ -129,12 +128,12 @@ def create_simulation(country_id: str) -> Response:
 @simulation_bp.route("/<country_id>/simulation/<int:simulation_id>", methods=["GET"])
 @validate_country
 def get_simulation(country_id: str, simulation_id: int) -> Response:
-    """
-    Get a simulation record by ID.
+    """Get a simulation record by ID.
 
     Args:
         country_id (str): The country ID.
         simulation_id (int): The simulation ID.
+
     """
     print(f"Getting simulation {simulation_id} for country {country_id}")
 
@@ -165,8 +164,7 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
 @simulation_bp.route("/<country_id>/simulation", methods=["PATCH"])
 @validate_country
 def update_simulation(country_id: str) -> Response:
-    """
-    Update a simulation record with results or error.
+    """Update a simulation record with results or error.
 
     Args:
         country_id (str): The country ID.
@@ -177,8 +175,8 @@ def update_simulation(country_id: str) -> Response:
         - output (dict): The result output (for complete status)
         - api_version (str): The API version of the simulation
         - error_message (str): The error message (for error status)
-    """
 
+    """
     payload = request.json
     if payload is None:
         raise BadRequest("Payload missing from request")

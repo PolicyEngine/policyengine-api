@@ -43,7 +43,6 @@ def build_database_url(
     database: str,
 ) -> URL:
     """Build a SQLAlchemy URL without stringifying its credentials."""
-
     return URL.create(
         drivername="mysql+pymysql",
         username=username,
@@ -71,7 +70,6 @@ def classify_database_state(
 
 def describe_metadata_difference(difference: object) -> str:
     """Return a stable, data-free description of an Alembic metadata diff."""
-
     item = difference
     if isinstance(item, list) and len(item) == 1:
         item = item[0]

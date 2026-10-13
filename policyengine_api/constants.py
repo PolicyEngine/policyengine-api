@@ -185,8 +185,7 @@ RUNTIME_CACHE_SCHEMA_VERSIONS = {
 def _build_runtime_cache_version(
     scope: str, country_id: str, caller_version: str | None = None
 ) -> str:
-    """
-    Build a compact version token for cache keys stored in legacy VARCHAR(10)
+    """Build a compact version token for cache keys stored in legacy VARCHAR(10)
     columns. The token changes whenever the relevant runtime or payload schema
     changes, even if the country package version is unchanged.
     """

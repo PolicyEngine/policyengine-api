@@ -48,7 +48,6 @@ def validate_economy_options(
     national_dataset: Dataset | None,
 ) -> Dataset:
     """Validate preloaded records required by the economy-options response."""
-
     if not any(region.code == country_id for region in regions):
         raise MetadataCatalogUnavailableError(
             f"the {country_id} national v2 region is absent"

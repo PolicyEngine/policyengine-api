@@ -1,6 +1,4 @@
-"""
-Test fixtures and constants for axes calculation tests
-"""
+"""Test fixtures and constants for axes calculation tests"""
 
 from policyengine_api.services.household_calculation_service import (
     add_yearly_variables,

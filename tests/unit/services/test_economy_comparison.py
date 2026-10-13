@@ -758,7 +758,8 @@ class TestComputeIncomeChange:
 
 class TestIntraDecileImpact:
     """Tests for the intra_decile_impact function — verifying correct
-    percentage change calculation and bucket assignment."""
+    percentage change calculation and bucket assignment.
+    """
 
     def test__5pct_gain_classified_below_5pct(self):
         """A uniform 5% income gain must NOT land in 'Gain more than 5%'.
@@ -834,7 +835,8 @@ class TestIntraDecileImpact:
 
     def test__near_zero_baseline_no_division_error(self):
         """Households with near-zero baseline income should not cause
-        division errors — the floor of 1 handles this."""
+        division errors — the floor of 1 handles this.
+        """
         baseline = _make_economy(
             incomes=[0.0] * 10,
             deciles=list(range(1, 11)),
@@ -852,7 +854,8 @@ class TestIntraDecileImpact:
     def test__zero_baseline_uses_floor_of_one(self):
         """When baseline income is 0, the max(B, 1) floor means the
         effective denominator is 1. A $0 -> $100 change should give
-        income_change = 100/1 = 100 (10000%), landing in >5%."""
+        income_change = 100/1 = 100 (10000%), landing in >5%.
+        """
         baseline = _make_economy(
             incomes=[0.0] * 10,
             deciles=list(range(1, 11)),
@@ -873,7 +876,8 @@ class TestIntraDecileImpact:
 
     def test__negative_baseline_handled(self):
         """Households with negative baseline income should be handled
-        by the max(B, 1) floor without producing NaN or Inf."""
+        by the max(B, 1) floor without producing NaN or Inf.
+        """
         baseline = _make_economy(
             incomes=[-500.0] * 10,
             deciles=list(range(1, 11)),
@@ -890,7 +894,8 @@ class TestIntraDecileImpact:
 
     def test__2pct_gain_is_not_doubled(self):
         """A 2% gain stays in <5% even if doubled (2*2%=4% < 5%), so this
-        test alone would not catch the doubling bug."""
+        test alone would not catch the doubling bug.
+        """
         baseline = _make_economy(
             incomes=[50000.0] * 10,
             deciles=list(range(1, 11)),
@@ -909,7 +914,8 @@ class TestIntraDecileImpact:
     def test__4pct_gain_not_doubled_into_above_5pct(self):
         """A 4% gain must stay in <5%. With the doubling bug, 4% * 2 = 8%
         would incorrectly land in >5%. This is the tightest regression
-        test for the doubling bug on the gain side."""
+        test for the doubling bug on the gain side.
+        """
         baseline = _make_economy(
             incomes=[10000.0] * 10,
             deciles=list(range(1, 11)),
@@ -944,7 +950,8 @@ class TestIntraDecileImpact:
 
 class TestIntraWealthDecileImpact:
     """Tests for intra_wealth_decile_impact — same formula, keyed by
-    wealth decile instead of income decile."""
+    wealth decile instead of income decile.
+    """
 
     def test__5pct_gain_classified_below_5pct(self):
         """Regression test: 5% gain must not be doubled into >5% bucket."""

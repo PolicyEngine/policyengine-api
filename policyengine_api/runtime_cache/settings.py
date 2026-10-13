@@ -129,7 +129,6 @@ def load_runtime_cache_settings(
     environ: Mapping[str, str] | None = None,
 ) -> RuntimeCacheSettings:
     """Load disabled, explicit-local, or fail-closed deployed cache settings."""
-
     values = os.environ if environ is None else environ
     raw_mode = values.get(RUNTIME_CACHE_MODE, "").strip()
     deployed_runtime = _is_deployed(values)

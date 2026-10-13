@@ -41,7 +41,6 @@ user_policy_service = UserPolicyService()
 
 def _should_mirror_to_v2(country_id: str, write_source: str) -> bool:
     """Select immediate mirroring only for countries supported by API v2."""
-
     return write_source == "dual_write" and country_id in SUPPORTED_V2_COUNTRY_IDS
 
 
@@ -87,7 +86,6 @@ def _user_policy_persistence_failure(
     legacy_user_policy_id: object | None = None,
 ) -> Response:
     """Return and record a failure without serializing exception details."""
-
     status_code = 503 if error.retryable else 500
     try:
         logger.log_struct(
@@ -144,8 +142,7 @@ def _serialize_policy(policy: Policy) -> dict:
 @policy_bp.route("/<country_id>/policy/<int:policy_id>", methods=["GET"])
 @validate_country
 def get_policy(country_id: str, policy_id: int | str) -> Response:
-    """
-    Get policy data for a given country and policy ID.
+    """Get policy data for a given country and policy ID.
 
     Args:
         country_id (str)
@@ -154,8 +151,8 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
     Returns:
         Response: A Flask response object containing the
         policy data in JSON format
-    """
 
+    """
     try:
         get_v1_policy_read_source()
     except ValueError:
@@ -179,14 +176,13 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
 @policy_bp.route("/<country_id>/policy", methods=["POST"])
 @validate_country
 def set_policy(country_id: str) -> Response:
-    """
-    Set policy data for given country and policy. If policy already exists,
+    """Set policy data for given country and policy. If policy already exists,
     return existing policy and 200.
 
     Args:
         country_id (str)
-    """
 
+    """
     payload = request.json
 
     is_payload_valid, message = validate_set_policy_payload(payload)

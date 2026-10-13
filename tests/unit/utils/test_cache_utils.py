@@ -65,7 +65,8 @@ def test_make_cache_key_is_sha256_hex():
 def test_make_cache_key_stable_across_processes():
     """Two independent Python processes must produce the same cache
     key for the same inputs, even though they use different
-    PYTHONHASHSEED values."""
+    PYTHONHASHSEED values.
+    """
     script = textwrap.dedent(
         """
         from flask import Flask

@@ -51,7 +51,6 @@ def user_policy_page(
 
 def fingerprint_legacy_user_policy(snapshot: LegacyUserPolicySnapshot) -> str:
     """Hash every committed source field through deterministic JSON."""
-
     document = {
         "fingerprint_version": USER_POLICY_FINGERPRINT_VERSION,
         **snapshot.model_dump(mode="json"),
@@ -73,7 +72,6 @@ def project_legacy_user_policy(
     policy_id: UUID,
 ) -> UserPolicyCreationInput:
     """Map v1 presentation data onto an association, never core policy content."""
-
     return UserPolicyCreationInput(
         country_id=snapshot.country_id,
         user_id=user_id,

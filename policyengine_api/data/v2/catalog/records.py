@@ -117,7 +117,6 @@ def iter_batches(
     batch_size: int,
 ) -> Iterator[tuple[RecordT, ...]]:
     """Yield bounded immutable slices without constructing a flattened copy."""
-
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
     for start in range(0, len(records), batch_size):
@@ -142,7 +141,6 @@ class CountryCatalog:
         batch_size: int,
     ) -> Iterator[tuple[ParameterValueRecord, ...]]:
         """Yield canonical parameter values in bounded batches."""
-
         if batch_size < 1:
             raise ValueError("batch_size must be positive")
         batch: list[ParameterValueRecord] = []
@@ -157,7 +155,6 @@ class CountryCatalog:
 
     def entity_counts(self) -> dict[str, int]:
         """Return non-secret record counts for validation and deployment evidence."""
-
         return {
             "models": 1,
             "model_versions": 1,
@@ -180,7 +177,6 @@ class NormalizedCatalog:
 
     def country(self, country_id: str) -> CountryCatalog:
         """Return one supported country catalog."""
-
         for catalog in self.countries:
             if catalog.country_id == country_id:
                 return catalog
@@ -188,7 +184,6 @@ class NormalizedCatalog:
 
     def entity_counts(self) -> dict[str, int]:
         """Return aggregate counts without catalog content."""
-
         counts: dict[str, int] = {}
         for country in self.countries:
             for name, count in country.entity_counts().items():
@@ -198,5 +193,4 @@ class NormalizedCatalog:
 
 def record_content(record: object) -> tuple[Any, ...]:
     """Return a deterministic field-ordered representation for comparisons."""
-
     return tuple(getattr(record, item.name) for item in fields(record))

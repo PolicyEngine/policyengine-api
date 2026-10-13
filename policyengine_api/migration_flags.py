@@ -149,7 +149,6 @@ def get_db_read(entity: str) -> str:
 
 def get_v1_policy_write_source() -> str:
     """Select Cloud SQL alone or immediate Cloud SQL-to-Supabase mirroring."""
-
     return _read_choice(
         "DB_WRITE_POLICY",
         DEFAULT_DB_SOURCE,
@@ -159,7 +158,6 @@ def get_v1_policy_write_source() -> str:
 
 def get_v1_policy_read_source() -> str:
     """Require every v1 policy read to remain on Cloud SQL in Phase 10."""
-
     return _read_choice(
         "DB_READ_POLICY",
         DEFAULT_DB_SOURCE,
@@ -169,7 +167,6 @@ def get_v1_policy_read_source() -> str:
 
 def get_v1_household_write_source() -> str:
     """Select Cloud SQL alone or immediate copying to Supabase."""
-
     return _read_choice(
         "DB_WRITE_HOUSEHOLD",
         DEFAULT_DB_SOURCE,
@@ -179,7 +176,6 @@ def get_v1_household_write_source() -> str:
 
 def get_v1_household_read_source() -> str:
     """Require every v1 household read to remain on Cloud SQL in Phase 11."""
-
     return _read_choice(
         "DB_READ_HOUSEHOLD",
         DEFAULT_DB_SOURCE,

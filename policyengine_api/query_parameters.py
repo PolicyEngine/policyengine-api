@@ -45,13 +45,11 @@ SUPPORTED_COUNTRY_IDS = frozenset({"us", "uk"})
 
 def normalize_country_id(value: object) -> object:
     """Lowercase a textual country ID before its supported-value check."""
-
     return value.lower() if isinstance(value, str) else value
 
 
 def validate_legacy_user_id(value: str) -> str:
     """Reject an empty or whitespace-only legacy user identifier."""
-
     if not value.strip():
         raise ValueError(
             "legacy user_id must contain at least one non-whitespace character"
@@ -306,7 +304,6 @@ def query_field_multiplicity(
     model_type: type[StrictQueryParameters],
 ) -> Mapping[str, bool]:
     """Return public query names mapped to whether repeated values are valid."""
-
     return {
         (field.alias or field_name): _annotation_is_list(field.annotation)
         for field_name, field in model_type.model_fields.items()
@@ -318,7 +315,6 @@ def validate_scalar_query_multiplicity(
     items: Iterable[tuple[str, str]],
 ) -> None:
     """Reject a repeated declared scalar while allowing declared list fields."""
-
     multiplicity = query_field_multiplicity(model_type)
     seen: set[str] = set()
     for name, _value in items:
@@ -334,7 +330,6 @@ def parse_query_items(
     items: Iterable[tuple[str, str]],
 ) -> QueryParametersT:
     """Validate ordered query pairs through one canonical Pydantic schema."""
-
     pairs = list(items)
     validate_scalar_query_multiplicity(model_type, pairs)
     multiplicity = query_field_multiplicity(model_type)
@@ -355,7 +350,6 @@ def parse_multidict_query(
     query_input: object,
 ) -> QueryParametersT:
     """Adapt a Flask/Werkzeug-style MultiDict to the canonical parser."""
-
     items_method = getattr(query_input, "items", None)
     if not callable(items_method):
         raise TypeError("query input must provide an items method")

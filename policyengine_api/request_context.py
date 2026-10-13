@@ -30,13 +30,11 @@ _asgi_incoming_observability_id: ContextVar[str | None] = ContextVar(
 
 def generate_request_id() -> str:
     """Generate an API request correlation identifier."""
-
     return uuid.uuid4().hex
 
 
 def current_request_id() -> str | None:
     """Return the correlation identifier for the current request, if any."""
-
     if flask.has_request_context():
         return getattr(flask.g, "request_id", None)
     return _asgi_request_id.get()
@@ -44,7 +42,6 @@ def current_request_id() -> str | None:
 
 def current_observability_id() -> str | None:
     """Return the diagnostic correlation identifier for the current request."""
-
     if flask.has_request_context():
         return getattr(flask.g, "observability_id", None)
     return _asgi_observability_id.get()
@@ -52,7 +49,6 @@ def current_observability_id() -> str | None:
 
 def incoming_observability_id() -> str | None:
     """Return the validated identifier candidate supplied by the caller."""
-
     if flask.has_request_context():
         return getattr(flask.g, "incoming_observability_id", None)
     return _asgi_incoming_observability_id.get()
@@ -74,7 +70,6 @@ def _bind_observability_id(observability_id: str) -> str:
 
 def start_observability_id(value: object = None) -> str:
     """Bind the identifier for a newly accepted calculation or report."""
-
     current = current_observability_id()
     if current is not None:
         return current
@@ -86,7 +81,6 @@ def start_observability_id(value: object = None) -> str:
 
 def restore_observability_id(value: object) -> str | None:
     """Bind a valid identifier read from durable functional state."""
-
     observability_id = normalize_observability_id(value)
     if observability_id is None:
         return current_observability_id()
@@ -95,5 +89,4 @@ def restore_observability_id(value: object) -> str | None:
 
 def resolve_observability_id(value: object) -> str:
     """Use a valid caller value or create a new diagnostic identifier."""
-
     return normalize_observability_id(value) or generate_observability_id()

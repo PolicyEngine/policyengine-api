@@ -169,7 +169,6 @@ def mirror_user_policy_after_commit(
     mirror_factory: Callable[[], LegacyUserPolicyMirror] | None = None,
 ) -> LegacyUserPolicyPersistenceResult:
     """Require one complete Supabase association transaction before v1 success."""
-
     started_at = time.perf_counter()
     try:
         result = _run_user_policy_mirror(
@@ -218,7 +217,6 @@ def mirror_pending_user_policy_events_after_commit(
     mirror_factory: Callable[[], LegacyUserPolicyMirror] | None = None,
 ) -> LegacyUserPolicyPersistenceResult:
     """Synchronously apply retained source events through one request's revision."""
-
     selected_event_service = event_service or UserPolicyService()
     selected_reform_loader = (
         reform_snapshot_loader or PolicyService().get_policy_snapshot

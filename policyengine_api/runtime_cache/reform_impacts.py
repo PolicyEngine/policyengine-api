@@ -219,7 +219,6 @@ class ReformImpactCache:
         observability_id: str,
     ) -> bool:
         """Atomically claim ownership of one reform-impact submission."""
-
         claim = ReformImpactStartClaim.from_payload(
             {
                 "submission_claim_id": claim_token,
@@ -260,7 +259,6 @@ class ReformImpactCache:
         target: str,
     ) -> ReformImpactStartClaim | None:
         """Read the current submission owner and its diagnostic identifier."""
-
         started_at = time.perf_counter()
         key = self._start_claim_key(
             country_id=country_id,
@@ -329,7 +327,6 @@ class ReformImpactCache:
         observability_id: str,
     ) -> bool:
         """Release a start claim only when its complete state still matches."""
-
         claim = ReformImpactStartClaim.from_payload(
             {
                 "submission_claim_id": claim_token,
@@ -584,6 +581,5 @@ class ReformImpactCache:
 
 def reform_impact_id(execution_id: str) -> int:
     """Stable positive cache-local identifier for the historical response field."""
-
     digest = hashlib.sha256(execution_id.encode("utf-8")).hexdigest()[:15]
     return int(digest, 16)

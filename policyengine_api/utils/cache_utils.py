@@ -10,7 +10,7 @@ import flask
 
 def make_cache_key(*args: object, **kwargs: object) -> str:
     # pylint: disable=unused-argument
-    """make a hash to uniquely identify a cache entry.
+    """Make a hash to uniquely identify a cache entry.
     keep it fast, adding overhead to try to add some minor chance of a
     cache hit is not worth it.
 

@@ -52,7 +52,6 @@ def require_json_value(
     containers: frozenset[int] = frozenset(),
 ) -> object:
     """Reject values that cannot be represented as standards-compliant JSON."""
-
     if depth > MAXIMUM_JSON_NESTING:
         raise ValueError("JSON values must not exceed 100 nested containers")
     if value is None or type(value) in {str, bool, int}:
@@ -80,7 +79,6 @@ def require_json_value(
 
 def normalize_utc(value: datetime) -> datetime:
     """Require a time-zone-aware value and normalize it to UTC."""
-
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("effective dates must include a UTC offset")
     return value.astimezone(UTC)
@@ -93,7 +91,6 @@ def validate_policy_catalog(
     resolved_parameter_ids: set[UUID],
 ) -> ResolvedPolicyCreationInput:
     """Validate preloaded catalog records and bind them to policy content."""
-
     from policyengine_api.services.v2.policies.types import ResolvedPolicyCreationInput
 
     if policy_input.tax_benefit_model_id != selected.model.id:
@@ -123,7 +120,6 @@ def verify_legacy_policy_mapping(
     expected_policy_id: UUID | None = None,
 ) -> None:
     """Validate an existing mapping without performing SQL."""
-
     if mapping.source_policy_hash != source_policy_hash:
         raise LegacyPolicyMappingIntegrityError(
             "legacy policy identity was presented with a different source hash"

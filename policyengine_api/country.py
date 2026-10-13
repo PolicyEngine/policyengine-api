@@ -557,7 +557,6 @@ class PolicyEngineCountry:
         spm_requested: bool = False,
     ) -> PreparedCountryCalculation:
         """Parse a situation before the API accepts it as a calculation."""
-
         simulation, system = self._create_simulation(household, reform, spm=spm)
         household = json.loads(json.dumps(household))
         has_axes = "axes" in household
@@ -648,14 +647,14 @@ class PolicyEngineCountry:
 
 
 def create_policy_reform(policy_data: dict) -> dict:
-    """
-    Create a policy reform.
+    """Create a policy reform.
 
     Args:
         policy_data (dict): The policy data.
 
     Returns:
         dict: The reform.
+
     """
 
     def modify_parameters(parameters: ParameterNode) -> ParameterNode:

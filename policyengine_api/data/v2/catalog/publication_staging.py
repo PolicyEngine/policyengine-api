@@ -275,7 +275,6 @@ def copy_rows(
     rows: Iterable[Sequence[object]],
 ) -> int:
     """Write one bounded source stream through Psycopg COPY."""
-
     raw_connection = connection.connection.driver_connection
     statement = sql.SQL("COPY {} ({}) FROM STDIN").format(
         sql.Identifier(table.name),

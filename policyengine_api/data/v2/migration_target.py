@@ -88,7 +88,6 @@ def load_v2_alembic_settings(
     environ: Mapping[str, str] | None = None,
 ) -> V2AlembicSettings:
     """Select either the configured persistent target or isolated test Postgres."""
-
     values = os.environ if environ is None else environ
     raw_url = _required(values, V2_MIGRATION_DATABASE_URL)
     url = _parse_url(raw_url)
@@ -134,7 +133,6 @@ def qualify_v2_connection(
     settings: V2AlembicSettings,
 ) -> None:
     """Verify live target identity and first-use state before Alembic runs."""
-
     if connection.dialect.name != "postgresql":
         raise V2MigrationTargetError("v2 Alembic requires a Postgres connection")
     if settings.disposable_test:
@@ -172,7 +170,6 @@ def qualify_v2_connection(
 
 def validate_v2_head_schema(connection: Connection, metadata: MetaData) -> None:
     """Require live application tables to match authoritative ORM metadata."""
-
     public_tables = set(inspect(connection).get_table_names(schema="public"))
     application_tables = public_tables - {"alembic_version"}
     metadata_tables = {table.name for table in metadata.tables.values()}

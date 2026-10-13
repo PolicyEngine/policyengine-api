@@ -9,14 +9,14 @@ if TYPE_CHECKING:
 def validate_household_payload(
     payload: Mapping[str, object],
 ) -> tuple[bool, str | None]:
-    """
-    Validate the payload for a POST request to set a household's input data.
+    """Validate the payload for a POST request to set a household's input data.
 
     Args:
         payload (dict): The payload to validate.
 
     Returns:
         tuple[bool, str]: A tuple containing a boolean indicating whether the payload is valid and a message.
+
     """
     # Check that all required keys are present
     required_keys = ["data"]

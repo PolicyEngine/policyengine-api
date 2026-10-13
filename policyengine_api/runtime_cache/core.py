@@ -127,7 +127,6 @@ def jittered_ttl(
 
     Coordination and claim TTLs are safety bounds and must not use this helper.
     """
-
     if ttl_seconds <= 0:
         raise ValueError("cache TTL must be positive")
     if not 0 <= jitter_fraction < 1:
@@ -148,7 +147,6 @@ def record_cache_event(
     operation: str | None = None,
 ) -> None:
     """Emit one metric-ready event without accepting cache keys or values."""
-
     payload: dict[str, str | int | float] = {
         "message": "Runtime cache operation",
         "metric_name": "runtime_cache_operations",

@@ -278,7 +278,6 @@ class HouseholdService:
         require_pending: bool = False,
     ) -> LegacyHouseholdPersistenceResult:
         """Process one explicitly selected retained create event."""
-
         with self._sessions.begin() as session:
             event = session.scalar(
                 select(HouseholdMirrorEvent)

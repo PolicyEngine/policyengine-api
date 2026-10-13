@@ -258,12 +258,12 @@ def _calculation_cache_key(*args: object, **kwargs: object) -> str:
 @household_bp.route("/<country_id>/household/<int:household_id>", methods=["GET"])
 @validate_country
 def get_household(country_id: str, household_id: int) -> Response:
-    """
-    Get a household's input data with a given ID.
+    """Get a household's input data with a given ID.
 
     Args:
         country_id (str): The country ID.
         household_id (int): The household ID.
+
     """
     try:
         get_v1_household_read_source()
@@ -290,13 +290,12 @@ def get_household(country_id: str, household_id: int) -> Response:
 @household_bp.route("/<country_id>/household", methods=["POST"])
 @validate_country
 def post_household(country_id: str) -> Response:
-    """
-    Set a household's input data.
+    """Set a household's input data.
 
     Args:
         country_id (str): The country ID.
-    """
 
+    """
     # Validate payload
     payload = request.json
     is_payload_valid, message = validate_household_payload(payload)

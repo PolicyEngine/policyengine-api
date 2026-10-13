@@ -22,7 +22,6 @@ DEFAULT_MARKDOWN = REPO_ROOT / "docs" / "engineering" / "migration-contracts.md"
 
 def build_payload() -> dict[str, Any]:
     """Build the migration contract payload from typed registries."""
-
     route_groups = []
     for group in ROUTE_GROUPS:
         row = asdict(group)
@@ -68,13 +67,11 @@ def build_payload() -> dict[str, Any]:
 
 def json_text(payload: dict[str, Any]) -> str:
     """Return the canonical JSON text for a migration contract payload."""
-
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
 def render_markdown(payload: dict[str, Any]) -> str:
     """Render migration contracts as reviewer- and agent-readable Markdown."""
-
     lines = [
         "# Migration Contracts",
         "",
@@ -147,7 +144,6 @@ def write_outputs(
     markdown_path: Path = DEFAULT_MARKDOWN,
 ) -> None:
     """Write generated migration contract artifacts."""
-
     json_path.parent.mkdir(parents=True, exist_ok=True)
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(json_text(payload))

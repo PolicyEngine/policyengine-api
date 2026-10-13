@@ -216,7 +216,6 @@ def build_spm_provenance(
     runtime_versions: SPMRuntimeVersions,
 ) -> SPMProvenance:
     """Build one compact receipt from typed calculation inputs."""
-
     if selection.forecast_content_sha256 != forecast_sha256:
         raise ValueError("SPM receipt differs from the SPM configuration")
     if selection.scenario is None:
@@ -247,7 +246,6 @@ def build_spm_calculation_provenance(
     receipt: Mapping[str, object],
 ) -> SPMProvenance:
     """Reduce the country-owned rich receipt to the public compact contract."""
-
     forecast_sha256 = _required_string(receipt, "forecast_sha256")
     scenario = _required_string(receipt, "scenario")
     geography_kind = _required_string(receipt, "geography_kind")
@@ -284,7 +282,6 @@ def resolved_spm_configuration(
     provenance: SPMProvenance,
 ) -> SPMResolvedConfiguration:
     """Derive the complete resolved selection from its compact receipt."""
-
     return SPMResolvedConfiguration(
         forecast_content_sha256=provenance.forecast_sha256,
         scenario=provenance.scenario,
@@ -313,7 +310,6 @@ def build_spm_comparison_provenance(
     reform_receipts: Sequence[SPMProvenance],
 ) -> SPMComparisonProvenance:
     """Collapse matching child receipts into one comparison receipt."""
-
     return SPMComparisonProvenance(
         schema_version="canonical-spm-comparison-v2",
         baseline=_collapse_execution_receipts("baseline", baseline_receipts),
@@ -425,7 +421,6 @@ def validate_spm_calculation_provenance(
     provenance: object,
 ) -> SPMProvenance:
     """Validate the sole transported compact receipt for a completed result."""
-
     return SPMProvenance.model_validate(provenance)
 
 

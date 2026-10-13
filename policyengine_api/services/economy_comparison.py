@@ -116,8 +116,7 @@ def detailed_budgetary_impact(baseline: dict, reform: dict, country_id: str) -> 
 
 
 def decile_impact(baseline: dict, reform: dict) -> dict:
-    """
-    Compare the impact of a reform on the deciles of the population.
+    """Compare the impact of a reform on the deciles of the population.
 
     Args:
         baseline (dict): The baseline economy.
@@ -125,6 +124,7 @@ def decile_impact(baseline: dict, reform: dict) -> dict:
 
     Returns:
         dict: The impact of the reform on the deciles of the population.
+
     """
     baseline_income = MicroSeries(
         baseline["household_net_income"], weights=baseline["household_weight"]
@@ -157,8 +157,7 @@ def decile_impact(baseline: dict, reform: dict) -> dict:
 
 
 def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
-    """
-    Compare the impact of a reform on the deciles of the population.
+    """Compare the impact of a reform on the deciles of the population.
 
     Args:
         baseline (dict): The baseline economy.
@@ -166,6 +165,7 @@ def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
 
     Returns:
         dict: The impact of the reform on the deciles of the population.
+
     """
     baseline_income = MicroSeries(
         baseline["household_net_income"], weights=baseline["household_weight"]
@@ -197,8 +197,7 @@ def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
 
 
 def inequality_impact(baseline: dict, reform: dict) -> dict:
-    """
-    Compare the impact of a reform on inequality.
+    """Compare the impact of a reform on inequality.
 
     Args:
         baseline (dict): The baseline economy.
@@ -206,8 +205,8 @@ def inequality_impact(baseline: dict, reform: dict) -> dict:
 
     Returns:
         dict: The impact of the reform on inequality.
-    """
 
+    """
     return dict(
         gini=dict(
             baseline=baseline["gini"],
@@ -225,8 +224,7 @@ def inequality_impact(baseline: dict, reform: dict) -> dict:
 
 
 def poverty_impact(baseline: dict, reform: dict) -> dict:
-    """
-    Compare the impact of a reform on poverty.
+    """Compare the impact of a reform on poverty.
 
     Args:
         baseline (dict): The baseline economy.
@@ -234,6 +232,7 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
 
     Returns:
         dict: The impact of the reform on poverty.
+
     """
     baseline_poverty = MicroSeries(
         baseline["person_in_poverty"], weights=baseline["person_weight"]
@@ -297,7 +296,8 @@ def compute_income_change(
     baseline_values: np.ndarray, reform_values: np.ndarray
 ) -> np.ndarray:
     """Percentage income change with a floor of 1 on the baseline
-    to avoid division by zero for zero/negative incomes."""
+    to avoid division by zero for zero/negative incomes.
+    """
     absolute_change = reform_values - baseline_values
     capped_baseline = np.maximum(baseline_values, 1)
     return absolute_change / capped_baseline
@@ -408,8 +408,7 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
 
 
 def poverty_gender_breakdown(baseline: dict, reform: dict) -> dict:
-    """
-    Compare the impact of a reform on poverty.
+    """Compare the impact of a reform on poverty.
 
     Args:
         baseline (dict): The baseline economy.
@@ -417,6 +416,7 @@ def poverty_gender_breakdown(baseline: dict, reform: dict) -> dict:
 
     Returns:
         dict: The impact of the reform on poverty.
+
     """
     if baseline["is_male"] is None:
         return {}
@@ -463,8 +463,7 @@ def poverty_gender_breakdown(baseline: dict, reform: dict) -> dict:
 
 
 def poverty_racial_breakdown(baseline: dict, reform: dict) -> dict:
-    """
-    Compare the impact of a reform on poverty.
+    """Compare the impact of a reform on poverty.
 
     Args:
         baseline (dict): The baseline economy.
@@ -472,6 +471,7 @@ def poverty_racial_breakdown(baseline: dict, reform: dict) -> dict:
 
     Returns:
         dict: The impact of the reform on poverty.
+
     """
     if baseline["race"] is None:
         return {}
@@ -785,8 +785,7 @@ def compare_economic_outputs(
     country_id: str = None,
     region: str | None = None,
 ) -> dict:
-    """
-    Compare the economic outputs of two economies.
+    """Compare the economic outputs of two economies.
 
     Args:
         baseline (dict): The baseline economy.
@@ -797,6 +796,7 @@ def compare_economic_outputs(
 
     Returns:
         dict: The comparison of the two economies.
+
     """
     if baseline.get("type") == "general":
         budgetary_impact_data = budgetary_impact(baseline, reform)

@@ -362,7 +362,6 @@ class HouseholdCalculationService:
         spm_requested: bool = False,
     ) -> PreparedHouseholdCalculation:
         """Validate request inputs before accepting a calculation."""
-
         countries = self._countries()
         country = countries.get(country_id)
         spm = normalize_spm_selection(country_id, spm)
@@ -398,7 +397,6 @@ class HouseholdCalculationService:
         prepared: PreparedHouseholdCalculation,
     ) -> HouseholdCalculationResult:
         """Calculate inputs already accepted by ``prepare_household_calculation``."""
-
         with observability_runtime.span(
             HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_CALCULATION)
         ):
@@ -443,7 +441,6 @@ class HouseholdCalculationService:
         on_accepted: Callable[[], object] | None = None,
     ) -> PreparedHouseholdCalculation:
         """Parse a prepared situation without performing requested calculations."""
-
         prepare_calculation = getattr(prepared.country, "prepare_calculation", None)
         country_calculation = prepared.country_calculation
         if callable(prepare_calculation):
@@ -476,7 +473,6 @@ class HouseholdCalculationService:
         spm_requested: bool = False,
     ) -> HouseholdCalculationResult:
         """Validate and calculate request-provided household and policy data."""
-
         prepared = self.prepare_household_calculation(
             country_id,
             household_json,

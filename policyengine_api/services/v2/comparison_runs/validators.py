@@ -164,7 +164,6 @@ def require_simulation_parent_matches(
     child: ComparisonSimulationRecord,
 ) -> None:
     """Require a child to retain the parent's release and retention identity."""
-
     if child.evaluation_id != parent.evaluation_id:
         raise ComparisonRunIdentityError(
             "comparison child names a different parent evaluation_id"
@@ -188,7 +187,6 @@ def require_successful_report_replay(
     candidate: ComparisonReportRecord,
 ) -> None:
     """Reject attempts to alter an already successful report receipt."""
-
     _require_equal_fields(existing, candidate, REPORT_SUCCEEDED_REPLAY_FIELDS)
 
 
@@ -197,7 +195,6 @@ def require_successful_simulation_replay(
     candidate: ComparisonSimulationRecord,
 ) -> None:
     """Reject attempts to alter an already successful simulation receipt."""
-
     _require_equal_fields(existing, candidate, SIMULATION_SUCCEEDED_REPLAY_FIELDS)
 
 

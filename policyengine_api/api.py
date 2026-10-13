@@ -1,7 +1,5 @@
 # ruff: noqa: E402
-"""
-This is the main Flask app for the PolicyEngine API.
-"""
+"""This is the main Flask app for the PolicyEngine API."""
 
 import sys
 import time

@@ -44,7 +44,8 @@ class Findings:
 
 def multiline_runs(config: CiScripts, root: Path) -> set[str]:
     """``workflow :: job :: step`` for every run: block with more than one line of
-    code, or with commands chained by ``&&``, ``||`` or ``;``."""
+    code, or with commands chained by ``&&``, ``||`` or ``;``.
+    """
     found = set()
     for workflow in sorted(root.glob(config.workflows)):
         relative = workflow.relative_to(root).as_posix()

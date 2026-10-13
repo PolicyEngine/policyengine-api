@@ -45,7 +45,6 @@ def validate_command_environment(
     environ: Mapping[str, str],
 ) -> dict[str, str]:
     """Require matching source, destination, and operator declarations."""
-
     deployment_environment = _required(environ, "DEPLOYMENT_ENVIRONMENT")
     supabase_environment = _required(environ, "V2_SUPABASE_ENVIRONMENT")
     if deployment_environment != selected_environment:
@@ -110,7 +109,6 @@ def _proxy_event_service(
     environ: Mapping[str, str],
 ) -> tuple[HouseholdService | None, Engine | None]:
     """Use the workflow-authenticated Cloud SQL proxy when it is selected."""
-
     raw_port = environ.get("POLICYENGINE_DB_PROXY_PORT", "").strip()
     if not raw_port:
         return None, None
@@ -162,7 +160,6 @@ def _record_command_outcome(
     error_type: str | None = None,
 ) -> None:
     """Write an audit record without source data or credentials."""
-
     logger.log_struct(
         {
             "message": "Explicit v1 household create-event processing completed",

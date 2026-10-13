@@ -10,7 +10,6 @@ from scripts.v1_database_migration import metadata_differences
 
 def compare_existing_schema(database_url: str) -> list[str]:
     """Return metadata drift without mutating the target database."""
-
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:

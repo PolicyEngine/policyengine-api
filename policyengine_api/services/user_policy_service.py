@@ -389,7 +389,6 @@ class UserPolicyService:
         | None = None,
     ) -> LegacyUserPolicyPersistenceResult:
         """Process retained source events in order through one request's revision."""
-
         latest_result: LegacyUserPolicyPersistenceResult | None = None
         while True:
             with self._sessions.begin() as session:

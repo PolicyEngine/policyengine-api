@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 def render_legacy_json(content: JSONValue) -> bytes:
     """Serialize once with the same JSON encoder used by legacy metadata."""
-
     return json.dumps(content).encode("utf-8")
 
 

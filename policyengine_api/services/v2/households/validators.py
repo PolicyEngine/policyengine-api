@@ -52,7 +52,6 @@ def require_json_value(
     containers: frozenset[int] = frozenset(),
 ) -> object:
     """Reject values that are not standards-compliant JSON."""
-
     if depth > MAXIMUM_JSON_NESTING:
         raise ValueError("JSON values must not exceed 100 nested containers")
     if value is None or type(value) in {str, bool, int}:
@@ -109,7 +108,6 @@ def normalize_household_document(
     document: dict[str, Any],
 ) -> dict[str, Any]:
     """Validate and normalize one country-specific household document."""
-
     collections = SUPPORTED_ENTITY_COLLECTIONS.get(country_id)
     if collections is None:
         raise HouseholdValidationError(f"unsupported country_id {country_id!r}")
@@ -208,7 +206,6 @@ def verify_legacy_household_mapping(
     expected_household_id: UUID | None = None,
 ) -> None:
     """Validate one stored immutable legacy mapping without executing SQL."""
-
     if (
         mapping.fingerprint_version != fingerprint_version
         or mapping.fingerprint_sha256 != fingerprint_sha256

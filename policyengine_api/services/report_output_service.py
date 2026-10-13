@@ -29,7 +29,6 @@ def _canonicalize_annual_spm_output(
     expected_year: str | None,
 ) -> JSONObject:
     """Validate and serialize compact SPM provenance on one economy result."""
-
     if "spm_config" in output:
         raise ValueError(
             "Completed US economy output must not include legacy spm_config"
@@ -58,7 +57,6 @@ def _canonicalize_society_wide_spm_output(
     expected_year: str | None,
 ) -> object:
     """Validate compact annual or budget-window society-wide SPM output."""
-
     if not isinstance(output, dict):
         return output
     typed_output = cast("JSONObject", output)

@@ -61,7 +61,6 @@ def resolve_simulation_entrypoint_url(entrypoint: str | None = None) -> str:
 
 def _attach_current_request_id(request: httpx.Request) -> None:
     """Attach the active API request ID to an outbound simulation request."""
-
     request_id = current_request_id()
     if request_id is not None:
         request.headers[REQUEST_ID_HEADER] = request_id
@@ -111,9 +110,7 @@ class SimulationRunProgress(BaseModel):
 
 @dataclass
 class ModalSimulationExecution:
-    """
-    Represents a Modal simulation job execution.
-    """
+    """Represents a Modal simulation job execution."""
 
     job_id: str
     status: str
@@ -131,9 +128,7 @@ class ModalSimulationExecution:
 
 @dataclass
 class ModalBudgetWindowBatchExecution:
-    """
-    Represents a budget-window batch execution in the Simulation Entrypoint.
-    """
+    """Represents a budget-window batch execution in the Simulation Entrypoint."""
 
     batch_job_id: str
     status: str
@@ -152,8 +147,7 @@ class ModalBudgetWindowBatchExecution:
 
 
 class SimulationEntrypointClient:
-    """
-    HTTP client for the configured Simulation Entrypoint.
+    """HTTP client for the configured Simulation Entrypoint.
 
     This class provides methods for submitting simulation jobs and
     polling for their status/results via HTTP endpoints.
@@ -232,8 +226,7 @@ class SimulationEntrypointClient:
         return modal_payload
 
     def run(self, payload: dict) -> ModalSimulationExecution:
-        """
-        Submit a simulation job to the selected Simulation entrypoint.
+        """Submit a simulation job to the selected Simulation entrypoint.
 
         Parameters
         ----------
@@ -250,6 +243,7 @@ class SimulationEntrypointClient:
         ------
         httpx.HTTPStatusError
             If the API returns an error response.
+
         """
         try:
             modal_payload = self._normalize_submission_payload(payload)
@@ -301,9 +295,7 @@ class SimulationEntrypointClient:
             raise
 
     def run_budget_window_batch(self, payload: dict) -> ModalBudgetWindowBatchExecution:
-        """
-        Submit a budget-window batch job to the selected Simulation entrypoint.
-        """
+        """Submit a budget-window batch job to the selected Simulation entrypoint."""
         try:
             modal_payload = self._normalize_submission_payload(payload)
 
@@ -445,8 +437,7 @@ class SimulationEntrypointClient:
             ) from exc
 
     def get_execution_id(self, execution: ModalSimulationExecution) -> str:
-        """
-        Get the job ID from an execution.
+        """Get the job ID from an execution.
 
         Parameters
         ----------
@@ -457,12 +448,12 @@ class SimulationEntrypointClient:
         -------
         str
             The job ID.
+
         """
         return execution.job_id
 
     def get_execution_by_id(self, job_id: str) -> ModalSimulationExecution:
-        """
-        Poll the selected Simulation entrypoint for the current status of a job.
+        """Poll the selected Simulation entrypoint for the current status of a job.
 
         Parameters
         ----------
@@ -473,6 +464,7 @@ class SimulationEntrypointClient:
         -------
         ModalSimulationExecution
             Execution object with current status and result if complete.
+
         """
         try:
             response = self.client.get(f"{self.base_url}/jobs/{job_id}")
@@ -513,9 +505,7 @@ class SimulationEntrypointClient:
     def get_budget_window_batch_by_id(
         self, batch_job_id: str
     ) -> ModalBudgetWindowBatchExecution:
-        """
-        Poll the selected Simulation entrypoint for a budget-window batch.
-        """
+        """Poll the selected Simulation entrypoint for a budget-window batch."""
         try:
             response = self.client.get(
                 f"{self.base_url}/budget-window-jobs/{batch_job_id}"
@@ -557,8 +547,7 @@ class SimulationEntrypointClient:
             raise
 
     def get_execution_status(self, execution: ModalSimulationExecution) -> str:
-        """
-        Get the status string from an execution.
+        """Get the status string from an execution.
 
         Parameters
         ----------
@@ -569,12 +558,12 @@ class SimulationEntrypointClient:
         -------
         str
             The status string ("submitted", "running", "complete", "failed").
+
         """
         return execution.status
 
     def get_execution_result(self, execution: ModalSimulationExecution) -> dict | None:
-        """
-        Get the result from a completed execution.
+        """Get the result from a completed execution.
 
         Parameters
         ----------
@@ -585,17 +574,18 @@ class SimulationEntrypointClient:
         -------
         dict or None
             The simulation result if complete, None otherwise.
+
         """
         return execution.result
 
     def health_check(self) -> bool:
-        """
-        Check if the selected Simulation entrypoint is healthy.
+        """Check if the selected Simulation entrypoint is healthy.
 
         Returns
         -------
         bool
             True if the API is healthy, False otherwise.
+
         """
         try:
             response = self.client.get(f"{self.base_url}/health")

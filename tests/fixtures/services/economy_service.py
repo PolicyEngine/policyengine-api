@@ -266,8 +266,7 @@ def create_mock_modal_execution(
     policyengine_bundle=None,
     run_progress=None,
 ):
-    """
-    Helper function to create mock Modal execution objects.
+    """Helper function to create mock Modal execution objects.
 
     Parameters
     ----------
@@ -284,6 +283,7 @@ def create_mock_modal_execution(
     -------
     MagicMock
         A mock ModalSimulationExecution object.
+
     """
     mock_execution = MagicMock()
     mock_execution.job_id = job_id

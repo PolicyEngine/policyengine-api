@@ -38,7 +38,6 @@ def _include_application_object(
     _compare_to: SchemaItem | None,
 ) -> bool:
     """Keep Alembic's own version table outside application drift."""
-
     return not (type_ == "table" and name == "alembic_version")
 
 

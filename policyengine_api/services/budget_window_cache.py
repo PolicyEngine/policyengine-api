@@ -146,7 +146,6 @@ class BudgetWindowCache:
 
     def get_state(self, cache_key: str) -> BudgetWindowCacheState | None:
         """Read the complete report state or fail closed on cache outage."""
-
         started_at = time.perf_counter()
         state_key = self._state_key(cache_key)
         try:

@@ -95,7 +95,8 @@ def test_inherited_measurement_leaves_dependent_variables_unavailable(
     monkeypatch, code, axes
 ):
     """Nobody chose this measurement, so its dependants behave like any other
-    variable the model cannot compute: null, not a rejected request."""
+    variable the model cannot compute: null, not a rejected request.
+    """
     country, _ = _failing_country(monkeypatch, code)
     # The requested cell is seeded null, so returning at all is the observable
     # change; the sibling test below pins that the rest of the result survives.

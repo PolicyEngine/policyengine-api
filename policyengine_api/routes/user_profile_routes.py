@@ -30,10 +30,7 @@ def _serialize_user_profile(
 @user_profile_bp.route("/<country_id>/user-profile", methods=["POST"])
 @validate_country
 def set_user_profile(country_id: str) -> Response:
-    """
-    Creates a new user_profile
-    """
-
+    """Creates a new user_profile"""
     payload = request.json
     if payload is None:
         raise BadRequest("Payload missing from request")
@@ -104,12 +101,10 @@ def get_user_profile(country_id: str) -> Response:
 @user_profile_bp.route("/<country_id>/user-profile", methods=["PUT"])
 @validate_country
 def update_user_profile(country_id: str) -> Response:
-    """
-    Update any part of a user_profile, given a user_id,
+    """Update any part of a user_profile, given a user_id,
     except the auth0_id value; any attempt to edit this
     will assume malicious intent and 403
     """
-
     payload = request.json
 
     if payload is None:

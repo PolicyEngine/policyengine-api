@@ -51,7 +51,6 @@ def find_unrecognized_inputs(
     metadata: dict,
 ) -> list[UnrecognizedInput]:
     """Return calculate payload names that the country package cannot resolve."""
-
     return [
         *find_unrecognized_household_inputs(household, metadata),
         *find_unrecognized_policy_inputs(policy, metadata),

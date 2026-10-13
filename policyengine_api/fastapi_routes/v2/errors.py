@@ -48,7 +48,6 @@ def v2_error_response(
     headers: Mapping[str, str] | None = None,
 ) -> JSONResponse:
     """Serialize one API v2 error without resource-path dispatch."""
-
     error = V2ErrorResponse(message=message)
     return JSONResponse(
         status_code=status_code,

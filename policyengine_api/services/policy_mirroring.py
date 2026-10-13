@@ -125,7 +125,6 @@ def mirror_policy_after_commit(
     mirror_factory: Callable[[], LegacyPolicyMirror] | None = None,
 ) -> LegacyPolicyPersistenceResult:
     """Require the Supabase policy and mapping transaction before v1 success."""
-
     started_at = time.perf_counter()
     try:
         result = (mirror_factory or _default_mirror_factory)().mirror_legacy_policy(
