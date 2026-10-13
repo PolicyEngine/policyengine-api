@@ -8,6 +8,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse, Response
 
+from policyengine_api.fastapi_routes.dependencies import (
+    _default_v2_user_policy_service_factory,
+)
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import v2_error_response
 from policyengine_api.fastapi_routes.v2.user_policies.request_models import (
@@ -54,10 +57,6 @@ def _service_factory(
 ) -> Callable[[], V2UserPolicyResourceService]:
     if dependencies.v2_user_policy_service_factory is not None:
         return dependencies.v2_user_policy_service_factory
-    from policyengine_api.fastapi_routes.dependencies import (
-        _default_v2_user_policy_service_factory,
-    )
-
     return _default_v2_user_policy_service_factory
 
 

@@ -131,7 +131,9 @@ def add_yearly_variables(
     changed in place and returned.
     """
     if countries is None:
-        from policyengine_api.country import COUNTRIES
+        from policyengine_api.country import (  # noqa: PLC0415  # country imports this module and loads every country model
+            COUNTRIES,
+        )
 
         countries = COUNTRIES
     metadata = countries.get(country_id).metadata
@@ -179,7 +181,9 @@ class HouseholdCalculationService:
     def _countries(self) -> dict:
         if self._country_provider is not None:
             return self._country_provider()
-        from policyengine_api.country import COUNTRIES
+        from policyengine_api.country import (  # noqa: PLC0415  # country imports this module and loads every country model
+            COUNTRIES,
+        )
 
         return COUNTRIES
 

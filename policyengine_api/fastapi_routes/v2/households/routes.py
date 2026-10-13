@@ -10,6 +10,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import JSONResponse
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
+from policyengine_api.fastapi_routes.dependencies import (
+    _default_v2_household_service_factory,
+)
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import (
     V2RequestTooLargeError,
@@ -81,10 +84,6 @@ def _service_factory(
 ) -> Callable[[], V2HouseholdResourceService]:
     if dependencies.v2_household_service_factory is not None:
         return dependencies.v2_household_service_factory
-    from policyengine_api.fastapi_routes.dependencies import (
-        _default_v2_household_service_factory,
-    )
-
     return _default_v2_household_service_factory
 
 

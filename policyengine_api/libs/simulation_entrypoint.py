@@ -25,6 +25,7 @@ from policyengine_api.request_context import (
     current_observability_id,
     current_request_id,
 )
+from policyengine_api.spm import SPMValidationError
 from policyengine_api.worker_spm import raise_worker_spm_error, validate_worker_spm
 
 
@@ -256,7 +257,7 @@ class SimulationEntrypointClient:
             msg = "Dataset overrides are not supported"
             raise ValueError(msg)
 
-        from policyengine_api.constants import (
+        from policyengine_api.constants import (  # noqa: PLC0415  # constants reads the installed bundle manifest at import
             COUNTRY_PACKAGE_VERSIONS,
             POLICYENGINE_VERSION,
         )
@@ -273,8 +274,6 @@ class SimulationEntrypointClient:
         )
         if resolved is not None:
             if bundle_version == "latest":
-                from policyengine_api.spm import SPMValidationError
-
                 error_code = "SPM_SETTINGS_INVALID"
                 raise SPMValidationError(
                     error_code,
@@ -423,8 +422,6 @@ class SimulationEntrypointClient:
         bundle publishes no capability. Raise SPMValidationError if the routes
         are unreachable or ambiguous.
         """
-        from policyengine_api.spm import SPMValidationError
-
         try:
             response = self.client.get(f"{self.base_url}/versions")
             response.raise_for_status()
