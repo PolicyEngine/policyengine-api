@@ -71,7 +71,10 @@ class SPMSelection(BaseModel):
     county_vintage: str = Field(default="2020", pattern=r"^[0-9]{4}$")
     as_of: str | None = Field(
         default=None,
-        description="ISO calendar date (YYYY-MM-DD); must satisfy the selected artifact's information date",
+        description=(
+            "ISO calendar date (YYYY-MM-DD); must satisfy the selected artifact's "
+            "information date"
+        ),
         json_schema_extra={
             "format": "date",
             "pattern": r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$",

@@ -953,7 +953,10 @@ class EconomyService:
     ) -> EconomicImpactResult:
         logger.log_struct(
             {
-                "message": "Received request for economic impact; checking if already in reform_impacts table",
+                "message": (
+                    "Received request for economic impact; checking if already in "
+                    "reform_impacts table"
+                ),
                 **setup_options.model_dump(),
             },
             severity="INFO",
@@ -989,7 +992,9 @@ class EconomyService:
         if impact_action == ImpactAction.COMPLETED:
             logger.log_struct(
                 {
-                    "message": "Found completed economic impact in db; returning result",
+                    "message": (
+                        "Found completed economic impact in db; returning result"
+                    ),
                     **setup_options.model_dump(),
                 },
                 severity="INFO",
@@ -1005,7 +1010,10 @@ class EconomyService:
         if impact_action == ImpactAction.COMPUTING:
             logger.log_struct(
                 {
-                    "message": "Found computing economic impact record in db; confirming this is still computing",
+                    "message": (
+                        "Found computing economic impact record in db; confirming this "
+                        "is still computing"
+                    ),
                     **setup_options.model_dump(),
                 },
                 severity="INFO",
@@ -1064,7 +1072,10 @@ class EconomyService:
                 return EconomicImpactResult.computing()
             logger.log_struct(
                 {
-                    "message": "No previous economic impact record found in db; creating new simulation run",
+                    "message": (
+                        "No previous economic impact record found in db; creating new "
+                        "simulation run"
+                    ),
                     **setup_options.model_dump(),
                 },
                 severity="INFO",
@@ -1185,10 +1196,16 @@ class EconomyService:
             active_years = ", ".join(computing_years[:2])
             if len(computing_years) > 2:
                 active_years = f"{active_years} + {len(computing_years) - 2} more"
-            return f"Scoring {active_years} ({completed_count} of {total_years} complete)..."
+            return (
+                f"Scoring {active_years} "
+                f"({completed_count} of {total_years} complete)..."
+            )
 
         if queued_years:
-            return f"Queued {queued_years[0]} ({completed_count} of {total_years} complete)..."
+            return (
+                f"Queued {queued_years[0]} "
+                f"({completed_count} of {total_years} complete)..."
+            )
 
         return f"Scoring budget window ({completed_count} of {total_years} complete)..."
 
@@ -1833,7 +1850,9 @@ class EconomyService:
         except Exception as e:
             logger.log_struct(
                 {
-                    "message": f"Error setting completed reform impact record: {str(e)}",
+                    "message": (
+                        f"Error setting completed reform impact record: {str(e)}"
+                    ),
                     **setup_options.model_dump(),
                 }
             )

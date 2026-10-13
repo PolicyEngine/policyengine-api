@@ -152,7 +152,10 @@ def normalize_household_document(
             msg = f"{collection} must be a list"
             raise HouseholdValidationError(msg)
         if len(records) > MAXIMUM_HOUSEHOLD_ENTITIES:
-            msg = f"{collection} must contain at most {MAXIMUM_HOUSEHOLD_ENTITIES} records"
+            msg = (
+                f"{collection} must contain at most "
+                f"{MAXIMUM_HOUSEHOLD_ENTITIES} records"
+            )
             raise HouseholdValidationError(msg)
         record_ids: set[str] = set()
         normalized_records: list[dict[str, Any]] = []

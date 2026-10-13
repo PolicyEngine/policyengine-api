@@ -186,7 +186,10 @@ class ReportSpecService:
                     for simulation in (simulation_1, simulation_2)
                 ]
                 if household_ids[0] != household_ids[1]:
-                    msg = "Household comparison report specs require matching household IDs"
+                    msg = (
+                        "Household comparison report specs require matching "
+                        "household IDs"
+                    )
                     raise ValueError(msg)
             return HouseholdReportSpec(
                 country_id=report_output.country_id,

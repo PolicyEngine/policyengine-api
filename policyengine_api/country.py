@@ -179,7 +179,8 @@ class PolicyEngineCountry:
 
     def build_microsimulation_options(self) -> dict:
         """Build the regions, time periods and datasets offered for economy runs."""
-        # { region: [{ name: "uk", label: "the UK" }], time_period: [{ name: 2022, label: "2022", ... }] }
+        # Shape: { region: [{ name: "uk", label: "the UK" }],
+        #   time_period: [{ name: 2022, label: "2022", ... }] }
         options = dict()
         if self.country_id == "uk":
             constituency_names_path = (
@@ -396,7 +397,8 @@ class PolicyEngineCountry:
                 }
             elif isinstance(parameter, ParameterScaleBracket):
                 bracket_index = int(parameter.name[parameter.name.index("[") + 1 : -1])
-                # Set the label to 'first bracket' for the first bracket, 'second bracket' for the second, etc.
+                # Set the label to 'first bracket' for the first bracket, 'second
+                # bracket' for the second, etc.
                 bracket_label = f"bracket {bracket_index + 1}"
                 parameter_data[parameter.name] = {
                     "type": "parameterNode",
@@ -681,7 +683,9 @@ def create_policy_reform(policy_data: dict) -> dict:
                 start, end = period.split(".")
                 node_type = type(node.values_list[-1].value)
                 if node_type is int:
-                    node_type = float  # '0' is of type int by default, but usually we want to cast to float.
+                    # '0' is of type int by default, but usually we want to cast to
+                    # float.
+                    node_type = float
                 if node.values_list[-1].value is None:
                     node_type = float
                 node.update(

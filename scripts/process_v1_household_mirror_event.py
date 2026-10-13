@@ -90,7 +90,10 @@ def validate_command_environment(
         "ALLOWED_HOUSEHOLD_MIRROR_OPERATOR_IDENTITY",
     )
     if operator_identity != allowed_operator_identity:
-        msg = "declared operator identity is not authorized for household event processing"
+        msg = (
+            "declared operator identity is not authorized for household event "
+            "processing"
+        )
         raise HouseholdEventCommandConfigurationError(msg)
     return {
         "environment": selected_environment,
