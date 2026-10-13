@@ -31,8 +31,6 @@ from policyengine_api.runtime_cache.settings import load_runtime_cache_settings
 
 log_timing("Caching utilities import completed")
 
-# from werkzeug.middleware.profiler import ProfilerMiddleware
-
 # Endpoints
 from policyengine_api.routes.error_routes import error_bp
 

@@ -46,8 +46,9 @@ question = st.text_input(
     "Revenue impact of changing the basic rate of income tax to 25%",
 )
 
-# First task: convert to:
-# { 'hmrc.income_tax.rates.uk[0].rate': { '2023-01-01.2024-01-01': 0.25 } }
+# First task: convert the question to a reform that maps each parameter path to
+# its values by period, for example hmrc.income_tax.rates.uk[0].rate set to 0.25
+# for the period 2023-01-01.2024-01-01.
 
 # We're going to do this with GPT4- we'll pass in the question, the related parameter metadata, and the task description.
 
