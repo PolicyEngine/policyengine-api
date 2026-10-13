@@ -216,25 +216,45 @@ def test_default_dependencies_publish_the_bearer_security_scheme() -> None:
     assert "security" not in schema["paths"]["/v2/policies"]["get"]
 
 
-def test_unexpected_failures_are_logged_without_their_message(caplog) -> None:
-    from policyengine_api.fastapi_routes.v2.user_resources import (
-        user_resource_operation,
-    )
+def test_unexpected_failures_are_logged_without_their_message() -> None:
+    import logging
+
+    from policyengine_api.fastapi_routes.v2 import user_resources
+
+    class RecordingHandler(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__(level=logging.ERROR)
+            self.records: list[logging.LogRecord] = []
+
+        def emit(self, record: logging.LogRecord) -> None:
+            self.records.append(record)
 
     subject = "|".join(("google-oauth2", "secret-subject"))
 
     def fail():
         raise RuntimeError(f"{subject} leaked into a message")
 
-    with caplog.at_level("ERROR"):
-        response = user_resource_operation(fail)
+    # Alembic tests run logging.config.fileConfig, which disables loggers that
+    # already exist, so re-enable this one and record on it directly.
+    handler = RecordingHandler()
+    was_disabled = user_resources.logger.disabled
+    user_resources.logger.disabled = False
+    user_resources.logger.addHandler(handler)
+    try:
+        response = user_resources.user_resource_operation(fail)
+    finally:
+        user_resources.logger.removeHandler(handler)
+        user_resources.logger.disabled = was_disabled
 
     assert response.status_code == 500
-    record = next(
-        record for record in caplog.records if record.msg == "v2_user_operation_failed"
-    )
+    (record,) = [
+        record
+        for record in handler.records
+        if record.getMessage() == "v2_user_operation_failed"
+    ]
     attributes = record.policyengine_attributes
     assert attributes["error_type"] == "RuntimeError"
     assert "in fail" in attributes["error_frames"]
-    assert "secret-subject" not in caplog.text
+    assert "secret-subject" not in record.getMessage()
     assert "secret-subject" not in str(attributes)
+    assert record.exc_info is None
