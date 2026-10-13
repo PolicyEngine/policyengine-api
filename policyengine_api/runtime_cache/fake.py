@@ -212,7 +212,6 @@ class DisabledCacheBackend(InMemoryCacheBackend):
 
     def get(self, key: str) -> None:
         """Return None: every read is a miss."""
-        return None  # noqa: RET501  # explicit None mirrors the Redis get contract
 
     def set(self, key: str, value: str, **kwargs: object) -> bool:
         """Discard the value and report the write as not stored."""
