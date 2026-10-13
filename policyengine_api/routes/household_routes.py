@@ -105,7 +105,7 @@ def _household_persistence_failure(
             },
             severity="ERROR",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001  # metric logging must not replace the error response
         pass
     message = (
         "Household database is temporarily unavailable; please try again later."
