@@ -679,7 +679,7 @@ autofix = true
 [rule.enforcer]
 kind = "ruff"
 mode = "lint"
-codes = ["E4", "E7", "E9", "F", "FLY", "FURB", "I", "PIE", "PYI", "RET", "RSE", "UP", "W"]
+codes = ["E4", "E7", "E9", "F", "FLY", "FURB", "I", "PIE", "PYI", "RET", "RSE", "TC", "UP", "W"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "lint"

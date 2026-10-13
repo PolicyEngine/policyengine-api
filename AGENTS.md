@@ -122,7 +122,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 - `api.quality.environment-variables-load`: Required environment variables and credentials load in a deployed-like environment. (blocking: CI job `test_env_vars`)
 - `api.quality.mypy-v2`: Shared query models, FastAPI dependencies, and v2 routes and services pass mypy with untyped definitions disallowed. (blocking: mypy)
 - `api.quality.ruff-format`: All Python files are formatted with ruff format. (blocking: ruff format)
-- `api.quality.ruff-lint`: All Python code passes ruff check with every rule family selected in pyproject.toml, with no ratchet; families are added one themed group at a time until the selection is ALL. (blocking: ruff check (E4, E7, E9, F, FLY, FURB, I, PIE, PYI, RET, RSE, UP, W))
+- `api.quality.ruff-lint`: All Python code passes ruff check with every rule family selected in pyproject.toml, with no ratchet; families are added one themed group at a time until the selection is ALL. (blocking: ruff check (E4, E7, E9, F, FLY, FURB, I, PIE, PYI, RET, RSE, TC, UP, W))
 - `api.quality.tests-pass`: The unit, contract and to-refactor test suites pass. (blocking: CI job `test`)
 
 ### Observability
