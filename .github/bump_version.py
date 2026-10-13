@@ -47,7 +47,7 @@ def bump_version(version: str, bump: str) -> str:
     return f"{major}.{minor}.{patch + 1}"
 
 
-def update_file(path: Path, old_version: str, new_version: str):
+def update_file(path: Path, old_version: str, new_version: str) -> None:
     text = path.read_text()
     updated = text.replace(
         f'version = "{old_version}"',
@@ -58,7 +58,7 @@ def update_file(path: Path, old_version: str, new_version: str):
         print(f"  Updated {path}")
 
 
-def main():
+def main() -> None:
     root = Path(__file__).resolve().parent.parent
     pyproject = root / "pyproject.toml"
     changelog_dir = root / "changelog.d"

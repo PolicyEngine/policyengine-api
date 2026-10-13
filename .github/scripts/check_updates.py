@@ -13,6 +13,7 @@ Usage:
 import argparse
 import re
 import sys
+from typing import TypedDict
 
 import requests
 
@@ -23,7 +24,12 @@ REPO_MAP = {
 }
 
 
-def fetch_changelog(package):
+class ChangelogEntry(TypedDict):
+    version: str
+    changes: dict[str, list[str]]
+
+
+def fetch_changelog(package: str) -> str | None:
     """Fetch CHANGELOG.md from the package's GitHub repo."""
     repo = REPO_MAP.get(package)
     if not repo:
@@ -36,18 +42,18 @@ def fetch_changelog(package):
     return None
 
 
-def parse_version(version_str):
+def parse_version(version_str: str) -> tuple[int, ...]:
     """Parse a version string into a comparable tuple."""
     return tuple(map(int, version_str.split(".")))
 
 
-def parse_changelog(text):
+def parse_changelog(text: str | None) -> list[ChangelogEntry]:
     """Parse Keep-a-Changelog markdown into structured entries."""
     if not text:
         return []
 
-    entries = []
-    current_entry = None
+    entries: list[ChangelogEntry] = []
+    current_entry: ChangelogEntry | None = None
     current_category = None
 
     for line in text.splitlines():
@@ -77,7 +83,9 @@ def parse_changelog(text):
     return entries
 
 
-def get_changes_between(changelog, old_version, new_version):
+def get_changes_between(
+    changelog: list[ChangelogEntry], old_version: str, new_version: str
+) -> list[ChangelogEntry]:
     """Extract changelog entries between two versions."""
     old_v = parse_version(old_version)
     new_v = parse_version(new_version)
@@ -88,9 +96,14 @@ def get_changes_between(changelog, old_version, new_version):
     ]
 
 
-def format_changes(entries):
+def format_changes(entries: list[ChangelogEntry]) -> str:
     """Format changelog entries as markdown sections."""
-    buckets = {"added": [], "changed": [], "fixed": [], "removed": []}
+    buckets: dict[str, list[str]] = {
+        "added": [],
+        "changed": [],
+        "fixed": [],
+        "removed": [],
+    }
     for entry in entries:
         for cat, items in entry.get("changes", {}).items():
             if cat in buckets:
@@ -105,7 +118,7 @@ def format_changes(entries):
     return "\n\n".join(sections) if sections else ""
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(
         description="Fetch changelog entries between two package versions."
     )
