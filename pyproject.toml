@@ -96,6 +96,8 @@ select = [
     "D",
     # Group 5: exceptions and messages.
     "BLE", "EM", "TRY",
+    # Group 6: security, logging and debugging leftovers.
+    "DTZ", "ERA", "EXE", "FIX", "G", "LOG", "S", "T20", "TD",
 ]
 # Mutually exclusive pydocstyle pairs: keep D211 (no blank line before a class
 # docstring) and D212 (summary on the first line).
