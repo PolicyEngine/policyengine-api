@@ -632,9 +632,10 @@ class SimulationEntrypointClient:
         """
         try:
             response = self.client.get(f"{self.base_url}/health")
-            return response.status_code == 200
-        except Exception:
+        except Exception:  # noqa: BLE001  # a health probe reports any failure as unhealthy
             return False
+        else:
+            return response.status_code == 200
 
 
 # Compatibility aliases preserve existing imports and generated-client consumers.

@@ -222,7 +222,7 @@ def main(
                 outcome="error",
                 error_type=type(error).__name__,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001  # outcome logging must not change the command result
             pass
         safe_types = (HouseholdEventCommandConfigurationError,)
         message = (
@@ -254,7 +254,7 @@ def main(
             outcome="ok",
             destination_household_id=result.household_id,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001  # outcome logging must not change the command result
         pass
     print(
         json.dumps(

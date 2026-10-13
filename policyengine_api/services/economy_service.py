@@ -1392,7 +1392,7 @@ class EconomyService:
                 error_code=error.code,
                 execution_id=most_recent_impact.execution_id,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001  # best effort: the typed SPM error is the answer, and the failure is already logged
             pass
 
     @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_FAILED))
@@ -1616,7 +1616,7 @@ class EconomyService:
                     policyengine_version=setup_options.policyengine_version,
                 )
             )
-        except Exception:
+        except Exception:  # noqa: BLE001  # an unresolvable worker app keeps the cached impact
             return False
 
         setup_options.runtime_app_name = runtime_app_name

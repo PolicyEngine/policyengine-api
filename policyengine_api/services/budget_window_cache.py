@@ -371,7 +371,7 @@ class BudgetWindowCache:
                 self._encoded_state(state),
                 ex=jittered_ttl(BUDGET_WINDOW_RESULT_TTL_SECONDS),
             )
-        except Exception:
+        except Exception:  # noqa: BLE001  # a failed cache write returns False instead of failing the request
             self._handle_cache_error(
                 operation,
                 event="write-failed",

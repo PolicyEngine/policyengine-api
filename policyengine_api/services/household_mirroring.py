@@ -113,7 +113,7 @@ def _log_copy_operation(
             },
             severity="INFO" if outcome == "ok" else "ERROR",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001  # metric logging must not change the mirror outcome
         pass
 
 

@@ -250,7 +250,7 @@ class RecoverableJSONCache:
         started_at = time.perf_counter()
         try:
             value = self.client.get(self.key(inputs))
-        except Exception:
+        except Exception:  # noqa: BLE001  # a cache outage is a miss, never a failed request
             record_cache_event(
                 family=self.family,
                 event="connection-failed",
@@ -279,7 +279,7 @@ class RecoverableJSONCache:
                 encode_envelope(self.family, self.schema_version, payload),
                 ex=jittered_ttl(self.ttl_seconds),
             )
-        except Exception:
+        except Exception:  # noqa: BLE001  # a failed cache write returns False instead of failing the request
             record_cache_event(
                 family=self.family,
                 event="write-failed",

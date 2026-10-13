@@ -436,7 +436,7 @@ class ReformImpactCache:
                     )
                     pipeline.expire(index, ttl_seconds)
                 pipeline.execute()
-        except Exception:
+        except Exception:  # noqa: BLE001  # a failed cache write returns False instead of failing the request
             record_cache_event(
                 family=self.family,
                 event="write-failed",
@@ -450,7 +450,7 @@ class ReformImpactCache:
         """Return the job's impact, or None if absent, unreadable or unreachable."""
         try:
             value = self.client.get(self._record_key(execution_id))
-        except Exception:
+        except Exception:  # noqa: BLE001  # a cache outage reads as absent, never a failed request
             return None
         return _impact_from_wire(
             decode_envelope(
@@ -464,7 +464,7 @@ class ReformImpactCache:
         try:
             keys = self.client.zrevrange(index, 0, max(limit - 1, 0))  # type: ignore[attr-defined]
             values = [self.client.get(key) for key in keys]
-        except Exception:
+        except Exception:  # noqa: BLE001  # a cache outage reads as empty, never a failed request
             return []
         impacts = [
             _impact_from_wire(
@@ -603,7 +603,7 @@ class ReformImpactCache:
                     pipeline.zrem(self._scope_index(impact), key)
                     pipeline.zrem(self._recent_index(), key)
                 pipeline.execute()
-        except Exception:
+        except Exception:  # noqa: BLE001  # best-effort cleanup of stale computing records
             return
 
 
