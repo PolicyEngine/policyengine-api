@@ -3,7 +3,7 @@ import math
 from datetime import date
 from pathlib import Path
 
-CURRENT_YEAR = date.today().year
+CURRENT_YEAR = date.today().year  # noqa: DTZ011  # matches the API's default year, which follows the local calendar
 
 
 def _load_reform_payload(filename: str) -> dict:

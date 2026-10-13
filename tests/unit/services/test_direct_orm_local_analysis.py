@@ -31,7 +31,7 @@ def test_reform_impact_service_writes_typed_expiring_cache_entity() -> None:
         status="computing",
         api_version="1",
         reform_impact_json={},
-        start_time=datetime(2026, 1, 1),
+        start_time=datetime(2026, 1, 1),  # noqa: DTZ001  # reform_impact start_time is a naive column
         execution_id="job",
     )
 

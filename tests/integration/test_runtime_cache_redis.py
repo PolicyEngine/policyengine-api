@@ -240,7 +240,7 @@ def test_real_reform_indexes_are_cross_connection_bounded_and_expiring(
                 reform_impact_json={},
                 status="computing",
                 message=None,
-                start_time=datetime(2026, 1, day),
+                start_time=datetime(2026, 1, day),  # noqa: DTZ001  # reform_impact start_time is a naive column
                 end_time=None,
                 execution_id=execution_id,
             )

@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     registry, violations = load_registry(root)
     if registry is None:
         return _print(violations)
-    violations += validate(registry, root, date.today())
+    violations += validate(registry, root, date.today())  # noqa: DTZ011  # review and expiry dates are calendar days, checked against the local date
     if args.command == "render":
         if violations:
             print("render refused: fix the registry first")
