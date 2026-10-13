@@ -1,6 +1,9 @@
 """Alembic environment for the isolated API v2-alpha Postgres schema."""
 
+from __future__ import annotations
+
 from logging.config import fileConfig
+from typing import TYPE_CHECKING
 
 from alembic import context
 from alembic.script import ScriptDirectory
@@ -13,6 +16,11 @@ from policyengine_api.data.v2.migration_target import (
 )
 from policyengine_api.data.v2.models import V2_METADATA
 
+if TYPE_CHECKING:
+    from alembic.runtime.environment import NameFilterType
+    from sqlalchemy import Connection
+    from sqlalchemy.sql.schema import SchemaItem
+
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -22,13 +30,19 @@ target_metadata = V2_METADATA
 script = ScriptDirectory.from_config(config)
 
 
-def _include_application_object(_object, name, type_, _reflected, _compare_to) -> bool:
+def _include_application_object(
+    _object: SchemaItem,
+    name: str | None,
+    type_: NameFilterType,
+    _reflected: bool,
+    _compare_to: SchemaItem | None,
+) -> bool:
     """Keep Alembic's own version table outside application drift."""
 
     return not (type_ == "table" and name == "alembic_version")
 
 
-def _configure(connection) -> None:
+def _configure(connection: Connection) -> None:
     qualify_v2_connection(connection, settings)
     context.configure(
         connection=connection,

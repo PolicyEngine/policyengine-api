@@ -1,13 +1,19 @@
 """Alembic environment for the API v1 schema."""
 
+from __future__ import annotations
+
 import os
 from logging.config import fileConfig
+from typing import TYPE_CHECKING
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine import make_url
 
 from policyengine_api.data.v1_models import V1Base
+
+if TYPE_CHECKING:
+    from sqlalchemy import Connection
 
 config = context.config
 if config.config_file_name is not None:
@@ -59,7 +65,7 @@ def run_migrations_online() -> None:
         _run_migrations_with_connection(connection)
 
 
-def _run_migrations_with_connection(connection) -> None:
+def _run_migrations_with_connection(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,

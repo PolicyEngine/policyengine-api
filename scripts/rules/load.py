@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import tomllib
 from datetime import date
+from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from scripts.rules.model import (
     Agents,
@@ -29,6 +30,8 @@ from scripts.rules.model import (
     Tier,
     Violation,
 )
+
+_EnumT = TypeVar("_EnumT", bound=Enum)
 
 REGISTRY_PATH = Path("rules/registry.toml")
 
@@ -127,7 +130,9 @@ class _Collector:
         )
         return ()
 
-    def enum(self, rule_id: str | None, enum_type: Any, value: Any, where: str) -> Any:
+    def enum(
+        self, rule_id: str | None, enum_type: type[_EnumT], value: object, where: str
+    ) -> _EnumT | None:
         try:
             return enum_type(value)
         except ValueError:
@@ -135,7 +140,7 @@ class _Collector:
             self.add(rule_id, f"{where} is {value!r}", f"use one of {allowed}")
             return None
 
-    def day(self, rule_id: str | None, value: Any, where: str) -> date | None:
+    def day(self, rule_id: str | None, value: object, where: str) -> date | None:
         if isinstance(value, date):
             return value
         if isinstance(value, str):
@@ -147,7 +152,7 @@ class _Collector:
         return None
 
 
-def _ignored(c: _Collector, raw: Any, key: str, field: str) -> tuple[Ignored, ...]:
+def _ignored(c: _Collector, raw: object, key: str, field: str) -> tuple[Ignored, ...]:
     if raw is None:
         return ()
     items = []
@@ -168,7 +173,7 @@ def _ignored(c: _Collector, raw: Any, key: str, field: str) -> tuple[Ignored, ..
     return tuple(items)
 
 
-def _discovery(c: _Collector, raw: Any) -> Discovery:
+def _discovery(c: _Collector, raw: object) -> Discovery:
     if raw is None:
         return Discovery()
     if not isinstance(raw, dict):
@@ -189,7 +194,7 @@ def _discovery(c: _Collector, raw: Any) -> Discovery:
     )
 
 
-def _agents(c: _Collector, raw: Any) -> Agents | None:
+def _agents(c: _Collector, raw: object) -> Agents | None:
     if raw is None:
         return None
     if not isinstance(raw, dict):
@@ -207,7 +212,7 @@ def _agents(c: _Collector, raw: Any) -> Agents | None:
     )
 
 
-def _ci_scripts(c: _Collector, raw: Any) -> CiScripts | None:
+def _ci_scripts(c: _Collector, raw: object) -> CiScripts | None:
     if raw is None:
         return None
     if not isinstance(raw, dict):
@@ -225,7 +230,7 @@ def _ci_scripts(c: _Collector, raw: Any) -> CiScripts | None:
     )
 
 
-def _rule(c: _Collector, raw: Any, index: int) -> Rule | None:
+def _rule(c: _Collector, raw: object, index: int) -> Rule | None:
     if not isinstance(raw, dict):
         c.add(None, f"rule #{index + 1} must be a table", "write [[rule]]")
         return None

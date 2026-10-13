@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import os
 from enum import StrEnum
-from typing import Any
 
 from alembic import command
 from alembic.autogenerate import compare_metadata
@@ -70,7 +69,7 @@ def classify_database_state(
     return DatabaseState.PENDING
 
 
-def describe_metadata_difference(difference: Any) -> str:
+def describe_metadata_difference(difference: object) -> str:
     """Return a stable, data-free description of an Alembic metadata diff."""
 
     item = difference

@@ -13,7 +13,7 @@ openai.api_key = os.environ["OPENAI_API_KEY"]
 
 
 @st.cache_data
-def get_embeddings_df():
+def get_embeddings_df() -> pd.DataFrame:
     embeddings_df = pd.read_csv("parameter_embeddings.csv.gz", compression="gzip")
     embeddings_df.parameter_embedding = embeddings_df.parameter_embedding.apply(
         lambda x: eval(x)
@@ -22,7 +22,7 @@ def get_embeddings_df():
 
 
 @st.cache_data
-def embed(prompt, engine="text-embedding-ada-002"):
+def embed(prompt: str, engine: str = "text-embedding-ada-002") -> list[float]:
     return get_embedding(prompt, engine=engine)
 
 
@@ -58,7 +58,7 @@ top5 = embeddings_df.sort_values("similarities", ascending=False).head(5)["json"
 # display in streamlit
 
 
-def write_prompt(question, relevant_parameters):
+def write_prompt(question: str, relevant_parameters: object) -> str:
     return f"""Question: {question}
     Here's some metadata about the parameters that are relevant to your question:
     Relevant parameters: {relevant_parameters}
@@ -78,7 +78,7 @@ reform_generation_prompt = write_prompt(question, top5)
 
 
 @st.cache_data
-def get_gpt4_response(prompt):
+def get_gpt4_response(prompt: str) -> str:
     return openai.ChatCompletion.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}],
@@ -93,7 +93,7 @@ reform = json.loads(response)
 
 
 @st.cache_data
-def get_policyengine_impact(reform):
+def get_policyengine_impact(reform: object) -> object:
     payload = {"data": reform}
     url = "https://api.policyengine.org/uk/policy"
 
