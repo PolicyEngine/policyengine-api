@@ -81,7 +81,8 @@ def check_baselines(
                         new.id,
                         "baseline",
                         f"status weakened from {old.status} to {new.status}",
-                        'add [rule.downgrade] reason = "..." so the downgrade is explicit and reviewable',
+                        'add [rule.downgrade] reason = "..." so the downgrade is '
+                        "explicit and reviewable",
                     )
                 )
     for rule_id in sorted(current_ids - {rule.id for rule in base.rules}):

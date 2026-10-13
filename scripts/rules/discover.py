@@ -149,7 +149,8 @@ def discover_hidden(registry: Registry, root: Path) -> list[Violation]:
         violations.append(
             _hidden(
                 f"guard test {node} is not referenced by any rule",
-                "add it to a pytest rule's nodes, or to discovery.ignore_tests with a reason",
+                "add it to a pytest rule's nodes, or to discovery.ignore_tests "
+                "with a reason",
             )
         )
 
@@ -162,7 +163,8 @@ def discover_hidden(registry: Registry, root: Path) -> list[Violation]:
                 violations.append(
                     _hidden(
                         f"CI job '{job_id}' in {workflow} enforces no registered rule",
-                        "reference it from a rule's [[rule.ci]], or add it to discovery.ignore_jobs with a reason",
+                        "reference it from a rule's [[rule.ci]], or add it to "
+                        "discovery.ignore_jobs with a reason",
                     )
                 )
     return violations

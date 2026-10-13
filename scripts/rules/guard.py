@@ -104,7 +104,8 @@ def run_guard(
         return result
     if ref is None:
         result.notes.append(
-            "no base ref (set --base-ref or GITHUB_BASE_REF); baseline comparison skipped"
+            "no base ref (set --base-ref or GITHUB_BASE_REF); "
+            "baseline comparison skipped"
         )
     else:
         try:
