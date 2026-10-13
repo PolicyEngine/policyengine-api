@@ -270,7 +270,9 @@ def translate_legacy_policy(
         msg = "legacy policy api_version does not match the running country package"
         raise LegacyPolicyTranslationError(msg)
     policy_json = snapshot.policy_json
-    assert isinstance(policy_json, dict)
+    if not isinstance(policy_json, dict):
+        msg = "legacy policy_json must be an object"
+        raise TypeError(msg)
     parameter_names = set(policy_json)
     if set(parameters) != parameter_names:
         msg = "every legacy parameter path must exist in the running catalog"
