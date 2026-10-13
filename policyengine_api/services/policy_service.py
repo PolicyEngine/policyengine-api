@@ -22,6 +22,10 @@ if TYPE_CHECKING:
     from policyengine_api.json_types import JSONValue
 
 
+class InvalidPolicyIdError(Exception):
+    """Raised when a policy ID is not a non-negative integer."""
+
+
 @dataclass(frozen=True)
 class PolicySetResult:
     """Existing v1 return values and an optional detached mirror snapshot."""
@@ -56,7 +60,7 @@ class PolicyService:
     def _validate_policy_id(policy_id: int) -> None:
         if type(policy_id) is not int or policy_id < 0:
             msg = f"Invalid policy ID: {policy_id}. Must be a positive integer."
-            raise Exception(msg)
+            raise InvalidPolicyIdError(msg)
 
     def get_policy(
         self,
@@ -65,8 +69,8 @@ class PolicyService:
     ) -> Policy | None:
         """Return the stored policy in this country, or None if there is none.
 
-        Raise Exception if ``policy_id`` is not a non-negative int, and ValueError for
-        an empty ``country_id``.
+        Raise InvalidPolicyIdError if ``policy_id`` is not a non-negative int, and
+        ValueError for an empty ``country_id``.
         """
         self._validate_policy_id(policy_id)
         if not country_id:

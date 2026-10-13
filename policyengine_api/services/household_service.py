@@ -70,6 +70,10 @@ class HouseholdMirrorEventIntegrityError(RuntimeError):
     """Raised when retained household copy input is invalid or inconsistent."""
 
 
+class InvalidHouseholdIdError(Exception):
+    """Raised when a household ID is not a non-negative integer."""
+
+
 class HouseholdPersistenceFailureCategory(StrEnum):
     """Safe-to-report reasons a household write failed."""
 
@@ -150,11 +154,11 @@ class HouseholdService:
     ) -> Household | None:
         """Return the stored household in this country, or None if there is none.
 
-        Raise Exception if ``household_id`` is not a non-negative int.
+        Raise InvalidHouseholdIdError if ``household_id`` is not a non-negative int.
         """
         if type(household_id) is not int or household_id < 0:
             msg = f"Invalid household ID: {household_id}. Must be a positive integer."
-            raise Exception(msg)
+            raise InvalidHouseholdIdError(msg)
         with self._sessions() as session:
             return self._get_household(session, country_id, household_id)
 

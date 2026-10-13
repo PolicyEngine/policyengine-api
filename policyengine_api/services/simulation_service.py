@@ -17,6 +17,10 @@ from policyengine_api.utils.population_identity import (
 )
 
 
+class InvalidSimulationIdError(Exception):
+    """Raised when a simulation ID is not a non-negative integer."""
+
+
 @dataclass(frozen=True)
 class SimulationCreateResult:
     """A simulation and whether this call created it."""
@@ -266,11 +270,11 @@ class SimulationService:
     ) -> Simulation | None:
         """Return the simulation in this country, or None.
 
-        Raise Exception if ``simulation_id`` is not a non-negative int.
+        Raise InvalidSimulationIdError if ``simulation_id`` is not a non-negative int.
         """
         if type(simulation_id) is not int or simulation_id < 0:
             msg = f"Invalid simulation ID: {simulation_id}. Must be a positive integer."
-            raise Exception(msg)
+            raise InvalidSimulationIdError(msg)
         with self._sessions() as session:
             return self._select_simulation(session, simulation_id, country_id)
 

@@ -58,7 +58,10 @@ from policyengine_api.runtime_cache.reform_impacts import (
     CachedReformImpact,
     ReformImpactStartClaim,
 )
-from policyengine_api.services.budget_window_cache import BudgetWindowCache
+from policyengine_api.services.budget_window_cache import (
+    BudgetWindowCache,
+    BudgetWindowCacheState,
+)
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactHandoffError,
@@ -475,19 +478,7 @@ class EconomyService:
                 )
 
             if cached_state is not None and cached_state.status == "failed":
-                if cached_state.failure_type == "spm_validation":
-                    cached_error = cached_state.error or {}
-                    raise SPMValidationError(
-                        code=str(cached_error.get("code", "SPM_VALIDATION_ERROR")),
-                        message=str(
-                            cached_error.get(
-                                "message", "Stored budget-window validation failed"
-                            )
-                        ),
-                    )
-                return BudgetWindowEconomicImpactResult.model_validate(
-                    cached_state.error
-                ).model_copy(update={"cache_status": "failure-hit"})
+                return self._replay_budget_window_failure(cached_state)
 
             if cached_state is not None and cached_state.status == "completed":
                 cached_result = cached_state.result or {}
@@ -541,29 +532,12 @@ class EconomyService:
             observability_id_candidate = resolve_observability_id(
                 incoming_observability_id()
             )
-            owns_claim = False
-            claimed_state = None
-            for _attempt in range(BUDGET_WINDOW_CLAIM_ATTEMPTS):
-                owns_claim = self._budget_window_cache.claim_batch_start(
-                    cache_key,
-                    claim_token,
-                    observability_id_candidate,
-                )
-                if owns_claim:
-                    setup_options.observability_id = start_observability_id(
-                        observability_id_candidate
-                    )
-                    break
-                claimed_state = self._budget_window_cache.get_state(cache_key)
-                if claimed_state is not None:
-                    self._restore_budget_window_observability_id(
-                        claimed_state.observability_id,
-                        setup_options=setup_options,
-                    )
-                    break
-            else:
-                msg = "budget-window submission ownership changed repeatedly"
-                raise CacheCoordinationError(msg)
+            owns_claim = self._claim_budget_window_start(
+                cache_key,
+                claim_token,
+                observability_id_candidate,
+                setup_options=setup_options,
+            )
 
             if owns_claim:
                 cache_status = "miss"
@@ -625,6 +599,59 @@ class EconomyService:
                 severity="ERROR",
             )
             raise
+
+    @staticmethod
+    def _replay_budget_window_failure(
+        cached_state: BudgetWindowCacheState,
+    ) -> BudgetWindowEconomicImpactResult:
+        """Replay a stored failure: raise its typed SPM error or return its result."""
+        if cached_state.failure_type == "spm_validation":
+            cached_error = cached_state.error or {}
+            raise SPMValidationError(
+                code=str(cached_error.get("code", "SPM_VALIDATION_ERROR")),
+                message=str(
+                    cached_error.get(
+                        "message", "Stored budget-window validation failed"
+                    )
+                ),
+            )
+        return BudgetWindowEconomicImpactResult.model_validate(
+            cached_state.error
+        ).model_copy(update={"cache_status": "failure-hit"})
+
+    def _claim_budget_window_start(
+        self,
+        cache_key: str,
+        claim_token: str,
+        observability_id_candidate: str,
+        *,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> bool:
+        """Claim this report's batch submission, or adopt another request's state.
+
+        Return True when this request now owns the submission and False once another
+        request's stored state is found. Raise CacheCoordinationError if ownership
+        keeps changing.
+        """
+        for _attempt in range(BUDGET_WINDOW_CLAIM_ATTEMPTS):
+            if self._budget_window_cache.claim_batch_start(
+                cache_key,
+                claim_token,
+                observability_id_candidate,
+            ):
+                setup_options.observability_id = start_observability_id(
+                    observability_id_candidate
+                )
+                return True
+            claimed_state = self._budget_window_cache.get_state(cache_key)
+            if claimed_state is not None:
+                self._restore_budget_window_observability_id(
+                    claimed_state.observability_id,
+                    setup_options=setup_options,
+                )
+                return False
+        msg = "budget-window submission ownership changed repeatedly"
+        raise CacheCoordinationError(msg)
 
     def _build_budget_window_cache_key(
         self,
@@ -1778,7 +1805,7 @@ class EconomyService:
                     **setup_options.model_dump(),
                 }
             )
-            raise e
+            raise
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_PERSIST_COMPLETED)
@@ -1809,7 +1836,7 @@ class EconomyService:
                     **setup_options.model_dump(),
                 }
             )
-            raise e
+            raise
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_PERSIST_FAILED)
@@ -1842,7 +1869,7 @@ class EconomyService:
                     **setup_options.model_dump(),
                 }
             )
-            raise e
+            raise
 
     def _create_submission_claim_id(self) -> str:
         """Create an opaque token for one submission ownership claim."""
