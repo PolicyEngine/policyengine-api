@@ -71,9 +71,7 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         summary="Read (and on first use provision) the signed-in user",
         description=(
             "Returns the PolicyEngine user for the bearer token, creating it on "
-            "the first call with primary_country set from country_id. "
-            "account_created is true only in the response to the request that "
-            "created the account."
+            "the first call with primary_country set from country_id."
         ),
     )
     def get_me(
@@ -93,10 +91,6 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         "/me",
         response_model=MeDetailResponse,
         summary="Update the signed-in user's names or primary country",
-        description=(
-            "Provisions the user on first use like GET /v2/me, and reports "
-            "account_created by the same rule."
-        ),
     )
     def patch_me(
         body: AccountPatchRequest,

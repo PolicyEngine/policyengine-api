@@ -25,12 +25,7 @@ class UserPrincipal(BaseModel):
 
 @dataclass(frozen=True)
 class ResolvedUser:
-    """The v2 user that owns one verified sign-in identity.
-
-    ``provisioned`` is true only when this resolution inserted the user and
-    identity rows. A concurrent request that lost the insert race and read the
-    winner's rows back resolves with ``provisioned`` false.
-    """
+    """The v2 user that owns one verified sign-in identity."""
 
     user_id: UUID
     email: str | None

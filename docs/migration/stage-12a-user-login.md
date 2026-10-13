@@ -11,12 +11,13 @@ Signed-out behavior is unchanged.
 Only app v3 (the flagship shell in `policyengine-app-v2`) consumes these
 routes. The legacy builder stays browser-only, signed in or not.
 
-- **Sign-in.** App v3 calls `GET /v2/me` at the sign-in callback, and again on
-  the account page. The `account_created` field in the sign-in response tells
-  it whether this sign-in just created the PolicyEngine account.
-- **Import.** Only when `account_created` is true does app v3 offer to import
-  this browser's signed-out v3 reforms and reports through
-  `POST /v2/me/imports`. The import therefore runs once, for new accounts.
+- **Import.** At every sign-in, app v3 moves the v3 reforms and reports saved
+  in that browser while signed out into the account through
+  `POST /v2/me/imports`. It removes from the browser each item whose
+  `client_ref` comes back in `id_map`, and keeps the rest for the next
+  sign-in. Because imports are idempotent on `client_ref`, an item sent again
+  returns its existing ID.
+- **Account.** App v3 calls `GET /v2/me` on its account page.
 - **Saved work.** App v3 reads and writes `/v2/user-policies` (its reforms)
   and `/v2/user-reports`. `/v2/user-households` and `/v2/user-simulations`
   have no app consumer yet.
@@ -40,14 +41,10 @@ routes. The legacy builder stays browser-only, signed in or not.
   `(issuer, subject)` to `users.id`. The first authenticated request inserts the
   user (with `primary_country` from `country_id`) and the identity. A concurrent
   first request loses `UNIQUE(issuer, subject)`, rolls back its savepoint, and
-  re-reads, so exactly one user is created. The `/v2/me` item's
-  `account_created` is true only in the response to the request that inserted
-  the rows; every other response, including the concurrent requests that lost
-  the race, has false. `PATCH /v2/me` and the export's `user` item follow the
-  same rule, since either can be the provisioning request. `last_seen_at` is
-  written at most hourly. Email is stored only when `email_verified` is true;
-  it is never unique and never used for linking. No legacy user is adopted
-  implicitly. Logs carry only the v2 user UUID.
+  re-reads, so exactly one user is created. `last_seen_at` is written at most
+  hourly. Email is stored only when `email_verified` is true; it is never unique
+  and never used for linking. No legacy user is adopted implicitly. Logs carry
+  only the v2 user UUID.
 - **Ownership.** Request bodies and queries no longer accept `user_id`; the
   owner always comes from the token. Another user's record returns 404.
 - **v1 references.** Each association accepts a `legacy_*_id` (a country-scoped
@@ -102,8 +99,8 @@ contract shared with `policyengine-app-v2`. The generated route inventory is in
 
 | Route | Behavior |
 | --- | --- |
-| `GET /v2/me?country_id=` | Returns the user; provisions on first call, and only that response has `account_created: true` |
-| `PATCH /v2/me` | Updates `first_name`, `last_name`, `primary_country`; reports `account_created` by the same rule |
+| `GET /v2/me?country_id=` | Returns the user; provisions on first call |
+| `PATCH /v2/me` | Updates `first_name`, `last_name`, `primary_country` |
 | `GET /v2/me/export` | Returns the user and every association, all countries |
 | `POST /v2/me/imports` | Idempotent bulk import; returns `id_map` and `skipped` |
 | `DELETE /v2/me` | 204; deletes data, then the Auth0 user when configured |
@@ -351,8 +348,7 @@ python scripts/run_quality_guards.py
 
 The disposable-Postgres suite proves the following:
 
-- concurrent first sign-ins create one user, and exactly one of them reports
-  `account_created: true`;
+- concurrent first sign-ins create one user;
 - concurrent imports are idempotent;
 - imports never reuse or link a `client_ref` from another country;
 - named `ON CONFLICT` targets work;

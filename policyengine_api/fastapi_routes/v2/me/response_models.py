@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from policyengine_api.fastapi_routes.v2.user_households.response_models import (
     UserHouseholdItem,
@@ -39,14 +39,6 @@ class MeItem(StrictAccountAPIModel):
     last_name: str | None
     email: str | None
     created_at: datetime
-    account_created: bool = Field(
-        description=(
-            "True only in the response to the request that created this "
-            "PolicyEngine account on first sign-in; false in every other "
-            "response, including concurrent first requests that did not create "
-            "it."
-        )
-    )
 
     @classmethod
     def from_read(cls, item: AccountRead) -> "MeItem":

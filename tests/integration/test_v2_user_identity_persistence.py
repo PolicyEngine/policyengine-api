@@ -129,29 +129,6 @@ def test_concurrent_first_requests_provision_exactly_one_user(sessions) -> None:
     )
 
 
-def test_exactly_one_concurrent_first_request_reports_account_created(
-    sessions,
-) -> None:
-    principal = _principal(sessions, "google-oauth2|first-sign-in-race")
-    service = V2AccountService(AccountDatabaseSession(sessions))
-    workers = 8
-    barrier = Barrier(workers)
-
-    def first_sign_in(_index: int):
-        barrier.wait()
-        return service.get_account(principal=principal, country_id="us")
-
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        accounts = list(executor.map(first_sign_in, range(workers)))
-
-    assert len({account.id for account in accounts}) == 1
-    assert [account.account_created for account in accounts].count(True) == 1
-    assert (
-        service.get_account(principal=principal, country_id="us").account_created
-        is False
-    )
-
-
 def test_concurrent_imports_are_idempotent_on_client_ref(sessions) -> None:
     principal = _principal(sessions, "google-oauth2|importer")
     service = V2AccountService(

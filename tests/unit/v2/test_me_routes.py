@@ -41,7 +41,6 @@ def _account(**changes) -> AccountRead:
         "last_name": None,
         "email": None,
         "created_at": CREATED_AT,
-        "account_created": False,
     }
     values.update(changes)
     return AccountRead(**values)
@@ -97,32 +96,12 @@ def test_get_me_provisions_with_the_query_country() -> None:
                 "last_name": None,
                 "email": None,
                 "created_at": "2026-01-01T00:00:00Z",
-                "account_created": False,
             }
         },
     }
     assert service.calls == [
         ("get_account", {"principal": PRINCIPAL, "country_id": "uk"})
     ]
-
-
-@pytest.mark.parametrize(
-    ("method", "operation", "body"),
-    [
-        ("GET", "get_account", None),
-        ("PATCH", "update_account", {"first_name": "Ada"}),
-    ],
-)
-def test_me_reports_account_created_from_the_service(method, operation, body) -> None:
-    service = RecordingService(
-        lambda name, _kwargs: _account(account_created=name == operation)
-    )
-    client, _service = _client(service)
-
-    response = client.request(method, "/v2/me?country_id=us", json=body)
-
-    assert response.status_code == 200
-    assert response.json()["result"]["item"]["account_created"] is True
 
 
 def test_patch_me_accepts_names_and_country_only() -> None:
