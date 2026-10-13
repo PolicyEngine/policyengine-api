@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -44,6 +44,24 @@ if TYPE_CHECKING:
     )
 
 
+UserHouseholdCreateQueryDependency = Annotated[
+    UserHouseholdCreateQuery, Depends(query_dependency(UserHouseholdCreateQuery))
+]
+UserHouseholdDetailQueryDependency = Annotated[
+    UserHouseholdDetailQuery, Depends(query_dependency(UserHouseholdDetailQuery))
+]
+UserHouseholdCollectionQueryDependency = Annotated[
+    UserHouseholdCollectionQuery,
+    Depends(query_dependency(UserHouseholdCollectionQuery)),
+]
+UserHouseholdUpdateQueryDependency = Annotated[
+    UserHouseholdUpdateQuery, Depends(query_dependency(UserHouseholdUpdateQuery))
+]
+UserHouseholdDeleteQueryDependency = Annotated[
+    UserHouseholdDeleteQuery, Depends(query_dependency(UserHouseholdDeleteQuery))
+]
+
+
 def _service_factory(
     dependencies: NativeRouteDependencies,
 ) -> Callable[[], V2UserHouseholdResourceService]:
@@ -73,11 +91,6 @@ def build_v2_user_household_router(
             Depends(enforce_user_write_request_size),
         ],
     )
-    create_query = query_dependency(UserHouseholdCreateQuery)
-    detail_query = query_dependency(UserHouseholdDetailQuery)
-    collection_query = query_dependency(UserHouseholdCollectionQuery)
-    update_query = query_dependency(UserHouseholdUpdateQuery)
-    delete_query = query_dependency(UserHouseholdDeleteQuery)
     service_factory = _service_factory(dependencies)
 
     @router.post(
@@ -94,7 +107,7 @@ def build_v2_user_household_router(
     )
     def create_user_household(
         body: UserHouseholdCreateRequest,
-        query: UserHouseholdCreateQuery = Depends(create_query),
+        query: UserHouseholdCreateQueryDependency,
         principal: AccountPrincipal = Depends(require_user),
     ) -> UserHouseholdDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
@@ -118,7 +131,7 @@ def build_v2_user_household_router(
     )
     def get_user_household(
         association_id: UUID,
-        query: UserHouseholdDetailQuery = Depends(detail_query),
+        query: UserHouseholdDetailQueryDependency,
         principal: AccountPrincipal = Depends(require_user),
     ) -> UserHouseholdDetailResponse | JSONResponse:
         def read() -> UserHouseholdDetailResponse:
@@ -139,7 +152,7 @@ def build_v2_user_household_router(
         summary="List the current user's saved households",
     )
     def get_user_households(
-        query: UserHouseholdCollectionQuery = Depends(collection_query),
+        query: UserHouseholdCollectionQueryDependency,
         principal: AccountPrincipal = Depends(require_user),
     ) -> UserHouseholdPageResponse | JSONResponse:
         def read() -> UserHouseholdPageResponse:
@@ -169,7 +182,7 @@ def build_v2_user_household_router(
     def patch_user_household_route(
         association_id: UUID,
         body: UserHouseholdPatchRequest,
-        query: UserHouseholdUpdateQuery = Depends(update_query),
+        query: UserHouseholdUpdateQueryDependency,
         principal: AccountPrincipal = Depends(require_user),
     ) -> UserHouseholdDetailResponse | JSONResponse:
         def patch() -> UserHouseholdDetailResponse:
@@ -194,7 +207,7 @@ def build_v2_user_household_router(
     )
     def delete_user_household_route(
         association_id: UUID,
-        query: UserHouseholdDeleteQuery = Depends(delete_query),
+        query: UserHouseholdDeleteQueryDependency,
         principal: AccountPrincipal = Depends(require_user),
     ) -> Response | JSONResponse:
         def delete() -> Response:
