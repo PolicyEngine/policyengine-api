@@ -331,6 +331,53 @@ class TestEconomyService:
             )
             mock_reform_impacts_service.set_complete_reform_impact.assert_called_once()
 
+        def test__given_succeeded_execution_with_unmeasured_poverty_group__keeps_null_rate(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            mock_logger,
+            mock_datetime,
+            mock_submission_claim_id,
+        ):
+            # The simulation API reports a null rate for a poverty group with
+            # nobody inside the poverty measurement (PovertyRateValue), for
+            # example one made up entirely of ACS group-quarters residents.
+            # That is not a measured rate of zero, so it must pass through.
+            unmeasured = {"baseline": None, "reform": None}
+            measured = {"baseline": 0.12, "reform": 0.1}
+            poverty_by_age = {
+                "child": measured,
+                "adult": measured,
+                "senior": unmeasured,
+                "all": measured,
+            }
+            impact = {
+                **MOCK_REFORM_IMPACT_DATA,
+                "poverty": {"poverty": poverty_by_age, "deep_poverty": poverty_by_age},
+            }
+            computing_impact = create_mock_reform_impact(status="computing")
+            mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
+                computing_impact
+            ]
+            mock_simulation_entrypoint.get_execution_status.return_value = "complete"
+            mock_simulation_entrypoint.get_execution_result.return_value = impact
+
+            result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.OK
+            assert result.data["poverty"]["poverty"]["senior"] == unmeasured
+            assert result.data["poverty"]["poverty"]["child"] == measured
+            stored = mock_reform_impacts_service.set_complete_reform_impact.call_args
+            assert (
+                stored.kwargs["reform_impact_json"]["poverty"]["deep_poverty"]["senior"]
+                == unmeasured
+            )
+
         def test__given_computing_impact_with_failed_execution__returns_error_result(
             self,
             economy_service,

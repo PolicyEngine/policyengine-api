@@ -37,15 +37,17 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         importlib_metadata.version(name) == expected
         for name, expected in expected_dependencies
     )
-    # Counts measured from the installed 6.2.7 bundle: US 2.2.1 and UK 2.125.1.
-    # Keep this exact assertion so later package changes require explicit review.
+    # Counts for the 6.3.4 bundle's models: US 2.2.1 and UK 2.126.12. Measured
+    # with the published 6.3.1 bundle, which installs the same model versions;
+    # 6.3.4 changes no model package. Keep this exact assertion so later
+    # package changes require explicit review.
     assert catalog.entity_counts() == {
         "models": 2,
         "model_versions": 2,
-        "variables": 7_275,
-        "parameter_nodes": 29_299,
-        "parameters": 104_140,
-        "parameter_values": 1_193_952,
+        "variables": 7_294,
+        "parameter_nodes": 29_300,
+        "parameters": 104_158,
+        "parameter_values": 1_194_256,
         # US national and ACS-local datasets, plus the UK default dataset.
         "datasets": 3,
         "regions": 826,

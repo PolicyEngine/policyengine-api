@@ -96,7 +96,7 @@ def _optional_text(
 def _serialize_region_filter_value(value: object, *, region_code: str) -> str:
     """Keep scalar text or encode flat membership values in the existing column.
 
-    PolicyEngine 6.2.7's England filter names all nine English regions. The
+    Since PolicyEngine 6.2.7, the England filter names all nine English regions. The
     catalog's existing text column can retain that complete list as a JSON
     array without changing its schema or the representation of scalar filters.
     """
