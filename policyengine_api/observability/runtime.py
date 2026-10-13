@@ -68,6 +68,7 @@ runtime = _build_runtime()
 
 
 def get_runtime() -> ObservabilityRuntime:
+    """Return the process-wide runtime that was configured when this module loaded."""
     return runtime
 
 

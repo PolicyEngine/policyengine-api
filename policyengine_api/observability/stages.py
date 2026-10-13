@@ -12,12 +12,16 @@ if TYPE_CHECKING:
 
 
 class RunConfiguration(StrEnum):
+    """A kind of calculation request, each with its own registered stage plan."""
+
     HOUSEHOLD = "household"
     ECONOMY_ANNUAL = "economy_annual"
     ECONOMY_BUDGET_WINDOW = "economy_budget_window"
 
 
 class Stage(StrEnum):
+    """A named calculation step; each value is the span name telemetry records."""
+
     HOUSEHOLD_LOAD_INPUTS = "household.load_inputs"
     HOUSEHOLD_CACHE_LOOKUP = "household.cache_lookup"
     HOUSEHOLD_INPUT_NORMALIZATION = "household.input_normalization"
@@ -43,10 +47,13 @@ class Stage(StrEnum):
 
 @dataclass(frozen=True)
 class StagePlan:
+    """The stages one run configuration is allowed to record as spans."""
+
     configuration: RunConfiguration
     stages: tuple[Stage, ...]
 
     def name(self, stage: Stage) -> str:
+        """Return the span name for ``stage``; raise ValueError if not in this plan."""
         if stage not in self.stages:
             raise ValueError(
                 f"{stage.value!r} is not registered for {self.configuration.value!r}"

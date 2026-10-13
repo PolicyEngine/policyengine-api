@@ -13,6 +13,7 @@ class InMemoryCacheBackend:
     """Small Redis-like fake with explicit time advancement and atomic pipelines."""
 
     def __init__(self, *, now: Callable[[], float] | None = None) -> None:
+        """Start empty at time zero, or follow the ``now`` clock when one is given."""
         self._external_now = now
         self._time = 0.0
         self._values: dict[str, str] = {}
@@ -24,6 +25,10 @@ class InMemoryCacheBackend:
         return self._external_now() if self._external_now else self._time
 
     def advance(self, seconds: float) -> None:
+        """Move the fake clock forward so TTLs can expire without sleeping.
+
+        Raises RuntimeError when the fake follows an external clock instead.
+        """
         if self._external_now is not None:
             raise RuntimeError("cannot advance an externally clocked fake")
         self._time += seconds
@@ -36,6 +41,7 @@ class InMemoryCacheBackend:
             self._expires.pop(key, None)
 
     def get(self, key: str) -> str | None:
+        """Emulate GET: return the string value, or None if missing or expired."""
         with self._lock:
             self._purge(key)
             return self._values.get(key)
@@ -48,6 +54,11 @@ class InMemoryCacheBackend:
         ex: int | None = None,
         nx: bool = False,
     ) -> bool | None:
+        """Emulate SET with the ``ex`` and ``nx`` options only.
+
+        Like redis-py, return True on a write and None when ``nx`` finds the key
+        already set; a write without ``ex`` clears any earlier TTL.
+        """
         with self._lock:
             self._purge(key)
             if nx and key in self._values:
@@ -60,6 +71,7 @@ class InMemoryCacheBackend:
             return True
 
     def delete(self, *keys: str) -> int:
+        """Emulate DEL for strings and sorted sets, returning how many existed."""
         with self._lock:
             deleted = 0
             for key in keys:
@@ -72,6 +84,7 @@ class InMemoryCacheBackend:
             return deleted
 
     def expire(self, key: str, seconds: int) -> bool:
+        """Emulate EXPIRE: set a TTL and return False if the key does not exist."""
         with self._lock:
             self._purge(key)
             if key not in self._values and key not in self._sorted_sets:
@@ -80,6 +93,7 @@ class InMemoryCacheBackend:
             return True
 
     def zadd(self, key: str, mapping: dict[str, float]) -> int:
+        """Emulate ZADD without flags: upsert scores and count new members only."""
         with self._lock:
             self._purge(key)
             values = self._sorted_sets.setdefault(key, {})
@@ -88,6 +102,11 @@ class InMemoryCacheBackend:
             return added
 
     def zrevrange(self, key: str, start: int, end: int) -> list[str]:
+        """Emulate ZREVRANGE: members by descending score over inclusive ranks.
+
+        Equal scores fall back to reverse member order, as in Redis. The only
+        negative ``end`` supported is ``-1`` (the last member).
+        """
         with self._lock:
             self._purge(key)
             ordered = sorted(
@@ -99,6 +118,7 @@ class InMemoryCacheBackend:
             return [member for member, _ in ordered[start:stop]]
 
     def zrem(self, key: str, *members: str) -> int:
+        """Emulate ZREM, returning how many of the members were present."""
         with self._lock:
             values = self._sorted_sets.get(key, {})
             removed = sum(member in values for member in members)
@@ -107,6 +127,10 @@ class InMemoryCacheBackend:
             return removed
 
     def zremrangebyrank(self, key: str, start: int, end: int) -> int:
+        """Emulate ZREMRANGEBYRANK over ascending-score ranks, inclusive of ``end``.
+
+        As with ``zrevrange``, the only negative ``end`` supported is ``-1``.
+        """
         with self._lock:
             self._purge(key)
             ordered = sorted(
@@ -123,6 +147,11 @@ class InMemoryCacheBackend:
         numkeys: int,
         *keys_and_args: str,
     ) -> int:
+        """Emulate EVAL of the claim store's compare-and-delete script only.
+
+        The script text is ignored: delete the one key if it still holds the
+        expected token, and raise ValueError for any other key/argument shape.
+        """
         if numkeys != 1 or len(keys_and_args) != 2:
             raise ValueError("fake supports one-key compare-and-delete only")
         key, expected = keys_and_args
@@ -132,16 +161,22 @@ class InMemoryCacheBackend:
             return self.delete(key)
 
     def pipeline(self, transaction: bool = True) -> InMemoryPipeline:
+        """Return a pipeline that queues commands until ``execute``."""
         return InMemoryPipeline(self, transaction=transaction)
 
 
 class InMemoryPipeline:
+    """A fake Redis pipeline that records any method call and replays it later."""
+
     def __init__(self, backend: InMemoryCacheBackend, *, transaction: bool) -> None:
+        """Queue commands for ``backend``; ``transaction`` makes ``execute`` atomic."""
         self.backend = backend
         self.transaction = transaction
         self.operations: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
 
     def __getattr__(self, name: str) -> Callable[..., InMemoryPipeline]:
+        """Return a recorder that queues a call to the backend method ``name``."""
+
         def queue(*args: object, **kwargs: object) -> InMemoryPipeline:
             self.operations.append((name, args, kwargs))
             return self
@@ -149,6 +184,11 @@ class InMemoryPipeline:
         return queue
 
     def execute(self) -> list[object]:
+        """Replay the queued commands on the backend, then clear the queue.
+
+        With ``transaction`` the replay holds the backend lock, as MULTI/EXEC
+        would; without it, other callers' commands may interleave.
+        """
         lock = self.backend._lock if self.transaction else RLock()
         with lock:
             results = [
@@ -159,9 +199,11 @@ class InMemoryPipeline:
         return results
 
     def __enter__(self) -> Self:
+        """Return the pipeline itself for use in a ``with`` block."""
         return self
 
     def __exit__(self, *_args: object) -> None:
+        """Drop queued commands that were never executed."""
         self.operations.clear()
 
 
@@ -169,27 +211,35 @@ class DisabledCacheBackend(InMemoryCacheBackend):
     """No-storage backend for unselected unit-test/application cache mode."""
 
     def get(self, key: str) -> None:
-        return None
+        """Return None: every read is a miss."""
+        return None  # noqa: RET501  # explicit None mirrors the Redis get contract
 
     def set(self, key: str, value: str, **kwargs: object) -> bool:
+        """Discard the value and report the write as not stored."""
         return False
 
     def delete(self, *keys: str) -> int:
+        """Return 0: no key ever exists."""
         return 0
 
     def zadd(self, key: str, mapping: dict[str, float]) -> int:
+        """Discard the members and report none added."""
         return 0
 
     def zrevrange(self, key: str, start: int, end: int) -> list[str]:
+        """Return an empty list: no sorted set ever exists."""
         return []
 
     def zrem(self, key: str, *members: str) -> int:
+        """Return 0: there is nothing to remove."""
         return 0
 
     def zremrangebyrank(self, key: str, start: int, end: int) -> int:
+        """Return 0: there is nothing to remove."""
         return 0
 
     def expire(self, key: str, seconds: int) -> bool:
+        """Return False, as Redis does for a key that does not exist."""
         return False
 
     def eval(
@@ -198,4 +248,5 @@ class DisabledCacheBackend(InMemoryCacheBackend):
         numkeys: int,
         *keys_and_args: str,
     ) -> int:
+        """Raise RuntimeError, so claim operations fail closed when disabled."""
         raise RuntimeError("the shared runtime cache is disabled")

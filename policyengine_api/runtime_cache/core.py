@@ -21,23 +21,65 @@ COMPLETED_RESULT_TTL_JITTER_FRACTION = 0.10
 class CachePipeline(Protocol):
     """The queued commands that cache writers issue inside one pipeline."""
 
-    def __enter__(self) -> Self: ...
-    def __exit__(self, *args: object) -> object: ...
-    def set(self, key: str, value: str, **kwargs: object) -> object: ...
-    def delete(self, *keys: str) -> object: ...
-    def expire(self, key: str, seconds: int) -> object: ...
-    def zadd(self, key: str, mapping: dict[str, float]) -> object: ...
-    def zrem(self, key: str, *members: str) -> object: ...
-    def zremrangebyrank(self, key: str, start: int, end: int) -> object: ...
-    def execute(self) -> list[object]: ...
+    def __enter__(self) -> Self:
+        """Open the pipeline for queuing commands."""
+        ...
+
+    def __exit__(self, *args: object) -> object:
+        """Discard any commands that were queued but not executed."""
+        ...
+
+    def set(self, key: str, value: str, **kwargs: object) -> object:
+        """Queue a Redis SET; ``kwargs`` carries options such as ``ex``."""
+        ...
+
+    def delete(self, *keys: str) -> object:
+        """Queue a Redis DEL of every given key."""
+        ...
+
+    def expire(self, key: str, seconds: int) -> object:
+        """Queue a Redis EXPIRE that sets the key's TTL in seconds."""
+        ...
+
+    def zadd(self, key: str, mapping: dict[str, float]) -> object:
+        """Queue a Redis ZADD of member-to-score pairs into a sorted set."""
+        ...
+
+    def zrem(self, key: str, *members: str) -> object:
+        """Queue a Redis ZREM of the given sorted-set members."""
+        ...
+
+    def zremrangebyrank(self, key: str, start: int, end: int) -> object:
+        """Queue a Redis ZREMRANGEBYRANK over inclusive ranks (``-1`` is last)."""
+        ...
+
+    def execute(self) -> list[object]:
+        """Run the queued commands and return their replies in queue order."""
+        ...
 
 
 class CacheBackend(Protocol):
-    def get(self, key: str) -> str | bytes | None: ...
-    def set(self, key: str, value: str, **kwargs: object) -> object: ...
-    def delete(self, *keys: str) -> object: ...
-    def pipeline(self, transaction: bool = True) -> CachePipeline: ...
-    def eval(self, script: str, numkeys: int, *keys_and_args: str) -> object: ...
+    """The Redis client subset the runtime cache uses; fakes implement it too."""
+
+    def get(self, key: str) -> str | bytes | None:
+        """Return the stored value, or None when the key is missing or expired."""
+        ...
+
+    def set(self, key: str, value: str, **kwargs: object) -> object:
+        """Store a value; ``kwargs`` carries Redis options such as ``ex`` and ``nx``."""
+        ...
+
+    def delete(self, *keys: str) -> object:
+        """Delete every given key and return how many existed."""
+        ...
+
+    def pipeline(self, transaction: bool = True) -> CachePipeline:
+        """Return a pipeline whose commands run together on ``execute``."""
+        ...
+
+    def eval(self, script: str, numkeys: int, *keys_and_args: str) -> object:
+        """Run a Lua script atomically on the server against the given keys."""
+        ...
 
 
 class CacheCoordinationError(RuntimeError):
@@ -46,6 +88,8 @@ class CacheCoordinationError(RuntimeError):
 
 @dataclass(frozen=True)
 class CacheNamespace:
+    """The environment and service prefix that keeps deployments' keys apart."""
+
     environment: str
     service: str
 
@@ -57,6 +101,11 @@ class CacheNamespace:
         *,
         suffix: str | None = None,
     ) -> str:
+        """Build a key from a SHA-256 of the canonical JSON of ``inputs``.
+
+        Equal inputs give the same key whatever their dict order; values that
+        are not JSON-serialisable are hashed by their ``str()``.
+        """
         encoded = json.dumps(
             inputs,
             sort_keys=True,
@@ -71,6 +120,7 @@ class CacheNamespace:
         return f"{key}:{suffix}" if suffix else key
 
     def family_key(self, family: str, schema_version: int, name: str) -> str:
+        """Build an unhashed key for a fixed, named entry within a cache family."""
         return (
             f"{CACHE_KEY_ROOT}:{self.environment}:{self.service}:"
             f"{family}:v{schema_version}:{name}"
@@ -82,6 +132,7 @@ def encode_envelope(
     schema_version: int,
     payload: object,
 ) -> str:
+    """Serialise a payload with the family and schema version it was written under."""
     return json.dumps(
         {
             "family": family,
@@ -100,6 +151,11 @@ def decode_envelope(
     family: str,
     schema_version: int,
 ) -> object:
+    """Return an envelope's payload, or None if it is absent or unusable.
+
+    Undecodable JSON and envelopes from another family or schema version are
+    treated as misses rather than errors.
+    """
     if value is None:
         return None
     try:
@@ -172,6 +228,7 @@ class RecoverableJSONCache:
         schema_version: int,
         ttl_seconds: int,
     ) -> None:
+        """Bind the cache to one key family; raise ValueError for a non-positive TTL."""
         if ttl_seconds <= 0:
             raise ValueError("cache TTL must be positive")
         self.client = client
@@ -181,9 +238,11 @@ class RecoverableJSONCache:
         self.ttl_seconds = ttl_seconds
 
     def key(self, inputs: dict[str, Any]) -> str:
+        """Return the namespaced key this cache stores ``inputs`` under."""
         return self.namespace.key(self.family, self.schema_version, inputs)
 
     def get(self, inputs: dict[str, Any]) -> object:
+        """Return the cached payload, or None on a miss or any backend failure."""
         started_at = time.perf_counter()
         try:
             value = self.client.get(self.key(inputs))
@@ -208,6 +267,7 @@ class RecoverableJSONCache:
         return payload
 
     def set(self, inputs: dict[str, Any], payload: object) -> bool:
+        """Store a payload with a jittered TTL; return False if the write failed."""
         started_at = time.perf_counter()
         try:
             result = self.client.set(

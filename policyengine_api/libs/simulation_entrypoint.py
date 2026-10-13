@@ -154,6 +154,11 @@ class SimulationEntrypointClient:
     """
 
     def __init__(self, entrypoint: str | None = None) -> None:
+        """Connect to ``entrypoint`` (default: the configured one) with gateway auth.
+
+        Raise GatewayAuthError if auth is partly configured, or is required here
+        but not configured.
+        """
         self.entrypoint = entrypoint or get_sim_entrypoint()
         self.base_url = resolve_simulation_entrypoint_url(self.entrypoint)
         self._token_provider = GatewayAuthTokenProvider()
@@ -348,6 +353,13 @@ class SimulationEntrypointClient:
         *,
         policyengine_version: str | None = None,
     ) -> object:
+        """Return the worker's published SPM capability for the bundle it would run.
+
+        The bundle is the one the worker's ``/versions`` routes resolve for
+        ``policyengine_version`` or else ``country``/``version``; None means that
+        bundle publishes no capability. Raise SPMValidationError if the routes
+        are unreachable or ambiguous.
+        """
         from policyengine_api.spm import SPMValidationError
 
         try:

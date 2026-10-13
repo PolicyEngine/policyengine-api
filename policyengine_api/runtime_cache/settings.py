@@ -33,6 +33,8 @@ class RuntimeCacheConfigurationError(RuntimeError):
 
 @dataclass(frozen=True)
 class RuntimeCacheSettings:
+    """Validated cache configuration; the URL and CA bundle stay secret in reprs."""
+
     mode: str
     environment: str
     service: str
@@ -45,6 +47,7 @@ class RuntimeCacheSettings:
 
     @property
     def enabled(self) -> bool:
+        """Whether a real Redis backend is configured (local or deployed mode)."""
         return self.mode != "disabled"
 
 

@@ -21,6 +21,13 @@ HOUSEHOLD_CALCULATION_TTL_SECONDS = 86_400
 
 @dataclass(frozen=True)
 class HouseholdCalculationIdentity:
+    """Every input that determines a calculated household; the cache key hashes it.
+
+    The content hashes and package versions make edited inputs and upgraded
+    models miss rather than reuse stale results. ``spm`` is the requested
+    resolved SPM configuration, or None when the request selected no SPM.
+    """
+
     country_id: str
     household_id: int
     policy_id: int
@@ -33,6 +40,8 @@ class HouseholdCalculationIdentity:
 
 @dataclass(frozen=True)
 class CachedHouseholdCalculation:
+    """A calculated household, its warnings, and the SPM receipt if SPM was used."""
+
     household: dict[str, Any]
     warnings: tuple[str, ...] = ()
     spm_provenance: dict[str, Any] | None = None
@@ -42,6 +51,7 @@ class HouseholdCalculationCache:
     """Cache a calculated household, its warnings and its receipts atomically."""
 
     def __init__(self, client: CacheBackend, namespace: CacheNamespace) -> None:
+        """Store results in ``client`` under ``namespace`` for about a day."""
         self._cache = RecoverableJSONCache(
             client,
             namespace,
@@ -51,12 +61,18 @@ class HouseholdCalculationCache:
         )
 
     def cache_key(self, identity: HouseholdCalculationIdentity) -> str:
+        """Return the backend key a result for ``identity`` is stored under."""
         return self._cache.key(asdict(identity))
 
     def get(
         self,
         identity: HouseholdCalculationIdentity,
     ) -> CachedHouseholdCalculation | None:
+        """Return the cached result, or None on a miss or any malformed entry.
+
+        An entry whose SPM receipt is missing, invalid, or resolves to a
+        different SPM configuration than ``identity`` asks for is also a miss.
+        """
         payload = self._cache.get(asdict(identity))
         if not isinstance(payload, dict):
             return None
@@ -96,6 +112,11 @@ class HouseholdCalculationCache:
         identity: HouseholdCalculationIdentity,
         value: CachedHouseholdCalculation,
     ) -> bool:
+        """Cache a result, returning False if it was not written.
+
+        Results whose SPM receipt does not match the identity's SPM request are
+        refused rather than stored, so a later read cannot serve them.
+        """
         if identity.spm is None:
             if value.spm_provenance is not None:
                 return False
