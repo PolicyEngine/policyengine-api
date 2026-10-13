@@ -131,8 +131,8 @@ logger = logging.getLogger(__name__)
 OperationT = TypeVar("OperationT")
 
 
-def _log_unexpected_failure(error: Exception) -> None:
-    """Record an unexpected failure without its message.
+def _log_failure(event: str, error: Exception) -> None:
+    """Record a failure without its message.
 
     Exception messages can carry bound SQL parameters or token claims, so only
     the type and the innermost frame locations are logged. Logging never
@@ -142,7 +142,7 @@ def _log_unexpected_failure(error: Exception) -> None:
     try:
         frames = traceback.extract_tb(error.__traceback__)[-8:]
         logger.error(
-            "v2_user_operation_failed",
+            event,
             extra={
                 "policyengine_attributes": {
                     "error_type": type(error).__name__,
@@ -182,8 +182,10 @@ def user_resource_operation(
         return v2_error_response(409, "The record conflicts with stored state")
     except AccountIdentityDeletionError as error:
         return v2_error_response(502, str(error))
-    except (V2ConfigurationError, SQLAlchemyError):
+    except (V2ConfigurationError, SQLAlchemyError) as error:
+        # Schema drift and rejected data surface here too, so keep a record.
+        _log_failure("v2_user_persistence_unavailable", error)
         return v2_error_response(503, "V2 user persistence is unavailable")
     except Exception as error:  # noqa: BLE001 - return a secret-safe typed error
-        _log_unexpected_failure(error)
+        _log_failure("v2_user_operation_failed", error)
         return v2_error_response(500, "V2 user operation failed")

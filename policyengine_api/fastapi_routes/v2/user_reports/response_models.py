@@ -6,12 +6,10 @@ from datetime import datetime
 from typing import Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from policyengine_api.query_parameters import CountryId
 from policyengine_api.services.v2.user_reports.types import (
-    ReportProvision,
-    ReportValidation,
     UserReportPage,
     UserReportRead,
 )
@@ -19,6 +17,69 @@ from policyengine_api.services.v2.user_reports.types import (
 
 class StrictUserReportAPIModel(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+
+class StoredSnapshotItem(BaseModel):
+    """A stored v3 report snapshot as responses publish it.
+
+    These shapes mirror the contract but not the input bounds: they ignore
+    unknown keys and accept any stored length, count, or label, so a row saved
+    under older or looser input rules still serializes and one row can never
+    fail a list or an export.
+    """
+
+    model_config = ConfigDict(extra="ignore", from_attributes=True)
+
+
+class ReportProvisionIntervalItem(StoredSnapshotItem):
+    # The contract makes this key optional rather than nullable.
+    parameter: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    start_date: str
+    end_date: str
+    value: JsonValue
+
+
+class ReportProvisionItem(StoredSnapshotItem):
+    path: str
+    breadcrumb: str
+    unit: str | None = None
+    baseline_value: JsonValue
+    value: JsonValue
+    intervals: list[ReportProvisionIntervalItem] | None = None
+
+
+class ReportCalibrationWorstItem(StoredSnapshotItem):
+    name: str
+    source: str
+    geography: str
+    relative_error: float | None = None
+
+
+class ReportCalibrationMatchItem(StoredSnapshotItem):
+    variable: str
+    depth: int
+    ring: str
+    target_count: int
+    mean_abs_relative_error: float
+    worst: ReportCalibrationWorstItem
+
+
+class ReportCalibrationItem(StoredSnapshotItem):
+    release_id: str | None = None
+    geography: str
+    reached_count: int
+    matches: list[ReportCalibrationMatchItem]
+
+
+class ReportScorecardItem(StoredSnapshotItem):
+    programs: list[str]
+
+
+class ReportValidationItem(StoredSnapshotItem):
+    matched_at: str
+    map_model_version: str
+    calibration: ReportCalibrationItem | None = None
+    scorecard: ReportScorecardItem | None = None
 
 
 class UserReportItem(StrictUserReportAPIModel):
@@ -31,8 +92,8 @@ class UserReportItem(StrictUserReportAPIModel):
     description: str | None
     user_policy_id: UUID | None
     source_note: str | None
-    provisions: list[ReportProvision] | None
-    validation: ReportValidation | None
+    provisions: list[ReportProvisionItem] | None
+    validation: ReportValidationItem | None
     last_run_at: datetime | None
     client_ref: str | None
     created_at: datetime

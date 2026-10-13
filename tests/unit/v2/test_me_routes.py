@@ -18,6 +18,8 @@ from policyengine_api.services.v2.user_accounts.types import (
 from policyengine_api.services.v2.user_accounts.validators import (
     AccountIdentityDeletionError,
 )
+from policyengine_api.services.v2.user_policies.types import UserPolicyRead
+from policyengine_api.services.v2.user_reports.types import UserReportRead
 from tests.unit.v2.user_route_support import (
     CREATED_AT,
     OWNER_ID,
@@ -217,3 +219,71 @@ def test_import_rejects_bodies_over_one_mebibyte() -> None:
     assert response.status_code == 413
     assert response.json()["status"] == "error"
     assert service.calls == []
+
+
+def test_export_serializes_stored_rows_outside_current_input_bounds() -> None:
+    long_text = "x" * 20_000
+    odd_policy = UserPolicyRead(
+        id=IMPORTED_ID,
+        country_id="us",
+        user_id=OWNER_ID,
+        policy_id=None,
+        legacy_policy_id=1,
+        name=None,
+        description=long_text,
+        baseline="current-law",
+        provenance={"source": "a-source-added-later", "ref": long_text, "extra": 1},
+        client_ref="rf-1",
+        created_at=CREATED_AT,
+        updated_at=CREATED_AT,
+    )
+    odd_report = UserReportRead(
+        id=IMPORTED_ID,
+        country_id="us",
+        user_id=OWNER_ID,
+        report_id=None,
+        legacy_report_id=615,
+        name=None,
+        description=None,
+        user_policy_id=None,
+        source_note=long_text,
+        provisions=[
+            {
+                "path": long_text,
+                "breadcrumb": "b",
+                "baseline_value": 1,
+                "value": 2,
+                "retired_key": True,
+            }
+        ],
+        validation={"matched_at": long_text, "map_model_version": "1"},
+        last_run_at=None,
+        client_ref="lfr-1",
+        created_at=CREATED_AT,
+        updated_at=CREATED_AT,
+    )
+
+    def result(name: str, kwargs: dict):
+        if name == "export_account":
+            return AccountExport(
+                user=_account(),
+                policies=(odd_policy,),
+                households=(),
+                simulations=(),
+                reports=(odd_report,),
+            )
+        return _result(name, kwargs)
+
+    client, _service = _client(RecordingService(result))
+
+    exported = client.get("/v2/me/export?country_id=us")
+
+    assert exported.status_code == 200
+    body = exported.json()["result"]
+    assert body["policies"][0]["provenance"] == {
+        "source": "a-source-added-later",
+        "ref": long_text,
+        "confidence": None,
+    }
+    assert body["reports"][0]["provisions"][0]["path"] == long_text
+    assert "retired_key" not in body["reports"][0]["provisions"][0]

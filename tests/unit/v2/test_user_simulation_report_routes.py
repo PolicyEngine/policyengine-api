@@ -359,10 +359,54 @@ def test_openapi_types_report_and_policy_snapshots() -> None:
     policy_item = next(name for name in schemas if name.startswith("UserPolicyItem"))
     assert {
         name.split("-")[0] for name in property_refs(report_item, "provisions")
-    } == {"ReportProvision"}
+    } == {"ReportProvisionItem"}
     assert {
         name.split("-")[0] for name in property_refs(report_item, "validation")
-    } == {"ReportValidation"}
+    } == {"ReportValidationItem"}
     assert {
         name.split("-")[0] for name in property_refs(policy_item, "provenance")
-    } == {"PolicyProvenance"}
+    } == {"PolicyProvenanceItem"}
+
+
+def test_stored_snapshots_outside_input_bounds_still_serialize() -> None:
+    long_label = "x" * 5_000
+    match = {
+        "variable": long_label,
+        "depth": 0,
+        "ring": "a-ring-added-later",
+        "target_count": 1,
+        "mean_abs_relative_error": 0.1,
+        "worst": {"name": long_label, "source": "irs", "geography": "us"},
+    }
+    oversized_validation = {
+        "matched_at": long_label,
+        "map_model_version": "1",
+        "retired_key": "kept in storage, dropped from responses",
+        "calibration": {
+            "geography": long_label,
+            "reached_count": 600,
+            "matches": [match] * 600,
+        },
+        "scorecard": {"programs": ["snap"] * 500},
+    }
+    odd_read = replace(_report_read(), validation=oversized_validation)
+    reports = RecordingService(
+        lambda _name, kwargs: UserReportPage(
+            items=(odd_read, _report_read()),
+            offset=kwargs["offset"],
+            limit=kwargs["limit"],
+            has_more=False,
+        )
+    )
+    client, _flask_calls = user_route_client(
+        v2_user_report_service_factory=lambda: reports
+    )
+
+    response = client.get("/v2/user-reports?country_id=us")
+
+    assert response.status_code == 200
+    first, second = response.json()["result"]["items"]
+    assert len(first["validation"]["calibration"]["matches"]) == 600
+    assert first["validation"]["calibration"]["geography"] == long_label
+    assert "retired_key" not in first["validation"]
+    assert second["validation"] == VALIDATION

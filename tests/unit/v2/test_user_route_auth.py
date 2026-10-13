@@ -216,7 +216,7 @@ def test_default_dependencies_publish_the_bearer_security_scheme() -> None:
     assert "security" not in schema["paths"]["/v2/policies"]["get"]
 
 
-def test_unexpected_failures_are_logged_without_their_message() -> None:
+def _recorded_failure_logs(operation) -> tuple[object, list]:
     import logging
 
     from policyengine_api.fastapi_routes.v2 import user_resources
@@ -229,11 +229,6 @@ def test_unexpected_failures_are_logged_without_their_message() -> None:
         def emit(self, record: logging.LogRecord) -> None:
             self.records.append(record)
 
-    subject = "|".join(("google-oauth2", "secret-subject"))
-
-    def fail():
-        raise RuntimeError(f"{subject} leaked into a message")
-
     # Alembic tests run logging.config.fileConfig, which disables loggers that
     # already exist, so re-enable this one and record on it directly.
     handler = RecordingHandler()
@@ -241,20 +236,46 @@ def test_unexpected_failures_are_logged_without_their_message() -> None:
     user_resources.logger.disabled = False
     user_resources.logger.addHandler(handler)
     try:
-        response = user_resources.user_resource_operation(fail)
+        response = user_resources.user_resource_operation(operation)
     finally:
         user_resources.logger.removeHandler(handler)
         user_resources.logger.disabled = was_disabled
+    return response, handler.records
+
+
+SECRET_SUBJECT = "|".join(("google-oauth2", "secret-subject"))
+
+
+def test_unexpected_failures_are_logged_without_their_message() -> None:
+    def fail():
+        raise RuntimeError(f"{SECRET_SUBJECT} leaked into a message")
+
+    response, records = _recorded_failure_logs(fail)
 
     assert response.status_code == 500
-    (record,) = [
-        record
-        for record in handler.records
-        if record.getMessage() == "v2_user_operation_failed"
-    ]
+    (record,) = records
+    assert record.getMessage() == "v2_user_operation_failed"
     attributes = record.policyengine_attributes
     assert attributes["error_type"] == "RuntimeError"
     assert "in fail" in attributes["error_frames"]
-    assert "secret-subject" not in record.getMessage()
     assert "secret-subject" not in str(attributes)
     assert record.exc_info is None
+
+
+def test_persistence_failures_are_logged_without_their_message() -> None:
+    from sqlalchemy.exc import DataError
+
+    def fail_in_database():
+        raise DataError(
+            "INSERT ...", {"subject": SECRET_SUBJECT}, Exception("bad value")
+        )
+
+    response, records = _recorded_failure_logs(fail_in_database)
+
+    assert response.status_code == 503
+    (record,) = records
+    assert record.getMessage() == "v2_user_persistence_unavailable"
+    attributes = record.policyengine_attributes
+    assert attributes["error_type"] == "DataError"
+    assert "in fail_in_database" in attributes["error_frames"]
+    assert "secret-subject" not in str(attributes)

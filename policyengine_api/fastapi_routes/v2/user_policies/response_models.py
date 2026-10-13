@@ -13,7 +13,6 @@ from policyengine_api.fastapi_routes.v2.user_resources import (
 )
 from policyengine_api.query_parameters import CountryId
 from policyengine_api.services.v2.user_policies.types import (
-    PolicyProvenance,
     UserPolicyBaseline,
     UserPolicyPage,
     UserPolicyRead,
@@ -26,6 +25,20 @@ class StrictUserPolicyAPIModel(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
 
+class PolicyProvenanceItem(BaseModel):
+    """Stored v3 reform provenance as responses publish it.
+
+    It mirrors the contract without the input bounds and ignores unknown keys,
+    so any stored row serializes.
+    """
+
+    model_config = ConfigDict(extra="ignore", from_attributes=True)
+
+    source: str
+    ref: str | None = None
+    confidence: str | None = None
+
+
 class UserPolicyItem(StrictUserPolicyAPIModel):
     id: UUID
     country_id: CountryId
@@ -35,7 +48,7 @@ class UserPolicyItem(StrictUserPolicyAPIModel):
     name: str | None
     description: str | None
     baseline: UserPolicyBaseline | None
-    provenance: PolicyProvenance | None
+    provenance: PolicyProvenanceItem | None
     client_ref: str | None
     created_at: datetime
     updated_at: datetime
