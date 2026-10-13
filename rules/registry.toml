@@ -700,7 +700,7 @@ autofix = true
 [rule.enforcer]
 kind = "ruff"
 mode = "lint"
-codes = ["ANN", "BLE", "D", "DTZ", "E4", "E7", "E9", "EM", "ERA", "EXE", "F", "FIX", "FLY", "FURB", "G", "I", "LOG", "PIE", "PYI", "RET", "RSE", "S", "T20", "TC", "TD", "TRY", "UP", "W"]
+codes = ["A", "ANN", "BLE", "D", "DTZ", "E", "E4", "E7", "E9", "EM", "ERA", "EXE", "F", "FAST", "FIX", "FLY", "FURB", "G", "I", "INP", "LOG", "N", "PIE", "PLC", "PYI", "RET", "RSE", "S", "SLF", "T20", "TC", "TD", "TRY", "UP", "W"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "lint"
