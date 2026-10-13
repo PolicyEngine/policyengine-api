@@ -52,7 +52,9 @@ def _canonical_number(value: float) -> str:
     return rendered
 
 
-def _canonical_json(value: Any) -> str:
+def _canonical_json(
+    value: Any,  # noqa: ANN401  # exact type() dispatch that mypy cannot narrow
+) -> str:
     if value is None:
         return "null"
     if type(value) is bool:

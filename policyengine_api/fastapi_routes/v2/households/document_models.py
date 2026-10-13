@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, TypeAlias
+from typing import TYPE_CHECKING, Annotated, Any, TypeAlias
 
 from pydantic import (
     BaseModel,
@@ -16,6 +16,9 @@ from pydantic import (
 from pydantic.json_schema import SkipJsonSchema
 
 from policyengine_api.spm import SPMSelection
+
+if TYPE_CHECKING:
+    from pydantic import SerializerFunctionWrapHandler
 
 DocumentIdentifier = Annotated[
     str,
@@ -60,13 +63,15 @@ class USHouseholdDocument(StrictHouseholdDocumentModel):
 
     @field_validator("spm", mode="before")
     @classmethod
-    def require_spm_object(cls, value: Any) -> Any:
+    def require_spm_object(cls, value: object) -> object:
         if value is None:
             raise ValueError("spm must be an object when supplied")
         return value
 
     @model_serializer(mode="wrap")
-    def serialize_document(self, handler: Any) -> dict[str, Any]:
+    def serialize_document(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
         document: dict[str, Any] = handler(self)
         if self.spm is None:
             document.pop("spm", None)

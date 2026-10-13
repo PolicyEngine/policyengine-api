@@ -31,7 +31,10 @@ def read_metadata_catalog(
     )
 
 
-def read_rows(session: Session, statement: Any) -> list[Any]:
+def read_rows(
+    session: Session,
+    statement: Any,  # noqa: ANN401  # Session.exec overloads omit core SQLAlchemy selects
+) -> list[Any]:
     try:
         return list(session.exec(statement).all())
     except SQLAlchemyError as error:

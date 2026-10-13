@@ -46,11 +46,11 @@ class LegacyHouseholdTranslationError(ValueError):
 
 
 def require_json_value(
-    value: Any,
+    value: Any,  # noqa: ANN401  # exact type() dispatch that mypy cannot narrow
     *,
     depth: int = 0,
     containers: frozenset[int] = frozenset(),
-) -> Any:
+) -> object:
     """Reject values that are not standards-compliant JSON."""
 
     if depth > MAXIMUM_JSON_NESTING:
