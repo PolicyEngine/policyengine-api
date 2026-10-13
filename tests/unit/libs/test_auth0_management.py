@@ -124,3 +124,39 @@ def test_failed_deletions_raise_without_leaking_subjects(status: int) -> None:
         client.delete_user("google-oauth2|secret-subject")
 
     assert "secret-subject" not in str(error.value)
+
+
+def test_deleters_share_one_client_and_its_token(monkeypatch) -> None:
+    from policyengine_api.libs import auth0_management
+
+    requests: list[httpx.Request] = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return _token_then(204)(request)
+
+    mock_client = httpx.Client
+    monkeypatch.setattr(
+        auth0_management.httpx,
+        "Client",
+        lambda **kwargs: mock_client(transport=httpx.MockTransport(record), **kwargs),
+    )
+    monkeypatch.setattr(auth0_management, "_shared_clients", {})
+    environ = {
+        "AUTH0_MANAGEMENT_DOMAIN": DOMAIN,
+        "AUTH0_MANAGEMENT_CLIENT_ID": "m2m",
+        "AUTH0_MANAGEMENT_CLIENT_SECRET": "raw-secret",
+    }
+
+    first = build_auth0_user_deleter(environ)
+    second = build_auth0_user_deleter(environ)
+    assert first is not None and second is not None
+    first("auth0|1")
+    second("auth0|2")
+
+    assert first.__self__ is second.__self__  # type: ignore[attr-defined]
+    assert [request.url.raw_path for request in requests] == [
+        b"/oauth/token",
+        b"/api/v2/users/auth0%7C1",
+        b"/api/v2/users/auth0%7C2",
+    ]

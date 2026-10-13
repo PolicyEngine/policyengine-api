@@ -279,16 +279,20 @@ class V2AccountService:
         if deleted_user_id is not None:
             logger.info(
                 "deleted_v2_user_account",
-                extra={"v2_user_id": str(deleted_user_id)},
+                extra={"policyengine_attributes": {"v2_user_id": str(deleted_user_id)}},
             )
 
         if self._auth0_user_deleter is None:
             logger.warning(
                 "auth0_user_deletion_skipped_not_configured",
                 extra={
-                    "v2_user_id": (
-                        str(deleted_user_id) if deleted_user_id is not None else None
-                    )
+                    "policyengine_attributes": {
+                        "v2_user_id": (
+                            str(deleted_user_id)
+                            if deleted_user_id is not None
+                            else None
+                        )
+                    }
                 },
             )
             return AccountDeletion(user_id=deleted_user_id, auth0_subjects=())
@@ -299,10 +303,14 @@ class V2AccountService:
             logger.warning(
                 "auth0_user_deletion_failed",
                 extra={
-                    "v2_user_id": (
-                        str(deleted_user_id) if deleted_user_id is not None else None
-                    ),
-                    "error_type": type(error).__name__,
+                    "policyengine_attributes": {
+                        "v2_user_id": (
+                            str(deleted_user_id)
+                            if deleted_user_id is not None
+                            else None
+                        ),
+                        "error_type": type(error).__name__,
+                    }
                 },
             )
             raise AccountIdentityDeletionError(

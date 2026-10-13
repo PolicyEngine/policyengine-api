@@ -205,12 +205,31 @@ class Auth0ManagementClient:
         )
 
 
+_shared_clients: dict[Auth0ManagementSettings, Auth0ManagementClient] = {}
+_shared_clients_lock = threading.Lock()
+
+
+def _shared_client(settings: Auth0ManagementSettings) -> Auth0ManagementClient:
+    """Return one process-wide client per settings so its token is reused."""
+
+    with _shared_clients_lock:
+        client = _shared_clients.get(settings)
+        if client is None:
+            client = Auth0ManagementClient(settings)
+            _shared_clients[settings] = client
+        return client
+
+
 def build_auth0_user_deleter(
     environ: Mapping[str, str] | None = None,
 ) -> Callable[[str], None] | None:
-    """Return a deleter bound to the configured tenant, or ``None``."""
+    """Return a deleter bound to the configured tenant, or ``None``.
+
+    Every call with the same settings shares one client, so the Management
+    API token is fetched once and reused until shortly before it expires.
+    """
 
     settings = load_auth0_management_settings(environ)
     if settings is None:
         return None
-    return Auth0ManagementClient(settings).delete_user
+    return _shared_client(settings).delete_user

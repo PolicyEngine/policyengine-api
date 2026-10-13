@@ -144,3 +144,52 @@ def test_empty_requests_open_no_v1_session() -> None:
     assert service.existing_ids(
         country_id="us", requested={LegacyRecordKind.POLICY: []}
     ) == {LegacyRecordKind.POLICY: frozenset()}
+
+
+def test_deferred_service_builds_the_v1_service_once_on_first_check() -> None:
+    from policyengine_api.services.v2.legacy_refs.services import (
+        DeferredLegacyReferenceService,
+    )
+
+    builds: list[int] = []
+
+    class Built:
+        def existing_ids(self, *, country_id, requested):
+            return {kind: frozenset(ids) for kind, ids in requested.items()}
+
+        def require_existing(self, *, country_id, requested):
+            return None
+
+    def build():
+        builds.append(1)
+        return Built()
+
+    deferred = DeferredLegacyReferenceService(build)
+    assert builds == []
+
+    deferred.require_existing(
+        country_id="us", requested={LegacyRecordKind.POLICY: (1,)}
+    )
+    assert deferred.existing_ids(
+        country_id="us", requested={LegacyRecordKind.POLICY: (2,)}
+    ) == {LegacyRecordKind.POLICY: frozenset({2})}
+    assert builds == [1]
+
+
+def test_default_reference_checker_does_not_touch_the_v1_database(
+    monkeypatch,
+) -> None:
+    from policyengine_api.data import orm
+    from policyengine_api.fastapi_routes import dependencies
+
+    def unavailable():
+        raise RuntimeError("v1 database is not configured")
+
+    monkeypatch.setattr(orm, "get_v1_session_factory", unavailable)
+
+    checker = dependencies._default_legacy_reference_checker()
+
+    with pytest.raises(RuntimeError, match="not configured"):
+        checker.require_existing(
+            country_id="us", requested={LegacyRecordKind.POLICY: (1,)}
+        )

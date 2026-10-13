@@ -246,7 +246,7 @@ def authenticate_bearer(
     except jwt.PyJWKClientConnectionError as error:
         logger.warning(
             "public_api_user_auth_unavailable",
-            extra={"error_type": type(error).__name__},
+            extra={"policyengine_attributes": {"error_type": type(error).__name__}},
         )
         raise UserAuthUnavailableError(
             "the signing keys could not be retrieved"
@@ -254,7 +254,7 @@ def authenticate_bearer(
     except (jwt.PyJWTError, ValueError) as error:
         logger.info(
             "public_api_user_auth_rejected",
-            extra={"error_type": type(error).__name__},
+            extra={"policyengine_attributes": {"error_type": type(error).__name__}},
         )
         raise InvalidBearerTokenError("the bearer access token is invalid") from error
     if claims.get("iss") != settings.issuer:

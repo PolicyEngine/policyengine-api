@@ -493,3 +493,33 @@ def test_delete_without_management_api_or_with_failures(store) -> None:
         failing.delete_account(principal=BOB)
     with store.sessions() as session:
         assert session.exec(select(User)).all() == []
+
+
+def test_reads_lists_and_account_routes_never_build_the_v1_checker(store) -> None:
+    from policyengine_api.services.v2.legacy_refs.services import (
+        DeferredLegacyReferenceService,
+    )
+
+    def unavailable():
+        raise AssertionError("the v1 reference service must not be built")
+
+    references = DeferredLegacyReferenceService(unavailable)
+    accounts = V2AccountService(
+        AccountDatabaseSession(store.sessions), legacy_references=references
+    )
+    simulations = V2UserSimulationService(
+        UserSimulationDatabaseSession(store.sessions), references
+    )
+
+    accounts.get_account(principal=ALICE, country_id="us")
+    accounts.export_account(principal=ALICE, country_id="us")
+    page = simulations.list_user_simulations(principal=ALICE, country_id="us")
+
+    assert page.items == ()
+    with pytest.raises(AssertionError, match="must not be built"):
+        simulations.create_user_simulation(
+            principal=ALICE,
+            association_input=UserSimulationCreateFields(
+                country_id="us", legacy_simulation_id=613
+            ),
+        )

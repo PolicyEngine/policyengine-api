@@ -8,8 +8,9 @@ transaction. It never writes, so it deliberately avoids
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
 
+from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
 from policyengine_api.services.v2.legacy_refs.database_connectors.reads import (
     read_existing_legacy_ids,
 )
@@ -67,3 +68,36 @@ class V1LegacyReferenceService:
                 requested=ids,
                 existing=existing[kind],
             )
+
+
+class DeferredLegacyReferenceService:
+    """Build the v1 reference service only when a reference is checked.
+
+    Reads, lists, deletes, and most account routes never check v1
+    references, so they must not depend on the v1 database configuration.
+    """
+
+    def __init__(self, build: Callable[[], LegacyReferenceChecker]) -> None:
+        self._build = build
+        self._service: LegacyReferenceChecker | None = None
+
+    def _resolved(self) -> LegacyReferenceChecker:
+        if self._service is None:
+            self._service = self._build()
+        return self._service
+
+    def existing_ids(
+        self,
+        *,
+        country_id: str,
+        requested: Mapping[LegacyRecordKind, Collection[int]],
+    ) -> dict[LegacyRecordKind, frozenset[int]]:
+        return self._resolved().existing_ids(country_id=country_id, requested=requested)
+
+    def require_existing(
+        self,
+        *,
+        country_id: str,
+        requested: Mapping[LegacyRecordKind, Collection[int]],
+    ) -> None:
+        self._resolved().require_existing(country_id=country_id, requested=requested)

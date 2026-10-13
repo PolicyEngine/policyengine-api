@@ -109,7 +109,7 @@ def resolve_principal_user_in_session(
     if created_user_id is not None:
         logger.info(
             "provisioned_v2_user",
-            extra={"v2_user_id": str(created_user_id)},
+            extra={"policyengine_attributes": {"v2_user_id": str(created_user_id)}},
         )
         return ResolvedUser(
             user_id=created_user_id,

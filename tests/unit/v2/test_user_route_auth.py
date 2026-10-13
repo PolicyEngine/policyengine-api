@@ -214,3 +214,27 @@ def test_default_dependencies_publish_the_bearer_security_scheme() -> None:
     for path in ("/v2/me", "/v2/user-policies", "/v2/user-reports"):
         assert {"UserAccessToken": []} in schema["paths"][path]["get"]["security"]
     assert "security" not in schema["paths"]["/v2/policies"]["get"]
+
+
+def test_unexpected_failures_are_logged_without_their_message(caplog) -> None:
+    from policyengine_api.fastapi_routes.v2.user_resources import (
+        user_resource_operation,
+    )
+
+    subject = "|".join(("google-oauth2", "secret-subject"))
+
+    def fail():
+        raise RuntimeError(f"{subject} leaked into a message")
+
+    with caplog.at_level("ERROR"):
+        response = user_resource_operation(fail)
+
+    assert response.status_code == 500
+    record = next(
+        record for record in caplog.records if record.msg == "v2_user_operation_failed"
+    )
+    attributes = record.policyengine_attributes
+    assert attributes["error_type"] == "RuntimeError"
+    assert "in fail" in attributes["error_frames"]
+    assert "secret-subject" not in caplog.text
+    assert "secret-subject" not in str(attributes)

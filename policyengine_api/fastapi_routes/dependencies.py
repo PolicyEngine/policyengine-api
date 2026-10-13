@@ -594,7 +594,7 @@ def _default_require_user(
     )
 
 
-def _default_legacy_reference_checker() -> "LegacyReferenceChecker":
+def _build_v1_legacy_reference_service() -> "LegacyReferenceChecker":
     from policyengine_api.data.orm import get_v1_session_factory
     from policyengine_api.services.v2.legacy_refs.database_session import (
         LegacyReferenceDatabaseSession,
@@ -606,6 +606,16 @@ def _default_legacy_reference_checker() -> "LegacyReferenceChecker":
     return V1LegacyReferenceService(
         LegacyReferenceDatabaseSession(get_v1_session_factory())
     )
+
+
+def _default_legacy_reference_checker() -> "LegacyReferenceChecker":
+    """Defer the v1 session factory until a request checks a v1 reference."""
+
+    from policyengine_api.services.v2.legacy_refs.services import (
+        DeferredLegacyReferenceService,
+    )
+
+    return DeferredLegacyReferenceService(_build_v1_legacy_reference_service)
 
 
 def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:

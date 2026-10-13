@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+import logging
+import traceback
 from typing import Any, TypeVar
 
 from fastapi import Request
@@ -124,7 +126,36 @@ USER_RESOURCE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
 }
 
+logger = logging.getLogger(__name__)
+
 OperationT = TypeVar("OperationT")
+
+
+def _log_unexpected_failure(error: Exception) -> None:
+    """Record an unexpected failure without its message.
+
+    Exception messages can carry bound SQL parameters or token claims, so only
+    the type and the innermost frame locations are logged. Logging never
+    changes the response.
+    """
+
+    try:
+        frames = traceback.extract_tb(error.__traceback__)[-8:]
+        logger.error(
+            "v2_user_operation_failed",
+            extra={
+                "policyengine_attributes": {
+                    "error_type": type(error).__name__,
+                    "error_frames": "; ".join(
+                        f"{frame.filename.rsplit('/', 1)[-1]}:{frame.lineno} "
+                        f"in {frame.name}"
+                        for frame in frames
+                    ),
+                }
+            },
+        )
+    except Exception:  # noqa: BLE001 - observability must not alter the response
+        pass
 
 
 def user_resource_operation(
@@ -153,5 +184,6 @@ def user_resource_operation(
         return v2_error_response(502, str(error))
     except (V2ConfigurationError, SQLAlchemyError):
         return v2_error_response(503, "V2 user persistence is unavailable")
-    except Exception:  # noqa: BLE001 - return a secret-safe typed error
+    except Exception as error:  # noqa: BLE001 - return a secret-safe typed error
+        _log_unexpected_failure(error)
         return v2_error_response(500, "V2 user operation failed")
