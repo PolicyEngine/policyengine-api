@@ -201,9 +201,30 @@ would therefore hand signed-in users' saved work to anyone.
 ### Schema compatibility
 
 The revision is additive for everything the previous Public API revision maps:
-it drops no table or column and makes no nullable column required. The
-lifecycle test `test_stage_12a_revision_keeps_the_previous_revision_loadable`
-compares the column sets and nullability at the parent revision and at head.
+it drops no table or column, and it adds no required column without a server
+default to any table that revision writes. The only new required columns are
+`country_id` on the simulation and report associations, which that revision
+maps but never inserts into.
+
+The lifecycle test `test_stage_12a_schema_serves_the_previous_revision`
+exercises this rather than only comparing columns. It reflects the schema at
+the parent revision with SQLAlchemy and upgrades to head. Then, through the
+reflected parent tables, it does the following for every table the parent
+revision maps:
+
+- inserts a row that supplies only the parent's required columns (plus the
+  nullable values that the parent's own check constraints demand);
+- reads the row back with every parent column;
+- rewrites every non-key column;
+- deletes the row.
+
+Rows of the two dormant tables are inserted through head's tables, since only
+new code writes them, and are then read, rewritten, and deleted through the
+parent's. The test also deletes, through the parent's `users` table, a user who
+owns rows in all four association tables and a `user_identities` row, and it
+checks that every one of them cascades away. It fails if head drops a parent
+column, or adds a required column without a server default to a table the
+parent revision writes.
 
 ## Settings
 
@@ -317,6 +338,9 @@ The disposable-Postgres suite proves the following:
 - named `ON CONFLICT` targets work;
 - `MATCH SIMPLE` composite keys accept NULL v2 references;
 - account deletion cascades after removing legacy mappings;
+- NaN and Infinity never reach JSONB, and an import skips the item holding one;
+- the parent revision's table usage works against head (see "Schema
+  compatibility");
 - the qualification transaction is read-only.
 
 ## Deferred

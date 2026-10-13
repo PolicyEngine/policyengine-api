@@ -1,5 +1,8 @@
 """Exercise the isolated v2 Alembic lifecycle against disposable Postgres."""
 
+from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
+import itertools
 import os
 from uuid import UUID, uuid4
 
@@ -176,18 +179,6 @@ def _assert_stage_12a_association_shape(engine) -> None:
         columns = _columns(engine, table_name)
         assert columns["country"]["nullable"]
         assert columns["label"]["nullable"]
-
-
-def _column_nullability(engine) -> dict[str, dict[str, bool]]:
-    inspector = inspect(engine)
-    return {
-        table_name: {
-            column["name"]: column["nullable"]
-            for column in inspector.get_columns(table_name, schema="public")
-        }
-        for table_name in inspector.get_table_names(schema="public")
-        if table_name != "alembic_version"
-    }
 
 
 def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
@@ -380,13 +371,211 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         engine.dispose()
 
 
-def test_stage_12a_revision_keeps_the_previous_revision_loadable() -> None:
-    """The previous Public API revision still maps every parent-revision column.
+# Dormant at the parent revision: its models map these tables, and deleting a
+# user cascades through them, but no parent-revision code inserts into them.
+# They are the only tables Stage 12A may give a new required column.
+PARENT_REVISION_READ_ONLY_TABLES = frozenset(
+    {"user_simulation_associations", "user_report_associations"}
+)
+USER_ASSOCIATION_TABLES = (
+    "user_policies",
+    "user_household_associations",
+    "user_simulation_associations",
+    "user_report_associations",
+)
+COUNTRY_COLUMN_NAMES = frozenset({"country", "country_id", "primary_country"})
+# Nullable references that a parent-revision check constraint requires.
+REFERENCES_REQUIRED_BY_CHECKS = frozenset({("simulations", "household_id")})
+# Required values that a parent-revision check constraint restricts.
+CHECKED_VALUES = {("datasets", "year"): 2026}
 
-    During a deploy or an application rollback that revision reads rows the
-    Stage 12A schema holds, so the revision may add columns and relax
-    constraints but must not drop a table or column or make a nullable column
-    required.
+
+def _is_required_without_default(column: sa.Column) -> bool:
+    return not column.nullable and column.server_default is None
+
+
+def _new_required_columns(parent_table: sa.Table, head_table: sa.Table) -> set[str]:
+    return {
+        column.name
+        for column in head_table.columns
+        if column.name not in parent_table.columns
+        and _is_required_without_default(column)
+    }
+
+
+def _test_value(table: sa.Table, column: sa.Column, sequence: Iterator[int]):
+    if (table.name, column.name) in CHECKED_VALUES:
+        return CHECKED_VALUES[(table.name, column.name)]
+    if column.name in COUNTRY_COLUMN_NAMES:
+        return "us"
+    column_type = column.type
+    if isinstance(column_type, sa.Enum):
+        return column_type.enums[0]
+    if isinstance(column_type, sa.Uuid):
+        return uuid4()
+    if isinstance(column_type, sa.Boolean):
+        return False
+    if isinstance(column_type, sa.Integer):
+        return 1
+    if isinstance(column_type, sa.Float):
+        return 0.0
+    if isinstance(column_type, sa.DateTime):
+        # Later than every server-default created_at, as retention checks need.
+        return datetime.now(timezone.utc) + timedelta(days=1)
+    if isinstance(column_type, sa.JSON):
+        return {}
+    if isinstance(column_type, sa.String):
+        length = column_type.length or 255
+        if length == 64:
+            return uuid4().hex + uuid4().hex
+        return f"value-{next(sequence)}"[:length]
+    raise AssertionError(f"no test value for {table.name}.{column.name}")
+
+
+def _row_values(
+    table: sa.Table,
+    stored_rows: dict[str, dict],
+    sequence: Iterator[int],
+    *,
+    head_table: sa.Table | None = None,
+) -> dict:
+    """Supply only what the parent revision requires, plus check-bound values.
+
+    ``head_table`` adds the columns head newly requires; only rows of the
+    parent's read-only tables, which new code writes, may need them.
+    """
+
+    values = {
+        column.name: _test_value(table, column, sequence)
+        for column in table.columns
+        if _is_required_without_default(column)
+        or (table.name, column.name) in REFERENCES_REQUIRED_BY_CHECKS
+    }
+    if head_table is not None:
+        for column_name in _new_required_columns(table, head_table):
+            values[column_name] = _test_value(
+                head_table, head_table.columns[column_name], sequence
+            )
+    for foreign_key in table.foreign_key_constraints:
+        if not any(element.parent.name in values for element in foreign_key.elements):
+            continue
+        referenced_row = stored_rows[foreign_key.referred_table.name]
+        for element in foreign_key.elements:
+            values[element.parent.name] = referenced_row[element.column.name]
+    return values
+
+
+def _primary_key_clause(table: sa.Table, row: dict):
+    return sa.and_(
+        *(column == row[column.name] for column in table.primary_key.columns)
+    )
+
+
+def _insert_and_read_back(
+    connection,
+    table: sa.Table,
+    values: dict,
+    *,
+    insert_table: sa.Table | None = None,
+) -> dict:
+    """Insert a row, then read it back through the parent's reflected table.
+
+    Rows of the parent's read-only tables are inserted through head's table,
+    as only new code writes them.
+    """
+
+    target = insert_table if insert_table is not None else table
+    connection.execute(target.insert().values(values))
+    # Selecting the reflected table reads every column the parent maps.
+    return dict(
+        connection.execute(sa.select(table).where(_primary_key_clause(table, values)))
+        .mappings()
+        .one()
+    )
+
+
+def _rewrite_mapped_columns(connection, table: sa.Table, row: dict) -> None:
+    """Update every non-key column the parent maps, as an ORM flush can."""
+
+    key_columns = {column.name for column in table.primary_key.columns} | {
+        element.parent.name
+        for foreign_key in table.foreign_key_constraints
+        for element in foreign_key.elements
+    }
+    result = connection.execute(
+        table.update()
+        .where(_primary_key_clause(table, row))
+        .values(
+            {
+                # sa.null() keeps SQL NULL; a bare None becomes JSON null.
+                name: sa.null() if value is None else value
+                for name, value in row.items()
+                if name not in key_columns
+            }
+        )
+    )
+    assert result.rowcount == 1, table.name
+
+
+def _assert_user_deletion_cascades(
+    connection,
+    parent: sa.MetaData,
+    head: sa.MetaData,
+    stored_rows: dict[str, dict],
+    sequence: Iterator[int],
+) -> None:
+    """Delete, through the parent's users table, a user who owns Stage 12A rows."""
+
+    users = parent.tables["users"]
+    owner = _insert_and_read_back(
+        connection, users, _row_values(users, stored_rows, sequence)
+    )
+    owner_rows = {**stored_rows, "users": owner}
+    for table_name in USER_ASSOCIATION_TABLES:
+        table = parent.tables[table_name]
+        head_table = (
+            head.tables[table_name]
+            if table_name in PARENT_REVISION_READ_ONLY_TABLES
+            else None
+        )
+        _insert_and_read_back(
+            connection,
+            table,
+            _row_values(table, owner_rows, sequence, head_table=head_table),
+            insert_table=head_table,
+        )
+    identities = head.tables["user_identities"]
+    connection.execute(
+        identities.insert().values(
+            id=uuid4(),
+            user_id=owner["id"],
+            issuer="https://auth.example.test/",
+            subject="google-oauth2|previous-revision",
+        )
+    )
+
+    result = connection.execute(users.delete().where(users.c.id == owner["id"]))
+
+    assert result.rowcount == 1
+    for table_name in (*USER_ASSOCIATION_TABLES, "user_identities"):
+        table = head.tables[table_name]
+        remaining = connection.execute(
+            sa.select(sa.func.count())
+            .select_from(table)
+            .where(table.c.user_id == owner["id"])
+        ).scalar_one()
+        assert remaining == 0, table_name
+
+
+def test_stage_12a_schema_serves_the_previous_revision() -> None:
+    """Run the previous Public API revision's table usage against head.
+
+    The parent revision's schema is reflected and then used, after upgrading,
+    to insert a row into every table it maps (supplying only what it
+    requires), read the row back with every mapped column, rewrite those
+    columns, delete it, and delete a user who owns Stage 12A rows so the
+    cascades run. Head may not give any table the parent revision writes a
+    new required column without a server default.
     """
 
     database_url = _disposable_url()
@@ -395,25 +584,66 @@ def test_stage_12a_revision_keeps_the_previous_revision_loadable() -> None:
 
     try:
         command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
-        previous = _column_nullability(engine)
-
+        parent = sa.MetaData()
+        parent.reflect(engine)
         command.upgrade(config, "head")
-        current = _column_nullability(engine)
+        head = sa.MetaData()
+        head.reflect(engine)
+        parent_tables = [
+            table for table in parent.sorted_tables if table.name != "alembic_version"
+        ]
 
-        missing = sorted(
-            f"{table_name}.{column_name}"
-            for table_name, columns in previous.items()
-            for column_name in columns
-            if column_name not in current.get(table_name, {})
+        dropped_columns = sorted(
+            f"{table.name}.{column.name}"
+            for table in parent_tables
+            for column in table.columns
+            if table.name not in head.tables
+            or column.name not in head.tables[table.name].columns
         )
-        newly_required = sorted(
-            f"{table_name}.{column_name}"
-            for table_name, columns in previous.items()
-            for column_name, nullable in columns.items()
-            if nullable and current.get(table_name, {}).get(column_name) is False
-        )
-        assert missing == []
-        assert newly_required == []
+        assert dropped_columns == []
+        tables_with_new_required_columns = {
+            table.name: sorted(_new_required_columns(table, head.tables[table.name]))
+            for table in parent_tables
+            if _new_required_columns(table, head.tables[table.name])
+        }
+        assert set(tables_with_new_required_columns) <= (
+            PARENT_REVISION_READ_ONLY_TABLES
+        ), tables_with_new_required_columns
+
+        sequence = itertools.count()
+        with engine.connect() as connection:
+            transaction = connection.begin()
+            try:
+                stored_rows: dict[str, dict] = {}
+                for table in parent_tables:
+                    head_table = (
+                        head.tables[table.name]
+                        if table.name in PARENT_REVISION_READ_ONLY_TABLES
+                        else None
+                    )
+                    stored_rows[table.name] = _insert_and_read_back(
+                        connection,
+                        table,
+                        _row_values(
+                            table, stored_rows, sequence, head_table=head_table
+                        ),
+                        insert_table=head_table,
+                    )
+                    _rewrite_mapped_columns(connection, table, stored_rows[table.name])
+
+                _assert_user_deletion_cascades(
+                    connection, parent, head, stored_rows, sequence
+                )
+
+                for table in reversed(parent_tables):
+                    result = connection.execute(
+                        table.delete().where(
+                            _primary_key_clause(table, stored_rows[table.name])
+                        )
+                    )
+                    assert result.rowcount == 1, table.name
+            finally:
+                transaction.rollback()
     finally:
         command.upgrade(config, "head")
         engine.dispose()
