@@ -391,7 +391,7 @@ def main() -> None:
         metric_location=args.metric_location,
         access_token=os.environ["GOOGLE_OAUTH_ACCESS_TOKEN"],
     )
-    print(
+    print(  # noqa: T201  # the command reports the verified ingestion
         "Verified collector ingestion "
         f"(verification_id={probe.verification_id}, trace_id={probe.trace_id})"
     )

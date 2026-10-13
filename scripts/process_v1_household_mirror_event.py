@@ -230,7 +230,7 @@ def main(
             if isinstance(error, safe_types)
             else "household create-event processing failed"
         )
-        print(
+        print(  # noqa: T201  # the command's JSON outcome is its output
             json.dumps(
                 {
                     "outcome": "error",
@@ -256,7 +256,7 @@ def main(
         )
     except Exception:  # noqa: BLE001  # outcome logging must not change the command result
         pass
-    print(
+    print(  # noqa: T201  # the command's JSON outcome is its output
         json.dumps(
             {
                 "outcome": "ok",
