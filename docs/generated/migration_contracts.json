@@ -772,7 +772,8 @@
             "result.item.first_name",
             "result.item.last_name",
             "result.item.email",
-            "result.item.created_at"
+            "result.item.created_at",
+            "result.item.account_created"
           ]
         },
         {
@@ -789,7 +790,8 @@
             "result.item.id",
             "result.item.primary_country",
             "result.item.first_name",
-            "result.item.last_name"
+            "result.item.last_name",
+            "result.item.account_created"
           ]
         },
         {

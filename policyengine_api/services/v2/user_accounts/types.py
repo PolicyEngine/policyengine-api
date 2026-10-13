@@ -102,6 +102,8 @@ class AccountRead:
     last_name: str | None
     email: str | None
     created_at: datetime
+    # True only in the response to the request that provisioned the account.
+    account_created: bool
 
 
 @dataclass(frozen=True)

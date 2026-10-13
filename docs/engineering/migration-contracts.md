@@ -141,8 +141,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 
 | Method | Path | Status | Route group | Required headers | Stable response fields |
 | --- | --- | ---: | --- | --- | --- |
-| `GET` | `/v2/me?country_id=us` | 200 | `user_profile` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.primary_country`, `result.item.first_name`, `result.item.last_name`, `result.item.email`, `result.item.created_at` |
-| `PATCH` | `/v2/me?country_id=us` | 200 | `user_profile` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.primary_country`, `result.item.first_name`, `result.item.last_name` |
+| `GET` | `/v2/me?country_id=us` | 200 | `user_profile` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.primary_country`, `result.item.first_name`, `result.item.last_name`, `result.item.email`, `result.item.created_at`, `result.item.account_created` |
+| `PATCH` | `/v2/me?country_id=us` | 200 | `user_profile` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.primary_country`, `result.item.first_name`, `result.item.last_name`, `result.item.account_created` |
 | `GET` | `/v2/me/export?country_id=us` | 200 | `user_profile` | `Authorization` | `status`, `message`, `result.user`, `result.policies`, `result.households`, `result.simulations`, `result.reports` |
 | `POST` | `/v2/me/imports?country_id=us` | 200 | `user_profile` | `Authorization` | `status`, `message`, `result.id_map`, `result.skipped` |
 | `DELETE` | `/v2/me?country_id=us` | 204 | `user_profile` | `Authorization` |  |

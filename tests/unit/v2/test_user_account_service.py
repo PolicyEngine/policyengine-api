@@ -140,9 +140,33 @@ def test_first_call_provisions_once_and_later_calls_reuse_the_user(store) -> Non
 
     assert first.id == second.id != other.id
     assert first.primary_country == second.primary_country == "uk"
+    assert (first.account_created, second.account_created) == (True, False)
+    assert other.account_created is True
     with store.sessions() as session:
         assert len(session.exec(select(User)).all()) == 2
         assert len(session.exec(select(UserIdentity)).all()) == 2
+
+
+def test_account_created_follows_whichever_account_route_provisions(store) -> None:
+    accounts, *_ = _services(store)
+
+    patched_first = accounts.update_account(
+        principal=ALICE,
+        country_id="us",
+        account_input=AccountUpdateInput(first_name="Ada"),
+    )
+    patched_again = accounts.update_account(
+        principal=ALICE,
+        country_id="us",
+        account_input=AccountUpdateInput(last_name="Lovelace"),
+    )
+    read_after_patch = accounts.get_account(principal=ALICE, country_id="us")
+    exported_first = accounts.export_account(principal=BOB, country_id="us")
+
+    assert patched_first.account_created is True
+    assert patched_again.account_created is False
+    assert read_after_patch.account_created is False
+    assert exported_first.user.account_created is True
 
 
 def test_concurrent_first_calls_converge_on_one_user(store, monkeypatch) -> None:

@@ -132,7 +132,7 @@ class V2AccountService:
             user = require_account(
                 read_account_user(session, owner.user_id), user_id=owner.user_id
             )
-            return account_read(user, email=owner.email)
+            return account_read(user, owner=owner)
 
     def update_account(
         self,
@@ -152,7 +152,7 @@ class V2AccountService:
                 update_account_user(
                     session, user, account_update_values(account_input)
                 ),
-                email=owner.email,
+                owner=owner,
             )
 
     def export_account(
@@ -166,7 +166,7 @@ class V2AccountService:
                 read_account_user(session, owner.user_id), user_id=owner.user_id
             )
             return AccountExport(
-                user=account_read(user, email=owner.email),
+                user=account_read(user, owner=owner),
                 policies=read_all_user_policies(session, user_id=owner.user_id),
                 households=read_all_user_households(session, user_id=owner.user_id),
                 simulations=read_all_user_simulations(session, user_id=owner.user_id),
