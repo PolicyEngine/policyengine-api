@@ -118,9 +118,9 @@ def main() -> None:
         raise SystemExit(msg)
     selection = validate_installed_worker(json.load(sys.stdin), sys.argv[1])
     if selection is None:
-        print("The installed legacy bundle and registered worker agree")
+        print("The installed legacy bundle and registered worker agree")  # noqa: T201  # the command reports its result on stdout
     else:
-        print("The installed bundle and registered worker capability agree")
+        print("The installed bundle and registered worker capability agree")  # noqa: T201  # the command reports its result on stdout
 
 
 if __name__ == "__main__":
