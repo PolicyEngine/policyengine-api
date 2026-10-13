@@ -1,0 +1,1 @@
+Enabled ruff's security, logging and debugging rules (S, T20, LOG, G, DTZ, ERA, TD, FIX, EXE): type-narrowing asserts became explicit checks, command-line scripts keep their printed output with reasons, commented-out code and TODO markers are gone, and every deliberate exception carries a reasoned suppression; error responses and published schemas are unchanged.
