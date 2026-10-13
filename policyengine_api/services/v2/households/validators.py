@@ -190,7 +190,9 @@ def normalize_household_document(
     required_memberships = set(collections)
     for person in normalized["people"]:
         memberships = person["memberships"]
-        assert isinstance(memberships, dict)
+        if not isinstance(memberships, dict):
+            msg = "people record memberships must be an object"
+            raise TypeError(msg)
         if set(memberships) != required_memberships:
             msg = (
                 "people record memberships must identify every country-supported "

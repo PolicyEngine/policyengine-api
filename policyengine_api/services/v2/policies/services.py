@@ -215,7 +215,9 @@ def mirror_legacy_policy_in_session(
         running_policyengine_version=running_policyengine_version,
     )
     policy_json = snapshot.policy_json
-    assert isinstance(policy_json, dict)
+    if not isinstance(policy_json, dict):
+        msg = "legacy policy_json must be an object"
+        raise TypeError(msg)
     parameters = read_parameters_by_name(
         session,
         model_version_id=selected.model_version.id,
