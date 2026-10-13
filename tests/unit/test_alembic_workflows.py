@@ -10,8 +10,22 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 
 
+STACKED_PR_CONDITION = (
+    "${{ !github.event.pull_request.stack || "
+    "github.event.pull_request.stack.base.ref == github.event.pull_request.base.ref }}"
+)
+
+
 def _workflow(name: str) -> str:
     return (REPO / ".github" / "workflows" / name).read_text(encoding="utf-8")
+
+
+def _job_conditions(job_text: str) -> list[str]:
+    return [
+        line.strip().removeprefix("if:").strip()
+        for line in job_text.splitlines()
+        if line.strip().startswith("if:")
+    ]
 
 
 def _long_inline_run_blocks() -> list[str]:
@@ -74,9 +88,13 @@ def test_pr_always_runs_reusable_alembic_and_v2_integration_checks():
     assert "uses: ./.github/workflows/v2-integration-check.yml" in integration_job
     assert "CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}" in integration_job
     assert "needs:" not in alembic_job
-    assert "if:" not in alembic_job
     assert "needs:" not in integration_job
-    assert "if:" not in integration_job
+    # The only condition allowed is the stacked-PR one: these checks run on
+    # every PR that isn't stacked and on the lowest unmerged PR of a stack, and
+    # CI complete, which needs them, fails on the others
+    # (tests/unit/test_ci_complete_gate.py).
+    assert _job_conditions(alembic_job) == [STACKED_PR_CONDITION]
+    assert _job_conditions(integration_job) == [STACKED_PR_CONDITION]
 
 
 def test_push_requires_schema_and_v2_integration_checks_before_versioning():
