@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Annotated, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -51,6 +51,17 @@ if TYPE_CHECKING:
         NativeRouteDependencies,
         V2PolicyResourceService,
     )
+
+
+PolicyCreateQueryDependency = Annotated[
+    PolicyCreateQuery, Depends(query_dependency(PolicyCreateQuery))
+]
+PolicyDetailQueryDependency = Annotated[
+    PolicyDetailQuery, Depends(query_dependency(PolicyDetailQuery))
+]
+PolicyCollectionQueryDependency = Annotated[
+    PolicyCollectionQuery, Depends(query_dependency(PolicyCollectionQuery))
+]
 
 
 async def enforce_policy_request_size(request: Request) -> None:
@@ -109,9 +120,6 @@ def build_v2_policy_router(
 ) -> APIRouter:
     """Build native policy routes without opening a database connection."""
     router = APIRouter(prefix="/v2", responses=POLICY_ERROR_RESPONSES)
-    create_query = query_dependency(PolicyCreateQuery)
-    detail_query = query_dependency(PolicyDetailQuery)
-    collection_query = query_dependency(PolicyCollectionQuery)
     service_factory = _service_factory(dependencies)
 
     @router.post(
@@ -128,8 +136,8 @@ def build_v2_policy_router(
     )
     def create_policy(
         body: PolicyCreateRequest,
-        query: PolicyCreateQuery = Depends(create_query),
-        _size: None = Depends(enforce_policy_request_size),
+        query: PolicyCreateQueryDependency,
+        _size: Annotated[None, Depends(enforce_policy_request_size)],
     ) -> PolicyDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
             return v2_error_response(
@@ -163,7 +171,7 @@ def build_v2_policy_router(
     )
     def get_policy(
         policy_id: UUID,
-        query: PolicyDetailQuery = Depends(detail_query),
+        query: PolicyDetailQueryDependency,
     ) -> PolicyDetailResponse | JSONResponse:
         def read() -> PolicyDetailResponse:
             item = service_factory().get_policy(
@@ -182,7 +190,7 @@ def build_v2_policy_router(
         summary="List immutable policies",
     )
     def get_policies(
-        query: PolicyCollectionQuery = Depends(collection_query),
+        query: PolicyCollectionQueryDependency,
     ) -> PolicyPageResponse | JSONResponse:
         def read() -> PolicyPageResponse:
             page = service_factory().list_policies(

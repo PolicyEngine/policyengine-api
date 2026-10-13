@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Annotated, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -46,6 +46,17 @@ if TYPE_CHECKING:
         NativeRouteDependencies,
         V2HouseholdResourceService,
     )
+
+
+HouseholdCreateQueryDependency = Annotated[
+    HouseholdCreateQuery, Depends(query_dependency(HouseholdCreateQuery))
+]
+HouseholdDetailQueryDependency = Annotated[
+    HouseholdDetailQuery, Depends(query_dependency(HouseholdDetailQuery))
+]
+HouseholdCollectionQueryDependency = Annotated[
+    HouseholdCollectionQuery, Depends(query_dependency(HouseholdCollectionQuery))
+]
 
 
 async def enforce_household_request_size(request: Request) -> None:
@@ -104,9 +115,6 @@ def build_v2_household_router(
 ) -> APIRouter:
     """Build native household routes without opening a database connection."""
     router = APIRouter(prefix="/v2", responses=HOUSEHOLD_ERROR_RESPONSES)
-    create_query = query_dependency(HouseholdCreateQuery)
-    detail_query = query_dependency(HouseholdDetailQuery)
-    collection_query = query_dependency(HouseholdCollectionQuery)
     service_factory = _service_factory(dependencies)
 
     @router.post(
@@ -123,8 +131,8 @@ def build_v2_household_router(
     )
     def create_household(
         body: HouseholdCreateRequest,
-        query: HouseholdCreateQuery = Depends(create_query),
-        _size: None = Depends(enforce_household_request_size),
+        query: HouseholdCreateQueryDependency,
+        _size: Annotated[None, Depends(enforce_household_request_size)],
     ) -> HouseholdDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
             return v2_error_response(400, "Body country_id must match query country_id")
@@ -150,7 +158,7 @@ def build_v2_household_router(
     )
     def get_household(
         household_id: UUID,
-        query: HouseholdDetailQuery = Depends(detail_query),
+        query: HouseholdDetailQueryDependency,
     ) -> HouseholdDetailResponse | JSONResponse:
         def read() -> HouseholdDetailResponse:
             item = service_factory().get_household(
@@ -169,7 +177,7 @@ def build_v2_household_router(
         summary="List immutable households",
     )
     def get_households(
-        query: HouseholdCollectionQuery = Depends(collection_query),
+        query: HouseholdCollectionQueryDependency,
     ) -> HouseholdPageResponse | JSONResponse:
         def read() -> HouseholdPageResponse:
             page = service_factory().list_households(

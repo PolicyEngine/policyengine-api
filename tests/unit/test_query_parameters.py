@@ -41,6 +41,17 @@ class ExplicitListQuery(CountryQuery):
     ]
 
 
+ExplicitListQueryDependency = Annotated[
+    ExplicitListQuery, Depends(query_dependency(ExplicitListQuery))
+]
+PolicyCollectionQueryDependency = Annotated[
+    PolicyCollectionQuery, Depends(query_dependency(PolicyCollectionQuery))
+]
+HouseholdCollectionQueryDependency = Annotated[
+    HouseholdCollectionQuery, Depends(query_dependency(HouseholdCollectionQuery))
+]
+
+
 def test_canonical_required_defaults_and_normalization() -> None:
     parsed = parse_query_items(PolicyCollectionQuery, [("country_id", "US")])
 
@@ -139,11 +150,10 @@ def test_multidict_adapter_preserves_the_canonical_contract() -> None:
 
 def _test_client() -> TestClient:
     app = FastAPI()
-    dependency = query_dependency(ExplicitListQuery)
 
     @app.get("/resources")
     def resources(
-        query: ExplicitListQuery = Depends(dependency),
+        query: ExplicitListQueryDependency,
     ) -> dict[str, object]:
         return query.model_dump(mode="json")
 
@@ -187,11 +197,10 @@ def test_openapi_matches_composed_runtime_query_contract() -> None:
 
 def test_policy_collection_openapi_defaults_and_bounds() -> None:
     app = FastAPI()
-    dependency = query_dependency(PolicyCollectionQuery)
 
     @app.get("/policies")
     def policies(
-        query: PolicyCollectionQuery = Depends(dependency),
+        query: PolicyCollectionQueryDependency,
     ) -> dict[str, object]:
         return query.model_dump(mode="json")
 
@@ -339,11 +348,10 @@ def test_household_query_models_reject_unknown_and_duplicate_scalars(
 
 def test_household_collection_openapi_matches_runtime_contract() -> None:
     app = FastAPI()
-    dependency = query_dependency(HouseholdCollectionQuery)
 
     @app.get("/households")
     def households(
-        query: HouseholdCollectionQuery = Depends(dependency),
+        query: HouseholdCollectionQueryDependency,
     ) -> dict[str, object]:
         return query.model_dump(mode="json")
 
