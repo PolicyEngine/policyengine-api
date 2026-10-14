@@ -27,8 +27,8 @@ class RegistryCapability:
 
     def get_spm_capability(
         self,
-        country: str,
-        model_version: str | None,
+        country: str,  # noqa: ARG002  # implements SPMCapabilitySource.get_spm_capability
+        model_version: str | None,  # noqa: ARG002  # implements SPMCapabilitySource.get_spm_capability
         *,
         policyengine_version: str | None,
     ) -> object:

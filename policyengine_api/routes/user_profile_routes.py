@@ -68,7 +68,7 @@ def set_user_profile(country_id: str) -> Response:
 
 @user_profile_bp.route("/<country_id>/user-profile", methods=["GET"])
 @validate_country
-def get_user_profile(country_id: str) -> Response:
+def get_user_profile(country_id: str) -> Response:  # noqa: ARG001  # Flask passes the <country_id> URL variable by keyword
     """Return a user profile looked up by ``auth0_id`` or, failing that, ``user_id``.
 
     The Auth0 ID is included only when the caller looked the profile up by it.
@@ -114,7 +114,7 @@ def get_user_profile(country_id: str) -> Response:
 
 @user_profile_bp.route("/<country_id>/user-profile", methods=["PUT"])
 @validate_country
-def update_user_profile(country_id: str) -> Response:
+def update_user_profile(country_id: str) -> Response:  # noqa: ARG001  # Flask passes the <country_id> URL variable by keyword
     """Update the username, primary country or start date of profile ``user_id``.
 
     The Auth0 ID cannot be changed: an ``auth0_id`` in the payload is ignored.

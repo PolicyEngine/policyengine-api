@@ -134,7 +134,7 @@ def _inline_list(value: str) -> tuple[str, ...]:
     return tuple(_unquote(item) for item in inner.split(",") if item.strip())
 
 
-def _parse_job(job_id: str, lines: list[str], job_indent: int) -> JobBlock:
+def _parse_job(job_id: str, lines: list[str]) -> JobBlock:
     name = ""
     uses = ""
     step_uses: list[str] = []
@@ -283,12 +283,12 @@ def parse_jobs(text: str) -> tuple[dict[str, JobBlock], list[str]]:
         match = re.match(rf"^ {{{job_indent}}}([A-Za-z0-9_-]+):\s*$", line)
         if match and _indent(line) == job_indent:
             if current:
-                jobs[current] = _parse_job(current, current_lines, job_indent)
+                jobs[current] = _parse_job(current, current_lines)
             current, current_lines = match.group(1), []
         elif line.strip() and _indent(line) == job_indent:
             problems.append(f"unexpected line at job level: {line.strip()!r}")
         elif current:
             current_lines.append(line)
     if current:
-        jobs[current] = _parse_job(current, current_lines, job_indent)
+        jobs[current] = _parse_job(current, current_lines)
     return jobs, problems

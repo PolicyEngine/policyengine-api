@@ -372,7 +372,7 @@ RESOLVERS: dict[Kind, Callable[[Rule, Path], list[Violation]]] = {
     Kind.WORKFLOW_JOB: _resolve_workflow_job,
     Kind.DOCS_GUARD: _resolve_file_field("doc"),
     Kind.LLM_REVIEW: _resolve_file_field("prompt"),
-    Kind.NONE: lambda rule, root: [],
+    Kind.NONE: lambda _rule, _root: [],
 }
 
 
