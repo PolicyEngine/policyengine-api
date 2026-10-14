@@ -8,7 +8,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from scripts.rules.workflows import parse_jobs
+from scripts.rules.workflows import JobBlock, RunBlock, parse_jobs
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -81,6 +81,161 @@ jobs:
     def test_anchors_are_reported(self) -> None:
         _, problems = parse_jobs("jobs:\n  a: &base\n    steps: []\n")
         self.assertTrue(problems)
+
+
+SYNTHETIC_WORKFLOW = """
+name: Synthetic
+on: push
+jobs:
+  test:
+    name: "Quoted name"
+    strategy:
+      matrix:
+        project: [a, "b", 'c']
+        python:
+          - "3.11"
+          - 3.12
+
+          - '3.13'
+        include:
+          - project: x
+    steps:
+      - name: First
+        run: >
+          folded one
+          folded two
+      -   uses: actions/checkout@v4
+      - run: echo a && echo b
+      - "just a string"
+      - name: Third
+        run: |
+          echo "a; b"
+
+          echo ${{ x || y }}
+      - name: Fourth
+        uses: org/action@v1
+        with:
+          - name: not a step
+  reusable:
+    uses: org/repo/.github/workflows/x.yml@main
+  other:
+    steps:
+    - name: Unindented list
+      run: make test
+    - run: |
+        multi
+        line
+      name: Named after run
+permissions: {}
+"""
+
+
+class JobParsingTest(unittest.TestCase):
+    """Pins every field the reader extracts from a job, quirks included."""
+
+    def setUp(self) -> None:
+        self.jobs, self.problems = parse_jobs(SYNTHETIC_WORKFLOW)
+
+    def test_jobs_end_at_the_next_top_level_key(self) -> None:
+        self.assertEqual(self.problems, [])
+        self.assertEqual(list(self.jobs), ["test", "reusable", "other"])
+
+    def test_job_with_matrix_and_steps(self) -> None:
+        self.assertEqual(
+            self.jobs["test"],
+            JobBlock(
+                id="test",
+                name="Quoted name",
+                run_text=(
+                    'folded one\nfolded two\necho a && echo b\necho "a; b"\n\n'
+                    "echo ${{ x || y }}"
+                ),
+                uses="",
+                step_names=("First", "Third", "Fourth", "not a step"),
+                step_uses=("actions/checkout@v4", "org/action@v1"),
+                # A blank line ends a block-style matrix list.
+                matrix={
+                    "project": ("a", "b", "c"),
+                    "python": ("3.11", "3.12"),
+                    "include": (),
+                },
+                run_blocks=(
+                    RunBlock(
+                        step="First",
+                        code_lines=2,
+                        chained=False,
+                        text="folded one\nfolded two",
+                    ),
+                    RunBlock(
+                        step="step 3",
+                        code_lines=1,
+                        chained=True,
+                        text="echo a && echo b",
+                    ),
+                    RunBlock(
+                        step="Third",
+                        code_lines=2,
+                        chained=False,
+                        text='echo "a; b"\n\necho ${{ x || y }}',
+                    ),
+                ),
+            ),
+        )
+
+    def test_reusable_workflow_job(self) -> None:
+        self.assertEqual(
+            self.jobs["reusable"],
+            JobBlock(
+                id="reusable",
+                name="reusable",
+                run_text="",
+                uses="org/repo/.github/workflows/x.yml@main",
+                step_names=(),
+            ),
+        )
+
+    def test_steps_listed_at_the_key_indent(self) -> None:
+        self.assertEqual(
+            self.jobs["other"],
+            JobBlock(
+                id="other",
+                name="other",
+                run_text="make test\nmulti\nline",
+                uses="",
+                step_names=("Unindented list", "Named after run"),
+                run_blocks=(
+                    RunBlock(
+                        step="Unindented list",
+                        code_lines=1,
+                        chained=False,
+                        text="make test",
+                    ),
+                    RunBlock(
+                        step="Named after run",
+                        code_lines=2,
+                        chained=False,
+                        text="multi\nline",
+                    ),
+                ),
+            ),
+        )
+
+    def test_flow_style_jobs_are_reported(self) -> None:
+        self.assertEqual(
+            parse_jobs("jobs: {a: 1}\n"),
+            ({}, ["flow-style 'jobs:' mapping is not supported"]),
+        )
+
+    def test_workflow_without_jobs(self) -> None:
+        self.assertEqual(parse_jobs("name: x\n"), ({}, []))
+
+    def test_stray_job_level_line_is_reported(self) -> None:
+        jobs, problems = parse_jobs(
+            "jobs:\n  a:\n    steps: []\n  - stray\n  b:\n    name: B\n"
+        )
+        self.assertEqual(list(jobs), ["a", "b"])
+        self.assertEqual(jobs["b"].name, "B")
+        self.assertEqual(problems, ["unexpected line at job level: '- stray'"])
 
 
 if __name__ == "__main__":
