@@ -52,6 +52,31 @@ def _service_factory(
     return _default_v2_user_policy_service_factory
 
 
+def _create_user_policy(
+    service_factory: Callable[[], V2UserPolicyResourceService],
+    body: UserPolicyCreateRequest,
+    query: CountryQuery,
+    principal: AccountPrincipal,
+) -> UserPolicyDetailResponse | JSONResponse:
+    """Create an association once the body and query agree on its country."""
+    if body.country_id != query.country_id:
+        return v2_error_response(
+            400,
+            "Body country_id must match query country_id",
+        )
+
+    def create() -> UserPolicyDetailResponse:
+        item = service_factory().create_user_policy(
+            principal=principal,
+            association_input=body,
+        )
+        return UserPolicyDetailResponse(
+            result=UserPolicyDetailResult(item=UserPolicyItem.from_read(item))
+        )
+
+    return user_resource_operation(create)
+
+
 def build_v2_user_policy_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
@@ -89,22 +114,7 @@ def build_v2_user_policy_router(
         query: CountryQueryDependency,
         principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserPolicyDetailResponse | JSONResponse:
-        if body.country_id != query.country_id:
-            return v2_error_response(
-                400,
-                "Body country_id must match query country_id",
-            )
-
-        def create() -> UserPolicyDetailResponse:
-            item = service_factory().create_user_policy(
-                principal=principal,
-                association_input=body,
-            )
-            return UserPolicyDetailResponse(
-                result=UserPolicyDetailResult(item=UserPolicyItem.from_read(item))
-            )
-
-        return user_resource_operation(create)
+        return _create_user_policy(service_factory, body, query, principal)
 
     @router.get(
         "/user-policies/{association_id}",

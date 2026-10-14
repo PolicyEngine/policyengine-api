@@ -65,6 +65,28 @@ def _service_factory(
     return _default_v2_user_household_service_factory
 
 
+def _create_user_household(
+    service_factory: Callable[[], V2UserHouseholdResourceService],
+    body: UserHouseholdCreateRequest,
+    query: UserHouseholdCreateQuery,
+    principal: AccountPrincipal,
+) -> UserHouseholdDetailResponse | JSONResponse:
+    """Create an association once the body and query agree on its country."""
+    if body.country_id != query.country_id:
+        return v2_error_response(400, "Body country_id must match query country_id")
+
+    def create() -> UserHouseholdDetailResponse:
+        item = service_factory().create_user_household(
+            principal=principal,
+            association_input=body,
+        )
+        return UserHouseholdDetailResponse(
+            result=UserHouseholdDetailResult(item=UserHouseholdItem.from_read(item))
+        )
+
+    return user_resource_operation(create)
+
+
 def build_v2_user_household_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
@@ -101,19 +123,7 @@ def build_v2_user_household_router(
         query: UserHouseholdCreateQueryDependency,
         principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserHouseholdDetailResponse | JSONResponse:
-        if body.country_id != query.country_id:
-            return v2_error_response(400, "Body country_id must match query country_id")
-
-        def create() -> UserHouseholdDetailResponse:
-            item = service_factory().create_user_household(
-                principal=principal,
-                association_input=body,
-            )
-            return UserHouseholdDetailResponse(
-                result=UserHouseholdDetailResult(item=UserHouseholdItem.from_read(item))
-            )
-
-        return user_resource_operation(create)
+        return _create_user_household(service_factory, body, query, principal)
 
     @router.get(
         "/user-households/{association_id}",
