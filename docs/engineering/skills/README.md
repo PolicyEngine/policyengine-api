@@ -16,6 +16,8 @@ Current skills:
 - `ci-workflows.md`: one line of code per workflow `run:` block, tested
   workflow scripts, and shellcheck.
 - `github-prs.md`: PR workflow and migration PR handoff expectations.
+- `microdata-weights.md`: weights, values, labels and counts in simulation
+  microdata, and the guards that keep weights from being aggregated as values.
 - `migration_contracts.md`: API v2 migration route contracts, route-group
   metadata, generated migration artifacts, and quality guards.
 - `observability.md`: identifier ownership, HTTP and simulation transport,
