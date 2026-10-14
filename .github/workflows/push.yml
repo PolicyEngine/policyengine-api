@@ -30,6 +30,20 @@ jobs:
       - name: Format check with ruff
         run: ruff format --check .
 
+  quality-guards:
+    name: Quality guards
+    runs-on: ubuntu-latest
+    if: github.repository == 'PolicyEngine/policyengine-api'
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run quality guards
+        run: python scripts/run_quality_guards.py
+
   alembic-v1-check:
     name: Alembic v1 qualification
     if: github.repository == 'PolicyEngine/policyengine-api'

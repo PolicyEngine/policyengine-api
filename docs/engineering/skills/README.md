@@ -21,6 +21,8 @@ Current skills:
   isolation.
 - `repository-maintenance.md`: mandatory Makefile target and `.PHONY`
   maintenance rules.
+- `rules-registry.md`: how rules are registered in `rules/registry.toml`,
+  enforced, proven, and rendered into `docs/generated/rules.md`.
 - `testing.md`: focused test commands and dependency boundaries for migration
   work.
 - `v2-code-organization.md`: mandatory API v2 route, service, and database-access

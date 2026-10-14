@@ -112,10 +112,15 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          # The rules registry guard compares baselines with the base branch.
+          fetch-depth: 0
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Test the rules registry tool
+        run: python -m unittest discover -s scripts/rules/tests -t .
       - name: Run quality guards
         run: python scripts/run_quality_guards.py
 
