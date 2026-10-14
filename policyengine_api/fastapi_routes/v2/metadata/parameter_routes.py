@@ -114,7 +114,7 @@ def build_v2_metadata_parameter_router(
         country_id: str,
         policyengine_version: str | None = None,
         parameter_id: UUID | None = None,
-        current: bool = False,
+        current: bool = False,  # noqa: FBT001, FBT002  # FastAPI query parameter
         offset: Offset = 0,
         limit: Limit = 100,
     ) -> MetadataParameterValuePageResponse | JSONResponse:

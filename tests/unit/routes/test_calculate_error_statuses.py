@@ -35,7 +35,7 @@ class CrashingCountry(DummyCountry):
         raise RuntimeError(msg)
 
 
-def make_client(monkeypatch, country, add_missing=False):
+def make_client(monkeypatch, country, *, add_missing=False):
     monkeypatch.setattr(
         household_routes,
         "household_calculation_service",

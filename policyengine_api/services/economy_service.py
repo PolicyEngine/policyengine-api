@@ -1557,6 +1557,7 @@ class EconomyService:
         region: str,
         time_period: str,
         scope: Literal["macro", "household"] = "macro",
+        *,
         include_cliffs: bool = False,
         model_version: str | None = None,
         policyengine_version: str | None = None,
