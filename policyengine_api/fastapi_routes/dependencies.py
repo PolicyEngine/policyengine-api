@@ -16,7 +16,6 @@ from policyengine_api.readiness import is_ready
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from datetime import datetime
     from uuid import UUID
 
     from policyengine_api.json_types import JSONObject
@@ -46,6 +45,7 @@ if TYPE_CHECKING:
         MetadataParameterSummary,
         MetadataRegion,
         MetadataVariable,
+        ParameterValueFilter,
     )
     from policyengine_api.services.v2.policies.types import (
         NativePolicyCreation,
@@ -225,16 +225,14 @@ class V2MetadataResourceReader(Protocol):
         country_id: str,
         policyengine_version: str | None = None,
         *,
-        parameter_id: UUID | None = None,
-        current: bool = False,
+        value_filter: ParameterValueFilter | None = None,
         offset: int = 0,
         limit: int = 100,
-        now: datetime | None = None,
     ) -> MetadataPageResult[MetadataCanonicalParameterValue]:
         """Return canonical values, optionally for one parameter.
 
-        With ``current``, only values in effect on the UTC day of ``now`` (default:
-        the present) are returned.
+        With the filter's ``current``, only values in effect on the UTC day of its
+        ``now`` (default: the present) are returned.
         """
         ...
 
