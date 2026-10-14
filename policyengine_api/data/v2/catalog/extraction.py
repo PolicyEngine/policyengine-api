@@ -66,7 +66,7 @@ REQUIRED_DEPENDENCIES = (
 )
 CURRENT_LAW_IDS = {"us": 2, "uk": 1}
 METADATA_TIME_PERIODS = {
-    "us": tuple(range(2035, 2021, -1)),
+    "us": tuple(range(2036, 2021, -1)),
     "uk": tuple(range(2024, 2031)),
 }
 PLACEHOLDER_VERSIONS = frozenset({"", "0", "0.0", "0.0.0", "unknown"})
