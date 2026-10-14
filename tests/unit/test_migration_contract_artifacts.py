@@ -144,3 +144,54 @@ def test_user_contracts_require_a_signed_in_or_signed_out_credential():
         ("Authorization", "PolicyEngine-Unauthenticated-User"): 1,
     }
     assert all("user_id=" not in request["path"] for request in user_requests)
+
+
+def _contract_request(path, status, fields, *, route_group="metadata"):
+    return {
+        "method": "GET",
+        "path": path,
+        "route_group": route_group,
+        "expected_status": status,
+        "stable_response_fields": fields,
+    }
+
+
+def test_workflow_guard_reports_each_request_problem_in_order():
+    payload = {
+        "route_groups": [{"name": "metadata"}],
+        "workflows": [
+            {
+                "name": "read",
+                "current_contract": "api_v1_compatible",
+                "future_owner_pr": "PR 9",
+                "requests": [
+                    _contract_request("/us/metadata", 200, ["result"]),
+                    _contract_request("/us/deleted", 204, []),
+                    _contract_request("/us/empty", 200, []),
+                    _contract_request(
+                        "us/no-slash", 201, ["result"], route_group="unknown"
+                    ),
+                    _contract_request("/us/teapot", 418, ["result"]),
+                    _contract_request("/us/metadata", 202, ["result"]),
+                ],
+            },
+            {
+                "name": "read",
+                "current_contract": "legacy",
+                "future_owner_pr": "",
+                "requests": [],
+            },
+        ],
+    }
+
+    assert migration_contracts._check_workflows(payload) == [
+        "duplicate workflow: 'read'",
+        "read GET /us/empty: stable_response_fields is required",
+        "read GET us/no-slash: unknown route_group 'unknown'",
+        "read GET us/no-slash: path must start with /",
+        "read GET /us/teapot: unexpected status 418",
+        "read: current_contract is not recognized",
+        "read: future_owner_pr is required",
+        "read: at least one request is required",
+        "duplicate contract request: 'GET /us/metadata'",
+    ]

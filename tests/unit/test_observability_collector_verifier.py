@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
 
 import grpc
@@ -215,3 +217,168 @@ def test_authority_rejects_non_https_or_hostless_endpoints(endpoint: str) -> Non
 
     with pytest.raises(ValueError, match="HTTPS URL"):
         verifier._authority(endpoint)
+
+
+class _JsonResponse:
+    def __init__(self, body: bytes):
+        self._body = io.BytesIO(body)
+
+    def __enter__(self):
+        return self._body
+
+    def __exit__(self, *_exc_info):
+        return False
+
+
+def test_get_json_sends_the_access_token_and_decodes_the_body(monkeypatch) -> None:
+    verifier = _load_verifier()
+    requests = []
+
+    def fake_urlopen(request, timeout):
+        requests.append((request.full_url, request.headers, timeout))
+        return _JsonResponse(b'{"traceId": "abc"}')
+
+    monkeypatch.setattr(verifier, "urlopen", fake_urlopen)
+
+    assert verifier._get_json("https://cloud.example/x", ACCESS_TOKEN) == {
+        "traceId": "abc"
+    }
+    assert requests == [
+        ("https://cloud.example/x", {"Authorization": f"Bearer {ACCESS_TOKEN}"}, 15)
+    ]
+
+
+def test_get_json_treats_not_found_as_missing(monkeypatch) -> None:
+    verifier = _load_verifier()
+
+    def fake_urlopen(request, timeout):
+        raise HTTPError(request.full_url, 404, "Not Found", None, io.BytesIO(b""))
+
+    monkeypatch.setattr(verifier, "urlopen", fake_urlopen)
+
+    assert verifier._get_json("https://cloud.example/x", ACCESS_TOKEN) is None
+
+
+def test_get_json_reports_other_http_errors_with_their_body(monkeypatch) -> None:
+    verifier = _load_verifier()
+
+    def fake_urlopen(request, timeout):
+        raise HTTPError(
+            request.full_url, 403, "Forbidden", None, io.BytesIO(b"permission denied")
+        )
+
+    monkeypatch.setattr(verifier, "urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError) as error:
+        verifier._get_json("https://cloud.example/x", ACCESS_TOKEN)
+
+    assert str(error.value) == (
+        "Google Cloud verification request failed (403): permission denied"
+    )
+    assert isinstance(error.value.__cause__, HTTPError)
+
+
+class _FakeClock:
+    """Monotonic time that only moves when the code under test sleeps."""
+
+    def __init__(self) -> None:
+        self.now = 100.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
+def _stub_delivery_checks(monkeypatch, verifier, *, trace_results, metric_results):
+    calls: dict[str, list[tuple]] = {"trace": [], "metric": []}
+    trace_answers = iter(trace_results)
+    metric_answers = iter(metric_results)
+
+    def trace_available(*args):
+        calls["trace"].append(args)
+        return next(trace_answers)
+
+    def metric_available(*args):
+        calls["metric"].append(args)
+        return next(metric_answers)
+
+    monkeypatch.setattr(verifier, "_trace_available", trace_available)
+    monkeypatch.setattr(verifier, "_metric_available", metric_available)
+    clock = _FakeClock()
+    monkeypatch.setattr(verifier, "time", clock)
+    return calls, clock
+
+
+def _wait_for_test_delivery(verifier, *, timeout_seconds: float) -> None:
+    verifier._wait_for_delivery(
+        project_id="observability-project",
+        trace_id="trace-123",
+        verification_id="collector-verify-123",
+        metric_location="us-central1",
+        access_token=ACCESS_TOKEN,
+        started_at=1_700_000_000.0,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+TRACE_CHECK = ("observability-project", "trace-123", ACCESS_TOKEN)
+METRIC_CHECK = (
+    "observability-project",
+    "collector-verify-123",
+    "us-central1",
+    ACCESS_TOKEN,
+    1_700_000_000.0,
+)
+
+
+def test_delivery_wait_returns_once_both_signals_are_stored(monkeypatch) -> None:
+    verifier = _load_verifier()
+    calls, clock = _stub_delivery_checks(
+        monkeypatch,
+        verifier,
+        trace_results=[True],
+        metric_results=[False, False, True],
+    )
+
+    _wait_for_test_delivery(verifier, timeout_seconds=12.0)
+
+    assert calls == {"trace": [TRACE_CHECK], "metric": [METRIC_CHECK] * 3}
+    assert clock.sleeps == [5.0, 5.0]
+
+
+def test_delivery_wait_names_the_signals_still_missing_at_the_deadline(
+    monkeypatch,
+) -> None:
+    verifier = _load_verifier()
+    calls, clock = _stub_delivery_checks(
+        monkeypatch,
+        verifier,
+        trace_results=[False, False, False, True],
+        metric_results=[False] * 4,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"^collector verification data was not stored: metric$",
+    ):
+        _wait_for_test_delivery(verifier, timeout_seconds=12.0)
+
+    assert calls == {"trace": [TRACE_CHECK] * 4, "metric": [METRIC_CHECK] * 4}
+    assert clock.sleeps == [5.0, 5.0, 2.0]
+
+
+def test_delivery_wait_lists_both_missing_signals(monkeypatch) -> None:
+    verifier = _load_verifier()
+    _stub_delivery_checks(
+        monkeypatch, verifier, trace_results=[False], metric_results=[False]
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"^collector verification data was not stored: trace, metric$",
+    ):
+        _wait_for_test_delivery(verifier, timeout_seconds=0.0)
