@@ -10,7 +10,11 @@ from policyengine_api.libs.simulation_entrypoint import (
     SimulationRunProgress,
 )
 from policyengine_api.runtime_cache.core import CacheCoordinationError
-from policyengine_api.runtime_cache.reform_impacts import ReformImpactStartClaim
+from policyengine_api.runtime_cache.reform_impacts import (
+    ReformImpactIdentity,
+    ReformImpactScope,
+    ReformImpactStartClaim,
+)
 from policyengine_api.services.budget_window_cache import BudgetWindowCacheState
 from policyengine_api.services.economy_service import (
     BUDGET_WINDOW_MAX_END_YEAR,
@@ -437,8 +441,8 @@ class TestEconomyService:
             mock_reform_impacts_service.claim_reform_impact_start.assert_called_once()
             assert (
                 mock_reform_impacts_service.claim_reform_impact_start.call_args.kwargs[
-                    "options_hash"
-                ]
+                    "identity"
+                ].options_hash
                 == MOCK_OPTIONS_HASH
             )
             mock_reform_impacts_service.release_reform_impact_start.assert_called_once_with(
@@ -450,7 +454,7 @@ class TestEconomyService:
             )
             assert write_values["options"] == resolved_options(MOCK_OPTIONS)
             assert write_values["reform_impact_json"] == {}
-            assert write_values["observability_id"] == MOCK_OBSERVABILITY_ID
+            assert write_values["execution"].observability_id == MOCK_OBSERVABILITY_ID
 
         @pytest.mark.usefixtures(
             "mock_country_package_versions",
@@ -896,17 +900,21 @@ class TestEconomyService:
             economy_service.get_economic_impact(**base_params)
 
             hash_prefix_lookup(mock_reform_impacts_service).assert_called_once_with(
-                MOCK_COUNTRY_ID,
-                MOCK_POLICY_ID,
-                MOCK_BASELINE_POLICY_ID,
-                MOCK_REGION,
-                MOCK_DATASET,
-                MOCK_TIME_PERIOD,
-                MOCK_LOOKUP_OPTIONS_HASH,
+                ReformImpactIdentity(
+                    scope=ReformImpactScope(
+                        country_id=MOCK_COUNTRY_ID,
+                        reform_policy_id=MOCK_POLICY_ID,
+                        baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                        region=MOCK_REGION,
+                        dataset=MOCK_DATASET,
+                        time_period=MOCK_TIME_PERIOD,
+                    ),
+                    api_version=cache_version,
+                    options_hash=MOCK_LOOKUP_OPTIONS_HASH,
+                ),
                 economy_service._build_options_hash_lookup_pattern(
                     MOCK_LOOKUP_OPTIONS_HASH
                 ),
-                cache_version,
             )
 
         @pytest.mark.usefixtures(
@@ -928,15 +936,17 @@ class TestEconomyService:
 
             economy_service.get_economic_impact(**base_params)
 
-            call_args = hash_prefix_lookup(mock_reform_impacts_service).call_args.args
-            assert call_args[4] == MOCK_DATASET
-            assert call_args[6] == MOCK_LOOKUP_OPTIONS_HASH
-            assert call_args[7] == economy_service._build_options_hash_lookup_pattern(
+            identity, lookup_pattern = hash_prefix_lookup(
+                mock_reform_impacts_service
+            ).call_args.args
+            assert identity.scope.dataset == MOCK_DATASET
+            assert identity.options_hash == MOCK_LOOKUP_OPTIONS_HASH
+            assert lookup_pattern == economy_service._build_options_hash_lookup_pattern(
                 MOCK_LOOKUP_OPTIONS_HASH
             )
-            assert "data\\_version" not in call_args[7]
-            assert "policyengine\\_version=3.4.0" in call_args[7]
-            assert "runtime_app_name" not in call_args[7]
+            assert "data\\_version" not in lookup_pattern
+            assert "policyengine\\_version=3.4.0" in lookup_pattern
+            assert "runtime_app_name" not in lookup_pattern
 
         @pytest.mark.usefixtures(
             "mock_country_package_versions",
@@ -1884,7 +1894,7 @@ class TestEconomyService:
 
             assert result.status == ImpactStatus.COMPUTING
             cache_key_kwargs = mock_budget_window_cache.build_key.call_args.kwargs
-            assert cache_key_kwargs["time_period"] == "budget_window:2026:3"
+            assert cache_key_kwargs["scope"].time_period == "budget_window:2026:3"
             assert cache_key_kwargs["api_version"] == cache_version
 
         def test__given_reordered_options__uses_same_budget_window_cache_identity(
@@ -1939,9 +1949,9 @@ class TestEconomyService:
             result = economy_service.get_budget_window_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.COMPUTING
-            assert mock_budget_window_cache.build_key.call_args.kwargs["region"] == (
-                "state/ca"
-            )
+            assert mock_budget_window_cache.build_key.call_args.kwargs[
+                "scope"
+            ].region == ("state/ca")
 
         def test__given_unexpected_batch_status__raises_value_error(
             self,
@@ -2009,28 +2019,27 @@ class TestEconomyService:
                 mock_reform_impacts_service
             ).return_value = expected_impacts
 
+            scope = ReformImpactScope(
+                country_id=MOCK_COUNTRY_ID,
+                reform_policy_id=MOCK_POLICY_ID,
+                baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                region=MOCK_REGION,
+                dataset=MOCK_DATASET,
+                time_period=MOCK_TIME_PERIOD,
+            )
+
             result = economy_service._get_previous_impacts(
-                MOCK_COUNTRY_ID,
-                MOCK_POLICY_ID,
-                MOCK_BASELINE_POLICY_ID,
-                MOCK_REGION,
-                MOCK_DATASET,
-                MOCK_TIME_PERIOD,
-                MOCK_OPTIONS_HASH,
-                MOCK_API_VERSION,
+                scope, options_hash=MOCK_OPTIONS_HASH, api_version=MOCK_API_VERSION
             )
 
             assert result == expected_impacts
             hash_prefix_lookup(mock_reform_impacts_service).assert_called_once_with(
-                MOCK_COUNTRY_ID,
-                MOCK_POLICY_ID,
-                MOCK_BASELINE_POLICY_ID,
-                MOCK_REGION,
-                MOCK_DATASET,
-                MOCK_TIME_PERIOD,
-                MOCK_OPTIONS_HASH,
+                ReformImpactIdentity(
+                    scope=scope,
+                    api_version=MOCK_API_VERSION,
+                    options_hash=MOCK_OPTIONS_HASH,
+                ),
                 economy_service._build_options_hash_lookup_pattern(MOCK_OPTIONS_HASH),
-                MOCK_API_VERSION,
             )
 
     class TestGetMostRecentImpact:

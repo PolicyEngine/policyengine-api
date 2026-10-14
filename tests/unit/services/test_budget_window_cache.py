@@ -8,6 +8,7 @@ from policyengine_api.runtime_cache.core import (
     encode_envelope,
 )
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
+from policyengine_api.runtime_cache.reform_impacts import ReformImpactScope
 from policyengine_api.services.budget_window_cache import (
     BUDGET_WINDOW_BATCH_TTL_SECONDS,
     BUDGET_WINDOW_CACHE_SCHEMA_VERSION,
@@ -67,25 +68,19 @@ def test_cache_state_rejects_malformed_documents(payload):
 def test_build_key_is_stable_for_request_identity():
     cache = BudgetWindowCache(client=FakeRedis())
 
-    first = cache.build_key(
+    scope = ReformImpactScope(
         country_id="us",
         reform_policy_id=123,
         baseline_policy_id=456,
         region="us",
         dataset="custom_dataset",
         time_period="budget_window:2026:10",
-        options_hash="[option=value]",
-        api_version="e1cache01",
+    )
+    first = cache.build_key(
+        scope, options_hash="[option=value]", api_version="e1cache01"
     )
     second = cache.build_key(
-        country_id="us",
-        reform_policy_id=123,
-        baseline_policy_id=456,
-        region="us",
-        dataset="custom_dataset",
-        time_period="budget_window:2026:10",
-        options_hash="[option=value]",
-        api_version="e1cache01",
+        scope, options_hash="[option=value]", api_version="e1cache01"
     )
 
     assert first == second
@@ -116,7 +111,18 @@ def test_previous_schema_cache_identity_is_not_read():
             {"status": "completed", "result": {"legacy": True}},
         ),
     )
-    current_key = cache.build_key(**identity)
+    current_key = cache.build_key(
+        ReformImpactScope(
+            country_id="us",
+            reform_policy_id=2,
+            baseline_policy_id=1,
+            region="us",
+            dataset="default",
+            time_period="budget_window:2026:2",
+        ),
+        options_hash="[spm=canonical]",
+        api_version="v1",
+    )
 
     assert current_key != old_key
     assert cache.get_state(current_key) is None
@@ -170,17 +176,20 @@ def test_spm_validation_failure_round_trips_for_only_its_selection(monkeypatch):
     backend = FakeRedis()
     cache = BudgetWindowCache(client=backend)
     error = {"code": "SPM_YEAR_UNAVAILABLE", "message": "No forecast for 2036"}
-    identity = {
-        "country_id": "us",
-        "reform_policy_id": 1,
-        "baseline_policy_id": 2,
-        "region": "us",
-        "dataset": "default",
-        "time_period": "budget_window:2035:2",
-        "api_version": "v1",
-    }
-    failed_key = cache.build_key(**identity, options_hash="canonical-selection-a")
-    other_key = cache.build_key(**identity, options_hash="canonical-selection-b")
+    scope = ReformImpactScope(
+        country_id="us",
+        reform_policy_id=1,
+        baseline_policy_id=2,
+        region="us",
+        dataset="default",
+        time_period="budget_window:2035:2",
+    )
+    failed_key = cache.build_key(
+        scope, options_hash="canonical-selection-a", api_version="v1"
+    )
+    other_key = cache.build_key(
+        scope, options_hash="canonical-selection-b", api_version="v1"
+    )
 
     assert cache.set_terminal_error(failed_key, error, "obs-1")
 

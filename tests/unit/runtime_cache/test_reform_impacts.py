@@ -15,6 +15,8 @@ from policyengine_api.runtime_cache.reform_impacts import (
     REFORM_IMPACT_START_CLAIM_TTL_SECONDS,
     CachedReformImpact,
     ReformImpactCache,
+    ReformImpactIdentity,
+    ReformImpactScope,
     reform_impact_id,
 )
 
@@ -50,20 +52,23 @@ def _impact(execution_id: str, options_hash: str, day: int) -> CachedReformImpac
     )
 
 
-def _claim_arguments(**changes):
-    values = {
-        "country_id": "us",
-        "reform_policy_id": 2,
-        "baseline_policy_id": 1,
-        "region": "us",
-        "dataset": "default",
-        "time_period": "2026",
-        "api_version": "v1",
-        "options_hash": "hash",
-        "target": "general",
+SCOPE = ReformImpactScope(
+    country_id="us",
+    reform_policy_id=2,
+    baseline_policy_id=1,
+    region="us",
+    dataset="default",
+    time_period="2026",
+)
+
+
+def _claim_arguments(*, target="general"):
+    return {
+        "identity": ReformImpactIdentity(
+            scope=SCOPE, api_version="v1", options_hash="hash"
+        ),
+        "target": target,
     }
-    values.update(changes)
-    return values
 
 
 def test_reform_impact_start_claim_is_atomic_exact_ttl_and_token_safe() -> None:
@@ -168,14 +173,9 @@ def test_reform_impact_indexes_are_bounded_expiring_and_query_compatible(
         "compatible",
     ]
     results = cache.matching(
-        country_id="us",
-        reform_policy_id=2,
-        baseline_policy_id=1,
-        region="us",
-        dataset="default",
-        time_period="2026",
-        api_version="v1",
-        options_hash="hash-compatible",
+        ReformImpactIdentity(
+            scope=SCOPE, api_version="v1", options_hash="hash-compatible"
+        ),
         options_hash_pattern="hash-%",
     )
     assert [value.execution_id for value in results] == [
@@ -241,15 +241,7 @@ def test_reform_impact_updates_and_deletes_only_matching_computing_values() -> N
     )
     assert completed is not None
     assert completed.status == "ok"
-    cache.delete_matching_computing(
-        country_id="us",
-        reform_policy_id=2,
-        baseline_policy_id=1,
-        region="us",
-        dataset="default",
-        time_period="2026",
-        options_hash="delete-hash",
-    )
+    cache.delete_matching_computing(SCOPE, options_hash="delete-hash")
     assert cache.get_by_execution_id("delete") is None
     assert cache.get_by_execution_id("retain") is not None
 

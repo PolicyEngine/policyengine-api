@@ -14,14 +14,19 @@ from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import (
     CachedReformImpact,
     ReformImpactCache,
+    ReformImpactIdentity,
+    ReformImpactScope,
     reform_impact_id,
 )
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
-from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from policyengine_api.services.reform_impacts_service import (
+    ReformImpactExecution,
+    ReformImpactsService,
+)
 
 NAMESPACE = CacheNamespace("test", "api")
 OBSERVABILITY_ID = "00000000-0000-4000-8000-000000000001"
-CLAIM_TOKEN = "owner"  # noqa: S105  # an opaque claim id, not a secret
+CLAIM_TOKEN = "owner"
 SCOPE = {
     "country_id": "us",
     "reform_policy_id": 22,
@@ -42,14 +47,20 @@ def _service() -> ReformImpactsService:
     return ReformImpactsService(_cache())
 
 
-def _claim_arguments(**changes: object) -> dict:
-    return {
-        **SCOPE,
-        "api_version": "v7",
-        "options_hash": "[region=state/ca&dataset=default]",
-        "target": "general",
-        **changes,
-    }
+OPTIONS_HASH = "[region=state/ca&dataset=default]"
+
+
+def _identity(**changes: object) -> ReformImpactIdentity:
+    values = {**SCOPE, "api_version": "v7", "options_hash": OPTIONS_HASH, **changes}
+    return ReformImpactIdentity(
+        scope=ReformImpactScope(**{field: values[field] for field in SCOPE}),
+        api_version=values["api_version"],
+        options_hash=values["options_hash"],
+    )
+
+
+def _claim_arguments(*, target: str = "general", **changes: object) -> dict:
+    return {"identity": _identity(**changes), "target": target}
 
 
 def test_start_claim_key_is_stable():
@@ -87,8 +98,8 @@ def test_budget_window_key_is_stable():
     cache = BudgetWindowCache(InMemoryCacheBackend(), NAMESPACE)
 
     key = cache.build_key(
-        **SCOPE,
-        options_hash="[region=state/ca&dataset=default]",
+        ReformImpactScope(**SCOPE),
+        options_hash=OPTIONS_HASH,
         api_version="v7",
     )
 
@@ -130,7 +141,7 @@ def _stored_impact(**changes: object) -> CachedReformImpact:
         "reform_impact_json": {},
         "status": "computing",
         "message": None,
-        "start_time": datetime(2026, 1, 2, 3, 4, 5),  # noqa: DTZ001  # reform_impact start_time is a naive column
+        "start_time": datetime(2026, 1, 2, 3, 4, 5),
         "end_time": None,
         "execution_id": "job-1",
         "error_code": None,
@@ -144,20 +155,15 @@ def test_set_reform_impact_stores_every_field_from_its_arguments():
     service = _service()
 
     stored = service.set_reform_impact(
-        country_id="us",
-        policy_id=22,
-        baseline_policy_id=11,
-        region="state/ca",
-        dataset="default",
-        time_period="2026",
+        _identity(),
+        ReformImpactExecution(
+            execution_id="job-1",
+            start_time=datetime(2026, 1, 2, 3, 4, 5),
+            observability_id=OBSERVABILITY_ID,
+        ),
         options={"region": "state/ca"},
-        options_hash="[region=state/ca&dataset=default]",
         status="computing",
-        api_version="v7",
         reform_impact_json={},
-        start_time=datetime(2026, 1, 2, 3, 4, 5),  # noqa: DTZ001  # reform_impact start_time is a naive column
-        execution_id="job-1",
-        observability_id=OBSERVABILITY_ID,
     )
 
     assert stored == _stored_impact()
@@ -168,36 +174,12 @@ def test_lookups_select_by_every_scope_field():
     service = _service()
     service._cache.set(_stored_impact())
 
-    exact = service.get_all_reform_impacts(
-        "us",
-        22,
-        11,
-        "state/ca",
-        "default",
-        "2026",
-        "[region=state/ca&dataset=default]",
-        "v7",
-    )
+    exact = service.get_all_reform_impacts(_identity())
     by_prefix = service.get_all_reform_impacts_by_options_hash_prefix(
-        "us",
-        22,
-        11,
-        "state/ca",
-        "default",
-        "2026",
-        "[region=state/ca]",
-        "[region=state/ca&%",
-        "v7",
+        _identity(options_hash="[region=state/ca]"), "[region=state/ca&%"
     )
     swapped_policies = service.get_all_reform_impacts(
-        "us",
-        11,
-        22,
-        "state/ca",
-        "default",
-        "2026",
-        "[region=state/ca&dataset=default]",
-        "v7",
+        _identity(reform_policy_id=11, baseline_policy_id=22)
     )
 
     assert exact == [_stored_impact()]
@@ -211,26 +193,11 @@ def test_transitions_update_only_the_execution_record():
     service._cache.set(_stored_impact(execution_id="job-2", options_hash="[two]"))
 
     completed = service.set_complete_reform_impact(
-        "uk",
-        1,
-        2,
-        "uk",
-        "ignored",
-        "1999",
-        "[ignored]",
-        {"budget": 1},
-        "job-1",
+        "job-1", reform_impact_json={"budget": 1}
     )
     failed = service.set_error_reform_impact(
-        "uk",
-        1,
-        2,
-        "uk",
-        "ignored",
-        "1999",
-        "[ignored]",
-        "worker failed",
         "job-2",
+        message="worker failed",
         error_code="SPM_CONFIGURATION_UNAVAILABLE",
     )
 
@@ -268,15 +235,7 @@ def test_delete_keeps_records_differing_in_any_field(changes):
     service = _service()
     service._cache.set(_stored_impact(**changes))
 
-    service.delete_reform_impact(
-        "us",
-        22,
-        11,
-        "state/ca",
-        "default",
-        "2026",
-        "[region=state/ca&dataset=default]",
-    )
+    service.delete_reform_impact(ReformImpactScope(**SCOPE), OPTIONS_HASH)
 
     assert len(service.get_recent_reform_impacts(5)) == 1
 
@@ -285,15 +244,7 @@ def test_delete_ignores_the_api_version():
     service = _service()
     service._cache.set(_stored_impact(api_version="v0"))
 
-    service.delete_reform_impact(
-        "us",
-        22,
-        11,
-        "state/ca",
-        "default",
-        "2026",
-        "[region=state/ca&dataset=default]",
-    )
+    service.delete_reform_impact(ReformImpactScope(**SCOPE), OPTIONS_HASH)
 
     assert service.get_recent_reform_impacts(5) == []
 
@@ -305,13 +256,7 @@ def test_delete_swallows_a_failed_cache_write():
     backend.pipeline.side_effect = RuntimeError("redis unavailable")
 
     ReformImpactsService(cache).delete_reform_impact(
-        "us",
-        22,
-        11,
-        "state/ca",
-        "default",
-        "2026",
-        "[region=state/ca&dataset=default]",
+        ReformImpactScope(**SCOPE), OPTIONS_HASH
     )
 
 
@@ -353,17 +298,7 @@ def test_unreachable_claim_store_fails_closed():
 
 def test_service_claim_round_trip_uses_the_same_key():
     service = _service()
-    arguments = {
-        "country_id": "us",
-        "policy_id": 22,
-        "baseline_policy_id": 11,
-        "region": "state/ca",
-        "dataset": "default",
-        "time_period": "2026",
-        "options_hash": "[region=state/ca&dataset=default]",
-        "api_version": "v7",
-        "target": "general",
-    }
+    arguments = _claim_arguments()
 
     assert service.claim_reform_impact_start(
         **arguments, claim_token=CLAIM_TOKEN, observability_id=OBSERVABILITY_ID

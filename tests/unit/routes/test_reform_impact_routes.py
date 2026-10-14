@@ -19,9 +19,14 @@ from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import (
     ReformImpactCache,
+    ReformImpactIdentity,
+    ReformImpactScope,
     reform_impact_id,
 )
-from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from policyengine_api.services.reform_impacts_service import (
+    ReformImpactExecution,
+    ReformImpactsService,
+)
 
 COMPLETED_AT = datetime(2026, 1, 1, 1)
 
@@ -56,31 +61,27 @@ def _seed_reform_impacts(service: ReformImpactsService, n: int) -> None:
     for i in range(n):
         execution_id = f"exec-{i}"
         service.set_reform_impact(
-            baseline_policy_id=i + 1,
-            policy_id=i + 2,
-            country_id="us",
-            region="us",
-            dataset="custom_dataset",
-            time_period="2025",
+            ReformImpactIdentity(
+                scope=ReformImpactScope(
+                    country_id="us",
+                    reform_policy_id=i + 2,
+                    baseline_policy_id=i + 1,
+                    region="us",
+                    dataset="custom_dataset",
+                    time_period="2025",
+                ),
+                api_version="1.0.0",
+                options_hash=f"hash-{i}",
+            ),
+            ReformImpactExecution(
+                execution_id=execution_id,
+                start_time=datetime(2026, 1, 1, 0, i // 60, i % 60),
+            ),
             options={},
-            options_hash=f"hash-{i}",
-            api_version="1.0.0",
-            reform_impact_json={},
             status="computing",
-            start_time=datetime(2026, 1, 1, 0, i // 60, i % 60),
-            execution_id=execution_id,
-        )
-        service.set_complete_reform_impact(
-            country_id="us",
-            reform_policy_id=i + 2,
-            baseline_policy_id=i + 1,
-            region="us",
-            dataset="custom_dataset",
-            time_period="2025",
-            options_hash=f"hash-{i}",
             reform_impact_json={},
-            execution_id=execution_id,
         )
+        service.set_complete_reform_impact(execution_id, reform_impact_json={})
 
 
 def test_get_simulations_default_limit_caps_at_100(reform_impacts_service):
