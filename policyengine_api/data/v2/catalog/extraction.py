@@ -99,6 +99,10 @@ def _optional_text(
     return value
 
 
+# The catalog's region filter_value column holds at most this many characters.
+MAX_REGION_FILTER_VALUE_LENGTH = 255
+
+
 def _serialize_region_filter_value(value: object, *, region_code: str) -> str:
     """Keep scalar text or encode flat membership values in the existing column.
 
@@ -124,8 +128,11 @@ def _serialize_region_filter_value(value: object, *, region_code: str) -> str:
     else:
         msg = f"region {region_code!r} has an unsupported filter value"
         raise CatalogExtractionError(msg)
-    if len(serialized) > 255:
-        msg = f"region {region_code!r} filter value exceeds 255 characters"
+    if len(serialized) > MAX_REGION_FILTER_VALUE_LENGTH:
+        msg = (
+            f"region {region_code!r} filter value exceeds "
+            f"{MAX_REGION_FILTER_VALUE_LENGTH} characters"
+        )
         raise CatalogExtractionError(msg)
     return serialized
 
