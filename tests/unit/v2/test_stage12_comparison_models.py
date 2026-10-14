@@ -65,6 +65,8 @@ def _report(**changes: object) -> Stage12ComparisonReport:
         "data_package_name": "policyengine-us-data",
         "data_package_version": "1.0.0",
         "data_artifact_revision": "revision",
+        "created_at": NOW,
+        "updated_at": NOW,
         "retention_expires_at": NOW + timedelta(days=30),
     }
     fields.update(changes)
@@ -80,6 +82,8 @@ def _simulation(**changes: object) -> Stage12ComparisonSimulation:
         "modal_application": "policyengine-v2-worker-5-2-0",
         "simulation_callable": "run_simulation",
         "version_manifest_sha256": DIGEST_A,
+        "created_at": NOW,
+        "updated_at": NOW,
         "retention_expires_at": NOW + timedelta(days=30),
     }
     fields.update(changes)
