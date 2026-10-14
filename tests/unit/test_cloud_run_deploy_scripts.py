@@ -2252,8 +2252,16 @@ def test_sync_cloud_run_secrets_workflow_is_manual_and_environment_gated():
     assert "- production" in workflow
     assert "environment: ${{ inputs.deployment_environment }}" in workflow
     assert "id-token: write" in workflow
-    assert "github.ref != 'refs/heads/master'" in workflow
-    assert "google-github-actions/auth@v2" in workflow
+    checkout_step = "uses: actions/checkout@v4"
+    master_gate = "bash .github/scripts/require_git_ref.sh refs/heads/master"
+    gcp_authentication_step = "google-github-actions/auth@v2"
+    assert checkout_step in workflow
+    assert master_gate in workflow
+    assert gcp_authentication_step in workflow
+    # The gate runs a script from the repository, so it needs the checkout
+    # first, and it must pass before anything authenticates to GCP.
+    assert workflow.index(checkout_step) < workflow.index(master_gate)
+    assert workflow.index(master_gate) < workflow.index(gcp_authentication_step)
     assert (
         'workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"'
         in workflow
