@@ -1,3 +1,10 @@
+## [5.2.0] - 2026-10-14
+
+### Added
+
+- Added a rules registry (rules/registry.toml) with a standard-library tool that validates it, checks every rule is enforced where it claims, and renders docs/generated/rules.md and the Rules block in AGENTS.md.
+
+
 ## [5.1.4] - 2026-10-13
 
 ### Changed
