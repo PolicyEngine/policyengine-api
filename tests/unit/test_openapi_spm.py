@@ -1,6 +1,7 @@
 """The served legacy specification describes the canonical SPM HTTP contract."""
 
 import json
+from typing import TYPE_CHECKING
 
 from flask import Flask
 
@@ -17,6 +18,9 @@ from policyengine_api.spm import (
     SPMRuntimeVersions,
     SPMSelection,
 )
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel
 
 
 def test_economy_query_and_receipt_schemas_match_public_http_contract():
@@ -105,13 +109,14 @@ def test_household_specification_exposes_creation_without_content_update():
 
 
 def _assert_spm_models_match_component_schemas(schemas: dict) -> None:
-    for name, model in {
+    models: dict[str, type[BaseModel]] = {
         "SPMSelection": SPMSelection,
         "SPMRuntimeVersions": SPMRuntimeVersions,
         "SPMProvenance": SPMProvenance,
         "SPMExecutionProvenance": SPMExecutionProvenance,
         "SPMComparisonProvenance": SPMComparisonProvenance,
-    }.items():
+    }
+    for name, model in models.items():
         schema = schemas[name]
         expected_fields = {
             field.alias or field_name

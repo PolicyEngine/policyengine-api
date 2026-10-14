@@ -2,13 +2,14 @@
 
 import importlib.util
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 BUMP_VERSION_PATH = Path(__file__).parents[2] / ".github" / "bump_version.py"
 
 
-def _load_bump_version():
+def _load_bump_version() -> ModuleType:
     spec = importlib.util.spec_from_file_location("bump_version", BUMP_VERSION_PATH)
     assert spec is not None
     assert spec.loader is not None
@@ -42,8 +43,8 @@ def _changelog_dir(tmp_path: Path, *fragment_names: str) -> Path:
     ],
 )
 def test_infer_bump_reads_the_category_from_the_suffix_or_the_stem(
-    tmp_path, fragment_names, expected_bump
-):
+    tmp_path: Path, fragment_names: tuple[str, ...], expected_bump: str
+) -> None:
     bump_version = _load_bump_version()
 
     assert (
@@ -52,7 +53,9 @@ def test_infer_bump_reads_the_category_from_the_suffix_or_the_stem(
     )
 
 
-def test_infer_bump_exits_when_only_gitkeep_is_present(tmp_path, capsys):
+def test_infer_bump_exits_when_only_gitkeep_is_present(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     bump_version = _load_bump_version()
     changelog_dir = _changelog_dir(tmp_path, ".gitkeep")
 

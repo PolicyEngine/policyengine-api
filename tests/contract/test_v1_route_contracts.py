@@ -579,7 +579,7 @@ _EXPECTED_SUBSETS: dict[tuple[str, str | None], dict] = {
         "result": {"id": 33},
     },
 }
-_EXPECTED_BUDGET_WINDOW_SUBSET = {
+_EXPECTED_BUDGET_WINDOW_SUBSET: dict[str, object] = {
     "status": "ok",
     "message": None,
     "result": {"kind": "budgetWindow", "windowSize": 1},

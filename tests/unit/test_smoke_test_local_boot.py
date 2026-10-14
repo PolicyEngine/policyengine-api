@@ -5,6 +5,10 @@ import subprocess
 import sys
 import tempfile
 import urllib.error
+from collections.abc import Callable
+from email.message import Message
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -31,30 +35,32 @@ class _FakeClock:
 class _FakeApp:
     """Stands in for the Flask child process and records how it is managed."""
 
-    def __init__(self, *, exits_after_polls=None, ignores_terminate=False):
+    def __init__(
+        self, *, exits_after_polls: int | None = None, ignores_terminate: bool = False
+    ) -> None:
         self.exits_after_polls = exits_after_polls
         self.ignores_terminate = ignores_terminate
-        self.returncode = None
+        self.returncode: int | None = None
         self.polls = 0
-        self.calls: list[tuple] = []
-        self.popen_args = None
+        self.calls: list[tuple[object, ...]] = []
+        self.popen_args: tuple[list[str], dict[str, Any]] | None = None
 
-    def popen(self, command, **kwargs):
+    def popen(self, command: list[str], **kwargs: Any) -> "_FakeApp":
         self.popen_args = (command, kwargs)
         kwargs["stdout"].write("app stdout\n")
         kwargs["stderr"].write("app stderr\n")
         return self
 
-    def poll(self):
+    def poll(self) -> int | None:
         self.polls += 1
         if self.exits_after_polls is not None and self.polls > self.exits_after_polls:
             self.returncode = 3
         return self.returncode
 
-    def terminate(self):
+    def terminate(self) -> None:
         self.calls.append(("terminate",))
 
-    def wait(self, timeout):
+    def wait(self, timeout: float) -> int:
         self.calls.append(("wait", timeout))
         if self.ignores_terminate and ("kill",) not in self.calls:
             command_name = "flask"
@@ -63,12 +69,16 @@ class _FakeApp:
             self.returncode = -15
         return self.returncode
 
-    def kill(self):
+    def kill(self) -> None:
         self.calls.append(("kill",))
 
 
+FetchOutcome = tuple[int, str] | Exception
+BootRunner = Callable[[_FakeApp, list[FetchOutcome]], tuple[int, list[str], _FakeClock]]
+
+
 @pytest.fixture
-def boot(monkeypatch, tmp_path):
+def boot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> BootRunner:
     """Patch the clock, port, version and temp directory; return a runner."""
     clock = _FakeClock()
     monkeypatch.setattr(smoke, "time", clock)
@@ -77,10 +87,12 @@ def boot(monkeypatch, tmp_path):
     monkeypatch.setattr(importlib.metadata, "version", lambda _name: "9.9.9")
     monkeypatch.delenv("PYTHONUNBUFFERED", raising=False)
 
-    def run(app, responses):
-        fetched = []
+    def run(
+        app: _FakeApp, responses: list[FetchOutcome]
+    ) -> tuple[int, list[str], _FakeClock]:
+        fetched: list[str] = []
 
-        def fake_fetch(url):
+        def fake_fetch(url: str) -> tuple[int, str]:
             fetched.append(url)
             response = responses.pop(0)
             if isinstance(response, Exception):
@@ -94,12 +106,13 @@ def boot(monkeypatch, tmp_path):
     return run
 
 
-def _log_paths(app):
+def _log_paths(app: _FakeApp) -> tuple[str, str]:
+    assert app.popen_args is not None
     _command, kwargs = app.popen_args
     return kwargs["stdout"].name, kwargs["stderr"].name
 
 
-def _header(app):
+def _header(app: _FakeApp) -> list[str]:
     stdout_path, stderr_path = _log_paths(app)
     return [
         f"repo: {smoke.REPO_ROOT}",
@@ -123,7 +136,9 @@ LIVENESS_URL = f"http://127.0.0.1:{PORT}/liveness-check"
 READINESS_URL = f"http://127.0.0.1:{PORT}/readiness-check"
 
 
-def test_boot_passes_when_both_health_checks_answer_ok(boot, capsys):
+def test_boot_passes_when_both_health_checks_answer_ok(
+    boot: BootRunner, capsys: pytest.CaptureFixture[str]
+) -> None:
     app = _FakeApp()
 
     status, fetched, clock = boot(app, [(200, "OK\n"), (200, "OK\n"), (200, " OK ")])
@@ -141,6 +156,7 @@ def test_boot_passes_when_both_health_checks_answer_ok(boot, capsys):
     assert fetched == [LIVENESS_URL, LIVENESS_URL, READINESS_URL]
     assert clock.sleeps == []
     assert app.calls == [("terminate",), ("wait", 5)]
+    assert app.popen_args is not None
     command, kwargs = app.popen_args
     assert command == [
         sys.executable,
@@ -162,7 +178,9 @@ def test_boot_passes_when_both_health_checks_answer_ok(boot, capsys):
     assert kwargs["stderr"].closed
 
 
-def test_boot_retries_until_the_app_is_live(boot, capsys):
+def test_boot_retries_until_the_app_is_live(
+    boot: BootRunner, capsys: pytest.CaptureFixture[str]
+) -> None:
     app = _FakeApp()
 
     status, fetched, clock = boot(
@@ -185,7 +203,9 @@ def test_boot_retries_until_the_app_is_live(boot, capsys):
     assert "Boot smoke test passed." in capsys.readouterr().out
 
 
-def test_boot_fails_when_the_app_exits_before_it_is_live(boot, capsys):
+def test_boot_fails_when_the_app_exits_before_it_is_live(
+    boot: BootRunner, capsys: pytest.CaptureFixture[str]
+) -> None:
     app = _FakeApp(exits_after_polls=1)
 
     status, fetched, clock = boot(app, [urllib.error.URLError("refused")])
@@ -202,9 +222,11 @@ def test_boot_fails_when_the_app_exits_before_it_is_live(boot, capsys):
     assert app.calls == [("wait", 5)]
 
 
-def test_boot_stops_an_app_that_never_becomes_live(boot, capsys):
+def test_boot_stops_an_app_that_never_becomes_live(
+    boot: BootRunner, capsys: pytest.CaptureFixture[str]
+) -> None:
     app = _FakeApp()
-    responses = [urllib.error.URLError("refused")] * 1200
+    responses: list[FetchOutcome] = [urllib.error.URLError("refused")] * 1200
 
     status, fetched, clock = boot(app, responses)
 
@@ -220,7 +242,9 @@ def test_boot_stops_an_app_that_never_becomes_live(boot, capsys):
     assert app.calls == [("terminate",), ("wait", 5)]
 
 
-def test_boot_fails_when_a_health_probe_is_not_ok(boot, capsys):
+def test_boot_fails_when_a_health_probe_is_not_ok(
+    boot: BootRunner, capsys: pytest.CaptureFixture[str]
+) -> None:
     app = _FakeApp()
 
     status, fetched, _clock = boot(
@@ -242,7 +266,7 @@ def test_boot_fails_when_a_health_probe_is_not_ok(boot, capsys):
     assert app.calls == [("terminate",), ("wait", 5)]
 
 
-def test_boot_kills_an_app_that_ignores_terminate(boot):
+def test_boot_kills_an_app_that_ignores_terminate(boot: BootRunner) -> None:
     app = _FakeApp(ignores_terminate=True)
 
     status, _fetched, _clock = boot(app, [(200, "OK"), (200, "OK"), (200, "OK")])
@@ -251,9 +275,11 @@ def test_boot_kills_an_app_that_ignores_terminate(boot):
     assert app.calls == [("terminate",), ("wait", 5), ("kill",), ("wait", 5)]
 
 
-def test_health_probe_errors_propagate_after_stopping_the_app(boot):
+def test_health_probe_errors_propagate_after_stopping_the_app(
+    boot: BootRunner,
+) -> None:
     app = _FakeApp()
-    error = urllib.error.HTTPError(READINESS_URL, 500, "boom", None, None)
+    error = urllib.error.HTTPError(READINESS_URL, 500, "boom", Message(), None)
 
     with pytest.raises(urllib.error.HTTPError):
         boot(app, [(200, "OK"), (200, "OK"), error])
@@ -261,8 +287,12 @@ def test_health_probe_errors_propagate_after_stopping_the_app(boot):
     assert app.calls == [("terminate",), ("wait", 5)]
 
 
-def test_boot_reports_a_missing_policyengine_package(boot, monkeypatch, capsys):
-    def missing(_name):
+def test_boot_reports_a_missing_policyengine_package(
+    boot: BootRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def missing(_name: str) -> str:
         raise importlib.metadata.PackageNotFoundError
 
     monkeypatch.setattr(importlib.metadata, "version", missing)

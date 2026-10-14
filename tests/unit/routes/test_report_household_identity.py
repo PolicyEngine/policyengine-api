@@ -1,10 +1,13 @@
 """Report linkage preserves historical US household identity and saved spelling."""
 
 import json
+from typing import Any
 
 import pytest
 from flask import Flask
+from flask.testing import FlaskClient
 from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.data.v1_models import (
     Household,
@@ -34,7 +37,9 @@ EXPECTED_COMPARISON_SPEC = {
 }
 
 
-def _seed_historical_baseline(orm_session_factory, historical_output) -> int:
+def _seed_historical_baseline(
+    orm_session_factory: sessionmaker[Session], historical_output: dict[str, Any]
+) -> int:
     """Store a historical household and its completed baseline; return its id."""
     with orm_session_factory.begin() as session:
         session.add(
@@ -57,10 +62,13 @@ def _seed_historical_baseline(orm_session_factory, historical_output) -> int:
         )
         session.add(baseline)
         session.flush()
-        return baseline.id
+        baseline_id: int = baseline.id
+        return baseline_id
 
 
-def _report_client(monkeypatch, orm_session_factory):
+def _report_client(
+    monkeypatch: pytest.MonkeyPatch, orm_session_factory: sessionmaker[Session]
+) -> FlaskClient:
     """Serve the simulation and report routes from real services."""
     monkeypatch.setattr(
         simulation_routes, "simulation_service", SimulationService(orm_session_factory)
@@ -77,31 +85,37 @@ def _report_client(monkeypatch, orm_session_factory):
     return app.test_client()
 
 
-def _replay_baseline_and_create_reform(client, baseline_id, historical_output) -> int:
+def _replay_baseline_and_create_reform(
+    client: FlaskClient, baseline_id: int, historical_output: dict[str, Any]
+) -> int:
     """Replay the saved baseline, create a new reform, and return the reform id."""
     replay = client.post(
         "/us/simulation",
         json={"population_id": "00001", "population_type": "household", "policy_id": 1},
     )
-    assert replay.status_code == 200, replay.json
-    assert replay.json["result"]["id"] == baseline_id
-    assert replay.json["result"]["population_id"] == "00001"
-    assert replay.json["result"]["status"] == "complete"
-    assert json.loads(replay.json["result"]["output"]) == historical_output
+    replay_body: Any = replay.json
+    assert replay.status_code == 200, replay_body
+    assert replay_body["result"]["id"] == baseline_id
+    assert replay_body["result"]["population_id"] == "00001"
+    assert replay_body["result"]["status"] == "complete"
+    assert json.loads(replay_body["result"]["output"]) == historical_output
 
     reform = client.post(
         "/us/simulation",
         json={"population_id": "00001", "population_type": "household", "policy_id": 2},
     )
-    assert reform.status_code == 201, reform.json
-    reform_id = reform.json["result"]["id"]
+    reform_body: Any = reform.json
+    assert reform.status_code == 201, reform_body
+    reform_id: int = reform_body["result"]["id"]
     assert reform_id != baseline_id
-    assert reform.json["result"]["population_id"] == "1"
-    assert reform.json["result"]["status"] == "pending"
+    assert reform_body["result"]["population_id"] == "1"
+    assert reform_body["result"]["status"] == "pending"
     return reform_id
 
 
-def _create_replay_and_read_report(client, baseline_id, reform_id) -> int:
+def _create_replay_and_read_report(
+    client: FlaskClient, baseline_id: int, reform_id: int
+) -> int:
     """Create the comparison report, replay and read it back; return its id."""
     payload = {
         "simulation_1_id": baseline_id,
@@ -109,13 +123,15 @@ def _create_replay_and_read_report(client, baseline_id, reform_id) -> int:
         "year": "2026",
     }
     created = client.post("/us/report", json=payload)
-    assert created.status_code == 201, created.json
-    report_id = created.json["result"]["id"]
+    created_body: Any = created.json
+    assert created.status_code == 201, created_body
+    report_id: int = created_body["result"]["id"]
     replayed = client.post("/us/report", json=payload)
     retrieved = client.get(f"/us/report/{report_id}")
     assert replayed.status_code == retrieved.status_code == 200
     for response in (created, replayed, retrieved):
-        result = response.json["result"]
+        response_body: Any = response.json
+        result = response_body["result"]
         assert result["id"] == report_id
         assert result["report_kind"] == "household_comparison"
         assert result["report_spec_json"] == EXPECTED_COMPARISON_SPEC
@@ -125,9 +141,14 @@ def _create_replay_and_read_report(client, baseline_id, reform_id) -> int:
     return report_id
 
 
-def _assert_saved_simulations(session, baseline_id, reform_id, historical_output):
-    saved_baseline = session.get(Simulation, baseline_id)
-    saved_reform = session.get(Simulation, reform_id)
+def _assert_saved_simulations(
+    session: Session,
+    baseline_id: int,
+    reform_id: int,
+    historical_output: dict[str, Any],
+) -> None:
+    saved_baseline: Any = session.get(Simulation, baseline_id)
+    saved_reform: Any = session.get(Simulation, reform_id)
     assert saved_baseline.population_id == "00001"
     assert saved_baseline.output == historical_output
     assert saved_baseline.simulation_spec_json["population_id"] == "00001"
@@ -135,8 +156,8 @@ def _assert_saved_simulations(session, baseline_id, reform_id, historical_output
     assert saved_reform.simulation_spec_json["population_id"] == "1"
 
 
-def _assert_saved_report(session, report_id):
-    saved_report = session.get(ReportOutput, report_id)
+def _assert_saved_report(session: Session, report_id: int) -> None:
+    saved_report: Any = session.get(ReportOutput, report_id)
     assert saved_report.report_kind == "household_comparison"
     assert saved_report.report_spec_json == EXPECTED_COMPARISON_SPEC
     assert saved_report.report_spec_schema_version == 1

@@ -3,13 +3,20 @@ from __future__ import annotations
 import importlib.util
 import io
 from contextlib import nullcontext
+from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Literal
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
 
 import grpc
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from types import ModuleType
+    from urllib.request import Request
 
 ROOT = Path(__file__).parents[2]
 VERIFIER_PATH = ROOT / ".github" / "scripts" / "verify_observability_collector.py"
@@ -229,21 +236,23 @@ def test_authority_rejects_non_https_or_hostless_endpoints(endpoint: str) -> Non
 
 
 class _JsonResponse:
-    def __init__(self, body: bytes):
+    def __init__(self, body: bytes) -> None:
         self._body = io.BytesIO(body)
 
-    def __enter__(self):
+    def __enter__(self) -> io.BytesIO:
         return self._body
 
-    def __exit__(self, *_exc_info):
+    def __exit__(self, *_exc_info: object) -> Literal[False]:
         return False
 
 
-def test_get_json_sends_the_access_token_and_decodes_the_body(monkeypatch) -> None:
+def test_get_json_sends_the_access_token_and_decodes_the_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     verifier = _load_verifier()
-    requests = []
+    requests: list[tuple[str, Mapping[str, str], float]] = []
 
-    def fake_urlopen(request, timeout):
+    def fake_urlopen(request: Request, timeout: float) -> _JsonResponse:
         requests.append((request.full_url, request.headers, timeout))
         return _JsonResponse(b'{"traceId": "abc"}')
 
@@ -257,23 +266,29 @@ def test_get_json_sends_the_access_token_and_decodes_the_body(monkeypatch) -> No
     ]
 
 
-def test_get_json_treats_not_found_as_missing(monkeypatch) -> None:
+def test_get_json_treats_not_found_as_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     verifier = _load_verifier()
 
-    def fake_urlopen(request, timeout):
-        raise HTTPError(request.full_url, 404, "Not Found", None, io.BytesIO(b""))
+    def fake_urlopen(request: Request, timeout: float) -> _JsonResponse:
+        raise HTTPError(request.full_url, 404, "Not Found", Message(), io.BytesIO(b""))
 
     monkeypatch.setattr(verifier, "urlopen", fake_urlopen)
 
     assert verifier._get_json("https://cloud.example/x", ACCESS_TOKEN) is None
 
 
-def test_get_json_reports_other_http_errors_with_their_body(monkeypatch) -> None:
+def test_get_json_reports_other_http_errors_with_their_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     verifier = _load_verifier()
 
-    def fake_urlopen(request, timeout):
+    def fake_urlopen(request: Request, timeout: float) -> _JsonResponse:
         raise HTTPError(
-            request.full_url, 403, "Forbidden", None, io.BytesIO(b"permission denied")
+            request.full_url,
+            403,
+            "Forbidden",
+            Message(),
+            io.BytesIO(b"permission denied"),
         )
 
     monkeypatch.setattr(verifier, "urlopen", fake_urlopen)
@@ -302,16 +317,22 @@ class _FakeClock:
         self.now += seconds
 
 
-def _stub_delivery_checks(monkeypatch, verifier, *, trace_results, metric_results):
+def _stub_delivery_checks(
+    monkeypatch: pytest.MonkeyPatch,
+    verifier: ModuleType,
+    *,
+    trace_results: list[bool],
+    metric_results: list[bool],
+) -> tuple[dict[str, list[tuple[object, ...]]], _FakeClock]:
     calls: dict[str, list[tuple]] = {"trace": [], "metric": []}
     trace_answers = iter(trace_results)
     metric_answers = iter(metric_results)
 
-    def trace_available(*args):
+    def trace_available(*args: object) -> bool:
         calls["trace"].append(args)
         return next(trace_answers)
 
-    def metric_available(*args):
+    def metric_available(*args: object) -> bool:
         calls["metric"].append(args)
         return next(metric_answers)
 
@@ -322,7 +343,7 @@ def _stub_delivery_checks(monkeypatch, verifier, *, trace_results, metric_result
     return calls, clock
 
 
-def _wait_for_test_delivery(verifier, *, timeout_seconds: float) -> None:
+def _wait_for_test_delivery(verifier: ModuleType, *, timeout_seconds: float) -> None:
     verifier._wait_for_delivery(
         readback=verifier.CloudReadback(
             project_id="observability-project",
@@ -348,7 +369,9 @@ METRIC_CHECK = (
 )
 
 
-def test_delivery_wait_returns_once_both_signals_are_stored(monkeypatch) -> None:
+def test_delivery_wait_returns_once_both_signals_are_stored(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     verifier = _load_verifier()
     calls, clock = _stub_delivery_checks(
         monkeypatch,
@@ -364,7 +387,7 @@ def test_delivery_wait_returns_once_both_signals_are_stored(monkeypatch) -> None
 
 
 def test_delivery_wait_names_the_signals_still_missing_at_the_deadline(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     verifier = _load_verifier()
     calls, clock = _stub_delivery_checks(
@@ -384,7 +407,9 @@ def test_delivery_wait_names_the_signals_still_missing_at_the_deadline(
     assert clock.sleeps == [5.0, 5.0, 2.0]
 
 
-def test_delivery_wait_lists_both_missing_signals(monkeypatch) -> None:
+def test_delivery_wait_lists_both_missing_signals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     verifier = _load_verifier()
     _stub_delivery_checks(
         monkeypatch, verifier, trace_results=[False], metric_results=[False]

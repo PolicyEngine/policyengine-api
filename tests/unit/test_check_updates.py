@@ -2,7 +2,7 @@
 
 import importlib.util
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -11,7 +11,7 @@ CHECK_UPDATES_PATH = (
 )
 
 
-def _load_check_updates():
+def _load_check_updates() -> ModuleType:
     spec = importlib.util.spec_from_file_location("check_updates", CHECK_UPDATES_PATH)
     assert spec is not None
     assert spec.loader is not None
@@ -30,12 +30,15 @@ def _load_check_updates():
     ],
 )
 def test_fetch_changelog_uses_the_first_branch_that_answers_ok(
-    monkeypatch, status_by_branch, expected_text, expected_branches
-):
+    monkeypatch: pytest.MonkeyPatch,
+    status_by_branch: dict[str, int],
+    expected_text: str | None,
+    expected_branches: list[str],
+) -> None:
     check_updates = _load_check_updates()
-    requested = []
+    requested: list[tuple[str, int]] = []
 
-    def fake_get(url, timeout):
+    def fake_get(url: str, timeout: int) -> SimpleNamespace:
         branch = url.split("/")[-2]
         requested.append((url, timeout))
         return SimpleNamespace(
@@ -55,7 +58,9 @@ def test_fetch_changelog_uses_the_first_branch_that_answers_ok(
     ]
 
 
-def test_fetch_changelog_skips_unknown_packages(monkeypatch):
+def test_fetch_changelog_skips_unknown_packages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     check_updates = _load_check_updates()
     monkeypatch.setattr(
         check_updates.requests,

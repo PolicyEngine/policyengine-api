@@ -311,12 +311,12 @@ class MockBatchProgress:
 
 
 def create_mock_budget_window_batch_execution(
-    batch_job_id=MOCK_MODAL_JOB_ID,
-    status=MODAL_EXECUTION_STATUS_SUBMITTED,
+    batch_job_id: str = MOCK_MODAL_JOB_ID,
+    status: str = MODAL_EXECUTION_STATUS_SUBMITTED,
     batch_progress: MockBatchProgress | None = None,
-    result=None,
-    error=None,
-):
+    result: object = None,
+    error: str | None = None,
+) -> MagicMock:
     """Build a mock budget-window batch execution; year lists default to empty."""
     batch_progress = batch_progress or MockBatchProgress()
     mock_execution = MagicMock()

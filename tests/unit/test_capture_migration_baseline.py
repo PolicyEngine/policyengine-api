@@ -1,6 +1,7 @@
 import json
 
 import httpx
+import pytest
 
 from scripts import capture_migration_baseline
 
@@ -161,7 +162,9 @@ def test_run_simulation_gateway_probe_records_completion(monkeypatch):
     assert summary["completion_failure_count"] == 0
 
 
-def _client_with_transport(monkeypatch, transport):
+def _client_with_transport(
+    monkeypatch: pytest.MonkeyPatch, transport: httpx.MockTransport
+) -> None:
     real_client = httpx.Client
     monkeypatch.setattr(
         capture_migration_baseline.httpx,
@@ -174,12 +177,16 @@ def _client_with_transport(monkeypatch, transport):
     )
 
 
-def _without_latency(result):
+def _without_latency(
+    result: capture_migration_baseline.ProbeResult,
+) -> dict[str, object]:
     return {**result.__dict__, "latency_ms": None}
 
 
-def test_run_probes_records_transport_errors_as_failed_probes(monkeypatch):
-    def refuse(request):
+def test_run_probes_records_transport_errors_as_failed_probes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
         msg = "connection refused"
         raise httpx.ConnectError(msg, request=request)
 
@@ -204,10 +211,12 @@ def test_run_probes_records_transport_errors_as_failed_probes(monkeypatch):
     assert all(result.latency_ms >= 0 for result in results)
 
 
-def test_gateway_probe_sends_the_payload_and_records_each_request(monkeypatch):
-    bodies = []
+def test_gateway_probe_sends_the_payload_and_records_each_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bodies: list[bytes] = []
 
-    def handler(request):
+    def handler(request: httpx.Request) -> httpx.Response:
         bodies.append(request.content)
         if request.method == "POST":
             return httpx.Response(202, json={"job_id": "job-1"})
@@ -263,7 +272,9 @@ def test_gateway_probe_sends_the_payload_and_records_each_request(monkeypatch):
     assert results[2].latency_ms == results[1].latency_ms
 
 
-def test_gateway_probe_stops_when_the_submission_is_rejected(monkeypatch):
+def test_gateway_probe_stops_when_the_submission_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _client_with_transport(
         monkeypatch,
         httpx.MockTransport(lambda _request: httpx.Response(400, json={})),
