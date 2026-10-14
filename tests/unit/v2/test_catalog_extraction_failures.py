@@ -184,6 +184,8 @@ class _Colour(Enum):
 
 
 class _Pair(tuple, Enum):
+    __slots__ = ()
+
     FIRST = (1, 2)
 
 
