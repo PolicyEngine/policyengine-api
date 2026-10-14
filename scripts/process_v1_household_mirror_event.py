@@ -8,7 +8,7 @@ import contextlib
 import json
 import os
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import URL
@@ -32,6 +32,14 @@ class HouseholdEventCommandConfigurationError(RuntimeError):
 V1_MIGRATION_USER = "policyengine_schema_migrator"
 V1_DATABASE_NAME = "policyengine"
 V1_PROXY_HOST = "127.0.0.1"
+MAX_TCP_PORT = 65535
+
+
+class _SelectedEvent(NamedTuple):
+    """The household create-event the operator selected on the command line."""
+
+    country_id: str
+    legacy_household_id: int
 
 
 def _required(environ: Mapping[str, str], name: str) -> str:
@@ -115,7 +123,7 @@ def _proxy_event_service(
     except ValueError as error:
         msg = "POLICYENGINE_DB_PROXY_PORT must be an integer"
         raise HouseholdEventCommandConfigurationError(msg) from error
-    if not 1 <= port <= 65535:
+    if not 1 <= port <= MAX_TCP_PORT:
         msg = "POLICYENGINE_DB_PROXY_PORT is outside the valid range"
         raise HouseholdEventCommandConfigurationError(msg)
 
@@ -149,8 +157,7 @@ def _parser() -> argparse.ArgumentParser:
 def _record_command_outcome(
     *,
     identity: Mapping[str, str] | None,
-    country_id: str,
-    legacy_household_id: int,
+    event: _SelectedEvent,
     outcome: str,
     destination_household_id: object | None = None,
     error_type: str | None = None,
@@ -171,8 +178,8 @@ def _record_command_outcome(
             "operator_identity": (
                 identity.get("operator_identity") if identity else None
             ),
-            "country_id": country_id,
-            "legacy_household_id": legacy_household_id,
+            "country_id": event.country_id,
+            "legacy_household_id": event.legacy_household_id,
             "destination_household_id": (
                 str(destination_household_id)
                 if destination_household_id is not None
@@ -199,6 +206,7 @@ def main(
     if args.legacy_household_id < 0:
         _parser().error("--legacy-household-id must be non-negative")
     values = os.environ if environ is None else environ
+    event = _SelectedEvent(args.country_id, args.legacy_household_id)
     identity: dict[str, str] | None = None
     v1_engine: Engine | None = None
     try:
@@ -222,8 +230,7 @@ def main(
         with contextlib.suppress(Exception):
             _record_command_outcome(
                 identity=identity,
-                country_id=args.country_id,
-                legacy_household_id=args.legacy_household_id,
+                event=event,
                 outcome="error",
                 error_type=type(error).__name__,
             )
@@ -253,8 +260,7 @@ def main(
     with contextlib.suppress(Exception):
         _record_command_outcome(
             identity=identity,
-            country_id=args.country_id,
-            legacy_household_id=args.legacy_household_id,
+            event=event,
             outcome="ok",
             destination_household_id=result.household_id,
         )
