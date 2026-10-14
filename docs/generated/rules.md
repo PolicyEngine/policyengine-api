@@ -296,7 +296,7 @@ flowchart LR
 | `api.quality.environment-variables-load` | Required environment variables and credentials load in a deployed-like environment. | mechanical | enforced | yes | CI job `test_env_vars` | `pr.yml:test_env_vars` | — |
 | `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, v2 routes and services, and the user sign-in and account-deletion libraries pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:typecheck-v2` | — |
 | `api.quality.ruff-format` | All Python files are formatted with ruff format. | mechanical | enforced | yes | ruff format | `pr.yml:lint` | — |
-| `api.quality.ruff-lint` | All Python code passes ruff check with every rule family selected in pyproject.toml, with no ratchet; families are added one themed group at a time until the selection is ALL. | mechanical | enforced | yes | ruff check (A, ANN, ARG, ASYNC, B, BLE, C4, D, DTZ, E, E4, E7, E9, EM, ERA, EXE, F, FAST, FBT, FIX, FLY, FURB, G, I, INP, LOG, N, PD, PERF, PGH, PIE, PLC, PLW, PT, PTH, PYI, RET, RSE, RUF, S, SIM, SLF, T20, TC, TD, TID253, TRY, UP, W) | `pr.yml:lint` | — |
+| `api.quality.ruff-lint` | All Python code passes ruff check with every ruff rule selected (ALL), with no ratchet, except the ignores in pyproject.toml: COM812 and ISC001, which conflict with ruff format, and D203 and D213, which conflict with the kept D211 and D212. | mechanical | enforced | yes | ruff check (ALL) | `pr.yml:lint` | — |
 | `api.quality.runtime-evaluated-models-resolve` | Every package model is one ruff treats as runtime-evaluated (a base resolves, through the import in its own module, to a name in runtime-evaluated-base-classes, or is a same-module class that does), and every Pydantic model and SQLAlchemy mapper resolves its annotations once the package is imported. | mechanical | enforced | yes | pytest `tests/unit/test_runtime_evaluated_annotations.py` | `pr.yml:test` | **unproven** |
 | `api.quality.tests-pass` | The unit, contract and to-refactor test suites pass. | mechanical | enforced | yes | CI job `test` | `pr.yml:test` | — |
 | `api.quality.tests-ruff-exemptions` | Test files may use pytest's bare assert, need no docstrings, annotations or named constants for magic numbers, and may reach into private members, live outside packages and import inside a test (S101, D1, ANN, PLR2004, SLF001, INP001, PLC0415). Their fakes may name methods after the interface they replace, such as a gRPC stub's Export (N802). They may also use fake credentials, naive datetimes, subprocess calls to repository scripts, SQL built from strings and prints (S105, S106, DTZ001, DTZ011, S603, S607, S608, T201), may import the lazily loaded packages at module level (TID253), and may leave a stand-in's arguments unused (ARG001, ARG002, ARG005). Every other ruff rule applies to tests. | mechanical | enforced | yes | ruff per-file ignore of ANN, ARG001, ARG002, ARG005, D1, DTZ001, DTZ011, INP001, N802, PLC0415, PLR2004, S101, S105, S106, S603, S607, S608, SLF001, T201, TID253 for `**/tests/**` | `pr.yml:lint` | — |
@@ -322,7 +322,7 @@ flowchart LR
   r_api_quality_ruff_format("api.quality.ruff-format (enforced)")
   e_ruff_format["ruff format"]
   r_api_quality_ruff_lint("api.quality.ruff-lint (enforced)")
-  e_ruff_check__A__ANN__ARG__ASYNC__B__BLE__C4__D__DTZ__E__E4__E7__E9__EM__ERA__EXE__F__FAST__FBT__FIX__FLY__FURB__G__I__INP__LOG__N__PD__PERF__PGH__PIE__PLC__PLW__PT__PTH__PYI__RET__RSE__RUF__S__SIM__SLF__T20__TC__TD__TID253__TRY__UP__W_["ruff check (A, ANN, ARG, ASYNC, B, BLE, C4, D, DTZ, E, E4, E7, E9, EM, ERA, EXE, F, FAST, FBT, FIX, FLY, FURB, G, I, INP, LOG, N, PD, PERF, PGH, PIE, PLC, PLW, PT, PTH, PYI, RET, RSE, RUF, S, SIM, SLF, T20, TC, TD, TID253, TRY, UP, W)"]
+  e_ruff_check__ALL_["ruff check (ALL)"]
   r_api_quality_runtime_evaluated_models_resolve("api.quality.runtime-evaluated-models-resolve (enforced)")
   e_pytest_tests_unit_test_runtime_evaluated_annotations_py["pytest tests/unit/test_runtime_evaluated_annotations.py"]
   j_CI_pr_yml_test["CI pr.yml:test"]
@@ -345,8 +345,8 @@ flowchart LR
   e_mypy --> j_CI_pr_yml_typecheck_v2
   r_api_quality_ruff_format --> e_ruff_format
   e_ruff_format --> j_CI_pr_yml_lint
-  r_api_quality_ruff_lint --> e_ruff_check__A__ANN__ARG__ASYNC__B__BLE__C4__D__DTZ__E__E4__E7__E9__EM__ERA__EXE__F__FAST__FBT__FIX__FLY__FURB__G__I__INP__LOG__N__PD__PERF__PGH__PIE__PLC__PLW__PT__PTH__PYI__RET__RSE__RUF__S__SIM__SLF__T20__TC__TD__TID253__TRY__UP__W_
-  e_ruff_check__A__ANN__ARG__ASYNC__B__BLE__C4__D__DTZ__E__E4__E7__E9__EM__ERA__EXE__F__FAST__FBT__FIX__FLY__FURB__G__I__INP__LOG__N__PD__PERF__PGH__PIE__PLC__PLW__PT__PTH__PYI__RET__RSE__RUF__S__SIM__SLF__T20__TC__TD__TID253__TRY__UP__W_ --> j_CI_pr_yml_lint
+  r_api_quality_ruff_lint --> e_ruff_check__ALL_
+  e_ruff_check__ALL_ --> j_CI_pr_yml_lint
   r_api_quality_runtime_evaluated_models_resolve --> e_pytest_tests_unit_test_runtime_evaluated_annotations_py
   e_pytest_tests_unit_test_runtime_evaluated_annotations_py --> j_CI_pr_yml_test
   r_api_quality_tests_pass --> e_CI_job_test
