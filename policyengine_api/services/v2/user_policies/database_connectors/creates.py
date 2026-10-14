@@ -17,7 +17,10 @@ from policyengine_api.data.v2.models import (
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from policyengine_api.services.v2.user_policies.types import UserPolicyCreationInput
+    from policyengine_api.services.v2.user_policies.types import (
+        LegacyUserPolicyRevision,
+        UserPolicyCreationInput,
+    )
 
 
 def create_user_policy(
@@ -58,14 +61,11 @@ def create_legacy_user_mapping(
 def create_legacy_user_policy_mapping(
     session: Session,
     *,
-    country_id: str,
-    legacy_user_policy_id: int,
+    revision: LegacyUserPolicyRevision,
     user_policy_id: UUID,
-    source_revision: int,
     fingerprint_version: int,
-    fingerprint: str,
 ) -> UUID | None:
-    """Map a v1 saved policy to its v2 association at ``source_revision``.
+    """Map a v1 saved policy to its v2 association at the revision's source revision.
 
     Return the new mapping id, or None when this v1 saved policy is already
     mapped in this country.
@@ -73,12 +73,12 @@ def create_legacy_user_policy_mapping(
     return session.execute(
         insert(LegacyUserPolicyMapping)
         .values(
-            country_id=country_id,
-            legacy_user_policy_id=legacy_user_policy_id,
+            country_id=revision.country_id,
+            legacy_user_policy_id=revision.legacy_user_policy_id,
             user_policy_id=user_policy_id,
-            last_applied_source_revision=source_revision,
+            last_applied_source_revision=revision.source_revision,
             fingerprint_version=fingerprint_version,
-            fingerprint_sha256=fingerprint,
+            fingerprint_sha256=revision.fingerprint,
         )
         .on_conflict_do_nothing(
             constraint="uq_legacy_user_policy_mappings_country_legacy"

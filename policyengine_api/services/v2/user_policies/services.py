@@ -53,9 +53,11 @@ from policyengine_api.services.v2.user_policies.transformations import (
 from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicyMappingAction,
     LegacyUserPolicyPersistenceResult,
+    LegacyUserPolicyRevision,
     LegacyUserPolicySnapshot,
     UserPolicyCreateFields,
     UserPolicyCreationInput,
+    UserPolicyListing,
     UserPolicyPage,
     UserPolicyRead,
     UserPolicyUpdateInput,
@@ -88,25 +90,11 @@ if TYPE_CHECKING:
 
 def read_user_policy_page(
     session: Session,
-    *,
-    country_id: str,
-    user_id: UUID,
-    policy_id: UUID | None,
-    offset: int,
-    limit: int,
-    legacy_policy_id: int | None = None,
+    listing: UserPolicyListing,
 ) -> UserPolicyPage:
     """Return a page of a user's associations, optionally for one policy."""
-    rows = read_user_policy_rows(
-        session,
-        country_id=country_id,
-        user_id=user_id,
-        policy_id=policy_id,
-        legacy_policy_id=legacy_policy_id,
-        offset=offset,
-        limit=limit,
-    )
-    return user_policy_page(rows, offset=offset, limit=limit)
+    rows = read_user_policy_rows(session, listing)
+    return user_policy_page(rows, offset=listing.offset, limit=listing.limit)
 
 
 def read_owned_user_policy(
@@ -210,28 +198,22 @@ def apply_existing_legacy_user_policy_mapping(
     session: Session,
     *,
     mapping: LegacyUserPolicyMapping,
-    country_id: str,
-    reform_label: str | None,
-    fingerprint: str,
-    user_id: UUID,
-    policy_id: UUID,
-    changed_fields: frozenset[str],
-    source_revision: int,
+    revision: LegacyUserPolicyRevision,
+    projection: UserPolicyCreationInput,
 ) -> LegacyUserPolicyPersistenceResult:
     """Apply one v1 revision to an already-mapped association.
 
-    Stale and replayed revisions change nothing. The next revision renames the
+    ``projection`` is the association the revision projects to. Stale and
+    replayed revisions change nothing. The next revision renames the
     association only if the v1 reform label changed. Raise
     LegacyUserPolicyIntegrityError on conflicting or skipped revisions.
     """
+    policy_id = require_mirrored_policy_id(projection)
     action, association = validate_existing_legacy_user_policy_mapping(
         mapping,
         association=read_mapped_user_policy(session, mapping),
-        country_id=country_id,
-        fingerprint=fingerprint,
-        user_id=user_id,
-        policy_id=policy_id,
-        source_revision=source_revision,
+        revision=revision,
+        projection=projection,
         fingerprint_version=USER_POLICY_FINGERPRINT_VERSION,
     )
     if action in {
@@ -248,17 +230,15 @@ def apply_existing_legacy_user_policy_mapping(
 
     association_updated = legacy_name_requires_update(
         association,
-        reform_label=reform_label,
-        changed_fields=changed_fields,
+        reform_label=revision.reform_label,
+        changed_fields=revision.changed_fields,
     )
     update_legacy_user_policy_state(
         session,
         association=association,
         mapping=mapping,
-        reform_label=reform_label,
+        revision=revision,
         update_name=association_updated,
-        fingerprint=fingerprint,
-        source_revision=source_revision,
     )
     return LegacyUserPolicyPersistenceResult(
         association_id=association.id,
@@ -272,13 +252,8 @@ def apply_existing_legacy_user_policy_mapping(
 def persist_legacy_user_policy_mapping(
     session: Session,
     *,
-    country_id: str,
-    legacy_user_policy_id: int,
-    reform_label: str | None,
+    revision: LegacyUserPolicyRevision,
     projection: UserPolicyCreationInput,
-    fingerprint: str,
-    source_revision: int,
-    changed_fields: frozenset[str],
 ) -> LegacyUserPolicyPersistenceResult:
     """Create the association and mapping for a v1 saved policy, or apply a revision.
 
@@ -290,32 +265,24 @@ def persist_legacy_user_policy_mapping(
     policy_id = require_mirrored_policy_id(projection)
     existing = read_legacy_user_policy_mapping(
         session,
-        country_id=country_id,
-        legacy_user_policy_id=legacy_user_policy_id,
+        country_id=revision.country_id,
+        legacy_user_policy_id=revision.legacy_user_policy_id,
         lock=True,
     )
     if existing is not None:
         return apply_existing_legacy_user_policy_mapping(
             session,
             mapping=existing,
-            country_id=country_id,
-            reform_label=reform_label,
-            fingerprint=fingerprint,
-            user_id=projection.user_id,
-            policy_id=policy_id,
-            changed_fields=changed_fields,
-            source_revision=source_revision,
+            revision=revision,
+            projection=projection,
         )
 
     association = create_user_policy(session, projection)
     mapping_id = create_legacy_user_policy_mapping(
         session,
-        country_id=country_id,
-        legacy_user_policy_id=legacy_user_policy_id,
+        revision=revision,
         user_policy_id=association.id,
-        source_revision=source_revision,
         fingerprint_version=USER_POLICY_FINGERPRINT_VERSION,
-        fingerprint=fingerprint,
     )
     if mapping_id is not None:
         return LegacyUserPolicyPersistenceResult(
@@ -329,8 +296,8 @@ def persist_legacy_user_policy_mapping(
     delete_user_policy(session, association)
     concurrent = read_legacy_user_policy_mapping(
         session,
-        country_id=country_id,
-        legacy_user_policy_id=legacy_user_policy_id,
+        country_id=revision.country_id,
+        legacy_user_policy_id=revision.legacy_user_policy_id,
         lock=False,
     )
     if concurrent is None:
@@ -339,13 +306,8 @@ def persist_legacy_user_policy_mapping(
     return apply_existing_legacy_user_policy_mapping(
         session,
         mapping=concurrent,
-        country_id=country_id,
-        reform_label=reform_label,
-        fingerprint=fingerprint,
-        user_id=projection.user_id,
-        policy_id=policy_id,
-        changed_fields=changed_fields,
-        source_revision=source_revision,
+        revision=revision,
+        projection=projection,
     )
 
 
@@ -384,13 +346,15 @@ def mirror_legacy_user_policy_in_session(
     )
     return persist_legacy_user_policy_mapping(
         session,
-        country_id=snapshot.country_id,
-        legacy_user_policy_id=snapshot.legacy_user_policy_id,
-        reform_label=snapshot.reform_label,
+        revision=LegacyUserPolicyRevision(
+            country_id=snapshot.country_id,
+            legacy_user_policy_id=snapshot.legacy_user_policy_id,
+            reform_label=snapshot.reform_label,
+            fingerprint=fingerprint_legacy_user_policy(snapshot),
+            source_revision=source_revision,
+            changed_fields=changed_fields,
+        ),
         projection=projection,
-        fingerprint=fingerprint_legacy_user_policy(snapshot),
-        source_revision=source_revision,
-        changed_fields=changed_fields,
     )
 
 
@@ -515,12 +479,14 @@ class V2UserPolicyService:
                 return user_policy_page([], offset=offset, limit=limit)
             return read_user_policy_page(
                 session,
-                country_id=country_id,
-                user_id=owner.user_id,
-                policy_id=policy_id,
-                legacy_policy_id=legacy_policy_id,
-                offset=offset,
-                limit=limit,
+                UserPolicyListing(
+                    country_id=country_id,
+                    user_id=owner.user_id,
+                    policy_id=policy_id,
+                    offset=offset,
+                    limit=limit,
+                    legacy_policy_id=legacy_policy_id,
+                ),
             )
 
     def patch_user_policy(
