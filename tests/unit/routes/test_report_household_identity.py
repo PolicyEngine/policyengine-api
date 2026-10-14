@@ -172,7 +172,7 @@ def test_household_report_does_not_alias_nonnumeric_or_different_ids(unrelated_i
 
 
 @pytest.mark.parametrize(
-    "country_id,population_type",
+    ("country_id", "population_type"),
     [("uk", "household"), ("us", "geography"), ("uk", "geography")],
 )
 def test_numeric_report_aliases_are_limited_to_us_households(

@@ -757,7 +757,7 @@ def test_a_household_created_without_a_selection_replays_rather_than_failing(
 
 
 @pytest.mark.parametrize(
-    "path,body",
+    ("path", "body"),
     [
         ("/us/calculate", {"household": HOUSEHOLD, "spm": None}),
         ("/us/calculate-full", {"household": HOUSEHOLD, "spm": None}),
@@ -827,7 +827,7 @@ def test_a_rejected_selection_never_quotes_validator_internals(certified, harnes
 
 
 @pytest.mark.parametrize(
-    "path,body",
+    ("path", "body"),
     [
         ("/uk/calculate", {"household": HOUSEHOLD, "spm": None}),
         ("/uk/calculate-full", {"household": HOUSEHOLD, "spm": None}),

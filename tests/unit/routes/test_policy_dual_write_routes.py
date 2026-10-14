@@ -83,7 +83,7 @@ def test_cloud_sql_mode_preserves_v1_create_response_without_mirroring(
     mirror.assert_not_called()
 
 
-@pytest.mark.parametrize("country_id", ("us", "uk"))
+@pytest.mark.parametrize("country_id", ["us", "uk"])
 def test_dual_write_mirrors_new_and_existing_rows_before_success(
     monkeypatch,
     country_id,
@@ -118,7 +118,7 @@ def test_dual_write_mirrors_new_and_existing_rows_before_success(
         mirror.assert_called_once_with(_snapshot(country_id))
 
 
-@pytest.mark.parametrize("country_id", ("ca", "ng", "il"))
+@pytest.mark.parametrize("country_id", ["ca", "ng", "il"])
 def test_dual_write_preserves_v1_only_policy_writes_for_non_v2_countries(
     monkeypatch,
     country_id,

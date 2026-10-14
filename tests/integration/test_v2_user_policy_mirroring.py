@@ -391,7 +391,8 @@ def test_complete_transaction_rolls_back_and_native_delete_is_isolated() -> None
         model_id, parameter_name = _seed_catalog(sessions)
         reform = _reform(parameter_name, legacy_id=501, source_hash="rollback")
         saved = _saved(legacy_id=601, reform_id=501)
-        with pytest.raises(RuntimeError, match="forced rollback"):
+
+        def mirror_then_fail() -> None:
             with sessions.begin() as session:
                 mirror_legacy_user_policy_in_session(
                     session,
@@ -401,6 +402,9 @@ def test_complete_transaction_rolls_back_and_native_delete_is_isolated() -> None
                 )
                 msg = "forced rollback"
                 raise RuntimeError(msg)
+
+        with pytest.raises(RuntimeError, match="forced rollback"):
+            mirror_then_fail()
 
         with sessions() as session:
             assert session.scalar(select(func.count()).select_from(Policy)) == 0

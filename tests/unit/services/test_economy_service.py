@@ -1129,7 +1129,7 @@ class TestEconomyService:
                 "Database error"
             )
 
-            with pytest.raises(Exception) as exc_info:
+            with pytest.raises(Exception, match="Database error") as exc_info:
                 economy_service.get_economic_impact(**base_params)
             assert str(exc_info.value) == "Database error"
 
@@ -2067,9 +2067,8 @@ class TestEconomyService:
         def test__given_unknown_status__raises_error(self, economy_service):
             impact = create_mock_reform_impact(status="unknown")
 
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(ValueError, match="Unknown impact status: unknown"):
                 economy_service._determine_impact_action(impact)
-            assert "Unknown impact status: unknown" in str(exc_info.value)
 
     class TestHandleExecutionState:
         @pytest.fixture
@@ -2184,11 +2183,12 @@ class TestEconomyService:
         ):
             reform_impact = create_mock_reform_impact(status="computing")
 
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(
+                ValueError, match="Unexpected sim API execution state: UNKNOWN"
+            ):
                 economy_service._handle_execution_state(
                     setup_options, "UNKNOWN", reform_impact
                 )
-            assert "Unexpected sim API execution state: UNKNOWN" in str(exc_info.value)
 
         # Modal status tests
         def test__given_modal_complete_state__then_returns_completed_result(
@@ -2658,30 +2658,30 @@ class TestEconomicImpactSetupOptions:
 
         def test__given_invalid_prefixed_state__raises_value_error(self):
             service = EconomyService()
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(ValueError, match="Invalid US state: 'mb'"):
                 service._setup_region("us", "state/mb")
-            assert "Invalid US state: 'mb'" in str(exc_info.value)
 
         def test__given_invalid_congressional_district__raises_value_error(
             self,
         ):
             service = EconomyService()
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(
+                ValueError, match="Invalid congressional district: 'cruft'"
+            ):
                 service._setup_region("us", "congressional_district/cruft")
-            assert "Invalid congressional district: 'cruft'" in str(exc_info.value)
 
         def test__given_invalid_prefix__raises_value_error(self):
             service = EconomyService()
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(
+                ValueError, match="Invalid US region: 'invalid_prefix/tx'"
+            ):
                 service._setup_region("us", "invalid_prefix/tx")
-            assert "Invalid US region: 'invalid_prefix/tx'" in str(exc_info.value)
 
         def test__given_invalid_bare_value__raises_value_error(self):
             # Bare values without prefix are now invalid (should be normalized first)
             service = EconomyService()
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(ValueError, match="Invalid US region: 'invalid_value'"):
                 service._setup_region("us", "invalid_value")
-            assert "Invalid US region: 'invalid_value'" in str(exc_info.value)
 
         def test__given_place_region__returns_unchanged(self):
             # Test normalized "place/STATE-FIPS" format passes through
@@ -2692,23 +2692,20 @@ class TestEconomicImpactSetupOptions:
         def test__given_invalid_place_format__raises_value_error(self):
             # Test place without hyphen raises error
             service = EconomyService()
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(ValueError, match="Invalid place format"):
                 service._setup_region("us", "place/invalid")
-            assert "Invalid place format" in str(exc_info.value)
 
         def test__given_invalid_place_state__raises_value_error(self):
             # Test place with invalid state code raises error
             service = EconomyService()
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(ValueError, match="Invalid state in place code"):
                 service._setup_region("us", "place/XX-57000")
-            assert "Invalid state in place code" in str(exc_info.value)
 
         def test__given_invalid_place_fips__raises_value_error(self):
             # Test place with invalid FIPS code raises error
             service = EconomyService()
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(ValueError, match="Invalid FIPS code"):
                 service._setup_region("us", "place/NJ-abc")
-            assert "Invalid FIPS code" in str(exc_info.value)
 
     class TestDatasetSelection:
         @pytest.mark.parametrize(
@@ -2744,9 +2741,8 @@ class TestEconomicImpactSetupOptions:
 
         def test__given_invalid_state__raises_value_error(self):
             service = EconomyService()
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(ValueError, match="Invalid US state: 'mb'"):
                 service._validate_us_region("state/mb")
-            assert "Invalid US state: 'mb'" in str(exc_info.value)
 
         def test__given_valid_congressional_district__does_not_raise(self):
             service = EconomyService()
@@ -2762,15 +2758,17 @@ class TestEconomicImpactSetupOptions:
             self,
         ):
             service = EconomyService()
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(
+                ValueError, match="Invalid congressional district: 'CA-99'"
+            ):
                 service._validate_us_region("congressional_district/CA-99")
-            assert "Invalid congressional district: 'CA-99'" in str(exc_info.value)
 
         def test__given_nonexistent_district__raises_value_error(self):
             service = EconomyService()
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(
+                ValueError, match="Invalid congressional district: 'cruft'"
+            ):
                 service._validate_us_region("congressional_district/cruft")
-            assert "Invalid congressional district: 'cruft'" in str(exc_info.value)
 
 
 class TestBuildOptionsHash:
