@@ -75,25 +75,22 @@ def _percentile(values: list[float], percentile: float) -> float | None:
 
 def _request_probe(
     client: httpx.Client,
+    probe: RouteProbe,
     *,
-    name: str,
-    method: str,
-    path: str,
-    expected_statuses: tuple[int, ...],
     json_payload: dict | None = None,
 ) -> tuple[ProbeResult, httpx.Response | None]:
     started_at = time.perf_counter()
     try:
-        response = client.request(method, path, json=json_payload)
+        response = client.request(probe.method, probe.path, json=json_payload)
         latency_ms = (time.perf_counter() - started_at) * 1000
         return (
             ProbeResult(
-                name=name,
-                method=method,
-                path=path,
+                name=probe.name,
+                method=probe.method,
+                path=probe.path,
                 status_code=response.status_code,
                 latency_ms=round(latency_ms, 2),
-                ok=response.status_code in expected_statuses,
+                ok=response.status_code in probe.expected_statuses,
             ),
             response,
         )
@@ -101,9 +98,9 @@ def _request_probe(
         latency_ms = (time.perf_counter() - started_at) * 1000
         return (
             ProbeResult(
-                name=name,
-                method=method,
-                path=path,
+                name=probe.name,
+                method=probe.method,
+                path=probe.path,
                 status_code=0,
                 latency_ms=round(latency_ms, 2),
                 ok=False,
@@ -119,13 +116,7 @@ def run_probes(base_url: str, repetitions: int) -> list[ProbeResult]:
     with httpx.Client(base_url=base_url.rstrip("/"), timeout=90.0) as client:
         for _ in range(repetitions):
             for probe in DEFAULT_PROBES:
-                result, _ = _request_probe(
-                    client,
-                    name=probe.name,
-                    method=probe.method,
-                    path=probe.path,
-                    expected_statuses=probe.expected_statuses,
-                )
+                result, _ = _request_probe(client, probe)
                 results.append(result)
     return results
 
@@ -149,10 +140,12 @@ def run_simulation_gateway_probe(
     with httpx.Client(base_url=gateway_url.rstrip("/"), timeout=90.0) as client:
         submit_result, submit_response = _request_probe(
             client,
-            name="simulation_gateway_submit",
-            method="POST",
-            path="/simulate/economy/comparison",
-            expected_statuses=(202,),
+            RouteProbe(
+                name="simulation_gateway_submit",
+                method="POST",
+                path="/simulate/economy/comparison",
+                expected_statuses=(202,),
+            ),
             json_payload=payload,
         )
         results.append(submit_result)
@@ -182,10 +175,12 @@ def run_simulation_gateway_probe(
         while time.perf_counter() < deadline:
             poll_result, poll_response = _request_probe(
                 client,
-                name="simulation_gateway_poll",
-                method="GET",
-                path=f"/jobs/{job_id}",
-                expected_statuses=(200, 202),
+                RouteProbe(
+                    name="simulation_gateway_poll",
+                    method="GET",
+                    path=f"/jobs/{job_id}",
+                    expected_statuses=(200, 202),
+                ),
             )
             last_result = poll_result
             results.append(poll_result)
