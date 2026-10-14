@@ -12,7 +12,10 @@ from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun, Simulation
 from policyengine_api.json_types import JSONObject, JSONValue
-from policyengine_api.services.report_run_service import ReportRunService
+from policyengine_api.services.report_run_service import (
+    NewReportOutputRun,
+    ReportRunService,
+)
 from policyengine_api.services.report_spec_service import (
     ECONOMY_REPORT_KINDS,
     ReportSpec,
@@ -471,14 +474,16 @@ class ReportOutputService:
             self.report_run_service.create_report_output_run(
                 session,
                 report_output_id,
-                status=report_output.status,
-                output=report_output.output,
-                error_message=report_output.error_message,
-                trigger_type="initial",
-                report_spec_snapshot=(
-                    report_spec.model_dump() if report_spec else None
+                NewReportOutputRun(
+                    status=report_output.status,
+                    output=report_output.output,
+                    error_message=report_output.error_message,
+                    trigger_type="initial",
+                    report_spec_snapshot=(
+                        report_spec.model_dump() if report_spec else None
+                    ),
+                    version_manifest=manifest,
                 ),
-                version_manifest=manifest,
             )
             runs = self._list_runs_descending(session, report_output_id)
         else:

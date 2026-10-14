@@ -10,7 +10,10 @@ from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun, Simul
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
 from policyengine_api.services.report_output_service import ReportOutputService
-from policyengine_api.services.report_run_service import ReportRunService
+from policyengine_api.services.report_run_service import (
+    NewReportOutputRun,
+    ReportRunService,
+)
 from policyengine_api.services.simulation_service import SimulationService
 
 simulation_service = SimulationService()
@@ -243,7 +246,7 @@ def test_report_patch_updates_active_rerun_and_preserves_success(
         report = session.get(ReportOutput, report_id)
         successful_id = report.latest_successful_run_id
         rerun = run_service.create_report_output_run(
-            session, report_id, trigger_type="rerun"
+            session, report_id, NewReportOutputRun(trigger_type="rerun")
         )
         report.active_run_id = rerun.id
         rerun_id = rerun.id
@@ -276,7 +279,7 @@ def test_report_patch_complete_promotes_active_rerun(orm_session_factory):
     with orm_session_factory.begin() as session:
         report = session.get(ReportOutput, report_id)
         rerun = run_service.create_report_output_run(
-            session, report_id, trigger_type="rerun"
+            session, report_id, NewReportOutputRun(trigger_type="rerun")
         )
         report.active_run_id = rerun.id
         rerun_id = rerun.id
