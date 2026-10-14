@@ -522,14 +522,17 @@ def _test_coverage(
                         "add it to what the job runs, or move the test",
                     )
                 )
-    if project and job.matrix:
-        if not any(project in values for values in job.matrix.values()):
-            violations.append(
-                Violation(
-                    rule_id,
-                    check,
-                    f"project {project} is not in the matrix of job '{job.id}'",
-                    "add the project to the job matrix",
-                )
+    if (
+        project
+        and job.matrix
+        and not any(project in values for values in job.matrix.values())
+    ):
+        violations.append(
+            Violation(
+                rule_id,
+                check,
+                f"project {project} is not in the matrix of job '{job.id}'",
+                "add the project to the job matrix",
             )
+        )
     return violations

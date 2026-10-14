@@ -172,15 +172,6 @@ def test_copy_streams_rows_through_psycopg_without_an_orm_write() -> None:
 def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
     dialect = postgresql.dialect()
     assert (
-        publication_reconciliation.DATASETS,
-        publication_reconciliation.MODELS,
-        publication_reconciliation.MODEL_VERSIONS,
-        publication_reconciliation.PARAMETERS,
-        publication_reconciliation.PARAMETER_NODES,
-        publication_reconciliation.PARAMETER_VALUES,
-        publication_reconciliation.REGIONS,
-        publication_reconciliation.VARIABLES,
-    ) == (
         Dataset.__table__,
         TaxBenefitModel.__table__,
         TaxBenefitModelVersion.__table__,
@@ -189,6 +180,15 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
         ParameterValue.__table__,
         Region.__table__,
         Variable.__table__,
+    ) == (
+        publication_reconciliation.DATASETS,
+        publication_reconciliation.MODELS,
+        publication_reconciliation.MODEL_VERSIONS,
+        publication_reconciliation.PARAMETERS,
+        publication_reconciliation.PARAMETER_NODES,
+        publication_reconciliation.PARAMETER_VALUES,
+        publication_reconciliation.REGIONS,
+        publication_reconciliation.VARIABLES,
     )
     staging_ddl = tuple(
         str(CreateTable(table).compile(dialect=dialect))

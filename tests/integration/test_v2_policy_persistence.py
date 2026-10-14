@@ -199,13 +199,16 @@ def test_equal_hash_with_different_canonical_bytes_is_an_integrity_error() -> No
                 content_hash=stored.content_hash,
             )
 
-        with Session(engine) as session, session.begin():
-            with pytest.raises(PolicyContentHashCollisionError):
-                create_resolved_policy(
-                    session,
-                    changed,
-                    canonicalizer=simulated_collision,
-                )
+        with (
+            Session(engine) as session,
+            session.begin(),
+            pytest.raises(PolicyContentHashCollisionError),
+        ):
+            create_resolved_policy(
+                session,
+                changed,
+                canonicalizer=simulated_collision,
+            )
 
         with Session(engine) as session:
             values = session.scalars(
@@ -316,14 +319,17 @@ def test_changed_hash_for_one_legacy_identity_rolls_back_without_mutation() -> N
                 "policy_json": {parameter_name: {"2026": 0.3}},
             }
         )
-        with pytest.raises(LegacyPolicyMappingIntegrityError, match="different"):
-            with Session(engine) as session, session.begin():
-                mirror_legacy_policy_in_session(
-                    session,
-                    changed,
-                    running_policyengine_version="5.2.0",
-                    country_package_versions={"us": "1.0.0"},
-                )
+        with (
+            pytest.raises(LegacyPolicyMappingIntegrityError, match="different"),
+            Session(engine) as session,
+            session.begin(),
+        ):
+            mirror_legacy_policy_in_session(
+                session,
+                changed,
+                running_policyengine_version="5.2.0",
+                country_package_versions={"us": "1.0.0"},
+            )
 
         with Session(engine) as session:
             mapping = session.scalar(
@@ -434,9 +440,12 @@ def test_child_insert_failure_rolls_back_the_policy_and_all_values() -> None:
             invalid = _command(model.id, version.id, uuid4())
             content_hash = canonicalize_policy(invalid).content_hash
 
-        with pytest.raises(IntegrityError):
-            with Session(engine) as session, session.begin():
-                create_resolved_policy(session, invalid)
+        with (
+            pytest.raises(IntegrityError),
+            Session(engine) as session,
+            session.begin(),
+        ):
+            create_resolved_policy(session, invalid)
 
         with Session(engine) as session:
             policy_count = session.scalar(

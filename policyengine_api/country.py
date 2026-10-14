@@ -1,5 +1,6 @@
 """Loaded country tax-benefit systems, their metadata and household calculation."""
 
+import contextlib
 import importlib
 import inspect
 import json
@@ -382,7 +383,7 @@ class PolicyEngineCountry:
         parameters = self.tax_benefit_system.parameters
         parameter_data = {}
         for parameter in parameters.get_descendants():
-            if "gov" != parameter.name[:3]:
+            if parameter.name[:3] != "gov":
                 continue
             end_name = parameter.name.split(".")[-1]
             if isinstance(parameter, ParameterScale):
@@ -506,7 +507,7 @@ class PolicyEngineCountry:
                 if has_axes:
                     count_entities = len(household[entity_plural])
                     entity_index = 0
-                    for _entity_id in household[entity_plural].keys():
+                    for _entity_id in household[entity_plural]:
                         if _entity_id == entity_id:
                             break
                         entity_index += 1
@@ -635,10 +636,8 @@ class PolicyEngineCountry:
                 node_type = type(parameter.values_list[-1].value)
                 if node_type is int:
                     node_type = float
-                try:
+                with contextlib.suppress(TypeError, ValueError, OverflowError):
                     value = float(value)
-                except (TypeError, ValueError, OverflowError):
-                    pass
                 normalized_reform[parameter_name][time_period] = node_type(value)
         return normalized_reform
 

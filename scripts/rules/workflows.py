@@ -65,9 +65,13 @@ def _strip_comment(line: str) -> str:
             in_single = not in_single
         elif char == '"' and not in_single:
             in_double = not in_double
-        elif char == "#" and not in_single and not in_double:
-            if index == 0 or line[index - 1].isspace():
-                return line[:index].rstrip()
+        elif (
+            char == "#"
+            and not in_single
+            and not in_double
+            and (index == 0 or line[index - 1].isspace())
+        ):
+            return line[:index].rstrip()
     return line.rstrip()
 
 
@@ -151,9 +155,13 @@ def _parse_job(job_id: str, lines: list[str], job_indent: int) -> JobBlock:
         match = _KEY.match(line)
         if not match:
             item = _LIST_ITEM.match(line)
-            if in_steps and item and item_indent is not None:
-                if len(item.group(1)) == item_indent:
-                    step_index += 1
+            if (
+                in_steps
+                and item
+                and item_indent is not None
+                and len(item.group(1)) == item_indent
+            ):
+                step_index += 1
             index += 1
             continue
         leading, dash, key, value = match.groups()

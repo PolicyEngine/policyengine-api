@@ -1,5 +1,6 @@
 """Recoverable reform-impact cache service backed by shared Redis."""
 
+import contextlib
 import datetime
 from typing import Any
 
@@ -158,7 +159,7 @@ class ReformImpactsService:
         observability_id: str,
     ) -> None:
         """Best-effort release; an unavailable cache safely falls back to expiry."""
-        try:
+        with contextlib.suppress(CacheCoordinationError):
             self._cache.release_start(
                 country_id=country_id,
                 reform_policy_id=policy_id,
@@ -172,8 +173,6 @@ class ReformImpactsService:
                 claim_token=claim_token,
                 observability_id=observability_id,
             )
-        except CacheCoordinationError:
-            pass
 
     def set_reform_impact(
         self,

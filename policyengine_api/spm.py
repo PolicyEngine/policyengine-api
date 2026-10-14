@@ -444,7 +444,7 @@ def resolved_spm_settings(settings: object) -> dict | None:
         config = SPMSelection.model_validate(settings)
     except ValidationError:
         return None
-    if not REQUIRED_RESOLVED_SPM_FIELDS <= config.model_fields_set:
+    if not config.model_fields_set >= REQUIRED_RESOLVED_SPM_FIELDS:
         return None
     return {name: getattr(config, name) for name in SPMSelection.model_fields}
 

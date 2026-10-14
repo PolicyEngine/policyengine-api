@@ -233,7 +233,7 @@ print(
 
     def test__uses_policyengine_bundle_versions_for_us_uk_and_core(self):
         expected_versions = self._expected_bundle_versions()
-        assert POLICYENGINE_VERSION == expected_versions["policyengine"]
-        assert POLICYENGINE_CORE_VERSION == expected_versions["core"]
+        assert expected_versions["policyengine"] == POLICYENGINE_VERSION
+        assert expected_versions["core"] == POLICYENGINE_CORE_VERSION
         assert COUNTRY_PACKAGE_VERSIONS["us"] == expected_versions["us"]
         assert COUNTRY_PACKAGE_VERSIONS["uk"] == expected_versions["uk"]
