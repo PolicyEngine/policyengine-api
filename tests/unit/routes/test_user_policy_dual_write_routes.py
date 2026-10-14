@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import NamedTuple
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -304,96 +305,115 @@ def test_saved_policy_mirror_failure_returns_503_and_retry_completes(
     assert create.call_count == mirror.call_count == 2
 
 
-@pytest.mark.parametrize(
-    (
-        "method",
-        "service_method",
-        "body",
-        "error",
-        "expected_status",
-        "expected_category",
-        "expected_operation",
+class _PersistenceFailure(NamedTuple):
+    """A saved-policy request whose service call fails, and the response expected."""
+
+    method: str
+    service_method: str
+    body: dict[str, object]
+    error: Exception
+    expected_status: int
+    expected_category: str
+    expected_operation: str
+
+
+_PERSISTENCE_FAILURES = (
+    _PersistenceFailure(
+        "post",
+        "create_or_get_user_policy",
+        _body(),
+        SQLAlchemyTimeoutError("credential=timeout-secret"),
+        503,
+        "timeout",
+        "create",
     ),
+    _PersistenceFailure(
+        "put",
+        "update_user_policy",
+        {"id": 10, "reform_label": "Renamed"},
+        OperationalError(
+            "UPDATE user_policies SET secret=:secret",
+            {"secret": "bound-parameter-secret"},
+            RuntimeError("driver-secret"),
+        ),
+        503,
+        "unavailable",
+        "update",
+    ),
+    _PersistenceFailure(
+        "post",
+        "create_or_get_user_policy",
+        _body(),
+        IntegrityError(
+            "INSERT caller-private-data",
+            {"user_id": "caller-private-data"},
+            RuntimeError("integrity-secret"),
+        ),
+        500,
+        "integrity",
+        "create",
+    ),
+    _PersistenceFailure(
+        "put",
+        "update_user_policy",
+        {"id": 10, "year": "2027"},
+        SQLAlchemyError("database-secret"),
+        500,
+        "database",
+        "update",
+    ),
+    _PersistenceFailure(
+        "post",
+        "create_or_get_user_policy",
+        _body(),
+        RuntimeError("unexpected-secret"),
+        500,
+        "unexpected",
+        "create",
+    ),
+    _PersistenceFailure(
+        "put",
+        "update_user_policy",
+        {"id": "caller-id-secret", "year": "2027"},
+        RuntimeError("unexpected-secret"),
+        500,
+        "unexpected",
+        "update",
+    ),
+)
+
+
+def _persistence_failure_id(index: int, failure: _PersistenceFailure) -> str:
+    """Return the test ID pytest gave this case when each field was a parameter."""
+    return "-".join(
+        (
+            failure.method,
+            failure.service_method,
+            f"body{index}",
+            f"error{index}",
+            str(failure.expected_status),
+            failure.expected_category,
+            failure.expected_operation,
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "failure",
     [
-        (
-            "post",
-            "create_or_get_user_policy",
-            _body(),
-            SQLAlchemyTimeoutError("credential=timeout-secret"),
-            503,
-            "timeout",
-            "create",
-        ),
-        (
-            "put",
-            "update_user_policy",
-            {"id": 10, "reform_label": "Renamed"},
-            OperationalError(
-                "UPDATE user_policies SET secret=:secret",
-                {"secret": "bound-parameter-secret"},
-                RuntimeError("driver-secret"),
-            ),
-            503,
-            "unavailable",
-            "update",
-        ),
-        (
-            "post",
-            "create_or_get_user_policy",
-            _body(),
-            IntegrityError(
-                "INSERT caller-private-data",
-                {"user_id": "caller-private-data"},
-                RuntimeError("integrity-secret"),
-            ),
-            500,
-            "integrity",
-            "create",
-        ),
-        (
-            "put",
-            "update_user_policy",
-            {"id": 10, "year": "2027"},
-            SQLAlchemyError("database-secret"),
-            500,
-            "database",
-            "update",
-        ),
-        (
-            "post",
-            "create_or_get_user_policy",
-            _body(),
-            RuntimeError("unexpected-secret"),
-            500,
-            "unexpected",
-            "create",
-        ),
-        (
-            "put",
-            "update_user_policy",
-            {"id": "caller-id-secret", "year": "2027"},
-            RuntimeError("unexpected-secret"),
-            500,
-            "unexpected",
-            "update",
-        ),
+        pytest.param(failure, id=_persistence_failure_id(index, failure))
+        for index, failure in enumerate(_PERSISTENCE_FAILURES)
     ],
 )
 def test_saved_policy_persistence_failures_use_allowlisted_records(
     monkeypatch,
-    method,
-    service_method,
-    body,
-    error,
-    expected_status,
-    expected_category,
-    expected_operation,
+    failure,
 ) -> None:
     monkeypatch.setenv("DB_WRITE_POLICY", "cloud_sql")
     with (
         patch(
-            f"policyengine_api.routes.policy_routes.user_policy_service.{service_method}",
-            side_effect=UserPolicyPersistenceError.from_exception(error),
+            f"policyengine_api.routes.policy_routes.user_policy_service.{failure.service_method}",
+            side_effect=UserPolicyPersistenceError.from_exception(failure.error),
         ),
         patch(
             "policyengine_api.routes.policy_routes.current_request_id",
@@ -401,14 +421,16 @@ def test_saved_policy_persistence_failures_use_allowlisted_records(
         ),
         patch("policyengine_api.routes.policy_routes.logger.log_struct") as log_struct,
     ):
-        response = getattr(_client(), method)("/us/user-policy", json=body)
+        response = getattr(_client(), failure.method)(
+            "/us/user-policy", json=failure.body
+        )
 
     expected_message = (
         "Policy database is temporarily unavailable; please try again later."
-        if expected_status == 503
+        if failure.expected_status == 503
         else "Internal database error; please try again later."
     )
-    assert response.status_code == expected_status
+    assert response.status_code == failure.expected_status
     assert response.json == {"message": expected_message}
 
     log_struct.assert_called_once()
@@ -430,11 +452,11 @@ def test_saved_policy_persistence_failures_use_allowlisted_records(
         "http_status",
         "duration_ms",
     }
-    assert payload["operation"] == expected_operation
-    assert payload["failure_category"] == expected_category
-    assert payload["http_status"] == expected_status
+    assert payload["operation"] == failure.expected_operation
+    assert payload["failure_category"] == failure.expected_category
+    assert payload["http_status"] == failure.expected_status
     assert payload["request_id"] == "request-123"
-    supplied_id = body.get("id")
+    supplied_id = failure.body.get("id")
     expected_logged_id = (
         supplied_id
         if isinstance(supplied_id, int)
