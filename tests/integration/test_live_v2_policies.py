@@ -1,9 +1,11 @@
-"""Live staging checks for native v2 policies and signed-in user resources.
+"""Live staging checks for native v2 policies and user-owned resources.
 
 The staging deployment runs this module against the tagged Cloud Run
 candidate. Signed-in routes use a dedicated staging Auth0 test user whose
 access token is obtained through the staging-only CI application's password
-grant. Every credential comes from the GitHub ``staging`` environment:
+grant. Signed-out checks send a fresh random UUID per run in the
+``PolicyEngine-Unauthenticated-User`` header and need no credential. Every
+credential comes from the GitHub ``staging`` environment:
 
 - ``STAGING_AUTH0_TEST_DOMAIN``: Auth0 domain issuing tokens whose ``iss``
   matches the staging ``PUBLIC_API_AUTH_ISSUER`` (variable);
@@ -42,6 +44,7 @@ AUTH0_ENVIRONMENT = (
 )
 UNKNOWN_LEGACY_ID = 9_007_199_254_740_000
 COUNTRY_ID = "us"
+UNAUTHENTICATED_USER_HEADER = "PolicyEngine-Unauthenticated-User"
 
 
 def _staging_user_token() -> str:
@@ -144,25 +147,58 @@ def _delete_account(api_client, headers: dict[str, str]) -> None:
     assert response.status_code == 204, response.text[:500]
 
 
+def _browser_headers() -> dict[str, str]:
+    """A fresh signed-out browser; its UUID never leaves the request headers."""
+
+    return {UNAUTHENTICATED_USER_HEADER: str(uuid4())}
+
+
+def _save_policy(api_client, headers: dict[str, str], legacy_policy_id: int) -> dict:
+    response = api_client.post(
+        "/v2/user-policies",
+        params={"country_id": COUNTRY_ID},
+        headers=headers,
+        json={
+            "country_id": COUNTRY_ID,
+            "legacy_policy_id": legacy_policy_id,
+            "name": "Stage 12A signed-out reform",
+        },
+    )
+    assert response.status_code == 201, response.text[:500]
+    return response.json()["result"]["item"]
+
+
+def _policy_ids(api_client, headers: dict[str, str]) -> set[str]:
+    response = api_client.get(
+        "/v2/user-policies",
+        params={"country_id": COUNTRY_ID, "limit": 1000},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text[:500]
+    return {item["id"] for item in response.json()["result"]["items"]}
+
+
 def test_live_user_routes_reject_unauthenticated_requests(api_client) -> None:
     for method, path in (
         ("GET", "/v2/me"),
         ("GET", "/v2/me/export"),
-        ("POST", "/v2/me/imports"),
+        ("POST", "/v2/me/upgrade"),
         ("GET", "/v2/user-policies"),
         ("GET", "/v2/user-households"),
         ("GET", "/v2/user-simulations"),
         ("GET", "/v2/user-reports"),
     ):
-        response = api_client.request(
-            method,
-            path,
-            params={"country_id": COUNTRY_ID, "user_id": str(uuid4())},
-            json={} if method == "POST" else None,
-        )
-        assert response.status_code == 401, (path, response.text[:500])
-        assert response.headers["www-authenticate"].startswith("Bearer")
-        assert response.json()["status"] == "error"
+        for headers in ({}, {UNAUTHENTICATED_USER_HEADER: "not-a-uuid"}):
+            response = api_client.request(
+                method,
+                path,
+                params={"country_id": COUNTRY_ID, "user_id": str(uuid4())},
+                headers=headers,
+                json={} if method == "POST" else None,
+            )
+            assert response.status_code == 401, (path, response.text[:500])
+            assert response.headers["www-authenticate"].startswith("Bearer")
+            assert response.json()["status"] == "error"
 
 
 def test_live_native_policy_resources_and_v2_policy_save(
@@ -262,7 +298,6 @@ def test_live_signed_in_user_lifecycle(
             "user-reports": ("legacy_report_id", legacy["report"]),
         }
         for resource, (legacy_field, legacy_id) in resources.items():
-            client_ref = f"{resource}-{integration_probe_id}"
             created = api_client.post(
                 f"/v2/{resource}",
                 params=params,
@@ -270,27 +305,14 @@ def test_live_signed_in_user_lifecycle(
                 json={
                     "country_id": COUNTRY_ID,
                     legacy_field: legacy_id,
-                    "name": f"Stage 12A {resource}",
-                    "client_ref": client_ref,
+                    "name": f"Stage 12A {resource} {integration_probe_id}",
                 },
             )
             assert created.status_code == 201, (resource, created.text[:500])
             item = created.json()["result"]["item"]
             assert item["user_id"] == user_id
             assert item[legacy_field] == legacy_id
-            assert item["client_ref"] == client_ref
 
-            duplicate = api_client.post(
-                f"/v2/{resource}",
-                params=params,
-                headers=user_headers,
-                json={
-                    "country_id": COUNTRY_ID,
-                    legacy_field: legacy_id,
-                    "client_ref": client_ref,
-                },
-            )
-            assert duplicate.status_code == 409, (resource, duplicate.text[:500])
             missing = api_client.post(
                 f"/v2/{resource}",
                 params=params,
@@ -327,70 +349,42 @@ def test_live_signed_in_user_lifecycle(
             absent = api_client.get(detail_path, params=params, headers=user_headers)
             assert absent.status_code == 404, (resource, absent.text[:500])
 
-        import_body = {
-            "policies": [
-                {
-                    "client_ref": f"rf-{integration_probe_id}",
-                    "legacy_policy_id": legacy["policy"],
-                    "baseline": "current-law",
-                    "provenance": {"source": "manual"},
-                },
-                {
-                    "client_ref": f"sup-missing-{integration_probe_id}",
-                    "legacy_policy_id": UNKNOWN_LEGACY_ID,
-                },
-            ],
-            "households": [
-                {
-                    "client_ref": f"suh-{integration_probe_id}",
-                    "legacy_household_id": legacy["household"],
-                }
-            ],
-            "simulations": [
-                {
-                    "client_ref": f"sus-{integration_probe_id}",
-                    "legacy_simulation_id": legacy["simulation"],
-                }
-            ],
-            "reports": [
-                {
-                    "client_ref": f"lfr-{integration_probe_id}",
-                    "legacy_report_id": legacy["report"],
-                    "user_policy_client_ref": f"rf-{integration_probe_id}",
-                }
-            ],
-        }
-        imported = api_client.post(
-            "/v2/me/imports", params=params, headers=user_headers, json=import_body
+        policy = api_client.post(
+            "/v2/user-policies",
+            params=params,
+            headers=user_headers,
+            json={
+                "country_id": COUNTRY_ID,
+                "legacy_policy_id": legacy["policy"],
+                "baseline": "current-law",
+                "provenance": {"source": "manual"},
+            },
         )
-        assert imported.status_code == 200, imported.text[:500]
-        result = imported.json()["result"]
-        assert len(result["id_map"]) == 4
-        assert result["skipped"] == [
-            {
-                "client_ref": f"sup-missing-{integration_probe_id}",
-                "reason": "unknown_legacy_reference",
-            }
-        ]
-        repeated = api_client.post(
-            "/v2/me/imports", params=params, headers=user_headers, json=import_body
+        assert policy.status_code == 201, policy.text[:500]
+        policy_id = policy.json()["result"]["item"]["id"]
+        report = api_client.post(
+            "/v2/user-reports",
+            params=params,
+            headers=user_headers,
+            json={
+                "country_id": COUNTRY_ID,
+                "legacy_report_id": legacy["report"],
+                "user_policy_id": policy_id,
+            },
         )
-        assert repeated.status_code == 200, repeated.text[:500]
-        assert repeated.json()["result"]["id_map"] == result["id_map"]
+        assert report.status_code == 201, report.text[:500]
+        report_id = report.json()["result"]["item"]["id"]
 
         exported = api_client.get("/v2/me/export", params=params, headers=user_headers)
         assert exported.status_code == 200, exported.text[:500]
         export = exported.json()["result"]
         assert export["user"]["id"] == user_id
-        report = next(
-            row
-            for row in export["reports"]
-            if row["client_ref"] == f"lfr-{integration_probe_id}"
+        assert export["user"]["user_type"] == "standard"
+        exported_report = next(
+            row for row in export["reports"] if row["id"] == report_id
         )
-        assert (
-            report["user_policy_id"] == result["id_map"][f"rf-{integration_probe_id}"]
-        )
-        assert {len(export[name]) for name in ("policies", "households")} == {1}
+        assert exported_report["user_policy_id"] == policy_id
+        assert [row["id"] for row in export["policies"]] == [policy_id]
 
         _delete_account(api_client, user_headers)
         reprovisioned = api_client.get("/v2/me", params=params, headers=user_headers)
@@ -402,4 +396,102 @@ def test_live_signed_in_user_lifecycle(
         assert empty_export.status_code == 200, empty_export.text[:500]
         assert empty_export.json()["result"]["policies"] == []
     finally:
+        _delete_account(api_client, user_headers)
+
+
+def test_live_unauthenticated_users_round_trip_and_upgrade(
+    api_client,
+    user_headers: dict[str, str],
+) -> None:
+    """Exercise signed-out saving, conversion, and merge at sign-in.
+
+    Every run uses fresh browser UUIDs and starts and ends by deleting the
+    test user's account, so it leaves nothing behind and can run repeatedly.
+    """
+
+    params = {"country_id": COUNTRY_ID}
+    legacy_policy_id = _v1_id(api_client, "policy", {"data": {}}, "policy_id")
+    converted_browser = _browser_headers()
+    merged_browser = _browser_headers()
+    signed_out_only_browser = _browser_headers()
+    # The upgrade must convert, so no account may exist for the test user yet.
+    _delete_account(api_client, user_headers)
+    try:
+        # Reads never create an unauthenticated user.
+        absent = api_client.get("/v2/me", params=params, headers=converted_browser)
+        assert absent.status_code == 404, absent.text[:500]
+        assert _policy_ids(api_client, converted_browser) == set()
+
+        saved = _save_policy(api_client, converted_browser, legacy_policy_id)
+        assert saved["user_id"] == converted_browser[UNAUTHENTICATED_USER_HEADER]
+        detail = api_client.get(
+            f"/v2/user-policies/{saved['id']}",
+            params=params,
+            headers=converted_browser,
+        )
+        assert detail.status_code == 200, detail.text[:500]
+        assert detail.json()["result"]["item"] == saved
+        me = api_client.get("/v2/me", params=params, headers=converted_browser)
+        assert me.status_code == 200, me.text[:500]
+        assert me.json()["result"]["item"]["user_type"] == "unauthenticated"
+        assert me.json()["result"]["item"]["primary_country"] is None
+        edited = api_client.patch(
+            "/v2/me",
+            params=params,
+            headers=converted_browser,
+            json={"first_name": "Signed out"},
+        )
+        assert edited.status_code == 403, edited.text[:500]
+
+        # A signed-out browser's work is invisible to the signed-in user...
+        other_work = _save_policy(api_client, signed_out_only_browser, legacy_policy_id)
+        assert other_work["id"] not in _policy_ids(api_client, user_headers)
+
+        # ...until sign-in converts this browser's user in place. The bearer
+        # GET above provisioned the account, so delete it again first.
+        _delete_account(api_client, user_headers)
+        converted = api_client.post(
+            "/v2/me/upgrade",
+            params=params,
+            headers={**user_headers, **converted_browser},
+        )
+        assert converted.status_code == 200, converted.text[:500]
+        converted_result = converted.json()["result"]
+        assert converted_result["outcome"] == "converted"
+        account_id = converted_result["item"]["id"]
+        assert account_id == converted_browser[UNAUTHENTICATED_USER_HEADER]
+        assert converted_result["item"]["user_type"] == "standard"
+        assert _policy_ids(api_client, user_headers) == {saved["id"]}
+        refused = api_client.get("/v2/me", params=params, headers=converted_browser)
+        assert refused.status_code == 401, refused.text[:500]
+
+        # A second browser's work merges into the existing account unchanged.
+        merged_work = _save_policy(api_client, merged_browser, legacy_policy_id)
+        merged = api_client.post(
+            "/v2/me/upgrade",
+            params=params,
+            headers={**user_headers, **merged_browser},
+        )
+        assert merged.status_code == 200, merged.text[:500]
+        assert merged.json()["result"]["outcome"] == "merged"
+        assert merged.json()["result"]["item"]["id"] == account_id
+        assert _policy_ids(api_client, user_headers) == {saved["id"], merged_work["id"]}
+        gone = api_client.get("/v2/me", params=params, headers=merged_browser)
+        assert gone.status_code == 404, gone.text[:500]
+
+        repeated = api_client.post(
+            "/v2/me/upgrade",
+            params=params,
+            headers={**user_headers, **merged_browser},
+        )
+        assert repeated.status_code == 200, repeated.text[:500]
+        assert repeated.json()["result"]["outcome"] == "none"
+
+        # A signed-out browser can delete its own work, and nothing else.
+        _delete_account(api_client, signed_out_only_browser)
+        assert _policy_ids(api_client, signed_out_only_browser) == set()
+        assert _policy_ids(api_client, user_headers) == {saved["id"], merged_work["id"]}
+    finally:
+        _delete_account(api_client, signed_out_only_browser)
+        _delete_account(api_client, merged_browser)
         _delete_account(api_client, user_headers)
