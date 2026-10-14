@@ -1,5 +1,6 @@
 import datetime
 import json
+from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
@@ -217,10 +218,7 @@ def mock_submission_claim_id():
 def create_mock_reform_impact(
     status="ok",
     reform_impact_json=None,
-    execution_id=MOCK_MODAL_JOB_ID,
     options_hash=MOCK_OPTIONS_HASH,
-    start_time=None,
-    time_period=MOCK_TIME_PERIOD,
     message=None,
 ):
     """Build a ReformImpact record populated with the shared mock identifiers."""
@@ -243,15 +241,15 @@ def create_mock_reform_impact(
         baseline_policy_id=MOCK_BASELINE_POLICY_ID,
         region=MOCK_REGION,
         dataset=MOCK_DATASET,
-        time_period=time_period,
+        time_period=MOCK_TIME_PERIOD,
         options_json=MOCK_OPTIONS,
         options_hash=options_hash,
         status=status,
         api_version=MOCK_API_VERSION,
         reform_impact_json=reform_impact_json or default_reform_impact_json,
-        execution_id=execution_id,
+        execution_id=MOCK_MODAL_JOB_ID,
         message=message,
-        start_time=start_time or datetime.datetime(2025, 6, 26, 12, 0, 0),
+        start_time=datetime.datetime(2025, 6, 26, 12, 0, 0),
         end_time=(datetime.datetime(2025, 6, 26, 12, 5, 0) if status == "ok" else None),
     )
     impact.observability_id = MOCK_OBSERVABILITY_ID
@@ -301,27 +299,35 @@ def create_mock_modal_execution(
     return mock_execution
 
 
+@dataclass(frozen=True)
+class MockBatchProgress:
+    """How far a mock budget-window batch has got, overall and year by year."""
+
+    progress: int | None = None
+    completed_years: list[str] | None = None
+    running_years: list[str] | None = None
+    queued_years: list[str] | None = None
+    failed_years: list[str] | None = None
+
+
 def create_mock_budget_window_batch_execution(
     batch_job_id=MOCK_MODAL_JOB_ID,
     status=MODAL_EXECUTION_STATUS_SUBMITTED,
-    progress=None,
-    completed_years=None,
-    running_years=None,
-    queued_years=None,
-    failed_years=None,
+    batch_progress: MockBatchProgress | None = None,
     result=None,
     error=None,
 ):
     """Build a mock budget-window batch execution; year lists default to empty."""
+    batch_progress = batch_progress or MockBatchProgress()
     mock_execution = MagicMock()
     mock_execution.batch_job_id = batch_job_id
     mock_execution.name = batch_job_id
     mock_execution.status = status
-    mock_execution.progress = progress
-    mock_execution.completed_years = completed_years or []
-    mock_execution.running_years = running_years or []
-    mock_execution.queued_years = queued_years or []
-    mock_execution.failed_years = failed_years or []
+    mock_execution.progress = batch_progress.progress
+    mock_execution.completed_years = batch_progress.completed_years or []
+    mock_execution.running_years = batch_progress.running_years or []
+    mock_execution.queued_years = batch_progress.queued_years or []
+    mock_execution.failed_years = batch_progress.failed_years or []
     mock_execution.result = result
     mock_execution.error = error
     return mock_execution
