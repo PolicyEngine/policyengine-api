@@ -143,6 +143,9 @@ exclude = ["migrations/*/versions/*.py"]
     "ANN", "D1", "DTZ001", "DTZ011", "INP001", "PLC0415", "PLR2004", "S101",
     "S105", "S106", "S603", "S607", "S608", "SLF001", "T201", "TID253",
 ]
+# The shared rules tool needs only the standard library, so its tests use
+# unittest on purpose; pytest-style rules don't apply to them.
+"scripts/rules/tests/**" = ["PT"]
 # CI/CD scripts print their results, fetch fixed URLs and may import the
 # lazily loaded packages at module level.
 ".github/**" = ["S310", "T201", "TID253"]
