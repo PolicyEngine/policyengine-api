@@ -15,6 +15,8 @@ from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import (
     CachedReformImpact,
     ReformImpactCache,
+    ReformImpactIdentity,
+    ReformImpactScope,
     reform_impact_id,
 )
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
@@ -221,28 +223,31 @@ def test_annual_submission_stores_record_and_sends_payload(
     # The submission claim is released once the execution pointer is stored.
     assert (
         economy_service._reform_impacts.get_reform_impact_start_claim(
-            country_id="us",
-            policy_id=MOCK_POLICY_ID,
-            baseline_policy_id=MOCK_BASELINE_POLICY_ID,
-            region="state/ca",
-            dataset="default",
-            time_period="2025",
-            options_hash=MOCK_OPTIONS_HASH,
-            api_version=CACHE_VERSION,
+            identity=ReformImpactIdentity(
+                scope=_scope(time_period="2025"),
+                api_version=CACHE_VERSION,
+                options_hash=MOCK_OPTIONS_HASH,
+            ),
             target="cliff",
         )
         is None
     )
 
 
-def _budget_window_key(service: EconomyService) -> str:
-    return service._budget_window_cache.build_key(
+def _scope(time_period: str) -> ReformImpactScope:
+    return ReformImpactScope(
         country_id="us",
         reform_policy_id=MOCK_POLICY_ID,
         baseline_policy_id=MOCK_BASELINE_POLICY_ID,
         region="state/ca",
         dataset="default",
-        time_period="budget_window:2026:3",
+        time_period=time_period,
+    )
+
+
+def _budget_window_key(service: EconomyService) -> str:
+    return service._budget_window_cache.build_key(
+        _scope(time_period="budget_window:2026:3"),
         options_hash=MOCK_LOOKUP_OPTIONS_HASH,
         api_version=CACHE_VERSION,
     )

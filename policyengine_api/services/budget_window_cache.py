@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -18,6 +18,9 @@ from policyengine_api.runtime_cache.core import (
     record_cache_event,
 )
 from policyengine_api.runtime_cache.dependencies import get_runtime_cache_context
+
+if TYPE_CHECKING:
+    from policyengine_api.runtime_cache.reform_impacts import ReformImpactScope
 
 BUDGET_WINDOW_CACHE_FAMILY = "budget-window"
 BUDGET_WINDOW_CACHE_SCHEMA_VERSION = 4
@@ -97,33 +100,29 @@ class BudgetWindowCache:
 
     def build_key(
         self,
+        scope: ReformImpactScope,
         *,
-        country_id: str,
-        reform_policy_id: int,
-        baseline_policy_id: int,
-        region: str,
-        dataset: str,
-        time_period: str,
         options_hash: str | None,
         api_version: str,
     ) -> str:
         """Return the cache key for one budget-window report request.
 
-        Every argument is part of the key, so a change to any of them (including the
-        API version or the options hash) starts a separate report.
+        Every scope field and argument is part of the key, so a change to any of
+        them (including the API version or the options hash) starts a separate
+        report.
         """
         return self.namespace.key(
             BUDGET_WINDOW_CACHE_FAMILY,
             BUDGET_WINDOW_CACHE_SCHEMA_VERSION,
             {
                 "api_version": api_version,
-                "baseline_policy_id": baseline_policy_id,
-                "country_id": country_id,
-                "dataset": dataset,
+                "baseline_policy_id": scope.baseline_policy_id,
+                "country_id": scope.country_id,
+                "dataset": scope.dataset,
                 "options_hash": options_hash,
-                "reform_policy_id": reform_policy_id,
-                "region": region,
-                "time_period": time_period,
+                "reform_policy_id": scope.reform_policy_id,
+                "region": scope.region,
+                "time_period": scope.time_period,
             },
         )
 

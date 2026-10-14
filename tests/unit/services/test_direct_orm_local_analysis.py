@@ -7,8 +7,13 @@ from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import (
     CachedReformImpact,
     ReformImpactCache,
+    ReformImpactIdentity,
+    ReformImpactScope,
 )
-from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from policyengine_api.services.reform_impacts_service import (
+    ReformImpactExecution,
+    ReformImpactsService,
+)
 
 
 def _context():
@@ -20,19 +25,25 @@ def test_reform_impact_service_writes_typed_expiring_cache_entity() -> None:
     impact = ReformImpactsService(
         ReformImpactCache(backend, namespace)
     ).set_reform_impact(
-        country_id="us",
-        policy_id=2,
-        baseline_policy_id=1,
-        region="us",
-        dataset="default",
-        time_period="2026",
+        ReformImpactIdentity(
+            scope=ReformImpactScope(
+                country_id="us",
+                reform_policy_id=2,
+                baseline_policy_id=1,
+                region="us",
+                dataset="default",
+                time_period="2026",
+            ),
+            api_version="1",
+            options_hash="hash",
+        ),
+        ReformImpactExecution(
+            execution_id="job",
+            start_time=datetime(2026, 1, 1),
+        ),
         options={"dataset": "default"},
-        options_hash="hash",
         status="computing",
-        api_version="1",
         reform_impact_json={},
-        start_time=datetime(2026, 1, 1),
-        execution_id="job",
     )
 
     assert isinstance(impact, CachedReformImpact)

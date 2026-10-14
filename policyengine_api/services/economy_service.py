@@ -57,6 +57,8 @@ from policyengine_api.request_context import (
 from policyengine_api.runtime_cache.core import CacheCoordinationError
 from policyengine_api.runtime_cache.reform_impacts import (
     CachedReformImpact,
+    ReformImpactIdentity,
+    ReformImpactScope,
     ReformImpactStartClaim,
 )
 from policyengine_api.services.budget_window_cache import (
@@ -65,6 +67,7 @@ from policyengine_api.services.budget_window_cache import (
 )
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
+    ReformImpactExecution,
     ReformImpactHandoffError,
     ReformImpactsService,
 )
@@ -659,12 +662,7 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
     ) -> str:
         return self._budget_window_cache.build_key(
-            country_id=setup_options.country_id,
-            reform_policy_id=setup_options.reform_policy_id,
-            baseline_policy_id=setup_options.baseline_policy_id,
-            region=setup_options.region,
-            dataset=setup_options.dataset,
-            time_period=setup_options.time_period,
+            scope=self._reform_impact_scope(setup_options),
             options_hash=setup_options.options_hash,
             api_version=setup_options.api_version,
         )
@@ -1121,6 +1119,31 @@ class EconomyService:
             runtime_app_name=setup_options.runtime_app_name,
         )
 
+    @staticmethod
+    def _reform_impact_scope(
+        setup_options: EconomicImpactSetupOptions,
+    ) -> ReformImpactScope:
+        """Return the policy pair, region, dataset and period of these options."""
+        return ReformImpactScope(
+            country_id=setup_options.country_id,
+            reform_policy_id=setup_options.reform_policy_id,
+            baseline_policy_id=setup_options.baseline_policy_id,
+            region=setup_options.region,
+            dataset=setup_options.dataset,
+            time_period=setup_options.time_period,
+        )
+
+    def _reform_impact_identity(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> ReformImpactIdentity:
+        """Return the cache identity of the impact these setup options describe."""
+        return ReformImpactIdentity(
+            scope=self._reform_impact_scope(setup_options),
+            api_version=setup_options.api_version,
+            options_hash=setup_options.options_hash,
+        )
+
     def _reform_impact_start_claim_scope_arguments(
         self,
         setup_options: EconomicImpactSetupOptions,
@@ -1129,14 +1152,7 @@ class EconomyService:
             msg = "resolved reform-impact options hash is required"
             raise ValueError(msg)
         return {
-            "country_id": setup_options.country_id,
-            "policy_id": setup_options.reform_policy_id,
-            "baseline_policy_id": setup_options.baseline_policy_id,
-            "region": setup_options.region,
-            "dataset": setup_options.dataset,
-            "time_period": setup_options.time_period,
-            "options_hash": setup_options.options_hash,
-            "api_version": setup_options.api_version,
+            "identity": self._reform_impact_identity(setup_options),
             "target": setup_options.target,
         }
 
@@ -1211,26 +1227,19 @@ class EconomyService:
 
     def _get_previous_impacts(
         self,
-        country_id: str,
-        policy_id: int,
-        baseline_policy_id: int,
-        region: str,
-        dataset: str,
-        time_period: str,
+        scope: ReformImpactScope,
+        *,
         options_hash: str,
         api_version: str,
     ) -> list[CachedReformImpact]:
         """Fetch any previous simulation runs for the given policy reform."""
         return self._reform_impacts.get_all_reform_impacts_by_options_hash_prefix(
-            country_id,
-            policy_id,
-            baseline_policy_id,
-            region,
-            dataset,
-            time_period,
-            options_hash,
+            ReformImpactIdentity(
+                scope=scope,
+                api_version=api_version,
+                options_hash=options_hash,
+            ),
             self._build_options_hash_lookup_pattern(options_hash),
-            api_version,
         )
 
     def _get_most_recent_impact(
@@ -1243,12 +1252,7 @@ class EconomyService:
         whose hash extends this one (with extra bundle fields) is used.
         """
         previous_impacts = self._get_previous_impacts(
-            country_id=setup_options.country_id,
-            policy_id=setup_options.reform_policy_id,
-            baseline_policy_id=setup_options.baseline_policy_id,
-            region=setup_options.region,
-            dataset=setup_options.dataset,
-            time_period=setup_options.time_period,
+            self._reform_impact_scope(setup_options),
             options_hash=setup_options.options_hash,
             api_version=setup_options.api_version,
         )
@@ -1810,20 +1814,15 @@ class EconomyService:
         """Record the impact as "computing" for this run; log and re-raise errors."""
         try:
             self._reform_impacts.set_reform_impact(
-                country_id=setup_options.country_id,
-                policy_id=setup_options.reform_policy_id,
-                baseline_policy_id=setup_options.baseline_policy_id,
-                region=setup_options.region,
-                dataset=setup_options.dataset,
-                time_period=setup_options.time_period,
+                identity=self._reform_impact_identity(setup_options),
+                execution=ReformImpactExecution(
+                    execution_id=execution_id,
+                    start_time=datetime.datetime.now(),  # noqa: DTZ005  # start_time is a naive column that has always held local time
+                    observability_id=setup_options.observability_id,
+                ),
                 options=setup_options.options,
-                options_hash=setup_options.options_hash,
                 status=ImpactStatus.COMPUTING.value,
-                api_version=setup_options.api_version,
                 reform_impact_json={},
-                start_time=datetime.datetime.now(),  # noqa: DTZ005  # start_time is a naive column that has always held local time
-                execution_id=execution_id,
-                observability_id=setup_options.observability_id,
             )
         except Exception as e:
             logger.log_struct(
@@ -1846,15 +1845,8 @@ class EconomyService:
         """Record the impact as "ok" with its result JSON; log and re-raise errors."""
         try:
             self._reform_impacts.set_complete_reform_impact(
-                country_id=setup_options.country_id,
-                reform_policy_id=setup_options.reform_policy_id,
-                baseline_policy_id=setup_options.baseline_policy_id,
-                region=setup_options.region,
-                dataset=setup_options.dataset,
-                time_period=setup_options.time_period,
-                options_hash=setup_options.options_hash,
-                reform_impact_json=reform_impact_json,
                 execution_id=execution_id,
+                reform_impact_json=reform_impact_json,
             )
         except Exception as e:
             logger.log_struct(
@@ -1878,15 +1870,8 @@ class EconomyService:
         """Record the impact as "error" with its message; log and re-raise errors."""
         try:
             self._reform_impacts.set_error_reform_impact(
-                country_id=setup_options.country_id,
-                policy_id=setup_options.reform_policy_id,
-                baseline_policy_id=setup_options.baseline_policy_id,
-                region=setup_options.region,
-                dataset=setup_options.dataset,
-                time_period=setup_options.time_period,
-                options_hash=setup_options.options_hash,
-                message=message,
                 execution_id=execution_id,
+                message=message,
                 **({"error_code": error_code} if error_code is not None else {}),
             )
         except Exception as e:

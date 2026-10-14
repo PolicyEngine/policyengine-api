@@ -13,7 +13,10 @@ from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
 from policyengine_api.services import economy_service as economy_module
 from policyengine_api.services.economy_service import EconomyService
-from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from policyengine_api.services.reform_impacts_service import (
+    ReformImpactExecution,
+    ReformImpactsService,
+)
 
 SELECTION = {
     "forecast_content_sha256": "a" * 64,
@@ -68,19 +71,11 @@ def failed_job_harness(request, monkeypatch):
     )
     service._resolve_runtime_bundle_for_setup_options(setup)
     impacts.set_reform_impact(
-        country_id=setup.country_id,
-        policy_id=setup.reform_policy_id,
-        baseline_policy_id=setup.baseline_policy_id,
-        region=setup.region,
-        dataset=setup.dataset,
-        time_period=setup.time_period,
+        service._reform_impact_identity(setup),
+        ReformImpactExecution(execution_id=EXECUTION_ID, start_time=None),
         options=setup.options,
-        options_hash=setup.options_hash,
         status="computing",
-        api_version=setup.api_version,
         reform_impact_json={},
-        start_time=None,
-        execution_id=EXECUTION_ID,
     )
     monkeypatch.setattr(economy_routes, "economy_service", service)
     logger = Mock()
