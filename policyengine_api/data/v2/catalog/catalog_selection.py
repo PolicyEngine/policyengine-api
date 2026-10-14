@@ -14,6 +14,7 @@ from policyengine_api.data.v2.models import (
 )
 
 SUPPORTED_V2_COUNTRY_IDS = frozenset({"us", "uk"})
+MAXIMUM_POLICYENGINE_VERSION_LENGTH = 128
 
 
 class MetadataCatalogUnavailableError(RuntimeError):
@@ -47,8 +48,11 @@ def validate_policyengine_version(value: str) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
         msg = "policyengine_version must be a non-empty canonical version"
         raise InvalidPolicyEngineVersionError(msg)
-    if len(value) > 128:
-        msg = "policyengine_version must be at most 128 characters"
+    if len(value) > MAXIMUM_POLICYENGINE_VERSION_LENGTH:
+        msg = (
+            "policyengine_version must be at most "
+            f"{MAXIMUM_POLICYENGINE_VERSION_LENGTH} characters"
+        )
         raise InvalidPolicyEngineVersionError(msg)
     try:
         parsed = Version(value)

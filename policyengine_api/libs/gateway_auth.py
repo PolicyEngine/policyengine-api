@@ -13,6 +13,7 @@ import os
 import threading
 import time
 from functools import cache
+from http import HTTPStatus
 from typing import TYPE_CHECKING
 
 import httpx
@@ -276,7 +277,7 @@ class GatewayBearerAuth(httpx.Auth):
         request.headers["Authorization"] = f"Bearer {self._token_provider.get_token()}"
         response = yield request
 
-        if response.status_code != 401:
+        if response.status_code != HTTPStatus.UNAUTHORIZED:
             return
 
         self._token_provider.invalidate()

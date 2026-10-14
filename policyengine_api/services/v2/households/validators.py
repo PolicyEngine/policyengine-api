@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 MAXIMUM_HOUSEHOLD_ENTITIES = 1_000
 MAXIMUM_HOUSEHOLD_RECORD_VALUES = 500
 MAXIMUM_JSON_NESTING = 100
+MAXIMUM_IDENTIFIER_LENGTH = 255
 SUPPORTED_ENTITY_COLLECTIONS = {
     "us": ("household", "family", "tax_unit", "spm_unit", "marital_unit"),
     "uk": ("household", "benunit"),
@@ -83,8 +84,15 @@ def require_json_value(
 
 
 def _require_identifier(value: object, *, field: str) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > 255:
-        msg = f"{field} must be a non-empty string of at most 255 characters"
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or len(value) > MAXIMUM_IDENTIFIER_LENGTH
+    ):
+        msg = (
+            f"{field} must be a non-empty string of at most "
+            f"{MAXIMUM_IDENTIFIER_LENGTH} characters"
+        )
         raise HouseholdValidationError(msg)
     return value
 
