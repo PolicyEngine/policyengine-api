@@ -5,7 +5,10 @@ from policyengine_api import constants
 from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun
 from policyengine_api.services.report_output_service import ReportOutputService
-from policyengine_api.services.report_run_service import ReportRunService
+from policyengine_api.services.report_run_service import (
+    NewReportOutputRun,
+    ReportRunService,
+)
 from policyengine_api.services.simulation_service import SimulationService
 
 run_service = ReportRunService()
@@ -431,7 +434,7 @@ def _add_rerun(orm_session_factory, report_id):
         report = session.get(ReportOutput, report_id)
         successful_run_id = report.latest_successful_run_id
         rerun = run_service.create_report_output_run(
-            session, report.id, trigger_type="rerun"
+            session, report.id, NewReportOutputRun(trigger_type="rerun")
         )
         report.active_run_id = rerun.id
         return rerun.id, successful_run_id

@@ -1,7 +1,10 @@
 import pytest
 
 from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun
-from policyengine_api.services.report_run_service import ReportRunService
+from policyengine_api.services.report_run_service import (
+    NewReportOutputRun,
+    ReportRunService,
+)
 
 service = ReportRunService()
 
@@ -26,12 +29,14 @@ def test_creates_mapped_runs_with_incrementing_sequence_and_python_json(orm_sess
     first = service.create_report_output_run(
         orm_session,
         report.id,
-        trigger_type="initial",
-        report_spec_snapshot={"country_id": "us"},
-        version_manifest={"report_cache_version": "r123"},
+        NewReportOutputRun(
+            trigger_type="initial",
+            report_spec_snapshot={"country_id": "us"},
+            version_manifest={"report_cache_version": "r123"},
+        ),
     )
     second = service.create_report_output_run(
-        orm_session, report.id, trigger_type="rerun"
+        orm_session, report.id, NewReportOutputRun(trigger_type="rerun")
     )
 
     assert isinstance(first, ReportOutputRun)
@@ -58,7 +63,9 @@ def test_sets_run_timestamps_from_status(
 ):
     report = create_report(orm_session)
 
-    run = service.create_report_output_run(orm_session, report.id, status=status)
+    run = service.create_report_output_run(
+        orm_session, report.id, NewReportOutputRun(status=status)
+    )
 
     assert (run.started_at is not None) is has_started
     assert (run.finished_at is not None) is has_finished
@@ -71,8 +78,12 @@ def test_raises_when_parent_report_is_missing(orm_session):
 
 def test_gets_lists_and_selects_mapped_runs(orm_session):
     report = create_report(orm_session)
-    first = service.create_report_output_run(orm_session, report.id, status="complete")
-    second = service.create_report_output_run(orm_session, report.id, status="running")
+    first = service.create_report_output_run(
+        orm_session, report.id, NewReportOutputRun(status="complete")
+    )
+    second = service.create_report_output_run(
+        orm_session, report.id, NewReportOutputRun(status="running")
+    )
     report.latest_successful_run_id = first.id
     report.active_run_id = second.id
 
@@ -87,8 +98,7 @@ def test_select_display_run_falls_back_to_matching_error(orm_session):
     matching = service.create_report_output_run(
         orm_session,
         report.id,
-        status="error",
-        error_message="failed",
+        NewReportOutputRun(status="error", error_message="failed"),
     )
     service.create_report_output_run(orm_session, report.id)
     report.error_message = "failed"
