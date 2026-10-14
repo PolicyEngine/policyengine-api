@@ -585,6 +585,11 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
 ]
 
 
+# Numbers whose last two digits are 10 through 20 always take "th" (11th, 12th).
+_ALWAYS_TH_REMAINDER_MIN = 10
+_ALWAYS_TH_REMAINDER_MAX = 20
+
+
 def _get_ordinal_suffix(number: int) -> str:
     """Get the ordinal suffix for a number (st, nd, rd, th).
 
@@ -598,7 +603,7 @@ def _get_ordinal_suffix(number: int) -> str:
         22 -> "nd"
 
     """
-    if 10 <= number % 100 <= 20:
+    if _ALWAYS_TH_REMAINDER_MIN <= number % 100 <= _ALWAYS_TH_REMAINDER_MAX:
         # Special case for 11th, 12th, 13th, etc.
         suffix = "th"
     else:

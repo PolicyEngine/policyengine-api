@@ -6,6 +6,8 @@ Example: NJ-57000 for Newark, NJ
 
 from policyengine_api.data.congressional_districts import get_valid_state_codes
 
+PLACE_FIPS_CODE_LENGTH = 5
+
 
 def parse_place_code(place_code: str) -> tuple[str, str]:
     """Parse a place code into its state abbreviation and FIPS components.
@@ -45,6 +47,6 @@ def validate_place_code(place_code: str) -> None:
         msg = f"Invalid state in place code: '{state_abbrev}'"
         raise ValueError(msg)
 
-    if not place_fips.isdigit() or len(place_fips) != 5:
+    if not place_fips.isdigit() or len(place_fips) != PLACE_FIPS_CODE_LENGTH:
         msg = f"Invalid FIPS code in place: '{place_fips}'. Expected 5-digit FIPS code"
         raise ValueError(msg)
