@@ -4,7 +4,11 @@ from dataclasses import dataclass
 
 
 AUTHORIZATION_HEADER = "Authorization"
+UNAUTHENTICATED_USER_HEADER = "PolicyEngine-Unauthenticated-User"
 USER_AUTH_HEADERS = (AUTHORIZATION_HEADER,)
+UNAUTHENTICATED_USER_HEADERS = (UNAUTHENTICATED_USER_HEADER,)
+# Each user-owned request is recorded once per credential that can make it.
+ACCOUNT_CREDENTIAL_HEADERS = (USER_AUTH_HEADERS, UNAUTHENTICATED_USER_HEADERS)
 
 
 @dataclass(frozen=True)
@@ -14,8 +18,10 @@ class ContractRequest:
     expected_status: int
     stable_response_fields: tuple[str, ...]
     route_group: str
-    # Request headers the route requires, by name. Signed-in user routes
-    # require "Authorization: Bearer <Auth0 user access token>".
+    # Request headers the route requires, by name. User-owned routes require
+    # "Authorization: Bearer <Auth0 user access token>" from a signed-in user,
+    # or "PolicyEngine-Unauthenticated-User: <browser UUID>" from a
+    # signed-out browser.
     headers: tuple[str, ...] = ()
 
 
@@ -27,7 +33,6 @@ def _association_item_fields(*names: str) -> tuple[str, ...]:
         "result.item.country_id",
         "result.item.user_id",
         *(f"result.item.{name}" for name in names),
-        "result.item.client_ref",
         "result.item.created_at",
         "result.item.updated_at",
     )
@@ -43,12 +48,13 @@ PAGE_FIELDS = (
 )
 
 
-def _signed_in_association_requests(
+def _association_requests(
     resource: str,
     *,
     route_group: str,
     item_fields: tuple[str, ...],
     patch_fields: tuple[str, ...],
+    headers: tuple[str, ...],
 ) -> tuple[ContractRequest, ...]:
     detail_path = f"/v2/{resource}/{{association_id}}?country_id=us"
     return (
@@ -58,7 +64,7 @@ def _signed_in_association_requests(
             expected_status=201,
             stable_response_fields=item_fields,
             route_group=route_group,
-            headers=USER_AUTH_HEADERS,
+            headers=headers,
         ),
         ContractRequest(
             method="GET",
@@ -66,7 +72,7 @@ def _signed_in_association_requests(
             expected_status=200,
             stable_response_fields=item_fields,
             route_group=route_group,
-            headers=USER_AUTH_HEADERS,
+            headers=headers,
         ),
         ContractRequest(
             method="GET",
@@ -74,7 +80,7 @@ def _signed_in_association_requests(
             expected_status=200,
             stable_response_fields=PAGE_FIELDS,
             route_group=route_group,
-            headers=USER_AUTH_HEADERS,
+            headers=headers,
         ),
         ContractRequest(
             method="PATCH",
@@ -88,7 +94,7 @@ def _signed_in_association_requests(
                 "result.item.updated_at",
             ),
             route_group=route_group,
-            headers=USER_AUTH_HEADERS,
+            headers=headers,
         ),
         ContractRequest(
             method="DELETE",
@@ -96,8 +102,28 @@ def _signed_in_association_requests(
             expected_status=204,
             stable_response_fields=(),
             route_group=route_group,
-            headers=USER_AUTH_HEADERS,
+            headers=headers,
         ),
+    )
+
+
+def _user_association_requests(
+    resource: str,
+    *,
+    route_group: str,
+    item_fields: tuple[str, ...],
+    patch_fields: tuple[str, ...],
+) -> tuple[ContractRequest, ...]:
+    return tuple(
+        request
+        for headers in ACCOUNT_CREDENTIAL_HEADERS
+        for request in _association_requests(
+            resource,
+            route_group=route_group,
+            item_fields=item_fields,
+            patch_fields=patch_fields,
+            headers=headers,
+        )
     )
 
 
@@ -235,7 +261,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
         name="user_policy_associations_v2",
         current_contract="typed_v2_resources",
         future_owner_pr="PR 12A: User Login and v1-Anchored User Associations",
-        requests=_signed_in_association_requests(
+        requests=_user_association_requests(
             "user-policies",
             route_group="policy",
             item_fields=_association_item_fields(
@@ -334,7 +360,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
         name="user_household_associations_v2",
         current_contract="typed_v2_resources",
         future_owner_pr="PR 12A: User Login and v1-Anchored User Associations",
-        requests=_signed_in_association_requests(
+        requests=_user_association_requests(
             "user-households",
             route_group="household",
             item_fields=_association_item_fields(
@@ -355,7 +381,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
         name="user_simulation_associations_v2",
         current_contract="typed_v2_resources",
         future_owner_pr="PR 12A: User Login and v1-Anchored User Associations",
-        requests=_signed_in_association_requests(
+        requests=_user_association_requests(
             "user-simulations",
             route_group="simulation",
             item_fields=_association_item_fields(
@@ -371,7 +397,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
         name="user_report_associations_v2",
         current_contract="typed_v2_resources",
         future_owner_pr="PR 12A: User Login and v1-Anchored User Associations",
-        requests=_signed_in_association_requests(
+        requests=_user_association_requests(
             "user-reports",
             route_group="report",
             item_fields=_association_item_fields(
@@ -402,22 +428,26 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
         current_contract="typed_v2_resources",
         future_owner_pr="PR 12A: User Login and v1-Anchored User Associations",
         requests=(
-            ContractRequest(
-                method="GET",
-                path="/v2/me?country_id=us",
-                expected_status=200,
-                stable_response_fields=(
-                    "status",
-                    "message",
-                    "result.item.id",
-                    "result.item.primary_country",
-                    "result.item.first_name",
-                    "result.item.last_name",
-                    "result.item.email",
-                    "result.item.created_at",
-                ),
-                route_group="user_profile",
-                headers=USER_AUTH_HEADERS,
+            *(
+                ContractRequest(
+                    method="GET",
+                    path="/v2/me?country_id=us",
+                    expected_status=200,
+                    stable_response_fields=(
+                        "status",
+                        "message",
+                        "result.item.id",
+                        "result.item.user_type",
+                        "result.item.primary_country",
+                        "result.item.first_name",
+                        "result.item.last_name",
+                        "result.item.email",
+                        "result.item.created_at",
+                    ),
+                    route_group="user_profile",
+                    headers=headers,
+                )
+                for headers in ACCOUNT_CREDENTIAL_HEADERS
             ),
             ContractRequest(
                 method="PATCH",
@@ -434,42 +464,50 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                 route_group="user_profile",
                 headers=USER_AUTH_HEADERS,
             ),
-            ContractRequest(
-                method="GET",
-                path="/v2/me/export?country_id=us",
-                expected_status=200,
-                stable_response_fields=(
-                    "status",
-                    "message",
-                    "result.user",
-                    "result.policies",
-                    "result.households",
-                    "result.simulations",
-                    "result.reports",
-                ),
-                route_group="user_profile",
-                headers=USER_AUTH_HEADERS,
+            *(
+                ContractRequest(
+                    method="GET",
+                    path="/v2/me/export?country_id=us",
+                    expected_status=200,
+                    stable_response_fields=(
+                        "status",
+                        "message",
+                        "result.user",
+                        "result.policies",
+                        "result.households",
+                        "result.simulations",
+                        "result.reports",
+                    ),
+                    route_group="user_profile",
+                    headers=headers,
+                )
+                for headers in ACCOUNT_CREDENTIAL_HEADERS
             ),
             ContractRequest(
                 method="POST",
-                path="/v2/me/imports?country_id=us",
+                path="/v2/me/upgrade?country_id=us",
                 expected_status=200,
                 stable_response_fields=(
                     "status",
                     "message",
-                    "result.id_map",
-                    "result.skipped",
+                    "result.item.id",
+                    "result.item.user_type",
+                    "result.item.primary_country",
+                    "result.outcome",
                 ),
                 route_group="user_profile",
-                headers=USER_AUTH_HEADERS,
+                headers=(AUTHORIZATION_HEADER, UNAUTHENTICATED_USER_HEADER),
             ),
-            ContractRequest(
-                method="DELETE",
-                path="/v2/me?country_id=us",
-                expected_status=204,
-                stable_response_fields=(),
-                route_group="user_profile",
-                headers=USER_AUTH_HEADERS,
+            *(
+                ContractRequest(
+                    method="DELETE",
+                    path="/v2/me?country_id=us",
+                    expected_status=204,
+                    stable_response_fields=(),
+                    route_group="user_profile",
+                    headers=headers,
+                )
+                for headers in ACCOUNT_CREDENTIAL_HEADERS
             ),
         ),
     ),

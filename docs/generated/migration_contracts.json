@@ -1,7 +1,7 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 65,
+    "request_count": 88,
     "route_group_count": 9,
     "sim_flow_count": 3,
     "workflow_count": 16
@@ -274,7 +274,6 @@
             "result.item.description",
             "result.item.baseline",
             "result.item.provenance",
-            "result.item.client_ref",
             "result.item.created_at",
             "result.item.updated_at"
           ]
@@ -299,7 +298,6 @@
             "result.item.description",
             "result.item.baseline",
             "result.item.provenance",
-            "result.item.client_ref",
             "result.item.created_at",
             "result.item.updated_at"
           ]
@@ -346,6 +344,102 @@
           "expected_status": 204,
           "headers": [
             "Authorization"
+          ],
+          "method": "DELETE",
+          "path": "/v2/user-policies/{association_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": []
+        },
+        {
+          "expected_status": 201,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "POST",
+          "path": "/v2/user-policies?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.policy_id",
+            "result.item.legacy_policy_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.baseline",
+            "result.item.provenance",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "GET",
+          "path": "/v2/user-policies/{association_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.policy_id",
+            "result.item.legacy_policy_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.baseline",
+            "result.item.provenance",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "GET",
+          "path": "/v2/user-policies?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "PATCH",
+          "path": "/v2/user-policies/{association_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.legacy_policy_id",
+            "result.item.policy_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.baseline",
+            "result.item.provenance",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 204,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
           ],
           "method": "DELETE",
           "path": "/v2/user-policies/{association_id}?country_id=us",
@@ -464,7 +558,6 @@
             "result.item.legacy_household_id",
             "result.item.name",
             "result.item.description",
-            "result.item.client_ref",
             "result.item.created_at",
             "result.item.updated_at"
           ]
@@ -487,7 +580,6 @@
             "result.item.legacy_household_id",
             "result.item.name",
             "result.item.description",
-            "result.item.client_ref",
             "result.item.created_at",
             "result.item.updated_at"
           ]
@@ -537,6 +629,96 @@
           "path": "/v2/user-households/{association_id}?country_id=us",
           "route_group": "household",
           "stable_response_fields": []
+        },
+        {
+          "expected_status": 201,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "POST",
+          "path": "/v2/user-households?country_id=us",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.household_id",
+            "result.item.legacy_household_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "GET",
+          "path": "/v2/user-households/{association_id}?country_id=us",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.household_id",
+            "result.item.legacy_household_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "GET",
+          "path": "/v2/user-households?country_id=us",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "PATCH",
+          "path": "/v2/user-households/{association_id}?country_id=us",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.legacy_household_id",
+            "result.item.household_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 204,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "DELETE",
+          "path": "/v2/user-households/{association_id}?country_id=us",
+          "route_group": "household",
+          "stable_response_fields": []
         }
       ]
     },
@@ -563,7 +745,6 @@
             "result.item.legacy_simulation_id",
             "result.item.name",
             "result.item.description",
-            "result.item.client_ref",
             "result.item.created_at",
             "result.item.updated_at"
           ]
@@ -586,7 +767,6 @@
             "result.item.legacy_simulation_id",
             "result.item.name",
             "result.item.description",
-            "result.item.client_ref",
             "result.item.created_at",
             "result.item.updated_at"
           ]
@@ -630,6 +810,95 @@
           "expected_status": 204,
           "headers": [
             "Authorization"
+          ],
+          "method": "DELETE",
+          "path": "/v2/user-simulations/{association_id}?country_id=us",
+          "route_group": "simulation",
+          "stable_response_fields": []
+        },
+        {
+          "expected_status": 201,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "POST",
+          "path": "/v2/user-simulations?country_id=us",
+          "route_group": "simulation",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.simulation_id",
+            "result.item.legacy_simulation_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "GET",
+          "path": "/v2/user-simulations/{association_id}?country_id=us",
+          "route_group": "simulation",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.simulation_id",
+            "result.item.legacy_simulation_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "GET",
+          "path": "/v2/user-simulations?country_id=us",
+          "route_group": "simulation",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "PATCH",
+          "path": "/v2/user-simulations/{association_id}?country_id=us",
+          "route_group": "simulation",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.legacy_simulation_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 204,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
           ],
           "method": "DELETE",
           "path": "/v2/user-simulations/{association_id}?country_id=us",
@@ -666,7 +935,6 @@
             "result.item.provisions",
             "result.item.validation",
             "result.item.last_run_at",
-            "result.item.client_ref",
             "result.item.created_at",
             "result.item.updated_at"
           ]
@@ -694,7 +962,6 @@
             "result.item.provisions",
             "result.item.validation",
             "result.item.last_run_at",
-            "result.item.client_ref",
             "result.item.created_at",
             "result.item.updated_at"
           ]
@@ -748,6 +1015,110 @@
           "path": "/v2/user-reports/{association_id}?country_id=us",
           "route_group": "report",
           "stable_response_fields": []
+        },
+        {
+          "expected_status": 201,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "POST",
+          "path": "/v2/user-reports?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.report_id",
+            "result.item.legacy_report_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.user_policy_id",
+            "result.item.source_note",
+            "result.item.provisions",
+            "result.item.validation",
+            "result.item.last_run_at",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "GET",
+          "path": "/v2/user-reports/{association_id}?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.report_id",
+            "result.item.legacy_report_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.user_policy_id",
+            "result.item.source_note",
+            "result.item.provisions",
+            "result.item.validation",
+            "result.item.last_run_at",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "GET",
+          "path": "/v2/user-reports?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "PATCH",
+          "path": "/v2/user-reports/{association_id}?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.legacy_report_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.user_policy_id",
+            "result.item.source_note",
+            "result.item.provisions",
+            "result.item.validation",
+            "result.item.last_run_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 204,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "DELETE",
+          "path": "/v2/user-reports/{association_id}?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": []
         }
       ]
     },
@@ -768,6 +1139,27 @@
             "status",
             "message",
             "result.item.id",
+            "result.item.user_type",
+            "result.item.primary_country",
+            "result.item.first_name",
+            "result.item.last_name",
+            "result.item.email",
+            "result.item.created_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "GET",
+          "path": "/v2/me?country_id=us",
+          "route_group": "user_profile",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.user_type",
             "result.item.primary_country",
             "result.item.first_name",
             "result.item.last_name",
@@ -813,22 +1205,53 @@
         {
           "expected_status": 200,
           "headers": [
-            "Authorization"
+            "PolicyEngine-Unauthenticated-User"
           ],
-          "method": "POST",
-          "path": "/v2/me/imports?country_id=us",
+          "method": "GET",
+          "path": "/v2/me/export?country_id=us",
           "route_group": "user_profile",
           "stable_response_fields": [
             "status",
             "message",
-            "result.id_map",
-            "result.skipped"
+            "result.user",
+            "result.policies",
+            "result.households",
+            "result.simulations",
+            "result.reports"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "Authorization",
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "POST",
+          "path": "/v2/me/upgrade?country_id=us",
+          "route_group": "user_profile",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.user_type",
+            "result.item.primary_country",
+            "result.outcome"
           ]
         },
         {
           "expected_status": 204,
           "headers": [
             "Authorization"
+          ],
+          "method": "DELETE",
+          "path": "/v2/me?country_id=us",
+          "route_group": "user_profile",
+          "stable_response_fields": []
+        },
+        {
+          "expected_status": 204,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
           ],
           "method": "DELETE",
           "path": "/v2/me?country_id=us",

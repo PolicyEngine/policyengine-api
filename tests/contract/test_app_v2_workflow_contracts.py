@@ -53,7 +53,11 @@ def test_app_v2_workflow_contract_registry_is_complete():
         assert request.stable_response_fields or request.expected_status == 204
         assert request.route_group in ROUTE_GROUP_CONFIG_BY_NAME
         if request.path.startswith(("/v2/me", "/v2/user-")):
-            assert request.headers == ("Authorization",)
+            assert request.headers in {
+                ("Authorization",),
+                ("PolicyEngine-Unauthenticated-User",),
+                ("Authorization", "PolicyEngine-Unauthenticated-User"),
+            }
             assert "user_id" not in request.path
         else:
             assert request.headers == ()
@@ -70,3 +74,40 @@ def test_app_v2_workflow_contract_registry_is_complete():
         if workflow.current_contract == "typed_v2_resources"
         for request in workflow.requests
     }
+
+
+def test_user_routes_record_signed_in_and_signed_out_contracts() -> None:
+    user_requests = {
+        (request.method, request.path.split("?", 1)[0], request.headers)
+        for request in APP_V2_ROUTE_CONTRACTS
+        if request.path.startswith(("/v2/me", "/v2/user-"))
+    }
+    signed_out = {
+        (method, path)
+        for method, path, headers in user_requests
+        if headers == ("PolicyEngine-Unauthenticated-User",)
+    }
+
+    for resource in ("policies", "households", "simulations", "reports"):
+        collection = f"/v2/user-{resource}"
+        detail = f"{collection}/{{association_id}}"
+        assert {
+            ("POST", collection),
+            ("GET", collection),
+            ("GET", detail),
+            ("PATCH", detail),
+            ("DELETE", detail),
+        } <= signed_out
+    assert {("GET", "/v2/me"), ("GET", "/v2/me/export"), ("DELETE", "/v2/me")} <= (
+        signed_out
+    )
+    # Signed-out browsers cannot edit account details.
+    assert ("PATCH", "/v2/me") not in signed_out
+    assert (
+        "POST",
+        "/v2/me/upgrade",
+        ("Authorization", "PolicyEngine-Unauthenticated-User"),
+    ) in user_requests
+    assert not any(
+        "/v2/me/imports" in path for _method, path, _headers in user_requests
+    )
