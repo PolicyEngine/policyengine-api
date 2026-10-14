@@ -1,3 +1,10 @@
+## [5.3.1] - 2026-10-14
+
+### Changed
+
+- Turned the remaining multi-line steps outside the deploy pipeline into single-line steps or a tested script, added tests for the Cloud Run image cleanup script, and fixed a shellcheck finding in the observability collector deploy script.
+
+
 ## [5.3.0] - 2026-10-14
 
 ### Added
