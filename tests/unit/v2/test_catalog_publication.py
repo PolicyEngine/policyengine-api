@@ -111,7 +111,7 @@ class _RevisionConnection:
 
 
 class _Inspector:
-    def __init__(self, table_exists: bool):
+    def __init__(self, *, table_exists: bool):
         self.table_exists = table_exists
 
     def has_table(self, table_name: str) -> bool:
@@ -124,13 +124,17 @@ def test_revision_check_rejects_non_postgres_missing_and_wrong_revisions() -> No
         publication._verify_expected_revision(_RevisionConnection(dialect="sqlite"))
 
     with (
-        patch.object(publication.sa, "inspect", return_value=_Inspector(False)),
+        patch.object(
+            publication.sa, "inspect", return_value=_Inspector(table_exists=False)
+        ),
         pytest.raises(publication.CatalogPublicationError, match="table is absent"),
     ):
         publication._verify_expected_revision(_RevisionConnection(dialect="postgresql"))
 
     with (
-        patch.object(publication.sa, "inspect", return_value=_Inspector(True)),
+        patch.object(
+            publication.sa, "inspect", return_value=_Inspector(table_exists=True)
+        ),
         pytest.raises(publication.CatalogPublicationError, match="expected"),
     ):
         publication._verify_expected_revision(

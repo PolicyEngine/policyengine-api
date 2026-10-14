@@ -162,7 +162,7 @@ class InMemoryCacheBackend:
                 return 0
             return self.delete(key)
 
-    def pipeline(self, transaction: bool = True) -> InMemoryPipeline:
+    def pipeline(self, *, transaction: bool = True) -> InMemoryPipeline:
         """Return a pipeline that queues commands until ``execute``."""
         return InMemoryPipeline(self, transaction=transaction)
 

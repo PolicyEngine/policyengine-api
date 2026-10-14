@@ -469,6 +469,7 @@ class PolicyEngineCountry:
         household: dict,
         reform: dict | None,
         spm: dict | None = None,
+        *,
         spm_requested: bool = False,
         prepared: PreparedCountryCalculation | None = None,
     ) -> CalculationResult:
@@ -567,6 +568,7 @@ class PolicyEngineCountry:
         household: dict,
         reform: dict | None,
         spm: dict | None = None,
+        *,
         spm_requested: bool = False,
     ) -> PreparedCountryCalculation:
         """Parse a situation before the API accepts it as a calculation."""

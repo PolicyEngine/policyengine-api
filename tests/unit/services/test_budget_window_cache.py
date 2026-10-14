@@ -33,7 +33,7 @@ class RaisingRedis:
             raise RuntimeError(msg)
         return
 
-    def set(self, key, value, nx=False, ex=None):  # noqa: ARG002  # implements the Redis client methods BudgetWindowCache calls
+    def set(self, key, value, *, nx=False, ex=None):  # noqa: ARG002  # implements the Redis client methods BudgetWindowCache calls
         if self.method == "set":
             msg = "redis unavailable"
             raise RuntimeError(msg)
