@@ -136,8 +136,10 @@ def compare(
                 f"(≤ {p95_limit:.2f}ms)"
             )
 
-    for name in sorted(set(candidate_stats) - set(baseline_stats)):
-        lines.append(f"NOTE {name}: not in baseline; not gated")
+    lines.extend(
+        f"NOTE {name}: not in baseline; not gated"
+        for name in sorted(set(candidate_stats) - set(baseline_stats))
+    )
 
     return passed, lines
 

@@ -1677,18 +1677,26 @@ class EconomyService:
             "dataset": setup_options.dataset,
         }
         if isinstance(result.get("policyengine_bundle"), dict):
-            for key, value in result["policyengine_bundle"].items():
-                if value is not None:
-                    bundle[key] = value
+            bundle.update(
+                {
+                    key: value
+                    for key, value in result["policyengine_bundle"].items()
+                    if value is not None
+                }
+            )
         execution_bundle = (
             getattr(execution, "policyengine_bundle", None)
             if execution is not None
             else None
         )
         if isinstance(execution_bundle, dict):
-            for key, value in execution_bundle.items():
-                if value is not None:
-                    bundle[key] = value
+            bundle.update(
+                {
+                    key: value
+                    for key, value in execution_bundle.items()
+                    if value is not None
+                }
+            )
         response = {
             **result,
             "policyengine_bundle": bundle,

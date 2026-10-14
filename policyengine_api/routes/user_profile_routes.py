@@ -54,11 +54,11 @@ def set_user_profile(country_id: str) -> Response:
     )
     result = _serialize_user_profile(profile, include_auth0_id=False)
 
-    response = dict(
-        status="ok",
-        message="Record created successfully" if created else "Record exists",
-        result=result,
-    )
+    response = {
+        "status": "ok",
+        "message": "Record created successfully" if created else "Record exists",
+        "result": result,
+    }
     return Response(
         json.dumps(response),
         status=201 if created else 200,
@@ -99,11 +99,11 @@ def get_user_profile(country_id: str) -> Response:
         msg = "No such user"
         raise NotFound(msg)
 
-    response_body = dict(
-        status="ok",
-        message=f"User #{readable_row['user_id']} found successfully",
-        result=readable_row,
-    )
+    response_body = {
+        "status": "ok",
+        "message": f"User #{readable_row['user_id']} found successfully",
+        "result": readable_row,
+    }
 
     return Response(
         json.dumps(response_body),
@@ -149,11 +149,11 @@ def update_user_profile(country_id: str) -> Response:
         msg = "No such user id"
         raise NotFound(msg)
 
-    response_body = dict(
-        status="ok",
-        message=f"User profile #{user_id} updated successfully",
-        result=dict(user_id=user_id),
-    )
+    response_body = {
+        "status": "ok",
+        "message": f"User profile #{user_id} updated successfully",
+        "result": {"user_id": user_id},
+    }
 
     return Response(
         json.dumps(response_body),

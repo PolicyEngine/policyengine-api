@@ -23,16 +23,13 @@ def _check_unique_values(
     *,
     label: str,
 ) -> list[str]:
-    violations = []
     seen: set[str] = set()
     duplicates: set[str] = set()
     for value in values:
         if value in seen:
             duplicates.add(value)
         seen.add(value)
-    for value in sorted(duplicates):
-        violations.append(f"duplicate {label}: {value!r}")
-    return violations
+    return [f"duplicate {label}: {value!r}" for value in sorted(duplicates)]
 
 
 def _check_route_groups(payload: dict[str, Any]) -> list[str]:

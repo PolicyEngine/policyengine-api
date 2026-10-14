@@ -177,9 +177,11 @@ def _spm_error_response(error: Exception) -> Response | None:
 
 
 def _calculation_response(calculation: HouseholdCalculationResult) -> dict:
-    result: dict[str, object] = dict(
-        status="ok", message=None, result=calculation.household
-    )
+    result: dict[str, object] = {
+        "status": "ok",
+        "message": None,
+        "result": calculation.household,
+    }
     if calculation.warnings:
         result["warnings"] = list(calculation.warnings)
     if calculation.spm_provenance is not None:

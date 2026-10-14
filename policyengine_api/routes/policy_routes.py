@@ -298,13 +298,13 @@ def set_policy(country_id: str) -> Response:
     if mirror_to_v2:
         _copy_policy_to_v2(country_id, policy_id, getattr(creation, "snapshot", None))
 
-    response_body = dict(
-        status="ok",
-        message=message,
-        result=dict(
-            policy_id=policy_id,
-        ),
-    )
+    response_body = {
+        "status": "ok",
+        "message": message,
+        "result": {
+            "policy_id": policy_id,
+        },
+    }
 
     code = 200 if is_existing_policy else 201
     return Response(json.dumps(response_body), status=code, mimetype="application/json")
@@ -342,14 +342,14 @@ def get_policy_search(country_id: str) -> Response:
                 404,
             )
 
-        policies = [dict(id=result.id, label=result.label) for result in results]
+        policies = [{"id": result.id, "label": result.label} for result in results]
         return Response(
             json.dumps(
-                dict(
-                    status="ok",
-                    message="Policies found",
-                    result=policies,
-                )
+                {
+                    "status": "ok",
+                    "message": "Policies found",
+                    "result": policies,
+                }
             ),
             status=200,
             mimetype="application/json",
@@ -433,14 +433,14 @@ def set_user_policy(country_id: str) -> Response:
     if not creation.created:
         return Response(
             json.dumps(
-                dict(
-                    status="ok",
-                    message=(
+                {
+                    "status": "ok",
+                    "message": (
                         f"The reform #{reform_id} / baseline #{baseline_id} pair "
                         f"already exists for user {user_id}"
                     ),
-                    result=dict(id=user_policy.id),
-                )
+                    "result": {"id": user_policy.id},
+                }
             ),
             status=200,
             mimetype="application/json",
@@ -448,11 +448,11 @@ def set_user_policy(country_id: str) -> Response:
 
     return Response(
         json.dumps(
-            dict(
-                status="ok",
-                message="Record created successfully",
-                result=_serialize_user_policy(user_policy),
-            )
+            {
+                "status": "ok",
+                "message": "Record created successfully",
+                "result": _serialize_user_policy(user_policy),
+            }
         ),
         status=201,
         mimetype="application/json",
@@ -468,11 +468,11 @@ def get_user_policy(country_id: str, user_id: str) -> dict | Response:
     except ValueError:
         return _policy_configuration_unavailable()
     user_policies = user_policy_service.list_user_policies(country_id, user_id)
-    return dict(
-        status="ok",
-        message=None,
-        result=[_serialize_user_policy(row) for row in user_policies],
-    )
+    return {
+        "status": "ok",
+        "message": None,
+        "result": [_serialize_user_policy(row) for row in user_policies],
+    }
 
 
 UPDATE_USER_POLICY_ALLOWED_FIELDS = USER_POLICY_MUTABLE_FIELDS
@@ -550,11 +550,11 @@ def update_user_policy(country_id: str) -> Response:
 
     return Response(
         json.dumps(
-            dict(
-                status="ok",
-                message="Record updated successfully",
-                result=dict(id=user_policy_id),
-            )
+            {
+                "status": "ok",
+                "message": "Record updated successfully",
+                "result": {"id": user_policy_id},
+            }
         ),
         status=200,
         mimetype="application/json",

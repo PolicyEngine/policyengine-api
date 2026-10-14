@@ -40,8 +40,10 @@ def gate_violations(workflow: dict) -> list[str]:
     gated_jobs = gate.get("needs") or []
     if isinstance(gated_jobs, str):
         gated_jobs = [gated_jobs]
-    for job_id in sorted(set(jobs) - {GATE_JOB} - set(gated_jobs)):
-        violations.append(f"{GATE_JOB} does not need {job_id}")
+    violations.extend(
+        f"{GATE_JOB} does not need {job_id}"
+        for job_id in sorted(set(jobs) - {GATE_JOB} - set(gated_jobs))
+    )
 
     for job_id, job in jobs.items():
         if job_id == GATE_JOB:

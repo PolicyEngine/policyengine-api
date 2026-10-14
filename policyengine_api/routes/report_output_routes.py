@@ -105,11 +105,11 @@ def create_report_output(country_id: str) -> Response:
         )
         status_code = 201 if creation.created else 200
 
-        response_body = dict(
-            status="ok",
-            message=message,
-            result=result,
-        )
+        response_body = {
+            "status": "ok",
+            "message": message,
+            "result": result,
+        }
 
         return Response(
             json.dumps(response_body),
@@ -155,11 +155,11 @@ def get_report_output(country_id: str, report_id: int) -> Response:
         raise NotFound(msg)
     result = _serialize_v1_report_output(view)
 
-    response_body = dict(
-        status="ok",
-        message=None,
-        result=result,
-    )
+    response_body = {
+        "status": "ok",
+        "message": None,
+        "result": result,
+    }
 
     return Response(
         json.dumps(response_body),
@@ -223,11 +223,11 @@ def update_report_output(country_id: str) -> Response:
         )
         result = _serialize_v1_report_output(view)
 
-        response_body = dict(
-            status="ok",
-            message="Report output updated successfully",
-            result=result,
-        )
+        response_body = {
+            "status": "ok",
+            "message": "Report output updated successfully",
+            "result": result,
+        }
 
         return Response(
             json.dumps(response_body),

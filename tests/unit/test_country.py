@@ -264,7 +264,7 @@ class TestUKCountryMetadata:
 
     def test__uk_has_all_region_types(self, uk_regions):
         """Verify all expected region types are present."""
-        types = set(r.get("type") for r in uk_regions)
+        types = {r.get("type") for r in uk_regions}
         assert "national" in types
         assert "country" in types
         assert "constituency" in types
