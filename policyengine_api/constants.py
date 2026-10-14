@@ -59,7 +59,7 @@ def get_py_manifest() -> Any:  # noqa: ANN401  # SimplePath, which open() reject
 
 def _load_policyengine_bundle() -> dict | None:
     try:
-        with open(get_py_manifest()) as manifest_file:
+        with Path(get_py_manifest()).open() as manifest_file:
             manifest = json.load(manifest_file)
     except Exception as exc:
         msg = (
