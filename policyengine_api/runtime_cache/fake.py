@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from threading import RLock
-from typing import Any
+from typing import Any, Self
 
 
 class InMemoryCacheBackend:
@@ -129,7 +129,7 @@ class InMemoryCacheBackend:
                 return 0
             return self.delete(key)
 
-    def pipeline(self, transaction: bool = True) -> "InMemoryPipeline":
+    def pipeline(self, transaction: bool = True) -> InMemoryPipeline:
         return InMemoryPipeline(self, transaction=transaction)
 
 
@@ -140,7 +140,7 @@ class InMemoryPipeline:
         self.operations: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
 
     def __getattr__(self, name: str):
-        def queue(*args: Any, **kwargs: Any) -> "InMemoryPipeline":
+        def queue(*args: Any, **kwargs: Any) -> InMemoryPipeline:
             self.operations.append((name, args, kwargs))
             return self
 
@@ -156,10 +156,10 @@ class InMemoryPipeline:
         self.operations.clear()
         return results
 
-    def __enter__(self) -> "InMemoryPipeline":
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *_args: Any) -> None:
+    def __exit__(self, *_args: object) -> None:
         self.operations.clear()
 
 

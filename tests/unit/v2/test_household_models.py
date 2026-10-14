@@ -12,11 +12,11 @@ from sqlmodel import Session, create_engine, select
 
 from policyengine_api.data.v1_models import HouseholdMirrorEvent
 from policyengine_api.data.v2.models import (
+    V2_METADATA,
     Household,
     LegacyHouseholdMapping,
     User,
     UserHouseholdAssociation,
-    V2_METADATA,
 )
 
 

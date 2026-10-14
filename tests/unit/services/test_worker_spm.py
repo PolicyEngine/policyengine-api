@@ -274,8 +274,9 @@ def test_uncertified_or_mismatching_worker_is_rejected(capability):
     ],
 )
 def test_actual_entrypoint_http_preserves_selection_without_data_override(method, path):
-    import httpx
     import json
+
+    import httpx
 
     requests = []
 
@@ -376,8 +377,10 @@ def test_explicit_bundle_capability_does_not_inherit_another_bundles_capability(
 
 @pytest.mark.parametrize("method", ["run", "run_budget_window_batch"])
 def test_canonical_direct_submission_forwards_the_validated_default_bundle(method):
-    import httpx
     import json
+
+    import httpx
+
     from policyengine_api.constants import POLICYENGINE_VERSION
 
     def handle(request):
@@ -442,6 +445,7 @@ def test_typed_worker_poll_errors_reach_api_validation(code, method):
 
 def test_worker_cache_receipts_are_required_and_json_roundtrip():
     import json
+
     from policyengine_api.worker_spm import validate_worker_result
 
     output = {

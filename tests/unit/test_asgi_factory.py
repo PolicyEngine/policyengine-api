@@ -8,10 +8,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
-import policyengine_api.asgi_factory as asgi_factory
 from fastapi.testclient import TestClient
 from flask import Flask, Response, jsonify, make_response, request
 from flask_cors import CORS
+
+import policyengine_api.asgi_factory as asgi_factory
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.migration_flags import (
     RouteImplementation,

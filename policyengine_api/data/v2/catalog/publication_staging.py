@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Sequence
 
+import sqlalchemy as sa
 from psycopg import sql
 from psycopg.types.json import Jsonb
-import sqlalchemy as sa
 from sqlalchemy import Connection, MetaData, Table
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -18,7 +18,6 @@ from policyengine_api.data.v2.catalog.records import (
     NormalizedCatalog,
     iter_batches,
 )
-
 
 COPY_BATCH_SIZE = 10_000
 

@@ -1,16 +1,16 @@
-from flask import Blueprint, Response, current_app, request
-from werkzeug.exceptions import HTTPException, NotFound, BadRequest
 import json
 
 import jsonschema
 import pydantic
+from flask import Blueprint, Response, current_app, request
+from werkzeug.exceptions import BadRequest, HTTPException, NotFound
 
+from policyengine_api.constants import CURRENT_YEAR
+from policyengine_api.data.v1_models import ReportOutput
 from policyengine_api.services.report_output_service import (
     ReportOutputService,
     ReportOutputView,
 )
-from policyengine_api.constants import CURRENT_YEAR
-from policyengine_api.data.v1_models import ReportOutput
 from policyengine_api.utils.payload_validators import validate_country
 
 report_output_bp = Blueprint("report_output", __name__)

@@ -8,7 +8,6 @@ from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.services.report_run_service import ReportRunService
 from policyengine_api.services.simulation_service import SimulationService
 
-
 run_service = ReportRunService()
 SPM_CONFIG = {
     "forecast_content_sha256": "a" * 64,

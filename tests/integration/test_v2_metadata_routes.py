@@ -6,11 +6,11 @@ import os
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
-import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.pool import NullPool
@@ -18,10 +18,6 @@ from sqlmodel import Session, select
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.publication import publish_catalog
-from policyengine_api.services.v2.metadata.database_session import (
-    MetadataDatabaseSession,
-)
-from policyengine_api.services.v2.metadata.services import V2MetadataService
 from policyengine_api.data.v2.models import (
     Dataset,
     TaxBenefitModel,
@@ -33,8 +29,11 @@ from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
 )
+from policyengine_api.services.v2.metadata.database_session import (
+    MetadataDatabaseSession,
+)
+from policyengine_api.services.v2.metadata.services import V2MetadataService
 from tests.fixtures.v2_catalog import POLICYENGINE_VERSION, normalized_catalog
-
 
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
@@ -80,7 +79,7 @@ def _client(engine: Engine) -> TestClient:
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
-        specification_provider=lambda: {},
+        specification_provider=dict,
         v2_metadata_reader_factory=lambda: V2MetadataService(
             MetadataDatabaseSession(Session(engine)),
             running_policyengine_version=POLICYENGINE_VERSION,

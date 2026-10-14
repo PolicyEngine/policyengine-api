@@ -1,6 +1,5 @@
 from policyengine_api.constants import REPO
 
-
 SKILL = REPO / "docs" / "engineering" / "skills" / "alembic-migrations.md"
 
 

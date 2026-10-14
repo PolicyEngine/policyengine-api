@@ -42,10 +42,9 @@ def bump_version(version: str, bump: str) -> str:
     major, minor, patch = (int(x) for x in version.split("."))
     if bump == "major":
         return f"{major + 1}.0.0"
-    elif bump == "minor":
+    if bump == "minor":
         return f"{major}.{minor + 1}.0"
-    else:
-        return f"{major}.{minor}.{patch + 1}"
+    return f"{major}.{minor}.{patch + 1}"
 
 
 def update_file(path: Path, old_version: str, new_version: str):

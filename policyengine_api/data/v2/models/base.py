@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import MappingProxyType
 from uuid import UUID, uuid4
 
 import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
-
 
 # These are the complete direct-SQLAlchemy categories permitted in the v2
 # table layer. Each remains underneath canonical SQLModel table classes and
@@ -47,7 +46,7 @@ DIRECT_SQLALCHEMY_EXCEPTIONS = MappingProxyType(
 def utc_now() -> datetime:
     """Return an aware UTC timestamp for application-created rows."""
 
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class IdentifiedModel(SQLModel):

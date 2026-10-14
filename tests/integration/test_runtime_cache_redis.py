@@ -1,8 +1,8 @@
 """Real Redis qualification for cross-connection, TTL, atomicity, and claims."""
 
-from datetime import datetime
 import os
 import time
+from datetime import datetime
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -21,7 +21,6 @@ from policyengine_api.runtime_cache.reform_impacts import (
     ReformImpactCache,
     reform_impact_id,
 )
-
 
 RUNTIME_CACHE_TEST_URL = "RUNTIME_CACHE_TEST_URL"
 

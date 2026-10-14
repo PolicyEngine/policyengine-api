@@ -4,8 +4,8 @@ from unittest.mock import patch
 from policyengine_api.data.v1_models import Household
 from policyengine_api.services.household_service import HouseholdCreateResult
 from tests.to_refactor.fixtures.to_refactor_household_fixtures import (
-    valid_request_body,
     valid_db_row,
+    valid_request_body,
 )
 
 pytest_plugins = ["tests.to_refactor.fixtures.to_refactor_household_fixtures"]

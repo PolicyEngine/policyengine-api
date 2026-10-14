@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from policyengine_api.services.v2.comparison_runs.types import (
+    ComparisonReportRecord,
     ComparisonRunAggregationStatus,
     ComparisonRunLifecycleStatus,
-    ComparisonReportRecord,
     ComparisonSimulationRecord,
     ResultComparisonStatus,
 )

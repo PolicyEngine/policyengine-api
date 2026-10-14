@@ -13,7 +13,6 @@ from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.services.user_service import UserService
 
-
 ROUTE_ROOT = Path(__file__).parents[3] / "policyengine_api" / "routes"
 
 

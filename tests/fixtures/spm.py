@@ -5,7 +5,6 @@ from __future__ import annotations
 from policyengine_api import spm
 from policyengine_api.constants import POLICYENGINE_VERSION
 
-
 SPM_CONTRACT_VERSION = "canonical-spm-v1"
 INSTALLED_SPM_SELECTION = spm.normalize_spm_selection("us", None)
 

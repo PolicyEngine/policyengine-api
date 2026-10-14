@@ -7,7 +7,6 @@ import pytest
 from policyengine_api import constants, worker_spm, worker_spm_release
 from policyengine_api.spm import SPMValidationError
 
-
 FIXTURE_BUNDLE_VERSION = "fixture-policyengine"
 FIXTURE_PACKAGE_VERSIONS = {
     "policyengine": FIXTURE_BUNDLE_VERSION,

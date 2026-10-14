@@ -5,8 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 from uuid import UUID
 
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from policyengine_api.services.v2.reports.types import (
     AggregateReportArtifactDescriptor,

@@ -1,6 +1,6 @@
-from datetime import date
 import json
 import math
+from datetime import date
 from pathlib import Path
 
 CURRENT_YEAR = date.today().year

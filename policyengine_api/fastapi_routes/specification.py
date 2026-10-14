@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
-from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from starlette.responses import JSONResponse
+
+from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 
 
 def build_specification_router(

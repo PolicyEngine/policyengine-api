@@ -31,7 +31,7 @@ class UserHouseholdItem(StrictUserHouseholdAPIModel):
     updated_at: datetime
 
     @classmethod
-    def from_read(cls, item: UserHouseholdRead) -> "UserHouseholdItem":
+    def from_read(cls, item: UserHouseholdRead) -> UserHouseholdItem:
         return cls.model_validate(item)
 
 
@@ -46,7 +46,7 @@ class UserHouseholdPageResult(StrictUserHouseholdAPIModel):
     has_more: bool
 
     @classmethod
-    def from_page(cls, page: UserHouseholdPage) -> "UserHouseholdPageResult":
+    def from_page(cls, page: UserHouseholdPage) -> UserHouseholdPageResult:
         return cls(
             items=[UserHouseholdItem.from_read(item) for item in page.items],
             offset=page.offset,

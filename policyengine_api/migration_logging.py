@@ -6,21 +6,21 @@ import time
 
 import flask
 from policyengine_observability import ObservabilityRuntime
+
 from policyengine_api.gcp_logging import logger
 from policyengine_api.migration_flags import (
     RouteImplementation,
     get_migration_log_context,
     infer_route_group,
 )
-from policyengine_api.request_context import (
-    REQUEST_ID_HEADER,
-    generate_request_id,
-)
 from policyengine_api.observability.identifiers import (
     OBSERVABILITY_ID_HEADER,
     normalize_observability_id,
 )
-
+from policyengine_api.request_context import (
+    REQUEST_ID_HEADER,
+    generate_request_id,
+)
 
 V2_METADATA_RESOURCE_SEGMENTS = frozenset(
     {

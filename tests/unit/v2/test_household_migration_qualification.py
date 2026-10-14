@@ -14,7 +14,6 @@ from policyengine_api.data.v2.settings import (
     V2_SUPABASE_PROJECT_REF,
 )
 
-
 ENVIRONMENT = {
     V2_MIGRATION_DATABASE_URL: (
         "postgresql+psycopg://migration:test-password@db."

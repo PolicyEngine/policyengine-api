@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 REPO = Path(__file__).resolve().parents[2]
 PUSH_WORKFLOW = REPO / ".github/workflows/push.yml"
 REMOVED_JOB_NAMES = (

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from sqlalchemy import Connection, Select
-from sqlalchemy.dialects.postgresql import JSONB, insert as postgresql_insert
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 
 from policyengine_api.data.v2.catalog.publication_staging import (
     STAGE_CATALOG_DATASETS,
@@ -29,7 +30,6 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     Variable,
 )
-
 
 DATASETS = Dataset.__table__
 MODELS = TaxBenefitModel.__table__

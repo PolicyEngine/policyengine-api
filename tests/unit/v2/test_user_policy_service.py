@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine, select
 
 from policyengine_api.data.v2.models import (
+    V2_METADATA,
     LegacyUserPolicyMapping,
     Parameter,
     ParameterValue,
@@ -19,7 +20,6 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     User,
     UserPolicy,
-    V2_METADATA,
 )
 from policyengine_api.services.v2.user_policies.database_session import (
     UserPolicyDatabaseSession,
@@ -35,7 +35,6 @@ from policyengine_api.services.v2.user_policies.validators import (
     AssociationUserNotFoundError,
     UserPolicyNotFoundError,
 )
-
 
 USER_ID = UUID("00000000-0000-0000-0000-000000000070")
 OTHER_USER_ID = UUID("00000000-0000-0000-0000-000000000071")
@@ -76,7 +75,7 @@ def association_store():
             parameter=parameter,
             policy=policy,
             value_json=0.2,
-            start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            start_date=datetime(2026, 1, 1, tzinfo=UTC),
         )
         session.add_all(
             [

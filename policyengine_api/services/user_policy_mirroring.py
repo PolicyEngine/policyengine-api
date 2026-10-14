@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import time
+from collections.abc import Callable
 from typing import Protocol
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -11,6 +11,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
+)
+from policyengine_api.data.v2.settings import V2ConfigurationError
+from policyengine_api.gcp_logging import logger
+from policyengine_api.services.policy_service import PolicyService
+from policyengine_api.services.user_policy_service import (
+    PendingUserPolicyMirrorEvent,
+    UserPolicyService,
 )
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.policies.validators import (
@@ -26,13 +33,6 @@ from policyengine_api.services.v2.user_policies.types import (
 )
 from policyengine_api.services.v2.user_policies.validators import (
     LegacyUserPolicyIntegrityError,
-)
-from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.gcp_logging import logger
-from policyengine_api.services.policy_service import PolicyService
-from policyengine_api.services.user_policy_service import (
-    PendingUserPolicyMirrorEvent,
-    UserPolicyService,
 )
 
 

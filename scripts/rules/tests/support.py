@@ -6,6 +6,7 @@ import tempfile
 import textwrap
 from datetime import date
 from pathlib import Path
+from typing import Self
 
 from scripts.rules.guard import GuardResult, run_guard
 from scripts.rules.load import load_registry
@@ -195,7 +196,7 @@ class Repo:
         if render:
             self.render()
 
-    def __enter__(self) -> Repo:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc: object) -> None:

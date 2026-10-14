@@ -11,7 +11,6 @@ depended on the deprecated input fall back to defaults.
 import copy
 from dataclasses import dataclass
 
-
 # Registry of removed/renamed model variables that legacy partner traffic
 # may still pass. The value is a one-line migration hint surfaced verbatim
 # in the warning message - keep it actionable.

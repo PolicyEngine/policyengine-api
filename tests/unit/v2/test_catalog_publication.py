@@ -6,10 +6,10 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from alembic.config import Config
-from alembic.script import ScriptDirectory
 import pytest
 import sqlalchemy as sa
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 from sqlalchemy.sql.elements import TextClause
@@ -31,7 +31,6 @@ from policyengine_api.data.v2.models import (
     Variable,
 )
 from tests.fixtures.v2_catalog import normalized_catalog
-
 
 REPO = Path(__file__).parents[3]
 

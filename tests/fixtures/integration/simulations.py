@@ -70,5 +70,4 @@ def create_household_with_axes(base_household, axes_config):
 def setup_small_axes_household(base_household, small_axes_config):
     """Fixture to setup a household with small axes for testing"""
     household_with_axes = create_household_with_axes(base_household, small_axes_config)
-    household_with_axes = add_yearly_variables(household_with_axes, TEST_COUNTRY_ID)
-    return household_with_axes
+    return add_yearly_variables(household_with_axes, TEST_COUNTRY_ID)

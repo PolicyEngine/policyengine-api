@@ -3,6 +3,5 @@
 
 from policyengine_api.data.v2.catalog.initialization import main
 
-
 if __name__ == "__main__":
     raise SystemExit(main())

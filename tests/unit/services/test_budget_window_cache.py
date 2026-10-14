@@ -2,8 +2,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from policyengine_api.runtime_cache.core import CacheCoordinationError
-from policyengine_api.runtime_cache.core import CacheNamespace, encode_envelope
+from policyengine_api.runtime_cache.core import (
+    CacheCoordinationError,
+    CacheNamespace,
+    encode_envelope,
+)
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.services.budget_window_cache import (
     BUDGET_WINDOW_BATCH_TTL_SECONDS,
@@ -27,7 +30,7 @@ class RaisingRedis:
     def get(self, key):
         if self.method == "get":
             raise RuntimeError("redis unavailable")
-        return None
+        return
 
     def set(self, key, value, nx=False, ex=None):
         if self.method == "set":

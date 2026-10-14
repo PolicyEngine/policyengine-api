@@ -13,7 +13,6 @@ from policyengine_api.runtime_cache.settings import (
     load_runtime_cache_settings,
 )
 
-
 _clients: dict[int, redis.Redis] = {}
 _client_lock = Lock()
 

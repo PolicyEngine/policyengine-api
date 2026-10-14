@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -10,13 +10,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
+    V2_METADATA,
     Stage12AggregationStatus,
     Stage12ComparisonReport,
     Stage12ComparisonSimulation,
     Stage12ResultComparisonStatus,
     Stage12RunStatus,
     Stage12SimulationRole,
-    V2_METADATA,
 )
 from policyengine_api.services.v2.comparison_runs.types import (
     ComparisonRunAggregationStatus,
@@ -25,7 +25,7 @@ from policyengine_api.services.v2.comparison_runs.types import (
 )
 from policyengine_api.services.v2.simulations.types import SimulationRole
 
-NOW = datetime(2026, 9, 14, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 14, tzinfo=UTC)
 EVALUATION_ID = UUID("00000000-0000-4000-8000-000000000001")
 DIGEST_A = "a" * 64
 DIGEST_B = "b" * 64

@@ -17,12 +17,12 @@ import argparse
 import asyncio
 import copy
 import json
-from collections import Counter
 import random
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -47,7 +47,7 @@ OUTCOME_CONNECT_ERROR = "connect_error"
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _classify(status_code: int) -> str:
@@ -206,7 +206,7 @@ async def _run(args: argparse.Namespace) -> dict:
         ended_at = _utc_now_iso()
 
     measured = [r for r in records if not r["warmup"]]
-    summary = {
+    return {
         "cell": args.cell_label,
         "base_url": args.base_url,
         "clients": args.clients,
@@ -230,7 +230,6 @@ async def _run(args: argparse.Namespace) -> dict:
             for endpoint in ("metadata", "calculate")
         },
     }
-    return summary
 
 
 def main() -> int:

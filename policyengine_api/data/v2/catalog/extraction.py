@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
-from datetime import date, datetime, timedelta, timezone
-from enum import Enum
-from importlib import metadata as importlib_metadata
 import json
 import math
 import re
+from collections import Counter
+from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, date, datetime, timedelta
+from enum import Enum
+from importlib import metadata as importlib_metadata
 from typing import Any
 from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -27,7 +27,6 @@ from policyengine_api.data.v2.catalog.records import (
     RegionRecord,
     VariableRecord,
 )
-
 
 SUPPORTED_COUNTRIES = ("us", "uk")
 REQUIRED_DEPENDENCIES = (
@@ -179,8 +178,8 @@ def _aware_datetime(value: object, *, field_name: str) -> datetime:
     if not isinstance(value, datetime):
         raise CatalogExtractionError(f"{field_name} must be a date or datetime")
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _optional_aware_datetime(value: object, *, field_name: str) -> datetime | None:

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
-from sqlalchemy.dialects import postgresql
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from policyengine_api.data.v2.models import (
     Stage12ComparisonReport,
@@ -37,7 +37,7 @@ from policyengine_api.services.v2.comparison_runs.validators import (
     require_result_comparison_transition,
 )
 
-NOW = datetime(2026, 9, 14, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 14, tzinfo=UTC)
 EVALUATION_ID = UUID("00000000-0000-4000-8000-000000000001")
 SIMULATION_ID = UUID("00000000-0000-4000-8000-000000000002")
 DIGEST_A = "a" * 64

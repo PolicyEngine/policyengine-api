@@ -3,7 +3,6 @@ from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v1_models import V1Base
 
-
 EXPECTED_TABLES = {
     "analysis",
     "computed_household",

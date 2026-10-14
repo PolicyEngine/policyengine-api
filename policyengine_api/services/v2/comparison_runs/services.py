@@ -29,9 +29,9 @@ from policyengine_api.services.v2.comparison_runs.transformations import (
     simulation_record,
 )
 from policyengine_api.services.v2.comparison_runs.types import (
-    ComparisonRunLifecycleStatus,
     ComparisonReportPersistenceResult,
     ComparisonReportRecord,
+    ComparisonRunLifecycleStatus,
     ComparisonSimulationPersistenceResult,
     ComparisonSimulationRecord,
 )

@@ -17,7 +17,6 @@ from policyengine_api.spm import (
     validate_spm_calculation_provenance,
 )
 
-
 SHA256 = "a" * 64
 SELECTION = SPMSelection.model_validate(
     {

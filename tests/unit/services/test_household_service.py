@@ -1,6 +1,7 @@
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import func, select
-from uuid import uuid4
 
 from policyengine_api.data.v1_models import Household, HouseholdMirrorEvent
 from policyengine_api.services.household_service import (
@@ -14,7 +15,6 @@ from tests.fixtures.services.household_fixtures import (
     valid_db_row,
     valid_request_body,
 )
-
 
 pytest_plugins = ["tests.fixtures.services.household_fixtures"]
 

@@ -1,6 +1,6 @@
-from contextlib import ExitStack
 import importlib
 import sys
+from contextlib import ExitStack
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -16,25 +16,25 @@ from policyengine_api.data.v1_models import (
     Simulation,
     UserPolicy,
 )
-from policyengine_api.services.v2.user_policies.types import LegacyUserPolicySnapshot
 from policyengine_api.extensions import cache
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
-from policyengine_api.services.report_output_service import (
-    ReportCreateResult,
-    ReportOutputView,
-)
 from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationResult,
 )
 from policyengine_api.services.household_service import HouseholdCreateResult
+from policyengine_api.services.report_output_service import (
+    ReportCreateResult,
+    ReportOutputView,
+)
 from policyengine_api.services.simulation_service import SimulationCreateResult
 from policyengine_api.services.user_policy_service import (
     UserPolicyCreateResult,
     UserPolicyUpdateResult,
 )
+from policyengine_api.services.v2.user_policies.types import LegacyUserPolicySnapshot
 from tests.contract.clients import (
     ASGIContractClient,
     ContractClient,
@@ -46,7 +46,6 @@ from tests.contract.helpers import (
     response_json,
 )
 from tests.contract.registry import APP_V1_COMPATIBLE_ROUTE_CONTRACTS, ContractRequest
-
 
 _STAGE12_PRIVATE_FIELDS = frozenset(
     {

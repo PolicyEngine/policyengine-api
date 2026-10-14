@@ -13,6 +13,12 @@ from uuid import UUID
 from policyengine_api.json_types import JSONObject
 
 if TYPE_CHECKING:
+    from policyengine_api.services.v2.households.types import (
+        HouseholdPage,
+        HouseholdRead,
+        NativeHouseholdCreation,
+        NativeHouseholdCreationInput,
+    )
     from policyengine_api.services.v2.metadata.types import (
         MetadataCanonicalParameterValue,
         MetadataDataset,
@@ -33,23 +39,17 @@ if TYPE_CHECKING:
         PolicyPage,
         PolicyRead,
     )
-    from policyengine_api.services.v2.households.types import (
-        HouseholdPage,
-        HouseholdRead,
-        NativeHouseholdCreation,
-        NativeHouseholdCreationInput,
+    from policyengine_api.services.v2.user_households.types import (
+        UserHouseholdCreationInput,
+        UserHouseholdPage,
+        UserHouseholdRead,
+        UserHouseholdUpdateInput,
     )
     from policyengine_api.services.v2.user_policies.types import (
         UserPolicyCreationInput,
         UserPolicyPage,
         UserPolicyRead,
         UserPolicyUpdateInput,
-    )
-    from policyengine_api.services.v2.user_households.types import (
-        UserHouseholdCreationInput,
-        UserHouseholdPage,
-        UserHouseholdRead,
-        UserHouseholdUpdateInput,
     )
 
 
@@ -71,20 +71,20 @@ class V2MetadataResourceReader(Protocol):
         *,
         offset: int = 0,
         limit: int = 100,
-    ) -> "MetadataPageResult[MetadataModel]": ...
+    ) -> MetadataPageResult[MetadataModel]: ...
 
     def get_model(
         self,
         country_id: str,
         model_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataModel]": ...
+    ) -> MetadataDetailResult[MetadataModel]: ...
 
     def get_model_by_country(
         self,
         country_id: str,
         policyengine_version: str | None = None,
-    ) -> "MetadataModelSelectionResult": ...
+    ) -> MetadataModelSelectionResult: ...
 
     def list_model_versions(
         self,
@@ -93,14 +93,14 @@ class V2MetadataResourceReader(Protocol):
         *,
         offset: int = 0,
         limit: int = 100,
-    ) -> "MetadataPageResult[MetadataModelVersionDetail]": ...
+    ) -> MetadataPageResult[MetadataModelVersionDetail]: ...
 
     def get_model_version(
         self,
         country_id: str,
         version_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataModelVersionDetail]": ...
+    ) -> MetadataDetailResult[MetadataModelVersionDetail]: ...
 
     def list_variables(
         self,
@@ -110,14 +110,14 @@ class V2MetadataResourceReader(Protocol):
         offset: int = 0,
         limit: int = 100,
         search: str | None = None,
-    ) -> "MetadataPageResult[MetadataVariable]": ...
+    ) -> MetadataPageResult[MetadataVariable]: ...
 
     def get_variable(
         self,
         country_id: str,
         variable_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataVariable]": ...
+    ) -> MetadataDetailResult[MetadataVariable]: ...
 
     def list_parameters(
         self,
@@ -127,14 +127,14 @@ class V2MetadataResourceReader(Protocol):
         offset: int = 0,
         limit: int = 100,
         search: str | None = None,
-    ) -> "MetadataPageResult[MetadataParameterSummary]": ...
+    ) -> MetadataPageResult[MetadataParameterSummary]: ...
 
     def get_parameter(
         self,
         country_id: str,
         parameter_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataParameterSummary]": ...
+    ) -> MetadataDetailResult[MetadataParameterSummary]: ...
 
     def list_parameter_children(
         self,
@@ -144,7 +144,7 @@ class V2MetadataResourceReader(Protocol):
         parent_path: str = "",
         offset: int = 0,
         limit: int = 100,
-    ) -> "MetadataPageResult[MetadataParameterChild]": ...
+    ) -> MetadataPageResult[MetadataParameterChild]: ...
 
     def list_parameter_values(
         self,
@@ -156,14 +156,14 @@ class V2MetadataResourceReader(Protocol):
         offset: int = 0,
         limit: int = 100,
         now: datetime | None = None,
-    ) -> "MetadataPageResult[MetadataCanonicalParameterValue]": ...
+    ) -> MetadataPageResult[MetadataCanonicalParameterValue]: ...
 
     def get_parameter_value(
         self,
         country_id: str,
         value_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataCanonicalParameterValue]": ...
+    ) -> MetadataDetailResult[MetadataCanonicalParameterValue]: ...
 
     def list_datasets(
         self,
@@ -172,14 +172,14 @@ class V2MetadataResourceReader(Protocol):
         *,
         offset: int = 0,
         limit: int = 100,
-    ) -> "MetadataPageResult[MetadataDataset]": ...
+    ) -> MetadataPageResult[MetadataDataset]: ...
 
     def get_dataset(
         self,
         country_id: str,
         dataset_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataDataset]": ...
+    ) -> MetadataDetailResult[MetadataDataset]: ...
 
     def list_regions(
         self,
@@ -189,27 +189,27 @@ class V2MetadataResourceReader(Protocol):
         region_type: str | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> "MetadataPageResult[MetadataRegion]": ...
+    ) -> MetadataPageResult[MetadataRegion]: ...
 
     def get_region(
         self,
         country_id: str,
         region_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataRegion]": ...
+    ) -> MetadataDetailResult[MetadataRegion]: ...
 
     def get_region_by_code(
         self,
         country_id: str,
         region_code: str,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataRegion]": ...
+    ) -> MetadataDetailResult[MetadataRegion]: ...
 
     def get_economy_options(
         self,
         country_id: str,
         policyengine_version: str | None = None,
-    ) -> "MetadataEconomyOptionsResult": ...
+    ) -> MetadataEconomyOptionsResult: ...
 
 
 class V2PolicyResourceService(Protocol):
@@ -217,10 +217,10 @@ class V2PolicyResourceService(Protocol):
 
     def create_policy(
         self,
-        command: "NativePolicyCreationInput",
-    ) -> "NativePolicyCreation": ...
+        command: NativePolicyCreationInput,
+    ) -> NativePolicyCreation: ...
 
-    def get_policy(self, *, country_id: str, policy_id: UUID) -> "PolicyRead": ...
+    def get_policy(self, *, country_id: str, policy_id: UUID) -> PolicyRead: ...
 
     def list_policies(
         self,
@@ -229,7 +229,7 @@ class V2PolicyResourceService(Protocol):
         tax_benefit_model_id: UUID | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> "PolicyPage": ...
+    ) -> PolicyPage: ...
 
 
 class V2HouseholdResourceService(Protocol):
@@ -237,15 +237,15 @@ class V2HouseholdResourceService(Protocol):
 
     def create_household(
         self,
-        household_input: "NativeHouseholdCreationInput",
-    ) -> "NativeHouseholdCreation": ...
+        household_input: NativeHouseholdCreationInput,
+    ) -> NativeHouseholdCreation: ...
 
     def get_household(
         self,
         *,
         country_id: str,
         household_id: UUID,
-    ) -> "HouseholdRead": ...
+    ) -> HouseholdRead: ...
 
     def list_households(
         self,
@@ -254,7 +254,7 @@ class V2HouseholdResourceService(Protocol):
         default_year: int | None,
         offset: int,
         limit: int,
-    ) -> "HouseholdPage": ...
+    ) -> HouseholdPage: ...
 
 
 class V2UserPolicyResourceService(Protocol):
@@ -262,15 +262,15 @@ class V2UserPolicyResourceService(Protocol):
 
     def create_user_policy(
         self,
-        association_input: "UserPolicyCreationInput",
-    ) -> "UserPolicyRead": ...
+        association_input: UserPolicyCreationInput,
+    ) -> UserPolicyRead: ...
 
     def get_user_policy(
         self,
         *,
         country_id: str,
         association_id: UUID,
-    ) -> "UserPolicyRead": ...
+    ) -> UserPolicyRead: ...
 
     def list_user_policies(
         self,
@@ -280,15 +280,15 @@ class V2UserPolicyResourceService(Protocol):
         policy_id: UUID | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> "UserPolicyPage": ...
+    ) -> UserPolicyPage: ...
 
     def patch_user_policy(
         self,
         *,
         country_id: str,
         association_id: UUID,
-        association_input: "UserPolicyUpdateInput",
-    ) -> "UserPolicyRead": ...
+        association_input: UserPolicyUpdateInput,
+    ) -> UserPolicyRead: ...
 
     def delete_user_policy(
         self,
@@ -303,15 +303,15 @@ class V2UserHouseholdResourceService(Protocol):
 
     def create_user_household(
         self,
-        association_input: "UserHouseholdCreationInput",
-    ) -> "UserHouseholdRead": ...
+        association_input: UserHouseholdCreationInput,
+    ) -> UserHouseholdRead: ...
 
     def get_user_household(
         self,
         *,
         country_id: str,
         association_id: UUID,
-    ) -> "UserHouseholdRead": ...
+    ) -> UserHouseholdRead: ...
 
     def list_user_households(
         self,
@@ -321,15 +321,15 @@ class V2UserHouseholdResourceService(Protocol):
         household_id: UUID | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> "UserHouseholdPage": ...
+    ) -> UserHouseholdPage: ...
 
     def patch_user_household(
         self,
         *,
         country_id: str,
         association_id: UUID,
-        association_input: "UserHouseholdUpdateInput",
-    ) -> "UserHouseholdRead": ...
+        association_input: UserHouseholdUpdateInput,
+    ) -> UserHouseholdRead: ...
 
     def delete_user_household(
         self,
@@ -457,7 +457,7 @@ class NativeRouteDependencies:
     ) = None
 
     @classmethod
-    def defaults(cls) -> "NativeRouteDependencies":
+    def defaults(cls) -> NativeRouteDependencies:
         """Build lazy defaults without importing country models unnecessarily."""
         return cls(
             readiness_probe=_default_readiness_probe,

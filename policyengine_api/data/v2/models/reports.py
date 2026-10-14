@@ -1,19 +1,19 @@
 """Canonical SQLModel tables for stable reports, runs, and run outputs."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship
 
+from policyengine_api.data.v2.models.associations import UserReportAssociation
 from policyengine_api.data.v2.models.base import (
     IdentifiedModel,
     TimestampedModel,
     enum_type,
 )
-from policyengine_api.data.v2.models.associations import UserReportAssociation
 from policyengine_api.data.v2.models.households import Household
 from policyengine_api.data.v2.models.metadata import (
     Dataset,
@@ -25,33 +25,33 @@ from policyengine_api.data.v2.models.simulations import Simulation
 from policyengine_api.data.v2.models.users import User
 
 
-class ReportRunStatus(str, Enum):
+class ReportRunStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
 
 
-class ReportRunTrigger(str, Enum):
+class ReportRunTrigger(StrEnum):
     INITIAL = "initial"
     MANUAL = "manual"
     SYSTEM = "system"
 
 
-class OutputStatus(str, Enum):
+class OutputStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
 
 
-class AggregateType(str, Enum):
+class AggregateType(StrEnum):
     SUM = "sum"
     MEAN = "mean"
     COUNT = "count"
 
 
-class DecileType(str, Enum):
+class DecileType(StrEnum):
     INCOME = "income"
     WEALTH = "wealth"
 

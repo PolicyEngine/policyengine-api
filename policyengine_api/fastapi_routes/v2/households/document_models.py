@@ -10,13 +10,12 @@ from pydantic import (
     Field,
     JsonValue,
     StringConstraints,
-    model_serializer,
     field_validator,
+    model_serializer,
 )
 from pydantic.json_schema import SkipJsonSchema
 
 from policyengine_api.spm import SPMSelection
-
 
 DocumentIdentifier = Annotated[
     str,

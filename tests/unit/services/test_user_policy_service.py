@@ -10,13 +10,12 @@ from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
     SQLAlchemyError,
+)
+from sqlalchemy.exc import (
     TimeoutError as SQLAlchemyTimeoutError,
 )
 
 from policyengine_api.data.v1_models import UserPolicy, UserPolicyMirrorEvent
-from policyengine_api.services.v2.user_policies.types import (
-    LegacyUserPolicyPersistenceResult,
-)
 from policyengine_api.services.user_policy_service import (
     UserPolicyCreateResult,
     UserPolicyMirrorEventIntegrityError,
@@ -24,7 +23,9 @@ from policyengine_api.services.user_policy_service import (
     UserPolicyService,
     UserPolicyUpdateResult,
 )
-
+from policyengine_api.services.v2.user_policies.types import (
+    LegacyUserPolicyPersistenceResult,
+)
 
 ROUTE_PATH = (
     Path(__file__).parents[3] / "policyengine_api" / "routes" / "policy_routes.py"

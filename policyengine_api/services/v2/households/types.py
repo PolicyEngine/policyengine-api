@@ -19,7 +19,6 @@ from pydantic import (
 from policyengine_api.query_parameters import CountryId, DefaultYear
 from policyengine_api.services.v2.households.validators import require_json_value
 
-
 StrictJsonValue = Annotated[JsonValue, BeforeValidator(require_json_value)]
 
 

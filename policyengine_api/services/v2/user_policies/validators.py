@@ -55,7 +55,7 @@ def require_user_policy(
 
 
 def validate_association_creation(
-    association_input: "UserPolicyCreationInput",
+    association_input: UserPolicyCreationInput,
     *,
     user: User | None,
     policy: Policy | None,
@@ -95,8 +95,8 @@ def validate_legacy_user_mapping_conflict(
 
 
 def validate_legacy_user_policy_input(
-    snapshot: "LegacyUserPolicySnapshot",
-    reform_snapshot: "LegacyPolicySnapshot",
+    snapshot: LegacyUserPolicySnapshot,
+    reform_snapshot: LegacyPolicySnapshot,
     *,
     source_revision: int,
 ) -> None:

@@ -9,14 +9,12 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from policyengine_api.migration_registry import ROUTE_GROUPS  # noqa: E402
 from tests.contract.registry import APP_V2_WORKFLOW_CONTRACTS  # noqa: E402
-
 
 DEFAULT_JSON = REPO_ROOT / "docs" / "generated" / "migration_contracts.json"
 DEFAULT_MARKDOWN = REPO_ROOT / "docs" / "engineering" / "migration-contracts.md"

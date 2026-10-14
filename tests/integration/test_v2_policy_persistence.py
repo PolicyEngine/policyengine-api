@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 import os
+from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from uuid import UUID, uuid4
 
@@ -24,13 +24,14 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
-from policyengine_api.services.v2.policies.transformations import (
-    canonical_policy_document,
-    canonicalize_policy,
-)
+from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.services.v2.policies.services import (
     create_resolved_policy,
     mirror_legacy_policy_in_session,
+)
+from policyengine_api.services.v2.policies.transformations import (
+    canonical_policy_document,
+    canonicalize_policy,
 )
 from policyengine_api.services.v2.policies.types import (
     CanonicalPolicyContent,
@@ -41,7 +42,6 @@ from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyMappingIntegrityError,
     PolicyContentHashCollisionError,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 
 
 def _disposable_url() -> str:

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 
-from policyengine_api.json_types import JSONValue
 from starlette.responses import Response
+
+from policyengine_api.json_types import JSONValue
 
 
 def render_legacy_json(content: JSONValue) -> bytes:

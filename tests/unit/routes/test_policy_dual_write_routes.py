@@ -5,14 +5,14 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-from flask import Flask
 import pytest
+from flask import Flask
 
 from policyengine_api.data.v1_models import Policy
-from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.services.policy_mirroring import PolicyMirrorUnavailableError
 from policyengine_api.services.policy_service import PolicySetResult
+from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 
 
 def _client():

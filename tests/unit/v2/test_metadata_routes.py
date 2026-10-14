@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
-import pytest
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.catalog_selection import (
@@ -16,6 +16,13 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
     UnsupportedPreviewCountryError,
+)
+from policyengine_api.data.v2.settings import V2ConfigurationError
+from policyengine_api.fastapi_routes import dependencies as route_dependencies
+from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+from policyengine_api.migration_flags import (
+    RouteImplementation,
+    RouteImplementationSettings,
 )
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
@@ -37,13 +44,6 @@ from policyengine_api.services.v2.metadata.types import (
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
-)
-from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.fastapi_routes import dependencies as route_dependencies
-from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-from policyengine_api.migration_flags import (
-    RouteImplementation,
-    RouteImplementationSettings,
 )
 
 
@@ -125,7 +125,7 @@ def _resource_results() -> tuple[dict[str, object], dict[str, object]]:
         id=parameter_value_id,
         parameter_id=parameter_id,
         value=0.1,
-        start_date=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        start_date=datetime(2025, 1, 1, tzinfo=UTC),
         end_date=None,
     )
     dataset = MetadataDataset(
@@ -238,7 +238,7 @@ def _client(factory) -> TestClient:
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
-        specification_provider=lambda: {},
+        specification_provider=dict,
         v2_metadata_reader_factory=factory,
     )
     settings = RouteImplementationSettings(

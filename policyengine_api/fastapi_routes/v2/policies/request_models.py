@@ -2,7 +2,6 @@
 
 from policyengine_api.services.v2.policies.types import PolicyCreationInput
 
-
 MAXIMUM_POLICY_REQUEST_BYTES = 1_048_576
 
 

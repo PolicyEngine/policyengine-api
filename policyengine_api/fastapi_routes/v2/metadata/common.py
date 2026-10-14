@@ -14,20 +14,19 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogVersionNotFoundError,
     UnsupportedPreviewCountryError,
 )
-from policyengine_api.services.v2.metadata.validators import (
-    InvalidMetadataPageError,
-    MetadataResourceNotFoundError,
-)
-from policyengine_api.fastapi_routes.v2.errors import (
-    V2ErrorResponse,
-    v2_error_response,
-)
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import (
     NativeRouteDependencies,
     V2MetadataResourceReader,
 )
-
+from policyengine_api.fastapi_routes.v2.errors import (
+    V2ErrorResponse,
+    v2_error_response,
+)
+from policyengine_api.services.v2.metadata.validators import (
+    InvalidMetadataPageError,
+    MetadataResourceNotFoundError,
+)
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {

@@ -20,7 +20,6 @@ from policyengine_api.services.v2.metadata.types import (
     StrictResponseModel,
 )
 
-
 ResourceT = TypeVar("ResourceT")
 
 

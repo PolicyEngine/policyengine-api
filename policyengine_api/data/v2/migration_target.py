@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
-import os
 
 from sqlalchemy import Connection, MetaData, inspect, text
 from sqlalchemy.engine import URL, make_url

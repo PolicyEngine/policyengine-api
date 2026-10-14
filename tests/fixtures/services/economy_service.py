@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest
+
 from policyengine_api.constants import (
     MODAL_EXECUTION_STATUS_RUNNING,
     MODAL_EXECUTION_STATUS_SUBMITTED,
