@@ -1,36 +1,30 @@
 """Application services for native v2 user-report associations.
 
 Stage 12A anchors saved reports on the requested v1 report output ID. The
-owner always comes from the verified session principal, and v1 references are
-checked in a short read-only v1 transaction before the v2 transaction opens.
+owner always comes from the verified session principal (a signed-in user or a
+signed-out browser), and v1 references are checked in a short read-only v1
+transaction before the v2 transaction opens. Reads never provision a
+browser's unauthenticated user; one that does not exist yet owns no records.
 An optional ``user_policy_id`` must name the same owner's saved policy in the
 same country.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from uuid import UUID
 
 from sqlmodel import Session
 
-from policyengine_api.data.v2.models import UserPolicy, UserReportAssociation
-from policyengine_api.services.v2.associations.database_connectors.reads import (
-    read_association_ids_by_client_ref,
-)
+from policyengine_api.data.v2.models import UserReportAssociation
 from policyengine_api.services.v2.associations.services import (
-    import_associations_in_session,
     require_legacy_reference,
-    require_unused_client_ref_in_session,
 )
-from policyengine_api.services.v2.associations.types import (
-    AssociationImport,
-    LegacyReferenceChecker,
-)
+from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
 from policyengine_api.services.v2.identity.services import (
+    resolve_principal_user_for_read_in_session,
     resolve_principal_user_in_session,
 )
-from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.identity.types import AccountPrincipal
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.user_reports.database_connectors.creates import (
     create_user_report,
@@ -51,7 +45,6 @@ from policyengine_api.services.v2.user_reports.database_session import (
     UserReportDatabaseSession,
 )
 from policyengine_api.services.v2.user_reports.transformations import (
-    imported_user_report_input,
     owned_user_report_input,
     user_report_page,
     user_report_read,
@@ -59,7 +52,6 @@ from policyengine_api.services.v2.user_reports.transformations import (
 )
 from policyengine_api.services.v2.user_reports.types import (
     UserReportCreateFields,
-    UserReportImportItem,
     UserReportPage,
     UserReportRead,
     UserReportUpdateInput,
@@ -73,12 +65,16 @@ from policyengine_api.services.v2.user_reports.validators import (
 def read_owned_user_report(
     session: Session,
     *,
-    user_id: UUID,
+    user_id: UUID | None,
     country_id: str,
     association_id: UUID,
 ) -> UserReportAssociation:
+    """``user_id`` is None for an unauthenticated user that owns nothing yet."""
+
     return require_user_report(
-        read_owned_user_report_row(
+        None
+        if user_id is None
+        else read_owned_user_report_row(
             session,
             user_id=user_id,
             country_id=country_id,
@@ -119,55 +115,6 @@ def read_all_user_reports(
     )
 
 
-def import_user_reports_in_session(
-    session: Session,
-    *,
-    user_id: UUID,
-    country_id: str,
-    items: Sequence[UserReportImportItem],
-) -> AssociationImport:
-    """Insert imported reports idempotently on ``(user_id, client_ref)``.
-
-    ``user_policy_client_ref`` resolves against the owner's saved policies in
-    the import country only, including policies inserted earlier in the same
-    transaction. An unresolved reference leaves ``user_policy_id`` empty.
-    """
-
-    policy_ids = read_association_ids_by_client_ref(
-        session,
-        UserPolicy,
-        user_id=user_id,
-        client_refs={
-            item.user_policy_client_ref
-            for item in items
-            if item.user_policy_client_ref is not None
-        },
-        country_id=country_id,
-    )
-    return import_associations_in_session(
-        session,
-        UserReportAssociation,
-        user_id=user_id,
-        country_id=country_id,
-        rows=[
-            (
-                item.client_ref,
-                imported_user_report_input(
-                    item,
-                    country_id=country_id,
-                    user_id=user_id,
-                    user_policy_id=(
-                        policy_ids.get(item.user_policy_client_ref)
-                        if item.user_policy_client_ref is not None
-                        else None
-                    ),
-                ).model_dump(),
-            )
-            for item in items
-        ],
-    )
-
-
 class V2UserReportService:
     """Sequence owner-scoped association operations through explicit sessions."""
 
@@ -190,7 +137,7 @@ class V2UserReportService:
     def create_user_report(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         association_input: UserReportCreateFields,
     ) -> UserReportRead:
         self._require_legacy_report(
@@ -202,12 +149,6 @@ class V2UserReportService:
                 session,
                 principal,
                 country_id=association_input.country_id,
-            )
-            require_unused_client_ref_in_session(
-                session,
-                UserReportAssociation,
-                user_id=owner.user_id,
-                client_ref=association_input.client_ref,
             )
             validate_linked_user_policy(
                 session,
@@ -225,18 +166,18 @@ class V2UserReportService:
     def get_user_report(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
     ) -> UserReportRead:
         with self._database_session.transaction() as session:
-            owner = resolve_principal_user_in_session(
+            owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
             )
             return user_report_read(
                 read_owned_user_report(
                     session,
-                    user_id=owner.user_id,
+                    user_id=None if owner is None else owner.user_id,
                     country_id=country_id,
                     association_id=association_id,
                 )
@@ -245,16 +186,18 @@ class V2UserReportService:
     def list_user_reports(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         legacy_report_id: int | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> UserReportPage:
         with self._database_session.transaction() as session:
-            owner = resolve_principal_user_in_session(
+            owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
             )
+            if owner is None:
+                return user_report_page([], offset=offset, limit=limit)
             rows = read_user_report_rows(
                 session,
                 country_id=country_id,
@@ -268,7 +211,7 @@ class V2UserReportService:
     def patch_user_report(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
         association_input: UserReportUpdateInput,
@@ -306,7 +249,7 @@ class V2UserReportService:
     def delete_user_report(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
     ) -> None:

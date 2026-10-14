@@ -8,14 +8,31 @@ from uuid import UUID
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, col
 
-from policyengine_api.data.v2.models import User, UserIdentity
+from policyengine_api.data.v2.models import User, UserIdentity, UserType
 
 
 def create_provisioned_user(session: Session, *, primary_country: str) -> User:
-    user = User(primary_country=primary_country)
+    user = User(primary_country=primary_country, user_type=UserType.STANDARD.value)
     session.add(user)
     session.flush()
     return user
+
+
+def create_unauthenticated_user(session: Session, *, user_id: UUID) -> bool:
+    """Insert an unauthenticated user unless a user with its ID already exists.
+
+    Returns whether this call inserted the row.
+    """
+
+    return (
+        session.execute(
+            insert(User)
+            .values(id=user_id, user_type=UserType.UNAUTHENTICATED.value)
+            .on_conflict_do_nothing(index_elements=[col(User.id)])
+            .returning(col(User.id))
+        ).scalar_one_or_none()
+        is not None
+    )
 
 
 def create_user_identity(

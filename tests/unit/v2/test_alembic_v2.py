@@ -512,8 +512,9 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
         ("user_simulation_associations", "simulation"),
         ("user_report_associations", "report"),
     ):
-        assert f'"uq_{table_name}_user_client_ref"' in revision
         assert f'"legacy_{reference}_id"' in revision
+    # The browser-local import keys were removed before release.
+    assert "client_ref" not in revision
     for check_name in (
         "ck_user_policies_policy_ref",
         "ck_user_policies_baseline",
@@ -522,6 +523,8 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
         "ck_user_simulation_associations_country",
         "ck_user_report_associations_report_ref",
         "ck_user_report_associations_country",
+        "ck_users_user_type",
+        "ck_users_standard_primary_country",
     ):
         assert check_name in revision
     # Cross-service foreign keys to v2 simulations and reports are removed.
@@ -545,6 +548,17 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
             "        existing_type=sa.VARCHAR(length=16),\n"
             "        nullable=True,"
         ) in upgrade
+    # Users gain a type whose server default keeps the previous revision's
+    # inserts standard, and only unauthenticated users omit a country.
+    assert (
+        '"user_type",\n'
+        "            sqlmodel.sql.sqltypes.AutoString(length=16),\n"
+        '            server_default="standard",\n'
+        "            nullable=False,"
+    ) in upgrade
+    assert (
+        '"users", "primary_country", existing_type=sa.VARCHAR(length=2), nullable=True'
+    ) in upgrade
 
 
 def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -> None:

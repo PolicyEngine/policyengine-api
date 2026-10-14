@@ -1,4 +1,4 @@
-"""Inbound Auth0 bearer authentication for user-owned Public API routes.
+"""Inbound authentication for user-owned Public API routes.
 
 The Public API accepts RS256 access tokens issued by the PolicyEngine Auth0
 tenant for the Public API resource server. The decoder is ported from the
@@ -7,7 +7,11 @@ fetched from ``{issuer}.well-known/jwks.json`` and ``iss``/``aud`` are
 verified. Machine-to-machine tokens (``…@clients`` subjects) are classified
 as client principals so user routes can refuse them.
 
-This module never logs a token, subject, or email address.
+A signed-out browser instead sends ``PolicyEngine-Unauthenticated-User``: a
+random UUID it generates once and keeps. That UUID is a bearer credential for
+the browser's unauthenticated user; it needs no Auth0 configuration.
+
+This module never logs a token, subject, email address, or browser UUID.
 """
 
 from __future__ import annotations
@@ -18,8 +22,10 @@ from enum import StrEnum
 from functools import lru_cache
 import logging
 import os
+import re
 from typing import Any, Protocol
 from urllib.parse import urlparse
+from uuid import UUID
 
 import jwt
 
@@ -31,6 +37,12 @@ PUBLIC_API_AUTH_ENV_VARS = (
     PUBLIC_API_AUTH_REQUIRED_ENV,
     PUBLIC_API_AUTH_ISSUER_ENV,
     PUBLIC_API_AUTH_AUDIENCE_ENV,
+)
+
+UNAUTHENTICATED_USER_HEADER = "PolicyEngine-Unauthenticated-User"
+# The canonical lowercase, hyphenated form that crypto.randomUUID() produces.
+CANONICAL_UUID_PATTERN = (
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
 
 CLIENT_SUBJECT_SUFFIX = "@clients"
@@ -61,6 +73,10 @@ class InvalidBearerTokenError(UserAuthError):
 
 class UserAuthUnavailableError(UserAuthError):
     """Raised when authentication cannot be performed by this deployment."""
+
+
+class InvalidUnauthenticatedUserError(UserAuthError):
+    """Raised when the unauthenticated-user header is not a canonical UUID."""
 
 
 class PrincipalKind(StrEnum):
@@ -196,6 +212,16 @@ def bearer_token(authorization: str | None) -> str:
     if scheme.lower() != "bearer" or not credentials:
         raise MissingBearerTokenError("a bearer access token is required")
     return credentials
+
+
+def unauthenticated_user_id(value: str) -> UUID:
+    """Return the browser UUID carried by the unauthenticated-user header."""
+
+    if re.fullmatch(CANONICAL_UUID_PATTERN, value) is None:
+        raise InvalidUnauthenticatedUserError(
+            f"{UNAUTHENTICATED_USER_HEADER} must be a canonical UUID"
+        )
+    return UUID(value)
 
 
 def _verified_email(claims: Mapping[str, Any]) -> str | None:

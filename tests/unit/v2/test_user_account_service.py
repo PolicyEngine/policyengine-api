@@ -1,4 +1,4 @@
-"""Service tests for identity provisioning, saves, imports, and deletion."""
+"""Service tests for signed-in identity provisioning, saves, and deletion."""
 
 from __future__ import annotations
 
@@ -10,10 +10,8 @@ from sqlmodel import select
 from policyengine_api.data.v2.models import (
     LegacyUserMapping,
     User,
-    UserHouseholdAssociation,
     UserIdentity,
     UserPolicy,
-    UserReportAssociation,
     UserSimulationAssociation,
 )
 from policyengine_api.services.v2.associations.validators import (
@@ -31,10 +29,7 @@ from policyengine_api.services.v2.user_accounts.database_session import (
     AccountDatabaseSession,
 )
 from policyengine_api.services.v2.user_accounts.services import V2AccountService
-from policyengine_api.services.v2.user_accounts.types import (
-    AccountImportInput,
-    AccountUpdateInput,
-)
+from policyengine_api.services.v2.user_accounts.types import AccountUpdateInput
 from policyengine_api.services.v2.user_accounts.validators import (
     AccountDeletionUnavailableError,
     AccountIdentityDeletionError,
@@ -69,7 +64,6 @@ from tests.unit.v2.user_service_support import (
     ALICE,
     BOB,
     ISSUER,
-    MAPPED_LEGACY_POLICY_ID,
     default_legacy_references,
     v2_store,
 )
@@ -120,7 +114,6 @@ def _services(selected, *, deleter=None, deleter_factory=None):
     return (
         V2AccountService(
             AccountDatabaseSession(selected.sessions),
-            legacy_references=references,
             auth0_user_deleter_factory=deleter_factory,
         ),
         V2UserPolicyService(UserPolicyDatabaseSession(selected.sessions), references),
@@ -222,7 +215,7 @@ def test_simulation_saves_are_owner_scoped_and_v1_checked(store) -> None:
     created = simulations.create_user_simulation(
         principal=ALICE,
         association_input=UserSimulationCreateFields(
-            country_id="us", legacy_simulation_id=613, client_ref="sus-1"
+            country_id="us", legacy_simulation_id=613
         ),
     )
 
@@ -314,289 +307,6 @@ def test_report_policy_links_require_the_same_owner_and_survive_deletion(
     assert refreshed.user_policy_id is None
 
 
-def _import_input(**sections) -> AccountImportInput:
-    return AccountImportInput.model_validate(sections)
-
-
-def test_import_is_idempotent_and_skips_unknown_or_invalid_items(store) -> None:
-    accounts, *_ = _services(store)
-    request = _import_input(
-        policies=[
-            {"client_ref": "rf-1", "legacy_policy_id": MAPPED_LEGACY_POLICY_ID},
-            {"client_ref": "sup-404", "legacy_policy_id": 404},
-            {"client_ref": "sup-bad", "legacy_policy_id": "1"},
-        ],
-        households=[{"client_ref": "suh-1", "legacy_household_id": 10}],
-        simulations=[{"client_ref": "sus-1", "legacy_simulation_id": 613}],
-        reports=[
-            {
-                "client_ref": "lfr-1",
-                "legacy_report_id": 615,
-                "user_policy_client_ref": "rf-1",
-                "source_note": "imported",
-            },
-            {"legacy_report_id": 615},
-        ],
-    )
-
-    first = accounts.import_records(
-        principal=ALICE, country_id="us", import_input=request
-    )
-    second = accounts.import_records(
-        principal=ALICE, country_id="us", import_input=request
-    )
-
-    assert set(first.id_map) == {"rf-1", "suh-1", "sus-1", "lfr-1"}
-    assert first.id_map == second.id_map
-    assert [(skip.client_ref, skip.reason.value) for skip in first.skipped] == [
-        ("sup-bad", "invalid"),
-        ("sup-404", "unknown_legacy_reference"),
-        (None, "invalid"),
-    ]
-    with store.sessions() as session:
-        policy = session.get(UserPolicy, first.id_map["rf-1"])
-        report = session.get(UserReportAssociation, first.id_map["lfr-1"])
-        assert policy is not None and policy.policy_id == store.policy_id
-        assert report is not None and report.user_policy_id == policy.id
-        assert len(session.exec(select(UserPolicy)).all()) == 1
-        assert len(session.exec(select(UserHouseholdAssociation)).all()) == 1
-        assert len(session.exec(select(UserSimulationAssociation)).all()) == 1
-
-
-def test_import_keeps_existing_rows_and_links_earlier_imported_policies(
-    store,
-) -> None:
-    accounts, *_ = _services(store)
-    accounts.import_records(
-        principal=ALICE,
-        country_id="us",
-        import_input=_import_input(
-            policies=[{"client_ref": "rf-1", "legacy_policy_id": 1, "name": "First"}]
-        ),
-    )
-
-    result = accounts.import_records(
-        principal=ALICE,
-        country_id="us",
-        import_input=_import_input(
-            policies=[{"client_ref": "rf-1", "legacy_policy_id": 2, "name": "Second"}],
-            reports=[
-                {
-                    "client_ref": "lfr-2",
-                    "legacy_report_id": 616,
-                    "user_policy_client_ref": "rf-1",
-                },
-                {
-                    "client_ref": "lfr-3",
-                    "legacy_report_id": 616,
-                    "user_policy_client_ref": "rf-unknown",
-                },
-            ],
-        ),
-    )
-
-    with store.sessions() as session:
-        policy = session.get(UserPolicy, result.id_map["rf-1"])
-        linked = session.get(UserReportAssociation, result.id_map["lfr-2"])
-        unlinked = session.get(UserReportAssociation, result.id_map["lfr-3"])
-    assert (policy.name, policy.legacy_policy_id) == ("First", 1)
-    assert linked.user_policy_id == policy.id
-    assert unlinked.user_policy_id is None
-
-
-def test_import_never_reuses_or_links_records_from_another_country(store) -> None:
-    accounts, *_ = _services(store)
-    uk = accounts.import_records(
-        principal=ALICE,
-        country_id="uk",
-        import_input=_import_input(
-            policies=[{"client_ref": "rf-shared", "legacy_policy_id": 7}]
-        ),
-    )
-
-    us = accounts.import_records(
-        principal=ALICE,
-        country_id="us",
-        import_input=_import_input(
-            policies=[{"client_ref": "rf-shared", "legacy_policy_id": 1}],
-            reports=[
-                {
-                    "client_ref": "lfr-us",
-                    "legacy_report_id": 615,
-                    "user_policy_client_ref": "rf-shared",
-                }
-            ],
-        ),
-    )
-
-    assert set(us.id_map) == {"lfr-us"}
-    assert [(skip.client_ref, skip.reason.value) for skip in us.skipped] == [
-        ("rf-shared", "client_ref_conflict")
-    ]
-    with store.sessions() as session:
-        report = session.get(UserReportAssociation, us.id_map["lfr-us"])
-        uk_policy = session.get(UserPolicy, uk.id_map["rf-shared"])
-        policies = session.exec(select(UserPolicy)).all()
-    assert report is not None and report.user_policy_id is None
-    assert uk_policy is not None and uk_policy.country_id == "uk"
-    assert [policy.country_id for policy in policies] == ["uk"]
-
-
-def test_import_skips_items_with_non_finite_numbers_as_invalid(store) -> None:
-    accounts, *_ = _services(store)
-    provision = {
-        "path": "gov.irs.credits.ctc.amount",
-        "breadcrumb": "Child Tax Credit amount",
-        "baseline_value": float("nan"),
-        "value": 3000,
-    }
-
-    result = accounts.import_records(
-        principal=ALICE,
-        country_id="us",
-        import_input=_import_input(
-            policies=[{"client_ref": "rf-finite", "legacy_policy_id": 1}],
-            reports=[
-                {
-                    "client_ref": "lfr-nan",
-                    "legacy_report_id": 615,
-                    "provisions": [provision],
-                }
-            ],
-        ),
-    )
-
-    assert set(result.id_map) == {"rf-finite"}
-    assert [(skip.client_ref, skip.reason.value) for skip in result.skipped] == [
-        ("lfr-nan", "invalid")
-    ]
-
-
-def test_import_stores_neither_a_valid_nor_an_invalid_repeated_client_ref(
-    store,
-) -> None:
-    accounts, *_ = _services(store)
-
-    result = accounts.import_records(
-        principal=ALICE,
-        country_id="us",
-        import_input=_import_input(
-            policies=[
-                {"client_ref": "rf-repeated", "legacy_policy_id": 1},
-                {"client_ref": "rf-repeated"},
-            ]
-        ),
-    )
-
-    assert result.id_map == {}
-    assert [(skip.client_ref, skip.reason.value) for skip in result.skipped] == [
-        ("rf-repeated", "invalid"),
-        ("rf-repeated", "invalid"),
-    ]
-    with store.sessions() as session:
-        assert session.exec(select(UserPolicy)).all() == []
-
-
-def test_import_stores_neither_of_two_valid_items_sharing_a_client_ref(
-    store,
-) -> None:
-    accounts, *_ = _services(store)
-
-    result = accounts.import_records(
-        principal=ALICE,
-        country_id="us",
-        import_input=_import_input(
-            policies=[
-                {"client_ref": "rf-repeated", "legacy_policy_id": 1, "name": "A"},
-                {"client_ref": "rf-repeated", "legacy_policy_id": 2, "name": "B"},
-            ]
-        ),
-    )
-
-    assert result.id_map == {}
-    assert [(skip.client_ref, skip.reason.value) for skip in result.skipped] == [
-        ("rf-repeated", "invalid"),
-        ("rf-repeated", "invalid"),
-    ]
-    with store.sessions() as session:
-        assert session.exec(select(UserPolicy)).all() == []
-
-
-def test_import_stores_items_beside_a_repeated_client_ref(store) -> None:
-    accounts, *_ = _services(store)
-
-    result = accounts.import_records(
-        principal=ALICE,
-        country_id="us",
-        import_input=_import_input(
-            policies=[
-                {"client_ref": "rf-repeated", "legacy_policy_id": 1},
-                {"client_ref": "rf-kept", "legacy_policy_id": 2},
-                {"client_ref": "rf-repeated", "legacy_policy_id": "1"},
-            ],
-            households=[{"client_ref": "suh-kept", "legacy_household_id": 10}],
-            reports=[
-                {
-                    "client_ref": "lfr-linked",
-                    "legacy_report_id": 615,
-                    "user_policy_client_ref": "rf-kept",
-                },
-                {
-                    "client_ref": "lfr-unlinked",
-                    "legacy_report_id": 616,
-                    "user_policy_client_ref": "rf-repeated",
-                },
-            ],
-        ),
-    )
-
-    assert set(result.id_map) == {"rf-kept", "suh-kept", "lfr-linked", "lfr-unlinked"}
-    assert [(skip.client_ref, skip.reason.value) for skip in result.skipped] == [
-        ("rf-repeated", "invalid"),
-        ("rf-repeated", "invalid"),
-    ]
-    assert not set(result.id_map) & {skip.client_ref for skip in result.skipped}
-    with store.sessions() as session:
-        policies = session.exec(select(UserPolicy)).all()
-        linked = session.get(UserReportAssociation, result.id_map["lfr-linked"])
-        unlinked = session.get(UserReportAssociation, result.id_map["lfr-unlinked"])
-        households = session.exec(select(UserHouseholdAssociation)).all()
-    assert [policy.client_ref for policy in policies] == ["rf-kept"]
-    assert linked.user_policy_id == policies[0].id
-    assert unlinked.user_policy_id is None
-    assert [household.client_ref for household in households] == ["suh-kept"]
-
-
-def test_import_treats_a_client_ref_shared_across_kinds_as_repeated(store) -> None:
-    accounts, *_ = _services(store)
-
-    result = accounts.import_records(
-        principal=ALICE,
-        country_id="us",
-        import_input=_import_input(
-            policies=[{"client_ref": "shared-ref", "legacy_policy_id": 1}],
-            reports=[{"client_ref": "shared-ref", "legacy_report_id": 615}],
-        ),
-    )
-
-    assert result.id_map == {}
-    assert [(skip.client_ref, skip.reason.value) for skip in result.skipped] == [
-        ("shared-ref", "invalid"),
-        ("shared-ref", "invalid"),
-    ]
-    with store.sessions() as session:
-        assert session.exec(select(UserPolicy)).all() == []
-        assert session.exec(select(UserReportAssociation)).all() == []
-
-
-def test_import_input_bounds_the_item_count() -> None:
-    with pytest.raises(ValueError, match="at most 500"):
-        _import_input(
-            policies=[{"client_ref": str(index)} for index in range(250)],
-            reports=[{"client_ref": str(index)} for index in range(251)],
-        )
-
-
 def test_export_covers_every_country(store) -> None:
     accounts, policies, *_ = _services(store)
     policies.create_user_policy(
@@ -685,9 +395,7 @@ def test_reads_lists_and_account_routes_never_build_the_v1_checker(store) -> Non
         raise AssertionError("the v1 reference service must not be built")
 
     references = DeferredLegacyReferenceService(unavailable)
-    accounts = V2AccountService(
-        AccountDatabaseSession(store.sessions), legacy_references=references
-    )
+    accounts = V2AccountService(AccountDatabaseSession(store.sessions))
     simulations = V2UserSimulationService(
         UserSimulationDatabaseSession(store.sessions), references
     )
@@ -763,6 +471,3 @@ def test_only_account_deletion_builds_the_auth0_deleter(store) -> None:
         account_input=AccountUpdateInput(first_name="Ada"),
     )
     accounts.export_account(principal=ALICE, country_id="us")
-    accounts.import_records(
-        principal=ALICE, country_id="us", import_input=_import_input()
-    )

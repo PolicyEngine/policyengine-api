@@ -43,7 +43,6 @@ def _association_read(**changes) -> UserHouseholdRead:
         "legacy_household_id": 123,
         "name": "Family",
         "description": None,
-        "client_ref": "suh-1",
         "created_at": CREATED_AT,
         "updated_at": CREATED_AT + timedelta(seconds=1),
     }
@@ -81,7 +80,6 @@ def test_create_returns_complete_contract_owned_by_the_session_user() -> None:
             "country_id": "us",
             "legacy_household_id": 123,
             "name": "Family",
-            "client_ref": "suh-1",
         },
     )
 
@@ -94,7 +92,6 @@ def test_create_returns_complete_contract_owned_by_the_session_user() -> None:
         "legacy_household_id": 123,
         "name": "Family",
         "description": None,
-        "client_ref": "suh-1",
         "created_at": "2026-01-01T00:00:00Z",
         "updated_at": "2026-01-01T00:00:01Z",
     }
@@ -255,7 +252,6 @@ def test_openapi_publishes_signed_in_household_contract() -> None:
         "legacy_household_id",
         "name",
         "description",
-        "client_ref",
         "created_at",
         "updated_at",
     }

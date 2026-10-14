@@ -1,4 +1,4 @@
-"""Strict HTTP request models for signed-in v2 user-policy associations."""
+"""Strict HTTP request models for v2 user-policy associations."""
 
 from policyengine_api.services.v2.user_policies.types import (
     UserPolicyCreateFields,
@@ -7,7 +7,7 @@ from policyengine_api.services.v2.user_policies.types import (
 
 
 class UserPolicyCreateRequest(UserPolicyCreateFields):
-    """Association fields; the owner is taken from the bearer token."""
+    """Association fields; the owner is taken from the request credential."""
 
 
 class UserPolicyPatchRequest(UserPolicyUpdateInput):

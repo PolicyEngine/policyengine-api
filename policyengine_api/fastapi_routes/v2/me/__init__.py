@@ -1,1 +1,1 @@
-"""FastAPI adapters for the signed-in account resource (/v2/me)."""
+"""FastAPI adapters for the current user's account resource (/v2/me)."""

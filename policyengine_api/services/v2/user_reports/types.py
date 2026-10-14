@@ -18,7 +18,6 @@ from pydantic import (
 
 from policyengine_api.query_parameters import CountryId, ResourceId, UserId
 from policyengine_api.services.v2.associations.types import (
-    AssociationClientRef,
     AssociationDescription,
     AssociationName,
     FiniteJsonValue,
@@ -146,7 +145,6 @@ class UserReportCreateFields(_ReportPresentationFields):
     country_id: CountryId
     legacy_report_id: LegacyRecordId
     user_policy_id: ResourceId | None = None
-    client_ref: AssociationClientRef | None = None
 
 
 class UserReportCreationInput(StrictUserReportModel):
@@ -162,7 +160,6 @@ class UserReportCreationInput(StrictUserReportModel):
     provisions: list[StoredJSONObject] | None = None
     validation: StoredJSONObject | None = None
     last_run_at: AwareDatetime | None = None
-    client_ref: AssociationClientRef | None = None
 
 
 class UserReportUpdateInput(_ReportPresentationFields):
@@ -189,14 +186,6 @@ class UserReportUpdateInput(_ReportPresentationFields):
         return self
 
 
-class UserReportImportItem(_ReportPresentationFields):
-    """One browser-local saved report offered for idempotent import."""
-
-    client_ref: AssociationClientRef
-    legacy_report_id: LegacyRecordId
-    user_policy_client_ref: AssociationClientRef | None = None
-
-
 @dataclass(frozen=True)
 class UserReportRead:
     id: UUID
@@ -211,7 +200,6 @@ class UserReportRead:
     provisions: list[StoredJSONObject] | None
     validation: StoredJSONObject | None
     last_run_at: datetime | None
-    client_ref: str | None
     created_at: datetime
     updated_at: datetime
 

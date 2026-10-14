@@ -1,19 +1,24 @@
-"""PostgreSQL tests for signed-in identity provisioning and user associations.
+"""PostgreSQL tests for identity provisioning, unauthenticated users, and upgrades.
 
 These prove the behaviors SQLite cannot: named ``ON CONFLICT`` targets,
-concurrent first sign-in, concurrent idempotent imports, ``MATCH SIMPLE``
-composite keys with NULL references, and cascading account deletion.
+concurrent first sign-in, concurrent first writes by one signed-out browser,
+row locks that serialize conversion at sign-in with that browser's writes,
+``MATCH SIMPLE`` composite keys with NULL references, and cascading account
+deletion.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 import os
 from threading import Barrier
-from uuid import uuid4
+import time
+from uuid import UUID, uuid4
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
@@ -26,9 +31,11 @@ from policyengine_api.data.v2.migration_target import (
 from policyengine_api.data.v2.models import (
     LegacyUserMapping,
     User,
+    UserHouseholdAssociation,
     UserIdentity,
     UserPolicy,
     UserReportAssociation,
+    UserSimulationAssociation,
 )
 from policyengine_api.data.v2.settings import (
     V2_MIGRATION_DATABASE_URL,
@@ -37,15 +44,61 @@ from policyengine_api.data.v2.settings import (
 )
 from policyengine_api.data.v2 import user_association_migration_qualification
 from policyengine_api.services.v2.identity.services import (
+    convert_unauthenticated_user_in_session,
     resolve_principal_user_in_session,
 )
-from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.identity.types import (
+    AccountConversionOutcome,
+    UnauthenticatedPrincipal,
+    UserPrincipal,
+)
+from policyengine_api.services.v2.identity.validators import (
+    StandardUserRequiresSignInError,
+)
 from policyengine_api.services.v2.user_accounts.database_session import (
     AccountDatabaseSession,
 )
 from policyengine_api.services.v2.user_accounts.services import V2AccountService
-from policyengine_api.services.v2.user_accounts.types import AccountImportInput
+from policyengine_api.services.v2.user_accounts.types import AccountUpdateInput
+from policyengine_api.services.v2.user_households.database_session import (
+    UserHouseholdDatabaseSession,
+)
+from policyengine_api.services.v2.user_households.services import (
+    V2UserHouseholdService,
+)
+from policyengine_api.services.v2.user_households.types import (
+    UserHouseholdCreateFields,
+)
+from policyengine_api.services.v2.user_policies.database_session import (
+    UserPolicyDatabaseSession,
+)
+from policyengine_api.services.v2.user_policies.services import V2UserPolicyService
+from policyengine_api.services.v2.user_policies.types import UserPolicyCreateFields
+from policyengine_api.services.v2.user_reports.database_session import (
+    UserReportDatabaseSession,
+)
+from policyengine_api.services.v2.user_reports.services import V2UserReportService
+from policyengine_api.services.v2.user_reports.types import UserReportCreateFields
+from policyengine_api.services.v2.user_simulations.database_session import (
+    UserSimulationDatabaseSession,
+)
+from policyengine_api.services.v2.user_simulations.services import (
+    V2UserSimulationService,
+)
+from policyengine_api.services.v2.user_simulations.types import (
+    UserSimulationCreateFields,
+)
 from tests.unit.v2.user_service_support import default_legacy_references
+
+
+# Long enough for a write that is not blocked by a held row lock to finish.
+LOCK_WAIT_SECONDS = 1.0
+ASSOCIATION_MODELS = (
+    UserPolicy,
+    UserHouseholdAssociation,
+    UserSimulationAssociation,
+    UserReportAssociation,
+)
 
 
 def _disposable_url() -> str:
@@ -68,13 +121,16 @@ def sessions() -> Iterator[sessionmaker[Session]]:
     engine = create_engine(_disposable_url(), pool_size=10, max_overflow=10)
     factory = sessionmaker(engine, class_=Session, expire_on_commit=False)
     issuer = f"https://stage12a-{uuid4().hex[:12]}.example.test/"
-    factory.kw["info"] = {"issuer": issuer}
+    factory.kw["info"] = {"issuer": issuer, "browser_user_ids": []}
     try:
         yield factory
     finally:
         with engine.begin() as connection:
             owned = select(UserIdentity.user_id).where(UserIdentity.issuer == issuer)
-            user_ids = list(connection.execute(owned).scalars())
+            user_ids = [
+                *connection.execute(owned).scalars(),
+                *factory.kw["info"]["browser_user_ids"],
+            ]
             if user_ids:
                 connection.execute(
                     delete(LegacyUserMapping).where(
@@ -89,9 +145,89 @@ def _principal(sessions, subject: str) -> UserPrincipal:
     return UserPrincipal(issuer=sessions.kw["info"]["issuer"], subject=subject)
 
 
+def _browser(sessions) -> UnauthenticatedPrincipal:
+    """A fresh signed-out browser whose user the fixture removes afterwards."""
+
+    user_id = uuid4()
+    sessions.kw["info"]["browser_user_ids"].append(user_id)
+    return UnauthenticatedPrincipal(user_id=user_id)
+
+
 def _count(sessions, statement) -> int:
     with sessions() as session:
         return int(session.execute(statement).scalar_one())
+
+
+@dataclass(frozen=True)
+class Services:
+    accounts: V2AccountService
+    policies: V2UserPolicyService
+    households: V2UserHouseholdService
+    simulations: V2UserSimulationService
+    reports: V2UserReportService
+
+
+def _services(sessions) -> Services:
+    references = default_legacy_references()
+    return Services(
+        accounts=V2AccountService(AccountDatabaseSession(sessions)),
+        policies=V2UserPolicyService(UserPolicyDatabaseSession(sessions), references),
+        households=V2UserHouseholdService(
+            UserHouseholdDatabaseSession(sessions), references
+        ),
+        simulations=V2UserSimulationService(
+            UserSimulationDatabaseSession(sessions), references
+        ),
+        reports=V2UserReportService(UserReportDatabaseSession(sessions), references),
+    )
+
+
+def _save_one_of_each(services: Services, principal) -> dict[type, UUID]:
+    policy = services.policies.create_user_policy(
+        principal=principal,
+        association_input=UserPolicyCreateFields(country_id="us", legacy_policy_id=1),
+    )
+    household = services.households.create_user_household(
+        principal=principal,
+        association_input=UserHouseholdCreateFields(
+            country_id="us", legacy_household_id=10
+        ),
+    )
+    simulation = services.simulations.create_user_simulation(
+        principal=principal,
+        association_input=UserSimulationCreateFields(
+            country_id="us", legacy_simulation_id=613
+        ),
+    )
+    report = services.reports.create_user_report(
+        principal=principal,
+        association_input=UserReportCreateFields(
+            country_id="us", legacy_report_id=615, user_policy_id=policy.id
+        ),
+    )
+    return {
+        UserPolicy: policy.id,
+        UserHouseholdAssociation: household.id,
+        UserSimulationAssociation: simulation.id,
+        UserReportAssociation: report.id,
+    }
+
+
+def _owners(sessions, records: dict[type, UUID]) -> set[UUID | None]:
+    with sessions() as session:
+        return {
+            None if row is None else row.user_id
+            for row in (
+                session.get(model, record_id) for model, record_id in records.items()
+            )
+        }
+
+
+def _save_policy(services: Services, principal) -> UUID:
+    return services.policies.create_user_policy(
+        principal=principal,
+        association_input=UserPolicyCreateFields(country_id="us", legacy_policy_id=1),
+    ).id
 
 
 def test_concurrent_first_requests_provision_exactly_one_user(sessions) -> None:
@@ -129,108 +265,310 @@ def test_concurrent_first_requests_provision_exactly_one_user(sessions) -> None:
     )
 
 
-def test_concurrent_imports_are_idempotent_on_client_ref(sessions) -> None:
-    principal = _principal(sessions, "google-oauth2|importer")
-    service = V2AccountService(
-        AccountDatabaseSession(sessions),
-        legacy_references=default_legacy_references(),
-    )
-    service.get_account(principal=principal, country_id="us")
-    request = AccountImportInput.model_validate(
-        {
-            "policies": [
-                {"client_ref": f"sup-{index}", "legacy_policy_id": 1}
-                for index in range(5)
-            ],
-            "simulations": [{"client_ref": "sus-1", "legacy_simulation_id": 613}],
-            "reports": [
-                {
-                    "client_ref": "sur-1",
-                    "legacy_report_id": 615,
-                    "user_policy_client_ref": "sup-0",
-                }
-            ],
-        }
-    )
-    workers = 4
+def test_concurrent_first_writes_by_one_browser_create_exactly_one_user(
+    sessions,
+) -> None:
+    browser = _browser(sessions)
+    services = _services(sessions)
+    workers = 8
     barrier = Barrier(workers)
 
-    def import_records(_index: int):
+    def first_write(_index: int) -> UUID:
         barrier.wait()
-        return service.import_records(
-            principal=principal, country_id="us", import_input=request
-        ).id_map
+        return services.policies.create_user_policy(
+            principal=browser,
+            association_input=UserPolicyCreateFields(
+                country_id="us", legacy_policy_id=1
+            ),
+        ).user_id
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        id_maps = list(executor.map(import_records, range(workers)))
+        owners = set(executor.map(first_write, range(workers)))
 
-    assert all(id_map == id_maps[0] for id_map in id_maps)
-    assert len(id_maps[0]) == 7
+    assert owners == {browser.user_id}
     with sessions() as session:
-        owner = session.execute(
-            select(UserIdentity.user_id).where(UserIdentity.issuer == principal.issuer)
+        user = session.get(User, browser.user_id)
+        policy_count = session.execute(
+            select(func.count())
+            .select_from(UserPolicy)
+            .where(UserPolicy.user_id == browser.user_id)
         ).scalar_one()
-        assert (
-            session.execute(
-                select(func.count())
-                .select_from(UserPolicy)
-                .where(UserPolicy.user_id == owner)
-            ).scalar_one()
-            == 5
+    assert user is not None
+    assert (user.user_type, user.primary_country, user.email) == (
+        "unauthenticated",
+        None,
+        None,
+    )
+    assert policy_count == workers
+
+
+def test_concurrent_upgrades_of_one_browser_convert_exactly_once(sessions) -> None:
+    browser = _browser(sessions)
+    alice = _principal(sessions, "google-oauth2|converted-once")
+    services = _services(sessions)
+    records = _save_one_of_each(services, browser)
+    workers = 6
+    barrier = Barrier(workers)
+
+    def upgrade(_index: int):
+        barrier.wait()
+        return services.accounts.upgrade_account(
+            principal=alice,
+            unauthenticated_user_id=browser.user_id,
+            country_id="us",
         )
-        report = session.get(UserReportAssociation, id_maps[0]["sur-1"])
-        assert report is not None
-        assert report.user_policy_id == id_maps[0]["sup-0"]
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        upgrades = list(executor.map(upgrade, range(workers)))
+
+    assert sorted(upgrade.outcome.value for upgrade in upgrades) == [
+        "converted",
+        *["none"] * (workers - 1),
+    ]
+    assert {upgrade.account.id for upgrade in upgrades} == {browser.user_id}
+    assert _owners(sessions, records) == {browser.user_id}
+    with sessions() as session:
+        identities = session.execute(
+            select(UserIdentity.user_id).where(UserIdentity.issuer == alice.issuer)
+        ).all()
+        user = session.get(User, browser.user_id)
+    assert [row.user_id for row in identities] == [browser.user_id]
+    assert user is not None and user.user_type == "standard"
 
 
-def test_imports_never_reuse_a_client_ref_from_another_country(sessions) -> None:
-    principal = _principal(sessions, "google-oauth2|two-countries")
-    service = V2AccountService(
-        AccountDatabaseSession(sessions),
-        legacy_references=default_legacy_references(),
+def test_concurrent_first_upgrades_from_two_browsers_share_one_account(
+    sessions,
+) -> None:
+    browsers = [_browser(sessions), _browser(sessions)]
+    alice = _principal(sessions, "google-oauth2|two-browsers")
+    services = _services(sessions)
+    records = [_save_one_of_each(services, browser) for browser in browsers]
+    barrier = Barrier(len(browsers))
+
+    def upgrade(browser: UnauthenticatedPrincipal):
+        barrier.wait()
+        return services.accounts.upgrade_account(
+            principal=alice,
+            unauthenticated_user_id=browser.user_id,
+            country_id="us",
+        )
+
+    with ThreadPoolExecutor(max_workers=len(browsers)) as executor:
+        upgrades = list(executor.map(upgrade, browsers))
+
+    # The first sign-in converts one browser in place; the other loses the
+    # UNIQUE(issuer, subject) race and merges into it.
+    assert sorted(upgrade.outcome.value for upgrade in upgrades) == [
+        "converted",
+        "merged",
+    ]
+    (account_id,) = {upgrade.account.id for upgrade in upgrades}
+    assert account_id in {browser.user_id for browser in browsers}
+    assert all(_owners(sessions, saved) == {account_id} for saved in records)
+    remaining = _count(
+        sessions,
+        select(func.count())
+        .select_from(User)
+        .where(User.id.in_([browser.user_id for browser in browsers])),
     )
-    uk = service.import_records(
-        principal=principal,
-        country_id="uk",
-        import_input=AccountImportInput.model_validate(
-            {"policies": [{"client_ref": "rf-shared", "legacy_policy_id": 7}]}
-        ),
+    assert remaining == 1
+
+
+def test_merge_moves_every_association_and_keeps_links_and_constraints(
+    sessions,
+) -> None:
+    browser = _browser(sessions)
+    alice = _principal(sessions, "google-oauth2|merged")
+    services = _services(sessions)
+    alice_id = services.accounts.get_account(principal=alice, country_id="us").id
+    alice_records = _save_one_of_each(services, alice)
+    browser_records = _save_one_of_each(services, browser)
+
+    upgrade = services.accounts.upgrade_account(
+        principal=alice, unauthenticated_user_id=browser.user_id, country_id="us"
     )
 
-    us = service.import_records(
+    assert upgrade.outcome is AccountConversionOutcome.MERGED
+    assert upgrade.account.id == alice_id
+    assert _owners(sessions, browser_records) == {alice_id}
+    assert _owners(sessions, alice_records) == {alice_id}
+    with sessions() as session:
+        assert session.get(User, browser.user_id) is None
+        report = session.get(
+            UserReportAssociation, browser_records[UserReportAssociation]
+        )
+    assert report is not None
+    assert report.user_policy_id == browser_records[UserPolicy]
+    exported = services.accounts.export_account(principal=alice, country_id="us")
+    assert len(exported.policies) == len(exported.reports) == 2
+
+    # The moved report's link still follows its policy's ON DELETE SET NULL.
+    services.policies.delete_user_policy(
+        principal=alice,
+        country_id="us",
+        association_id=browser_records[UserPolicy],
+    )
+    linked = services.reports.get_user_report(
+        principal=alice,
+        country_id="us",
+        association_id=browser_records[UserReportAssociation],
+    )
+    assert linked.user_policy_id is None
+
+
+def _hold_a_conversion(sessions, *, browser, principal) -> Session:
+    """Convert or merge ``browser`` in an open transaction holding its lock."""
+
+    session = sessions()
+    session.begin()
+    convert_unauthenticated_user_in_session(
+        session,
+        unauthenticated_user_id=browser.user_id,
         principal=principal,
         country_id="us",
-        import_input=AccountImportInput.model_validate(
-            {
-                "policies": [{"client_ref": "rf-shared", "legacy_policy_id": 1}],
-                "reports": [
-                    {
-                        "client_ref": "sur-us",
-                        "legacy_report_id": 615,
-                        "user_policy_client_ref": "rf-shared",
-                    }
-                ],
-            }
-        ),
     )
+    return session
 
-    assert set(us.id_map) == {"sur-us"}
-    assert [(skip.client_ref, skip.reason.value) for skip in us.skipped] == [
-        ("rf-shared", "client_ref_conflict")
-    ]
+
+def test_a_browser_write_waits_for_its_conversion_and_is_then_refused(
+    sessions,
+) -> None:
+    browser = _browser(sessions)
+    alice = _principal(sessions, "google-oauth2|write-during-conversion")
+    services = _services(sessions)
+    _save_policy(services, browser)
+    converting = _hold_a_conversion(sessions, browser=browser, principal=alice)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        write = executor.submit(_save_policy, services, browser)
+        time.sleep(LOCK_WAIT_SECONDS)
+        assert not write.done()
+        converting.commit()
+        converting.close()
+        with pytest.raises(StandardUserRequiresSignInError):
+            write.result(timeout=30)
+
     with sessions() as session:
-        report = session.get(UserReportAssociation, us.id_map["sur-us"])
-        uk_policy = session.get(UserPolicy, uk.id_map["rf-shared"])
-    assert report is not None and report.user_policy_id is None
-    assert uk_policy is not None and uk_policy.country_id == "uk"
+        policy_count = session.execute(
+            select(func.count())
+            .select_from(UserPolicy)
+            .where(UserPolicy.user_id == browser.user_id)
+        ).scalar_one()
+    assert policy_count == 1
+
+
+def test_a_browser_write_after_its_merge_starts_a_new_unauthenticated_user(
+    sessions,
+) -> None:
+    browser = _browser(sessions)
+    alice = _principal(sessions, "google-oauth2|write-during-merge")
+    services = _services(sessions)
+    alice_id = services.accounts.get_account(principal=alice, country_id="us").id
+    merged_policy_id = _save_policy(services, browser)
+    merging = _hold_a_conversion(sessions, browser=browser, principal=alice)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        write = executor.submit(_save_policy, services, browser)
+        time.sleep(LOCK_WAIT_SECONDS)
+        assert not write.done()
+        merging.commit()
+        merging.close()
+        new_policy_id = write.result(timeout=30)
+
+    with sessions() as session:
+        merged_policy = session.get(UserPolicy, merged_policy_id)
+        new_policy = session.get(UserPolicy, new_policy_id)
+        browser_user = session.get(User, browser.user_id)
+    assert merged_policy is not None and merged_policy.user_id == alice_id
+    assert new_policy is not None and new_policy.user_id == browser.user_id
+    assert browser_user is not None and browser_user.user_type == "unauthenticated"
+
+
+def test_a_browser_account_deletion_never_deletes_its_converted_user(
+    sessions,
+) -> None:
+    browser = _browser(sessions)
+    alice = _principal(sessions, "google-oauth2|delete-during-conversion")
+    services = _services(sessions)
+    policy_id = _save_policy(services, browser)
+    converting = _hold_a_conversion(sessions, browser=browser, principal=alice)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        deletion = executor.submit(services.accounts.delete_account, principal=browser)
+        time.sleep(LOCK_WAIT_SECONDS)
+        assert not deletion.done()
+        converting.commit()
+        converting.close()
+        deletion.result(timeout=30)
+
+    with sessions() as session:
+        user = session.get(User, browser.user_id)
+        policy = session.get(UserPolicy, policy_id)
+    assert user is not None and user.user_type == "standard"
+    assert policy is not None and policy.user_id == browser.user_id
+
+
+def test_upgrade_never_locks_a_standard_user_named_by_the_header(sessions) -> None:
+    alice = _principal(sessions, "google-oauth2|names-someone-else")
+    bob = _principal(sessions, "google-oauth2|named-by-the-header")
+    services = _services(sessions)
+    bob_id = services.accounts.get_account(principal=bob, country_id="us").id
+    upgrading = sessions()
+    upgrading.begin()
+    try:
+        conversion = convert_unauthenticated_user_in_session(
+            upgrading,
+            unauthenticated_user_id=bob_id,
+            principal=alice,
+            country_id="us",
+        )
+        assert conversion.outcome is AccountConversionOutcome.NONE
+        # Bob's own account update would wait here if his row were locked.
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            update = executor.submit(
+                services.accounts.update_account,
+                principal=bob,
+                country_id="us",
+                account_input=AccountUpdateInput(first_name="Bob"),
+            )
+            assert update.result(timeout=10 * LOCK_WAIT_SECONDS).first_name == "Bob"
+    finally:
+        upgrading.rollback()
+        upgrading.close()
+
+
+def test_unauthenticated_users_are_written_only_with_their_id(sessions) -> None:
+    browser = _browser(sessions)
+    alice = _principal(sessions, "google-oauth2|not-a-browser")
+    services = _services(sessions)
+    alice_id = services.accounts.get_account(principal=alice, country_id="us").id
+
+    page = services.policies.list_user_policies(principal=browser, country_id="us")
+    with pytest.raises(StandardUserRequiresSignInError):
+        services.policies.list_user_policies(
+            principal=UnauthenticatedPrincipal(user_id=alice_id), country_id="us"
+        )
+    _save_policy(services, browser)
+
+    assert page.items == ()
+    with sessions() as session:
+        user = session.get(User, browser.user_id)
+    assert user is not None
+    assert (
+        user.user_type,
+        user.primary_country,
+        user.first_name,
+        user.last_name,
+        user.email,
+    ) == ("unauthenticated", None, None, None, None)
+    with pytest.raises(IntegrityError):
+        with sessions.begin() as session:
+            session.add(User(user_type="standard"))
 
 
 def test_non_finite_numbers_never_reach_jsonb(sessions) -> None:
     principal = _principal(sessions, "google-oauth2|non-finite")
-    service = V2AccountService(
-        AccountDatabaseSession(sessions),
-        legacy_references=default_legacy_references(),
-    )
+    services = _services(sessions)
     provision = {
         "path": "gov.irs.credits.ctc.amount",
         "breadcrumb": "Child Tax Credit amount",
@@ -238,35 +576,24 @@ def test_non_finite_numbers_never_reach_jsonb(sessions) -> None:
         "value": 3000,
     }
 
-    result = service.import_records(
+    stored = services.reports.create_user_report(
         principal=principal,
-        country_id="us",
-        import_input=AccountImportInput.model_validate(
-            {
-                "policies": [{"client_ref": "rf-finite", "legacy_policy_id": 1}],
-                "reports": [
-                    {
-                        "client_ref": "sur-finite",
-                        "legacy_report_id": 615,
-                        "provisions": [provision],
-                    },
-                    {
-                        "client_ref": "sur-infinite",
-                        "legacy_report_id": 616,
-                        "provisions": [{**provision, "value": float("inf")}],
-                    },
-                ],
-            }
+        association_input=UserReportCreateFields.model_validate(
+            {"country_id": "us", "legacy_report_id": 615, "provisions": [provision]}
         ),
     )
+    with pytest.raises(ValidationError):
+        UserReportCreateFields.model_validate(
+            {
+                "country_id": "us",
+                "legacy_report_id": 616,
+                "provisions": [{**provision, "value": float("inf")}],
+            }
+        )
 
-    assert set(result.id_map) == {"rf-finite", "sur-finite"}
-    assert [(skip.client_ref, skip.reason.value) for skip in result.skipped] == [
-        ("sur-infinite", "invalid")
-    ]
     with sessions() as session:
-        stored = session.get(UserReportAssociation, result.id_map["sur-finite"])
-    assert stored is not None and stored.provisions == [provision]
+        row = session.get(UserReportAssociation, stored.id)
+    assert row is not None and row.provisions == [provision]
 
 
 def test_reference_checks_and_match_simple_composite_keys(sessions) -> None:
@@ -281,6 +608,8 @@ def test_reference_checks_and_match_simple_composite_keys(sessions) -> None:
             [
                 UserPolicy(user_id=owner, country_id="us", legacy_policy_id=1),
                 UserPolicy(user_id=owner, country_id="us", legacy_policy_id=2),
+                # One owner may save the same v1 policy more than once.
+                UserPolicy(user_id=owner, country_id="us", legacy_policy_id=2),
             ]
         )
 
@@ -293,23 +622,6 @@ def test_reference_checks_and_match_simple_composite_keys(sessions) -> None:
         with pytest.raises(IntegrityError):
             with sessions.begin() as session:
                 session.add(invalid)
-
-    with sessions.begin() as session:
-        session.add(
-            UserPolicy(
-                user_id=owner, country_id="us", legacy_policy_id=1, client_ref="rf-1"
-            )
-        )
-    with pytest.raises(IntegrityError):
-        with sessions.begin() as session:
-            session.add(
-                UserPolicy(
-                    user_id=owner,
-                    country_id="us",
-                    legacy_policy_id=2,
-                    client_ref="rf-1",
-                )
-            )
 
 
 def test_account_deletion_cascades_after_removing_legacy_mappings(sessions) -> None:
@@ -324,41 +636,26 @@ def test_account_deletion_cascades_after_removing_legacy_mappings(sessions) -> N
         def delete_user(self, subject: str) -> None:
             deleted_subjects.append(subject)
 
-    service = V2AccountService(
+    services = _services(sessions)
+    accounts = V2AccountService(
         AccountDatabaseSession(sessions),
-        legacy_references=default_legacy_references(),
         auth0_user_deleter_factory=RecordingDeleter,
     )
-    alice_id = service.get_account(principal=alice, country_id="us").id
-    bob_id = service.get_account(principal=bob, country_id="us").id
-    service.import_records(
-        principal=alice,
-        country_id="us",
-        import_input=AccountImportInput.model_validate(
-            {
-                "policies": [{"client_ref": "rf-1", "legacy_policy_id": 1}],
-                "reports": [
-                    {
-                        "client_ref": "lfr-1",
-                        "legacy_report_id": 615,
-                        "user_policy_client_ref": "rf-1",
-                    }
-                ],
-            }
-        ),
-    )
+    alice_id = accounts.get_account(principal=alice, country_id="us").id
+    bob_id = accounts.get_account(principal=bob, country_id="us").id
+    _save_one_of_each(services, alice)
     with sessions.begin() as session:
         session.add(
             LegacyUserMapping(legacy_user_id=f"legacy-{uuid4().hex}", user_id=alice_id)
         )
 
-    service.delete_account(principal=alice)
+    accounts.delete_account(principal=alice)
 
     assert deleted_subjects == [alice.subject]
     with sessions() as session:
         assert session.get(User, alice_id) is None
         assert session.get(User, bob_id) is not None
-        for model in (LegacyUserMapping, UserPolicy, UserReportAssociation):
+        for model in (LegacyUserMapping, *ASSOCIATION_MODELS):
             assert (
                 session.execute(
                     select(func.count())

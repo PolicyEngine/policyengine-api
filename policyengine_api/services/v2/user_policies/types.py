@@ -17,7 +17,6 @@ from policyengine_api.query_parameters import (
     UserId,
 )
 from policyengine_api.services.v2.associations.types import (
-    AssociationClientRef,
     AssociationDescription,
     AssociationName,
     StrictAssociationModel,
@@ -50,7 +49,6 @@ class UserPolicyCreateFields(StrictAssociationInput):
     description: AssociationDescription | None = None
     baseline: UserPolicyBaseline | None = None
     provenance: PolicyProvenance | None = None
-    client_ref: AssociationClientRef | None = None
 
     @model_validator(mode="after")
     def require_policy_reference(self) -> "UserPolicyCreateFields":
@@ -73,7 +71,6 @@ class UserPolicyCreationInput(StrictAssociationInput):
     description: str | None = None
     baseline: UserPolicyBaseline | None = None
     provenance: PolicyProvenance | None = None
-    client_ref: AssociationClientRef | None = None
 
     @model_validator(mode="after")
     def require_policy_reference(self) -> "UserPolicyCreationInput":
@@ -104,17 +101,6 @@ class UserPolicyUpdateInput(StrictAssociationInput):
         if "legacy_policy_id" in supplied and self.legacy_policy_id is None:
             raise ValueError("legacy_policy_id must not be null")
         return self
-
-
-class UserPolicyImportItem(StrictAssociationInput):
-    """One browser-local saved policy offered for idempotent import."""
-
-    client_ref: AssociationClientRef
-    legacy_policy_id: LegacyRecordId
-    name: AssociationName | None = None
-    description: AssociationDescription | None = None
-    baseline: UserPolicyBaseline | None = None
-    provenance: PolicyProvenance | None = None
 
 
 class LegacyUserPolicySnapshot(StrictAssociationInput):
@@ -155,7 +141,6 @@ class UserPolicyRead:
     description: str | None
     baseline: str | None
     provenance: dict[str, Any] | None
-    client_ref: str | None
     created_at: datetime
     updated_at: datetime
 

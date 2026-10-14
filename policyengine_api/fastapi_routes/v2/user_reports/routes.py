@@ -1,4 +1,4 @@
-"""Native FastAPI routes for signed-in v2 user-report associations."""
+"""Native FastAPI routes for v2 user-report associations."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from policyengine_api.query_parameters import (
     CountryQuery,
     UserReportCollectionQuery,
 )
-from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.identity.types import AccountPrincipal
 
 
 def _service_factory(
@@ -52,10 +52,10 @@ def _service_factory(
 def build_v2_user_report_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
-    """Build signed-in association routes without opening a connection.
+    """Build user association routes without opening a connection.
 
     Authentication is a router-level dependency, so a missing or invalid
-    token is rejected before query or body validation.
+    credential is rejected before query or body validation.
     """
 
     require_user = dependencies.require_user
@@ -75,9 +75,10 @@ def build_v2_user_report_router(
         "/user-reports",
         response_model=UserReportDetailResponse,
         status_code=201,
-        summary="Save a v1 report for the signed-in user",
+        summary="Save a v1 report for the current user",
         description=(
-            "Requires a user bearer token; the owner is taken from the token. "
+            "Requires a bearer access token or the PolicyEngine-Unauthenticated-User "
+            "header; the owner is taken from that credential. "
             "Stage 12A accepts legacy_report_id only (the requested v1 report "
             "output ID), checked in the v1 database. An optional user_policy_id "
             "must name the same user's saved policy in the same country."
@@ -86,7 +87,7 @@ def build_v2_user_report_router(
     def create_user_report(
         body: UserReportCreateRequest,
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> UserReportDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
             return v2_error_response(400, "Body country_id must match query country_id")
@@ -105,12 +106,12 @@ def build_v2_user_report_router(
     @router.get(
         "/user-reports/{association_id}",
         response_model=UserReportDetailResponse,
-        summary="Read one of the signed-in user's saved reports",
+        summary="Read one of the current user's saved reports",
     )
     def get_user_report(
         association_id: UUID,
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> UserReportDetailResponse | JSONResponse:
         def read() -> UserReportDetailResponse:
             item = service_factory().get_user_report(
@@ -127,11 +128,11 @@ def build_v2_user_report_router(
     @router.get(
         "/user-reports",
         response_model=UserReportPageResponse,
-        summary="List the signed-in user's saved reports",
+        summary="List the current user's saved reports",
     )
     def get_user_reports(
         query: UserReportCollectionQuery = Depends(collection_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> UserReportPageResponse | JSONResponse:
         def read() -> UserReportPageResponse:
             page = service_factory().list_user_reports(
@@ -148,13 +149,13 @@ def build_v2_user_report_router(
     @router.patch(
         "/user-reports/{association_id}",
         response_model=UserReportDetailResponse,
-        summary="Update or repoint one of the signed-in user's saved reports",
+        summary="Update or repoint one of the current user's saved reports",
     )
     def patch_user_report_route(
         association_id: UUID,
         body: UserReportPatchRequest,
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> UserReportDetailResponse | JSONResponse:
         def patch() -> UserReportDetailResponse:
             item = service_factory().patch_user_report(
@@ -174,12 +175,12 @@ def build_v2_user_report_router(
         response_model=None,
         status_code=204,
         response_class=Response,
-        summary="Delete one of the signed-in user's saved reports",
+        summary="Delete one of the current user's saved reports",
     )
     def delete_user_report_route(
         association_id: UUID,
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> Response | JSONResponse:
         def delete() -> Response:
             service_factory().delete_user_report(

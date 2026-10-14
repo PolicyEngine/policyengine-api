@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from uuid import UUID
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 import jwt
@@ -11,6 +12,7 @@ import pytest
 
 from policyengine_api.libs.user_auth import (
     InvalidBearerTokenError,
+    InvalidUnauthenticatedUserError,
     JWTDecoder,
     MissingBearerTokenError,
     PrincipalKind,
@@ -20,6 +22,7 @@ from policyengine_api.libs.user_auth import (
     _normalized_issuer,
     authenticate_bearer,
     load_user_auth_settings,
+    unauthenticated_user_id,
 )
 
 
@@ -198,3 +201,28 @@ def test_decoder_uses_the_issuer_jwks_endpoint() -> None:
     decoder = JWTDecoder(ISSUER, AUDIENCE)
 
     assert decoder.jwks_client.uri == f"{ISSUER}.well-known/jwks.json"
+
+
+def test_unauthenticated_user_ids_are_canonical_uuids() -> None:
+    browser_user_id = "8f14e45f-ceea-467a-9575-0b2c5c1c2f2a"
+
+    assert unauthenticated_user_id(browser_user_id) == UUID(browser_user_id)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "not-a-uuid",
+        "8F14E45F-CEEA-467A-9575-0B2C5C1C2F2A",
+        "8f14e45fceea467a95750b2c5c1c2f2a",
+        "{8f14e45f-ceea-467a-9575-0b2c5c1c2f2a}",
+        "urn:uuid:8f14e45f-ceea-467a-9575-0b2c5c1c2f2a",
+        "8f14e45f-ceea-467a-9575-0b2c5c1c2f2a\n",
+    ],
+)
+def test_non_canonical_unauthenticated_user_ids_are_rejected(value: str) -> None:
+    with pytest.raises(InvalidUnauthenticatedUserError) as raised:
+        unauthenticated_user_id(value)
+
+    assert value.strip() not in str(raised.value) or not value.strip()

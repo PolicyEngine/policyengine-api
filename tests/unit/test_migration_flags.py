@@ -183,7 +183,7 @@ def test_explicit_migration_context_rejects_invalid_database_sources(
         ("/v2/user-simulations", "simulation"),
         ("/v2/user-reports/00000000-0000-0000-0000-000000000001", "report"),
         ("/v2/me", "user_profile"),
-        ("/v2/me/imports", "user_profile"),
+        ("/v2/me/upgrade", "user_profile"),
         ("/us/policy/1", "policy"),
         ("/us/policies", "policy"),
         ("/us/household/1", "household"),

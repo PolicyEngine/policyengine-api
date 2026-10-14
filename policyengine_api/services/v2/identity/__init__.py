@@ -1,1 +1,1 @@
-"""Signed-in user identity resolution and account services."""
+"""User identity resolution, provisioning strategies, and account conversion."""

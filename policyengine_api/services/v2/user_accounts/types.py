@@ -4,28 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
 from typing import Annotated, Protocol
 from uuid import UUID
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    JsonValue,
-    StringConstraints,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 from policyengine_api.query_parameters import CountryId
+from policyengine_api.services.v2.identity.types import AccountConversionOutcome
 from policyengine_api.services.v2.user_households.types import UserHouseholdRead
 from policyengine_api.services.v2.user_policies.types import UserPolicyRead
 from policyengine_api.services.v2.user_reports.types import UserReportRead
 from policyengine_api.services.v2.user_simulations.types import UserSimulationRead
 
 
-MAXIMUM_IMPORT_ITEMS = 500
 PersonName = Annotated[str, StringConstraints(max_length=255)]
-ImportedRecord = dict[str, JsonValue]
 
 
 class StrictAccountInput(BaseModel):
@@ -52,52 +44,12 @@ class AccountUpdateInput(StrictAccountInput):
         return self
 
 
-class AccountImportInput(StrictAccountInput):
-    """Browser-local records; each item is validated individually."""
-
-    policies: list[ImportedRecord] = []
-    households: list[ImportedRecord] = []
-    simulations: list[ImportedRecord] = []
-    reports: list[ImportedRecord] = []
-
-    @model_validator(mode="after")
-    def bound_item_count(self) -> "AccountImportInput":
-        total = (
-            len(self.policies)
-            + len(self.households)
-            + len(self.simulations)
-            + len(self.reports)
-        )
-        if total > MAXIMUM_IMPORT_ITEMS:
-            raise ValueError(
-                f"An import may contain at most {MAXIMUM_IMPORT_ITEMS} items"
-            )
-        return self
-
-
-class ImportSkipReason(StrEnum):
-    INVALID = "invalid"
-    UNKNOWN_LEGACY_REFERENCE = "unknown_legacy_reference"
-    # The owner already uses the client_ref in another country.
-    CLIENT_REF_CONFLICT = "client_ref_conflict"
-
-
-@dataclass(frozen=True)
-class ImportSkip:
-    client_ref: str | None
-    reason: ImportSkipReason
-
-
-@dataclass(frozen=True)
-class AccountImportResult:
-    id_map: dict[str, UUID]
-    skipped: tuple[ImportSkip, ...]
-
-
 @dataclass(frozen=True)
 class AccountRead:
     id: UUID
-    primary_country: str
+    user_type: str
+    # Null only for an unauthenticated user.
+    primary_country: str | None
     first_name: str | None
     last_name: str | None
     email: str | None
@@ -106,11 +58,20 @@ class AccountRead:
 
 @dataclass(frozen=True)
 class AccountExport:
-    user: AccountRead
+    # Null when an unauthenticated principal has not saved anything yet.
+    user: AccountRead | None
     policies: tuple[UserPolicyRead, ...]
     households: tuple[UserHouseholdRead, ...]
     simulations: tuple[UserSimulationRead, ...]
     reports: tuple[UserReportRead, ...]
+
+
+@dataclass(frozen=True)
+class AccountUpgrade:
+    """The signed-in account after a browser's unauthenticated user moved in."""
+
+    account: AccountRead
+    outcome: AccountConversionOutcome
 
 
 @dataclass(frozen=True)

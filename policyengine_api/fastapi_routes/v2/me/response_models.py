@@ -1,4 +1,4 @@
-"""Strict HTTP response models for the signed-in account resource."""
+"""Strict HTTP response models for the account resource."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ from policyengine_api.fastapi_routes.v2.user_simulations.response_models import 
 from policyengine_api.query_parameters import CountryId
 from policyengine_api.services.v2.user_accounts.types import (
     AccountExport,
-    AccountImportResult,
     AccountRead,
+    AccountUpgrade,
 )
 
 
@@ -34,7 +34,9 @@ class StrictAccountAPIModel(BaseModel):
 
 class MeItem(StrictAccountAPIModel):
     id: UUID
-    primary_country: CountryId
+    user_type: Literal["unauthenticated", "standard"]
+    # Null only for an unauthenticated user.
+    primary_country: CountryId | None
     first_name: str | None
     last_name: str | None
     email: str | None
@@ -50,7 +52,8 @@ class MeDetailResult(StrictAccountAPIModel):
 
 
 class MeExportResult(StrictAccountAPIModel):
-    user: MeItem
+    # Null when an unauthenticated user has not saved anything yet.
+    user: MeItem | None
     policies: list[UserPolicyItem]
     households: list[UserHouseholdItem]
     simulations: list[UserSimulationItem]
@@ -59,7 +62,7 @@ class MeExportResult(StrictAccountAPIModel):
     @classmethod
     def from_export(cls, export: AccountExport) -> "MeExportResult":
         return cls(
-            user=MeItem.from_read(export.user),
+            user=None if export.user is None else MeItem.from_read(export.user),
             policies=[UserPolicyItem.from_read(item) for item in export.policies],
             households=[
                 UserHouseholdItem.from_read(item) for item in export.households
@@ -71,23 +74,15 @@ class MeExportResult(StrictAccountAPIModel):
         )
 
 
-class MeImportSkip(StrictAccountAPIModel):
-    client_ref: str | None
-    reason: Literal["invalid", "unknown_legacy_reference", "client_ref_conflict"]
-
-
-class MeImportResult(StrictAccountAPIModel):
-    id_map: dict[str, UUID]
-    skipped: list[MeImportSkip]
+class MeUpgradeResult(StrictAccountAPIModel):
+    item: MeItem
+    outcome: Literal["converted", "merged", "none"]
 
     @classmethod
-    def from_result(cls, result: AccountImportResult) -> "MeImportResult":
+    def from_upgrade(cls, upgrade: AccountUpgrade) -> "MeUpgradeResult":
         return cls(
-            id_map=dict(result.id_map),
-            skipped=[
-                MeImportSkip(client_ref=skip.client_ref, reason=skip.reason.value)
-                for skip in result.skipped
-            ],
+            item=MeItem.from_read(upgrade.account),
+            outcome=upgrade.outcome.value,
         )
 
 
@@ -108,5 +103,5 @@ class MeExportResponse(AccountSuccessResponse[MeExportResult]):
     pass
 
 
-class MeImportResponse(AccountSuccessResponse[MeImportResult]):
+class MeUpgradeResponse(AccountSuccessResponse[MeUpgradeResult]):
     pass

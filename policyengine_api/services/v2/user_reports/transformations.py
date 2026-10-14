@@ -9,7 +9,6 @@ from policyengine_api.data.v2.models import UserReportAssociation
 from policyengine_api.services.v2.user_reports.types import (
     UserReportCreateFields,
     UserReportCreationInput,
-    UserReportImportItem,
     UserReportPage,
     UserReportRead,
     UserReportUpdateInput,
@@ -32,7 +31,6 @@ def user_report_read(association: UserReportAssociation) -> UserReportRead:
         provisions=association.provisions,
         validation=association.validation,
         last_run_at=association.last_run_at,
-        client_ref=association.client_ref,
         created_at=association.created_at,
         updated_at=association.updated_at,
     )
@@ -62,27 +60,6 @@ def owned_user_report_input(
         provisions=stored_provisions(fields.provisions),
         validation=stored_validation(fields.validation),
         user_id=user_id,
-    )
-
-
-def imported_user_report_input(
-    item: UserReportImportItem,
-    *,
-    country_id: str,
-    user_id: UUID,
-    user_policy_id: UUID | None,
-) -> UserReportCreationInput:
-    return UserReportCreationInput.model_validate(
-        {
-            **item.model_dump(
-                exclude={"provisions", "validation", "user_policy_client_ref"}
-            ),
-            "provisions": stored_provisions(item.provisions),
-            "validation": stored_validation(item.validation),
-            "country_id": country_id,
-            "user_id": user_id,
-            "user_policy_id": user_policy_id,
-        }
     )
 
 

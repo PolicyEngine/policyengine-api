@@ -494,7 +494,7 @@ def test_v2_household_resources_log_actual_supabase_read_and_write_sources(
         ("PATCH", "/v2/me", "user_profile", None, "supabase"),
         ("DELETE", "/v2/me", "user_profile", None, "supabase"),
         ("GET", "/v2/me/export", "user_profile", "supabase", None),
-        ("POST", "/v2/me/imports", "user_profile", None, "supabase"),
+        ("POST", "/v2/me/upgrade", "user_profile", None, "supabase"),
         ("GET", "/v2/user-simulations", "simulation", "supabase", None),
         ("POST", "/v2/user-households", "household", None, "supabase"),
         ("POST", "/v2/user-simulations", "simulation", None, "supabase"),

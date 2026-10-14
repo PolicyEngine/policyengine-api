@@ -16,11 +16,17 @@ from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
 )
-from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.identity.types import (
+    AccountPrincipal,
+    UnauthenticatedPrincipal,
+    UserPrincipal,
+)
 
 
 ISSUER = "https://auth.example.test/"
 PRINCIPAL = UserPrincipal(issuer=ISSUER, subject="google-oauth2|1234")
+BROWSER_USER_ID = UUID("6f1c2a4e-8b3d-4c5e-9a7f-1e2d3c4b5a69")
+UNAUTHENTICATED_PRINCIPAL = UnauthenticatedPrincipal(user_id=BROWSER_USER_ID)
 OWNER_ID = UUID("00000000-0000-0000-0000-000000000070")
 CREATED_AT = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -29,9 +35,13 @@ def signed_in_user() -> UserPrincipal:
     return PRINCIPAL
 
 
+def signed_out_browser() -> UnauthenticatedPrincipal:
+    return UNAUTHENTICATED_PRINCIPAL
+
+
 def user_route_client(
     *,
-    require_user: Callable[..., UserPrincipal] | None = signed_in_user,
+    require_user: Callable[..., AccountPrincipal] | None = signed_in_user,
     **service_factories: Any,
 ) -> tuple[TestClient, dict[str, int]]:
     """Build the ASGI app with fake services and an injected principal.

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
-from policyengine_api.data.v2.models import UserIdentity
+from policyengine_api.data.v2.models import User, UserIdentity, UserType
+from policyengine_api.services.v2.identity.types import ResolvedUser
 
 
 LAST_SEEN_REFRESH_INTERVAL = timedelta(hours=1)
@@ -31,3 +33,17 @@ def identity_refresh_required(
     if refreshed_identity_email(identity, email) != identity.email:
         return True
     return _aware(now) - _aware(identity.last_seen_at) >= LAST_SEEN_REFRESH_INTERVAL
+
+
+def standard_resolved_user(user_id: UUID, *, email: str | None) -> ResolvedUser:
+    return ResolvedUser(user_id=user_id, email=email, user_type=UserType.STANDARD)
+
+
+def unauthenticated_resolved_user(user: User) -> ResolvedUser:
+    return ResolvedUser(user_id=user.id, email=None, user_type=UserType.UNAUTHENTICATED)
+
+
+def converted_primary_country(user: User, *, country_id: str) -> str:
+    """A converted user keeps any primary country, or takes the request's."""
+
+    return user.primary_country or country_id

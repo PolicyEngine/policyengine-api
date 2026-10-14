@@ -2,28 +2,23 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from uuid import UUID
 
 from sqlmodel import Session
 
 from policyengine_api.data.v2.models import LegacyUserPolicyMapping, UserPolicy
 from policyengine_api.services.v2.associations.services import (
-    import_associations_in_session,
     require_legacy_reference,
-    require_unused_client_ref_in_session,
 )
-from policyengine_api.services.v2.associations.types import (
-    AssociationImport,
-    LegacyReferenceChecker,
-)
+from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
 from policyengine_api.services.v2.associations.validators import (
     require_not_mirror_owned,
 )
 from policyengine_api.services.v2.identity.services import (
+    resolve_principal_user_for_read_in_session,
     resolve_principal_user_in_session,
 )
-from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.identity.types import AccountPrincipal
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.policies.services import (
     mirror_legacy_policy_in_session,
@@ -61,7 +56,6 @@ from policyengine_api.services.v2.user_policies.database_session import (
 from policyengine_api.services.v2.user_policies.transformations import (
     USER_POLICY_FINGERPRINT_VERSION,
     fingerprint_legacy_user_policy,
-    imported_user_policy_input,
     legacy_name_requires_update,
     owned_user_policy_input,
     project_legacy_user_policy,
@@ -74,7 +68,6 @@ from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicySnapshot,
     UserPolicyCreateFields,
     UserPolicyCreationInput,
-    UserPolicyImportItem,
     UserPolicyPage,
     UserPolicyRead,
     UserPolicyUpdateInput,
@@ -117,12 +110,16 @@ def read_user_policy_page(
 def read_owned_user_policy(
     session: Session,
     *,
-    user_id: UUID,
+    user_id: UUID | None,
     country_id: str,
     association_id: UUID,
 ) -> UserPolicy:
+    """``user_id`` is None for an unauthenticated user that owns nothing yet."""
+
     return require_user_policy(
-        read_owned_user_policy_row(
+        None
+        if user_id is None
+        else read_owned_user_policy_row(
             session,
             user_id=user_id,
             country_id=country_id,
@@ -170,40 +167,6 @@ def read_all_user_policies(
     return tuple(
         user_policy_read(row)
         for row in read_all_user_policy_rows(session, user_id=user_id)
-    )
-
-
-def import_user_policies_in_session(
-    session: Session,
-    *,
-    user_id: UUID,
-    country_id: str,
-    items: Sequence[UserPolicyImportItem],
-) -> AssociationImport:
-    """Insert imported associations idempotently on ``(user_id, client_ref)``."""
-
-    mirrored = read_mirrored_policy_ids(
-        session,
-        country_id=country_id,
-        legacy_policy_ids={item.legacy_policy_id for item in items},
-    )
-    return import_associations_in_session(
-        session,
-        UserPolicy,
-        user_id=user_id,
-        country_id=country_id,
-        rows=[
-            (
-                item.client_ref,
-                imported_user_policy_input(
-                    item,
-                    country_id=country_id,
-                    user_id=user_id,
-                    policy_id=mirrored.get(item.legacy_policy_id),
-                ).model_dump(),
-            )
-            for item in items
-        ],
     )
 
 
@@ -409,8 +372,10 @@ def mirror_legacy_user_policy_in_session(
 class V2UserPolicyService:
     """Sequence owner-scoped association operations through explicit sessions.
 
-    The owner always comes from the verified session principal. v1 references
-    are checked in a short read-only v1 transaction before the v2
+    The owner always comes from the verified session principal: a signed-in
+    user or a signed-out browser. Reads never provision a browser's
+    unauthenticated user; one that does not exist yet owns no records. v1
+    references are checked in a short read-only v1 transaction before the v2
     transaction opens.
     """
 
@@ -433,7 +398,7 @@ class V2UserPolicyService:
     def create_user_policy(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         association_input: UserPolicyCreateFields,
     ) -> UserPolicyRead:
         if association_input.legacy_policy_id is not None:
@@ -446,12 +411,6 @@ class V2UserPolicyService:
                 session,
                 principal,
                 country_id=association_input.country_id,
-            )
-            require_unused_client_ref_in_session(
-                session,
-                UserPolicy,
-                user_id=owner.user_id,
-                client_ref=association_input.client_ref,
             )
             policy_id = resolve_user_policy_reference(
                 session,
@@ -473,18 +432,18 @@ class V2UserPolicyService:
     def get_user_policy(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
     ) -> UserPolicyRead:
         with self._database_session.transaction() as session:
-            owner = resolve_principal_user_in_session(
+            owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
             )
             return user_policy_read(
                 read_owned_user_policy(
                     session,
-                    user_id=owner.user_id,
+                    user_id=None if owner is None else owner.user_id,
                     country_id=country_id,
                     association_id=association_id,
                 )
@@ -493,7 +452,7 @@ class V2UserPolicyService:
     def list_user_policies(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         policy_id: UUID | None = None,
         legacy_policy_id: int | None = None,
@@ -501,9 +460,11 @@ class V2UserPolicyService:
         limit: int = 100,
     ) -> UserPolicyPage:
         with self._database_session.transaction() as session:
-            owner = resolve_principal_user_in_session(
+            owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
             )
+            if owner is None:
+                return user_policy_page([], offset=offset, limit=limit)
             return read_user_policy_page(
                 session,
                 country_id=country_id,
@@ -517,7 +478,7 @@ class V2UserPolicyService:
     def patch_user_policy(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
         association_input: UserPolicyUpdateInput,
@@ -565,7 +526,7 @@ class V2UserPolicyService:
     def delete_user_policy(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
     ) -> None:

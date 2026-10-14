@@ -1,41 +1,49 @@
-"""Native FastAPI contract tests for the signed-in account resource."""
+"""Native FastAPI contract tests for the account resource."""
 
 from __future__ import annotations
 
-import json
 from uuid import UUID
 
 import pytest
 
+from policyengine_api.services.v2.identity.types import AccountConversionOutcome
+from policyengine_api.services.v2.identity.validators import (
+    StandardUserRequiresSignInError,
+)
 from policyengine_api.services.v2.user_accounts.types import (
     AccountDeletion,
     AccountExport,
-    AccountImportResult,
     AccountRead,
-    ImportSkip,
-    ImportSkipReason,
+    AccountUpgrade,
 )
 from policyengine_api.services.v2.user_accounts.validators import (
     AccountDeletionUnavailableError,
+    AccountEditRequiresSignInError,
     AccountIdentityDeletionError,
+    AccountNotFoundError,
 )
 from policyengine_api.services.v2.user_policies.types import UserPolicyRead
 from policyengine_api.services.v2.user_reports.types import UserReportRead
 from tests.unit.v2.user_route_support import (
+    BROWSER_USER_ID,
     CREATED_AT,
     OWNER_ID,
     PRINCIPAL,
+    UNAUTHENTICATED_PRINCIPAL,
     RecordingService,
+    signed_out_browser,
     user_route_client,
 )
 
 
-IMPORTED_ID = UUID("00000000-0000-0000-0000-000000000065")
+RECORD_ID = UUID("00000000-0000-0000-0000-000000000065")
+UNAUTHENTICATED_HEADERS = {"PolicyEngine-Unauthenticated-User": str(BROWSER_USER_ID)}
 
 
 def _account(**changes) -> AccountRead:
     values = {
         "id": OWNER_ID,
+        "user_type": "standard",
         "primary_country": "us",
         "first_name": None,
         "last_name": None,
@@ -55,16 +63,9 @@ def _result(name: str, kwargs: dict):
             simulations=(),
             reports=(),
         )
-    if name == "import_records":
-        return AccountImportResult(
-            id_map={"sup-1": IMPORTED_ID},
-            skipped=(
-                ImportSkip(
-                    client_ref="sus-9",
-                    reason=ImportSkipReason.UNKNOWN_LEGACY_REFERENCE,
-                ),
-                ImportSkip(client_ref=None, reason=ImportSkipReason.INVALID),
-            ),
+    if name == "upgrade_account":
+        return AccountUpgrade(
+            account=_account(), outcome=AccountConversionOutcome.CONVERTED
         )
     if name == "delete_account":
         return AccountDeletion(user_id=OWNER_ID, auth0_subjects=())
@@ -73,9 +74,11 @@ def _result(name: str, kwargs: dict):
     return _account()
 
 
-def _client(service: RecordingService | None = None):
+def _client(service: RecordingService | None = None, **client_options):
     service = service or RecordingService(_result)
-    client, _flask_calls = user_route_client(v2_account_service_factory=lambda: service)
+    client, _flask_calls = user_route_client(
+        v2_account_service_factory=lambda: service, **client_options
+    )
     return client, service
 
 
@@ -91,6 +94,7 @@ def test_get_me_provisions_with_the_query_country() -> None:
         "result": {
             "item": {
                 "id": str(OWNER_ID),
+                "user_type": "standard",
                 "primary_country": "us",
                 "first_name": None,
                 "last_name": None,
@@ -172,73 +176,10 @@ def test_unavailable_auth0_deletion_reports_that_nothing_was_deleted() -> None:
     assert "nothing was deleted" in response.json()["message"]
 
 
-def test_import_returns_id_map_and_skipped_items() -> None:
-    client, service = _client()
-
-    response = client.post(
-        "/v2/me/imports?country_id=us",
-        json={
-            "policies": [{"client_ref": "sup-1", "legacy_policy_id": 1}],
-            "simulations": [{"client_ref": "sus-9", "legacy_simulation_id": 99}],
-            "reports": [{"legacy_report_id": "invalid"}],
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "status": "ok",
-        "message": None,
-        "result": {
-            "id_map": {"sup-1": str(IMPORTED_ID)},
-            "skipped": [
-                {"client_ref": "sus-9", "reason": "unknown_legacy_reference"},
-                {"client_ref": None, "reason": "invalid"},
-            ],
-        },
-    }
-    import_input = service.calls[0][1]["import_input"]
-    assert import_input.households == []
-    assert len(import_input.reports) == 1
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        {"policies": [{"client_ref": f"sup-{index}"} for index in range(501)]},
-        {"unknown": []},
-        {"policies": ["not-an-object"]},
-    ],
-)
-def test_import_rejects_oversized_counts_and_unknown_sections(body: dict) -> None:
-    client, service = _client()
-
-    response = client.post("/v2/me/imports?country_id=us", json=body)
-
-    assert response.status_code == 422
-    assert service.calls == []
-
-
-def test_import_rejects_bodies_over_one_mebibyte() -> None:
-    client, service = _client()
-    body = json.dumps(
-        {"policies": [{"client_ref": "sup-1", "description": "x" * 1_048_576}]}
-    )
-
-    response = client.post(
-        "/v2/me/imports?country_id=us",
-        content=body,
-        headers={"content-type": "application/json"},
-    )
-
-    assert response.status_code == 413
-    assert response.json()["status"] == "error"
-    assert service.calls == []
-
-
 def test_export_serializes_stored_rows_outside_current_input_bounds() -> None:
     long_text = "x" * 20_000
     odd_policy = UserPolicyRead(
-        id=IMPORTED_ID,
+        id=RECORD_ID,
         country_id="us",
         user_id=OWNER_ID,
         policy_id=None,
@@ -247,12 +188,11 @@ def test_export_serializes_stored_rows_outside_current_input_bounds() -> None:
         description=long_text,
         baseline="current-law",
         provenance={"source": "a-source-added-later", "ref": long_text, "extra": 1},
-        client_ref="rf-1",
         created_at=CREATED_AT,
         updated_at=CREATED_AT,
     )
     odd_report = UserReportRead(
-        id=IMPORTED_ID,
+        id=RECORD_ID,
         country_id="us",
         user_id=OWNER_ID,
         report_id=None,
@@ -272,7 +212,6 @@ def test_export_serializes_stored_rows_outside_current_input_bounds() -> None:
         ],
         validation={"matched_at": long_text, "map_model_version": "1"},
         last_run_at=None,
-        client_ref="lfr-1",
         created_at=CREATED_AT,
         updated_at=CREATED_AT,
     )
@@ -301,3 +240,202 @@ def test_export_serializes_stored_rows_outside_current_input_bounds() -> None:
     }
     assert body["reports"][0]["provisions"][0]["path"] == long_text
     assert "retired_key" not in body["reports"][0]["provisions"][0]
+
+
+def test_unauthenticated_principals_reach_every_account_operation() -> None:
+    client, service = _client(require_user=signed_out_browser)
+
+    read = client.get("/v2/me?country_id=us")
+    exported = client.get("/v2/me/export?country_id=us")
+    deleted = client.delete("/v2/me?country_id=us")
+
+    assert [read.status_code, exported.status_code, deleted.status_code] == [
+        200,
+        200,
+        204,
+    ]
+    assert [(name, kwargs["principal"]) for name, kwargs in service.calls] == [
+        ("get_account", UNAUTHENTICATED_PRINCIPAL),
+        ("export_account", UNAUTHENTICATED_PRINCIPAL),
+        ("delete_account", UNAUTHENTICATED_PRINCIPAL),
+    ]
+
+
+def test_unauthenticated_account_items_have_no_primary_country() -> None:
+    def result(name: str, kwargs: dict):
+        return _account(
+            id=BROWSER_USER_ID, user_type="unauthenticated", primary_country=None
+        )
+
+    client, _service = _client(
+        RecordingService(result), require_user=signed_out_browser
+    )
+
+    response = client.get("/v2/me?country_id=us")
+
+    assert response.status_code == 200
+    item = response.json()["result"]["item"]
+    assert (item["id"], item["user_type"], item["primary_country"]) == (
+        str(BROWSER_USER_ID),
+        "unauthenticated",
+        None,
+    )
+
+
+def test_absent_unauthenticated_users_read_as_not_found_and_export_empty() -> None:
+    def result(name: str, kwargs: dict):
+        if name == "get_account":
+            raise AccountNotFoundError("The account was not found")
+        return AccountExport(
+            user=None, policies=(), households=(), simulations=(), reports=()
+        )
+
+    client, _service = _client(
+        RecordingService(result), require_user=signed_out_browser
+    )
+
+    read = client.get("/v2/me?country_id=us")
+    exported = client.get("/v2/me/export?country_id=us")
+
+    assert read.status_code == 404
+    assert str(BROWSER_USER_ID) not in read.text
+    assert exported.status_code == 200
+    assert exported.json()["result"] == {
+        "user": None,
+        "policies": [],
+        "households": [],
+        "simulations": [],
+        "reports": [],
+    }
+
+
+def test_unauthenticated_account_edits_are_forbidden() -> None:
+    service = RecordingService(_result)
+    service.error = AccountEditRequiresSignInError(
+        "Sign in to edit your account details."
+    )
+    client, _service = _client(service, require_user=signed_out_browser)
+
+    response = client.patch("/v2/me?country_id=us", json={"first_name": "Ada"})
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "status": "error",
+        "message": "Sign in to edit your account details.",
+    }
+
+
+def test_a_credential_naming_a_signed_in_account_asks_the_browser_to_sign_in() -> None:
+    service = RecordingService(_result)
+    service.error = StandardUserRequiresSignInError("sign in to continue")
+    client, _service = _client(service, require_user=signed_out_browser)
+
+    response = client.get("/v2/me?country_id=us")
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert response.json() == {"status": "error", "message": "sign in to continue"}
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected"),
+    [
+        (AccountConversionOutcome.CONVERTED, "converted"),
+        (AccountConversionOutcome.MERGED, "merged"),
+        (AccountConversionOutcome.NONE, "none"),
+    ],
+)
+def test_upgrade_returns_the_signed_in_account_and_outcome(
+    outcome: AccountConversionOutcome, expected: str
+) -> None:
+    def result(name: str, kwargs: dict):
+        return AccountUpgrade(account=_account(), outcome=outcome)
+
+    client, service = _client(RecordingService(result))
+
+    response = client.post(
+        "/v2/me/upgrade?country_id=UK", headers=UNAUTHENTICATED_HEADERS
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "message": None,
+        "result": {
+            "item": {
+                "id": str(OWNER_ID),
+                "user_type": "standard",
+                "primary_country": "us",
+                "first_name": None,
+                "last_name": None,
+                "email": None,
+                "created_at": "2026-01-01T00:00:00Z",
+            },
+            "outcome": expected,
+        },
+    }
+    assert service.calls == [
+        (
+            "upgrade_account",
+            {
+                "principal": PRINCIPAL,
+                "unauthenticated_user_id": BROWSER_USER_ID,
+                "country_id": "uk",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {},
+        {"PolicyEngine-Unauthenticated-User": "not-a-uuid"},
+        {"PolicyEngine-Unauthenticated-User": str(BROWSER_USER_ID).upper()},
+        {"PolicyEngine-Unauthenticated-User": BROWSER_USER_ID.hex},
+        {"PolicyEngine-Unauthenticated-User": f"{{{BROWSER_USER_ID}}}"},
+    ],
+)
+def test_upgrade_requires_a_canonical_unauthenticated_user_header(
+    headers: dict[str, str],
+) -> None:
+    client, service = _client()
+
+    response = client.post("/v2/me/upgrade?country_id=us", headers=headers)
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "status": "error",
+        "message": "Invalid API v2 request",
+    }
+    assert service.calls == []
+
+
+def test_upgrade_requires_a_bearer_access_token() -> None:
+    client, service = _client(require_user=signed_out_browser)
+
+    response = client.post(
+        "/v2/me/upgrade?country_id=us", headers=UNAUTHENTICATED_HEADERS
+    )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert service.calls == []
+
+
+def test_upgrade_authentication_precedes_query_validation() -> None:
+    client, service = _client(require_user=signed_out_browser)
+
+    response = client.post("/v2/me/upgrade?country_id=zz")
+
+    assert response.status_code == 401
+    assert service.calls == []
+
+
+def test_import_route_is_removed() -> None:
+    client, service = _client()
+
+    response = client.post("/v2/me/imports?country_id=us", json={"policies": []})
+
+    assert response.status_code == 405
+    assert service.calls == []

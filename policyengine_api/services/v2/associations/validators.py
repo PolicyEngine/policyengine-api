@@ -23,10 +23,6 @@ class MirrorOwnedAssociationError(AssociationConflictError):
     """The association is maintained by the Stage 10 v1 saved-policy mirror."""
 
 
-class AssociationClientRefConflictError(AssociationConflictError):
-    """The caller already has an association with the supplied client_ref."""
-
-
 class AssociationLinkNotFoundError(LookupError):
     """A linked association is absent or not owned by the same user and country."""
 
@@ -43,17 +39,6 @@ def require_legacy_reference_checker(
             "v1 reference checks are not configured"
         )
     return legacy_references
-
-
-def require_unused_client_ref(
-    existing_id: UUID | None,
-    *,
-    client_ref: str,
-) -> None:
-    if existing_id is not None:
-        raise AssociationClientRefConflictError(
-            f"an association with client_ref {client_ref!r} already exists"
-        )
 
 
 def require_not_mirror_owned(mirror_owned: bool, *, association_id: UUID) -> None:

@@ -1,12 +1,30 @@
-"""Database updates used by v2 identity resolution."""
+"""Database updates used by v2 identity resolution and conversion."""
 
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
-from sqlmodel import Session
+from sqlalchemy import update
+from sqlmodel import Session, col
 
-from policyengine_api.data.v2.models import UserIdentity
+from policyengine_api.data.v2.models import (
+    User,
+    UserHouseholdAssociation,
+    UserIdentity,
+    UserPolicy,
+    UserReportAssociation,
+    UserSimulationAssociation,
+    UserType,
+)
+
+
+USER_ASSOCIATION_TABLES = (
+    UserPolicy,
+    UserHouseholdAssociation,
+    UserSimulationAssociation,
+    UserReportAssociation,
+)
 
 
 def update_user_identity_activity(
@@ -21,3 +39,38 @@ def update_user_identity_activity(
     session.add(identity)
     session.flush()
     return identity
+
+
+def update_user_to_standard(
+    session: Session,
+    user: User,
+    *,
+    primary_country: str,
+) -> User:
+    user.user_type = UserType.STANDARD.value
+    user.primary_country = primary_country
+    session.add(user)
+    session.flush()
+    return user
+
+
+def reassign_user_associations(
+    session: Session,
+    *,
+    from_user_id: UUID,
+    to_user_id: UUID,
+) -> None:
+    """Move every association row from one owner to another.
+
+    Association IDs, contents, and timestamps are unchanged, so links between
+    the moved rows (a report's ``user_policy_id``) stay valid.
+    """
+
+    for table in USER_ASSOCIATION_TABLES:
+        session.execute(
+            update(table)
+            .where(col(table.user_id) == from_user_id)
+            .values(user_id=to_user_id, updated_at=col(table.updated_at))
+            .execution_options(synchronize_session=False)
+        )
+    session.flush()

@@ -1,30 +1,27 @@
 """Application services for native v2 user-household associations.
 
-The owner always comes from the verified session principal. v1 references are
-checked in a short read-only v1 transaction before the v2 transaction opens.
+The owner always comes from the verified session principal: a signed-in user
+or a signed-out browser. Reads never provision a browser's unauthenticated
+user; one that does not exist yet owns no records. v1 references are checked
+in a short read-only v1 transaction before the v2 transaction opens.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from uuid import UUID
 
 from sqlmodel import Session
 
 from policyengine_api.data.v2.models import UserHouseholdAssociation
 from policyengine_api.services.v2.associations.services import (
-    import_associations_in_session,
     require_legacy_reference,
-    require_unused_client_ref_in_session,
 )
-from policyengine_api.services.v2.associations.types import (
-    AssociationImport,
-    LegacyReferenceChecker,
-)
+from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
 from policyengine_api.services.v2.identity.services import (
+    resolve_principal_user_for_read_in_session,
     resolve_principal_user_in_session,
 )
-from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.identity.types import AccountPrincipal
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.user_households.database_connectors.creates import (
     create_user_household,
@@ -46,14 +43,12 @@ from policyengine_api.services.v2.user_households.database_session import (
     UserHouseholdDatabaseSession,
 )
 from policyengine_api.services.v2.user_households.transformations import (
-    imported_user_household_input,
     owned_user_household_input,
     user_household_page,
     user_household_read,
 )
 from policyengine_api.services.v2.user_households.types import (
     UserHouseholdCreateFields,
-    UserHouseholdImportItem,
     UserHouseholdPage,
     UserHouseholdRead,
     UserHouseholdUpdateInput,
@@ -68,12 +63,16 @@ from policyengine_api.services.v2.user_households.validators import (
 def read_owned_user_household(
     session: Session,
     *,
-    user_id: UUID,
+    user_id: UUID | None,
     country_id: str,
     association_id: UUID,
 ) -> UserHouseholdAssociation:
+    """``user_id`` is None for an unauthenticated user that owns nothing yet."""
+
     return require_user_household(
-        read_owned_user_household_row(
+        None
+        if user_id is None
+        else read_owned_user_household_row(
             session,
             user_id=user_id,
             country_id=country_id,
@@ -124,40 +123,6 @@ def read_all_user_households(
     )
 
 
-def import_user_households_in_session(
-    session: Session,
-    *,
-    user_id: UUID,
-    country_id: str,
-    items: Sequence[UserHouseholdImportItem],
-) -> AssociationImport:
-    """Insert imported associations idempotently on ``(user_id, client_ref)``."""
-
-    copied = read_copied_household_ids(
-        session,
-        country_id=country_id,
-        legacy_household_ids={item.legacy_household_id for item in items},
-    )
-    return import_associations_in_session(
-        session,
-        UserHouseholdAssociation,
-        user_id=user_id,
-        country_id=country_id,
-        rows=[
-            (
-                item.client_ref,
-                imported_user_household_input(
-                    item,
-                    country_id=country_id,
-                    user_id=user_id,
-                    household_id=copied.get(item.legacy_household_id),
-                ).model_dump(),
-            )
-            for item in items
-        ],
-    )
-
-
 class V2UserHouseholdService:
     """Sequence owner-scoped association operations through explicit sessions."""
 
@@ -182,7 +147,7 @@ class V2UserHouseholdService:
     def create_user_household(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         association_input: UserHouseholdCreateFields,
     ) -> UserHouseholdRead:
         if association_input.legacy_household_id is not None:
@@ -195,12 +160,6 @@ class V2UserHouseholdService:
                 session,
                 principal,
                 country_id=association_input.country_id,
-            )
-            require_unused_client_ref_in_session(
-                session,
-                UserHouseholdAssociation,
-                user_id=owner.user_id,
-                client_ref=association_input.client_ref,
             )
             household_id = resolve_user_household_reference(
                 session,
@@ -222,18 +181,18 @@ class V2UserHouseholdService:
     def get_user_household(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
     ) -> UserHouseholdRead:
         with self._database_session.transaction() as session:
-            owner = resolve_principal_user_in_session(
+            owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
             )
             return user_household_read(
                 read_owned_user_household(
                     session,
-                    user_id=owner.user_id,
+                    user_id=None if owner is None else owner.user_id,
                     country_id=country_id,
                     association_id=association_id,
                 )
@@ -242,7 +201,7 @@ class V2UserHouseholdService:
     def list_user_households(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         household_id: UUID | None = None,
         legacy_household_id: int | None = None,
@@ -250,9 +209,11 @@ class V2UserHouseholdService:
         limit: int = 100,
     ) -> UserHouseholdPage:
         with self._database_session.transaction() as session:
-            owner = resolve_principal_user_in_session(
+            owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
             )
+            if owner is None:
+                return user_household_page([], offset=offset, limit=limit)
             rows = read_user_household_rows(
                 session,
                 country_id=country_id,
@@ -267,7 +228,7 @@ class V2UserHouseholdService:
     def patch_user_household(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
         association_input: UserHouseholdUpdateInput,
@@ -311,7 +272,7 @@ class V2UserHouseholdService:
     def delete_user_household(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
     ) -> None:

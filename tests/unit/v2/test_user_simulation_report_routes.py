@@ -9,7 +9,6 @@ from uuid import UUID
 import pytest
 
 from policyengine_api.services.v2.associations.validators import (
-    AssociationClientRefConflictError,
     AssociationLinkNotFoundError,
 )
 from policyengine_api.services.v2.legacy_refs.validators import (
@@ -87,7 +86,6 @@ def _simulation_read() -> UserSimulationRead:
         legacy_simulation_id=613,
         name="Baseline",
         description=None,
-        client_ref="sus-1",
         created_at=CREATED_AT,
         updated_at=CREATED_AT + timedelta(seconds=1),
     )
@@ -107,7 +105,6 @@ def _report_read() -> UserReportRead:
         provisions=PROVISIONS,
         validation=VALIDATION,
         last_run_at=LAST_RUN_AT,
-        client_ref="sur-1",
         created_at=CREATED_AT,
         updated_at=CREATED_AT + timedelta(seconds=1),
     )
@@ -150,7 +147,7 @@ def test_simulation_routes_require_v1_references_and_scope_to_the_user() -> None
 
     created = client.post(
         "/v2/user-simulations?country_id=us",
-        json={"country_id": "us", "legacy_simulation_id": 613, "client_ref": "sus-1"},
+        json={"country_id": "us", "legacy_simulation_id": 613},
     )
     v2_reference = client.post(
         "/v2/user-simulations?country_id=us",
@@ -174,7 +171,6 @@ def test_simulation_routes_require_v1_references_and_scope_to_the_user() -> None
         "legacy_simulation_id": 613,
         "name": "Baseline",
         "description": None,
-        "client_ref": "sus-1",
         "created_at": "2026-01-01T00:00:00Z",
         "updated_at": "2026-01-01T00:00:01Z",
     }
@@ -206,7 +202,6 @@ def test_report_routes_round_trip_v3_fields() -> None:
             "provisions": PROVISIONS,
             "validation": VALIDATION,
             "last_run_at": "2026-02-01T12:00:00Z",
-            "client_ref": "sur-1",
         },
     )
 
@@ -257,7 +252,6 @@ def test_report_create_rejects_invalid_v3_payloads(changes: dict) -> None:
         (AssociationLinkNotFoundError("user-policy association was not found"), 422),
         (LegacyReferenceNotFoundError("v1 report 615 was not found"), 422),
         (UserReportNotFoundError("association was not found"), 404),
-        (AssociationClientRefConflictError("client_ref exists"), 409),
     ],
 )
 def test_report_failures_map_to_contract_statuses(

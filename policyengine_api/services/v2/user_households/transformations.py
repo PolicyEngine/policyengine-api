@@ -8,7 +8,6 @@ from policyengine_api.data.v2.models import UserHouseholdAssociation
 from policyengine_api.services.v2.user_households.types import (
     UserHouseholdCreateFields,
     UserHouseholdCreationInput,
-    UserHouseholdImportItem,
     UserHouseholdPage,
     UserHouseholdRead,
 )
@@ -25,7 +24,6 @@ def user_household_read(
         legacy_household_id=association.legacy_household_id,
         name=association.name,
         description=association.description,
-        client_ref=association.client_ref,
         created_at=association.created_at,
         updated_at=association.updated_at,
     )
@@ -55,21 +53,4 @@ def owned_user_household_input(
         **fields.model_dump(exclude={"household_id"}),
         user_id=user_id,
         household_id=household_id,
-    )
-
-
-def imported_user_household_input(
-    item: UserHouseholdImportItem,
-    *,
-    country_id: str,
-    user_id: UUID,
-    household_id: UUID | None,
-) -> UserHouseholdCreationInput:
-    return UserHouseholdCreationInput.model_validate(
-        {
-            **item.model_dump(),
-            "country_id": country_id,
-            "user_id": user_id,
-            "household_id": household_id,
-        }
     )

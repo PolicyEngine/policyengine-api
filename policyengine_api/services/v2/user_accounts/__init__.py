@@ -1,1 +1,1 @@
-"""Signed-in account read, update, export, import, and deletion services."""
+"""Account read, update, export, upgrade, and deletion services."""

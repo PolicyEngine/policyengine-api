@@ -11,7 +11,6 @@ from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicySnapshot,
     UserPolicyCreateFields,
     UserPolicyCreationInput,
-    UserPolicyImportItem,
     UserPolicyPage,
     UserPolicyRead,
 )
@@ -31,7 +30,6 @@ def user_policy_read(association: UserPolicy) -> UserPolicyRead:
         description=association.description,
         baseline=association.baseline,
         provenance=association.provenance,
-        client_ref=association.client_ref,
         created_at=association.created_at,
         updated_at=association.updated_at,
     )
@@ -95,23 +93,6 @@ def owned_user_policy_input(
         **fields.model_dump(exclude={"policy_id"}),
         user_id=user_id,
         policy_id=policy_id,
-    )
-
-
-def imported_user_policy_input(
-    item: UserPolicyImportItem,
-    *,
-    country_id: str,
-    user_id: UUID,
-    policy_id: UUID | None,
-) -> UserPolicyCreationInput:
-    return UserPolicyCreationInput.model_validate(
-        {
-            **item.model_dump(),
-            "country_id": country_id,
-            "user_id": user_id,
-            "policy_id": policy_id,
-        }
     )
 
 

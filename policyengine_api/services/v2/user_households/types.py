@@ -10,7 +10,6 @@ from pydantic import model_validator
 
 from policyengine_api.query_parameters import CountryId, ResourceId, UserId
 from policyengine_api.services.v2.associations.types import (
-    AssociationClientRef,
     AssociationDescription,
     AssociationName,
     StrictAssociationModel,
@@ -30,7 +29,6 @@ class UserHouseholdCreateFields(StrictUserHouseholdInput):
     legacy_household_id: LegacyRecordId | None = None
     name: AssociationName | None = None
     description: AssociationDescription | None = None
-    client_ref: AssociationClientRef | None = None
 
     @model_validator(mode="after")
     def require_household_reference(self) -> "UserHouseholdCreateFields":
@@ -50,7 +48,6 @@ class UserHouseholdCreationInput(StrictUserHouseholdInput):
     legacy_household_id: LegacyRecordId | None = None
     name: AssociationName | None = None
     description: str | None = None
-    client_ref: AssociationClientRef | None = None
 
     @model_validator(mode="after")
     def require_household_reference(self) -> "UserHouseholdCreationInput":
@@ -80,15 +77,6 @@ class UserHouseholdUpdateInput(StrictUserHouseholdInput):
         return self
 
 
-class UserHouseholdImportItem(StrictUserHouseholdInput):
-    """One browser-local saved household offered for idempotent import."""
-
-    client_ref: AssociationClientRef
-    legacy_household_id: LegacyRecordId
-    name: AssociationName | None = None
-    description: AssociationDescription | None = None
-
-
 @dataclass(frozen=True)
 class UserHouseholdRead:
     id: UUID
@@ -98,7 +86,6 @@ class UserHouseholdRead:
     legacy_household_id: int | None
     name: str | None
     description: str | None
-    client_ref: str | None
     created_at: datetime
     updated_at: datetime
 

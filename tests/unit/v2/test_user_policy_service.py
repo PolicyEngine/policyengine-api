@@ -1,4 +1,4 @@
-"""Service tests for signed-in v2 user-policy associations."""
+"""Service tests for v2 user-policy associations."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from policyengine_api.data.v2.models import (
     UserPolicy,
 )
 from policyengine_api.services.v2.associations.validators import (
-    AssociationClientRefConflictError,
     AssociationReferenceConflictError,
     MirrorOwnedAssociationError,
 )
@@ -78,7 +77,6 @@ def test_first_save_provisions_the_owner_and_stores_v3_fields(store) -> None:
         association_input=_fields(
             baseline="current-policy",
             provenance={"source": "bill", "ref": "HR-1"},
-            client_ref="rf-1",
         ),
     )
 
@@ -86,7 +84,6 @@ def test_first_save_provisions_the_owner_and_stores_v3_fields(store) -> None:
     assert created.legacy_policy_id == 1
     assert created.baseline == "current-policy"
     assert created.provenance == {"source": "bill", "ref": "HR-1", "confidence": None}
-    assert created.client_ref == "rf-1"
     with selected.sessions() as session:
         identity = session.exec(select(UserIdentity)).one()
         user = session.get(User, identity.user_id)
@@ -162,22 +159,6 @@ def test_create_rejects_bad_references_before_writing(store) -> None:
     with selected.sessions() as session:
         assert session.exec(select(UserPolicy)).all() == []
         assert session.exec(select(User)).all() == []
-
-
-def test_duplicate_client_ref_conflicts_on_single_create(store) -> None:
-    service, _selected, _legacy_references = store
-    service.create_user_policy(
-        principal=ALICE, association_input=_fields(client_ref="sup-1")
-    )
-
-    with pytest.raises(AssociationClientRefConflictError):
-        service.create_user_policy(
-            principal=ALICE, association_input=_fields(client_ref="sup-1")
-        )
-    other_user = service.create_user_policy(
-        principal=BOB, association_input=_fields(client_ref="sup-1")
-    )
-    assert other_user.client_ref == "sup-1"
 
 
 def test_other_users_rows_are_not_found_and_lists_are_owner_scoped(store) -> None:
@@ -343,7 +324,6 @@ def test_stage_10_projection_records_the_v1_reform_id() -> None:
 
     assert projection.legacy_policy_id == 95762
     assert projection.policy_id == policy_id
-    assert projection.client_ref is None
 
 
 def test_patch_input_requires_a_supported_field() -> None:

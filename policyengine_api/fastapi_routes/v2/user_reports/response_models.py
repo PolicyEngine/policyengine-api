@@ -1,4 +1,4 @@
-"""Strict HTTP response models for signed-in v2 user-report associations."""
+"""Strict HTTP response models for v2 user-report associations."""
 
 from __future__ import annotations
 
@@ -95,7 +95,6 @@ class UserReportItem(StrictUserReportAPIModel):
     provisions: list[ReportProvisionItem] | None
     validation: ReportValidationItem | None
     last_run_at: datetime | None
-    client_ref: str | None
     created_at: datetime
     updated_at: datetime
 

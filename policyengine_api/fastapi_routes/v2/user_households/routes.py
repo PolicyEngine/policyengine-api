@@ -1,4 +1,4 @@
-"""Native FastAPI routes for signed-in v2 user-household associations."""
+"""Native FastAPI routes for v2 user-household associations."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ from policyengine_api.query_parameters import (
     UserHouseholdDetailQuery,
     UserHouseholdUpdateQuery,
 )
-from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.identity.types import AccountPrincipal
 
 
 def _service_factory(
@@ -55,10 +55,10 @@ def _service_factory(
 def build_v2_user_household_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
-    """Build signed-in association routes without opening a connection.
+    """Build user association routes without opening a connection.
 
     Authentication is a router-level dependency, so a missing or invalid
-    token is rejected before query or body validation.
+    credential is rejected before query or body validation.
     """
 
     require_user = dependencies.require_user
@@ -81,9 +81,10 @@ def build_v2_user_household_router(
         "/user-households",
         response_model=UserHouseholdDetailResponse,
         status_code=201,
-        summary="Save a household for the signed-in user",
+        summary="Save a household for the current user",
         description=(
-            "Requires a user bearer token; the owner is taken from the token. "
+            "Requires a bearer access token or the PolicyEngine-Unauthenticated-User "
+            "header; the owner is taken from that credential. "
             "Accepts legacy_household_id (a v1 household, checked in the v1 "
             "database) or household_id (a v2 household)."
         ),
@@ -91,7 +92,7 @@ def build_v2_user_household_router(
     def create_user_household(
         body: UserHouseholdCreateRequest,
         query: UserHouseholdCreateQuery = Depends(create_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> UserHouseholdDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
             return v2_error_response(400, "Body country_id must match query country_id")
@@ -110,12 +111,12 @@ def build_v2_user_household_router(
     @router.get(
         "/user-households/{association_id}",
         response_model=UserHouseholdDetailResponse,
-        summary="Read one of the signed-in user's saved households",
+        summary="Read one of the current user's saved households",
     )
     def get_user_household(
         association_id: UUID,
         query: UserHouseholdDetailQuery = Depends(detail_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> UserHouseholdDetailResponse | JSONResponse:
         def read() -> UserHouseholdDetailResponse:
             item = service_factory().get_user_household(
@@ -132,11 +133,11 @@ def build_v2_user_household_router(
     @router.get(
         "/user-households",
         response_model=UserHouseholdPageResponse,
-        summary="List the signed-in user's saved households",
+        summary="List the current user's saved households",
     )
     def get_user_households(
         query: UserHouseholdCollectionQuery = Depends(collection_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> UserHouseholdPageResponse | JSONResponse:
         def read() -> UserHouseholdPageResponse:
             page = service_factory().list_user_households(
@@ -156,7 +157,7 @@ def build_v2_user_household_router(
     @router.patch(
         "/user-households/{association_id}",
         response_model=UserHouseholdDetailResponse,
-        summary="Update or repoint one of the signed-in user's saved households",
+        summary="Update or repoint one of the current user's saved households",
         description=(
             "Changing legacy_household_id repoints the row and re-resolves "
             "household_id from the Stage 11 copy mapping, or clears it."
@@ -166,7 +167,7 @@ def build_v2_user_household_router(
         association_id: UUID,
         body: UserHouseholdPatchRequest,
         query: UserHouseholdUpdateQuery = Depends(update_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> UserHouseholdDetailResponse | JSONResponse:
         def patch() -> UserHouseholdDetailResponse:
             item = service_factory().patch_user_household(
@@ -186,12 +187,12 @@ def build_v2_user_household_router(
         response_model=None,
         status_code=204,
         response_class=Response,
-        summary="Delete one of the signed-in user's saved households",
+        summary="Delete one of the current user's saved households",
     )
     def delete_user_household_route(
         association_id: UUID,
         query: UserHouseholdDeleteQuery = Depends(delete_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> Response | JSONResponse:
         def delete() -> Response:
             service_factory().delete_user_household(

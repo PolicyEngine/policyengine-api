@@ -8,7 +8,6 @@ from policyengine_api.data.v2.models import UserSimulationAssociation
 from policyengine_api.services.v2.user_simulations.types import (
     UserSimulationCreateFields,
     UserSimulationCreationInput,
-    UserSimulationImportItem,
     UserSimulationPage,
     UserSimulationRead,
 )
@@ -25,7 +24,6 @@ def user_simulation_read(
         legacy_simulation_id=association.legacy_simulation_id,
         name=association.name,
         description=association.description,
-        client_ref=association.client_ref,
         created_at=association.created_at,
         updated_at=association.updated_at,
     )
@@ -51,18 +49,3 @@ def owned_user_simulation_input(
     user_id: UUID,
 ) -> UserSimulationCreationInput:
     return UserSimulationCreationInput(**fields.model_dump(), user_id=user_id)
-
-
-def imported_user_simulation_input(
-    item: UserSimulationImportItem,
-    *,
-    country_id: str,
-    user_id: UUID,
-) -> UserSimulationCreationInput:
-    return UserSimulationCreationInput.model_validate(
-        {
-            **item.model_dump(),
-            "country_id": country_id,
-            "user_id": user_id,
-        }
-    )

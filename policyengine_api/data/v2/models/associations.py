@@ -2,8 +2,7 @@
 
 Every association names its target through a nullable v2 reference, a
 nullable country-scoped v1 (legacy) reference, or both; a database check
-requires at least one. ``client_ref`` carries the browser-local identifier of
-an imported record so repeated imports are idempotent per user.
+requires at least one.
 
 The simulation and report associations still carry the pre-Stage 12A
 ``country`` and ``label`` columns. Nothing reads or writes them; they stay
@@ -30,7 +29,6 @@ if TYPE_CHECKING:
     )
 
 
-ASSOCIATION_CLIENT_REF_MAX_LENGTH = 64
 USER_POLICY_BASELINES = ("current-law", "current-policy")
 
 
@@ -46,11 +44,6 @@ class UserHouseholdAssociation(TimestampedModel, table=True):
             "id",
             "country_id",
             name="uq_user_household_associations_id_country",
-        ),
-        sa.UniqueConstraint(
-            "user_id",
-            "client_ref",
-            name="uq_user_household_associations_user_client_ref",
         ),
         sa.CheckConstraint(
             "country_id IN ('us', 'uk')",
@@ -95,10 +88,6 @@ class UserHouseholdAssociation(TimestampedModel, table=True):
     country_id: str = Field(max_length=2)
     name: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, sa_type=sa.Text)
-    client_ref: str | None = Field(
-        default=None,
-        max_length=ASSOCIATION_CLIENT_REF_MAX_LENGTH,
-    )
 
     user: User = Relationship(back_populates="household_associations")
     household: Household | None = Relationship(back_populates="user_associations")
@@ -111,11 +100,6 @@ class UserPolicy(TimestampedModel, table=True):
             "id",
             "country_id",
             name="uq_user_policies_id_country",
-        ),
-        sa.UniqueConstraint(
-            "user_id",
-            "client_ref",
-            name="uq_user_policies_user_client_ref",
         ),
         sa.CheckConstraint(
             "country_id IN ('us', 'uk')",
@@ -166,10 +150,6 @@ class UserPolicy(TimestampedModel, table=True):
     description: str | None = Field(default=None, sa_type=sa.Text)
     baseline: str | None = Field(default=None, max_length=16)
     provenance: dict[str, Any] | None = Field(default=None, sa_type=_jsonb_type())
-    client_ref: str | None = Field(
-        default=None,
-        max_length=ASSOCIATION_CLIENT_REF_MAX_LENGTH,
-    )
 
     user: User = Relationship(back_populates="policy_associations")
     policy: Policy | None = Relationship(back_populates="user_associations")
@@ -192,11 +172,6 @@ class UserSimulationAssociation(TimestampedModel, table=True):
             "id",
             "country_id",
             name="uq_user_simulation_associations_id_country",
-        ),
-        sa.UniqueConstraint(
-            "user_id",
-            "client_ref",
-            name="uq_user_simulation_associations_user_client_ref",
         ),
         sa.CheckConstraint(
             "country_id IN ('us', 'uk')",
@@ -230,10 +205,6 @@ class UserSimulationAssociation(TimestampedModel, table=True):
     country_id: str = Field(max_length=2)
     name: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, sa_type=sa.Text)
-    client_ref: str | None = Field(
-        default=None,
-        max_length=ASSOCIATION_CLIENT_REF_MAX_LENGTH,
-    )
     # Retired; see the module docstring.
     country: str | None = Field(default=None, max_length=16)
     label: str | None = Field(default=None, max_length=255)
@@ -255,11 +226,6 @@ class UserReportAssociation(TimestampedModel, table=True):
             "id",
             "country_id",
             name="uq_user_report_associations_id_country",
-        ),
-        sa.UniqueConstraint(
-            "user_id",
-            "client_ref",
-            name="uq_user_report_associations_user_client_ref",
         ),
         sa.CheckConstraint(
             "country_id IN ('us', 'uk')",
@@ -305,10 +271,6 @@ class UserReportAssociation(TimestampedModel, table=True):
     last_run_at: datetime | None = Field(
         default=None,
         sa_type=sa.DateTime(timezone=True),
-    )
-    client_ref: str | None = Field(
-        default=None,
-        max_length=ASSOCIATION_CLIENT_REF_MAX_LENGTH,
     )
     # Retired; see the module docstring.
     country: str | None = Field(default=None, max_length=16)

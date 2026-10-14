@@ -1,15 +1,18 @@
-"""Native FastAPI routes for the signed-in account resource (/v2/me).
+"""Native FastAPI routes for the current user's account resource (/v2/me).
 
-``GET /v2/me`` provisions the caller's PolicyEngine user on first use, with
-``primary_country`` taken from ``country_id``. Every route requires a user
-bearer token; authentication is a router-level dependency.
+A signed-in caller's standard user is provisioned on first use, with
+``primary_country`` taken from ``country_id``. A signed-out browser's
+unauthenticated user exists only after its first saved record, so reading
+an absent one returns 404 and exporting it returns nothing. Every route
+requires a credential; authentication is a router-level dependency.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from starlette.responses import JSONResponse, Response
 
 from policyengine_api.fastapi_routes.dependencies import (
@@ -19,7 +22,6 @@ from policyengine_api.fastapi_routes.dependencies import (
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
 from policyengine_api.fastapi_routes.v2.me.request_models import (
-    AccountImportRequest,
     AccountPatchRequest,
 )
 from policyengine_api.fastapi_routes.v2.me.response_models import (
@@ -27,18 +29,25 @@ from policyengine_api.fastapi_routes.v2.me.response_models import (
     MeDetailResult,
     MeExportResponse,
     MeExportResult,
-    MeImportResponse,
-    MeImportResult,
     MeItem,
+    MeUpgradeResponse,
+    MeUpgradeResult,
 )
+from policyengine_api.fastapi_routes.v2.user_auth import require_signed_in_principal
 from policyengine_api.fastapi_routes.v2.user_resources import (
     USER_RESOURCE_ERROR_RESPONSES,
-    enforce_user_import_request_size,
     enforce_user_write_request_size,
     user_resource_operation,
 )
+from policyengine_api.libs.user_auth import (
+    CANONICAL_UUID_PATTERN,
+    UNAUTHENTICATED_USER_HEADER,
+)
 from policyengine_api.query_parameters import CountryQuery
-from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.identity.types import (
+    AccountPrincipal,
+    UserPrincipal,
+)
 
 
 def _service_factory(
@@ -54,7 +63,7 @@ def _service_factory(
 
 
 def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
-    """Build signed-in account routes without opening a connection."""
+    """Build account routes without opening a connection."""
 
     require_user = dependencies.require_user
     router = APIRouter(
@@ -65,18 +74,26 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
     country_query = query_dependency(CountryQuery)
     service_factory = _service_factory(dependencies)
 
+    def require_signed_in_user(
+        principal: AccountPrincipal = Depends(require_user),
+    ) -> UserPrincipal:
+        return require_signed_in_principal(principal)
+
     @router.get(
         "/me",
         response_model=MeDetailResponse,
-        summary="Read (and on first use provision) the signed-in user",
+        summary="Read the current user",
         description=(
-            "Returns the PolicyEngine user for the bearer token, creating it on "
-            "the first call with primary_country set from country_id."
+            "For a bearer access token, returns the PolicyEngine user, creating "
+            "it on the first call with primary_country set from country_id. For "
+            "the PolicyEngine-Unauthenticated-User header, returns the "
+            "browser's unauthenticated user, or 404 before its first saved "
+            "record; reading never creates one."
         ),
     )
     def get_me(
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> MeDetailResponse | JSONResponse:
         def read() -> MeDetailResponse:
             item = service_factory().get_account(
@@ -91,11 +108,12 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         "/me",
         response_model=MeDetailResponse,
         summary="Update the signed-in user's names or primary country",
+        description="Unauthenticated users cannot edit account details (403).",
     )
     def patch_me(
         body: AccountPatchRequest,
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
         _size: None = Depends(enforce_user_write_request_size),
     ) -> MeDetailResponse | JSONResponse:
         def patch() -> MeDetailResponse:
@@ -129,16 +147,19 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
                 ),
             },
         },
-        summary="Delete the signed-in user and all of their saved records",
+        summary="Delete the current user and all of their saved records",
         description=(
-            "Obtains Auth0 Management credentials first when they are "
-            "configured, then deletes the user's legacy user mappings, the user "
-            "(identities and associations cascade), and the Auth0 user."
+            "For a signed-in user, obtains Auth0 Management credentials first "
+            "when they are configured, then deletes the user's legacy user "
+            "mappings, the user (identities and associations cascade), and the "
+            "Auth0 user. For an unauthenticated user, deletes the user and its "
+            "associations and never calls Auth0; 204 even when it does not "
+            "exist."
         ),
     )
     def delete_me(
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> Response | JSONResponse:
         def delete() -> Response:
             service_factory().delete_account(principal=principal)
@@ -149,12 +170,15 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
     @router.get(
         "/me/export",
         response_model=MeExportResponse,
-        summary="Export the signed-in user and every saved record",
-        description="Covers every country, not only country_id.",
+        summary="Export the current user and every saved record",
+        description=(
+            "Covers every country, not only country_id. user is null, and every "
+            "list empty, for an unauthenticated user with no saved records."
+        ),
     )
     def export_me(
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> MeExportResponse | JSONResponse:
         def export() -> MeExportResponse:
             result = service_factory().export_account(
@@ -166,32 +190,39 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         return user_resource_operation(export)
 
     @router.post(
-        "/me/imports",
-        response_model=MeImportResponse,
-        summary="Import browser-local saved records into the signed-in account",
+        "/me/upgrade",
+        response_model=MeUpgradeResponse,
+        summary="Move this browser's unauthenticated user into the signed-in account",
         description=(
-            "At most 500 items and 1 MiB. Idempotent on (user, client_ref): an "
-            "existing client_ref in the same country returns its stored ID "
-            "unchanged. Items with an unknown v1 reference, an invalid shape, or "
-            "a client_ref the user already holds in another country are skipped "
-            "and reported. A client_ref that appears more than once in the "
-            "request stores none of its items; each is skipped as invalid."
+            "Requires both a bearer access token and the "
+            "PolicyEngine-Unauthenticated-User header. When the signed-in "
+            "identity has no account yet, the unauthenticated user becomes it "
+            "in place, keeping its ID and records (converted). When the "
+            "identity already has an account, every record moves to that "
+            "account with its ID unchanged and the unauthenticated user is "
+            "deleted (merged). When the header names no unauthenticated user, "
+            "including a signed-in account's ID, nothing moves (none). The "
+            "response is the signed-in account."
         ),
     )
-    def import_records(
-        body: AccountImportRequest,
+    def upgrade_me(
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
-        _size: None = Depends(enforce_user_import_request_size),
-    ) -> MeImportResponse | JSONResponse:
-        def import_() -> MeImportResponse:
-            result = service_factory().import_records(
+        principal: UserPrincipal = Depends(require_signed_in_user),
+        unauthenticated_user: str = Header(
+            alias=UNAUTHENTICATED_USER_HEADER,
+            pattern=CANONICAL_UUID_PATTERN,
+            description="The browser's unauthenticated user ID (a canonical UUID).",
+        ),
+        _size: None = Depends(enforce_user_write_request_size),
+    ) -> MeUpgradeResponse | JSONResponse:
+        def upgrade() -> MeUpgradeResponse:
+            result = service_factory().upgrade_account(
                 principal=principal,
+                unauthenticated_user_id=UUID(unauthenticated_user),
                 country_id=query.country_id,
-                import_input=body,
             )
-            return MeImportResponse(result=MeImportResult.from_result(result))
+            return MeUpgradeResponse(result=MeUpgradeResult.from_upgrade(result))
 
-        return user_resource_operation(import_)
+        return user_resource_operation(upgrade)
 
     return router

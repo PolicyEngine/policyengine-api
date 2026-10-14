@@ -1,4 +1,4 @@
-"""Strict HTTP request models for signed-in v2 user-report associations."""
+"""Strict HTTP request models for v2 user-report associations."""
 
 from policyengine_api.services.v2.user_reports.types import (
     UserReportCreateFields,
@@ -7,7 +7,7 @@ from policyengine_api.services.v2.user_reports.types import (
 
 
 class UserReportCreateRequest(UserReportCreateFields):
-    """Association fields; the owner is taken from the bearer token."""
+    """Association fields; the owner is taken from the request credential."""
 
 
 class UserReportPatchRequest(UserReportUpdateInput):

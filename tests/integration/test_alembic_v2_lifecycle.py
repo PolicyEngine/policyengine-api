@@ -120,7 +120,6 @@ def _assert_pre_stage_12a_association_shape(engine) -> None:
             "country_id",
             "name",
             f"legacy_{reference}_id",
-            "client_ref",
         }.isdisjoint(columns)
         assert not columns[f"{reference}_id"]["nullable"]
         assert {
@@ -132,8 +131,11 @@ def _assert_pre_stage_12a_association_shape(engine) -> None:
         ("user_household_associations", "household"),
     ):
         columns = _columns(engine, table_name)
-        assert {f"legacy_{reference}_id", "client_ref"}.isdisjoint(columns)
+        assert f"legacy_{reference}_id" not in columns
         assert not columns[f"{reference}_id"]["nullable"]
+    user_columns = _columns(engine, "users")
+    assert "user_type" not in user_columns
+    assert not user_columns["primary_country"]["nullable"]
 
 
 def _assert_stage_12a_association_shape(engine) -> None:
@@ -155,14 +157,12 @@ def _assert_stage_12a_association_shape(engine) -> None:
         assert columns[f"{reference}_id"]["nullable"]
         assert columns[f"legacy_{reference}_id"]["nullable"]
         assert not columns["country_id"]["nullable"]
-        unique_constraints = {
-            constraint["name"]: constraint["column_names"]
+        assert "client_ref" not in columns
+        # No uniqueness involves the owner, so a merge can move any row.
+        assert [
+            constraint["column_names"]
             for constraint in inspect(engine).get_unique_constraints(table_name)
-        }
-        assert unique_constraints[f"uq_{table_name}_user_client_ref"] == [
-            "user_id",
-            "client_ref",
-        ]
+        ] == [["id", "country_id"]]
     for table_name in ("user_simulation_associations", "user_report_associations"):
         referred_tables = {
             foreign_key["referred_table"]
@@ -179,6 +179,19 @@ def _assert_stage_12a_association_shape(engine) -> None:
         columns = _columns(engine, table_name)
         assert columns["country"]["nullable"]
         assert columns["label"]["nullable"]
+    user_columns = _columns(engine, "users")
+    assert not user_columns["user_type"]["nullable"]
+    assert "standard" in user_columns["user_type"]["default"]
+    assert user_columns["primary_country"]["nullable"]
+    user_checks = {
+        constraint["name"]
+        for constraint in inspect(engine).get_check_constraints("users")
+    }
+    assert {
+        "ck_users_primary_country",
+        "ck_users_user_type",
+        "ck_users_standard_primary_country",
+    } <= user_checks
 
 
 def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:

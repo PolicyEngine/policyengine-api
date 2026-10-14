@@ -58,6 +58,7 @@ def _imported_modules(path: Path) -> set[str]:
         "user_reports/database_connectors/deletes.py",
         "identity/database_connectors/creates.py",
         "identity/database_connectors/updates.py",
+        "identity/database_connectors/deletes.py",
         "user_accounts/database_connectors/updates.py",
         "user_accounts/database_connectors/deletes.py",
     ),

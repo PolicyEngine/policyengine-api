@@ -1,4 +1,4 @@
-"""Shared HTTP conventions for signed-in user-owned API v2 resources."""
+"""Shared HTTP conventions for user-owned API v2 resources."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from starlette.responses import JSONResponse
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.v2.errors import (
+    BEARER_CHALLENGE,
     V2ErrorResponse,
     V2RequestTooLargeError,
     v2_error_response,
@@ -23,11 +24,15 @@ from policyengine_api.services.v2.associations.validators import (
     AssociationNotFoundError,
     AssociationReferenceConflictError,
 )
+from policyengine_api.services.v2.identity.validators import (
+    StandardUserRequiresSignInError,
+)
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
 )
 from policyengine_api.services.v2.user_accounts.validators import (
     AccountDeletionUnavailableError,
+    AccountEditRequiresSignInError,
     AccountIdentityDeletionError,
     AccountNotFoundError,
 )
@@ -40,7 +45,6 @@ from policyengine_api.services.v2.user_policies.validators import (
 
 
 MAXIMUM_USER_WRITE_REQUEST_BYTES = 256 * 1024
-MAXIMUM_USER_IMPORT_REQUEST_BYTES = 1024 * 1024
 
 
 def request_size_limit(
@@ -72,9 +76,6 @@ def request_size_limit(
 enforce_user_write_request_size = request_size_limit(
     MAXIMUM_USER_WRITE_REQUEST_BYTES, label="256 KiB"
 )
-enforce_user_import_request_size = request_size_limit(
-    MAXIMUM_USER_IMPORT_REQUEST_BYTES, label="1 MiB"
-)
 
 
 USER_RESOURCE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
@@ -85,13 +86,18 @@ USER_RESOURCE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     401: {
         "model": V2ErrorResponse,
         "description": (
-            "A valid bearer access token is required; the response carries "
+            "A valid bearer access token, or a canonical UUID in the "
+            "PolicyEngine-Unauthenticated-User header, is required; that UUID "
+            "may not name a signed-in account. The response carries "
             "WWW-Authenticate: Bearer."
         ),
     },
     403: {
         "model": V2ErrorResponse,
-        "description": "Machine (client-credentials) principals are not permitted.",
+        "description": (
+            "Machine (client-credentials) principals are not permitted, and "
+            "unauthenticated users cannot edit account details."
+        ),
     },
     404: {
         "model": V2ErrorResponse,
@@ -101,14 +107,12 @@ USER_RESOURCE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": (
             "The change conflicts with stored state, such as a record maintained "
-            "by the v1 saved-policy mirror or a duplicate client_ref."
+            "by the v1 saved-policy mirror."
         ),
     },
     413: {
         "model": V2ErrorResponse,
-        "description": (
-            "The request body exceeds 256 KiB (1 MiB for POST /v2/me/imports)."
-        ),
+        "description": "The request body exceeds 256 KiB.",
     },
     422: {
         "model": V2ErrorResponse,
@@ -166,6 +170,12 @@ def user_resource_operation(
 
     try:
         return operation()
+    except StandardUserRequiresSignInError as error:
+        return v2_error_response(
+            401, str(error), headers={"WWW-Authenticate": BEARER_CHALLENGE}
+        )
+    except AccountEditRequiresSignInError as error:
+        return v2_error_response(403, str(error))
     except AssociationReferenceConflictError as error:
         return v2_error_response(400, str(error))
     except (LegacyReferenceNotFoundError, AssociationLinkNotFoundError) as error:

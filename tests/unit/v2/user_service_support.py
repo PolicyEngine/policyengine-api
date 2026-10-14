@@ -23,7 +23,10 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     V2_METADATA,
 )
-from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.identity.types import (
+    UnauthenticatedPrincipal,
+    UserPrincipal,
+)
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.legacy_refs.validators import (
     require_legacy_references,
@@ -33,6 +36,12 @@ from policyengine_api.services.v2.legacy_refs.validators import (
 ISSUER = "https://auth.example.test/"
 ALICE = UserPrincipal(issuer=ISSUER, subject="google-oauth2|alice")
 BOB = UserPrincipal(issuer=ISSUER, subject="google-oauth2|bob")
+SIGNED_OUT_BROWSER = UnauthenticatedPrincipal(
+    user_id=UUID("3d6f0a8e-5b2c-4e1f-9d7a-2c4b6e8f0a13")
+)
+OTHER_SIGNED_OUT_BROWSER = UnauthenticatedPrincipal(
+    user_id=UUID("9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d")
+)
 MAPPED_LEGACY_POLICY_ID = 501
 MAPPED_LEGACY_HOUSEHOLD_ID = 601
 

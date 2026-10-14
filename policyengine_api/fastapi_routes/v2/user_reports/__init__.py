@@ -1,1 +1,1 @@
-"""FastAPI adapters for signed-in v2 user-report associations."""
+"""FastAPI adapters for v2 user-report associations."""

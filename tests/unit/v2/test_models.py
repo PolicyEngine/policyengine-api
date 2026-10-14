@@ -25,6 +25,7 @@ from policyengine_api.data.v2.models import (
     UserPolicy,
     UserReportAssociation,
     UserSimulationAssociation,
+    UserType,
     V2_METADATA,
 )
 
@@ -340,17 +341,39 @@ def test_report_definition_and_run_columns_are_separated() -> None:
     assert report_run.c.idempotency_key.type.as_uuid
 
 
-def test_user_primary_country_is_required_and_limited_to_supported_values() -> None:
+def test_standard_users_require_a_supported_primary_country() -> None:
     users = V2_METADATA.tables["users"]
 
-    assert not users.c.primary_country.nullable
+    # Nullable only for unauthenticated users; a check requires it otherwise.
+    assert users.c.primary_country.nullable
     assert users.c.first_name.nullable
     assert users.c.last_name.nullable
     assert users.c.email.nullable
     assert users.c.primary_country.type.length == 2
-    assert "ck_users_primary_country" in {
-        constraint.name for constraint in users.constraints
+    checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in users.constraints
+        if isinstance(constraint, sa.CheckConstraint)
     }
+    assert checks == {
+        "ck_users_primary_country": "primary_country IN ('us', 'uk')",
+        "ck_users_user_type": "user_type IN ('unauthenticated', 'standard')",
+        "ck_users_standard_primary_country": (
+            "user_type = 'unauthenticated' OR primary_country IS NOT NULL"
+        ),
+    }
+
+
+def test_user_type_defaults_to_standard_for_every_writer() -> None:
+    users = V2_METADATA.tables["users"]
+
+    assert not users.c.user_type.nullable
+    assert users.c.user_type.type.length == 16
+    # The server default covers inserts by Public API revisions that predate
+    # the column; the Python default covers this revision's ORM inserts.
+    assert users.c.user_type.server_default.arg == "standard"
+    assert User().user_type == "standard"
+    assert [member.value for member in UserType] == ["unauthenticated", "standard"]
 
 
 def test_regions_have_one_same_model_version_default_logical_dataset() -> None:
@@ -547,7 +570,7 @@ def test_user_identity_maps_one_issuer_subject_to_one_user() -> None:
     assert sa.inspect(User).relationships["identities"].back_populates == "user"
 
 
-def test_associations_are_v1_anchored_and_import_idempotent() -> None:
+def test_associations_are_v1_anchored_without_client_refs() -> None:
     for table_name, reference in (
         ("user_policies", "policy"),
         ("user_household_associations", "household"),
@@ -558,7 +581,7 @@ def test_associations_are_v1_anchored_and_import_idempotent() -> None:
         assert table.c[f"{reference}_id"].nullable
         assert table.c[f"legacy_{reference}_id"].nullable
         assert isinstance(table.c[f"legacy_{reference}_id"].type, sa.BigInteger)
-        assert table.c.client_ref.type.length == 64
+        assert "client_ref" not in table.c
         assert not table.c.country_id.nullable
         assert table.c.country_id.type.length == 2
         constraints = {constraint.name: constraint for constraint in table.constraints}
@@ -566,16 +589,13 @@ def test_associations_are_v1_anchored_and_import_idempotent() -> None:
         assert str(reference_check.sqltext) == (
             f"{reference}_id IS NOT NULL OR legacy_{reference}_id IS NOT NULL"
         )
-        client_ref_unique = constraints[f"uq_{table_name}_user_client_ref"]
-        assert [column.name for column in client_ref_unique.columns] == [
-            "user_id",
-            "client_ref",
-        ]
-        assert ("id", "country_id") in {
+        # No uniqueness involves the owner, so a merge at sign-in can move
+        # any association to another user unchanged.
+        assert {
             tuple(column.name for column in constraint.columns)
             for constraint in table.constraints
             if isinstance(constraint, sa.UniqueConstraint)
-        }
+        } == {("id", "country_id")}
 
 
 def test_simulation_and_report_associations_have_no_cross_service_keys() -> None:

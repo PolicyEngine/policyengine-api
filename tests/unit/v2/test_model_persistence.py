@@ -126,6 +126,38 @@ def test_user_primary_country_can_change_between_us_and_uk_only() -> None:
     engine.dispose()
 
 
+def test_only_unauthenticated_users_may_omit_a_primary_country() -> None:
+    engine = create_engine("sqlite://")
+    V2_METADATA.create_all(engine)
+
+    with Session(engine) as session:
+        session.add(User(user_type="unauthenticated"))
+        session.commit()
+    for invalid in (
+        User(),
+        User(user_type="standard"),
+        User(user_type="guest", primary_country="us"),
+    ):
+        with Session(engine) as session:
+            session.add(invalid)
+            with pytest.raises(IntegrityError):
+                session.commit()
+    with engine.begin() as connection:
+        # Writers that predate user_type rely on its server default.
+        connection.execute(
+            sa.text(
+                "INSERT INTO users (id, created_at, primary_country) "
+                "VALUES ('00000000000000000000000000000001', CURRENT_TIMESTAMP, 'us')"
+            )
+        )
+        stored_types = connection.execute(
+            sa.text("SELECT user_type FROM users ORDER BY user_type")
+        ).scalars()
+        assert list(stored_types) == ["standard", "unauthenticated"]
+
+    engine.dispose()
+
+
 def test_canonical_parameter_values_are_unique_by_parameter_and_start_date() -> None:
     engine = create_engine("sqlite://")
     V2_METADATA.create_all(engine)

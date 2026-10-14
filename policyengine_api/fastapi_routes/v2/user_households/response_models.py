@@ -1,4 +1,4 @@
-"""Strict HTTP response models for signed-in v2 user-household associations."""
+"""Strict HTTP response models for v2 user-household associations."""
 
 from __future__ import annotations
 
@@ -30,7 +30,6 @@ class UserHouseholdItem(StrictUserHouseholdAPIModel):
     legacy_household_id: int | None
     name: str | None
     description: str | None
-    client_ref: str | None
     created_at: datetime
     updated_at: datetime
 

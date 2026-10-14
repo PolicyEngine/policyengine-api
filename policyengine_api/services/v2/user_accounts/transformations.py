@@ -14,6 +14,7 @@ from policyengine_api.services.v2.user_accounts.types import (
 def account_read(user: User, *, email: str | None) -> AccountRead:
     return AccountRead(
         id=user.id,
+        user_type=user.user_type,
         primary_country=user.primary_country,
         first_name=user.first_name,
         last_name=user.last_name,

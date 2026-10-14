@@ -10,7 +10,6 @@ from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.services.v2.associations.validators import (
-    AssociationClientRefConflictError,
     AssociationReferenceConflictError,
     MirrorOwnedAssociationError,
 )
@@ -51,7 +50,6 @@ def _association_read(**changes) -> UserPolicyRead:
         "description": "Personal note",
         "baseline": "current-law",
         "provenance": PROVENANCE,
-        "client_ref": "rf-1",
         "created_at": CREATED_AT,
         "updated_at": CREATED_AT + timedelta(seconds=1),
     }
@@ -88,7 +86,6 @@ def _body(**changes) -> dict[str, object]:
         "description": "Personal note",
         "baseline": "current-law",
         "provenance": PROVENANCE,
-        "client_ref": "rf-1",
     }
     body.update(changes)
     return body
@@ -114,7 +111,6 @@ def test_create_returns_complete_contract_owned_by_the_session_user() -> None:
                 "description": "Personal note",
                 "baseline": "current-law",
                 "provenance": PROVENANCE,
-                "client_ref": "rf-1",
                 "created_at": "2026-01-01T00:00:00Z",
                 "updated_at": "2026-01-01T00:00:01Z",
             }
@@ -155,7 +151,7 @@ def test_create_accepts_a_v2_policy_reference() -> None:
         _body(baseline="baseline"),
         _body(provenance={"source": "email"}),
         _body(provenance={"source": "chat", "extra": 1}),
-        _body(client_ref="x" * 65),
+        _body(client_ref="rf-1"),
         _body(name="x" * 256),
     ],
 )
@@ -297,7 +293,6 @@ def test_delete_returns_no_content_for_the_session_user() -> None:
         (AssociationPolicyNotFoundError("policy was not found"), 404, "not found"),
         (UserPolicyNotFoundError("association was not found"), 404, "not found"),
         (MirrorOwnedAssociationError("maintained from v1"), 409, "maintained"),
-        (AssociationClientRefConflictError("client_ref exists"), 409, "client_ref"),
         (
             IntegrityError("statement secret", {}, Exception("credential")),
             409,
@@ -373,7 +368,6 @@ def test_openapi_publishes_signed_in_association_contracts() -> None:
         "description",
         "baseline",
         "provenance",
-        "client_ref",
         "created_at",
         "updated_at",
     }

@@ -10,7 +10,6 @@ from pydantic import model_validator
 
 from policyengine_api.query_parameters import CountryId, UserId
 from policyengine_api.services.v2.associations.types import (
-    AssociationClientRef,
     AssociationDescription,
     AssociationName,
     StrictAssociationModel,
@@ -29,7 +28,6 @@ class UserSimulationCreateFields(StrictUserSimulationInput):
     legacy_simulation_id: LegacyRecordId
     name: AssociationName | None = None
     description: AssociationDescription | None = None
-    client_ref: AssociationClientRef | None = None
 
 
 class UserSimulationCreationInput(StrictUserSimulationInput):
@@ -38,7 +36,6 @@ class UserSimulationCreationInput(StrictUserSimulationInput):
     legacy_simulation_id: LegacyRecordId
     name: AssociationName | None = None
     description: str | None = None
-    client_ref: AssociationClientRef | None = None
 
 
 class UserSimulationUpdateInput(StrictUserSimulationInput):
@@ -61,15 +58,6 @@ class UserSimulationUpdateInput(StrictUserSimulationInput):
         return self
 
 
-class UserSimulationImportItem(StrictUserSimulationInput):
-    """One browser-local saved simulation offered for idempotent import."""
-
-    client_ref: AssociationClientRef
-    legacy_simulation_id: LegacyRecordId
-    name: AssociationName | None = None
-    description: AssociationDescription | None = None
-
-
 @dataclass(frozen=True)
 class UserSimulationRead:
     id: UUID
@@ -79,7 +67,6 @@ class UserSimulationRead:
     legacy_simulation_id: int | None
     name: str | None
     description: str | None
-    client_ref: str | None
     created_at: datetime
     updated_at: datetime
 

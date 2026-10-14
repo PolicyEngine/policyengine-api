@@ -1,4 +1,4 @@
-"""Strict HTTP response models for signed-in v2 user-policy associations."""
+"""Strict HTTP response models for v2 user-policy associations."""
 
 from __future__ import annotations
 
@@ -49,7 +49,6 @@ class UserPolicyItem(StrictUserPolicyAPIModel):
     description: str | None
     baseline: UserPolicyBaseline | None
     provenance: PolicyProvenanceItem | None
-    client_ref: str | None
     created_at: datetime
     updated_at: datetime
 

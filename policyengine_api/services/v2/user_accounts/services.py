@@ -1,31 +1,40 @@
-"""Signed-in account services for ``/v2/me``.
+"""Account services for ``/v2/me``.
 
-Reads, updates, exports, and imports resolve (and on first use provision) the
-caller's v2 user from the verified session principal. Imports are idempotent
-on ``(user_id, client_ref)``: unknown v1 references, invalid items, items
-whose client_ref appears more than once in the request, and client_refs the
-user already holds in another country are skipped and reported rather than
-failing the request. Deletion removes the
-user's legacy mappings, then the user (identities and associations cascade),
-and finally the Auth0 user when the Management API is configured. Only v2 user
-UUIDs are logged.
+Each operation finds or provisions the caller's v2 user through the
+principal's provisioning strategy. A signed-in principal's standard user is
+provisioned on first use; a signed-out browser's unauthenticated user exists
+only after its first write, so reading, exporting, or deleting an absent one
+finds nothing. Only signed-in principals edit account details.
+
+Upgrading moves a browser's unauthenticated user into the signed-in account
+at sign-in. Deleting a standard account removes the user's legacy mappings,
+then the user (identities and associations cascade), and finally the Auth0
+user when the Management API is configured; deleting an unauthenticated
+account removes only its user and associations. Only standard user UUIDs are
+logged.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 import logging
+from uuid import UUID
 
-from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
-from policyengine_api.services.v2.associations.validators import (
-    require_legacy_reference_checker,
+from policyengine_api.data.v2.models import UserType
+from policyengine_api.services.v2.identity.database_connectors.deletes import (
+    delete_unauthenticated_user,
 )
 from policyengine_api.services.v2.identity.services import (
+    convert_unauthenticated_user_in_session,
     find_principal_user_in_session,
+    resolve_principal_user_for_read_in_session,
     resolve_principal_user_in_session,
 )
-from policyengine_api.services.v2.identity.types import UserPrincipal
-from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
+from policyengine_api.services.v2.identity.types import (
+    AccountPrincipal,
+    UnauthenticatedPrincipal,
+    UserPrincipal,
+)
 from policyengine_api.services.v2.user_accounts.database_connectors.deletes import (
     delete_account_legacy_user_mappings,
     delete_account_user,
@@ -47,42 +56,29 @@ from policyengine_api.services.v2.user_accounts.transformations import (
 from policyengine_api.services.v2.user_accounts.types import (
     AccountDeletion,
     AccountExport,
-    AccountImportInput,
-    Auth0UserDeleter,
-    AccountImportResult,
     AccountRead,
     AccountUpdateInput,
+    AccountUpgrade,
+    Auth0UserDeleter,
 )
 from policyengine_api.services.v2.user_accounts.validators import (
     AccountDeletionUnavailableError,
     AccountIdentityDeletionError,
-    client_ref_conflict_skips,
-    duplicated_client_refs,
-    partition_import_items,
-    partition_known_legacy_items,
     require_account,
+    require_editable_account,
+    require_resolved_account,
 )
 from policyengine_api.services.v2.user_households.services import (
-    import_user_households_in_session,
     read_all_user_households,
 )
-from policyengine_api.services.v2.user_households.types import UserHouseholdImportItem
 from policyengine_api.services.v2.user_policies.services import (
-    import_user_policies_in_session,
     read_all_user_policies,
 )
-from policyengine_api.services.v2.user_policies.types import UserPolicyImportItem
 from policyengine_api.services.v2.user_reports.services import (
-    import_user_reports_in_session,
     read_all_user_reports,
 )
-from policyengine_api.services.v2.user_reports.types import UserReportImportItem
 from policyengine_api.services.v2.user_simulations.services import (
-    import_user_simulations_in_session,
     read_all_user_simulations,
-)
-from policyengine_api.services.v2.user_simulations.types import (
-    UserSimulationImportItem,
 )
 
 
@@ -90,17 +86,15 @@ logger = logging.getLogger(__name__)
 
 
 class V2AccountService:
-    """Sequence signed-in account operations through explicit sessions."""
+    """Sequence account operations through explicit sessions."""
 
     def __init__(
         self,
         database_session: AccountDatabaseSession,
         *,
-        legacy_references: LegacyReferenceChecker | None = None,
         auth0_user_deleter_factory: Callable[[], Auth0UserDeleter | None] | None = None,
     ) -> None:
         self._database_session = database_session
-        self._legacy_references = legacy_references
         self._auth0_user_deleter_factory = auth0_user_deleter_factory
 
     def _prepared_auth0_user_deleter(self) -> Auth0UserDeleter | None:
@@ -126,30 +120,31 @@ class V2AccountService:
             ) from error
         return deleter
 
-    def get_account(self, *, principal: UserPrincipal, country_id: str) -> AccountRead:
+    def get_account(
+        self, *, principal: AccountPrincipal, country_id: str
+    ) -> AccountRead:
         with self._database_session.transaction() as session:
-            owner = resolve_principal_user_in_session(
-                session, principal, country_id=country_id
+            owner = require_resolved_account(
+                resolve_principal_user_for_read_in_session(
+                    session, principal, country_id=country_id
+                )
             )
-            user = require_account(
-                read_account_user(session, owner.user_id), user_id=owner.user_id
-            )
+            user = require_account(read_account_user(session, owner.user_id))
             return account_read(user, email=owner.email)
 
     def update_account(
         self,
         *,
-        principal: UserPrincipal,
+        principal: AccountPrincipal,
         country_id: str,
         account_input: AccountUpdateInput,
     ) -> AccountRead:
+        signed_in = require_editable_account(principal)
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
-                session, principal, country_id=country_id
+                session, signed_in, country_id=country_id
             )
-            user = require_account(
-                read_account_user(session, owner.user_id), user_id=owner.user_id
-            )
+            user = require_account(read_account_user(session, owner.user_id))
             return account_read(
                 update_account_user(
                     session, user, account_update_values(account_input)
@@ -158,15 +153,21 @@ class V2AccountService:
             )
 
     def export_account(
-        self, *, principal: UserPrincipal, country_id: str
+        self, *, principal: AccountPrincipal, country_id: str
     ) -> AccountExport:
         with self._database_session.transaction() as session:
-            owner = resolve_principal_user_in_session(
+            owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
             )
-            user = require_account(
-                read_account_user(session, owner.user_id), user_id=owner.user_id
-            )
+            if owner is None:
+                return AccountExport(
+                    user=None,
+                    policies=(),
+                    households=(),
+                    simulations=(),
+                    reports=(),
+                )
+            user = require_account(read_account_user(session, owner.user_id))
             return AccountExport(
                 user=account_read(user, email=owner.email),
                 policies=read_all_user_policies(session, user_id=owner.user_id),
@@ -175,131 +176,57 @@ class V2AccountService:
                 reports=read_all_user_reports(session, user_id=owner.user_id),
             )
 
-    def import_records(
+    def upgrade_account(
         self,
         *,
         principal: UserPrincipal,
+        unauthenticated_user_id: UUID,
         country_id: str,
-        import_input: AccountImportInput,
-    ) -> AccountImportResult:
-        # A client_ref sent more than once stores none of its records, so
-        # id_map never returns a client_ref that is also skipped.
-        duplicates = duplicated_client_refs(
-            (
-                import_input.policies,
-                import_input.households,
-                import_input.simulations,
-                import_input.reports,
+    ) -> AccountUpgrade:
+        with self._database_session.transaction() as session:
+            conversion = convert_unauthenticated_user_in_session(
+                session,
+                unauthenticated_user_id=unauthenticated_user_id,
+                principal=principal,
+                country_id=country_id,
             )
+            user = require_account(read_account_user(session, conversion.owner.user_id))
+            upgrade = AccountUpgrade(
+                account=account_read(user, email=conversion.owner.email),
+                outcome=conversion.outcome,
+            )
+        # A converted user's ID was a browser credential, so no ID is logged.
+        logger.info(
+            "upgraded_v2_user",
+            extra={"policyengine_attributes": {"outcome": upgrade.outcome.value}},
         )
-        policies, policy_skips = partition_import_items(
-            import_input.policies, UserPolicyImportItem, duplicates=duplicates
-        )
-        households, household_skips = partition_import_items(
-            import_input.households, UserHouseholdImportItem, duplicates=duplicates
-        )
-        simulations, simulation_skips = partition_import_items(
-            import_input.simulations, UserSimulationImportItem, duplicates=duplicates
-        )
-        reports, report_skips = partition_import_items(
-            import_input.reports, UserReportImportItem, duplicates=duplicates
-        )
+        return upgrade
 
-        existing = require_legacy_reference_checker(
-            self._legacy_references
-        ).existing_ids(
-            country_id=country_id,
-            requested={
-                LegacyRecordKind.POLICY: [item.legacy_policy_id for item in policies],
-                LegacyRecordKind.HOUSEHOLD: [
-                    item.legacy_household_id for item in households
-                ],
-                LegacyRecordKind.SIMULATION: [
-                    item.legacy_simulation_id for item in simulations
-                ],
-                LegacyRecordKind.REPORT: [item.legacy_report_id for item in reports],
-            },
-        )
-        known_policies, unknown_policies = partition_known_legacy_items(
-            policies,
-            legacy_ids=[item.legacy_policy_id for item in policies],
-            client_refs=[item.client_ref for item in policies],
-            existing=existing[LegacyRecordKind.POLICY],
-        )
-        known_households, unknown_households = partition_known_legacy_items(
-            households,
-            legacy_ids=[item.legacy_household_id for item in households],
-            client_refs=[item.client_ref for item in households],
-            existing=existing[LegacyRecordKind.HOUSEHOLD],
-        )
-        known_simulations, unknown_simulations = partition_known_legacy_items(
-            simulations,
-            legacy_ids=[item.legacy_simulation_id for item in simulations],
-            client_refs=[item.client_ref for item in simulations],
-            existing=existing[LegacyRecordKind.SIMULATION],
-        )
-        known_reports, unknown_reports = partition_known_legacy_items(
-            reports,
-            legacy_ids=[item.legacy_report_id for item in reports],
-            client_refs=[item.client_ref for item in reports],
-            existing=existing[LegacyRecordKind.REPORT],
-        )
+    def delete_account(self, *, principal: AccountPrincipal) -> AccountDeletion:
+        if isinstance(principal, UnauthenticatedPrincipal):
+            return self._delete_unauthenticated_account(principal)
+        return self._delete_standard_account(principal)
+
+    def _delete_unauthenticated_account(
+        self, principal: UnauthenticatedPrincipal
+    ) -> AccountDeletion:
+        """Delete a browser's unauthenticated user; there is no Auth0 user."""
 
         with self._database_session.transaction() as session:
-            owner = resolve_principal_user_in_session(
-                session, principal, country_id=country_id
-            )
-            # Policies go first so reports can link to policies imported by the
-            # same request.
-            policy_import = import_user_policies_in_session(
-                session,
-                user_id=owner.user_id,
-                country_id=country_id,
-                items=known_policies,
-            )
-            household_import = import_user_households_in_session(
-                session,
-                user_id=owner.user_id,
-                country_id=country_id,
-                items=known_households,
-            )
-            simulation_import = import_user_simulations_in_session(
-                session,
-                user_id=owner.user_id,
-                country_id=country_id,
-                items=known_simulations,
-            )
-            report_import = import_user_reports_in_session(
-                session,
-                user_id=owner.user_id,
-                country_id=country_id,
-                items=known_reports,
-            )
-
-        return AccountImportResult(
-            id_map={
-                **policy_import.ids,
-                **household_import.ids,
-                **simulation_import.ids,
-                **report_import.ids,
+            owner = find_principal_user_in_session(session, principal)
+            if owner is not None:
+                delete_unauthenticated_user(session, user_id=owner.user_id)
+        if owner is None:
+            return AccountDeletion(user_id=None, auth0_subjects=())
+        logger.info(
+            "deleted_v2_user_account",
+            extra={
+                "policyengine_attributes": {"user_type": UserType.UNAUTHENTICATED.value}
             },
-            skipped=(
-                *policy_skips,
-                *unknown_policies,
-                *client_ref_conflict_skips(policy_import.conflicting_client_refs),
-                *household_skips,
-                *unknown_households,
-                *client_ref_conflict_skips(household_import.conflicting_client_refs),
-                *simulation_skips,
-                *unknown_simulations,
-                *client_ref_conflict_skips(simulation_import.conflicting_client_refs),
-                *report_skips,
-                *unknown_reports,
-                *client_ref_conflict_skips(report_import.conflicting_client_refs),
-            ),
         )
+        return AccountDeletion(user_id=owner.user_id, auth0_subjects=())
 
-    def delete_account(self, *, principal: UserPrincipal) -> AccountDeletion:
+    def _delete_standard_account(self, principal: UserPrincipal) -> AccountDeletion:
         auth0_user_deleter = self._prepared_auth0_user_deleter()
         with self._database_session.transaction() as session:
             owner = find_principal_user_in_session(session, principal)

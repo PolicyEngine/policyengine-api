@@ -1,4 +1,4 @@
-"""Request-size and field bounds on signed-in user writes."""
+"""Request-size and field bounds on user-owned writes."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from pydantic import ValidationError
 import pytest
 
 from policyengine_api.fastapi_routes.v2.user_resources import (
-    MAXIMUM_USER_IMPORT_REQUEST_BYTES,
     MAXIMUM_USER_WRITE_REQUEST_BYTES,
 )
 from policyengine_api.services.v2.associations.types import (
@@ -18,12 +17,10 @@ from policyengine_api.services.v2.associations.types import (
 )
 from policyengine_api.services.v2.user_households.types import (
     UserHouseholdCreateFields,
-    UserHouseholdImportItem,
     UserHouseholdUpdateInput,
 )
 from policyengine_api.services.v2.user_policies.types import (
     UserPolicyCreateFields,
-    UserPolicyImportItem,
     UserPolicyUpdateInput,
 )
 from policyengine_api.services.v2.user_reports.types import (
@@ -32,12 +29,10 @@ from policyengine_api.services.v2.user_reports.types import (
     REPORT_SOURCE_NOTE_MAX_LENGTH,
     ReportValidation,
     UserReportCreateFields,
-    UserReportImportItem,
     UserReportUpdateInput,
 )
 from policyengine_api.services.v2.user_simulations.types import (
     UserSimulationCreateFields,
-    UserSimulationImportItem,
     UserSimulationRead,
     UserSimulationUpdateInput,
 )
@@ -94,16 +89,11 @@ def test_every_user_write_rejects_oversized_bodies_before_the_service(
 ) -> None:
     services, factories = _services()
     client, _flask_calls = user_route_client(**factories)
-    limit = (
-        MAXIMUM_USER_IMPORT_REQUEST_BYTES
-        if path == "/v2/me/imports"
-        else MAXIMUM_USER_WRITE_REQUEST_BYTES
-    )
 
     response = client.request(
         method,
         f"{path}?country_id=us",
-        content=_padded_body(limit),
+        content=_padded_body(MAXIMUM_USER_WRITE_REQUEST_BYTES),
         headers={"Content-Type": "application/json"},
     )
 
@@ -123,7 +113,6 @@ def test_single_writes_accept_bodies_under_the_limit() -> None:
         legacy_simulation_id=613,
         name=None,
         description=description,
-        client_ref=None,
         created_at=CREATED_AT,
         updated_at=CREATED_AT,
     )
@@ -150,22 +139,15 @@ def test_single_writes_accept_bodies_under_the_limit() -> None:
     [
         (UserPolicyCreateFields, {"country_id": "us", "legacy_policy_id": 1}),
         (UserPolicyUpdateInput, {}),
-        (UserPolicyImportItem, {"client_ref": "sup-1", "legacy_policy_id": 1}),
         (UserHouseholdCreateFields, {"country_id": "us", "legacy_household_id": 1}),
         (UserHouseholdUpdateInput, {}),
-        (UserHouseholdImportItem, {"client_ref": "suh-1", "legacy_household_id": 1}),
         (
             UserSimulationCreateFields,
             {"country_id": "us", "legacy_simulation_id": 1},
         ),
         (UserSimulationUpdateInput, {}),
-        (
-            UserSimulationImportItem,
-            {"client_ref": "sus-1", "legacy_simulation_id": 1},
-        ),
         (UserReportCreateFields, {"country_id": "us", "legacy_report_id": 1}),
         (UserReportUpdateInput, {}),
-        (UserReportImportItem, {"client_ref": "sur-1", "legacy_report_id": 1}),
     ],
 )
 def test_descriptions_are_bounded_on_every_caller_input(model, fields) -> None:
@@ -178,11 +160,9 @@ def test_descriptions_are_bounded_on_every_caller_input(model, fields) -> None:
         )
 
 
-@pytest.mark.parametrize(
-    "model", [UserReportCreateFields, UserReportUpdateInput, UserReportImportItem]
-)
+@pytest.mark.parametrize("model", [UserReportCreateFields, UserReportUpdateInput])
 def test_report_source_notes_are_bounded(model) -> None:
-    fields = {"country_id": "us", "legacy_report_id": 1, "client_ref": "sur-1"}
+    fields = {"country_id": "us", "legacy_report_id": 1}
     allowed = set(model.model_fields)
     base = {name: value for name, value in fields.items() if name in allowed}
     model.model_validate({**base, "source_note": "x" * REPORT_SOURCE_NOTE_MAX_LENGTH})

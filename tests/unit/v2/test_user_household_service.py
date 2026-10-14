@@ -1,4 +1,4 @@
-"""Service tests for signed-in v2 user-household associations."""
+"""Service tests for v2 user-household associations."""
 
 from __future__ import annotations
 
@@ -6,9 +6,6 @@ import pytest
 from sqlmodel import select
 
 from policyengine_api.data.v2.models import Household, UserHouseholdAssociation
-from policyengine_api.services.v2.associations.validators import (
-    AssociationClientRefConflictError,
-)
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
 )
@@ -74,11 +71,8 @@ def test_legacy_households_resolve_copied_v2_households(store) -> None:
     assert unmapped.user_id == mapped.user_id == v2_only.user_id
 
 
-def test_missing_references_and_duplicate_client_refs_are_rejected(store) -> None:
+def test_missing_references_are_rejected(store) -> None:
     service, selected = store
-    service.create_user_household(
-        principal=ALICE, association_input=_fields(client_ref="suh-1")
-    )
 
     with pytest.raises(LegacyReferenceNotFoundError):
         service.create_user_household(
@@ -90,10 +84,6 @@ def test_missing_references_and_duplicate_client_refs_are_rejected(store) -> Non
             association_input=UserHouseholdCreateFields(
                 country_id="us", household_id=selected.policy_id
             ),
-        )
-    with pytest.raises(AssociationClientRefConflictError):
-        service.create_user_household(
-            principal=ALICE, association_input=_fields(client_ref="suh-1")
         )
 
 

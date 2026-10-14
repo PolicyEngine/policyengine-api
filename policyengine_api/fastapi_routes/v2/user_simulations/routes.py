@@ -1,4 +1,4 @@
-"""Native FastAPI routes for signed-in v2 user-simulation associations."""
+"""Native FastAPI routes for v2 user-simulation associations."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from policyengine_api.query_parameters import (
     CountryQuery,
     UserSimulationCollectionQuery,
 )
-from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.identity.types import AccountPrincipal
 
 
 def _service_factory(
@@ -52,10 +52,10 @@ def _service_factory(
 def build_v2_user_simulation_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
-    """Build signed-in association routes without opening a connection.
+    """Build user association routes without opening a connection.
 
     Authentication is a router-level dependency, so a missing or invalid
-    token is rejected before query or body validation.
+    credential is rejected before query or body validation.
     """
 
     require_user = dependencies.require_user
@@ -75,9 +75,10 @@ def build_v2_user_simulation_router(
         "/user-simulations",
         response_model=UserSimulationDetailResponse,
         status_code=201,
-        summary="Save a v1 simulation for the signed-in user",
+        summary="Save a v1 simulation for the current user",
         description=(
-            "Requires a user bearer token; the owner is taken from the token. "
+            "Requires a bearer access token or the PolicyEngine-Unauthenticated-User "
+            "header; the owner is taken from that credential. "
             "Stage 12A accepts legacy_simulation_id only, checked in the v1 "
             "database."
         ),
@@ -85,7 +86,7 @@ def build_v2_user_simulation_router(
     def create_user_simulation(
         body: UserSimulationCreateRequest,
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> UserSimulationDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
             return v2_error_response(400, "Body country_id must match query country_id")
@@ -106,12 +107,12 @@ def build_v2_user_simulation_router(
     @router.get(
         "/user-simulations/{association_id}",
         response_model=UserSimulationDetailResponse,
-        summary="Read one of the signed-in user's saved simulations",
+        summary="Read one of the current user's saved simulations",
     )
     def get_user_simulation(
         association_id: UUID,
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> UserSimulationDetailResponse | JSONResponse:
         def read() -> UserSimulationDetailResponse:
             item = service_factory().get_user_simulation(
@@ -130,11 +131,11 @@ def build_v2_user_simulation_router(
     @router.get(
         "/user-simulations",
         response_model=UserSimulationPageResponse,
-        summary="List the signed-in user's saved simulations",
+        summary="List the current user's saved simulations",
     )
     def get_user_simulations(
         query: UserSimulationCollectionQuery = Depends(collection_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> UserSimulationPageResponse | JSONResponse:
         def read() -> UserSimulationPageResponse:
             page = service_factory().list_user_simulations(
@@ -153,13 +154,13 @@ def build_v2_user_simulation_router(
     @router.patch(
         "/user-simulations/{association_id}",
         response_model=UserSimulationDetailResponse,
-        summary="Update or repoint one of the signed-in user's saved simulations",
+        summary="Update or repoint one of the current user's saved simulations",
     )
     def patch_user_simulation_route(
         association_id: UUID,
         body: UserSimulationPatchRequest,
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> UserSimulationDetailResponse | JSONResponse:
         def patch() -> UserSimulationDetailResponse:
             item = service_factory().patch_user_simulation(
@@ -181,12 +182,12 @@ def build_v2_user_simulation_router(
         response_model=None,
         status_code=204,
         response_class=Response,
-        summary="Delete one of the signed-in user's saved simulations",
+        summary="Delete one of the current user's saved simulations",
     )
     def delete_user_simulation_route(
         association_id: UUID,
         query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_user),
+        principal: AccountPrincipal = Depends(require_user),
     ) -> Response | JSONResponse:
         def delete() -> Response:
             service_factory().delete_user_simulation(

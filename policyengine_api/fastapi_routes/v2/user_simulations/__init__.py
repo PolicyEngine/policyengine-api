@@ -1,1 +1,1 @@
-"""FastAPI adapters for signed-in v2 user-simulation associations."""
+"""FastAPI adapters for v2 user-simulation associations."""

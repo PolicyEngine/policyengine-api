@@ -4,17 +4,25 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
+from uuid import UUID
 
 import pytest
 
 from policyengine_api.libs import user_auth
-from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.identity.types import (
+    UnauthenticatedPrincipal,
+    UserPrincipal,
+)
+from policyengine_api.services.v2.user_accounts.types import AccountExport
+from policyengine_api.services.v2.user_policies.types import UserPolicyPage
 from tests.unit.v2.user_route_support import RecordingService, user_route_client
 
 
 ISSUER = "https://auth.example.test/"
 AUDIENCE = "https://api.policyengine.org/"
 ASSOCIATION_ID = "00000000-0000-0000-0000-000000000001"
+BROWSER_USER_ID = UUID("0d9e8f7a-6b5c-4d3e-8f2a-1b0c9d8e7f6a")
+UNAUTHENTICATED_HEADER = "PolicyEngine-Unauthenticated-User"
 
 
 class FakeDecoder:
@@ -210,10 +218,28 @@ def test_default_dependencies_publish_the_bearer_security_scheme() -> None:
 
     schema = client.get("/v2/openapi.json").json()
 
-    assert "UserAccessToken" in schema["components"]["securitySchemes"]
+    security_schemes = schema["components"]["securitySchemes"]
+    assert "UserAccessToken" in security_schemes
+    assert security_schemes["UnauthenticatedUser"] == {
+        "type": "apiKey",
+        "in": "header",
+        "name": UNAUTHENTICATED_HEADER,
+        "description": security_schemes["UnauthenticatedUser"]["description"],
+    }
     for path in ("/v2/me", "/v2/user-policies", "/v2/user-reports"):
-        assert {"UserAccessToken": []} in schema["paths"][path]["get"]["security"]
+        # Separate requirement objects are alternatives in OpenAPI.
+        assert schema["paths"][path]["get"]["security"] == [
+            {"UserAccessToken": []},
+            {"UnauthenticatedUser": []},
+        ]
     assert "security" not in schema["paths"]["/v2/policies"]["get"]
+    upgrade_header = next(
+        parameter
+        for parameter in schema["paths"]["/v2/me/upgrade"]["post"]["parameters"]
+        if parameter["in"] == "header"
+    )
+    assert upgrade_header["name"] == UNAUTHENTICATED_HEADER
+    assert upgrade_header["required"] is True
 
 
 def _recorded_failure_logs(operation) -> tuple[object, list]:
@@ -279,3 +305,185 @@ def test_persistence_failures_are_logged_without_their_message() -> None:
     assert attributes["error_type"] == "DataError"
     assert "in fail_in_database" in attributes["error_frames"]
     assert "secret-subject" not in str(attributes)
+
+
+def _without_auth_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in user_auth.PUBLIC_API_AUTH_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.mark.parametrize("auth_configured", [False, True])
+def test_the_unauthenticated_user_header_authenticates_a_signed_out_browser(
+    monkeypatch: pytest.MonkeyPatch, configured_auth, auth_configured: bool
+) -> None:
+    if not auth_configured:
+        _without_auth_settings(monkeypatch)
+    services, factories = _services()
+    services["policy"].next_result = UserPolicyPage(
+        items=(), offset=0, limit=100, has_more=False
+    )
+    client, _flask_calls = user_route_client(require_user=None, **factories)
+
+    response = client.get(
+        "/v2/user-policies?country_id=us",
+        headers={UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID)},
+    )
+
+    assert response.status_code == 200
+    assert services["policy"].calls[0][1]["principal"] == UnauthenticatedPrincipal(
+        user_id=BROWSER_USER_ID
+    )
+
+
+@pytest.mark.parametrize(
+    "header_value",
+    [
+        "not-a-uuid",
+        str(BROWSER_USER_ID).upper(),
+        BROWSER_USER_ID.hex,
+        f"urn:uuid:{BROWSER_USER_ID}",
+        f"{BROWSER_USER_ID} ",
+    ],
+)
+def test_malformed_unauthenticated_user_headers_are_unauthenticated(
+    header_value: str,
+) -> None:
+    services, factories = _services()
+    client, _flask_calls = user_route_client(require_user=None, **factories)
+
+    response = client.post(
+        "/v2/user-reports?country_id=zz",
+        headers={UNAUTHENTICATED_HEADER: header_value},
+        json={"bogus": True},
+    )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert response.json() == {
+        "status": "error",
+        "message": f"The {UNAUTHENTICATED_HEADER} header must be a canonical UUID",
+    }
+    assert all(not service.calls for service in services.values())
+
+
+def test_a_bearer_token_takes_precedence_over_the_unauthenticated_header(
+    configured_auth,
+) -> None:
+    configured_auth({"iss": ISSUER, "sub": "google-oauth2|42"})
+    services, factories = _services()
+    services["account"].next_result = AccountExport(
+        user=None, policies=(), households=(), simulations=(), reports=()
+    )
+    client, _flask_calls = user_route_client(require_user=None, **factories)
+
+    response = client.get(
+        "/v2/me/export?country_id=us",
+        headers={
+            "Authorization": "Bearer user-token",
+            UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
+        },
+    )
+
+    assert response.status_code == 200
+    assert services["account"].calls[0][1]["principal"] == UserPrincipal(
+        issuer=ISSUER, subject="google-oauth2|42"
+    )
+
+
+def test_an_invalid_bearer_token_never_falls_back_to_the_header(
+    configured_auth,
+) -> None:
+    import jwt
+
+    configured_auth(jwt.InvalidSignatureError("bad signature"))
+    services, factories = _services()
+    client, _flask_calls = user_route_client(require_user=None, **factories)
+
+    response = client.get(
+        "/v2/user-policies?country_id=us",
+        headers={
+            "Authorization": "Bearer forged-token",
+            UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == 'Bearer error="invalid_token"'
+    assert not services["policy"].calls
+
+
+def test_machine_client_principals_are_forbidden_beside_the_header(
+    configured_auth,
+) -> None:
+    configured_auth(
+        {"iss": ISSUER, "sub": "abc123@clients", "gty": "client-credentials"}
+    )
+    services, factories = _services()
+    client, _flask_calls = user_route_client(require_user=None, **factories)
+
+    response = client.get(
+        "/v2/user-policies?country_id=us",
+        headers={
+            "Authorization": "Bearer machine-token",
+            UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
+        },
+    )
+
+    assert response.status_code == 403
+    assert not services["policy"].calls
+
+
+def test_a_bearer_token_without_auth_settings_is_unavailable_beside_the_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _without_auth_settings(monkeypatch)
+    services, factories = _services()
+    client, _flask_calls = user_route_client(require_user=None, **factories)
+
+    response = client.get(
+        "/v2/me?country_id=us",
+        headers={
+            "Authorization": "Bearer user-token",
+            UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
+        },
+    )
+
+    assert response.status_code == 503
+    assert not services["account"].calls
+
+
+def test_upgrade_with_only_the_unauthenticated_header_requires_sign_in() -> None:
+    services, factories = _services()
+    client, _flask_calls = user_route_client(require_user=None, **factories)
+
+    response = client.post(
+        "/v2/me/upgrade?country_id=us",
+        headers={UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID)},
+    )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert not services["account"].calls
+
+
+def test_browsers_may_send_the_unauthenticated_header_cross_origin() -> None:
+    _services_by_name, factories = _services()
+    client, _flask_calls = user_route_client(require_user=None, **factories)
+
+    response = client.options(
+        "/v2/user-policies?country_id=us",
+        headers={
+            "Origin": "https://app.policyengine.org",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": (
+                f"content-type,{UNAUTHENTICATED_HEADER.lower()}"
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    allowed = {
+        value.strip().lower()
+        for value in response.headers["access-control-allow-headers"].split(",")
+    }
+    assert UNAUTHENTICATED_HEADER.lower() in allowed
