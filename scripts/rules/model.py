@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
     from datetime import date
 
 
@@ -41,6 +41,40 @@ class Kind(StrEnum):
     DOCS_GUARD = "docs-guard"
     LLM_REVIEW = "llm-review"
     NONE = "none"
+
+
+def _describe_pytest(fields: Mapping[str, Any]) -> str:
+    """Name the test files behind a pytest enforcer, under its project if any."""
+    prefix = f"{fields['project'].rstrip('/')}/" if "project" in fields else ""
+    files = sorted({node.split("::", 1)[0] for node in fields.get("nodes", [])})
+    return "pytest " + ", ".join(f"`{prefix}{path}`" for path in files)
+
+
+def _describe_ruff(fields: Mapping[str, Any]) -> str:
+    """Describe a ruff enforcer by its mode: format, a per-file ignore or a check."""
+    codes = ", ".join(fields.get("codes", []))
+    mode = fields.get("mode", "")
+    if mode == "format":
+        return "ruff format"
+    if mode == "per-file-ignore":
+        return f"ruff per-file ignore of {codes} for `{fields.get('pattern', '')}`"
+    return f"ruff check ({codes})"
+
+
+# How each kind of enforcer describes itself; a kind not listed enforces nothing.
+_ENFORCER_DESCRIPTIONS: dict[Kind, Callable[[Mapping[str, Any]], str]] = {
+    Kind.PYTEST: _describe_pytest,
+    Kind.QUALITY_GUARD: lambda fields: f"quality guard `{fields.get('name', '')}`",
+    Kind.RUFF: _describe_ruff,
+    Kind.MYPY: lambda _fields: "mypy",
+    Kind.WORKFLOW_JOB: lambda _fields: "CI job",
+    Kind.PYRIGHT: lambda fields: f"{Kind.PYRIGHT.value} `{fields.get('config', '')}`",
+    Kind.IMPORT_LINTER: (
+        lambda fields: f"{Kind.IMPORT_LINTER.value} `{fields.get('config', '')}`"
+    ),
+    Kind.DOCS_GUARD: lambda fields: f"docs guard on `{fields.get('doc', '')}`",
+    Kind.LLM_REVIEW: lambda fields: f"LLM review with `{fields.get('prompt', '')}`",
+}
 
 
 @dataclass(frozen=True)
@@ -124,34 +158,8 @@ class Enforcer:
     @property
     def description(self) -> str:
         """Short human-readable description of what enforces the rule."""
-        kind, fields = self.kind, self.fields
-        if kind is Kind.PYTEST:
-            prefix = f"{fields['project'].rstrip('/')}/" if "project" in fields else ""
-            files = sorted({node.split("::", 1)[0] for node in fields.get("nodes", [])})
-            return "pytest " + ", ".join(f"`{prefix}{path}`" for path in files)
-        if kind is Kind.QUALITY_GUARD:
-            return f"quality guard `{fields.get('name', '')}`"
-        if kind is Kind.RUFF:
-            codes = ", ".join(fields.get("codes", []))
-            mode = fields.get("mode", "")
-            if mode == "format":
-                return "ruff format"
-            if mode == "per-file-ignore":
-                return (
-                    f"ruff per-file ignore of {codes} for `{fields.get('pattern', '')}`"
-                )
-            return f"ruff check ({codes})"
-        if kind is Kind.MYPY:
-            return "mypy"
-        if kind is Kind.WORKFLOW_JOB:
-            return "CI job"
-        if kind in (Kind.PYRIGHT, Kind.IMPORT_LINTER):
-            return f"{kind.value} `{fields.get('config', '')}`"
-        if kind is Kind.DOCS_GUARD:
-            return f"docs guard on `{fields.get('doc', '')}`"
-        if kind is Kind.LLM_REVIEW:
-            return f"LLM review with `{fields.get('prompt', '')}`"
-        return "nothing"
+        describe = _ENFORCER_DESCRIPTIONS.get(self.kind)
+        return "nothing" if describe is None else describe(self.fields)
 
     @property
     def expects_proof(self) -> bool:
