@@ -2,7 +2,7 @@
 
 Revision ID: fbb7488ebe8a
 Revises: 91af4fc8d8c1
-Create Date: 2026-10-14 17:52:33.514142
+Create Date: 2026-10-14 23:53:46.255223
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
 """
 
@@ -157,6 +157,10 @@ def upgrade() -> None:
             nullable=True,
         ),
     )
+    op.add_column(
+        "user_report_associations",
+        sa.Column("budget_window_years", sa.SmallInteger(), nullable=True),
+    )
     op.alter_column(
         "user_report_associations", "report_id", existing_type=sa.UUID(), nullable=True
     )
@@ -206,6 +210,11 @@ def upgrade() -> None:
         ["user_policy_id"],
         ["id"],
         ondelete="SET NULL",
+    )
+    op.create_check_constraint(
+        op.f("ck_user_report_associations_budget_window_years"),
+        "user_report_associations",
+        "budget_window_years IS NULL OR budget_window_years BETWEEN 2 AND 75",
     )
     op.create_check_constraint(
         op.f("ck_user_report_associations_country"),
@@ -383,6 +392,11 @@ def downgrade() -> None:
         type_="check",
     )
     op.drop_constraint(
+        op.f("ck_user_report_associations_budget_window_years"),
+        "user_report_associations",
+        type_="check",
+    )
+    op.drop_constraint(
         op.f("fk_user_report_associations_user_policy_id_user_policies"),
         "user_report_associations",
         type_="foreignkey",
@@ -425,6 +439,7 @@ def downgrade() -> None:
     op.alter_column(
         "user_report_associations", "report_id", existing_type=sa.UUID(), nullable=False
     )
+    op.drop_column("user_report_associations", "budget_window_years")
     op.drop_column("user_report_associations", "validation")
     op.drop_column("user_report_associations", "provisions")
     op.drop_column("user_report_associations", "source_note")

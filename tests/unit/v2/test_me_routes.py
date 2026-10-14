@@ -211,6 +211,7 @@ def test_export_serializes_stored_rows_outside_current_input_bounds() -> None:
             }
         ],
         validation={"matched_at": long_text, "map_model_version": "1"},
+        budget_window_years=None,
         last_run_at=None,
         created_at=CREATED_AT,
         updated_at=CREATED_AT,

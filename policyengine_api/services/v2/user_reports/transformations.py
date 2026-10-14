@@ -30,6 +30,7 @@ def user_report_read(association: UserReportAssociation) -> UserReportRead:
         source_note=association.source_note,
         provisions=association.provisions,
         validation=association.validation,
+        budget_window_years=association.budget_window_years,
         last_run_at=association.last_run_at,
         created_at=association.created_at,
         updated_at=association.updated_at,

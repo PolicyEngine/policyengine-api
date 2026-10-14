@@ -276,7 +276,10 @@ from the final SQLModel metadata. It has no post-generation corrections.
   `country_id` (NOT NULL, CHECK), `name`, `description`, a legacy ID, a
   reference CHECK, `UNIQUE(id, country_id)`, and listing indexes. Reports also
   add `user_policy_id` → `user_policies.id` ON DELETE SET NULL, `source_note`,
-  `provisions jsonb`, and `validation jsonb`.
+  `provisions jsonb`, `validation jsonb`, and `budget_window_years smallint`
+  (the years of the budget window run with the report, from its year; NULL for
+  none, otherwise 2 to 75 by `ck_user_report_associations_budget_window_years`,
+  matching the economy route's limit).
 - The old `country` and `label` columns on those two tables are retired but
   kept: `country` becomes nullable and nothing reads or writes either column.
   The previous Public API revision still maps them, so dropping them would

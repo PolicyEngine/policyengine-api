@@ -596,6 +596,33 @@ def test_non_finite_numbers_never_reach_jsonb(sessions) -> None:
     assert row is not None and row.provisions == [provision]
 
 
+def test_report_budget_windows_persist_within_the_api_window_limit(sessions) -> None:
+    principal = _principal(sessions, "google-oauth2|budget-window")
+    services = _services(sessions)
+
+    stored = services.reports.create_user_report(
+        principal=principal,
+        association_input=UserReportCreateFields(
+            country_id="us", legacy_report_id=615, budget_window_years=10
+        ),
+    )
+    with sessions() as session:
+        row = session.get(UserReportAssociation, stored.id)
+    assert row is not None and row.budget_window_years == 10
+
+    for out_of_range_years in (1, 76):
+        with pytest.raises(IntegrityError):
+            with sessions.begin() as session:
+                session.add(
+                    UserReportAssociation(
+                        user_id=stored.user_id,
+                        country_id="us",
+                        legacy_report_id=615,
+                        budget_window_years=out_of_range_years,
+                    )
+                )
+
+
 def test_reference_checks_and_match_simple_composite_keys(sessions) -> None:
     principal = _principal(sessions, "google-oauth2|constraints")
     with sessions.begin() as session:

@@ -104,6 +104,7 @@ def _report_read() -> UserReportRead:
         source_note="from chat",
         provisions=PROVISIONS,
         validation=VALIDATION,
+        budget_window_years=10,
         last_run_at=LAST_RUN_AT,
         created_at=CREATED_AT,
         updated_at=CREATED_AT + timedelta(seconds=1),
@@ -201,6 +202,7 @@ def test_report_routes_round_trip_v3_fields() -> None:
             "source_note": "from chat",
             "provisions": PROVISIONS,
             "validation": VALIDATION,
+            "budget_window_years": 10,
             "last_run_at": "2026-02-01T12:00:00Z",
         },
     )
@@ -212,6 +214,7 @@ def test_report_routes_round_trip_v3_fields() -> None:
     assert item["user_policy_id"] == str(USER_POLICY_ID)
     assert item["provisions"] == PROVISIONS
     assert item["validation"] == VALIDATION
+    assert item["budget_window_years"] == 10
     assert item["last_run_at"] == "2026-02-01T12:00:00Z"
     fields = reports.calls[0][1]["association_input"]
     assert fields.provisions[0].intervals[0].value == 3000
@@ -234,6 +237,9 @@ def test_report_routes_round_trip_v3_fields() -> None:
         },
         {"validation": {**VALIDATION, "scorecard": {"programs": "ctc"}}},
         {"provisions": [{**PROVISIONS[0], "value": "x" * (64 * 1024)}]},
+        {"budget_window_years": 1},
+        {"budget_window_years": 76},
+        {"budget_window_years": "ten"},
     ],
 )
 def test_report_create_rejects_invalid_v3_payloads(changes: dict) -> None:
@@ -278,6 +284,7 @@ def test_report_patch_accepts_only_contract_fields() -> None:
             "legacy_report_id": 616,
             "user_policy_id": None,
             "provisions": None,
+            "budget_window_years": None,
             "last_run_at": "2026-03-01T00:00:00+00:00",
         },
     )
@@ -293,6 +300,7 @@ def test_report_patch_accepts_only_contract_fields() -> None:
         "legacy_report_id",
         "user_policy_id",
         "provisions",
+        "budget_window_years",
         "last_run_at",
     }
 

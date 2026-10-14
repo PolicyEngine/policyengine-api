@@ -409,6 +409,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                 "source_note",
                 "provisions",
                 "validation",
+                "budget_window_years",
                 "last_run_at",
             ),
             patch_fields=(
@@ -419,6 +420,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                 "source_note",
                 "provisions",
                 "validation",
+                "budget_window_years",
                 "last_run_at",
             ),
         ),

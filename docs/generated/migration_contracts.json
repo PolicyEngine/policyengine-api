@@ -934,6 +934,7 @@
             "result.item.source_note",
             "result.item.provisions",
             "result.item.validation",
+            "result.item.budget_window_years",
             "result.item.last_run_at",
             "result.item.created_at",
             "result.item.updated_at"
@@ -961,6 +962,7 @@
             "result.item.source_note",
             "result.item.provisions",
             "result.item.validation",
+            "result.item.budget_window_years",
             "result.item.last_run_at",
             "result.item.created_at",
             "result.item.updated_at"
@@ -1002,6 +1004,7 @@
             "result.item.source_note",
             "result.item.provisions",
             "result.item.validation",
+            "result.item.budget_window_years",
             "result.item.last_run_at",
             "result.item.updated_at"
           ]
@@ -1038,6 +1041,7 @@
             "result.item.source_note",
             "result.item.provisions",
             "result.item.validation",
+            "result.item.budget_window_years",
             "result.item.last_run_at",
             "result.item.created_at",
             "result.item.updated_at"
@@ -1065,6 +1069,7 @@
             "result.item.source_note",
             "result.item.provisions",
             "result.item.validation",
+            "result.item.budget_window_years",
             "result.item.last_run_at",
             "result.item.created_at",
             "result.item.updated_at"
@@ -1106,6 +1111,7 @@
             "result.item.source_note",
             "result.item.provisions",
             "result.item.validation",
+            "result.item.budget_window_years",
             "result.item.last_run_at",
             "result.item.updated_at"
           ]

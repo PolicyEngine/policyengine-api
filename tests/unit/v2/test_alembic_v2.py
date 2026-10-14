@@ -523,6 +523,7 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
         "ck_user_simulation_associations_country",
         "ck_user_report_associations_report_ref",
         "ck_user_report_associations_country",
+        "ck_user_report_associations_budget_window_years",
         "ck_users_user_type",
         "ck_users_standard_primary_country",
     ):

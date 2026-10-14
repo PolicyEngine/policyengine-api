@@ -24,6 +24,7 @@ from policyengine_api.services.v2.associations.types import (
     StrictAssociationModel,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
+from policyengine_api.utils.budget_window import BUDGET_WINDOW_MAX_YEARS
 
 
 MAXIMUM_PROVISIONS_BYTES = 64 * 1024
@@ -34,6 +35,8 @@ IsoDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 ReportSourceNote = Annotated[
     str, StringConstraints(max_length=REPORT_SOURCE_NOTE_MAX_LENGTH)
 ]
+# A window of one year is the report itself, so it is stored as no window.
+BudgetWindowYears = Annotated[int, Field(ge=2, le=BUDGET_WINDOW_MAX_YEARS)]
 ShortText = Annotated[str, StringConstraints(max_length=64)]
 LabelText = Annotated[str, StringConstraints(max_length=255)]
 LongLabelText = Annotated[str, StringConstraints(max_length=1024)]
@@ -131,6 +134,7 @@ class _ReportPresentationFields(StrictUserReportModel):
     source_note: ReportSourceNote | None = None
     provisions: list[ReportProvision] | None = None
     validation: ReportValidation | None = None
+    budget_window_years: BudgetWindowYears | None = None
     last_run_at: AwareDatetime | None = None
 
     @model_validator(mode="after")
@@ -159,6 +163,7 @@ class UserReportCreationInput(StrictUserReportModel):
     source_note: str | None = None
     provisions: list[StoredJSONObject] | None = None
     validation: StoredJSONObject | None = None
+    budget_window_years: int | None = None
     last_run_at: AwareDatetime | None = None
 
 
@@ -176,6 +181,7 @@ class UserReportUpdateInput(_ReportPresentationFields):
             "source_note",
             "provisions",
             "validation",
+            "budget_window_years",
             "last_run_at",
         }
         supplied = self.model_fields_set.intersection(mutable_fields)
@@ -199,6 +205,7 @@ class UserReportRead:
     source_note: str | None
     provisions: list[StoredJSONObject] | None
     validation: StoredJSONObject | None
+    budget_window_years: int | None
     last_run_at: datetime | None
     created_at: datetime
     updated_at: datetime

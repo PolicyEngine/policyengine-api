@@ -94,6 +94,7 @@ class UserReportItem(StrictUserReportAPIModel):
     source_note: str | None
     provisions: list[ReportProvisionItem] | None
     validation: ReportValidationItem | None
+    budget_window_years: int | None
     last_run_at: datetime | None
     created_at: datetime
     updated_at: datetime

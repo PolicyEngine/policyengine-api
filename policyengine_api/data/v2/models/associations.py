@@ -22,6 +22,7 @@ from policyengine_api.data.v2.models.base import TimestampedModel
 from policyengine_api.data.v2.models.households import Household
 from policyengine_api.data.v2.models.policies import Policy
 from policyengine_api.data.v2.models.users import User
+from policyengine_api.utils.budget_window import BUDGET_WINDOW_MAX_YEARS
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.policy_mappings import (
@@ -235,6 +236,11 @@ class UserReportAssociation(TimestampedModel, table=True):
             "report_id IS NOT NULL OR legacy_report_id IS NOT NULL",
             name="ck_user_report_associations_report_ref",
         ),
+        sa.CheckConstraint(
+            "budget_window_years IS NULL OR budget_window_years BETWEEN 2 AND "
+            f"{BUDGET_WINDOW_MAX_YEARS}",
+            name="ck_user_report_associations_budget_window_years",
+        ),
         sa.Index(
             "ix_user_reports_country_user_created_id",
             "country_id",
@@ -268,6 +274,8 @@ class UserReportAssociation(TimestampedModel, table=True):
     source_note: str | None = Field(default=None, sa_type=sa.Text)
     provisions: list[Any] | None = Field(default=None, sa_type=_jsonb_type())
     validation: dict[str, Any] | None = Field(default=None, sa_type=_jsonb_type())
+    # Years in the budget window run with the report, from the report's year.
+    budget_window_years: int | None = Field(default=None, sa_type=sa.SmallInteger)
     last_run_at: datetime | None = Field(
         default=None,
         sa_type=sa.DateTime(timezone=True),
