@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+from datetime import date
+from enum import Enum
 from typing import TYPE_CHECKING
 
 import pytest
@@ -175,3 +177,22 @@ def test_normalize_json_value_unwraps_scalars_and_rejects_self_returning_items()
         CatalogExtractionError, match=r"^JSON object keys must be strings$"
     ):
         normalize_json_value({1: "one"})
+
+
+class _Colour(Enum):
+    RED = "red"
+
+
+class _Pair(tuple, Enum):
+    FIRST = (1, 2)
+
+
+class _Date(date, Enum):
+    LAUNCH = (2024, 1, 2)
+
+
+def test_normalize_json_value_reads_enums_by_value_before_their_base_type() -> None:
+    assert normalize_json_value(_Colour.RED) == "red"
+    assert normalize_json_value(_Pair.FIRST) == [1, 2]
+    assert normalize_json_value(_Date.LAUNCH) == "2024-01-02"
+    assert normalize_json_value({"colour": [_Colour.RED]}) == {"colour": ["red"]}

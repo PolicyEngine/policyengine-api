@@ -11,6 +11,7 @@ from policyengine_api.migration_flags import (
     ExplicitDatabaseSources,
     RouteImplementation,
     get_migration_context,
+    get_migration_log_context,
     infer_route_group,
 )
 from policyengine_api.migration_logging import (
@@ -98,6 +99,27 @@ def test_invalid_explicit_write_source_is_reported_before_the_read_source() -> N
                 db_write_source="bad-write", db_read_source="bad-read"
             ),
         )
+
+
+def test_invalid_flags_become_a_log_context_error_instead_of_raising(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DB_WRITE_POLICY", "invalid-source")
+
+    assert get_migration_log_context("policy") == {
+        "route_group": "policy",
+        "migration_flag_error": (
+            "DB_WRITE_POLICY='invalid-source' is invalid; expected one of: "
+            "cloud_sql, dual_write, supabase"
+        ),
+    }
+    assert get_migration_log_context(
+        "policy",
+        explicit_db_sources=ExplicitDatabaseSources(db_write_source="unknown"),
+    ) == {
+        "route_group": "policy",
+        "migration_flag_error": "invalid explicit database write source 'unknown'",
+    }
 
 
 @pytest.mark.parametrize(
