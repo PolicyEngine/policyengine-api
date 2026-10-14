@@ -12,6 +12,7 @@ from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
 from policyengine_api.services import economy_service as economy_module
+from policyengine_api.services.economic_impact_request import EconomicImpactRequest
 from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactExecution,
@@ -60,14 +61,16 @@ def failed_job_harness(request, monkeypatch):
         simulation_entrypoint_=gateway,
     )
     setup = service._build_economic_impact_setup_options(
-        country_id="us",
-        policy_id=1,
-        baseline_policy_id=2,
-        region="us",
-        dataset="default",
+        EconomicImpactRequest(
+            country_id="us",
+            policy_id=1,
+            baseline_policy_id=2,
+            region="us",
+            dataset="default",
+            options={},
+            api_version="1.0.0",
+        ),
         time_period="2026",
-        options={},
-        api_version="1.0.0",
     )
     service._resolve_runtime_bundle_for_setup_options(setup)
     impacts.set_reform_impact(

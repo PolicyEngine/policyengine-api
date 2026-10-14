@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from typing import Literal
 from unittest.mock import MagicMock, call, patch
 
@@ -16,15 +17,18 @@ from policyengine_api.runtime_cache.reform_impacts import (
     ReformImpactStartClaim,
 )
 from policyengine_api.services.budget_window_cache import BudgetWindowCacheState
+from policyengine_api.services.economic_impact_request import EconomicImpactRequest
 from policyengine_api.services.economy_service import (
     BUDGET_WINDOW_MAX_END_YEAR,
     BUDGET_WINDOW_MAX_YEARS,
     REFORM_IMPACT_START_CLAIM_ATTEMPTS,
+    BudgetWindowYearProgress,
     EconomicImpactResult,
     EconomicImpactSetupOptions,
     EconomyService,
     ImpactAction,
     ImpactStatus,
+    RuntimeBundleIdentity,
 )
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
@@ -61,6 +65,22 @@ from tests.fixtures.spm import (
 )
 
 pytest_plugins = ("tests.fixtures.services.economy_service",)
+
+
+def setup_options_for(country_id: str, region: str) -> EconomicImpactSetupOptions:
+    """Return resolved setup options for one country and pre-normalized region."""
+    return EconomicImpactSetupOptions(
+        submission_claim_id=MOCK_SUBMISSION_CLAIM_ID,
+        country_id=country_id,
+        reform_policy_id=MOCK_POLICY_ID,
+        baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+        region=region,
+        dataset=MOCK_DATASET,
+        time_period=MOCK_TIME_PERIOD,
+        options={},
+        api_version=MOCK_API_VERSION,
+        target="general",
+    )
 
 
 def hash_prefix_lookup(reform_impacts_service: MagicMock) -> MagicMock:
@@ -159,15 +179,17 @@ class TestEconomyService:
         @pytest.fixture
         def base_params(self):
             return {
-                "country_id": MOCK_COUNTRY_ID,
-                "policy_id": MOCK_POLICY_ID,
-                "baseline_policy_id": MOCK_BASELINE_POLICY_ID,
-                "region": MOCK_REGION,
-                "dataset": MOCK_DATASET,
+                "impact_request": EconomicImpactRequest(
+                    country_id=MOCK_COUNTRY_ID,
+                    policy_id=MOCK_POLICY_ID,
+                    baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                    region=MOCK_REGION,
+                    dataset=MOCK_DATASET,
+                    options=MOCK_OPTIONS,
+                    api_version=MOCK_API_VERSION,
+                    target="general",
+                ),
                 "time_period": MOCK_TIME_PERIOD,
-                "options": MOCK_OPTIONS,
-                "api_version": MOCK_API_VERSION,
-                "target": "general",
             }
 
         @pytest.mark.usefixtures(
@@ -776,14 +798,16 @@ class TestEconomyService:
             )
 
             result = service.get_economic_impact(
-                country_id="us",
-                policy_id=reform_policy_id,
-                baseline_policy_id=baseline_policy_id,
-                region="us",
-                dataset="default",
+                EconomicImpactRequest(
+                    country_id="us",
+                    policy_id=reform_policy_id,
+                    baseline_policy_id=baseline_policy_id,
+                    region="us",
+                    dataset="default",
+                    options={},
+                    api_version="test",
+                ),
                 time_period="2026",
-                options={},
-                api_version="test",
             )
 
             assert result.status is ImpactStatus.COMPUTING
@@ -1219,15 +1243,17 @@ class TestEconomyService:
             hash_prefix_lookup(mock_reform_impacts_service).return_value = []
 
             economy_service.get_economic_impact(
-                country_id="uk",
-                policy_id=MOCK_POLICY_ID,
-                baseline_policy_id=MOCK_BASELINE_POLICY_ID,
-                region="uk",
-                dataset="default",
+                EconomicImpactRequest(
+                    country_id="uk",
+                    policy_id=MOCK_POLICY_ID,
+                    baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                    region="uk",
+                    dataset="default",
+                    options=MOCK_OPTIONS,
+                    api_version=MOCK_API_VERSION,
+                    target="general",
+                ),
                 time_period=MOCK_TIME_PERIOD,
-                options=MOCK_OPTIONS,
-                api_version=MOCK_API_VERSION,
-                target="general",
             )
 
             sim_params = mock_simulation_entrypoint.run.call_args[0][0]
@@ -1248,16 +1274,18 @@ class TestEconomyService:
         @pytest.fixture
         def base_params(self):
             return {
-                "country_id": MOCK_COUNTRY_ID,
-                "policy_id": MOCK_POLICY_ID,
-                "baseline_policy_id": MOCK_BASELINE_POLICY_ID,
-                "region": MOCK_REGION,
-                "dataset": MOCK_DATASET,
+                "impact_request": EconomicImpactRequest(
+                    country_id=MOCK_COUNTRY_ID,
+                    policy_id=MOCK_POLICY_ID,
+                    baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                    region=MOCK_REGION,
+                    dataset=MOCK_DATASET,
+                    options=MOCK_OPTIONS,
+                    api_version=MOCK_API_VERSION,
+                    target="general",
+                ),
                 "start_year": "2026",
                 "window_size": 3,
-                "options": MOCK_OPTIONS,
-                "api_version": MOCK_API_VERSION,
-                "target": "general",
             }
 
         def test__given_no_cached_batch__submits_parent_batch_and_returns_queued_result(
@@ -1836,7 +1864,9 @@ class TestEconomyService:
         def test__given_cliff_target__raises_value_error(
             self, economy_service, base_params
         ):
-            base_params["target"] = "cliff"
+            base_params["impact_request"] = replace(
+                base_params["impact_request"], target="cliff"
+            )
 
             with pytest.raises(
                 ValueError,
@@ -1913,7 +1943,10 @@ class TestEconomyService:
             economy_service.get_budget_window_economic_impact(
                 **{
                     **base_params,
-                    "options": {"staging_probe": "abc", "analysis_mode": "x"},
+                    "impact_request": replace(
+                        base_params["impact_request"],
+                        options={"staging_probe": "abc", "analysis_mode": "x"},
+                    ),
                 }
             )
             first_cache_key_kwargs = dict(
@@ -1924,7 +1957,10 @@ class TestEconomyService:
             economy_service.get_budget_window_economic_impact(
                 **{
                     **base_params,
-                    "options": {"analysis_mode": "x", "staging_probe": "abc"},
+                    "impact_request": replace(
+                        base_params["impact_request"],
+                        options={"analysis_mode": "x", "staging_probe": "abc"},
+                    ),
                 }
             )
             second_cache_key_kwargs = dict(
@@ -1943,8 +1979,9 @@ class TestEconomyService:
             base_params,
             mock_budget_window_cache,
         ):
-            base_params["region"] = "ca"
-            base_params["dataset"] = "default"
+            base_params["impact_request"] = replace(
+                base_params["impact_request"], region="ca", dataset="default"
+            )
 
             result = economy_service.get_budget_window_economic_impact(**base_params)
 
@@ -1983,9 +2020,11 @@ class TestEconomyService:
         ):
             result = economy_service._build_budget_window_computing_result(
                 total_years=4,
-                completed_years=["2026"],
-                computing_years=["2027", "2028", "2029"],
-                queued_years=[],
+                years=BudgetWindowYearProgress(
+                    completed_years=["2026"],
+                    computing_years=["2027", "2028", "2029"],
+                    queued_years=[],
+                ),
                 progress=None,
             )
 
@@ -1997,9 +2036,11 @@ class TestEconomyService:
         ):
             result = economy_service._build_budget_window_computing_result(
                 total_years=3,
-                completed_years=["2026"],
-                computing_years=[],
-                queued_years=[],
+                years=BudgetWindowYearProgress(
+                    completed_years=["2026"],
+                    computing_years=[],
+                    queued_years=[],
+                ),
                 progress=None,
             )
 
@@ -2537,12 +2578,10 @@ class TestEconomicImpactSetupOptions:
             service = EconomyService()
 
             sim_options_model = service._setup_sim_options(
-                self.test_country_id,
-                self.test_reform_policy,
-                self.test_current_law_baseline_policy,
-                self.test_region,
-                self.test_time_period,
-                self.test_scope,
+                setup_options_for(self.test_country_id, self.test_region),
+                reform_policy=self.test_reform_policy,
+                baseline_policy=self.test_current_law_baseline_policy,
+                time_period=self.test_time_period,
             )
 
             sim_options = sim_options_model.model_dump()
@@ -2568,12 +2607,10 @@ class TestEconomicImpactSetupOptions:
 
             service = EconomyService()
             sim_options_model = service._setup_sim_options(
-                country_id,
-                reform_policy,
-                current_law_baseline_policy,
-                region,
-                time_period,
-                scope,
+                setup_options_for(country_id, region),
+                reform_policy=reform_policy,
+                baseline_policy=current_law_baseline_policy,
+                time_period=time_period,
             )
             sim_options = sim_options_model.model_dump()
 
@@ -2596,12 +2633,10 @@ class TestEconomicImpactSetupOptions:
 
             service = EconomyService()
             sim_options_model = service._setup_sim_options(
-                country_id,
-                reform_policy,
-                current_law_baseline_policy,
-                region,
-                time_period,
-                scope,
+                setup_options_for(country_id, region),
+                reform_policy=reform_policy,
+                baseline_policy=current_law_baseline_policy,
+                time_period=time_period,
             )
             sim_options = sim_options_model.model_dump()
 
@@ -2624,12 +2659,10 @@ class TestEconomicImpactSetupOptions:
             service = EconomyService()
 
             sim_options_model = service._setup_sim_options(
-                country_id,
-                reform_policy,
-                current_law_baseline_policy,
-                region,
-                time_period,
-                scope,
+                setup_options_for(country_id, region),
+                reform_policy=reform_policy,
+                baseline_policy=current_law_baseline_policy,
+                time_period=time_period,
                 include_cliffs=True,
             )
 
@@ -2649,17 +2682,14 @@ class TestEconomicImpactSetupOptions:
             current_law_baseline_policy = json.dumps({})
             region = "uk"
             time_period = 2025
-            scope = "macro"
 
             service = EconomyService()
 
             sim_options_model = service._setup_sim_options(
-                country_id,
-                reform_policy,
-                current_law_baseline_policy,
-                region,
-                time_period,
-                scope,
+                setup_options_for(country_id, region),
+                reform_policy=reform_policy,
+                baseline_policy=current_law_baseline_policy,
+                time_period=time_period,
             )
 
             sim_options = sim_options_model.model_dump()
@@ -2675,17 +2705,14 @@ class TestEconomicImpactSetupOptions:
             current_law_baseline_policy = json.dumps({})
             region = "congressional_district/CA-37"  # Pre-normalized
             time_period = 2025
-            scope = "macro"
 
             service = EconomyService()
 
             sim_options_model = service._setup_sim_options(
-                country_id,
-                reform_policy,
-                current_law_baseline_policy,
-                region,
-                time_period,
-                scope,
+                setup_options_for(country_id, region),
+                reform_policy=reform_policy,
+                baseline_policy=current_law_baseline_policy,
+                time_period=time_period,
             )
 
             sim_options = sim_options_model.model_dump()
@@ -2793,14 +2820,16 @@ class TestEconomicImpactSetupOptions:
             service = EconomyService()
             with pytest.raises(ValueError, match="Custom datasets are not supported"):
                 service._build_economic_impact_setup_options(
-                    country_id="us",
-                    policy_id=MOCK_POLICY_ID,
-                    baseline_policy_id=MOCK_BASELINE_POLICY_ID,
-                    region="us",
-                    dataset=dataset,
+                    EconomicImpactRequest(
+                        country_id="us",
+                        policy_id=MOCK_POLICY_ID,
+                        baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                        region="us",
+                        dataset=dataset,
+                        options={},
+                        api_version=MOCK_API_VERSION,
+                    ),
                     time_period=MOCK_TIME_PERIOD,
-                    options={},
-                    api_version=MOCK_API_VERSION,
                 )
 
     class TestValidateUsRegion:
@@ -2852,15 +2881,15 @@ class TestBuildOptionsHash:
     def test__given_reordered_options__returns_same_hash(self):
         service = EconomyService()
 
+        bundle = RuntimeBundleIdentity(
+            dataset="hf://policyengine/test.h5@1.0", model_version="1.2.3"
+        )
+
         first = service._build_options_hash(
-            options={"staging_probe": "abc", "analysis_mode": "x"},
-            model_version="1.2.3",
-            dataset="hf://policyengine/test.h5@1.0",
+            options={"staging_probe": "abc", "analysis_mode": "x"}, bundle=bundle
         )
         second = service._build_options_hash(
-            options={"analysis_mode": "x", "staging_probe": "abc"},
-            model_version="1.2.3",
-            dataset="hf://policyengine/test.h5@1.0",
+            options={"analysis_mode": "x", "staging_probe": "abc"}, bundle=bundle
         )
 
         assert first == second
