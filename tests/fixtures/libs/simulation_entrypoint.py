@@ -159,7 +159,7 @@ MOCK_BATCH_POLL_RESPONSE_FAILED = {
 
 def create_mock_httpx_response(
     status_code: int = 200,
-    json_data: dict = None,
+    json_data: dict | None = None,
     headers: dict | None = None,
 ):
     """Build a mock httpx response for the Simulation Entrypoint client tests.

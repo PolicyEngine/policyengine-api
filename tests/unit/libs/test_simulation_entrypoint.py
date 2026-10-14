@@ -5,6 +5,7 @@ job submission, status polling, and error handling.
 """
 
 import os
+from typing import ClassVar
 from unittest.mock import patch
 
 import httpx
@@ -13,14 +14,14 @@ from flask import Flask, g
 
 os.environ.setdefault("FLASK_DEBUG", "1")
 
-from policyengine_api.constants import (  # noqa: E402
+from policyengine_api.constants import (
     MODAL_EXECUTION_STATUS_COMPLETE,
     MODAL_EXECUTION_STATUS_FAILED,
     MODAL_EXECUTION_STATUS_RUNNING,
     MODAL_EXECUTION_STATUS_SUBMITTED,
     POLICYENGINE_VERSION,
 )
-from policyengine_api.libs.simulation_entrypoint import (  # noqa: E402
+from policyengine_api.libs.simulation_entrypoint import (
     ModalBudgetWindowBatchExecution,
     ModalSimulationExecution,
     SimulationAPIModal,
@@ -28,17 +29,17 @@ from policyengine_api.libs.simulation_entrypoint import (  # noqa: E402
     SimulationRunProgress,
     resolve_simulation_entrypoint_url,
 )
-from policyengine_api.observability.identifiers import (  # noqa: E402
+from policyengine_api.observability.identifiers import (
     OBSERVABILITY_ID_HEADER,
 )
-from policyengine_api.request_context import (  # noqa: E402
+from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     _asgi_observability_id,
     _asgi_request_id,
     current_observability_id,
     start_observability_id,
 )
-from tests.fixtures.libs.simulation_entrypoint import (  # noqa: E402
+from tests.fixtures.libs.simulation_entrypoint import (
     MOCK_BATCH_JOB_ID,
     MOCK_BATCH_POLL_RESPONSE_COMPLETE,
     MOCK_BATCH_POLL_RESPONSE_FAILED,
@@ -60,7 +61,7 @@ from tests.fixtures.libs.simulation_entrypoint import (  # noqa: E402
     MOCK_WORKER_VERSIONS,
     create_mock_httpx_response,
 )
-from tests.fixtures.spm import INSTALLED_SPM_SELECTION  # noqa: E402
+from tests.fixtures.spm import INSTALLED_SPM_SELECTION
 
 pytest_plugins = ("tests.fixtures.libs.simulation_entrypoint",)
 
@@ -83,7 +84,7 @@ ENTRYPOINT_TEST_ENV_VARS = (
 class RequestRecordingHTTPXClient:
     """Minimal HTTPX-compatible client that executes request event hooks."""
 
-    instances = []
+    instances: ClassVar[list] = []
 
     def __init__(self, *, event_hooks=None, **kwargs):
         self.event_hooks = event_hooks or {}
@@ -791,7 +792,7 @@ class TestSimulationAPIModal:
             api = SimulationAPIModal()
 
             with pytest.raises(
-                ValueError, match="Unknown version 9.9.9 for country us"
+                ValueError, match=r"Unknown version 9\.9\.9 for country us"
             ):
                 api.resolve_app_name("us", "9.9.9")
 

@@ -11,10 +11,10 @@ from policyengine_api.services.v2.comparison_runs.types import (
 )
 
 __all__ = [
-    "ComparisonRunAggregationStatus",
-    "ComparisonRunLifecycleStatus",
     "ComparisonReportPersistenceResult",
     "ComparisonReportRecord",
+    "ComparisonRunAggregationStatus",
+    "ComparisonRunLifecycleStatus",
     "ComparisonSimulationPersistenceResult",
     "ComparisonSimulationRecord",
     "ResultComparisonStatus",

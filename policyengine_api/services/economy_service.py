@@ -1827,7 +1827,7 @@ class EconomyService:
         except Exception as e:
             logger.log_struct(
                 {
-                    "message": f"Error inserting computing record: {str(e)}",
+                    "message": f"Error inserting computing record: {e!s}",
                     **setup_options.model_dump(),
                 }
             )
@@ -1858,9 +1858,7 @@ class EconomyService:
         except Exception as e:
             logger.log_struct(
                 {
-                    "message": (
-                        f"Error setting completed reform impact record: {str(e)}"
-                    ),
+                    "message": (f"Error setting completed reform impact record: {e!s}"),
                     **setup_options.model_dump(),
                 }
             )
@@ -1893,7 +1891,7 @@ class EconomyService:
         except Exception as e:
             logger.log_struct(
                 {
-                    "message": f"Error setting error reform impact record: {str(e)}",
+                    "message": f"Error setting error reform impact record: {e!s}",
                     **setup_options.model_dump(),
                 }
             )

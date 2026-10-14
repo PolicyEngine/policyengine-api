@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import unittest
 from datetime import date
+from typing import ClassVar
 
 from scripts.rules.baseline import check_baselines
 from scripts.rules.load import load_text
@@ -342,7 +343,7 @@ codes = ["B"]
 
 
 class ProofCiTest(unittest.TestCase):
-    PROOF_FILES = {
+    PROOF_FILES: ClassVar[dict[str, str]] = {
         "rules/fixtures/bad.py": "import sqlalchemy\n",
         "rules/fixtures/good.py": "x = 1\n",
     }

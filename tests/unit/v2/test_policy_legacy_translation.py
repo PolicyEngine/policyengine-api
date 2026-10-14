@@ -294,7 +294,7 @@ def test_reverse_legacy_range_is_rejected() -> None:
 def test_unknown_policyengine_version_never_falls_back() -> None:
     engine, session, _model, _version, _first, _second = _session_and_catalog()
     try:
-        with pytest.raises(Exception, match="running PolicyEngine.py"):
+        with pytest.raises(Exception, match=r"running PolicyEngine\.py"):
             _translate(
                 session,
                 _snapshot(),

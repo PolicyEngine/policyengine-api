@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from types import SimpleNamespace
+from typing import ClassVar
 from unittest.mock import patch
 
 import pytest
@@ -40,7 +41,7 @@ class CountryInputError(ValueError):
 
 
 class Country:
-    metadata = {
+    metadata: ClassVar[dict] = {
         "variables": {
             "age": {"entity": "person", "definitionPeriod": "year", "name": "age"}
         },
@@ -717,7 +718,7 @@ def test_certification_does_not_change_what_an_unselected_household_stores(
     Writing back the defaults a caller never chose would move every household
     hash the day a bundle is certified, and record a choice nobody made.
     """
-    client, country = harness
+    client, _country = harness
     created = client.post("/us/household", json={"data": HOUSEHOLD})
     assert created.status_code == 201, created.json
     household_id = created.json["result"]["household_id"]
