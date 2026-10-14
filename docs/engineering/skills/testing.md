@@ -301,7 +301,7 @@ uv run --frozen pytest \
 
 ## Stage 12A User Login and Associations
 
-Run the static type check, then the signed-in route, service, authentication,
+Run the static type check, then the user route, service, authentication,
 contract, and deployment tests:
 
 ```bash
@@ -317,6 +317,7 @@ uv run --frozen pytest \
   tests/unit/v2/test_user_policy_service.py \
   tests/unit/v2/test_user_household_service.py \
   tests/unit/v2/test_user_account_service.py \
+  tests/unit/v2/test_unauthenticated_user_service.py \
   tests/unit/v2/test_legacy_reference_service.py \
   tests/unit/v2/test_user_association_migration_qualification.py \
   tests/unit/v2/test_models.py \
@@ -327,8 +328,10 @@ uv run --frozen pytest \
   tests/contract -q
 ```
 
-Prove provisioning races, idempotent imports, named conflict targets, and the
-reshape lifecycle against the disposable Postgres database:
+Prove provisioning races (signed-in and signed-out), conversion and merge at
+sign-in under concurrency, the row locks that keep a signed-out browser from
+acting on its converted user, named conflict targets, and the reshape
+lifecycle against the disposable Postgres database:
 
 ```bash
 V2_ALEMBIC_DISPOSABLE_TEST=1 \
@@ -338,8 +341,9 @@ uv run --frozen pytest \
   tests/integration/test_v2_user_identity_persistence.py -q
 ```
 
-Route tests inject a principal through
-`NativeRouteDependencies(require_user=...)`; omit it to exercise the
-fail-closed default authenticator. `tests/integration/test_live_v2_policies.py`
-is a staging deploy gate that signs in the staging Auth0 test user; it is not
-run locally.
+Route tests inject a principal (a `UserPrincipal` or an
+`UnauthenticatedPrincipal`) through `NativeRouteDependencies(require_user=...)`;
+omit it to exercise the fail-closed default authenticator.
+`tests/integration/test_live_v2_policies.py` is a staging deploy gate that
+signs in the staging Auth0 test user and saves work as fresh signed-out
+browsers; it is not run locally.

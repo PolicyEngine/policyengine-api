@@ -70,8 +70,9 @@ The Phase 10 policy schemas demonstrate the required composition:
 - `PolicyDetailQuery` for country-scoped policy detail;
 - `PolicyCollectionQuery` for exact model filtering and pagination;
 - `CountryQuery` for association create, detail, update, and delete;
-- `UserPolicyCollectionQuery` for signed-in association reference filtering
-  and pagination; the owner comes from the bearer token, never the query.
+- `UserPolicyCollectionQuery` for user association reference filtering and
+  pagination; the owner comes from the request credential (a bearer token or
+  the `PolicyEngine-Unauthenticated-User` header), never the query.
 
 ## Compatibility and Documentation
 

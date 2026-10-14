@@ -1,19 +1,11 @@
-# PROPOSED (not deployed): Stage 12A per-IP throttles for signed-in user writes.
+# PROPOSED (not deployed): Stage 12A per-IP throttle for user-owned writes.
 #
 # This is the newest deployed snapshot
-# (../20260830T141827Z-pol-api-lb-metadata-enforced.yaml) plus two new rules at
-# priorities 1150 and 1200. It lives under proposed/ so it is never mistaken for
-# the authoritative deployed state. An operator applies the two rules with the
+# (../20260830T141827Z-pol-api-lb-metadata-enforced.yaml) plus one new rule at
+# priority 1200. It lives under proposed/ so it is never mistaken for the
+# authoritative deployed state. An operator applies the rule with the
 # runbook's preview-first procedure (docs/migration/lb-cloud-armor-runbook.md),
 # then exports and commits a new timestamped snapshot:
-#
-#   gcloud compute security-policies rules create 1150 \
-#     --project=$PROJECT --security-policy=pol-api-lb \
-#     --expression="request.method == 'POST' && request.path.matches('^/v2/me/imports$')" \
-#     --action=throttle \
-#     --rate-limit-threshold-count=60 --rate-limit-threshold-interval-sec=600 \
-#     --conform-action=allow --exceed-action=deny-429 --enforce-on-key=IP \
-#     --preview
 #
 #   gcloud compute security-policies rules create 1200 \
 #     --project=$PROJECT --security-policy=pol-api-lb \
@@ -24,29 +16,29 @@
 #     --preview
 #
 # Design notes:
+# - The rule covers signed-in and signed-out writes alike: requests with a
+#   bearer token and requests with the PolicyEngine-Unauthenticated-User
+#   header reach the same /v2/me* and /v2/user-* routes. It includes
+#   POST /v2/me/upgrade, which app v3 sends once per sign-in to move the
+#   browser's signed-out work into the account.
+# - Anyone can mint unauthenticated users: the first write with a new UUID in
+#   the header creates one, with no sign-in. This per-IP write throttle is the
+#   only bound on how fast one IP can create them (and their rows); the
+#   256 KiB body limit and the per-field bounds limit what each write stores.
+#   Reads never create a user.
 # - Reads (GET) and CORS preflights (OPTIONS) are excluded: app v3 lists saved
-#   reforms and reports, and reads GET /v2/me on its account page and once
-#   before each sign-in import; NAT'd offices share IPs.
-# - App v3 imports at every sign-in, not only the first. It moves the
-#   browser's signed-out reforms and reports into the account with
-#   POST /v2/me/imports, removes each item whose client_ref comes back in
-#   id_map, and keeps the rest for the next sign-in. Requests are chunked per
-#   country at <=500 items and about 950 KB. A sign-in with browser work sends
-#   one GET /v2/me (not throttled) and usually one import per country with
-#   items: at most 2 for typical browsers, more only for very large ones. A
-#   sign-in with nothing to move sends no import. A failed import offers a
-#   manual "Try again", which sends the imports again.
-# - Imports are the heaviest write (up to 500 items, 1 MiB each), so they get
-#   a tighter, longer-window rule evaluated first (lower priority number):
-#   60 requests per 600 s per IP. At 2 imports per sign-in that is about 30
-#   sign-ins with browser work per IP every 10 minutes, room for offices and
-#   campuses behind shared NAT and for retries, while still bounding the
-#   import path. A throttled import (429) fails the run; its items stay in the
-#   browser for "Try again" or the next sign-in.
+#   reforms and reports and reads GET /v2/me on its account page; NAT'd
+#   offices share IPs.
+# - App v3 saves signed-out work one record at a time as the user creates it,
+#   so a busy browser sends a handful of writes per minute; 120 per minute per
+#   IP leaves room for offices and campuses behind shared NAT. A throttled
+#   write (429) fails that save, and the app reports it.
+# - The earlier import throttle (priority 1150, POST /v2/me/imports) is gone:
+#   that route was removed before release.
 # - Cloud Armor CEL regexes reject capture groups, so the plan's
 #   ^/v2/(me|user-) is written ^/v2/(?:me|user-).
-# - Thresholds are starting points; confirm with >=24h of preview logs and the
-#   runbook's empirical threshold check before enforcing.
+# - The threshold is a starting point; confirm with >=24h of preview logs and
+#   the runbook's empirical threshold check before enforcing.
 creationTimestamp: '2026-07-21T07:16:39.177-07:00'
 description: Rate limiting for api.policyengine.org (lb-api). See docs/migration/lb-cloud-armor-runbook.md
 fingerprint: dT_5QmeI6h8=
@@ -86,22 +78,7 @@ rules:
       count: 75
       intervalSec: 60
 - action: throttle
-  description: 'Stage 12A: per-IP limit on signed-in localStorage imports'
-  kind: compute#securityPolicyRule
-  match:
-    expr:
-      expression: request.method == 'POST' && request.path.matches('^/v2/me/imports$')
-  preview: true
-  priority: 1150
-  rateLimitOptions:
-    conformAction: allow
-    enforceOnKey: IP
-    exceedAction: deny(429)
-    rateLimitThreshold:
-      count: 60
-      intervalSec: 600
-- action: throttle
-  description: 'Stage 12A: per-IP limit on signed-in user writes'
+  description: 'Stage 12A: per-IP limit on user-owned writes'
   kind: compute#securityPolicyRule
   match:
     expr:

@@ -1,24 +1,25 @@
 # PROPOSED (not deployed): Stage 12A application-rollback guard.
 #
 # Apply this rule BEFORE shifting production traffic back to a Public API
-# revision older than Stage 12A (revision fbb7488ebe8a) once any signed-in user
-# exists. Those revisions serve /v2/user-policies and /v2/user-households
-# without authentication: anyone could list, read, create, rename or delete a
-# signed-in user's saved work by user or record ID. This rule denies every
-# signed-in user route at the edge instead. Saved work is unavailable while it
-# is in place; signed-out flows and v1 routes are unaffected.
+# revision older than Stage 12A (revision fbb7488ebe8a) once any user-owned
+# record exists, signed in or not. Those revisions serve /v2/user-policies and
+# /v2/user-households without authentication: anyone could list, read, create,
+# rename or delete a user's saved work by user or record ID. This rule denies
+# every user-owned route (/v2/me*, including /v2/me/upgrade, and /v2/user-*)
+# at the edge instead. Saved work is unavailable while it is in place; v1
+# routes and the /v2 metadata, policy and household routes are unaffected.
 #
 # This is the newest deployed snapshot
 # (../20260830T141827Z-pol-api-lb-metadata-enforced.yaml) plus one deny rule at
 # priority 900, evaluated before every throttle. It lives under proposed/ so it
 # is never mistaken for the authoritative deployed state, and it is independent
-# of the proposed Stage 12A write throttles (priorities 1150 and 1200).
+# of the proposed Stage 12A write throttle (priority 1200).
 #
 # Apply (enforced at once: a rollback guard that only logs protects nothing):
 #
 #   gcloud compute security-policies rules create 900 \
 #     --project=$PROJECT --security-policy=pol-api-lb \
-#     --description="Stage 12A rollback guard: deny signed-in user routes" \
+#     --description="Stage 12A rollback guard: deny user-owned routes" \
 #     --expression="request.path.matches('^/v2/(?:me|user-(?:policies|households|simulations|reports))(?:/.*)?$')" \
 #     --action=deny-403
 #
@@ -61,7 +62,7 @@ labelFingerprint: 42WmSpB8rSM=
 name: pol-api-lb
 rules:
 - action: deny(403)
-  description: 'Stage 12A rollback guard: deny signed-in user routes'
+  description: 'Stage 12A rollback guard: deny user-owned routes'
   kind: compute#securityPolicyRule
   match:
     expr:
