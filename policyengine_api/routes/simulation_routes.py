@@ -57,6 +57,29 @@ def _require_updated_simulation(simulation: Simulation | None) -> Simulation:
     return simulation
 
 
+def _require_simulation_identity(
+    population_id: object,
+    population_type: object,
+    policy_id: object,
+) -> None:
+    """Raise BadRequest for the first missing or invalid simulation identity field."""
+    if not population_id:
+        msg = "population_id is required"
+        raise BadRequest(msg)
+    if not population_type:
+        msg = "population_type is required"
+        raise BadRequest(msg)
+    if population_type not in ["household", "geography"]:
+        msg = "population_type must be 'household' or 'geography'"
+        raise BadRequest(msg)
+    if policy_id is None:
+        msg = "policy_id is required"
+        raise BadRequest(msg)
+    if not isinstance(policy_id, int):
+        msg = "policy_id must be an integer"
+        raise BadRequest(msg)
+
+
 @simulation_bp.route("/<country_id>/simulation", methods=["POST"])
 @validate_country
 def create_simulation(country_id: str) -> Response:
@@ -83,22 +106,7 @@ def create_simulation(country_id: str) -> Response:
     population_type = payload.get("population_type")
     policy_id = payload.get("policy_id")
 
-    # Validate required fields
-    if not population_id:
-        msg = "population_id is required"
-        raise BadRequest(msg)
-    if not population_type:
-        msg = "population_type is required"
-        raise BadRequest(msg)
-    if population_type not in ["household", "geography"]:
-        msg = "population_type must be 'household' or 'geography'"
-        raise BadRequest(msg)
-    if policy_id is None:
-        msg = "policy_id is required"
-        raise BadRequest(msg)
-    if not isinstance(policy_id, int):
-        msg = "policy_id must be an integer"
-        raise BadRequest(msg)
+    _require_simulation_identity(population_id, population_type, policy_id)
 
     try:
         creation = simulation_service.get_or_create_simulation(
