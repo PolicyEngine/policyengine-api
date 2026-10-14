@@ -1,5 +1,7 @@
 """Typed worker failures become durable terminal HTTP polling responses."""
 
+from dataclasses import dataclass
+
 import httpx
 import pytest
 from flask import Flask
@@ -64,81 +66,119 @@ def segmented_result(year, invalid_side=None):
     return result
 
 
-@pytest.mark.parametrize(
-    "failure", [400, 422, "segmented-baseline", "segmented-reform"]
-)
-@pytest.mark.parametrize("budget_window", [False, True], ids=["annual", "window"])
-def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
-    monkeypatch, failure, budget_window
-):
-    # Certification is synthetic; the HTTP consumer, routes and both caches are
-    # real. No worker execution or dataset loading is needed for this boundary.
-    monkeypatch.setattr(worker_spm, "normalize_spm_selection", lambda *_: SELECTION)
-    monkeypatch.setattr(economy_module, "COUNTRY_PACKAGE_VERSIONS", {"us": "1.0.0"})
-    monkeypatch.setattr(economy_module, "POLICYENGINE_VERSION", "5.3.1")
-    job_id = "unsupported-year-job"
-    job_path = f"/budget-window-jobs/{job_id}" if budget_window else f"/jobs/{job_id}"
-    received = []
-    worker_app = "test-worker"
-    typed_error = YEAR_ERROR
-    if isinstance(failure, str):
-        typed_error = {
-            "code": "SPM_CONFIGURATION_UNAVAILABLE",
-            "message": "baseline and reform SPM receipts differ",
-        }
-        side = failure.removeprefix("segmented-")
-        worker_result = (
-            {
-                "kind": "budgetWindow",
-                "windowSize": 2,
-                "annualImpacts": [
-                    segmented_result("2035"),
-                    segmented_result("2036", side),
-                ],
-            }
-            if budget_window
-            else segmented_result("2036", side)
+def _versions_response(path, worker_app):
+    """Answer the worker's version discovery routes, or return None."""
+    if path == "/versions":
+        return httpx.Response(
+            200,
+            json={
+                "policyengine": {"5.3.1": worker_app},
+                "spm_capabilities": {
+                    "5.3.1": {
+                        "contract_version": "canonical-spm-v1",
+                        "defaults": SELECTION,
+                    }
+                },
+            },
         )
+    if path == "/versions/policyengine":
+        return httpx.Response(200, json={"5.3.1": worker_app})
+    return None
 
-    def transport(request):
-        received.append((request.method, request.url.path))
-        if request.method == "POST" and worker_app == "replacement-worker":
+
+class _FailingJobWorker:
+    """A worker HTTP API whose job fails once with a typed error, then expires."""
+
+    def __init__(self, *, job_path, failure, typed_error, worker_result):
+        self.job_path = job_path
+        self.failure = failure
+        self.typed_error = typed_error
+        self.worker_result = worker_result
+        self.app_name = "test-worker"
+        self.received = []
+
+    def __call__(self, request):
+        self.received.append((request.method, request.url.path))
+        if request.method == "POST" and self.app_name == "replacement-worker":
             assert request.url.path == "/simulate/economy/comparison"
             return httpx.Response(
                 200, json={"job_id": "replacement-job", "status": "submitted"}
             )
         assert request.method == "GET", "Polling must not submit a replacement job"
-        if request.url.path == "/versions":
-            return httpx.Response(
-                200,
-                json={
-                    "policyengine": {"5.3.1": worker_app},
-                    "spm_capabilities": {
-                        "5.3.1": {
-                            "contract_version": "canonical-spm-v1",
-                            "defaults": SELECTION,
-                        }
-                    },
-                },
-            )
-        if request.url.path == "/versions/policyengine":
-            return httpx.Response(200, json={"5.3.1": worker_app})
-        assert request.url.path == job_path
-        if received.count(("GET", job_path)) > 1:
+        versions = _versions_response(request.url.path, self.app_name)
+        if versions is not None:
+            return versions
+        assert request.url.path == self.job_path
+        if self.received.count(("GET", self.job_path)) > 1:
             return httpx.Response(404, json={"detail": "Job expired"})
-        if isinstance(failure, str):
+        if isinstance(self.failure, str):
             return httpx.Response(
-                200, json={"status": "complete", "result": worker_result}
+                200, json={"status": "complete", "result": self.worker_result}
             )
         return httpx.Response(
-            failure,
-            json={"status": "error", "errors": [typed_error]},
+            self.failure,
+            json={"status": "error", "errors": [self.typed_error]},
         )
 
+
+def _versions_only_worker(request):
+    """Answer as a worker HTTP API that serves only version discovery."""
+    assert request.method == "GET", "A stored result must not submit a job"
+    versions = _versions_response(request.url.path, "test-worker")
+    if versions is not None:
+        return versions
+    msg = f"Unexpected worker call: {request.url.path}"
+    raise AssertionError(msg)
+
+
+def _typed_failure(failure, *, budget_window):
+    """Return the typed error the routes must report, and the worker's result."""
+    if not isinstance(failure, str):
+        return YEAR_ERROR, None
+    side = failure.removeprefix("segmented-")
+    worker_result = (
+        {
+            "kind": "budgetWindow",
+            "windowSize": 2,
+            "annualImpacts": [
+                segmented_result("2035"),
+                segmented_result("2036", side),
+            ],
+        }
+        if budget_window
+        else segmented_result("2036", side)
+    )
+    typed_error = {
+        "code": "SPM_CONFIGURATION_UNAVAILABLE",
+        "message": "baseline and reform SPM receipts differ",
+    }
+    return typed_error, worker_result
+
+
+def _patch_spm_release(monkeypatch):
+    monkeypatch.setattr(worker_spm, "normalize_spm_selection", lambda *_: SELECTION)
+    monkeypatch.setattr(economy_module, "COUNTRY_PACKAGE_VERSIONS", {"us": "1.0.0"})
+    monkeypatch.setattr(economy_module, "POLICYENGINE_VERSION", "5.3.1")
+
+
+def _worker_gateway():
     gateway = object.__new__(SimulationEntrypointClient)
     gateway.base_url = "https://worker.invalid"
-    backend = InMemoryCacheBackend()
-    namespace = CacheNamespace("test", "typed-year-worker-polling")
+    return gateway
+
+
+@dataclass
+class _EconomyStack:
+    """The caches and service one process builds over the shared storage."""
+
+    annual_cache: ReformImpactCache
+    annual_impacts: ReformImpactsService
+    window_cache: BudgetWindowCache
+    service: EconomyService
+
+
+def _install_economy_stack(monkeypatch, gateway, backend, namespace):
+    """Build fresh cache facades and a service over ``backend`` and route to it."""
     annual_cache = ReformImpactCache(backend, namespace)
     annual_impacts = ReformImpactsService(annual_cache)
     window_cache = BudgetWindowCache(backend, namespace)
@@ -148,50 +188,128 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
         simulation_entrypoint_=gateway,
     )
     monkeypatch.setattr(economy_routes, "economy_service", service)
+    return _EconomyStack(annual_cache, annual_impacts, window_cache, service)
+
+
+def _economy_app():
     app = Flask(__name__)
     app.config["TESTING"] = True
     app.register_blueprint(economy_routes.economy_bp)
+    return app
 
-    with httpx.Client(transport=httpx.MockTransport(transport)) as gateway.client:
-        setup = service._build_economic_impact_setup_options(
-            EconomicImpactRequest(
-                country_id="us",
-                policy_id=1,
-                baseline_policy_id=2,
-                region="us",
-                dataset="default",
-                options={},
-                api_version="1.0.0",
-            ),
-            time_period="budget_window:2035:2" if budget_window else "2036",
-        )
+
+def _setup_options(service, *, budget_window):
+    return service._build_economic_impact_setup_options(
+        EconomicImpactRequest(
+            country_id="us",
+            policy_id=1,
+            baseline_policy_id=2,
+            region="us",
+            dataset="default",
+            options={},
+            api_version="1.0.0",
+        ),
+        time_period="budget_window:2035:2" if budget_window else "2036",
+    )
+
+
+def _store_annual_impact(
+    stack, setup, *, status, reform_impact_json, execution_id
+) -> None:
+    stack.service._resolve_runtime_bundle_for_setup_options(setup)
+    stack.annual_impacts.set_reform_impact(
+        stack.service._reform_impact_identity(setup),
+        ReformImpactExecution(execution_id=execution_id, start_time=None),
+        options=setup.options,
+        status=status,
+        reform_impact_json=reform_impact_json,
+    )
+
+
+def _economy_request(*, budget_window):
+    """Return the economy route and query for an annual or budget-window run."""
+    if budget_window:
+        return "/us/economy/1/over/2/budget-window", {
+            "start_year": "2035",
+            "window_size": "2",
+        }
+    return "/us/economy/1/over/2", {"time_period": "2036"}
+
+
+def _get_economy(app, url, query):
+    return app.test_client().get(
+        url,
+        query_string={"region": "us", "version": "1.0.0", **query},
+    )
+
+
+def _assert_window_failure_recorded(state, typed_error, setup) -> None:
+    assert state is not None
+    assert state.status == "failed"
+    assert state.failure_type == "spm_validation"
+    assert state.error == typed_error
+    assert state.observability_id == setup.observability_id
+
+
+def _assert_annual_failure_recorded(stored, typed_error, setup) -> None:
+    assert stored.status == "error"
+    assert stored.reform_impact_json == {}
+    assert stored.error_code == typed_error["code"]
+    assert stored.message == typed_error["message"]
+    assert stored.execution_id is None
+    assert stored.end_time is not None
+    assert stored.options_hash == setup.options_hash
+    assert stored.options_json == setup.options
+
+
+@pytest.mark.parametrize(
+    "failure", [400, 422, "segmented-baseline", "segmented-reform"]
+)
+@pytest.mark.parametrize("budget_window", [False, True], ids=["annual", "window"])
+def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
+    monkeypatch, failure, budget_window
+):
+    # Certification is synthetic; the HTTP consumer, routes and both caches are
+    # real. No worker execution or dataset loading is needed for this boundary.
+    _patch_spm_release(monkeypatch)
+    job_id = "unsupported-year-job"
+    job_path = f"/budget-window-jobs/{job_id}" if budget_window else f"/jobs/{job_id}"
+    typed_error, worker_result = _typed_failure(failure, budget_window=budget_window)
+    worker = _FailingJobWorker(
+        job_path=job_path,
+        failure=failure,
+        typed_error=typed_error,
+        worker_result=worker_result,
+    )
+
+    gateway = _worker_gateway()
+    backend = InMemoryCacheBackend()
+    namespace = CacheNamespace("test", "typed-year-worker-polling")
+    stack = _install_economy_stack(monkeypatch, gateway, backend, namespace)
+    app = _economy_app()
+
+    with httpx.Client(transport=httpx.MockTransport(worker)) as gateway.client:
+        setup = _setup_options(stack.service, budget_window=budget_window)
         if budget_window:
-            cache_key = service._build_budget_window_cache_key(setup)
-            window_cache.store_submitted(
+            cache_key = stack.service._build_budget_window_cache_key(setup)
+            stack.window_cache.store_submitted(
                 cache_key,
                 job_id,
                 setup.observability_id,
             )
-            url = "/us/economy/1/over/2/budget-window"
-            query = {"start_year": "2035", "window_size": "2"}
         else:
-            service._resolve_runtime_bundle_for_setup_options(setup)
-            annual_impacts.set_reform_impact(
-                service._reform_impact_identity(setup),
-                ReformImpactExecution(execution_id=job_id, start_time=None),
-                options=setup.options,
+            _store_annual_impact(
+                stack,
+                setup,
                 status="computing",
                 reform_impact_json={},
+                execution_id=job_id,
             )
-            url = "/us/economy/1/over/2"
-            query = {"time_period": "2036"}
+        url, query = _economy_request(budget_window=budget_window)
 
-        received.clear()
+        worker.received.clear()
         for _ in range(2):
-            response = app.test_client().get(
-                url,
-                query_string={"region": "us", "version": "1.0.0", **query},
-            )
+            response = _get_economy(app, url, query)
             assert response.status_code == 400, response.json
             assert response.json == {
                 "status": "error",
@@ -200,53 +318,33 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
                 "errors": [typed_error],
             }
             if budget_window:
-                state = window_cache.get_state(cache_key)
-                assert state is not None
-                assert state.status == "failed"
-                assert state.failure_type == "spm_validation"
-                assert state.error == typed_error
-                assert state.observability_id == setup.observability_id
+                _assert_window_failure_recorded(
+                    stack.window_cache.get_state(cache_key), typed_error, setup
+                )
             else:
-                stored = annual_cache.get_by_execution_id(job_id)
-                assert stored.status == "error"
-                assert stored.reform_impact_json == {}
-                assert stored.error_code == typed_error["code"]
-                assert stored.message == typed_error["message"]
-                assert stored.execution_id is None
-                assert stored.end_time is not None
-                assert stored.options_hash == setup.options_hash
-                assert stored.options_json == setup.options
+                _assert_annual_failure_recorded(
+                    stack.annual_cache.get_by_execution_id(job_id), typed_error, setup
+                )
 
             # The worker job vanishes after its first failure. Recreate both
             # services and cache facades to prove replay uses shared storage.
-            annual_cache = ReformImpactCache(backend, namespace)
-            annual_impacts = ReformImpactsService(annual_cache)
-            window_cache = BudgetWindowCache(backend, namespace)
-            service = EconomyService(
-                reform_impacts_service_=annual_impacts,
-                budget_window_cache_=window_cache,
-                simulation_entrypoint_=gateway,
-            )
-            monkeypatch.setattr(economy_routes, "economy_service", service)
+            stack = _install_economy_stack(monkeypatch, gateway, backend, namespace)
 
         if not budget_window:
             # Preserve the existing retry policy: only a newly resolved worker
             # creates a fresh canonical cache identity and permits submission.
-            worker_app = "replacement-worker"
-            monkeypatch.setattr(service, "_get_policy_jsons", lambda *_: ({}, {}))
-            response = app.test_client().get(
-                url,
-                query_string={"region": "us", "version": "1.0.0", **query},
-            )
+            worker.app_name = "replacement-worker"
+            monkeypatch.setattr(stack.service, "_get_policy_jsons", lambda *_: ({}, {}))
+            response = _get_economy(app, url, query)
             assert response.status_code == 200, response.json
             assert response.json["status"] == "computing"
-            replacement = annual_cache.get_by_execution_id("replacement-job")
+            replacement = stack.annual_cache.get_by_execution_id("replacement-job")
             assert replacement.options_hash != setup.options_hash
             assert replacement.options_json == setup.options
-            assert annual_cache.get_by_execution_id(job_id).status == "error"
-            assert received.count(("POST", "/simulate/economy/comparison")) == 1
+            assert stack.annual_cache.get_by_execution_id(job_id).status == "error"
+            assert worker.received.count(("POST", "/simulate/economy/comparison")) == 1
 
-    assert received.count(("GET", job_path)) == 1
+    assert worker.received.count(("GET", job_path)) == 1
 
 
 @pytest.mark.parametrize("budget_window", [False, True], ids=["annual", "window"])
@@ -260,68 +358,23 @@ def test_an_uncertifiable_stored_result_becomes_terminal_instead_of_repeating(
     re-validated on every poll: a 400 the caller can never move past and a
     worker handle that is never released.
     """
-    monkeypatch.setattr(worker_spm, "normalize_spm_selection", lambda *_: SELECTION)
-    monkeypatch.setattr(economy_module, "COUNTRY_PACKAGE_VERSIONS", {"us": "1.0.0"})
-    monkeypatch.setattr(economy_module, "POLICYENGINE_VERSION", "5.3.1")
+    _patch_spm_release(monkeypatch)
     job_id = "uncertifiable-stored-result"
-    received = []
 
-    def transport(request):
-        received.append((request.method, request.url.path))
-        assert request.method == "GET", "A stored result must not submit a job"
-        if request.url.path == "/versions":
-            return httpx.Response(
-                200,
-                json={
-                    "policyengine": {"5.3.1": "test-worker"},
-                    "spm_capabilities": {
-                        "5.3.1": {
-                            "contract_version": "canonical-spm-v1",
-                            "defaults": SELECTION,
-                        }
-                    },
-                },
-            )
-        if request.url.path == "/versions/policyengine":
-            return httpx.Response(200, json={"5.3.1": "test-worker"})
-        msg = f"Unexpected worker call: {request.url.path}"
-        raise AssertionError(msg)
-
-    gateway = object.__new__(SimulationEntrypointClient)
-    gateway.base_url = "https://worker.invalid"
+    gateway = _worker_gateway()
     backend = InMemoryCacheBackend()
     namespace = CacheNamespace("test", "uncertifiable-stored-result")
-    annual_cache = ReformImpactCache(backend, namespace)
-    annual_impacts = ReformImpactsService(annual_cache)
-    window_cache = BudgetWindowCache(backend, namespace)
-    service = EconomyService(
-        reform_impacts_service_=annual_impacts,
-        budget_window_cache_=window_cache,
-        simulation_entrypoint_=gateway,
-    )
-    monkeypatch.setattr(economy_routes, "economy_service", service)
-    app = Flask(__name__)
-    app.config["TESTING"] = True
-    app.register_blueprint(economy_routes.economy_bp)
+    stack = _install_economy_stack(monkeypatch, gateway, backend, namespace)
+    app = _economy_app()
 
     # A stored payload whose reform receipt covers the wrong year: a success
     # this build cannot certify, exactly as a worker defect would leave it.
-    with httpx.Client(transport=httpx.MockTransport(transport)) as gateway.client:
-        setup = service._build_economic_impact_setup_options(
-            EconomicImpactRequest(
-                country_id="us",
-                policy_id=1,
-                baseline_policy_id=2,
-                region="us",
-                dataset="default",
-                options={},
-                api_version="1.0.0",
-            ),
-            time_period="budget_window:2035:2" if budget_window else "2036",
-        )
+    transport = httpx.MockTransport(_versions_only_worker)
+    with httpx.Client(transport=transport) as gateway.client:
+        setup = _setup_options(stack.service, budget_window=budget_window)
         if budget_window:
-            cache_key = service._build_budget_window_cache_key(setup)
-            window_cache.set_completed_result(
+            cache_key = stack.service._build_budget_window_cache_key(setup)
+            stack.window_cache.set_completed_result(
                 cache_key,
                 {
                     "kind": "budgetWindow",
@@ -333,26 +386,19 @@ def test_an_uncertifiable_stored_result_becomes_terminal_instead_of_repeating(
                 },
                 setup.observability_id,
             )
-            url = "/us/economy/1/over/2/budget-window"
-            query = {"start_year": "2035", "window_size": "2"}
         else:
-            service._resolve_runtime_bundle_for_setup_options(setup)
-            annual_impacts.set_reform_impact(
-                service._reform_impact_identity(setup),
-                ReformImpactExecution(execution_id=job_id, start_time=None),
-                options=setup.options,
+            _store_annual_impact(
+                stack,
+                setup,
                 status="ok",
                 reform_impact_json=segmented_result("2036", "reform"),
+                execution_id=job_id,
             )
-            url = "/us/economy/1/over/2"
-            query = {"time_period": "2036"}
+        url, query = _economy_request(budget_window=budget_window)
 
         first = None
         for _ in range(2):
-            response = app.test_client().get(
-                url,
-                query_string={"region": "us", "version": "1.0.0", **query},
-            )
+            response = _get_economy(app, url, query)
             assert response.status_code == 400, response.json
             assert response.json["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
             if first is None:
@@ -360,26 +406,18 @@ def test_an_uncertifiable_stored_result_becomes_terminal_instead_of_repeating(
             assert response.json == first
 
             if budget_window:
-                state = window_cache.get_state(cache_key)
+                state = stack.window_cache.get_state(cache_key)
                 assert state is not None
                 assert state.status == "failed"
                 assert state.failure_type == "spm_validation"
                 assert state.error is not None
                 assert state.error["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
             else:
-                stored = annual_cache.get_by_execution_id(job_id)
+                stored = stack.annual_cache.get_by_execution_id(job_id)
                 assert stored.status == "error"
                 assert stored.error_code == "SPM_CONFIGURATION_UNAVAILABLE"
                 assert stored.execution_id is None
                 assert stored.options_hash == setup.options_hash
 
             # Replay must come from storage, not from re-reading the payload.
-            annual_cache = ReformImpactCache(backend, namespace)
-            annual_impacts = ReformImpactsService(annual_cache)
-            window_cache = BudgetWindowCache(backend, namespace)
-            service = EconomyService(
-                reform_impacts_service_=annual_impacts,
-                budget_window_cache_=window_cache,
-                simulation_entrypoint_=gateway,
-            )
-            monkeypatch.setattr(economy_routes, "economy_service", service)
+            stack = _install_economy_stack(monkeypatch, gateway, backend, namespace)
