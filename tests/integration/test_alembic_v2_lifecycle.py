@@ -193,6 +193,161 @@ def _assert_stage_12a_association_shape(engine) -> None:
     } <= user_checks
 
 
+def _upgrade_and_assert_head(config, engine) -> None:
+    command.upgrade(config, "head")
+    command.check(config)
+    _assert_head(engine)
+
+
+def _assert_revision(engine, revision) -> None:
+    with engine.connect() as connection:
+        context = MigrationContext.configure(connection)
+        assert context.get_current_revision() == revision
+
+
+def _assert_revision_without_enum_types(engine, revision, enum_query: str) -> None:
+    """Check the database revision, then that ``enum_query`` counts no enum types."""
+    with engine.connect() as connection:
+        context = MigrationContext.configure(connection)
+        assert context.get_current_revision() == revision
+        enum_count = connection.execute(text(enum_query)).scalar_one()
+    assert enum_count == 0
+
+
+def _insert_legacy_stage12_report(engine) -> UUID:
+    """Store a report from before the comparison columns existed; return its id."""
+    legacy_report_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO stage12_evaluation_reports "
+                "(evaluation_id, contract_version, status, aggregation_status, "
+                "environment, calculation_flow, originating_request_id, "
+                "production_identity, worker_version, modal_application, "
+                "report_coordinator_callable, version_manifest_sha256, "
+                "policyengine_version, country_package_name, "
+                "country_package_version, country, dataset_identity, dataset_uri, "
+                "data_package_name, data_package_version, data_artifact_revision, "
+                "retention_expires_at) VALUES "
+                "(:evaluation_id, 1, 'pending', 'not_started', 'test', "
+                "'economy', 'request', 'production', '5.2.0', 'application', "
+                "'coordinate_report', :digest, '5.2.0', 'policyengine-us', "
+                "'1.0.0', 'us', 'dataset', 'hf://dataset/file@revision', "
+                "'data-package', '1.0.0', 'revision', now() + interval '1 day')"
+            ),
+            {"evaluation_id": legacy_report_id, "digest": "a" * 64},
+        )
+    return legacy_report_id
+
+
+def _assert_comparison_downgrade_then_store_legacy_report(engine) -> UUID:
+    """Check the comparison revision is gone, then store a pre-comparison report."""
+    _assert_revision_without_enum_types(
+        engine,
+        STAGE_12_COMPARISON_PREVIOUS_REVISION,
+        "SELECT count(*) FROM pg_type "
+        "WHERE typname = 'v2_stage12_result_comparison_status' "
+        "AND typtype = 'e'",
+    )
+    report_columns = {
+        column["name"]
+        for column in inspect(engine).get_columns(
+            "stage12_evaluation_reports",
+            schema="public",
+        )
+    }
+    assert not any(name.startswith("comparison_") for name in report_columns)
+    return _insert_legacy_stage12_report(engine)
+
+
+def _assert_legacy_report_is_not_compared(engine, legacy_report_id: UUID) -> None:
+    with engine.connect() as connection:
+        comparison_status = connection.execute(
+            text(
+                "SELECT comparison_status FROM stage12_evaluation_reports "
+                "WHERE evaluation_id = :evaluation_id"
+            ),
+            {"evaluation_id": legacy_report_id},
+        ).scalar_one()
+    assert comparison_status == "not_requested"
+
+
+def _assert_stage12_downgrade(engine) -> None:
+    _assert_revision_without_enum_types(
+        engine,
+        STAGE_12_PREVIOUS_REVISION,
+        "SELECT count(*) FROM pg_type "
+        "WHERE typname LIKE 'v2_stage12_%' AND typtype = 'e'",
+    )
+    assert {
+        "stage12_evaluation_reports",
+        "stage12_evaluation_simulations",
+    }.isdisjoint(inspect(engine).get_table_names(schema="public"))
+
+
+def _assert_stage11_downgrade(engine) -> None:
+    _assert_revision(engine, STAGE_11_PREVIOUS_REVISION)
+    assert "legacy_household_mappings" not in inspect(engine).get_table_names(
+        schema="public"
+    )
+    household_columns = {
+        column["name"]: column
+        for column in inspect(engine).get_columns(
+            "households",
+            schema="public",
+        )
+    }
+    assert {"country", "label", "year"} <= household_columns.keys()
+    assert {
+        "country_id",
+        "default_year",
+        "canonicalization_version",
+        "content_hash",
+    }.isdisjoint(household_columns)
+    association_columns = {
+        column["name"]: column
+        for column in inspect(engine).get_columns(
+            "user_household_associations",
+            schema="public",
+        )
+    }
+    assert {"country", "label"} <= association_columns.keys()
+    assert {"country_id", "name", "description"}.isdisjoint(association_columns)
+    user_policy_id = next(
+        column
+        for column in inspect(engine).get_columns(
+            "user_policies",
+            schema="public",
+        )
+        if column["name"] == "user_id"
+    )
+    assert isinstance(user_policy_id["type"], postgresql.UUID)
+    user_columns = {
+        column["name"]: column
+        for column in inspect(engine).get_columns("users", schema="public")
+    }
+    assert all(
+        user_columns[field_name]["nullable"]
+        for field_name in ("first_name", "last_name", "email")
+    )
+
+
+def _assert_baseline_downgrade(engine) -> None:
+    _assert_revision(engine, BASELINE_REVISION)
+    assert "uq_parameter_values_canonical_parameter_start_date" not in {
+        index["name"] for index in inspect(engine).get_indexes("parameter_values")
+    }
+
+
+def _assert_base(engine) -> None:
+    assert set(inspect(engine).get_table_names(schema="public")) <= {"alembic_version"}
+    _assert_revision_without_enum_types(
+        engine,
+        None,
+        "SELECT count(*) FROM pg_type WHERE typname LIKE 'v2_%' AND typtype = 'e'",
+    )
+
+
 def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
     database_url = _disposable_url()
     config = _config()
@@ -204,180 +359,34 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
             "alembic_version"
         }
 
-        command.upgrade(config, "head")
-        command.check(config)
-        _assert_head(engine)
+        _upgrade_and_assert_head(config, engine)
 
         command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
-        with engine.connect() as connection:
-            context = MigrationContext.configure(connection)
-            assert context.get_current_revision() == STAGE_12A_PREVIOUS_REVISION
+        _assert_revision(engine, STAGE_12A_PREVIOUS_REVISION)
         _assert_pre_stage_12a_association_shape(engine)
-
-        command.upgrade(config, "head")
-        command.check(config)
-        _assert_head(engine)
+        _upgrade_and_assert_head(config, engine)
         _assert_stage_12a_association_shape(engine)
 
         command.downgrade(config, STAGE_12_COMPARISON_PREVIOUS_REVISION)
-        with engine.connect() as connection:
-            context = MigrationContext.configure(connection)
-            assert (
-                context.get_current_revision() == STAGE_12_COMPARISON_PREVIOUS_REVISION
-            )
-            comparison_enum_count = connection.execute(
-                text(
-                    "SELECT count(*) FROM pg_type "
-                    "WHERE typname = 'v2_stage12_result_comparison_status' "
-                    "AND typtype = 'e'"
-                )
-            ).scalar_one()
-        assert comparison_enum_count == 0
-        report_columns = {
-            column["name"]
-            for column in inspect(engine).get_columns(
-                "stage12_evaluation_reports",
-                schema="public",
-            )
-        }
-        assert not any(name.startswith("comparison_") for name in report_columns)
-        legacy_report_id = uuid4()
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO stage12_evaluation_reports "
-                    "(evaluation_id, contract_version, status, aggregation_status, "
-                    "environment, calculation_flow, originating_request_id, "
-                    "production_identity, worker_version, modal_application, "
-                    "report_coordinator_callable, version_manifest_sha256, "
-                    "policyengine_version, country_package_name, "
-                    "country_package_version, country, dataset_identity, dataset_uri, "
-                    "data_package_name, data_package_version, data_artifact_revision, "
-                    "retention_expires_at) VALUES "
-                    "(:evaluation_id, 1, 'pending', 'not_started', 'test', "
-                    "'economy', 'request', 'production', '5.2.0', 'application', "
-                    "'coordinate_report', :digest, '5.2.0', 'policyengine-us', "
-                    "'1.0.0', 'us', 'dataset', 'hf://dataset/file@revision', "
-                    "'data-package', '1.0.0', 'revision', now() + interval '1 day')"
-                ),
-                {"evaluation_id": legacy_report_id, "digest": "a" * 64},
-            )
-
-        command.upgrade(config, "head")
-        command.check(config)
-        _assert_head(engine)
-        with engine.connect() as connection:
-            comparison_status = connection.execute(
-                text(
-                    "SELECT comparison_status FROM stage12_evaluation_reports "
-                    "WHERE evaluation_id = :evaluation_id"
-                ),
-                {"evaluation_id": legacy_report_id},
-            ).scalar_one()
-        assert comparison_status == "not_requested"
+        legacy_report_id = _assert_comparison_downgrade_then_store_legacy_report(engine)
+        _upgrade_and_assert_head(config, engine)
+        _assert_legacy_report_is_not_compared(engine, legacy_report_id)
 
         command.downgrade(config, STAGE_12_PREVIOUS_REVISION)
-        with engine.connect() as connection:
-            context = MigrationContext.configure(connection)
-            assert context.get_current_revision() == STAGE_12_PREVIOUS_REVISION
-            remaining_stage_12_enum_count = connection.execute(
-                text(
-                    "SELECT count(*) FROM pg_type "
-                    "WHERE typname LIKE 'v2_stage12_%' AND typtype = 'e'"
-                )
-            ).scalar_one()
-        assert remaining_stage_12_enum_count == 0
-        assert {
-            "stage12_evaluation_reports",
-            "stage12_evaluation_simulations",
-        }.isdisjoint(inspect(engine).get_table_names(schema="public"))
-
-        command.upgrade(config, "head")
-        command.check(config)
-        _assert_head(engine)
+        _assert_stage12_downgrade(engine)
+        _upgrade_and_assert_head(config, engine)
 
         command.downgrade(config, STAGE_11_PREVIOUS_REVISION)
-        with engine.connect() as connection:
-            context = MigrationContext.configure(connection)
-            assert context.get_current_revision() == STAGE_11_PREVIOUS_REVISION
-        assert "legacy_household_mappings" not in inspect(engine).get_table_names(
-            schema="public"
-        )
-        household_columns = {
-            column["name"]: column
-            for column in inspect(engine).get_columns(
-                "households",
-                schema="public",
-            )
-        }
-        assert {"country", "label", "year"} <= household_columns.keys()
-        assert {
-            "country_id",
-            "default_year",
-            "canonicalization_version",
-            "content_hash",
-        }.isdisjoint(household_columns)
-        association_columns = {
-            column["name"]: column
-            for column in inspect(engine).get_columns(
-                "user_household_associations",
-                schema="public",
-            )
-        }
-        assert {"country", "label"} <= association_columns.keys()
-        assert {"country_id", "name", "description"}.isdisjoint(association_columns)
-        user_policy_id = next(
-            column
-            for column in inspect(engine).get_columns(
-                "user_policies",
-                schema="public",
-            )
-            if column["name"] == "user_id"
-        )
-        assert isinstance(user_policy_id["type"], postgresql.UUID)
-        user_columns = {
-            column["name"]: column
-            for column in inspect(engine).get_columns("users", schema="public")
-        }
-        assert all(
-            user_columns[field_name]["nullable"]
-            for field_name in ("first_name", "last_name", "email")
-        )
-
-        command.upgrade(config, "head")
-        command.check(config)
-        _assert_head(engine)
+        _assert_stage11_downgrade(engine)
+        _upgrade_and_assert_head(config, engine)
 
         command.downgrade(config, BASELINE_REVISION)
-        with engine.connect() as connection:
-            context = MigrationContext.configure(connection)
-            assert context.get_current_revision() == BASELINE_REVISION
-        assert "uq_parameter_values_canonical_parameter_start_date" not in {
-            index["name"] for index in inspect(engine).get_indexes("parameter_values")
-        }
-
-        command.upgrade(config, "head")
-        command.check(config)
-        _assert_head(engine)
+        _assert_baseline_downgrade(engine)
+        _upgrade_and_assert_head(config, engine)
 
         command.downgrade(config, "base")
-        assert set(inspect(engine).get_table_names(schema="public")) <= {
-            "alembic_version"
-        }
-        with engine.connect() as connection:
-            context = MigrationContext.configure(connection)
-            assert context.get_current_revision() is None
-            remaining_enum_count = connection.execute(
-                text(
-                    "SELECT count(*) FROM pg_type "
-                    "WHERE typname LIKE 'v2_%' AND typtype = 'e'"
-                )
-            ).scalar_one()
-        assert remaining_enum_count == 0
-
-        command.upgrade(config, "head")
-        command.check(config)
-        _assert_head(engine)
+        _assert_base(engine)
+        _upgrade_and_assert_head(config, engine)
     finally:
         command.upgrade(config, "head")
         engine.dispose()
