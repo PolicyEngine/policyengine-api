@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
@@ -92,7 +93,7 @@ def _check_workflows(payload: dict[str, Any]) -> list[str]:
                 )
             if (
                 not request["stable_response_fields"]
-                and request["expected_status"] != 204
+                and request["expected_status"] != HTTPStatus.NO_CONTENT
             ):
                 violations.append(f"{context}: stable_response_fields is required")
             if not request["path"].startswith("/"):
