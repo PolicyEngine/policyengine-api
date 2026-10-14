@@ -65,21 +65,35 @@ def require_json_value(
     if type(value) not in {list, dict}:
         msg = "value must contain only standards-compliant JSON types"
         raise ValueError(msg)
-    identity = id(value)
+    _require_json_container(value, depth=depth, containers=containers)
+    return value
+
+
+def _require_json_container(
+    container: list[Any] | dict[Any, Any],
+    *,
+    depth: int,
+    containers: frozenset[int],
+) -> None:
+    """Check a JSON list's items or object's members, rejecting reference cycles.
+
+    ``containers`` holds the identities of the containers enclosing this one.
+    """
+    identity = id(container)
     if identity in containers:
         msg = "JSON values must not contain reference cycles"
         raise ValueError(msg)
     nested_containers = containers | {identity}
-    if type(value) is list:
-        for item in value:
+    # The caller admits only exact lists and dicts, so isinstance is exact here.
+    if isinstance(container, list):
+        for item in container:
             require_json_value(item, depth=depth + 1, containers=nested_containers)
-        return value
-    for key, item in value.items():
+        return
+    for key, item in container.items():
         if type(key) is not str:
             msg = "JSON object keys must be strings"
             raise ValueError(msg)
         require_json_value(item, depth=depth + 1, containers=nested_containers)
-    return value
 
 
 def normalize_utc(value: datetime) -> datetime:
