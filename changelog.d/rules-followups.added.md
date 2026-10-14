@@ -1,0 +1,1 @@
+Made CLAUDE.md and the Copilot instructions thin pointers to AGENTS.md, required workflow logic longer than one line to live in tested and shellchecked scripts, and registered the tracking-issue rule.

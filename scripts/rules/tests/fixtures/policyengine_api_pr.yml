@@ -1,0 +1,201 @@
+name: Pull request
+
+on: pull_request
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  OLD_SIMULATION_GATEWAY_URL: ${{ vars.OLD_SIMULATION_GATEWAY_URL }}
+
+jobs:
+  ensure-policyengine-bundle-supported-by-simulation-api:
+    name: Ensure PolicyEngine bundle is supported by simulation API
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
+      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install jq
+        run: sudo apt-get install -y jq
+      - name: Set up uv for installed bundle validation
+        uses: astral-sh/setup-uv@v6
+      - name: Check simulation API supports updated PolicyEngine bundle
+        run: bash .github/check-policyengine-bundle-supported.sh --if-changed-from-base "${{ github.base_ref }}"
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+      - name: Install ruff
+        run: pip install ruff>=0.9.0
+      - name: Format check with ruff
+        run: ruff format --check .
+  typecheck-v2:
+    name: Type-check API v2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev
+      - name: Type-check API v2
+        run: uv run --frozen --extra dev mypy
+  quality-guards:
+    name: Quality guards
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # The rules registry guard compares baselines with the base branch.
+          fetch-depth: 0
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test the rules registry tool
+        run: python -m unittest discover -s scripts/rules/tests -t .
+      - name: Run quality guards
+        run: python scripts/run_quality_guards.py
+
+  alembic-v1-check:
+    name: Alembic v1 qualification
+    uses: ./.github/workflows/alembic-v1-check.yml
+  alembic-v2-check:
+    name: Alembic v2 qualification
+    uses: ./.github/workflows/alembic-v2-check.yml
+  v2-integration-check:
+    name: Cross-database integration tests
+    uses: ./.github/workflows/v2-integration-check.yml
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+  check-changelog:
+    name: Check changelog fragment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for changelog fragment
+        run: bash .github/scripts/check_changelog_fragment.sh
+  test_container_builds:
+    name: Docker
+    runs-on: ubuntu-latest
+    needs: ensure-policyengine-bundle-supported-by-simulation-api
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build container
+        run: docker build -t ghcr.io/policyengine/policyengine docker
+  test_cloud_run_container_builds:
+    name: Cloud Run container
+    runs-on: ubuntu-latest
+    needs: ensure-policyengine-bundle-supported-by-simulation-api
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Build Cloud Run container
+        run: docker build -f gcp/cloud_run/Dockerfile -t policyengine-api-cloud-run:test .
+  test_env_vars:
+    name: Test environment variables
+    runs-on: ubuntu-latest
+    needs: ensure-policyengine-bundle-supported-by-simulation-api
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Wait until PolicyEngine bundle version is available on PyPI
+        run: .github/wait-for-pypi.sh
+      - name: Install dependencies
+        run: make install
+      - name: Run environment variable tests
+        run: pytest tests/env_variables/test_environment_variables.py
+        env:
+          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
+          # Compatibility name required by PolicyEngine Core. The GitHub
+          # credential name describes its provider, data, and read-only scope.
+          HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}
+          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs:
+      - ensure-policyengine-bundle-supported-by-simulation-api
+      - test_env_vars
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y redis-server
+      - name: Start Redis
+        run: sudo systemctl start redis-server
+      - name: Auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: policyengine-api
+      - name: Install dependencies
+        run: make install
+      - name: Test the API
+        run: make test
+        env:
+          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
+          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: PolicyEngine/policyengine-api

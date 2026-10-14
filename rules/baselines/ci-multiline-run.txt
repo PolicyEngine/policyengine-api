@@ -1,0 +1,11 @@
+# Tolerated existing violations. This list may only shrink.
+.github/workflows/alembic-v1-check.yml :: mysql-lifecycle :: Test Alembic configuration and MySQL lifecycle
+.github/workflows/pr.yml :: test :: Install system dependencies
+.github/workflows/push.yml :: deploy-cloud-run-candidate :: Compute Cloud Run candidate metadata
+.github/workflows/push.yml :: deploy-cloud-run-candidate :: Restore previous Cloud Run production revision
+.github/workflows/push.yml :: deploy-cloud-run-staging :: Compute Cloud Run staging metadata
+.github/workflows/push.yml :: deploy-cloud-run-staging :: Install release test dependencies
+.github/workflows/push.yml :: deploy-cloud-run-staging :: Run release tests
+.github/workflows/push.yml :: promote-cloud-run-staging :: Restore previous Cloud Run staging revision
+.github/workflows/push.yml :: versioning :: Build changelog
+.github/workflows/sync-cloud-run-secrets.yml :: sync-cloud-run-secrets :: Require master branch

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "5.1.3"
+version = "5.2.1"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -47,7 +47,7 @@ dependencies = [
     # versions certified by this PolicyEngine bundle. Cloud Run installs the
     # complete frozen environment from uv.lock; the generic image installs
     # this requirement directly.
-    "policyengine[models]==6.2.1",
+    "policyengine[models]==6.3.4",
     "pydantic",
     "pymysql",
     "python-dotenv",
@@ -79,6 +79,11 @@ packages = ["policyengine_api"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.ruff.lint]
+# Ruff's defaults as of 0.15, made explicit so a ruff upgrade cannot change
+# which rules apply. Widen this deliberately, one rule family per PR.
+select = ["E4", "E7", "E9", "F"]
 
 [tool.ruff.lint.per-file-ignores]
 "migrations/*/versions/*.py" = ["F401"]

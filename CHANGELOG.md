@@ -1,3 +1,28 @@
+## [5.2.1] - 2026-10-14
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.3.4.
+
+### Fixed
+
+- Store list-valued UK region filters, such as England's nine English regions, as a JSON array in the catalog's existing filter text, so catalog extraction no longer fails on PolicyEngine 6.3.4.
+
+
+## [5.2.0] - 2026-10-14
+
+### Added
+
+- Added a rules registry (rules/registry.toml) with a standard-library tool that validates it, checks every rule is enforced where it claims, and renders docs/generated/rules.md and the Rules block in AGENTS.md.
+
+
+## [5.1.4] - 2026-10-13
+
+### Changed
+
+- Added CODEOWNERS for the rule machinery, pinned CI's ruff to the version in uv.lock with an explicit rule selection, made the v2 CRUD boundary tests discover modules so households and user_households are checked, and documented the tracking-issue, Fixes line and no-bypass PR rules. In a stack of pull requests, only the lowest unmerged one now runs the full PR workflow, behind a new "CI complete" gate job that fails on the others.
+
+
 ## [5.1.3] - 2026-10-09
 
 ### Changed
