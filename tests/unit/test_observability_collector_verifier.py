@@ -78,12 +78,15 @@ def test_verify_exports_real_telemetry_reads_it_back_and_rejects_logs(
         lambda **kwargs: delivery.update(kwargs),
     )
 
-    probe = verifier.verify(
-        "https://collector.example",
-        "identity-token",
+    readback = verifier.CloudReadback(
         project_id="observability-project",
         metric_location="us-central1",
         access_token=ACCESS_TOKEN,
+    )
+    probe = verifier.verify(
+        "https://collector.example",
+        "identity-token",
+        readback=readback,
         timeout_seconds=3.0,
         delivery_timeout_seconds=9.0,
     )
@@ -116,12 +119,16 @@ def test_verify_exports_real_telemetry_reads_it_back_and_rejects_logs(
         == "collector log rejection verification"
     )
     assert delivery == {
-        "project_id": "observability-project",
-        "trace_id": probe.trace_id,
-        "verification_id": probe.verification_id,
-        "metric_location": "us-central1",
-        "access_token": ACCESS_TOKEN,
-        "started_at": probe.started_at,
+        "readback": verifier.CloudReadback(
+            project_id="observability-project",
+            metric_location="us-central1",
+            access_token=ACCESS_TOKEN,
+        ),
+        "probe": verifier.VerificationProbe(
+            verification_id=probe.verification_id,
+            trace_id=probe.trace_id,
+            started_at=probe.started_at,
+        ),
         "timeout_seconds": 9.0,
     }
 
@@ -151,9 +158,11 @@ def test_verify_fails_when_the_collector_accepts_logs(
         verifier.verify(
             "https://collector.example",
             "identity-token",
-            project_id="observability-project",
-            metric_location="us-central1",
-            access_token=ACCESS_TOKEN,
+            readback=verifier.CloudReadback(
+                project_id="observability-project",
+                metric_location="us-central1",
+                access_token=ACCESS_TOKEN,
+            ),
         )
 
 
@@ -315,12 +324,16 @@ def _stub_delivery_checks(monkeypatch, verifier, *, trace_results, metric_result
 
 def _wait_for_test_delivery(verifier, *, timeout_seconds: float) -> None:
     verifier._wait_for_delivery(
-        project_id="observability-project",
-        trace_id="trace-123",
-        verification_id="collector-verify-123",
-        metric_location="us-central1",
-        access_token=ACCESS_TOKEN,
-        started_at=1_700_000_000.0,
+        readback=verifier.CloudReadback(
+            project_id="observability-project",
+            metric_location="us-central1",
+            access_token=ACCESS_TOKEN,
+        ),
+        probe=verifier.VerificationProbe(
+            verification_id="collector-verify-123",
+            trace_id="trace-123",
+            started_at=1_700_000_000.0,
+        ),
         timeout_seconds=timeout_seconds,
     )
 
