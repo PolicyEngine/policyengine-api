@@ -39,7 +39,7 @@ from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
 )
-from policyengine_api.migration_logging import log_migration_request
+from policyengine_api.migration_logging import ServedRequest, log_migration_request
 from policyengine_api.observability import get_runtime
 from policyengine_api.observability.identifiers import (
     OBSERVABILITY_ID_HEADER,
@@ -250,16 +250,18 @@ def create_asgi_app(
             # Migration logging must never fail the request.
             with contextlib.suppress(Exception):
                 log_migration_request(
-                    request_id=request_id,
-                    method=request.method,
-                    path=request.url.path,
-                    status_code=status_code,
-                    started_at=started_at,
-                    country_id=(
-                        request.path_params.get("country_id")
-                        or request.query_params.get("country_id")
-                    ),
-                    route_impl=RouteImplementation.FASTAPI_NATIVE,
+                    ServedRequest(
+                        request_id=request_id,
+                        method=request.method,
+                        path=request.url.path,
+                        status_code=status_code,
+                        started_at=started_at,
+                        country_id=(
+                            request.path_params.get("country_id")
+                            or request.query_params.get("country_id")
+                        ),
+                        route_impl=RouteImplementation.FASTAPI_NATIVE,
+                    )
                 )
 
         def finish_native_route(

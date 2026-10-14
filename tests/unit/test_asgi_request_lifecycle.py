@@ -14,6 +14,7 @@ from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
 )
+from policyengine_api.migration_logging import ServedRequest
 from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
 from policyengine_api.request_context import REQUEST_ID_HEADER
 
@@ -82,13 +83,15 @@ def test_native_request_calls_the_runtime_and_logger_in_a_fixed_order() -> None:
         call.runtime.set_context(observability_id=OBSERVABILITY_ID),
         call.runtime.response_headers(),
         call.log(
-            request_id="runtime-request-id",
-            method="GET",
-            path="/readiness-check",
-            status_code=200,
-            started_at=ANY,
-            country_id="uk",
-            route_impl=RouteImplementation.FASTAPI_NATIVE,
+            ServedRequest(
+                request_id="runtime-request-id",
+                method="GET",
+                path="/readiness-check",
+                status_code=200,
+                started_at=ANY,
+                country_id="uk",
+                route_impl=RouteImplementation.FASTAPI_NATIVE,
+            )
         ),
         call.runtime.update_request_route("/readiness-check"),
         call.runtime.update_request_status(200),
@@ -109,8 +112,8 @@ def test_native_request_keeps_its_id_when_the_runtime_assigns_none() -> None:
 
     assert response.headers[REQUEST_ID_HEADER] == "incoming-request-id"
     runtime.set_context.assert_called_once_with(request_id="incoming-request-id")
-    assert log_request.call_args.kwargs["request_id"] == "incoming-request-id"
-    assert log_request.call_args.kwargs["country_id"] is None
+    assert log_request.call_args.args[0].request_id == "incoming-request-id"
+    assert log_request.call_args.args[0].country_id is None
 
 
 def test_failing_native_route_logs_and_finishes_as_a_server_error() -> None:
@@ -134,13 +137,15 @@ def test_failing_native_route_logs_and_finishes_as_a_server_error() -> None:
         call.runtime.begin_request(headers=ANY, method="GET", route="/readiness-check"),
         call.runtime.set_context(request_id="failed-request"),
         call.log(
-            request_id="failed-request",
-            method="GET",
-            path="/readiness-check",
-            status_code=500,
-            started_at=ANY,
-            country_id=None,
-            route_impl=RouteImplementation.FASTAPI_NATIVE,
+            ServedRequest(
+                request_id="failed-request",
+                method="GET",
+                path="/readiness-check",
+                status_code=500,
+                started_at=ANY,
+                country_id=None,
+                route_impl=RouteImplementation.FASTAPI_NATIVE,
+            )
         ),
         call.runtime.update_request_route("/readiness-check"),
         call.runtime.update_request_status(500),

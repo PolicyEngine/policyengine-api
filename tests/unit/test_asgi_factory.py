@@ -272,7 +272,7 @@ def test_native_readiness_uses_shared_asgi_middleware():
 def test_native_route_preserves_request_id_in_context_log_and_response():
     observed_context_ids = []
 
-    def capture_request(**_kwargs):
+    def capture_request(_served_request):
         observed_context_ids.append(current_request_id())
 
     with patch(
@@ -285,14 +285,14 @@ def test_native_route_preserves_request_id_in_context_log_and_response():
         )
 
     assert response.headers[REQUEST_ID_HEADER] == "request-123"
-    assert log_request.call_args.kwargs["request_id"] == "request-123"
+    assert log_request.call_args.args[0].request_id == "request-123"
     assert observed_context_ids == ["request-123"]
 
 
 def test_native_route_generates_one_request_id_for_context_log_and_response():
     observed_context_ids = []
 
-    def capture_request(**_kwargs):
+    def capture_request(_served_request):
         observed_context_ids.append(current_request_id())
 
     with (
@@ -308,7 +308,7 @@ def test_native_route_generates_one_request_id_for_context_log_and_response():
         response = TestClient(create_asgi_app(create_test_wsgi_app())).get("/health")
 
     assert response.headers[REQUEST_ID_HEADER] == "generated-request-id"
-    assert log_request.call_args.kwargs["request_id"] == "generated-request-id"
+    assert log_request.call_args.args[0].request_id == "generated-request-id"
     assert observed_context_ids == ["generated-request-id"]
     generate_request_id.assert_called_once_with()
 
@@ -445,7 +445,7 @@ def test_native_route_does_not_accept_x_request_id_as_an_alias():
         )
 
     assert response.headers[REQUEST_ID_HEADER] == "generated-request-id"
-    assert log_request.call_args.kwargs["request_id"] == "generated-request-id"
+    assert log_request.call_args.args[0].request_id == "generated-request-id"
 
 
 def test_asgi_request_context_is_reset_after_response():
@@ -465,10 +465,10 @@ def test_concurrent_asgi_requests_do_not_leak_request_ids():
     observed_context_ids = {}
     observed_lock = threading.Lock()
 
-    def capture_request(**kwargs):
+    def capture_request(served_request):
         barrier.wait(timeout=5)
         with observed_lock:
-            observed_context_ids[kwargs["request_id"]] = current_request_id()
+            observed_context_ids[served_request.request_id] = current_request_id()
 
     app = create_asgi_app(create_test_wsgi_app())
 
