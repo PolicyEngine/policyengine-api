@@ -10,7 +10,6 @@
 
 schema_version = 1
 repo = "policyengine-api"
-tool_version = "0.1.0"
 
 [[category]]
 id = "v2-layers"

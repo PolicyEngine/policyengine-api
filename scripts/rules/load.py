@@ -30,7 +30,7 @@ from scripts.rules.model import (
 
 REGISTRY_PATH = Path("rules/registry.toml")
 
-_TOP_KEYS = {"schema_version", "repo", "tool_version", "category", "discovery", "rule"}
+_TOP_KEYS = {"schema_version", "repo", "category", "discovery", "rule"}
 _RULE_KEYS = {
     "id",
     "category",
@@ -319,7 +319,6 @@ def parse(raw: dict[str, Any]) -> tuple[Registry | None, list[Violation]]:
     registry = Registry(
         schema_version=1,
         repo=c.string(None, raw, "repo", "registry"),
-        tool_version=c.string(None, raw, "tool_version", "registry"),
         categories=tuple(categories),
         discovery=_discovery(c, raw.get("discovery")),
         rules=tuple(rule for rule in rules if rule is not None),

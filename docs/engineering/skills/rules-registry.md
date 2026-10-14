@@ -140,8 +140,8 @@ describe:
 Register it, or list it under `discovery.ignore_jobs` / `discovery.ignore_tests`
 with a reason.
 
-## Keeping the tool in sync
+## The tool in other repositories
 
-`scripts/rules/` is byte-identical in policyengine-api and policyengine-sim-api;
-see `scripts/rules/SYNC.md`. Change it in both repositories together and bump
-`TOOL_VERSION` and each registry's `tool_version`.
+policyengine-sim-api has its own copy of `scripts/rules/`, which started as this
+one. The copies may diverge: each repository owns its copy. Port a change by
+hand when it's useful in both.

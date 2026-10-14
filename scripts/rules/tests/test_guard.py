@@ -104,15 +104,6 @@ class SchemaTest(unittest.TestCase):
             )
             self.assertViolation(repo, "duplicate rule id")
 
-    def test_tool_version_mismatch(self) -> None:
-        with Repo(render=False) as repo:
-            text = repo.read("rules/registry.toml")
-            repo.write(
-                "rules/registry.toml",
-                text.replace('tool_version = "', 'tool_version = "9', 1),
-            )
-            self.assertViolation(repo, "tool_version is 9")
-
     def test_scope_glob_must_match(self) -> None:
         with Repo(render=False) as repo:
             repo.edit(

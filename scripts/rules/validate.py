@@ -7,7 +7,6 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from scripts.rules import TOOL_VERSION
 from scripts.rules.model import Kind, Registry, Rule, Status, Tier, Violation
 from scripts.rules.resolve import node_exists
 
@@ -245,13 +244,6 @@ def validate(registry: Registry, root: Path, today: date) -> list[Violation]:
 
     def v(rule_id: str | None, message: str, fix: str, check: str = "schema") -> None:
         violations.append(Violation(rule_id, check, message, fix))
-
-    if registry.tool_version != TOOL_VERSION:
-        v(
-            None,
-            f"tool_version is {registry.tool_version} but scripts/rules is {TOOL_VERSION}",
-            "sync scripts/rules (see SYNC.md) and update tool_version",
-        )
 
     category_ids = [category.id for category in registry.categories]
     for duplicate in sorted({c for c in category_ids if category_ids.count(c) > 1}):

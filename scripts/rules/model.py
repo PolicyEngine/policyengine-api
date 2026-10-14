@@ -180,7 +180,6 @@ class Rule:
 class Registry:
     schema_version: int
     repo: str
-    tool_version: str
     categories: tuple[Category, ...]
     discovery: Discovery
     rules: tuple[Rule, ...]

@@ -7,7 +7,6 @@ import textwrap
 from datetime import date
 from pathlib import Path
 
-from scripts.rules import TOOL_VERSION
 from scripts.rules.guard import GuardResult, run_guard
 from scripts.rules.load import load_registry
 from scripts.rules.render import write_outputs
@@ -15,10 +14,9 @@ from scripts.rules.resolve import clear_caches
 
 TODAY = date(2026, 6, 1)
 
-REGISTRY = f"""
+REGISTRY = """
 schema_version = 1
 repo = "example"
-tool_version = "{TOOL_VERSION}"
 
 [[category]]
 id = "layers"
