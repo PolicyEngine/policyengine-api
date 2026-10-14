@@ -16,6 +16,10 @@ if TYPE_CHECKING:
     from collections.abc import Collection
     from uuid import UUID
 
+    from policyengine_api.services.v2.user_households.types import (
+        UserHouseholdListing,
+    )
+
 
 def read_household_for_association(
     session: Session,
@@ -46,31 +50,25 @@ def read_owned_user_household_row(
 
 def read_user_household_rows(
     session: Session,
-    *,
-    country_id: str,
-    user_id: UUID,
-    household_id: UUID | None,
-    offset: int,
-    limit: int,
-    legacy_household_id: int | None = None,
+    listing: UserHouseholdListing,
 ) -> list[UserHouseholdAssociation]:
     """Return up to ``limit + 1`` of a user's associations in creation order.
 
-    With ``household_id`` or ``legacy_household_id``, only associations to that
-    household are returned. The extra row lets the caller report whether another
-    page exists.
+    With the listing's ``household_id`` or ``legacy_household_id``, only
+    associations to that household are returned. The extra row lets the caller
+    report whether another page exists.
     """
     statement = select(UserHouseholdAssociation).where(
-        UserHouseholdAssociation.country_id == country_id,
-        UserHouseholdAssociation.user_id == user_id,
+        UserHouseholdAssociation.country_id == listing.country_id,
+        UserHouseholdAssociation.user_id == listing.user_id,
     )
-    if household_id is not None:
+    if listing.household_id is not None:
         statement = statement.where(
-            UserHouseholdAssociation.household_id == household_id
+            UserHouseholdAssociation.household_id == listing.household_id
         )
-    if legacy_household_id is not None:
+    if listing.legacy_household_id is not None:
         statement = statement.where(
-            UserHouseholdAssociation.legacy_household_id == legacy_household_id
+            UserHouseholdAssociation.legacy_household_id == listing.legacy_household_id
         )
     return list(
         session.exec(
@@ -78,8 +76,8 @@ def read_user_household_rows(
                 col(UserHouseholdAssociation.created_at),
                 col(UserHouseholdAssociation.id),
             )
-            .offset(offset)
-            .limit(limit + 1)
+            .offset(listing.offset)
+            .limit(listing.limit + 1)
         ).all()
     )
 

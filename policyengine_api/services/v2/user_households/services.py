@@ -39,6 +39,7 @@ from policyengine_api.services.v2.user_households.transformations import (
     user_household_page,
     user_household_read,
 )
+from policyengine_api.services.v2.user_households.types import UserHouseholdListing
 from policyengine_api.services.v2.user_households.validators import (
     require_user_household,
     resolve_association_household_id,
@@ -240,12 +241,14 @@ class V2UserHouseholdService:
                 return user_household_page([], offset=offset, limit=limit)
             rows = read_user_household_rows(
                 session,
-                country_id=country_id,
-                user_id=owner.user_id,
-                household_id=household_id,
-                legacy_household_id=legacy_household_id,
-                offset=offset,
-                limit=limit,
+                UserHouseholdListing(
+                    country_id=country_id,
+                    user_id=owner.user_id,
+                    household_id=household_id,
+                    legacy_household_id=legacy_household_id,
+                    offset=offset,
+                    limit=limit,
+                ),
             )
             return user_household_page(rows, offset=offset, limit=limit)
 
