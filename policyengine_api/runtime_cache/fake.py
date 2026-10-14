@@ -220,39 +220,39 @@ class DisabledCacheBackend(InMemoryCacheBackend):
     def get(self, key: str) -> None:
         """Return None: every read is a miss."""
 
-    def set(self, key: str, value: str, **kwargs: object) -> bool:
+    def set(self, key: str, value: str, **_kwargs: object) -> bool:  # noqa: ARG002  # overrides InMemoryCacheBackend.set
         """Discard the value and report the write as not stored."""
         return False
 
-    def delete(self, *keys: str) -> int:
+    def delete(self, *_keys: str) -> int:
         """Return 0: no key ever exists."""
         return 0
 
-    def zadd(self, key: str, mapping: dict[str, float]) -> int:
+    def zadd(self, key: str, mapping: dict[str, float]) -> int:  # noqa: ARG002  # overrides InMemoryCacheBackend.zadd
         """Discard the members and report none added."""
         return 0
 
-    def zrevrange(self, key: str, start: int, end: int) -> list[str]:
+    def zrevrange(self, key: str, start: int, end: int) -> list[str]:  # noqa: ARG002  # overrides InMemoryCacheBackend.zrevrange
         """Return an empty list: no sorted set ever exists."""
         return []
 
-    def zrem(self, key: str, *members: str) -> int:
+    def zrem(self, key: str, *_members: str) -> int:  # noqa: ARG002  # overrides InMemoryCacheBackend.zrem
         """Return 0: there is nothing to remove."""
         return 0
 
-    def zremrangebyrank(self, key: str, start: int, end: int) -> int:
+    def zremrangebyrank(self, key: str, start: int, end: int) -> int:  # noqa: ARG002  # overrides InMemoryCacheBackend.zremrangebyrank
         """Return 0: there is nothing to remove."""
         return 0
 
-    def expire(self, key: str, seconds: int) -> bool:
+    def expire(self, key: str, seconds: int) -> bool:  # noqa: ARG002  # overrides InMemoryCacheBackend.expire
         """Return False, as Redis does for a key that does not exist."""
         return False
 
     def eval(
         self,
         _script: str,
-        numkeys: int,
-        *keys_and_args: str,
+        numkeys: int,  # noqa: ARG002  # overrides InMemoryCacheBackend.eval
+        *_keys_and_args: str,
     ) -> int:
         """Raise RuntimeError, so claim operations fail closed when disabled."""
         msg = "the shared runtime cache is disabled"

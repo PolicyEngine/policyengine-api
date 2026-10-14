@@ -8,8 +8,7 @@ from typing import Any
 import flask
 
 
-def make_cache_key(*args: object, **kwargs: object) -> str:
-    # pylint: disable=unused-argument
+def make_cache_key(*_args: object, **_kwargs: object) -> str:
     """Hash the current request's full path and JSON or form body into a cache key.
 
     The arguments are ignored. Keep it fast: adding overhead for a minor extra
