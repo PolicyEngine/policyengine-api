@@ -11,6 +11,7 @@ from flask import Flask
 from policyengine_api.data.v1_models import UserPolicy
 from policyengine_api.routes import policy_routes
 from policyengine_api.services.user_policy_mirroring import (
+    UserPolicyMirrorCollaborators,
     UserPolicyMirrorUnavailableError,
 )
 from policyengine_api.services.user_policy_service import (
@@ -395,8 +396,10 @@ def test_mirrored_creation_returns_the_saved_policy(
     assert mirror.call_args.args == ("us", 10)
     assert mirror.call_args.kwargs == {
         "through_revision": 4,
-        "event_service": policy_routes.user_policy_service,
-        "reform_snapshot_loader": policy_routes.policy_service.get_policy_snapshot,
+        "collaborators": UserPolicyMirrorCollaborators(
+            event_service=policy_routes.user_policy_service,
+            reform_snapshot_loader=policy_routes.policy_service.get_policy_snapshot,
+        ),
     }
 
 
@@ -423,8 +426,10 @@ def test_mirrored_update_returns_the_updated_id(
     assert mirror.call_args.args == ("us", 10)
     assert mirror.call_args.kwargs == {
         "through_revision": 5,
-        "event_service": policy_routes.user_policy_service,
-        "reform_snapshot_loader": policy_routes.policy_service.get_policy_snapshot,
+        "collaborators": UserPolicyMirrorCollaborators(
+            event_service=policy_routes.user_policy_service,
+            reform_snapshot_loader=policy_routes.policy_service.get_policy_snapshot,
+        ),
     }
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -99,18 +100,48 @@ def _failure_category(error: Exception) -> str:
     return "unexpected"
 
 
+@dataclass(frozen=True)
+class UserPolicyMirrorCollaborators:
+    """The services a saved-policy mirror uses; each one left None takes its default.
+
+    ``event_service`` reads and completes the retained v1 events,
+    ``reform_snapshot_loader`` loads a saved policy's reform policy, and
+    ``mirror_factory`` builds the v2 mirror.
+    """
+
+    event_service: UserPolicyService | None = None
+    reform_snapshot_loader: Callable[[str, int], LegacyPolicySnapshot | None] | None = (
+        None
+    )
+    mirror_factory: Callable[[], LegacyUserPolicyMirror] | None = None
+
+
+@dataclass(frozen=True)
+class _MirroredRevision:
+    """The saved-policy revision one mirror metric record reports on."""
+
+    country_id: str
+    legacy_user_policy_id: int
+    source_revision: int | None
+    requested_through_revision: int
+    started_at: float
+
+
+@dataclass(frozen=True)
+class _MirrorOutcome:
+    """How one immediate saved-policy mirror ended, as its metric record reports it."""
+
+    outcome: str
+    actual_write_sources: list[str]
+    result: LegacyUserPolicyPersistenceResult | None = None
+    failure_category: str | None = None
+
+
 def _log_mirror_operation(
-    *,
-    country_id: str,
-    legacy_user_policy_id: int,
-    source_revision: int | None,
-    requested_through_revision: int,
-    started_at: float,
-    outcome: str,
-    actual_write_sources: list[str],
-    result: LegacyUserPolicyPersistenceResult | None = None,
-    failure_category: str | None = None,
+    revision: _MirroredRevision,
+    mirror_outcome: _MirrorOutcome,
 ) -> None:
+    result = mirror_outcome.result
     # Metric logging must not change the mirror outcome.
     with contextlib.suppress(Exception):
         logger.log_struct(
@@ -120,19 +151,19 @@ def _log_mirror_operation(
                 "metric_value": 1,
                 "configured_write_source": "dual_write",
                 "attempted_write_sources": ["cloud_sql", "supabase"],
-                "actual_write_sources": actual_write_sources,
-                "country_id": country_id,
-                "legacy_user_policy_id": legacy_user_policy_id,
-                "source_revision": source_revision,
-                "requested_through_revision": requested_through_revision,
+                "actual_write_sources": mirror_outcome.actual_write_sources,
+                "country_id": revision.country_id,
+                "legacy_user_policy_id": revision.legacy_user_policy_id,
+                "source_revision": revision.source_revision,
+                "requested_through_revision": revision.requested_through_revision,
                 "destination_association_id": (
                     str(result.association_id) if result is not None else None
                 ),
                 "destination_policy_id": (
                     str(result.policy_id) if result is not None else None
                 ),
-                "outcome": outcome,
-                "failure_category": failure_category,
+                "outcome": mirror_outcome.outcome,
+                "failure_category": mirror_outcome.failure_category,
                 "association_created": (
                     result.association_created if result is not None else None
                 ),
@@ -142,9 +173,11 @@ def _log_mirror_operation(
                 "mapping_created": result.mapping_created
                 if result is not None
                 else None,
-                "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
+                "duration_ms": round(
+                    (time.perf_counter() - revision.started_at) * 1000, 3
+                ),
             },
-            severity="INFO" if outcome == "ok" else "ERROR",
+            severity="INFO" if mirror_outcome.outcome == "ok" else "ERROR",
         )
 
 
@@ -188,27 +221,35 @@ def mirror_user_policy_after_commit(
         )
     except Exception as error:
         _log_mirror_operation(
-            country_id=snapshot.country_id,
-            legacy_user_policy_id=snapshot.legacy_user_policy_id,
-            source_revision=source_revision,
-            requested_through_revision=source_revision,
-            started_at=started_at,
-            outcome="error",
-            actual_write_sources=["cloud_sql"],
-            failure_category=_failure_category(error),
+            _MirroredRevision(
+                country_id=snapshot.country_id,
+                legacy_user_policy_id=snapshot.legacy_user_policy_id,
+                source_revision=source_revision,
+                requested_through_revision=source_revision,
+                started_at=started_at,
+            ),
+            _MirrorOutcome(
+                outcome="error",
+                actual_write_sources=["cloud_sql"],
+                failure_category=_failure_category(error),
+            ),
         )
         msg = "The committed v1 saved policy could not be mirrored to v2"
         raise UserPolicyMirrorUnavailableError(msg) from error
 
     _log_mirror_operation(
-        country_id=snapshot.country_id,
-        legacy_user_policy_id=snapshot.legacy_user_policy_id,
-        source_revision=source_revision,
-        requested_through_revision=source_revision,
-        started_at=started_at,
-        outcome="ok",
-        actual_write_sources=["cloud_sql", "supabase"],
-        result=result,
+        _MirroredRevision(
+            country_id=snapshot.country_id,
+            legacy_user_policy_id=snapshot.legacy_user_policy_id,
+            source_revision=source_revision,
+            requested_through_revision=source_revision,
+            started_at=started_at,
+        ),
+        _MirrorOutcome(
+            outcome="ok",
+            actual_write_sources=["cloud_sql", "supabase"],
+            result=result,
+        ),
     )
     return result
 
@@ -218,10 +259,7 @@ def mirror_pending_user_policy_events_after_commit(
     legacy_user_policy_id: int,
     *,
     through_revision: int,
-    event_service: UserPolicyService | None = None,
-    reform_snapshot_loader: Callable[[str, int], LegacyPolicySnapshot | None]
-    | None = None,
-    mirror_factory: Callable[[], LegacyUserPolicyMirror] | None = None,
+    collaborators: UserPolicyMirrorCollaborators | None = None,
 ) -> LegacyUserPolicyPersistenceResult:
     """Copy this saved policy's retained events into v2, up to the request's revision.
 
@@ -229,10 +267,13 @@ def mirror_pending_user_policy_events_after_commit(
     ``through_revision``. Raise UserPolicyMirrorUnavailableError, after logging the
     failure, if an event cannot be copied.
     """
-    selected_event_service = event_service or UserPolicyService()
+    if collaborators is None:
+        collaborators = UserPolicyMirrorCollaborators()
+    selected_event_service = collaborators.event_service or UserPolicyService()
     selected_reform_loader = (
-        reform_snapshot_loader or PolicyService().get_policy_snapshot
+        collaborators.reform_snapshot_loader or PolicyService().get_policy_snapshot
     )
+    mirror_factory = collaborators.mirror_factory
     request_started_at = time.perf_counter()
     active_event: PendingUserPolicyMirrorEvent | None = None
     event_started_at: dict[int, float] = {}
@@ -269,14 +310,18 @@ def mirror_pending_user_policy_events_after_commit(
         nonlocal active_event
 
         _log_mirror_operation(
-            country_id=event.snapshot.country_id,
-            legacy_user_policy_id=event.snapshot.legacy_user_policy_id,
-            source_revision=event.source_revision,
-            requested_through_revision=through_revision,
-            started_at=event_started_at.pop(event.event_id),
-            outcome="ok",
-            actual_write_sources=["cloud_sql", "supabase"],
-            result=result,
+            _MirroredRevision(
+                country_id=event.snapshot.country_id,
+                legacy_user_policy_id=event.snapshot.legacy_user_policy_id,
+                source_revision=event.source_revision,
+                requested_through_revision=through_revision,
+                started_at=event_started_at.pop(event.event_id),
+            ),
+            _MirrorOutcome(
+                outcome="ok",
+                actual_write_sources=["cloud_sql", "supabase"],
+                result=result,
+            ),
         )
         destination_results.pop(event.event_id, None)
         active_event = None
@@ -298,25 +343,31 @@ def mirror_pending_user_policy_events_after_commit(
         ):
             failure = error.__cause__
         _log_mirror_operation(
-            country_id=(event.snapshot.country_id if event is not None else country_id),
-            legacy_user_policy_id=(
-                event.snapshot.legacy_user_policy_id
-                if event is not None
-                else legacy_user_policy_id
+            _MirroredRevision(
+                country_id=(
+                    event.snapshot.country_id if event is not None else country_id
+                ),
+                legacy_user_policy_id=(
+                    event.snapshot.legacy_user_policy_id
+                    if event is not None
+                    else legacy_user_policy_id
+                ),
+                source_revision=event.source_revision if event is not None else None,
+                requested_through_revision=through_revision,
+                started_at=(
+                    event_started_at.get(event.event_id, request_started_at)
+                    if event is not None
+                    else request_started_at
+                ),
             ),
-            source_revision=event.source_revision if event is not None else None,
-            requested_through_revision=through_revision,
-            started_at=(
-                event_started_at.get(event.event_id, request_started_at)
-                if event is not None
-                else request_started_at
+            _MirrorOutcome(
+                outcome="error",
+                actual_write_sources=(
+                    ["cloud_sql", "supabase"] if result is not None else ["cloud_sql"]
+                ),
+                result=result,
+                failure_category=_failure_category(failure),
             ),
-            outcome="error",
-            actual_write_sources=(
-                ["cloud_sql", "supabase"] if result is not None else ["cloud_sql"]
-            ),
-            result=result,
-            failure_category=_failure_category(failure),
         )
         msg = "The committed v1 saved policy event could not be mirrored to v2"
         raise UserPolicyMirrorUnavailableError(msg) from error

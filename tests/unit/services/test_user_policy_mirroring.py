@@ -13,6 +13,7 @@ from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from policyengine_api.data.v1_models import UserPolicyMirrorEvent
 from policyengine_api.services.user_policy_mirroring import (
+    UserPolicyMirrorCollaborators,
     UserPolicyMirrorUnavailableError,
     mirror_pending_user_policy_events_after_commit,
     mirror_user_policy_after_commit,
@@ -206,9 +207,11 @@ def test_processing_marker_commit_failure_logs_error_after_supabase_commit(
                 "us",
                 creation.user_policy.id,
                 through_revision=creation.mirror_revision,
-                event_service=event_service,
-                reform_snapshot_loader=lambda _country_id, _policy_id: _reform(),
-                mirror_factory=lambda: mirror,
+                collaborators=UserPolicyMirrorCollaborators(
+                    event_service=event_service,
+                    reform_snapshot_loader=lambda _country_id, _policy_id: _reform(),
+                    mirror_factory=lambda: mirror,
+                ),
             )
     finally:
         sqlalchemy_event.remove(
@@ -249,9 +252,11 @@ def test_event_preparation_failure_logs_error_and_retains_the_event(
             "us",
             creation.user_policy.id,
             through_revision=creation.mirror_revision,
-            event_service=event_service,
-            reform_snapshot_loader=lambda _country_id, _policy_id: None,
-            mirror_factory=mirror_factory,
+            collaborators=UserPolicyMirrorCollaborators(
+                event_service=event_service,
+                reform_snapshot_loader=lambda _country_id, _policy_id: None,
+                mirror_factory=mirror_factory,
+            ),
         )
 
     mirror_factory.assert_not_called()

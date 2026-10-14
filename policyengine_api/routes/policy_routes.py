@@ -26,6 +26,7 @@ from policyengine_api.services.policy_mirroring import (
 )
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.user_policy_mirroring import (
+    UserPolicyMirrorCollaborators,
     UserPolicyMirrorUnavailableError,
     mirror_pending_user_policy_events_after_commit,
 )
@@ -142,8 +143,10 @@ def _copy_saved_policy_events_to_v2(
             country_id,
             legacy_user_policy_id,
             through_revision=mirror_revision,
-            event_service=user_policy_service,
-            reform_snapshot_loader=policy_service.get_policy_snapshot,
+            collaborators=UserPolicyMirrorCollaborators(
+                event_service=user_policy_service,
+                reform_snapshot_loader=policy_service.get_policy_snapshot,
+            ),
         )
     except UserPolicyMirrorUnavailableError:
         # The mirroring service has already logged the failure and its category.
