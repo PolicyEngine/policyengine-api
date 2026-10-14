@@ -87,7 +87,7 @@ def test_get_or_create_rolls_back_simulation_when_dual_write_fails(
     orm_session_factory,
     monkeypatch,
 ):
-    def fail_dual_write(*args, **kwargs):
+    def fail_dual_write(*_args, **_kwargs):
         msg = "dual write sync failed"
         raise RuntimeError(msg)
 
@@ -282,7 +282,7 @@ def test_creating_a_simulation_never_locks_a_household_row(
     engine = orm_session_factory.kw["bind"]
 
     @event.listens_for(engine, "before_cursor_execute")
-    def record(conn, cursor, statement, parameters, context, executemany):
+    def record(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001  # SQLAlchemy calls before_cursor_execute listeners with these arguments
         statements.append(" ".join(statement.split()).lower())
 
     try:

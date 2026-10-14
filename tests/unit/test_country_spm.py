@@ -48,22 +48,22 @@ def requested_household(variable="spm_unit_spm_threshold", *, axes=False):
 def _country_raising(monkeypatch, error):
     """Return a country whose every variable calculation raises `error`."""
 
-    def calculate(variable, period):
+    def calculate(_variable, _period):
         # This also represents a requested resource with a nested SPM dependency.
         raise error
 
     simulation = SimpleNamespace(
         calculate=calculate,
-        get_population=lambda entity: SimpleNamespace(
-            get_index=lambda entity_id: 0, count=AXIS_POINTS
+        get_population=lambda _entity: SimpleNamespace(
+            get_index=lambda _entity_id: 0, count=AXIS_POINTS
         ),
     )
     system = SimpleNamespace(
-        get_variable=lambda name: object(), variables=HOUSEHOLD_VARIABLES
+        get_variable=lambda _name: object(), variables=HOUSEHOLD_VARIABLES
     )
     country = PolicyEngineCountry.__new__(PolicyEngineCountry)
     monkeypatch.setattr(
-        country, "_create_simulation", lambda *args, **kwargs: (simulation, system)
+        country, "_create_simulation", lambda *_args, **_kwargs: (simulation, system)
     )
     return country
 
@@ -122,21 +122,21 @@ def test_an_inherited_measurement_still_returns_the_rest_of_the_calculation(
     error = ValueError("Missing or unavailable explicit SPM input")
     error.code = "SPM_GEOGRAPHY_REQUIRED"
 
-    def calculate(variable, period):
+    def calculate(variable, _period):
         if variable == "spm_unit_net_income":
             raise error
         return np.array([1234.0])
 
     simulation = SimpleNamespace(
         calculate=calculate,
-        get_population=lambda entity: SimpleNamespace(get_index=lambda entity_id: 0),
+        get_population=lambda _entity: SimpleNamespace(get_index=lambda _entity_id: 0),
     )
     system = SimpleNamespace(
-        get_variable=lambda name: SimpleNamespace(value_type=float)
+        get_variable=lambda _name: SimpleNamespace(value_type=float)
     )
     country = PolicyEngineCountry.__new__(PolicyEngineCountry)
     monkeypatch.setattr(
-        country, "_create_simulation", lambda *args, **kwargs: (simulation, system)
+        country, "_create_simulation", lambda *_args, **_kwargs: (simulation, system)
     )
 
     household = requested_household("spm_unit_net_income")
@@ -175,11 +175,11 @@ def test_country_passes_resolved_spm_and_uses_the_simulations_private_system(
 ):
     selection = spm.SPMSelection(geography_kind="national").model_dump()
     monkeypatch.setattr(
-        country_module, "normalize_spm_selection", lambda country, chosen: selection
+        country_module, "normalize_spm_selection", lambda _country, _chosen: selection
     )
 
     class Simulation:
-        def __init__(self, *, tax_benefit_system, situation, spm):
+        def __init__(self, *, tax_benefit_system, situation, spm):  # noqa: ARG002  # stands in for a country Simulation, which is constructed by keyword
             self.tax_benefit_system = object()
             self.spm_config = spm
 
@@ -220,23 +220,23 @@ def test_tax_only_result_reads_provenance_without_calculating_spm(monkeypatch):
         "storage_method": "test final cast",
     }
 
-    def calculate(variable, period):
+    def calculate(variable, _period):
         calculations.append(variable)
         assert variable == "spm_unit_federal_tax"
         return np.array([123.0])
 
     simulation = SimpleNamespace(
         calculate=calculate,
-        get_population=lambda entity: SimpleNamespace(get_index=lambda entity_id: 0),
+        get_population=lambda _entity: SimpleNamespace(get_index=lambda _entity_id: 0),
         spm_config=selection,
         spm_provenance=lambda: receipt,
     )
     system = SimpleNamespace(
-        get_variable=lambda name: SimpleNamespace(value_type=float)
+        get_variable=lambda _name: SimpleNamespace(value_type=float)
     )
     country = PolicyEngineCountry.__new__(PolicyEngineCountry)
     monkeypatch.setattr(
-        country, "_create_simulation", lambda *args, **kwargs: (simulation, system)
+        country, "_create_simulation", lambda *_args, **_kwargs: (simulation, system)
     )
     result = country.calculate(requested_household("spm_unit_federal_tax"), None)
     assert calculations == ["spm_unit_federal_tax"]
@@ -662,17 +662,17 @@ def test_uncertifiable_country_receipt_does_not_become_an_internal_failure(monke
     """
     selection = spm.SPMSelection(geography_kind="national").model_dump()
     simulation = SimpleNamespace(
-        calculate=lambda variable, period: np.array([123.0]),
-        get_population=lambda entity: SimpleNamespace(get_index=lambda entity_id: 0),
+        calculate=lambda _variable, _period: np.array([123.0]),
+        get_population=lambda _entity: SimpleNamespace(get_index=lambda _entity_id: 0),
         spm_config={**selection, "threshold_method": "unreviewed"},
         spm_provenance=dict,
     )
     system = SimpleNamespace(
-        get_variable=lambda name: SimpleNamespace(value_type=float)
+        get_variable=lambda _name: SimpleNamespace(value_type=float)
     )
     country = PolicyEngineCountry.__new__(PolicyEngineCountry)
     monkeypatch.setattr(
-        country, "_create_simulation", lambda *args, **kwargs: (simulation, system)
+        country, "_create_simulation", lambda *_args, **_kwargs: (simulation, system)
     )
     with pytest.raises(spm.SPMValidationError) as caught:
         country.calculate(requested_household("spm_unit_federal_tax"), None)

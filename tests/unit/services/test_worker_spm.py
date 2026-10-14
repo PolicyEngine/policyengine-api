@@ -446,7 +446,7 @@ def test_typed_worker_poll_errors_reach_api_validation(code, method):
     client.base_url = "http://test"
     client.client = httpx.Client(
         transport=httpx.MockTransport(
-            lambda request: httpx.Response(
+            lambda _request: httpx.Response(
                 400,
                 json={
                     "status": "failed",

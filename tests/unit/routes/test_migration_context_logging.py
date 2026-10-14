@@ -74,7 +74,7 @@ class _MetadataReader:
 
 
 class _FailingMetadataReader:
-    def get_metadata(self, country_id: str):
+    def get_metadata(self, country_id: str):  # noqa: ARG002  # implements MetadataReader.get_metadata
         msg = "private metadata failure"
         raise RuntimeError(msg)
 

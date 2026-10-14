@@ -285,7 +285,7 @@ def test__calculate_full__drops_deprecated_input_after_add_missing(monkeypatch):
     )
     monkeypatch.setattr(
         "policyengine_api.services.household_calculation_service.add_yearly_variables",
-        lambda household, country_id, countries=None: {
+        lambda household, _country_id, _countries=None: {
             **household,
             "people": {
                 **household["people"],

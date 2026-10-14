@@ -69,7 +69,7 @@ def test_core_services_commit_writes_and_return_generated_ids(
 ):
     monkeypatch.setattr(
         "policyengine_api.services.household_service.hash_object",
-        lambda value: "household-hash",
+        lambda _value: "household-hash",
     )
     service = HouseholdService(orm_session_factory)
 
@@ -92,7 +92,7 @@ def test_core_services_roll_back_failed_writes(
 ):
     monkeypatch.setattr(
         "policyengine_api.services.household_service.hash_object",
-        lambda value: "household-hash",
+        lambda _value: "household-hash",
     )
     session_type = orm_session_factory.class_
     original_flush = session_type.flush

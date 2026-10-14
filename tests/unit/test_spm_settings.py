@@ -26,7 +26,7 @@ def certified_bundle(monkeypatch):
     monkeypatch.setattr(spm, "_current_bundle", lambda: bundle)
     monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: True)
 
-    def entry(year, *, scenario, as_of):
+    def entry(_year, *, scenario, as_of):
         if scenario not in {"baseline", "alternative"}:
             msg = "Unknown forecast scenario"
             raise ValueError(msg)
@@ -35,7 +35,7 @@ def certified_bundle(monkeypatch):
             raise ValueError(msg)
         return {}
 
-    def geography_factor(year, tenure, *, geoid, **kwargs):
+    def geography_factor(_year, _tenure, *, geoid, **_kwargs):
         if geoid != "31080":
             msg = "Forecast geography unavailable"
             raise ValueError(msg)
@@ -44,7 +44,7 @@ def certified_bundle(monkeypatch):
     forecast = SimpleNamespace(
         years=(2022, 2035), entry=entry, geography_factor=geography_factor
     )
-    monkeypatch.setattr(spm, "_selected_forecast", lambda expected: forecast)
+    monkeypatch.setattr(spm, "_selected_forecast", lambda _expected: forecast)
     return bundle
 
 
@@ -145,9 +145,8 @@ def test_measurementless_bundle_shapes_read_as_unconfigured(monkeypatch, measure
     assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
 
 
-def test_default_and_explicit_default_have_identical_resolved_identity(
-    certified_bundle,
-):
+@pytest.mark.usefixtures("certified_bundle")
+def test_default_and_explicit_default_have_identical_resolved_identity():
     defaults = spm.normalize_spm_selection("us", None)
     assert defaults == spm.normalize_spm_selection("us", {})
     assert defaults == spm.normalize_spm_selection(
@@ -172,7 +171,8 @@ def test_default_and_explicit_default_have_identical_resolved_identity(
         {"as_of": "2026-09-09"},
     ],
 )
-def test_selection_changes_resolved_request_identity(certified_bundle, selection):
+@pytest.mark.usefixtures("certified_bundle")
+def test_selection_changes_resolved_request_identity(selection):
     default = spm.normalize_spm_selection("us", None)
     chosen = spm.normalize_spm_selection("us", selection)
     assert chosen != default
@@ -192,9 +192,8 @@ def test_selection_changes_resolved_request_identity(certified_bundle, selection
         {"unreviewed_setting": True},
     ],
 )
-def test_invalid_selected_artifact_settings_have_structured_error(
-    certified_bundle, selection
-):
+@pytest.mark.usefixtures("certified_bundle")
+def test_invalid_selected_artifact_settings_have_structured_error(selection):
     with pytest.raises(spm.SPMValidationError) as caught:
         spm.normalize_spm_selection("us", selection)
     assert caught.value.code == "SPM_SETTINGS_INVALID"
@@ -208,9 +207,8 @@ def test_certification_requires_pinned_artifact_hash(certified_bundle):
     assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
 
 
-def test_mismatched_installed_artifact_cannot_enable_metadata(
-    certified_bundle, monkeypatch
-):
+@pytest.mark.usefixtures("certified_bundle")
+def test_mismatched_installed_artifact_cannot_enable_metadata(monkeypatch):
     def mismatched_artifact(expected):
         assert expected == ARTIFACT_HASH
         msg = "Forecast content SHA256 mismatch"
@@ -223,21 +221,24 @@ def test_mismatched_installed_artifact_cannot_enable_metadata(
     assert spm.spm_metadata("us") == {"available": False}
 
 
-def test_legacy_country_cannot_enable_certified_settings(certified_bundle, monkeypatch):
+@pytest.mark.usefixtures("certified_bundle")
+def test_legacy_country_cannot_enable_certified_settings(monkeypatch):
     monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: False)
     with pytest.raises(spm.SPMValidationError) as caught:
         spm.normalize_spm_selection("us", None)
     assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
 
 
-def test_metadata_exposes_typed_defaults_only_when_available(certified_bundle):
+@pytest.mark.usefixtures("certified_bundle")
+def test_metadata_exposes_typed_defaults_only_when_available():
     result = spm.spm_metadata("us")
     assert result["available"] is True
     assert result["defaults"] == spm.normalize_spm_selection("us", None)
     assert result["settings_schema"] == spm.SPMSelection.model_json_schema()
 
 
-def test_selected_area_must_exist_in_artifact(certified_bundle):
+@pytest.mark.usefixtures("certified_bundle")
+def test_selected_area_must_exist_in_artifact():
     with pytest.raises(spm.SPMValidationError) as caught:
         spm.normalize_spm_selection(
             "us", {"geography_kind": "metro", "geography_id": "unknown-area"}
@@ -245,8 +246,9 @@ def test_selected_area_must_exist_in_artifact(certified_bundle):
     assert caught.value.code == "SPM_GEOGRAPHY_UNAVAILABLE"
 
 
-def test_area_available_in_later_year_can_be_selected(certified_bundle, monkeypatch):
-    def geography_factor(year, tenure, **kwargs):
+@pytest.mark.usefixtures("certified_bundle")
+def test_area_available_in_later_year_can_be_selected(monkeypatch):
+    def geography_factor(year, _tenure, **_kwargs):
         if year < 2025:
             msg = "Area unavailable before the boundary changed"
             raise ValueError(msg)
@@ -254,7 +256,7 @@ def test_area_available_in_later_year_can_be_selected(certified_bundle, monkeypa
 
     forecast = SimpleNamespace(
         years=(2022, 2035),
-        entry=lambda *args, **kwargs: {},
+        entry=lambda *_args, **_kwargs: {},
         geography_factor=geography_factor,
     )
     monkeypatch.setattr(spm, "_selected_forecast", lambda _: forecast)
@@ -323,7 +325,7 @@ def test_variadic_constructor_alone_does_not_claim_support():
             pass
 
     class Canonical(Legacy):
-        spm_config = property(lambda self: {})
+        spm_config = property(lambda _self: {})
 
         def spm_provenance(self):
             return {}
@@ -415,7 +417,8 @@ RESOLVED_SELECTION = {
 }
 
 
-def test_resolved_settings_require_explicit_null_values(certified_bundle):
+@pytest.mark.usefixtures("certified_bundle")
+def test_resolved_settings_require_explicit_null_values():
     """A transported resolved config includes all six selection fields."""
     assert spm.resolved_spm_settings(RESOLVED_SELECTION) == RESOLVED_SELECTION
     omitted = {
@@ -444,9 +447,8 @@ def test_resolved_settings_reject_unreadable_receipt_settings(settings):
     assert spm.resolved_spm_settings(settings) is None
 
 
-def test_receipt_reduces_country_diagnostics_to_one_compact_provenance(
-    certified_bundle,
-):
+@pytest.mark.usefixtures("certified_bundle")
+def test_receipt_reduces_country_diagnostics_to_one_compact_provenance():
     """The public receipt itself contains every resolved configuration field."""
     simulation = SimpleNamespace(
         spm_config=RESOLVED_SELECTION,
@@ -541,9 +543,8 @@ def test_a_bundle_this_build_cannot_read_reports_no_validator_internals(
     assert caught.value.message
 
 
-def test_a_country_package_without_a_simulation_is_typed_not_internal(
-    monkeypatch, certified_bundle
-):
+@pytest.mark.usefixtures("certified_bundle")
+def test_a_country_package_without_a_simulation_is_typed_not_internal(monkeypatch):
     """A partially installed model must not make /readiness-check raise.
 
     `is_ready` recovers from RuntimeError and ValueError only, so an escaping
@@ -577,7 +578,7 @@ def test_a_model_this_build_cannot_load_reads_as_no_canonical_model(
     a 500 rather than the legacy behaviour that bundle actually has.
     """
 
-    def refuse(name):
+    def refuse(name):  # noqa: ARG001  # stands in for importlib.import_module, whose callers may pass name by keyword
         raise failure
 
     monkeypatch.setattr(spm, "_current_bundle", lambda: deepcopy(LEGACY_BUNDLE))

@@ -106,7 +106,7 @@ def mock_policyengine_version():
 def mock_policy_service():
     """Mock the ORM-facing PolicyService with decoded JSON objects."""
     mock_service = MagicMock()
-    mock_service.get_policy_json.side_effect = lambda country_id, policy_id: (
+    mock_service.get_policy_json.side_effect = lambda _country_id, policy_id: (
         json.loads(MOCK_REFORM_POLICY_JSON)
         if policy_id == MOCK_POLICY_ID
         else json.loads(MOCK_BASELINE_POLICY_JSON)
@@ -150,7 +150,7 @@ def mock_simulation_entrypoint():
     mock_api.get_spm_capability.return_value = worker_spm_capability()
     mock_api.run.return_value = mock_execution
     mock_api.resolve_app_name.side_effect = (
-        lambda country_id, version=None, policyengine_version=None: (
+        lambda country_id, version=None, policyengine_version=None: (  # noqa: ARG005  # EconomyService passes policyengine_version by keyword
             MOCK_RESOLVED_APP_NAME,
             version or MOCK_MODEL_VERSION,
         )
@@ -336,7 +336,7 @@ def mock_simulation_entrypoint_legacy():
     mock_api.run.return_value = mock_execution
     mock_api.get_spm_capability.return_value = None
     mock_api.resolve_app_name.side_effect = (
-        lambda country_id, version=None, policyengine_version=None: (
+        lambda country_id, version=None, policyengine_version=None: (  # noqa: ARG005  # EconomyService passes policyengine_version by keyword
             MOCK_RESOLVED_APP_NAME,
             version or MOCK_MODEL_VERSION,
         )

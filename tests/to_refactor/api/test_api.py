@@ -8,7 +8,7 @@ from policyengine_api.api import app
 
 
 @pytest.fixture
-def client(mock_v2_runtime_settings):
+def client(mock_v2_runtime_settings):  # noqa: ARG001  # requested for its side effect; usefixtures marks don't apply to fixtures
     app.config["TESTING"] = True
     with app.test_client() as client:
         yield client

@@ -109,7 +109,7 @@ class _BudgetWindowEconomicImpactResult:
 
 
 class _EconomyService:
-    def get_budget_window_economic_impact(self, **kwargs):
+    def get_budget_window_economic_impact(self, **_kwargs):
         return _BudgetWindowEconomicImpactResult.completed(
             {"kind": "budgetWindow", "windowSize": 1}
         )
@@ -257,7 +257,7 @@ def _json_payload(contract: ContractRequest) -> dict | None:
 def _fake_country():
     return SimpleNamespace(
         metadata={},
-        calculate=lambda household, policy: {
+        calculate=lambda _household, policy: {
             "people": {"you": {"age": {"2026": 40}}},
             "policy": policy,
         },

@@ -39,10 +39,13 @@ def failed_job_harness(request, monkeypatch):
         "contract_version": "canonical-spm-v1",
         "defaults": SELECTION,
     }
-    gateway.resolve_app_name.side_effect = lambda country_id, version=None, **kwargs: (
-        "test-worker",
-        version,
-    )
+
+    def resolve_app_name(
+        _country_id: str, version: str | None = None, **_kwargs: object
+    ) -> tuple[str, str | None]:
+        return "test-worker", version
+
+    gateway.resolve_app_name.side_effect = resolve_app_name
     gateway.get_execution_by_id.return_value = SimpleNamespace(error=WORKER_ERROR)
     gateway.get_execution_status.return_value = "failed"
     cache = ReformImpactCache(

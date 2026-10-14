@@ -27,7 +27,7 @@ def economy_http(request, monkeypatch):
     monkeypatch.setattr(
         spm,
         "_selected_forecast",
-        lambda _: SimpleNamespace(years=[2026], entry=lambda *args, **kwargs: {}),
+        lambda _: SimpleNamespace(years=[2026], entry=lambda *_args, **_kwargs: {}),
     )
     gateway = Mock()
     gateway.get_spm_capability.return_value = {

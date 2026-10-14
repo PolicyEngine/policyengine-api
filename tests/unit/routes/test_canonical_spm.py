@@ -103,7 +103,9 @@ def certified(monkeypatch):
         spm,
         "_selected_forecast",
         lambda _: SimpleNamespace(
-            years=[2022], entry=lambda *a, **k: {}, geography_factor=lambda *a, **k: 1.0
+            years=[2022],
+            entry=lambda *_args, **_kwargs: {},
+            geography_factor=lambda *_args, **_kwargs: 1.0,
         ),
     )
     return bundle
@@ -153,7 +155,8 @@ def harness(monkeypatch, orm_session_factory):
 
 @pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
 @pytest.mark.parametrize("path", ["/us/calculate", "/us/calculate-full", "stored"])
-def test_spm_input_errors_are_structured_400(certified, harness, code, path):
+@pytest.mark.usefixtures("certified")
+def test_spm_input_errors_are_structured_400(harness, code, path):
     client, country = harness
     country.error_code = code
     if path == "stored":
@@ -191,9 +194,8 @@ def test_spm_input_errors_are_structured_400(certified, harness, code, path):
     ],
 )
 @pytest.mark.parametrize("path", ["/us/calculate", "/us/household"])
-def test_invalid_settings_never_reach_country_or_storage(
-    certified, harness, selection, path
-):
+@pytest.mark.usefixtures("certified")
+def test_invalid_settings_never_reach_country_or_storage(harness, selection, path):
     client, country = harness
     response = client.post(
         path, json={"household": HOUSEHOLD, "data": HOUSEHOLD, "spm": selection}
@@ -203,9 +205,8 @@ def test_invalid_settings_never_reach_country_or_storage(
     assert country.calls == []
 
 
-def test_settings_and_provenance_survive_storage_reform_replay_and_replacement(
-    certified, harness
-):
+@pytest.mark.usefixtures("certified")
+def test_settings_and_provenance_survive_storage_reform_replay_and_replacement(harness):
     client, country = harness
     response = client.post(
         "/us/household", json={"data": HOUSEHOLD, "spm": {"geography_kind": "national"}}
@@ -275,7 +276,8 @@ def test_settings_and_provenance_survive_storage_reform_replay_and_replacement(
         {"as_of": "2026-09-09"},
     ],
 )
-def test_http_cache_varies_with_measurement_settings(certified, harness, selection):
+@pytest.mark.usefixtures("certified")
+def test_http_cache_varies_with_measurement_settings(harness, selection):
     client, country = harness
     payload = {"household": HOUSEHOLD, "spm": {"geography_kind": "national"}}
     first = client.post("/us/calculate", json=payload)
@@ -289,7 +291,8 @@ def test_http_cache_varies_with_measurement_settings(certified, harness, selecti
     assert first.json["spm_provenance"] != second.json["spm_provenance"]
 
 
-def test_successful_http_cache_hit_still_starts_observability(certified, harness):
+@pytest.mark.usefixtures("certified")
+def test_successful_http_cache_hit_still_starts_observability(harness):
     client, country = harness
     payload = {"household": HOUSEHOLD}
 
@@ -341,8 +344,9 @@ def test_http_cache_default_artifact_hash_is_part_of_identity(certified, harness
     assert first.json["spm_provenance"] != second.json["spm_provenance"]
 
 
+@pytest.mark.usefixtures("certified")
 def test_linked_household_measurement_is_immutable_for_saved_reports(
-    certified, harness, orm_session_factory
+    harness, orm_session_factory
 ):
     client, _ = harness
     created = client.post(
@@ -372,8 +376,9 @@ def test_linked_household_measurement_is_immutable_for_saved_reports(
     assert saved["household_json"] == HOUSEHOLD
 
 
+@pytest.mark.usefixtures("certified")
 def test_certification_protects_linked_households_without_saved_spm(
-    certified, harness, orm_session_factory
+    harness, orm_session_factory
 ):
     client, _ = harness
     historical_output = {"result": {"household_net_income": 12345}}
@@ -443,8 +448,9 @@ def test_certification_protects_linked_households_without_saved_spm(
 
 
 @pytest.mark.parametrize("write_source", ["cloud_sql", "dual_write"])
+@pytest.mark.usefixtures("certified")
 def test_household_creation_retains_resolved_spm_before_selected_mirror(
-    certified, harness, orm_session_factory, monkeypatch, write_source
+    harness, orm_session_factory, monkeypatch, write_source
 ):
     from unittest.mock import Mock
 
@@ -495,8 +501,9 @@ def test_household_creation_retains_resolved_spm_before_selected_mirror(
 
 
 @pytest.mark.parametrize("write_source", ["cloud_sql", "dual_write"])
+@pytest.mark.usefixtures("certified")
 def test_invalid_spm_stops_before_database_and_mirror(
-    certified, harness, monkeypatch, write_source
+    harness, monkeypatch, write_source
 ):
     from unittest.mock import Mock
 
@@ -520,8 +527,9 @@ def test_invalid_spm_stops_before_database_and_mirror(
 
 
 @pytest.mark.parametrize("write_source", ["cloud_sql", "dual_write"])
+@pytest.mark.usefixtures("certified")
 def test_valid_spm_database_timeout_keeps_stage11_safe_persistence_response(
-    certified, harness, monkeypatch, write_source
+    harness, monkeypatch, write_source
 ):
     from unittest.mock import Mock
 
@@ -549,7 +557,8 @@ def test_valid_spm_database_timeout_keeps_stage11_safe_persistence_response(
     copy_event.assert_not_called()
 
 
-def test_stored_replay_rejects_a_receipt_that_omits_null_settings(certified, harness):
+@pytest.mark.usefixtures("certified")
+def test_stored_replay_rejects_a_receipt_that_omits_null_settings(harness):
     """The sole receipt must state every field in its resolved configuration."""
     client, country = harness
     calculate = country.calculate
@@ -641,8 +650,9 @@ def test_canonical_model_without_certification_refuses_every_us_surface(
 
 
 @pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
+@pytest.mark.usefixtures("certified")
 def test_household_saved_without_a_selection_replays_with_null_spm_variables(
-    certified, harness, orm_session_factory, code
+    harness, orm_session_factory, code
 ):
     """A household that never chose a measurement keeps replaying under any policy.
 
@@ -675,9 +685,8 @@ def test_household_saved_without_a_selection_replays_with_null_spm_variables(
 
 
 @pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
-def test_household_saved_with_a_selection_still_fails_closed_on_replay(
-    certified, harness, code
-):
+@pytest.mark.usefixtures("certified")
+def test_household_saved_with_a_selection_still_fails_closed_on_replay(harness, code):
     client, country = harness
     created = client.post(
         "/us/household", json={"data": HOUSEHOLD, "spm": {"geography_kind": "national"}}
@@ -692,8 +701,9 @@ def test_household_saved_with_a_selection_still_fails_closed_on_replay(
 
 @pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
 @pytest.mark.parametrize("path", ["/us/calculate", "/us/calculate-full"])
+@pytest.mark.usefixtures("certified")
 def test_calculation_without_a_chosen_measurement_returns_null_spm_variables(
-    certified, harness, code, path
+    harness, code, path
 ):
     """An omitted selection inherits defaults but does not assert a choice."""
     client, country = harness
@@ -710,8 +720,9 @@ def test_calculation_without_a_chosen_measurement_returns_null_spm_variables(
     assert country.calls[0][2]["spm"]["geography_kind"] == "county"
 
 
+@pytest.mark.usefixtures("certified")
 def test_certification_does_not_change_what_an_unselected_household_stores(
-    certified, harness, orm_session_factory
+    harness, orm_session_factory
 ):
     """Identical inputs keep their hash, stored JSON and GET shape.
 
@@ -732,8 +743,9 @@ def test_certification_does_not_change_what_an_unselected_household_stores(
 
 
 @pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
+@pytest.mark.usefixtures("certified")
 def test_a_household_created_without_a_selection_replays_rather_than_failing(
-    certified, harness, code
+    harness, code
 ):
     """The write-time rule and the replay-time rule have to agree.
 
@@ -764,8 +776,9 @@ def test_a_household_created_without_a_selection_replays_rather_than_failing(
         ("/us/household", {"data": HOUSEHOLD, "spm": None}),
     ],
 )
+@pytest.mark.usefixtures("certified")
 def test_an_explicit_null_selection_is_rejected_rather_than_read_as_omission(
-    certified, harness, path, body
+    harness, path, body
 ):
     """v2 documents and simulation records refuse a null; v1 must not differ."""
     client, country = harness
@@ -811,7 +824,8 @@ def test_a_saved_selection_this_deployment_cannot_serve_is_not_a_caller_error(
     assert requested.json["errors"][0]["code"] == "SPM_SETTINGS_INVALID"
 
 
-def test_a_rejected_selection_never_quotes_validator_internals(certified, harness):
+@pytest.mark.usefixtures("certified")
+def test_a_rejected_selection_never_quotes_validator_internals(harness):
     """The message a client shows its users is ours, not pydantic's."""
     client, _ = harness
     response = client.post(
@@ -838,8 +852,9 @@ def test_a_rejected_selection_never_quotes_validator_internals(certified, harnes
         ),
     ],
 )
+@pytest.mark.usefixtures("certified")
 def test_a_country_without_spm_reports_the_field_itself_as_unsupported(
-    certified, harness, path, body
+    harness, path, body
 ):
     """A null there is not a shape to correct; the field does not exist for UK.
 

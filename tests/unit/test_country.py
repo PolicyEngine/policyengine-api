@@ -43,22 +43,22 @@ class TestHouseholdCalculation:
         class SimulationWithoutTracing:
             __slots__ = ()
 
-            def calculate(self, variable_name, period):
+            def calculate(self, variable_name, period):  # noqa: ARG002  # implements the Simulation methods PolicyEngineCountry calls
                 return np.array([40])
 
-            def get_population(self, entity_plural):
-                return SimpleNamespace(get_index=lambda entity_id: 0)
+            def get_population(self, entity_plural):  # noqa: ARG002  # implements the Simulation methods PolicyEngineCountry calls
+                return SimpleNamespace(get_index=lambda _entity_id: 0)
 
         variable = SimpleNamespace(value_type=int)
         system = SimpleNamespace(
             variables={"age": variable},
-            get_variable=lambda variable_name: variable,
+            get_variable=lambda _variable_name: variable,
         )
         country = PolicyEngineCountry.__new__(PolicyEngineCountry)
         monkeypatch.setattr(
             country,
             "_create_simulation",
-            lambda household, reform, **kwargs: (SimulationWithoutTracing(), system),
+            lambda _household, _reform, **_kwargs: (SimulationWithoutTracing(), system),
         )
 
         result = country.calculate(
@@ -151,23 +151,23 @@ class TestAxisResults:
         class BrokenSimulation:
             __slots__ = ()
 
-            def calculate(self, variable_name, period):
+            def calculate(self, variable_name, period):  # noqa: ARG002  # implements the Simulation methods PolicyEngineCountry calls
                 msg = "calculation failed"
                 raise RuntimeError(msg)
 
-            def get_population(self, entity_plural):
+            def get_population(self, entity_plural):  # noqa: ARG002  # implements the Simulation methods PolicyEngineCountry calls
                 return SimpleNamespace(count=5)
 
         variable = SimpleNamespace(value_type=float)
         system = SimpleNamespace(
             variables={"employment_income": variable},
-            get_variable=lambda variable_name: variable,
+            get_variable=lambda _variable_name: variable,
         )
         country = PolicyEngineCountry.__new__(PolicyEngineCountry)
         monkeypatch.setattr(
             country,
             "_create_simulation",
-            lambda household, reform, **kwargs: (BrokenSimulation(), system),
+            lambda _household, _reform, **_kwargs: (BrokenSimulation(), system),
         )
         household = {
             "people": {"you": {"employment_income": {"2025": None}}},

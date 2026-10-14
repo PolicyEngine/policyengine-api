@@ -63,7 +63,7 @@ def fake_country_metadata():
 
 def fake_countries():
     return SimpleNamespace(
-        get=lambda country_id: SimpleNamespace(metadata=fake_country_metadata())
+        get=lambda _country_id: SimpleNamespace(metadata=fake_country_metadata())
     )
 
 
