@@ -1,6 +1,6 @@
 import json
 from dataclasses import replace
-from typing import Literal
+from typing import Literal, NamedTuple
 from unittest.mock import MagicMock, call, patch
 
 import httpx
@@ -55,6 +55,7 @@ from tests.fixtures.services.economy_service import (
     MOCK_RESOLVED_DATASET,
     MOCK_SUBMISSION_CLAIM_ID,
     MOCK_TIME_PERIOD,
+    MockBatchProgress,
     create_mock_budget_window_batch_execution,
     create_mock_reform_impact,
 )
@@ -81,6 +82,15 @@ def setup_options_for(country_id: str, region: str) -> EconomicImpactSetupOption
         api_version=MOCK_API_VERSION,
         target="general",
     )
+
+
+class EconomyServiceHarness(NamedTuple):
+    """The service under test, its call parameters and the mocks it talks to."""
+
+    service: EconomyService
+    params: dict
+    reform_impacts_service: MagicMock
+    simulation_entrypoint: MagicMock
 
 
 def hash_prefix_lookup(reform_impacts_service: MagicMock) -> MagicMock:
@@ -192,6 +202,21 @@ class TestEconomyService:
                 "time_period": MOCK_TIME_PERIOD,
             }
 
+        @pytest.fixture
+        def economy_service_harness(
+            self,
+            economy_service,
+            base_params,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+        ):
+            return EconomyServiceHarness(
+                service=economy_service,
+                params=base_params,
+                reform_impacts_service=mock_reform_impacts_service,
+                simulation_entrypoint=mock_simulation_entrypoint,
+            )
+
         @pytest.mark.usefixtures(
             "mock_country_package_versions",
             "mock_policyengine_version",
@@ -282,26 +307,24 @@ class TestEconomyService:
             self,
             cached_message,
             expected_message,
-            economy_service,
-            base_params,
-            mock_reform_impacts_service,
-            mock_simulation_entrypoint,
+            economy_service_harness,
         ):
+            harness = economy_service_harness
             failed_impact = create_mock_reform_impact(
                 status="error",
                 message=cached_message,
             )
-            hash_prefix_lookup(mock_reform_impacts_service).return_value = [
+            hash_prefix_lookup(harness.reform_impacts_service).return_value = [
                 failed_impact
             ]
 
-            result = economy_service.get_economic_impact(**base_params)
+            result = harness.service.get_economic_impact(**harness.params)
 
             assert result.status == ImpactStatus.ERROR
             assert result.data is None
             assert result.message == expected_message
-            mock_simulation_entrypoint.run.assert_not_called()
-            mock_simulation_entrypoint.get_execution_by_id.assert_not_called()
+            harness.simulation_entrypoint.run.assert_not_called()
+            harness.simulation_entrypoint.get_execution_by_id.assert_not_called()
 
         @pytest.mark.usefixtures(
             "mock_country_package_versions",
@@ -1392,10 +1415,12 @@ class TestEconomyService:
                 create_mock_budget_window_batch_execution(
                     batch_job_id="fc-budget-123",
                     status="running",
-                    progress=33,
-                    completed_years=["2026"],
-                    running_years=["2027"],
-                    queued_years=["2028"],
+                    batch_progress=MockBatchProgress(
+                        progress=33,
+                        completed_years=["2026"],
+                        running_years=["2027"],
+                        queued_years=["2028"],
+                    ),
                 )
             )
 
@@ -1429,8 +1454,9 @@ class TestEconomyService:
                 create_mock_budget_window_batch_execution(
                     batch_job_id="fc-budget-123",
                     status="complete",
-                    progress=100,
-                    completed_years=["2026", "2027", "2028"],
+                    batch_progress=MockBatchProgress(
+                        progress=100, completed_years=["2026", "2027", "2028"]
+                    ),
                     result=completed_result,
                 )
             )
@@ -1464,10 +1490,12 @@ class TestEconomyService:
                 create_mock_budget_window_batch_execution(
                     batch_job_id="fc-budget-123",
                     status="complete",
-                    progress=100,
-                    completed_years=["2026", "2027"],
-                    running_years=[],
-                    queued_years=["2028"],
+                    batch_progress=MockBatchProgress(
+                        progress=100,
+                        completed_years=["2026", "2027"],
+                        running_years=[],
+                        queued_years=["2028"],
+                    ),
                     result=malformed_result,
                 )
             )
@@ -1501,8 +1529,9 @@ class TestEconomyService:
                 create_mock_budget_window_batch_execution(
                     batch_job_id="fc-budget-123",
                     status="complete",
-                    progress=100,
-                    completed_years=["2026", "2027", "2028"],
+                    batch_progress=MockBatchProgress(
+                        progress=100, completed_years=["2026", "2027", "2028"]
+                    ),
                     result=completed_result,
                 )
             )
@@ -1533,10 +1562,12 @@ class TestEconomyService:
                 create_mock_budget_window_batch_execution(
                     batch_job_id="fc-budget-123",
                     status="failed",
-                    progress=33,
-                    completed_years=["2026"],
-                    queued_years=["2028"],
-                    failed_years=["2027"],
+                    batch_progress=MockBatchProgress(
+                        progress=33,
+                        completed_years=["2026"],
+                        queued_years=["2028"],
+                        failed_years=["2027"],
+                    ),
                     error="Budget window failed for 2027",
                 )
             )
