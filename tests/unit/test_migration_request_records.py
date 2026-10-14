@@ -14,6 +14,7 @@ from policyengine_api.migration_flags import (
     infer_route_group,
 )
 from policyengine_api.migration_logging import (
+    ServedRequest,
     log_migration_request,
     register_migration_request_logging,
 )
@@ -108,13 +109,15 @@ def test_request_record_has_a_fixed_shape_and_severity(
 ) -> None:
     with patch("policyengine_api.migration_logging.logger") as logger:
         log_migration_request(
-            request_id="request-1",
-            method="GET",
-            path="/us/policy/3",
-            status_code=status_code,
-            started_at=None,
-            country_id="us",
-            route_impl=RouteImplementation.FLASK_FALLBACK,
+            ServedRequest(
+                request_id="request-1",
+                method="GET",
+                path="/us/policy/3",
+                status_code=status_code,
+                started_at=None,
+                country_id="us",
+                route_impl=RouteImplementation.FLASK_FALLBACK,
+            )
         )
 
     assert logger.log_struct.call_args.kwargs == {"severity": severity}
@@ -156,11 +159,13 @@ def test_request_record_reports_latency_from_its_start_time() -> None:
         patch("policyengine_api.migration_logging.time.time", return_value=12.5),
     ):
         log_migration_request(
-            request_id=None,
-            method="POST",
-            path="/v2/user-policies",
-            status_code=201,
-            started_at=10.0,
+            ServedRequest(
+                request_id=None,
+                method="POST",
+                path="/v2/user-policies",
+                status_code=201,
+                started_at=10.0,
+            )
         )
 
     record = logger.log_struct.call_args.args[0]
