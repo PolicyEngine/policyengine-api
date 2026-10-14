@@ -40,6 +40,10 @@ id = "observability"
 title = "Observability"
 
 [[category]]
+id = "ci"
+title = "CI workflows and scripts"
+
+[[category]]
 id = "process"
 title = "Process and repository hygiene"
 
@@ -57,6 +61,18 @@ extra_guard_tests = [
   "tests/unit/v2/test_model_persistence.py::test_v2_models_do_not_create_a_parallel_sqlalchemy_orm_layer",
   "tests/unit/v2/test_report_v1_runtime_selection.py::test_existing_report_route_and_service_import_only_v1_persistence",
 ]
+
+[agents]
+instructions = "AGENTS.md"
+adapters = ["CLAUDE.md", ".github/copilot-instructions.md"]
+
+[ci_scripts]
+workflows = ".github/workflows/*.yml"
+scripts_dir = ".github/scripts"
+test_globs = ["tests/**/test_*.py"]
+multiline_baseline = "rules/baselines/ci-multiline-run.txt"
+untested_baseline = "rules/baselines/ci-untested-scripts.txt"
+shellcheck_baseline = "rules/baselines/ci-shellcheck.txt"
 
 # --- API v2 layer boundaries ----------------------------------------------
 
@@ -735,6 +751,89 @@ workflow = ".github/workflows/pr.yml"
 job = "test_env_vars"
 invocation = "tests/env_variables"
 
+# --- CI workflows and scripts ----------------------------------------------
+
+[[rule]]
+id = "api.ci.multiline-run-is-script"
+category = "ci"
+statement = "A GitHub Actions run: block holds one line of code and no chained commands (&&, ||, ;); anything more lives in a tested script under .github/scripts/, called from a single-line step."
+rationale = "docs/engineering/skills/ci-workflows.md#one-line-of-code-per-run-block"
+scope = [".github/workflows/*.yml"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "ci-scripts"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.baseline]
+file = "rules/baselines/ci-multiline-run.txt"
+count = 10
+[rule.proof]
+bad_fixture = "scripts/rules/tests/fixtures/ci_scripts/multiline_bad"
+good_fixture = "scripts/rules/tests/fixtures/ci_scripts/multiline_good"
+test = "scripts/rules/tests/test_ci_scripts.py::TestCiScriptsProof::test_rule_proof_multiline_run"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
+id = "api.ci.workflow-scripts-tested"
+category = "ci"
+statement = "Every shell script a workflow calls is run by at least one test."
+rationale = "docs/engineering/skills/ci-workflows.md#testing-a-workflow-script"
+scope = [".github/scripts/*.sh"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "ci-scripts"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.baseline]
+file = "rules/baselines/ci-untested-scripts.txt"
+count = 1
+[rule.proof]
+bad_fixture = "scripts/rules/tests/fixtures/ci_scripts/untested_bad"
+good_fixture = "scripts/rules/tests/fixtures/ci_scripts/untested_good"
+test = "scripts/rules/tests/test_ci_scripts.py::TestCiScriptsProof::test_rule_proof_untested_script"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
+id = "api.ci.shell-scripts-pass-shellcheck"
+category = "ci"
+statement = "Every shell script under .github/scripts/ passes shellcheck."
+rationale = "docs/engineering/skills/ci-workflows.md#writing-a-workflow-script"
+scope = [".github/scripts/*.sh"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "ci-scripts"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.baseline]
+file = "rules/baselines/ci-shellcheck.txt"
+count = 1
+[rule.proof]
+bad_fixture = "scripts/rules/tests/fixtures/ci_scripts/shellcheck/bad_script.sh"
+good_fixture = "scripts/rules/tests/fixtures/ci_scripts/shellcheck/good_script.sh"
+test = "scripts/rules/tests/test_ci_scripts.py::TestCiScriptsProof::test_rule_proof_shellcheck"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
 # --- Process and repository hygiene ----------------------------------------
 
 [[rule]]
@@ -753,6 +852,42 @@ name = "rules-registry"
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
 invocation = "run_quality_guards.py"
+
+[[rule]]
+id = "api.agents.adapters-point-to-agents-md"
+category = "process"
+statement = "CLAUDE.md and .github/copilot-instructions.md only point to AGENTS.md; skills and rules are listed in AGENTS.md alone."
+rationale = "AGENTS.md"
+scope = ["CLAUDE.md", ".github/copilot-instructions.md"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "rules-registry"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "scripts/rules/tests/fixtures/adapters/bad_CLAUDE.md"
+good_fixture = "scripts/rules/tests/fixtures/adapters/good_CLAUDE.md"
+test = "scripts/rules/tests/test_adapters.py::TestAdaptersProof::test_rule_proof_adapters"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
+id = "api.process.pr-tracking-issue"
+category = "process"
+statement = "Every PR has a tracking issue in this repository, and the first line of its description is Fixes #ISSUE_NUMBER."
+rationale = "docs/engineering/skills/github-prs.md#tracking-issues"
+scope = [".github/pull_request_template.md"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
 
 [[rule]]
 id = "api.process.changelog-fragment"

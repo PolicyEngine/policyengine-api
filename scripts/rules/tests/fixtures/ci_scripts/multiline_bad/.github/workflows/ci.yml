@@ -1,0 +1,16 @@
+name: CI
+on: pull_request
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build
+        run: |
+          make deps
+          make build
+      - name: Folded test command
+        run: >-
+          python -m pytest tests/unit
+          tests/contract -q
+      - name: Chained
+        run: make deps && make build

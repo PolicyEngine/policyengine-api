@@ -6,8 +6,9 @@ dependencies, so this reads only the subset these repositories use: block-style
 block scalars), and ``strategy.matrix`` lists. Anything outside that subset is
 reported as unsupported rather than guessed at.
 
-It answers two questions: does job X exist, and does its run text (or reusable
-workflow reference) contain a given invocation string?
+It answers three questions: does job X exist, does its run text (or reusable
+workflow reference) contain a given invocation string, and does each step's
+``run:`` block hold more than one line of code (or chain several commands)?
 """
 
 from __future__ import annotations
@@ -21,6 +22,20 @@ _UNSUPPORTED = re.compile(r"(<<:|:\s*[&*][A-Za-z0-9_-]+\s*$)")
 
 
 @dataclass(frozen=True)
+class RunBlock:
+    """One step's ``run:`` script."""
+
+    step: str
+    code_lines: int
+    chained: bool
+    text: str
+
+    @property
+    def single_line(self) -> bool:
+        return self.code_lines <= 1 and not self.chained
+
+
+@dataclass(frozen=True)
 class JobBlock:
     id: str
     name: str
@@ -29,6 +44,7 @@ class JobBlock:
     step_names: tuple[str, ...]
     step_uses: tuple[str, ...] = ()
     matrix: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    run_blocks: tuple[RunBlock, ...] = ()
 
     def invokes(self, invocation: str) -> bool:
         """Whether the job's commands or actions mention ``invocation``."""
@@ -63,6 +79,49 @@ def _indent(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
 
 
+def code_lines(text: str) -> int:
+    """Lines of code in a run: script: every non-empty, non-comment line.
+
+    The lines of a folded (``>``) block and backslash-continued lines each
+    count, because each is a line written in the workflow.
+    """
+    return sum(1 for line in text.splitlines() if line.strip())
+
+
+_CHAIN_OPERATORS = ("&&", "||", ";")
+
+
+def chains_commands(text: str) -> bool:
+    """Whether a line chains commands with ``&&``, ``||`` or ``;``.
+
+    Operators inside quotes or GitHub ``${{ }}`` expressions don't count. A
+    single pipeline (``a | b``) is one command and is allowed.
+    """
+    for line in text.splitlines():
+        index, quote = 0, ""
+        while index < len(line):
+            char = line[index]
+            if quote:
+                if char == "\\" and quote == '"':
+                    index += 2
+                    continue
+                if char == quote:
+                    quote = ""
+            elif line.startswith("${{", index):
+                end = line.find("}}", index)
+                index = len(line) if end == -1 else end + 2
+                continue
+            elif char == "\\":
+                index += 2
+                continue
+            elif char in "'\"":
+                quote = char
+            elif any(line.startswith(op, index) for op in _CHAIN_OPERATORS):
+                return True
+            index += 1
+    return False
+
+
 def _inline_list(value: str) -> tuple[str, ...]:
     inner = value.strip()[1:-1]
     return tuple(_unquote(item) for item in inner.split(",") if item.strip())
@@ -76,11 +135,22 @@ def _parse_job(job_id: str, lines: list[str], job_indent: int) -> JobBlock:
     steps: list[str] = []
     matrix: dict[str, tuple[str, ...]] = {}
     body_indent = None
+    # Step tracking, so each run: block can be attributed to its step.
+    item_indent: int | None = None
+    in_steps = False
+    step_index = 0
+    step_key_column = -1
+    step_labels: dict[int, str] = {}
+    blocks: list[tuple[int, str, str]] = []
     index = 0
     while index < len(lines):
         line = lines[index]
         match = _KEY.match(line)
         if not match:
+            item = _LIST_ITEM.match(line)
+            if in_steps and item and item_indent is not None:
+                if len(item.group(1)) == item_indent:
+                    step_index += 1
             index += 1
             continue
         leading, dash, key, value = match.groups()
@@ -88,6 +158,17 @@ def _parse_job(job_id: str, lines: list[str], job_indent: int) -> JobBlock:
         if body_indent is None and not dash:
             body_indent = key_column
         top_level = not dash and key_column == body_indent
+        if top_level:
+            in_steps = key == "steps" and not value
+            item_indent = None
+        elif in_steps and dash:
+            if item_indent is None:
+                item_indent = len(leading)
+            if len(leading) == item_indent:
+                step_index += 1
+                step_key_column = key_column
+        if in_steps and key == "name" and key_column == step_key_column:
+            step_labels[step_index] = _unquote(value)
 
         if key == "name" and top_level:
             name = _unquote(value)
@@ -107,8 +188,10 @@ def _parse_job(job_id: str, lines: list[str], job_indent: int) -> JobBlock:
                     block.append(lines[index].strip())
                     index += 1
                 runs.append("\n".join(block))
+                blocks.append((step_index, "\n".join(block), value.strip()[:1]))
                 continue
             runs.append(_unquote(value))
+            blocks.append((step_index, _unquote(value), "|"))
         elif key == "matrix" and not value:
             index += 1
             while index < len(lines) and (
@@ -146,6 +229,15 @@ def _parse_job(job_id: str, lines: list[str], job_indent: int) -> JobBlock:
         step_uses=tuple(step_uses),
         step_names=tuple(steps),
         matrix=matrix,
+        run_blocks=tuple(
+            RunBlock(
+                step=step_labels.get(number) or f"step {number}",
+                code_lines=code_lines(text),
+                chained=chains_commands(text),
+                text=text,
+            )
+            for number, text, _style in blocks
+        ),
     )
 
 

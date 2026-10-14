@@ -73,6 +73,27 @@ class Discovery:
 
 
 @dataclass(frozen=True)
+class Agents:
+    """Agent instruction files: one source, plus thin per-tool adapters."""
+
+    instructions: str
+    adapters: tuple[str, ...]
+    max_adapter_lines: int = 20
+
+
+@dataclass(frozen=True)
+class CiScripts:
+    """Where workflow scripts live, where their tests are, and their baselines."""
+
+    workflows: str
+    scripts_dir: str
+    test_globs: tuple[str, ...]
+    multiline_baseline: str
+    untested_baseline: str
+    shellcheck_baseline: str
+
+
+@dataclass(frozen=True)
 class Enforcer:
     kind: Kind
     fields: Mapping[str, Any] = field(default_factory=dict)
@@ -183,6 +204,8 @@ class Registry:
     categories: tuple[Category, ...]
     discovery: Discovery
     rules: tuple[Rule, ...]
+    agents: Agents | None = None
+    ci_scripts: CiScripts | None = None
 
     def rule(self, rule_id: str) -> Rule | None:
         for rule in self.rules:

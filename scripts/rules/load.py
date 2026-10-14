@@ -12,9 +12,11 @@ from pathlib import Path
 from typing import Any
 
 from scripts.rules.model import (
+    Agents,
     Baseline,
     Category,
     CiRef,
+    CiScripts,
     Discovery,
     Enforcer,
     Ignored,
@@ -30,7 +32,24 @@ from scripts.rules.model import (
 
 REGISTRY_PATH = Path("rules/registry.toml")
 
-_TOP_KEYS = {"schema_version", "repo", "category", "discovery", "rule"}
+_TOP_KEYS = {
+    "schema_version",
+    "repo",
+    "category",
+    "discovery",
+    "rule",
+    "agents",
+    "ci_scripts",
+}
+_AGENTS_KEYS = {"instructions", "adapters", "max_adapter_lines"}
+_CI_SCRIPTS_KEYS = {
+    "workflows",
+    "scripts_dir",
+    "test_globs",
+    "multiline_baseline",
+    "untested_baseline",
+    "shellcheck_baseline",
+}
 _RULE_KEYS = {
     "id",
     "category",
@@ -167,6 +186,42 @@ def _discovery(c: _Collector, raw: Any) -> Discovery:
         ),
         ignore_jobs=_ignored(c, raw.get("ignore_jobs"), "ignore_jobs", "job"),
         ignore_tests=_ignored(c, raw.get("ignore_tests"), "ignore_tests", "node"),
+    )
+
+
+def _agents(c: _Collector, raw: Any) -> Agents | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        c.add(None, "agents must be a table", "write [agents]")
+        return None
+    c.unknown_keys(None, raw, _AGENTS_KEYS, "agents")
+    max_lines = raw.get("max_adapter_lines", 20)
+    if not isinstance(max_lines, int) or max_lines < 1:
+        c.add(None, "agents.max_adapter_lines must be a positive integer", "fix it")
+        max_lines = 20
+    return Agents(
+        instructions=c.string(None, raw, "instructions", "agents"),
+        adapters=c.string_list(None, raw, "adapters", "agents"),
+        max_adapter_lines=max_lines,
+    )
+
+
+def _ci_scripts(c: _Collector, raw: Any) -> CiScripts | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        c.add(None, "ci_scripts must be a table", "write [ci_scripts]")
+        return None
+    c.unknown_keys(None, raw, _CI_SCRIPTS_KEYS, "ci_scripts")
+    where = "ci_scripts"
+    return CiScripts(
+        workflows=c.string(None, raw, "workflows", where),
+        scripts_dir=c.string(None, raw, "scripts_dir", where),
+        test_globs=c.string_list(None, raw, "test_globs", where),
+        multiline_baseline=c.string(None, raw, "multiline_baseline", where),
+        untested_baseline=c.string(None, raw, "untested_baseline", where),
+        shellcheck_baseline=c.string(None, raw, "shellcheck_baseline", where),
     )
 
 
@@ -322,6 +377,8 @@ def parse(raw: dict[str, Any]) -> tuple[Registry | None, list[Violation]]:
         categories=tuple(categories),
         discovery=_discovery(c, raw.get("discovery")),
         rules=tuple(rule for rule in rules if rule is not None),
+        agents=_agents(c, raw.get("agents")),
+        ci_scripts=_ci_scripts(c, raw.get("ci_scripts")),
     )
     return registry, c.violations
 

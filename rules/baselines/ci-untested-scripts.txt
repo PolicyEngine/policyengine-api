@@ -1,0 +1,2 @@
+# Tolerated existing violations. This list may only shrink.
+.github/scripts/cleanup_cloud_run_images.sh

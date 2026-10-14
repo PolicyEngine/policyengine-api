@@ -32,6 +32,9 @@ names, logging, or observability failure handling, read
 When modifying the `Makefile`, read
 `docs/engineering/skills/repository-maintenance.md`.
 
+When adding or changing a GitHub Actions workflow step or a script under
+`.github/scripts/`, read `docs/engineering/skills/ci-workflows.md`.
+
 When adding, changing, or removing a rule, a guard test, a checker
 configuration, or a CI job that enforces one, read
 `docs/engineering/skills/rules-registry.md`.
@@ -49,6 +52,12 @@ Before creating or sharing a migration PR, run the focused migration guards:
 python scripts/run_quality_guards.py
 python scripts/export_migration_contracts.py
 ```
+
+## Safety Boundaries
+
+Do not claim a route, database table, compute path, or deployment surface has
+migrated unless the relevant contract tests, migration flags, and generated
+migration docs identify that state.
 
 ## Rules
 
@@ -121,13 +130,21 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 - `api.observability.id-is-diagnostic-only`: observability_id is used only to query diagnostic records, never for idempotency, cache ownership, authorization, database identity, routing or calculation behavior. (doc-only, not checked: follow it yourself)
 - `api.observability.registered-stages-only`: Span names come from the stage plans in policyengine_api.observability.stages; route and service code never adds span-name string literals. (doc-only, not checked: follow it yourself)
 
+### CI workflows and scripts
+
+- `api.ci.multiline-run-is-script`: A GitHub Actions run: block holds one line of code and no chained commands (&&, ||, ;); anything more lives in a tested script under .github/scripts/, called from a single-line step. (blocking: quality guard `ci-scripts`)
+- `api.ci.shell-scripts-pass-shellcheck`: Every shell script under .github/scripts/ passes shellcheck. (blocking: quality guard `ci-scripts`)
+- `api.ci.workflow-scripts-tested`: Every shell script a workflow calls is run by at least one test. (blocking: quality guard `ci-scripts`)
+
 ### Process and repository hygiene
 
+- `api.agents.adapters-point-to-agents-md`: CLAUDE.md and .github/copilot-instructions.md only point to AGENTS.md; skills and rules are listed in AGENTS.md alone. (blocking: quality guard `rules-registry`)
 - `api.process.agents-never-bypass`: Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human. (doc-only, not checked: follow it yourself)
 - `api.process.changelog-fragment`: Every PR adds a changelog.d fragment. (blocking: CI job `check-changelog`)
 - `api.process.cloud-run-image-builds`: The Cloud Run container image builds. (blocking: CI job `test_cloud_run_container_builds`)
 - `api.process.docker-image-builds`: The API Docker image builds. (blocking: CI job `test_container_builds`)
 - `api.process.makefile-phony`: Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed. (doc-only, not checked: follow it yourself)
+- `api.process.pr-tracking-issue`: Every PR has a tracking issue in this repository, and the first line of its description is Fixes #ISSUE_NUMBER. (doc-only, not checked: follow it yourself)
 - `api.process.rule-machinery-code-owned`: Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author. (doc-only, not checked: follow it yourself)
 - `api.process.rules-registry`: Every rule is registered in rules/registry.toml, is enforced where it claims to be, and its rendered views are current. (blocking: quality guard `rules-registry`)
 - `api.process.stacked-prs-full-ci-at-bottom`: In a stack of pull requests, only the lowest unmerged one runs the full PR workflow. Every pr.yml job is needed by the CI complete gate, which fails on the pull requests above it and otherwise passes only when every job passed, so a stack merges bottom-up and nothing merges untested. (blocking: pytest `tests/unit/test_ci_complete_gate.py`)
