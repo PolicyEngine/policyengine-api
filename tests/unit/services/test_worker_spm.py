@@ -284,7 +284,7 @@ def test_uncertified_or_mismatching_worker_is_rejected(capability):
 
 
 @pytest.mark.parametrize(
-    "method,path",
+    ("method", "path"),
     [
         ("run", "/simulate/economy/comparison"),
         ("run_budget_window_batch", "/simulate/economy/budget-window"),

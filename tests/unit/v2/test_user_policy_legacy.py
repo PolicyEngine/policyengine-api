@@ -85,9 +85,13 @@ def test_every_mutable_or_v1_only_field_changes_the_fingerprint(
 
 
 def test_snapshot_rejects_unknown_or_unbounded_fields() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match=r"unexpected\n  Extra inputs are not permitted"
+    ):
         _snapshot(unexpected="value")
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match=r"user_id\n  String should have at most 255 characters"
+    ):
         _snapshot(user_id="x" * 256)
 
 

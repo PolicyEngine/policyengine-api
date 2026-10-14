@@ -80,7 +80,9 @@ def test_country_never_swallows_spm_input_errors_for_a_chosen_measurement(
     monkeypatch, code, axes
 ):
     country, error = _failing_country(monkeypatch, code)
-    with pytest.raises(ValueError) as caught:
+    with pytest.raises(
+        ValueError, match="Missing or unavailable explicit SPM input"
+    ) as caught:
         country.calculate(
             requested_household("spm_unit_net_income", axes=axes),
             None,
@@ -302,7 +304,9 @@ def test_real_country_state_only_spm_dependency_requires_geography(
     real_canonical_country, variable
 ):
     """A household that chose this measurement is told what it is missing."""
-    with pytest.raises(ValueError) as caught:
+    with pytest.raises(
+        ValueError, match="County selection has no county FIPS input"
+    ) as caught:
         real_canonical_country.calculate(
             requested_household(variable), None, spm_requested=True
         )
@@ -339,13 +343,19 @@ def test_real_country_unknown_county_is_structured(
 ):
     household = requested_household()
     household["households"]["household"]["county_fips"] = {"2024": county}
-    with pytest.raises(ValueError) as caught:
+    with pytest.raises(
+        ValueError,
+        match=r"County (assignment unavailable|selection has no county FIPS input)",
+    ) as caught:
         real_canonical_country.calculate(household, None, spm_requested=True)
     assert spm.spm_error_detail(caught.value)["code"] == expected_code
 
 
 def test_real_country_unknown_area_is_structured(real_canonical_country):
-    with pytest.raises(ValueError) as caught:
+    with pytest.raises(
+        ValueError,
+        match="SPM area is unavailable in the selected artifact: unknown-area",
+    ) as caught:
         real_canonical_country.calculate(
             requested_household(),
             None,
@@ -358,7 +368,7 @@ def test_real_country_unknown_area_is_structured(real_canonical_country):
 def test_real_country_unclassified_composition_is_structured(real_canonical_country):
     household = requested_household()
     household["people"]["you"]["age"] = {"2024": 14}
-    with pytest.raises(ValueError) as caught:
+    with pytest.raises(ValueError, match="SPM unit has no classified adult") as caught:
         real_canonical_country.calculate(
             household, None, spm={"geography_kind": "national"}, spm_requested=True
         )
@@ -452,7 +462,7 @@ def test_real_http_tax_only_succeeds_without_geography(real_http_client):
 
 
 @pytest.mark.parametrize(
-    "kind,code",
+    ("kind", "code"),
     [
         ("state-only", "SPM_GEOGRAPHY_REQUIRED"),
         ("axes", "SPM_GEOGRAPHY_REQUIRED"),

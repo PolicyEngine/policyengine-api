@@ -77,7 +77,7 @@ def test_policy_routes_do_not_manage_sessions_or_queries():
 
 @pytest.mark.parametrize(
     ("error", "expected_category", "expected_retryable"),
-    (
+    [
         (
             SQLAlchemyTimeoutError("credential=timeout-secret"),
             "timeout",
@@ -103,7 +103,7 @@ def test_policy_routes_do_not_manage_sessions_or_queries():
         ),
         (SQLAlchemyError("database-secret"), "database", False),
         (RuntimeError("unexpected-secret"), "unexpected", False),
-    ),
+    ],
 )
 def test_saved_policy_service_translates_failures_to_safe_domain_errors(
     error,
@@ -123,7 +123,12 @@ def test_saved_policy_service_translates_failures_to_safe_domain_errors(
 
 
 def test_saved_policy_persistence_failure_category_is_allowlisted() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match=(
+            "'raw-exception-text' is not a valid UserPolicyPersistenceFailureCategory"
+        ),
+    ):
         UserPolicyPersistenceError("raw-exception-text")  # type: ignore[arg-type]
 
 

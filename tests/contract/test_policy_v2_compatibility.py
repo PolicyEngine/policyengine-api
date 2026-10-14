@@ -54,7 +54,7 @@ def test_app_v2_reform_label_maps_to_association_name_only() -> None:
 
 
 def test_core_policy_request_rejects_association_presentation_fields() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"name\n  Extra inputs are not permitted"):
         PolicyCreateRequest.model_validate(
             {
                 "country_id": "us",

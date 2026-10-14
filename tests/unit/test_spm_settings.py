@@ -273,21 +273,21 @@ def _raise_missing_forecast_year():
 
 @pytest.mark.parametrize("wrapped", [False, True])
 def test_missing_forecast_year_message_alone_does_not_reclassify_errors(wrapped):
-    try:
+    with pytest.raises(ValueError, match="Forecast has no entry for 2036") as caught:
         _raise_missing_forecast_year()
-    except ValueError as error:
-        if wrapped:
-            outer = RuntimeError("An unrelated dependency failed")
-            outer.__cause__ = error
-            error = outer
-        assert spm.spm_error_detail(error) is None
+    error: BaseException = caught.value
+    if wrapped:
+        outer = RuntimeError("An unrelated dependency failed")
+        outer.__cause__ = caught.value
+        error = outer
+    assert spm.spm_error_detail(error) is None
 
 
 def test_plain_forecast_missing_year_is_not_reclassified():
     forecast_module = pytest.importorskip("spm_calculator.rolling_forecast")
     forecast = forecast_module.load_forecast()
     year = max(forecast.years) + 1
-    with pytest.raises(ValueError) as caught:
+    with pytest.raises(ValueError, match=f"Forecast has no entry for {year}") as caught:
         forecast.entry(year)
     assert spm.spm_error_detail(caught.value) is None
 
@@ -295,7 +295,9 @@ def test_plain_forecast_missing_year_is_not_reclassified():
 def test_other_real_forecast_errors_are_not_reclassified():
     forecast_module = pytest.importorskip("spm_calculator.rolling_forecast")
     forecast = forecast_module.load_forecast()
-    with pytest.raises(ValueError) as caught:
+    with pytest.raises(
+        ValueError, match="Unknown forecast scenario: unknown-scenario"
+    ) as caught:
         forecast.entry(forecast.years[0], scenario="unknown-scenario")
     assert spm.spm_error_detail(caught.value) is None
 

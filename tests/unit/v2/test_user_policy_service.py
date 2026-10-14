@@ -329,7 +329,9 @@ def test_stage_10_projection_records_the_v1_reform_id() -> None:
 def test_patch_input_requires_a_supported_field() -> None:
     with pytest.raises(ValueError):
         UserPolicyUpdateInput()
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match=r"policy_id\n  Extra inputs are not permitted"
+    ):
         UserPolicyUpdateInput.model_validate(
             {"policy_id": "00000000-0000-0000-0000-000000000001"}
         )

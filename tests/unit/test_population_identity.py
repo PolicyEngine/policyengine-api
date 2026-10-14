@@ -7,7 +7,7 @@ from policyengine_api.utils.population_identity import population_id_matches
 
 
 @pytest.mark.parametrize(
-    "stored,requested,expected",
+    ("stored", "requested", "expected"),
     [
         ("1 ", "1", False),
         ("1", "1 ", False),

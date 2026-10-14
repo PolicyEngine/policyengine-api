@@ -104,7 +104,8 @@ class HouseholdDatabases:
         with self.mysql_sessions() as session:
             source = session.get(V1Household, creation.household.id)
             event = session.get(HouseholdMirrorEvent, creation.mirror_event_id)
-            assert source is not None and event is not None
+            assert source is not None
+            assert event is not None
             return {
                 "source_id": source.id,
                 "household_json": deepcopy(source.household_json),
@@ -213,7 +214,8 @@ def test_spm_source_event_and_postgres_retry_keep_exact_persisted_identity(
     ]
     if value == 0.04 + 3 / 1_000_000:
         assert repr(value) == "0.040003000000000004"
-        assert stored_value == 0.040003 and stored_value != value
+        assert stored_value == 0.040003
+        assert stored_value != value
     record_property("input_value", repr(value))
     record_property("mysql_household_json", raw_json)
     record_property("mysql_source_receipt", json.dumps(before, sort_keys=True))
@@ -250,18 +252,22 @@ def test_spm_source_event_and_postgres_retry_keep_exact_persisted_identity(
 
     first = databases.mirror(creation, require_pending=True)
     replay = databases.mirror(creation)
-    assert first.household_created and first.mapping_created
+    assert first.household_created
+    assert first.mapping_created
     assert replay.household_id == first.household_id
-    assert not replay.household_created and not replay.mapping_created
+    assert not replay.household_created
+    assert not replay.mapping_created
     after, completed_at = databases.source_receipt(creation)
-    assert after == before and completed_at is not None
+    assert after == before
+    assert completed_at is not None
 
     # A repeated create is a new immutable legacy source with one shared content row.
     retried_creation = databases.create(value=value, spm=NATIONAL_SPM)
     retried_mirror = databases.mirror(retried_creation)
     assert retried_creation.household.id != creation.household.id
     assert retried_mirror.household_id == first.household_id
-    assert not retried_mirror.household_created and retried_mirror.mapping_created
+    assert not retried_mirror.household_created
+    assert retried_mirror.mapping_created
     with databases.postgres_sessions() as session:
         destination = session.get(Household, first.household_id)
         assert destination is not None
@@ -314,9 +320,11 @@ def test_legacy_absence_and_distinct_spm_selections_keep_distinct_content(databa
     assert len(destination_ids) == 4
     with databases.postgres_sessions() as session:
         saved_legacy = session.get(Household, legacy_result.household_id)
-        assert saved_legacy is not None and "spm" not in saved_legacy.household_data
+        assert saved_legacy is not None
+        assert "spm" not in saved_legacy.household_data
     saved_source = databases.source.get_household("us", legacy.id)
-    assert saved_source is not None and "spm" not in saved_source.household_json
+    assert saved_source is not None
+    assert "spm" not in saved_source.household_json
 
 
 def test_a_creation_that_sends_no_selection_persists_and_mirrors_without_one(

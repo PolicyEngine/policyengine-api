@@ -21,7 +21,7 @@ from policyengine_api.constants import (
 
 class TestBundleDatasetDisplayLabels:
     @pytest.mark.parametrize(
-        "dataset_name, expected_label",
+        ("dataset_name", "expected_label"),
         [
             ("populace_us_2024", "Microcosm"),
             ("enhanced_frs_2024_25", "Enhanced FRS"),
