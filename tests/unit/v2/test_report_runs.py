@@ -26,6 +26,7 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
 )
 from policyengine_api.data.v2.report_runs import (
+    ReportRunPackageVersions,
     ReportRunStateError,
     ReportTypeImmutableError,
     begin_report_run,
@@ -78,8 +79,10 @@ def _create_run(
     return create_report_run(
         session,
         report_id=report.id,
-        country_package_version=country_version,
-        policyengine_version=policyengine_version,
+        versions=ReportRunPackageVersions(
+            country_package_version=country_version,
+            policyengine_version=policyengine_version,
+        ),
         trigger=ReportRunTrigger.MANUAL,
         idempotency_key=key if key is not None else uuid4(),
     )
@@ -142,8 +145,10 @@ def test_manual_rerun_requires_an_idempotency_key(engine) -> None:
             create_report_run(
                 session,
                 report_id=report.id,
-                country_package_version="1.2.3",
-                policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
+                versions=ReportRunPackageVersions(
+                    country_package_version="1.2.3",
+                    policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
+                ),
                 trigger=ReportRunTrigger.MANUAL,
             )
 
@@ -202,8 +207,10 @@ def test_concurrent_idempotent_requests_resolve_to_one_run(tmp_path: Path) -> No
             run = create_report_run(
                 session,
                 report_id=report_id,
-                country_package_version="1.2.3",
-                policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
+                versions=ReportRunPackageVersions(
+                    country_package_version="1.2.3",
+                    policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
+                ),
                 trigger=ReportRunTrigger.MANUAL,
                 idempotency_key=request_key,
             )
