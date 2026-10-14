@@ -29,7 +29,7 @@ def mock_v2_runtime_settings():
 
 
 @pytest.fixture
-def api_client(mock_v2_runtime_settings):
+def api_client(mock_v2_runtime_settings):  # noqa: ARG001  # requested for its side effect; usefixtures marks don't apply to fixtures
     """Provide a Flask client without starting a Redis server."""
     from policyengine_api.api import app
 

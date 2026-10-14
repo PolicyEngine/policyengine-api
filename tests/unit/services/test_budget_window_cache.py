@@ -27,19 +27,19 @@ class RaisingRedis:
     def __init__(self, *, method):
         self.method = method
 
-    def get(self, key):
+    def get(self, key):  # noqa: ARG002  # implements the Redis client methods BudgetWindowCache calls
         if self.method == "get":
             msg = "redis unavailable"
             raise RuntimeError(msg)
         return
 
-    def set(self, key, value, nx=False, ex=None):
+    def set(self, key, value, nx=False, ex=None):  # noqa: ARG002  # implements the Redis client methods BudgetWindowCache calls
         if self.method == "set":
             msg = "redis unavailable"
             raise RuntimeError(msg)
         return True
 
-    def delete(self, key):
+    def delete(self, key):  # noqa: ARG002  # implements the Redis client methods BudgetWindowCache calls
         if self.method == "delete":
             msg = "redis unavailable"
             raise RuntimeError(msg)

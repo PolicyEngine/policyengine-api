@@ -398,7 +398,7 @@ def test_failed_processing_retains_the_oldest_pending_event(orm_session_factory)
             "us",
             created.user_policy.id,
             through_revision=created.mirror_revision,
-            processor=lambda event: (_ for _ in ()).throw(
+            processor=lambda _event: (_ for _ in ()).throw(
                 RuntimeError("Supabase unavailable")
             ),
         )
@@ -467,5 +467,5 @@ def test_corrupt_event_changed_fields_are_rejected(orm_session_factory):
             "us",
             created.user_policy.id,
             through_revision=created.mirror_revision,
-            processor=lambda event: None,
+            processor=lambda _event: None,
         )

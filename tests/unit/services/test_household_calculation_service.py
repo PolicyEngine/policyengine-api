@@ -118,7 +118,7 @@ def test_calculate_household_preserves_calculation_warnings():
             "parameters": {},
         }
 
-        def calculate(self, household, policy, **_kwargs):
+        def calculate(self, household, policy, **_kwargs):  # noqa: ARG002  # implements the country calculation interface the service calls
             return CalculationResult(
                 household=household,
                 warnings=("employment_income could not be calculated",),
@@ -192,7 +192,7 @@ def test_successful_situation_parsing_accepts_calculation_before_stage_ends():
             "parameters": {},
         }
 
-        def prepare_calculation(self, household, policy, **_kwargs):
+        def prepare_calculation(self, household, policy, **_kwargs):  # noqa: ARG002  # implements the country calculation interface the service calls
             return object()
 
     service = HouseholdCalculationService(
@@ -220,7 +220,7 @@ def test_failed_situation_parsing_does_not_accept_calculation():
             "parameters": {},
         }
 
-        def prepare_calculation(self, household, policy, **_kwargs):
+        def prepare_calculation(self, household, policy, **_kwargs):  # noqa: ARG002  # implements the country calculation interface the service calls
             msg = "invalid situation"
             raise RuntimeError(msg)
 
@@ -255,7 +255,7 @@ def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
             "entities": {"person": {"plural": "people", "roles": {}}},
         }
 
-        def calculate(self, household, policy, **_kwargs):
+        def calculate(self, household, policy, **_kwargs):  # noqa: ARG002  # implements the country calculation interface the service calls
             assert primary.active_scopes == 0
             return CalculationResult(
                 household={"people": {"you": {"net_income": {"2026": 42}}}},

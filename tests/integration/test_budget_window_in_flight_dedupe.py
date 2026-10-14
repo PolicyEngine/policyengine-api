@@ -65,7 +65,7 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
     monkeypatch.setattr(
         EconomyService,
         "_build_budget_window_batch_payload",
-        lambda self, **kwargs: {
+        lambda _self, **kwargs: {
             "country_id": "us",
             "start_year": kwargs["start_year"],
             "window_size": kwargs["window_size"],

@@ -119,7 +119,7 @@ def test_runtime_rejects_ambiguous_or_invalid_secret_sources(
     with pytest.raises(V2ConfigurationError, match=message):
         load_v2_runtime_database_settings(
             environment,
-            secret_loader=lambda resource: RUNTIME_URL,
+            secret_loader=lambda _resource: RUNTIME_URL,
         )
 
 
@@ -147,7 +147,7 @@ def test_runtime_rejects_an_empty_resolved_secret() -> None:
                 **TARGET_ENVIRONMENT,
                 V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE: RUNTIME_SECRET_RESOURCE,
             },
-            secret_loader=lambda resource: "   ",
+            secret_loader=lambda _resource: "   ",
         )
 
 

@@ -166,18 +166,20 @@ class TestEconomyService:
                 "target": "general",
             }
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_completed_impact__returns_completed_result(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(status="ok")
             hash_prefix_lookup(mock_reform_impacts_service).return_value = [
@@ -200,18 +202,20 @@ class TestEconomyService:
             (hash_prefix_lookup(mock_reform_impacts_service).assert_called_once())
             mock_simulation_entrypoint.run.assert_not_called()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_orm_decoded_completed_impact__returns_completed_result(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(status="ok")
             completed_impact.reform_impact_json = json.loads(
@@ -240,20 +244,22 @@ class TestEconomyService:
                 (None, "Simulation entrypoint execution failed"),
             ],
         )
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_cached_error_impact__returns_error_message(
             self,
             cached_message,
             expected_message,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             failed_impact = create_mock_reform_impact(
                 status="error",
@@ -271,18 +277,20 @@ class TestEconomyService:
             mock_simulation_entrypoint.run.assert_not_called()
             mock_simulation_entrypoint.get_execution_by_id.assert_not_called()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_legacy_completed_impact__refreshes_cache(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(
                 status="ok",
@@ -303,18 +311,20 @@ class TestEconomyService:
             )
             mock_simulation_entrypoint.run.assert_called_once()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_computing_impact_with_succeeded_execution__returns_completed(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             computing_impact = create_mock_reform_impact(status="computing")
             hash_prefix_lookup(mock_reform_impacts_service).return_value = [
@@ -342,18 +352,20 @@ class TestEconomyService:
             )
             mock_reform_impacts_service.set_complete_reform_impact.assert_called_once()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_computing_impact_with_failed_execution__returns_error_result(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             computing_impact = create_mock_reform_impact(status="computing")
             hash_prefix_lookup(mock_reform_impacts_service).return_value = [
@@ -374,18 +386,20 @@ class TestEconomyService:
             )
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_computing_impact_with_active_execution__returns_computing(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             computing_impact = create_mock_reform_impact(status="computing")
             hash_prefix_lookup(mock_reform_impacts_service).return_value = [
@@ -398,18 +412,20 @@ class TestEconomyService:
             assert result.status == ImpactStatus.COMPUTING
             assert result.data is None
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_no_previous_impact__creates_new_simulation(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             hash_prefix_lookup(mock_reform_impacts_service).return_value = []
 
@@ -436,18 +452,20 @@ class TestEconomyService:
             assert write_values["reform_impact_json"] == {}
             assert write_values["observability_id"] == MOCK_OBSERVABILITY_ID
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_simulation_entrypoint",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_no_previous_impact__starts_observability_after_claim(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             hash_prefix_lookup(mock_reform_impacts_service).return_value = []
             lifecycle_events = []
@@ -467,18 +485,20 @@ class TestEconomyService:
             start_observability_id.assert_called_once_with(MOCK_OBSERVABILITY_ID)
             assert lifecycle_events == ["claim", "start"]
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_simulation_entrypoint",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__selected_observability_id_is_applied_to_containing_spans(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             hash_prefix_lookup(mock_reform_impacts_service).return_value = []
 
@@ -495,18 +515,20 @@ class TestEconomyService:
                 == 2
             )
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_existing_start_claim__does_not_submit_duplicate_simulation(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.claim_reform_impact_start.return_value = False
             winning_observability_id = "00000000-0000-4000-8000-000000000003"
@@ -529,18 +551,20 @@ class TestEconomyService:
             mock_reform_impacts_service.set_reform_impact.assert_not_called()
             mock_reform_impacts_service.release_reform_impact_start.assert_not_called()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_expired_contended_claim__retries_and_submits(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.claim_reform_impact_start.side_effect = [
                 False,
@@ -562,18 +586,20 @@ class TestEconomyService:
             start_observability_id.assert_called_once_with(MOCK_OBSERVABILITY_ID)
             mock_simulation_entrypoint.run.assert_called_once()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_repeatedly_expiring_start_claims__fails_before_submission(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.claim_reform_impact_start.return_value = False
             mock_reform_impacts_service.get_reform_impact_start_claim.return_value = (
@@ -602,18 +628,20 @@ class TestEconomyService:
             start_observability_id.assert_not_called()
             mock_simulation_entrypoint.run.assert_not_called()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_start_claim_cache_failure__fails_before_submission(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.claim_reform_impact_start.side_effect = (
                 CacheCoordinationError("cache unavailable")
@@ -625,18 +653,20 @@ class TestEconomyService:
             mock_simulation_entrypoint.run.assert_not_called()
             mock_reform_impacts_service.set_reform_impact.assert_not_called()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_gateway_raises_before_returning_execution__releases_start_claim(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             mock_simulation_entrypoint.run.side_effect = RuntimeError(
                 "submission failed"
@@ -649,18 +679,20 @@ class TestEconomyService:
                 **mock_reform_impacts_service.claim_reform_impact_start.call_args.kwargs
             )
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_submitted_simulation_handoff_failure__retains_start_claim(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.set_reform_impact.side_effect = (
                 ReformImpactHandoffError("cache unavailable")
@@ -672,18 +704,20 @@ class TestEconomyService:
             mock_simulation_entrypoint.run.assert_called_once()
             mock_reform_impacts_service.release_reform_impact_start.assert_not_called()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_submitted_simulation_without_execution_id__retains_start_claim(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             mock_simulation_entrypoint.get_execution_id.side_effect = RuntimeError(
                 "missing execution identifier"
@@ -753,18 +787,20 @@ class TestEconomyService:
             assert submitted["baseline"] == {}
             assert submitted["reform"] == reform
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_no_previous_impact__includes_metadata_in_simulation_params(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             """Verify that _metadata with policy IDs is passed to simulation API."""
             hash_prefix_lookup(mock_reform_impacts_service).return_value = []
@@ -798,17 +834,19 @@ class TestEconomyService:
                 sim_params["_metadata"]["resolved_app_name"] == MOCK_RESOLVED_APP_NAME
             )
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policy_service",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_no_previous_impact__includes_telemetry_in_simulation_params(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
             mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.get_all_reform_impacts.return_value = []
 
@@ -832,24 +870,26 @@ class TestEconomyService:
                 mock_logger.log_struct.call_args_list[-1].kwargs["severity"] == "INFO"
             )
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_simulation_entrypoint",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_runtime_cache_version__uses_versioned_economy_cache_key(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
             monkeypatch,
         ):
             cache_version = "e1cache01"
             monkeypatch.setattr(
                 "policyengine_api.services.economy_service.get_economy_impact_cache_version",
-                lambda country_id, api_version=None: cache_version,
+                lambda _country_id, _api_version=None: cache_version,
             )
             hash_prefix_lookup(mock_reform_impacts_service).return_value = []
 
@@ -869,18 +909,20 @@ class TestEconomyService:
                 cache_version,
             )
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_simulation_entrypoint",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_default_dataset__queries_previous_impacts_with_resolved_bundle(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             hash_prefix_lookup(mock_reform_impacts_service).return_value = []
 
@@ -896,18 +938,20 @@ class TestEconomyService:
             assert "policyengine\\_version=3.4.0" in call_args[7]
             assert "runtime_app_name" not in call_args[7]
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_completed_impact__uses_resolved_runtime_bundle_for_cache_lookup(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(status="ok")
             hash_prefix_lookup(mock_reform_impacts_service).return_value = [
@@ -923,18 +967,20 @@ class TestEconomyService:
                 policyengine_version=MOCK_POLICYENGINE_VERSION,
             )
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_simulation_entrypoint",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_existing_impact__restores_stored_observability_id(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(status="ok")
             hash_prefix_lookup(mock_reform_impacts_service).return_value = [
@@ -956,18 +1002,20 @@ class TestEconomyService:
             restore_observability_id.assert_called_once_with(MOCK_OBSERVABILITY_ID)
             start_observability_id.assert_not_called()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_cached_impact_and_runtime_lookup_fails__returns_cached_result(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(status="ok")
             hash_prefix_lookup(mock_reform_impacts_service).return_value = [
@@ -985,18 +1033,20 @@ class TestEconomyService:
             )
             mock_simulation_entrypoint.run.assert_not_called()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_legacy_cached_impact_without_resolved_app_name__refreshes_cache(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(
                 status="ok",
@@ -1017,18 +1067,20 @@ class TestEconomyService:
             )
             mock_simulation_entrypoint.run.assert_called_once()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_legacy_and_refreshed_cached_impacts__reuses_refreshed_entry(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             legacy_impact = create_mock_reform_impact(
                 status="ok",
@@ -1053,18 +1105,20 @@ class TestEconomyService:
             assert hash_prefix_lookup(mock_reform_impacts_service).call_count == 2
             mock_simulation_entrypoint.run.assert_not_called()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_legacy_cached_impact_and_lookup_fails__returns_cached_result(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(
                 status="ok",
@@ -1084,18 +1138,20 @@ class TestEconomyService:
             assert result.data["policyengine_bundle"]["model_version"] is None
             mock_simulation_entrypoint.run.assert_not_called()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_legacy_computing_impact_without_app_name__then_reuses_execution(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             computing_impact = create_mock_reform_impact(
                 status="computing",
@@ -1112,18 +1168,20 @@ class TestEconomyService:
             mock_simulation_entrypoint.resolve_app_name.assert_not_called()
             mock_simulation_entrypoint.run.assert_not_called()
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_simulation_entrypoint",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_exception__raises_error(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             hash_prefix_lookup(mock_reform_impacts_service).side_effect = Exception(
                 "Database error"
@@ -1133,17 +1191,19 @@ class TestEconomyService:
                 economy_service.get_economic_impact(**base_params)
             assert str(exc_info.value) == "Database error"
 
+        @pytest.mark.usefixtures(
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_uk_request__preserves_model_version_in_bundle(
             self,
             economy_service,
             mock_country_package_versions,
-            mock_policyengine_version,
-            mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_entrypoint,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
         ):
             mock_country_package_versions["uk"] = "2.7.8"
             hash_prefix_lookup(mock_reform_impacts_service).return_value = []
@@ -1167,11 +1227,11 @@ class TestEconomyService:
         @pytest.fixture
         def economy_service(
             self,
-            mock_country_package_versions,
-            mock_policy_service,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
+            mock_country_package_versions,  # noqa: ARG002  # requested for its side effect; usefixtures marks don't apply to fixtures
+            mock_policy_service,  # noqa: ARG002  # requested for its side effect; usefixtures marks don't apply to fixtures
+            mock_logger,  # noqa: ARG002  # requested for its side effect; usefixtures marks don't apply to fixtures
+            mock_datetime,  # noqa: ARG002  # requested for its side effect; usefixtures marks don't apply to fixtures
+            mock_submission_claim_id,  # noqa: ARG002  # requested for its side effect; usefixtures marks don't apply to fixtures
         ):
             return EconomyService()
 
@@ -1800,23 +1860,25 @@ class TestEconomyService:
             ):
                 economy_service.get_budget_window_economic_impact(**base_params)
 
+        @pytest.mark.usefixtures(
+            "mock_country_package_versions",
+            "mock_simulation_entrypoint",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         def test__given_runtime_cache_version__uses_versioned_budget_window_cache_key(
             self,
             economy_service,
             base_params,
-            mock_country_package_versions,
-            mock_simulation_entrypoint,
             mock_budget_window_cache,
-            mock_logger,
-            mock_datetime,
-            mock_submission_claim_id,
             monkeypatch,
         ):
             cache_version = "e1cache01"
 
             monkeypatch.setattr(
                 "policyengine_api.services.economy_service.get_economy_impact_cache_version",
-                lambda country_id, api_version=None: cache_version,
+                lambda _country_id, _api_version=None: cache_version,
             )
             result = economy_service.get_budget_window_economic_impact(**base_params)
 
@@ -1862,12 +1924,13 @@ class TestEconomyService:
             assert first_cache_key_kwargs == second_cache_key_kwargs
             mock_simulation_entrypoint.run_budget_window_batch.assert_not_called()
 
+        @pytest.mark.usefixtures(
+            "mock_reform_impacts_service", "mock_simulation_entrypoint"
+        )
         def test__given_legacy_us_region__normalizes_before_building_cache_key(
             self,
             economy_service,
             base_params,
-            mock_reform_impacts_service,
-            mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
             base_params["region"] = "ca"
@@ -2113,13 +2176,13 @@ class TestEconomyService:
             mock_reform_impacts_service.set_error_reform_impact.assert_not_called()
             mock_simulation_entrypoint.run.assert_not_called()
 
+        @pytest.mark.usefixtures("mock_logger")
         def test__given_succeeded_state__returns_completed_result(
             self,
             economy_service,
             setup_options,
             mock_simulation_entrypoint,
             mock_reform_impacts_service,
-            mock_logger,
         ):
             reform_impact = create_mock_reform_impact(status="computing")
             mock_execution = MagicMock()
@@ -2148,12 +2211,12 @@ class TestEconomyService:
                 == (MOCK_REFORM_IMPACT_DATA["poverty_impact"])
             )
 
+        @pytest.mark.usefixtures("mock_logger")
         def test__given_failed_state__returns_error_result(
             self,
             economy_service,
             setup_options,
             mock_reform_impacts_service,
-            mock_logger,
         ):
             reform_impact = create_mock_reform_impact(status="computing")
 
@@ -2166,8 +2229,9 @@ class TestEconomyService:
             assert result.message == "Simulation entrypoint execution failed"
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once()
 
+        @pytest.mark.usefixtures("mock_logger")
         def test__given_active_state__returns_computing_result(
-            self, economy_service, setup_options, mock_logger
+            self, economy_service, setup_options
         ):
             reform_impact = create_mock_reform_impact(status="computing")
 
@@ -2191,13 +2255,13 @@ class TestEconomyService:
                 )
 
         # Modal status tests
+        @pytest.mark.usefixtures("mock_logger")
         def test__given_modal_complete_state__then_returns_completed_result(
             self,
             economy_service,
             setup_options,
             mock_simulation_entrypoint,
             mock_reform_impacts_service,
-            mock_logger,
         ):
             # Given
             reform_impact = create_mock_reform_impact(status="computing")
@@ -2221,12 +2285,12 @@ class TestEconomyService:
             }
             mock_reform_impacts_service.set_complete_reform_impact.assert_called_once()
 
+        @pytest.mark.usefixtures("mock_logger")
         def test__given_modal_failed_state__then_returns_error_result(
             self,
             economy_service,
             setup_options,
             mock_reform_impacts_service,
-            mock_logger,
         ):
             # Given
             reform_impact = create_mock_reform_impact(status="computing")
@@ -2243,12 +2307,12 @@ class TestEconomyService:
             assert result.data is None
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once()
 
+        @pytest.mark.usefixtures("mock_logger")
         def test__given_modal_failure_with_error_message__includes_error_in_message(
             self,
             economy_service,
             setup_options,
             mock_reform_impacts_service,
-            mock_logger,
         ):
             # Given
             reform_impact = create_mock_reform_impact(status="computing")
@@ -2266,8 +2330,9 @@ class TestEconomyService:
             call_args = mock_reform_impacts_service.set_error_reform_impact.call_args
             assert "Simulation timed out" in call_args[1]["message"]
 
+        @pytest.mark.usefixtures("mock_logger")
         def test__given_modal_running_state__then_returns_computing_result(
-            self, economy_service, setup_options, mock_logger
+            self, economy_service, setup_options
         ):
             # Given
             reform_impact = create_mock_reform_impact(status="computing")
@@ -2324,8 +2389,9 @@ class TestEconomyService:
             assert result.status == ImpactStatus.COMPUTING
             assert result.run_progress is None
 
+        @pytest.mark.usefixtures("mock_logger")
         def test__given_modal_submitted_state__then_returns_computing_result(
-            self, economy_service, setup_options, mock_logger
+            self, economy_service, setup_options
         ):
             # Given
             reform_impact = create_mock_reform_impact(status="computing")

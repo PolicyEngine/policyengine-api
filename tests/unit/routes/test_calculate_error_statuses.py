@@ -22,7 +22,7 @@ HOUSEHOLD = {
 
 
 class ParsingErrorCountry(DummyCountry):
-    def prepare_calculation(self, household, policy, **_kwargs):
+    def prepare_calculation(self, household, policy, **_kwargs):  # noqa: ARG002  # overrides DummyCountry.prepare_calculation
         raise SituationParsingError(
             ["people", "you", "employment_income", "2026"],
             "Can't deal with value: expected type number, received '{}'.",
@@ -30,7 +30,7 @@ class ParsingErrorCountry(DummyCountry):
 
 
 class CrashingCountry(DummyCountry):
-    def calculate(self, household, policy, **_kwargs):
+    def calculate(self, household, policy, **_kwargs):  # noqa: ARG002  # overrides DummyCountry.calculate
         msg = "engine exploded"
         raise RuntimeError(msg)
 
@@ -47,7 +47,7 @@ def make_client(monkeypatch, country, add_missing=False):
     if add_missing:
         monkeypatch.setattr(
             "policyengine_api.services.household_calculation_service.add_yearly_variables",
-            lambda household, country_id, countries=None: household,
+            lambda household, _country_id, _countries=None: household,
         )
     app.register_blueprint(household_routes.household_bp)
     return app.test_client()

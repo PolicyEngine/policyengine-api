@@ -295,7 +295,7 @@ def test_terminal_error_clears_worker_handle_without_changing_cache_identity(
 def test_failed_terminal_error_write_keeps_existing_worker_handle(monkeypatch):
     cache = ReformImpactCache(InMemoryCacheBackend(), _namespace())
     cache.set(_impact("job", "selection", 1))
-    monkeypatch.setattr(cache, "set", lambda *args, **kwargs: False)
+    monkeypatch.setattr(cache, "set", lambda *_args, **_kwargs: False)
 
     assert cache.update("job", status="error", clear_execution_id=True) is None
     unchanged = cache.get_by_execution_id("job")
