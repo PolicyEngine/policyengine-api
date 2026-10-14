@@ -281,9 +281,9 @@ def test_creating_a_simulation_never_locks_a_household_row(
     statements = []
     engine = orm_session_factory.kw["bind"]
 
-    @event.listens_for(engine, "before_cursor_execute")
-    def record(conn, cursor, statement, parameters, context, executemany):
-        statements.append(" ".join(statement.split()).lower())
+    @event.listens_for(engine, "before_cursor_execute", named=True)
+    def record(**event_arguments):
+        statements.append(" ".join(event_arguments["statement"].split()).lower())
 
     try:
         result = service.get_or_create_simulation(
