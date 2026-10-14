@@ -270,6 +270,39 @@ def uk_datasets() -> Iterator[FakeUKDatasets]:
         yield datasets
 
 
+class _RecordingHandler(logging.Handler):
+    """Keep every record logged to the logger it is attached to."""
+
+    def __init__(self, records: list[logging.LogRecord]) -> None:
+        super().__init__(level=logging.DEBUG)
+        self.records = records
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+@pytest.fixture
+def comparison_logs() -> Iterator[list[logging.LogRecord]]:
+    """Record what the comparison module logs, whatever the global logging setup.
+
+    Other tests load logging configuration that disables existing loggers, so
+    the module logger is enabled and recorded directly for the test's duration.
+    """
+    records: list[logging.LogRecord] = []
+    handler = _RecordingHandler(records)
+    logger = economy_comparison.logger
+    previous_state = (logger.disabled, logger.level)
+    logger.disabled = False
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+    try:
+        yield records
+    finally:
+        logger.removeHandler(handler)
+        logger.disabled, previous_level = previous_state
+        logger.setLevel(previous_level)
+
+
 def _canonical_key(key: object) -> str:
     """Keep string keys as they are and tag any other key with its type."""
     if isinstance(key, str):
@@ -317,7 +350,7 @@ def _key_order(value: object, path: str = "") -> dict[str, list[str]]:
 def _observed(
     result: object,
     datasets: FakeUKDatasets | None,
-    caplog: pytest.LogCaptureFixture,
+    comparison_logs: list[logging.LogRecord],
 ) -> dict[str, Any]:
     return {
         "result_type": type(result).__name__,
@@ -331,7 +364,7 @@ def _observed(
                 record.getMessage(),
                 record.exc_info[0].__name__ if record.exc_info else None,
             ]
-            for record in caplog.records
+            for record in comparison_logs
             if record.name.startswith("policyengine_api")
         ],
     }
@@ -390,7 +423,7 @@ GENERAL_CASES = {
 
 @pytest.mark.parametrize("case_name", sorted(GENERAL_CASES))
 def test_compare_economic_outputs_general_matches_snapshot(
-    case_name, uk_datasets, caplog
+    case_name, uk_datasets, comparison_logs
 ):
     country_id, region, include_wealth, use_numpy = GENERAL_CASES[case_name]
     economy_country = country_id or "us"
@@ -402,11 +435,10 @@ def test_compare_economic_outputs_general_matches_snapshot(
     )
     if use_numpy:
         baseline, reform = _numpy_economy(baseline), _numpy_economy(reform)
-    caplog.set_level(logging.DEBUG)
 
     result = compare_economic_outputs(baseline, reform, country_id, region)
 
-    _assert_matches_snapshot(case_name, _observed(result, uk_datasets, caplog))
+    _assert_matches_snapshot(case_name, _observed(result, uk_datasets, comparison_logs))
 
 
 @pytest.mark.parametrize(
@@ -419,7 +451,7 @@ def test_compare_economic_outputs_general_matches_snapshot(
     ],
 )
 def test_compare_economic_outputs_other_types_match_snapshot(
-    case_name, baseline_type, country_id, caplog
+    case_name, baseline_type, country_id, comparison_logs
 ):
     baseline = _cliff_economy(side="baseline")
     reform = _cliff_economy(side="reform")
@@ -427,11 +459,10 @@ def test_compare_economic_outputs_other_types_match_snapshot(
         del baseline["type"]
     else:
         baseline["type"] = baseline_type
-    caplog.set_level(logging.DEBUG)
 
     result = compare_economic_outputs(baseline, reform, country_id, None)
 
-    _assert_matches_snapshot(case_name, _observed(result, None, caplog))
+    _assert_matches_snapshot(case_name, _observed(result, None, comparison_logs))
 
 
 BREAKDOWN_REGIONS = [
@@ -470,16 +501,15 @@ def _uk_breakdown_economies() -> tuple[dict[str, Any], dict[str, Any]]:
 )
 @pytest.mark.parametrize("region", BREAKDOWN_REGIONS)
 def test_uk_area_breakdowns_match_snapshot(
-    breakdown_name, breakdown, region, uk_datasets, caplog
+    breakdown_name, breakdown, region, uk_datasets, comparison_logs
 ):
     baseline, reform = _uk_breakdown_economies()
-    caplog.set_level(logging.DEBUG)
 
     result = breakdown(baseline, reform, "uk", region)
 
     _assert_matches_snapshot(
         f"{breakdown_name}_breakdown_region_{region}",
-        _observed(result, uk_datasets, caplog),
+        _observed(result, uk_datasets, comparison_logs),
     )
 
 
@@ -492,7 +522,7 @@ def test_uk_area_breakdowns_match_snapshot(
 )
 @pytest.mark.parametrize("country_id", ["us", None, "UK"])
 def test_uk_area_breakdowns_outside_uk_match_snapshot(
-    breakdown_name, breakdown, country_id, uk_datasets, caplog
+    breakdown_name, breakdown, country_id, uk_datasets, comparison_logs
 ):
     baseline, reform = _uk_breakdown_economies()
 
@@ -500,11 +530,13 @@ def test_uk_area_breakdowns_outside_uk_match_snapshot(
 
     _assert_matches_snapshot(
         f"{breakdown_name}_breakdown_country_{country_id}",
-        _observed(result, uk_datasets, caplog),
+        _observed(result, uk_datasets, comparison_logs),
     )
 
 
-def test_uk_area_breakdowns_with_numpy_incomes_match_snapshot(uk_datasets, caplog):
+def test_uk_area_breakdowns_with_numpy_incomes_match_snapshot(
+    uk_datasets, comparison_logs
+):
     baseline, reform = _uk_breakdown_economies()
     baseline = _numpy_economy(baseline)
     reform = _numpy_economy(reform)
@@ -515,7 +547,8 @@ def test_uk_area_breakdowns_with_numpy_incomes_match_snapshot(uk_datasets, caplo
     }
 
     _assert_matches_snapshot(
-        "area_breakdowns_numpy_incomes", _observed(results, uk_datasets, caplog)
+        "area_breakdowns_numpy_incomes",
+        _observed(results, uk_datasets, comparison_logs),
     )
 
 
