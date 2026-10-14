@@ -897,6 +897,25 @@ workflow = ".github/workflows/pr.yml"
 job = "lint"
 invocation = "ruff check ."
 
+
+[[rule]]
+id = "api.quality.unittest-ruff-exemptions"
+category = "quality"
+statement = "The shared rules tool's tests use unittest, because the tool needs only the standard library, so ruff's pytest-style rules (PT) don't apply to them."
+rationale = "docs/engineering/skills/rules-registry.md#baselines"
+scope = ["scripts/rules/tests/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "ruff"
+mode = "per-file-ignore"
+pattern = "scripts/rules/tests/**"
+codes = ["PT"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "lint"
+invocation = "ruff check ."
 [[rule]]
 id = "api.quality.mypy-v2"
 category = "quality"
