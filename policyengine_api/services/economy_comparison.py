@@ -336,7 +336,7 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
     people = MicroSeries(
         baseline["household_count_people"], weights=baseline_income.weights
     )
-    decile = MicroSeries(baseline["household_income_decile"]).values
+    decile = MicroSeries(baseline["household_income_decile"]).values  # noqa: PD011  # MicroSeries overrides .values, and .to_numpy() emits a different warning
     income_change = compute_income_change(baseline_income.values, reform_income.values)
 
     # Within each decile, calculate the percentage of people who:
@@ -395,7 +395,7 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     people = MicroSeries(
         baseline["household_count_people"], weights=baseline_income.weights
     )
-    decile = MicroSeries(baseline["household_wealth_decile"]).values
+    decile = MicroSeries(baseline["household_wealth_decile"]).values  # noqa: PD011  # MicroSeries overrides .values, and .to_numpy() emits a different warning
     income_change = compute_income_change(baseline_income.values, reform_income.values)
 
     # Within each decile, calculate the percentage of people who:

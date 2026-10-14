@@ -152,7 +152,7 @@ def _summarize_endpoint(records: list[dict], duration_seconds: float) -> dict:
 
 
 async def _run(args: argparse.Namespace) -> dict:
-    base_payload = json.loads(Path(args.calculate_payload).read_text())
+    base_payload = json.loads(Path(args.calculate_payload).read_text())  # noqa: ASYNC240  # one small read before any request starts, with nothing else running yet
     base_payload["household"]["axes"][0][0]["count"] = args.axes_count
     cache_bust = args.cache_bust == "always"
     run_token = uuid.uuid4().hex[:8]
