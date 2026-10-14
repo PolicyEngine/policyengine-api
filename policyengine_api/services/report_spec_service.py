@@ -1,6 +1,7 @@
 """Explicit specifications of what each v1 report output calculates."""
 
 import json
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -13,6 +14,18 @@ REPORT_SPEC_SCHEMA_VERSION = 1
 REPORT_SPEC_STATUSES = {"explicit", "backfilled_assumed"}
 HOUSEHOLD_REPORT_KINDS = {"household_single", "household_comparison"}
 ECONOMY_REPORT_KINDS = {"economy_single", "economy_comparison"}
+
+
+@dataclass(frozen=True)
+class EconomyReportSettings:
+    """How an economy report is calculated: its dataset, target and options.
+
+    A household report ignores them.
+    """
+
+    dataset: str = "default"
+    target: Literal["general", "cliff"] = "general"
+    options: dict[str, Any] | None = None
 
 
 class ReportSimulationInput(BaseModel):
@@ -160,15 +173,17 @@ class ReportSpecService:
         report_output: ReportOutput,
         simulation_1: Simulation,
         simulation_2: Simulation | None = None,
-        dataset: str = "default",
-        target: Literal["general", "cliff"] = "general",
-        options: dict[str, Any] | None = None,
+        economy_settings: EconomyReportSettings | None = None,
     ) -> ReportSpec:
         """Build the spec implied by a report output and its linked simulations.
 
-        Raise ValueError if the simulations do not match the report's simulation IDs or
-        country, or if a comparison's simulations cover different households or regions.
+        ``economy_settings`` sets an economy report's dataset, target and options;
+        without it they take their defaults. Raise ValueError if the simulations do
+        not match the report's simulation IDs or country, or if a comparison's
+        simulations cover different households or regions.
         """
+        if economy_settings is None:
+            economy_settings = EconomyReportSettings()
         self._validate_report_simulation_linkage(
             report_output, simulation_1, simulation_2
         )
@@ -225,9 +240,9 @@ class ReportSpecService:
             reform_policy_id=(
                 simulation_2.policy_id if simulation_2 else simulation_1.policy_id
             ),
-            dataset=dataset,
-            target=target,
-            options=options or {},
+            dataset=economy_settings.dataset,
+            target=economy_settings.target,
+            options=economy_settings.options or {},
         )
 
     def _validate_report_spec_matches_model(
@@ -243,21 +258,13 @@ class ReportSpecService:
             report_output,
             simulation_1,
             simulation_2,
-            dataset=(
-                report_spec.dataset
-                if isinstance(report_spec, EconomyReportSpec)
-                else "default"
-            ),
-            target=(
-                report_spec.target
-                if isinstance(report_spec, EconomyReportSpec)
-                else "general"
-            ),
-            options=(
-                report_spec.options
-                if isinstance(report_spec, EconomyReportSpec)
-                else None
-            ),
+            EconomyReportSettings(
+                dataset=report_spec.dataset,
+                target=report_spec.target,
+                options=report_spec.options,
+            )
+            if isinstance(report_spec, EconomyReportSpec)
+            else EconomyReportSettings(),
         )
         if report_spec != expected:
             msg = "Report spec must match the linked report and simulations"
