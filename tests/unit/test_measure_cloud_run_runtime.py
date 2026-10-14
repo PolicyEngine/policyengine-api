@@ -5,6 +5,7 @@ import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import httpx
 import pytest
@@ -47,23 +48,25 @@ class _CountingClock:
         (503, "http_5xx"),
     ],
 )
-def test_classify_groups_status_codes(status_code, outcome):
+def test_classify_groups_status_codes(status_code: int, outcome: str) -> None:
     assert load_generator._classify(status_code) == outcome
 
 
-def test_readiness_wait_polls_until_the_service_answers_ok(monkeypatch):
+def test_readiness_wait_polls_until_the_service_answers_ok(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     clock = _CountingClock()
     monkeypatch.setattr(load_generator, "time", clock)
-    sleeps = []
+    sleeps: list[float] = []
 
-    async def fake_sleep(seconds):
+    async def fake_sleep(seconds: float) -> None:
         sleeps.append(seconds)
 
     monkeypatch.setattr(load_generator.asyncio, "sleep", fake_sleep)
     statuses = iter([503, 201, 200])
-    requests = []
+    requests: list[tuple[str, Any]] = []
 
-    def handler(request):
+    def handler(request: httpx.Request) -> httpx.Response:
         requests.append((request.url.path, request.extensions["timeout"]))
         status = next(statuses)
         if status == 201:
@@ -71,7 +74,7 @@ def test_readiness_wait_polls_until_the_service_answers_ok(monkeypatch):
             raise httpx.ConnectError(msg, request=request)
         return httpx.Response(status)
 
-    async def wait():
+    async def wait() -> float:
         async with httpx.AsyncClient(
             transport=httpx.MockTransport(handler), base_url="https://api.test"
         ) as client:
@@ -83,10 +86,12 @@ def test_readiness_wait_polls_until_the_service_answers_ok(monkeypatch):
     assert sleeps == [5.0, 5.0]
 
 
-def test_readiness_wait_gives_up_after_the_timeout(monkeypatch):
+def test_readiness_wait_gives_up_after_the_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(load_generator, "time", _CountingClock())
 
-    async def wait():
+    async def wait() -> float:
         async with httpx.AsyncClient(
             transport=httpx.MockTransport(lambda _request: httpx.Response(500)),
             base_url="https://api.test",
@@ -97,7 +102,7 @@ def test_readiness_wait_gives_up_after_the_timeout(monkeypatch):
         asyncio.run(wait())
 
 
-def _load_args(**overrides) -> argparse.Namespace:
+def _load_args(**overrides: object) -> argparse.Namespace:
     values = {
         "base_url": "https://api.test/",
         "cell_label": "cell-a",
@@ -116,7 +121,9 @@ def _load_args(**overrides) -> argparse.Namespace:
     return argparse.Namespace(**{**values, **overrides})
 
 
-def _run_load_cell(monkeypatch, args):
+def _run_load_cell(
+    monkeypatch: pytest.MonkeyPatch, args: argparse.Namespace
+) -> tuple[dict[str, Any], list[tuple[Any, ...]]]:
     monkeypatch.setattr(load_generator, "time", _CountingClock())
     monkeypatch.setattr(
         load_generator,
@@ -125,23 +132,21 @@ def _run_load_cell(monkeypatch, args):
     )
     timestamps = iter(["2026-01-01T00:00:00Z", "2026-01-01T00:10:00Z"])
     monkeypatch.setattr(load_generator, "_utc_now_iso", lambda: next(timestamps))
-    requests = []
-    outcomes = iter(
-        [
-            httpx.Response(200),
-            httpx.Response(200),
-            httpx.Response(429),
-            httpx.Response(200),
-            httpx.Response(503),
-            httpx.Response(404),
-            httpx.ReadTimeout("slow"),
-            httpx.Response(200),
-            httpx.ConnectError("refused"),
-        ]
-        * 20
-    )
+    requests: list[tuple[Any, ...]] = []
+    responses_and_errors: list[httpx.Response | httpx.HTTPError] = [
+        httpx.Response(200),
+        httpx.Response(200),
+        httpx.Response(429),
+        httpx.Response(200),
+        httpx.Response(503),
+        httpx.Response(404),
+        httpx.ReadTimeout("slow"),
+        httpx.Response(200),
+        httpx.ConnectError("refused"),
+    ]
+    outcomes = iter(responses_and_errors * 20)
 
-    def handler(request):
+    def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content) if request.content else None
         requests.append(
             (
@@ -171,7 +176,7 @@ def _run_load_cell(monkeypatch, args):
     return summary, requests
 
 
-def _endpoint_summary(**fields):
+def _endpoint_summary(**fields: object) -> dict[str, object]:
     return {
         "request_count": 0,
         "achieved_rps": 0.0,
@@ -195,7 +200,9 @@ ONE_SECOND_LATENCIES = {
 }
 
 
-def test_load_cell_runs_seeded_clients_and_summarizes_each_endpoint(monkeypatch):
+def test_load_cell_runs_seeded_clients_and_summarizes_each_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     summary, requests = _run_load_cell(monkeypatch, _load_args())
 
     # The mock transport never yields, so the first client runs to the deadline
@@ -251,7 +258,9 @@ def test_load_cell_runs_seeded_clients_and_summarizes_each_endpoint(monkeypatch)
     ]
 
 
-def test_load_cell_without_cache_busting_repeats_the_same_payload(monkeypatch):
+def test_load_cell_without_cache_busting_repeats_the_same_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     summary, requests = _run_load_cell(
         monkeypatch, _load_args(cache_bust="never", clients=1, calculate_share=1.0)
     )

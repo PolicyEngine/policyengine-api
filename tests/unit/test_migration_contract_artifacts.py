@@ -146,7 +146,9 @@ def test_user_contracts_require_a_signed_in_or_signed_out_credential():
     assert all("user_id=" not in request["path"] for request in user_requests)
 
 
-def _contract_request(path, status, fields, *, route_group="metadata"):
+def _contract_request(
+    path: str, status: int, fields: list[str], *, route_group: str = "metadata"
+) -> dict[str, object]:
     return {
         "method": "GET",
         "path": path,
@@ -156,7 +158,7 @@ def _contract_request(path, status, fields, *, route_group="metadata"):
     }
 
 
-def test_workflow_guard_reports_each_request_problem_in_order():
+def test_workflow_guard_reports_each_request_problem_in_order() -> None:
     payload = {
         "route_groups": [{"name": "metadata"}],
         "workflows": [

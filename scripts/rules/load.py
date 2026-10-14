@@ -332,7 +332,8 @@ def _downgrade_reason(
         return None
     draw = raw["downgrade"]
     if isinstance(draw, dict) and isinstance(draw.get("reason"), str):
-        return draw["reason"]
+        reason: str = draw["reason"]
+        return reason
     c.add(
         rule_id,
         f"{label}.downgrade needs a 'reason'",

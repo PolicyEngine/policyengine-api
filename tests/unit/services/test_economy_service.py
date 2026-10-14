@@ -205,11 +205,11 @@ class TestEconomyService:
         @pytest.fixture
         def economy_service_harness(
             self,
-            economy_service,
-            base_params,
-            mock_reform_impacts_service,
-            mock_simulation_entrypoint,
-        ):
+            economy_service: EconomyService,
+            base_params: dict,
+            mock_reform_impacts_service: MagicMock,
+            mock_simulation_entrypoint: MagicMock,
+        ) -> EconomyServiceHarness:
             return EconomyServiceHarness(
                 service=economy_service,
                 params=base_params,

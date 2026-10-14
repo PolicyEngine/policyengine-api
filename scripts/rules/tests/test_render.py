@@ -69,7 +69,7 @@ def rule_node(number: int) -> str:
 
 class EnforcerDescriptionTest(unittest.TestCase):
     def test_each_kind_describes_its_checker(self) -> None:
-        cases = [
+        cases: list[tuple[Kind, dict[str, object], str]] = [
             (
                 Kind.PYTEST,
                 {"project": "proj/", "nodes": ["b.py::t", "a.py::u", "a.py::v"]},

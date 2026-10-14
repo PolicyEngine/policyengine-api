@@ -1,6 +1,7 @@
 """Typed worker failures become durable terminal HTTP polling responses."""
 
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 import pytest
@@ -66,7 +67,7 @@ def segmented_result(year, invalid_side=None):
     return result
 
 
-def _versions_response(path, worker_app):
+def _versions_response(path: str, worker_app: str) -> httpx.Response | None:
     """Answer the worker's version discovery routes, or return None."""
     if path == "/versions":
         return httpx.Response(
@@ -89,15 +90,22 @@ def _versions_response(path, worker_app):
 class _FailingJobWorker:
     """A worker HTTP API whose job fails once with a typed error, then expires."""
 
-    def __init__(self, *, job_path, failure, typed_error, worker_result):
+    def __init__(
+        self,
+        *,
+        job_path: str,
+        failure: int | str,
+        typed_error: dict[str, str],
+        worker_result: dict[str, Any] | None,
+    ) -> None:
         self.job_path = job_path
         self.failure = failure
         self.typed_error = typed_error
         self.worker_result = worker_result
         self.app_name = "test-worker"
-        self.received = []
+        self.received: list[tuple[str, str]] = []
 
-    def __call__(self, request):
+    def __call__(self, request: httpx.Request) -> httpx.Response:
         self.received.append((request.method, request.url.path))
         if request.method == "POST" and self.app_name == "replacement-worker":
             assert request.url.path == "/simulate/economy/comparison"
@@ -121,7 +129,7 @@ class _FailingJobWorker:
         )
 
 
-def _versions_only_worker(request):
+def _versions_only_worker(request: httpx.Request) -> httpx.Response:
     """Answer as a worker HTTP API that serves only version discovery."""
     assert request.method == "GET", "A stored result must not submit a job"
     versions = _versions_response(request.url.path, "test-worker")
@@ -131,7 +139,9 @@ def _versions_only_worker(request):
     raise AssertionError(msg)
 
 
-def _typed_failure(failure, *, budget_window):
+def _typed_failure(
+    failure: int | str, *, budget_window: bool
+) -> tuple[dict[str, str], dict[str, Any] | None]:
     """Return the typed error the routes must report, and the worker's result."""
     if not isinstance(failure, str):
         return YEAR_ERROR, None
@@ -155,13 +165,13 @@ def _typed_failure(failure, *, budget_window):
     return typed_error, worker_result
 
 
-def _patch_spm_release(monkeypatch):
+def _patch_spm_release(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(worker_spm, "normalize_spm_selection", lambda *_: SELECTION)
     monkeypatch.setattr(economy_module, "COUNTRY_PACKAGE_VERSIONS", {"us": "1.0.0"})
     monkeypatch.setattr(economy_module, "POLICYENGINE_VERSION", "5.3.1")
 
 
-def _worker_gateway():
+def _worker_gateway() -> SimulationEntrypointClient:
     gateway = object.__new__(SimulationEntrypointClient)
     gateway.base_url = "https://worker.invalid"
     return gateway
@@ -177,7 +187,12 @@ class _EconomyStack:
     service: EconomyService
 
 
-def _install_economy_stack(monkeypatch, gateway, backend, namespace):
+def _install_economy_stack(
+    monkeypatch: pytest.MonkeyPatch,
+    gateway: SimulationEntrypointClient,
+    backend: Any,
+    namespace: CacheNamespace,
+) -> _EconomyStack:
     """Build fresh cache facades and a service over ``backend`` and route to it."""
     annual_cache = ReformImpactCache(backend, namespace)
     annual_impacts = ReformImpactsService(annual_cache)
@@ -191,14 +206,14 @@ def _install_economy_stack(monkeypatch, gateway, backend, namespace):
     return _EconomyStack(annual_cache, annual_impacts, window_cache, service)
 
 
-def _economy_app():
+def _economy_app() -> Flask:
     app = Flask(__name__)
     app.config["TESTING"] = True
     app.register_blueprint(economy_routes.economy_bp)
     return app
 
 
-def _setup_options(service, *, budget_window):
+def _setup_options(service: EconomyService, *, budget_window: bool) -> Any:
     return service._build_economic_impact_setup_options(
         EconomicImpactRequest(
             country_id="us",
@@ -214,7 +229,12 @@ def _setup_options(service, *, budget_window):
 
 
 def _store_annual_impact(
-    stack, setup, *, status, reform_impact_json, execution_id
+    stack: Any,
+    setup: Any,
+    *,
+    status: str,
+    reform_impact_json: dict[str, Any],
+    execution_id: str,
 ) -> None:
     stack.service._resolve_runtime_bundle_for_setup_options(setup)
     stack.annual_impacts.set_reform_impact(
@@ -226,7 +246,7 @@ def _store_annual_impact(
     )
 
 
-def _economy_request(*, budget_window):
+def _economy_request(*, budget_window: bool) -> tuple[str, dict[str, str]]:
     """Return the economy route and query for an annual or budget-window run."""
     if budget_window:
         return "/us/economy/1/over/2/budget-window", {
@@ -236,14 +256,16 @@ def _economy_request(*, budget_window):
     return "/us/economy/1/over/2", {"time_period": "2036"}
 
 
-def _get_economy(app, url, query):
+def _get_economy(app: Flask, url: str, query: dict[str, str]) -> Any:
     return app.test_client().get(
         url,
         query_string={"region": "us", "version": "1.0.0", **query},
     )
 
 
-def _assert_window_failure_recorded(state, typed_error, setup) -> None:
+def _assert_window_failure_recorded(
+    state: Any, typed_error: dict[str, str], setup: Any
+) -> None:
     assert state is not None
     assert state.status == "failed"
     assert state.failure_type == "spm_validation"
@@ -251,7 +273,9 @@ def _assert_window_failure_recorded(state, typed_error, setup) -> None:
     assert state.observability_id == setup.observability_id
 
 
-def _assert_annual_failure_recorded(stored, typed_error, setup) -> None:
+def _assert_annual_failure_recorded(
+    stored: Any, typed_error: dict[str, str], setup: Any
+) -> None:
     assert stored.status == "error"
     assert stored.reform_impact_json == {}
     assert stored.error_code == typed_error["code"]

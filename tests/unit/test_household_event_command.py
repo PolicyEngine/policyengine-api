@@ -206,7 +206,9 @@ def _staging_identity_fields() -> dict[str, str]:
     }
 
 
-def _run_staging_command(environ, legacy_household_id="42") -> int:
+def _run_staging_command(
+    environ: dict[str, str], legacy_household_id: str = "42"
+) -> int:
     return command.main(
         [
             "--environment",
@@ -220,7 +222,9 @@ def _run_staging_command(environ, legacy_household_id="42") -> int:
     )
 
 
-def test_success_audit_record_lists_every_field(monkeypatch, capsys) -> None:
+def test_success_audit_record_lists_every_field(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     destination_id = UUID("00000000-0000-0000-0000-000000000012")
     monkeypatch.setattr(
         command,
@@ -260,7 +264,9 @@ def test_success_audit_record_lists_every_field(monkeypatch, capsys) -> None:
     )
 
 
-def test_failure_audit_record_names_only_the_error_type(monkeypatch, capsys) -> None:
+def test_failure_audit_record_names_only_the_error_type(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.setattr(
         command,
         "process_household_event_after_commit",
@@ -293,7 +299,7 @@ def test_failure_audit_record_names_only_the_error_type(monkeypatch, capsys) -> 
 
 
 def test_configuration_failure_audit_record_has_no_identity(
-    monkeypatch, capsys
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     audit = Mock()
     monkeypatch.setattr(command.logger, "log_struct", audit)
@@ -325,7 +331,9 @@ def test_configuration_failure_audit_record_has_no_identity(
     )
 
 
-def test_audit_failure_does_not_change_the_command_result(monkeypatch) -> None:
+def test_audit_failure_does_not_change_the_command_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         command,
         "process_household_event_after_commit",
@@ -345,7 +353,7 @@ def test_audit_failure_does_not_change_the_command_result(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("raw_port", ["", "   "])
-def test_proxy_is_not_used_without_a_port(raw_port) -> None:
+def test_proxy_is_not_used_without_a_port(raw_port: str) -> None:
     assert command._proxy_event_service({"POLICYENGINE_DB_PROXY_PORT": raw_port}) == (
         None,
         None,
@@ -362,7 +370,7 @@ def test_proxy_is_not_used_without_a_port(raw_port) -> None:
         ("-1", "POLICYENGINE_DB_PROXY_PORT is outside the valid range"),
     ],
 )
-def test_proxy_port_must_be_a_valid_tcp_port(raw_port, message) -> None:
+def test_proxy_port_must_be_a_valid_tcp_port(raw_port: str, message: str) -> None:
     with pytest.raises(
         command.HouseholdEventCommandConfigurationError, match=f"^{message}$"
     ):
@@ -375,7 +383,9 @@ def test_proxy_port_must_be_a_valid_tcp_port(raw_port, message) -> None:
 
 
 @pytest.mark.parametrize(("raw_port", "port"), [("1", 1), (" 65535 ", 65535)])
-def test_proxy_connects_as_the_migration_user(monkeypatch, raw_port, port) -> None:
+def test_proxy_connects_as_the_migration_user(
+    monkeypatch: pytest.MonkeyPatch, raw_port: str, port: int
+) -> None:
     engine = Mock(spec=Engine)
     create_engine = Mock(return_value=engine)
     session_factory = Mock()

@@ -254,12 +254,14 @@ def test_upgrade_refuses_databases_without_valid_revision_history(monkeypatch, s
         ("remove_table", "Unsupported metadata difference shape"),
     ],
 )
-def test_metadata_difference_rejects_short_or_unknown_shapes(difference, message):
+def test_metadata_difference_rejects_short_or_unknown_shapes(
+    difference: object, message: str
+) -> None:
     with pytest.raises(ValueError, match=f"^{message}$"):
         describe_metadata_difference(difference)
 
 
-def test_metadata_difference_accepts_longer_tuples_and_unwraps_one_item_lists():
+def test_metadata_difference_accepts_longer_tuples_and_unwraps_one_item_lists() -> None:
     assert (
         describe_metadata_difference(
             [("modify_default", None, "t", "c", {}, None, "now()", "extra")]

@@ -12,7 +12,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.dialects import postgresql
 
 from policyengine_api.constants import REPO
@@ -193,19 +193,21 @@ def _assert_stage_12a_association_shape(engine) -> None:
     } <= user_checks
 
 
-def _upgrade_and_assert_head(config, engine) -> None:
+def _upgrade_and_assert_head(config: Config, engine: Engine) -> None:
     command.upgrade(config, "head")
     command.check(config)
     _assert_head(engine)
 
 
-def _assert_revision(engine, revision) -> None:
+def _assert_revision(engine: Engine, revision: str) -> None:
     with engine.connect() as connection:
         context = MigrationContext.configure(connection)
         assert context.get_current_revision() == revision
 
 
-def _assert_revision_without_enum_types(engine, revision, enum_query: str) -> None:
+def _assert_revision_without_enum_types(
+    engine: Engine, revision: str | None, enum_query: str
+) -> None:
     """Check the database revision, then that ``enum_query`` counts no enum types."""
     with engine.connect() as connection:
         context = MigrationContext.configure(connection)
@@ -214,7 +216,7 @@ def _assert_revision_without_enum_types(engine, revision, enum_query: str) -> No
     assert enum_count == 0
 
 
-def _insert_legacy_stage12_report(engine) -> UUID:
+def _insert_legacy_stage12_report(engine: Engine) -> UUID:
     """Store a report from before the comparison columns existed; return its id."""
     legacy_report_id = uuid4()
     with engine.begin() as connection:
@@ -240,7 +242,7 @@ def _insert_legacy_stage12_report(engine) -> UUID:
     return legacy_report_id
 
 
-def _assert_comparison_downgrade_then_store_legacy_report(engine) -> UUID:
+def _assert_comparison_downgrade_then_store_legacy_report(engine: Engine) -> UUID:
     """Check the comparison revision is gone, then store a pre-comparison report."""
     _assert_revision_without_enum_types(
         engine,
@@ -260,7 +262,9 @@ def _assert_comparison_downgrade_then_store_legacy_report(engine) -> UUID:
     return _insert_legacy_stage12_report(engine)
 
 
-def _assert_legacy_report_is_not_compared(engine, legacy_report_id: UUID) -> None:
+def _assert_legacy_report_is_not_compared(
+    engine: Engine, legacy_report_id: UUID
+) -> None:
     with engine.connect() as connection:
         comparison_status = connection.execute(
             text(
@@ -272,7 +276,7 @@ def _assert_legacy_report_is_not_compared(engine, legacy_report_id: UUID) -> Non
     assert comparison_status == "not_requested"
 
 
-def _assert_stage12_downgrade(engine) -> None:
+def _assert_stage12_downgrade(engine: Engine) -> None:
     _assert_revision_without_enum_types(
         engine,
         STAGE_12_PREVIOUS_REVISION,
@@ -285,7 +289,7 @@ def _assert_stage12_downgrade(engine) -> None:
     }.isdisjoint(inspect(engine).get_table_names(schema="public"))
 
 
-def _assert_stage11_downgrade(engine) -> None:
+def _assert_stage11_downgrade(engine: Engine) -> None:
     _assert_revision(engine, STAGE_11_PREVIOUS_REVISION)
     assert "legacy_household_mappings" not in inspect(engine).get_table_names(
         schema="public"
@@ -332,14 +336,14 @@ def _assert_stage11_downgrade(engine) -> None:
     )
 
 
-def _assert_baseline_downgrade(engine) -> None:
+def _assert_baseline_downgrade(engine: Engine) -> None:
     _assert_revision(engine, BASELINE_REVISION)
     assert "uq_parameter_values_canonical_parameter_start_date" not in {
         index["name"] for index in inspect(engine).get_indexes("parameter_values")
     }
 
 
-def _assert_base(engine) -> None:
+def _assert_base(engine: Engine) -> None:
     assert set(inspect(engine).get_table_names(schema="public")) <= {"alembic_version"}
     _assert_revision_without_enum_types(
         engine,
