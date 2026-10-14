@@ -63,46 +63,64 @@ def _mermaid_id(prefix: str, text: str) -> str:
     return prefix + "_" + re.sub(r"[^A-Za-z0-9]", "_", text)
 
 
-def _mermaid(rules: list[Rule]) -> list[str]:
-    lines = ["```mermaid", "flowchart LR"]
-    declared: set[str] = set()
-    edges: list[str] = []
+# Mermaid node declarations by shape: a box, a rounded box, or a flag.
+_MERMAID_SHAPES = {
+    "box": '  {node_id}["{label}"]',
+    "round": '  {node_id}("{label}")',
+    "flag": '  {node_id}>"{label}"]',
+}
 
-    def node(node_id: str, label: str, shape: str = "box") -> str:
-        if node_id not in declared:
-            declared.add(node_id)
-            safe = label.replace('"', "'")
-            if shape == "round":
-                lines.append(f'  {node_id}("{safe}")')
-            elif shape == "flag":
-                lines.append(f'  {node_id}>"{safe}"]')
-            else:
-                lines.append(f'  {node_id}["{safe}"]')
+
+class _MermaidGraph:
+    """A flowchart under construction: each node is declared once, in first use."""
+
+    def __init__(self) -> None:
+        self.nodes: list[str] = []
+        self.edges: list[str] = []
+        self._declared: set[str] = set()
+
+    def node(self, node_id: str, label: str, shape: str = "box") -> str:
+        """Declare the node the first time it is used, and return its id."""
+        if node_id not in self._declared:
+            self._declared.add(node_id)
+            template = _MERMAID_SHAPES.get(shape, _MERMAID_SHAPES["box"])
+            self.nodes.append(
+                template.format(node_id=node_id, label=label.replace('"', "'"))
+            )
         return node_id
 
+    def edge_once(self, edge: str) -> None:
+        """Add an edge unless the graph already has it."""
+        if edge not in self.edges:
+            self.edges.append(edge)
+
+
+def _add_rule_to_graph(graph: _MermaidGraph, rule: Rule) -> None:
+    """Link a rule to its enforcer, and the enforcer to its CI jobs or a gap."""
+    rule_node = graph.node(
+        _mermaid_id("r", rule.id), f"{rule.id} ({rule.status})", "round"
+    )
+    if rule.enforcer.kind is Kind.NONE:
+        gap = graph.node("gap_unenforced", "not enforced", "flag")
+        graph.edges.append(f"  {rule_node} -.-> {gap}")
+        return
+    label = _enforced_by(rule).replace("`", "")
+    enforcer_node = graph.node(_mermaid_id("e", label), label)
+    graph.edges.append(f"  {rule_node} --> {enforcer_node}")
+    for ref in rule.ci:
+        job_label = f"CI {Path(ref.workflow).name}:{ref.job}"
+        job_node = graph.node(_mermaid_id("j", job_label), job_label)
+        graph.edge_once(f"  {enforcer_node} --> {job_node}")
+    if not rule.ci:
+        local = graph.node("local_only", "not run in CI", "flag")
+        graph.edge_once(f"  {enforcer_node} -.-> {local}")
+
+
+def _mermaid(rules: list[Rule]) -> list[str]:
+    graph = _MermaidGraph()
     for rule in rules:
-        rule_node = node(
-            _mermaid_id("r", rule.id), f"{rule.id} ({rule.status})", "round"
-        )
-        if rule.enforcer.kind is Kind.NONE:
-            gap = node("gap_unenforced", "not enforced", "flag")
-            edges.append(f"  {rule_node} -.-> {gap}")
-            continue
-        label = _enforced_by(rule).replace("`", "")
-        enforcer_node = node(_mermaid_id("e", label), label)
-        edges.append(f"  {rule_node} --> {enforcer_node}")
-        for ref in rule.ci:
-            job_label = f"CI {Path(ref.workflow).name}:{ref.job}"
-            job_node = node(_mermaid_id("j", job_label), job_label)
-            edge = f"  {enforcer_node} --> {job_node}"
-            if edge not in edges:
-                edges.append(edge)
-        if not rule.ci:
-            local = node("local_only", "not run in CI", "flag")
-            edge = f"  {enforcer_node} -.-> {local}"
-            if edge not in edges:
-                edges.append(edge)
-    return lines + edges + ["```"]
+        _add_rule_to_graph(graph, rule)
+    return ["```mermaid", "flowchart LR", *graph.nodes, *graph.edges, "```"]
 
 
 def _mermaid_chunks(rules: list[Rule]) -> list[list[str]]:
