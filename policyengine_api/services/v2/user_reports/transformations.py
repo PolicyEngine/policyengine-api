@@ -27,6 +27,7 @@ def user_report_read(association: UserReportAssociation) -> UserReportRead:
         name=association.name,
         description=association.description,
         user_policy_id=association.user_policy_id,
+        baseline_user_policy_id=association.baseline_user_policy_id,
         source_note=association.source_note,
         provisions=association.provisions,
         validation=association.validation,

@@ -200,6 +200,7 @@ def test_export_serializes_stored_rows_outside_current_input_bounds() -> None:
         name=None,
         description=None,
         user_policy_id=None,
+        baseline_user_policy_id=None,
         source_note=long_text,
         provisions=[
             {

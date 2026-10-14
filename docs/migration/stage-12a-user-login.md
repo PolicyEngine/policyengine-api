@@ -275,8 +275,13 @@ from the final SQLModel metadata. It has no post-generation corrections.
   `(user_id, simulation_id|report_id)` uniques are dropped. Each gains
   `country_id` (NOT NULL, CHECK), `name`, `description`, a legacy ID, a
   reference CHECK, `UNIQUE(id, country_id)`, and listing indexes. Reports also
-  add `user_policy_id` → `user_policies.id` ON DELETE SET NULL, `source_note`,
-  `provisions jsonb`, `validation jsonb`, and `budget_window_years smallint`
+  add `user_policy_id` → `user_policies.id` ON DELETE SET NULL (the saved
+  reform the report was run from), `baseline_user_policy_id` →
+  `user_policies.id` ON DELETE SET NULL (the saved reform it was compared
+  with, when not current law; the baseline's name is that reform's name, so no
+  label is stored), `source_note`, `provisions jsonb` (each provision may carry
+  optional `growth`, `growth_start`, `growth_base`, `growth_round_to` and
+  `growth_round` settings), `validation jsonb`, and `budget_window_years smallint`
   (the years of the budget window run with the report, from its year; NULL for
   none, otherwise 2 to 75 by `ck_user_report_associations_budget_window_years`,
   matching the economy route's limit).

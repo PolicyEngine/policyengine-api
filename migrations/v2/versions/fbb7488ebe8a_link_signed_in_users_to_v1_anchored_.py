@@ -2,7 +2,7 @@
 
 Revision ID: fbb7488ebe8a
 Revises: 91af4fc8d8c1
-Create Date: 2026-10-14 23:53:46.255223
+Create Date: 2026-10-15 01:35:47.751988
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
 """
 
@@ -135,6 +135,10 @@ def upgrade() -> None:
         sa.Column("user_policy_id", sa.Uuid(), nullable=True),
     )
     op.add_column(
+        "user_report_associations",
+        sa.Column("baseline_user_policy_id", sa.Uuid(), nullable=True),
+    )
+    op.add_column(
         "user_report_associations", sa.Column("source_note", sa.Text(), nullable=True)
     )
     op.add_column(
@@ -176,6 +180,12 @@ def upgrade() -> None:
         type_="unique",
     )
     op.create_index(
+        op.f("ix_user_report_associations_baseline_user_policy_id"),
+        "user_report_associations",
+        ["baseline_user_policy_id"],
+        unique=False,
+    )
+    op.create_index(
         op.f("ix_user_report_associations_user_policy_id"),
         "user_report_associations",
         ["user_policy_id"],
@@ -202,6 +212,14 @@ def upgrade() -> None:
         op.f("fk_user_report_associations_report_id_reports"),
         "user_report_associations",
         type_="foreignkey",
+    )
+    op.create_foreign_key(
+        op.f("fk_user_report_associations_baseline_user_policy_id_user_policies"),
+        "user_report_associations",
+        "user_policies",
+        ["baseline_user_policy_id"],
+        ["id"],
+        ondelete="SET NULL",
     )
     op.create_foreign_key(
         op.f("fk_user_report_associations_user_policy_id_user_policies"),
@@ -401,6 +419,11 @@ def downgrade() -> None:
         "user_report_associations",
         type_="foreignkey",
     )
+    op.drop_constraint(
+        op.f("fk_user_report_associations_baseline_user_policy_id_user_policies"),
+        "user_report_associations",
+        type_="foreignkey",
+    )
     op.create_foreign_key(
         op.f("fk_user_report_associations_report_id_reports"),
         "user_report_associations",
@@ -424,6 +447,10 @@ def downgrade() -> None:
         op.f("ix_user_report_associations_user_policy_id"),
         table_name="user_report_associations",
     )
+    op.drop_index(
+        op.f("ix_user_report_associations_baseline_user_policy_id"),
+        table_name="user_report_associations",
+    )
     op.create_unique_constraint(
         op.f("uq_user_report_associations_user_report"),
         "user_report_associations",
@@ -443,6 +470,7 @@ def downgrade() -> None:
     op.drop_column("user_report_associations", "validation")
     op.drop_column("user_report_associations", "provisions")
     op.drop_column("user_report_associations", "source_note")
+    op.drop_column("user_report_associations", "baseline_user_policy_id")
     op.drop_column("user_report_associations", "user_policy_id")
     op.drop_column("user_report_associations", "description")
     op.drop_column("user_report_associations", "name")

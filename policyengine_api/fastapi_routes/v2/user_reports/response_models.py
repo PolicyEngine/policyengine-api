@@ -46,6 +46,20 @@ class ReportProvisionItem(StoredSnapshotItem):
     baseline_value: JsonValue
     value: JsonValue
     intervals: list[ReportProvisionIntervalItem] | None = None
+    # Optional rather than nullable: absent unless the provision grows.
+    growth: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    growth_start: int | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    growth_base: int | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    growth_round_to: float | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    growth_round: str | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class ReportCalibrationWorstItem(StoredSnapshotItem):
@@ -91,6 +105,7 @@ class UserReportItem(StrictUserReportAPIModel):
     name: str | None
     description: str | None
     user_policy_id: UUID | None
+    baseline_user_policy_id: UUID | None
     source_note: str | None
     provisions: list[ReportProvisionItem] | None
     validation: ReportValidationItem | None

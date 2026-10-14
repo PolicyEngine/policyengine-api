@@ -202,7 +202,10 @@ def _save_one_of_each(services: Services, principal) -> dict[type, UUID]:
     report = services.reports.create_user_report(
         principal=principal,
         association_input=UserReportCreateFields(
-            country_id="us", legacy_report_id=615, user_policy_id=policy.id
+            country_id="us",
+            legacy_report_id=615,
+            user_policy_id=policy.id,
+            baseline_user_policy_id=policy.id,
         ),
     )
     return {
@@ -399,6 +402,7 @@ def test_merge_moves_every_association_and_keeps_links_and_constraints(
         )
     assert report is not None
     assert report.user_policy_id == browser_records[UserPolicy]
+    assert report.baseline_user_policy_id == browser_records[UserPolicy]
     exported = services.accounts.export_account(principal=alice, country_id="us")
     assert len(exported.policies) == len(exported.reports) == 2
 
@@ -414,6 +418,7 @@ def test_merge_moves_every_association_and_keeps_links_and_constraints(
         association_id=browser_records[UserReportAssociation],
     )
     assert linked.user_policy_id is None
+    assert linked.baseline_user_policy_id is None
 
 
 def _hold_a_conversion(sessions, *, browser, principal) -> Session:

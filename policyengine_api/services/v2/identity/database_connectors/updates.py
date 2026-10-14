@@ -63,7 +63,8 @@ def reassign_user_associations(
     """Move every association row from one owner to another.
 
     Association IDs, contents, and timestamps are unchanged, so links between
-    the moved rows (a report's ``user_policy_id``) stay valid.
+    the moved rows (a report's ``user_policy_id`` and
+    ``baseline_user_policy_id``) stay valid.
     """
 
     for table in USER_ASSOCIATION_TABLES:

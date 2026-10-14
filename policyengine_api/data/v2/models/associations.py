@@ -271,6 +271,14 @@ class UserReportAssociation(TimestampedModel, table=True):
         ondelete="SET NULL",
         index=True,
     )
+    # The same owner's saved reform the report was compared with, when the
+    # comparison was not current law; its name is the baseline's label.
+    baseline_user_policy_id: UUID | None = Field(
+        default=None,
+        foreign_key="user_policies.id",
+        ondelete="SET NULL",
+        index=True,
+    )
     source_note: str | None = Field(default=None, sa_type=sa.Text)
     provisions: list[Any] | None = Field(default=None, sa_type=_jsonb_type())
     validation: dict[str, Any] | None = Field(default=None, sa_type=_jsonb_type())

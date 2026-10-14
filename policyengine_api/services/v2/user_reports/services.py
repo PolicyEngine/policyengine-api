@@ -5,8 +5,9 @@ owner always comes from the verified session principal (a signed-in user or a
 signed-out browser), and v1 references are checked in a short read-only v1
 transaction before the v2 transaction opens. Reads never provision a
 browser's unauthenticated user; one that does not exist yet owns no records.
-An optional ``user_policy_id`` must name the same owner's saved policy in the
-same country.
+An optional ``user_policy_id`` (the saved reform the report was run from) and
+an optional ``baseline_user_policy_id`` (the saved reform it was compared with)
+must each name the same owner's saved policy in the same country.
 """
 
 from __future__ import annotations
@@ -150,12 +151,16 @@ class V2UserReportService:
                 principal,
                 country_id=association_input.country_id,
             )
-            validate_linked_user_policy(
-                session,
-                user_id=owner.user_id,
-                country_id=association_input.country_id,
-                user_policy_id=association_input.user_policy_id,
-            )
+            for linked_user_policy_id in (
+                association_input.user_policy_id,
+                association_input.baseline_user_policy_id,
+            ):
+                validate_linked_user_policy(
+                    session,
+                    user_id=owner.user_id,
+                    country_id=association_input.country_id,
+                    user_policy_id=linked_user_policy_id,
+                )
             return user_report_read(
                 create_user_report(
                     session,
@@ -231,13 +236,14 @@ class V2UserReportService:
                 country_id=country_id,
                 association_id=association_id,
             )
-            if "user_policy_id" in association_input.model_fields_set:
-                validate_linked_user_policy(
-                    session,
-                    user_id=owner.user_id,
-                    country_id=country_id,
-                    user_policy_id=association_input.user_policy_id,
-                )
+            for link_field in ("user_policy_id", "baseline_user_policy_id"):
+                if link_field in association_input.model_fields_set:
+                    validate_linked_user_policy(
+                        session,
+                        user_id=owner.user_id,
+                        country_id=country_id,
+                        user_policy_id=getattr(association_input, link_field),
+                    )
             return user_report_read(
                 update_user_report(
                     session,

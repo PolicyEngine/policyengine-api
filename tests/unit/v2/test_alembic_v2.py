@@ -532,6 +532,9 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
     assert "fk_user_simulation_associations_simulation_id_simulations" in revision
     assert "fk_user_report_associations_report_id_reports" in revision
     assert "fk_user_report_associations_user_policy_id_user_policies" in revision
+    assert (
+        "fk_user_report_associations_baseline_user_policy_id_user_policies" in revision
+    )
     assert 'ondelete="SET NULL"' in revision
     assert "Post-generation" not in revision
     assert "op.execute(" not in revision

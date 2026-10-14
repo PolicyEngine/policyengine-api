@@ -61,6 +61,14 @@ class ReportProvision(StrictUserReportModel):
     baseline_value: FiniteJsonValue
     value: FiniteJsonValue
     intervals: list[ReportProvisionInterval] | None = None
+    # How a value set from one year on moves after it: 'fixed',
+    # 'current_law', or an index's parameter path. The rest say when it
+    # moves and how grown values round. Absent for a hand-set schedule.
+    growth: LongLabelText | None = None
+    growth_start: int | None = None
+    growth_base: int | None = None
+    growth_round_to: float | None = None
+    growth_round: Literal["nearest", "down", "up"] | None = None
 
 
 class ReportCalibrationWorst(StrictUserReportModel):
@@ -149,6 +157,7 @@ class UserReportCreateFields(_ReportPresentationFields):
     country_id: CountryId
     legacy_report_id: LegacyRecordId
     user_policy_id: ResourceId | None = None
+    baseline_user_policy_id: ResourceId | None = None
 
 
 class UserReportCreationInput(StrictUserReportModel):
@@ -160,6 +169,7 @@ class UserReportCreationInput(StrictUserReportModel):
     name: AssociationName | None = None
     description: str | None = None
     user_policy_id: ResourceId | None = None
+    baseline_user_policy_id: ResourceId | None = None
     source_note: str | None = None
     provisions: list[StoredJSONObject] | None = None
     validation: StoredJSONObject | None = None
@@ -170,6 +180,7 @@ class UserReportCreationInput(StrictUserReportModel):
 class UserReportUpdateInput(_ReportPresentationFields):
     legacy_report_id: LegacyRecordId | None = None
     user_policy_id: ResourceId | None = None
+    baseline_user_policy_id: ResourceId | None = None
 
     @model_validator(mode="after")
     def require_valid_supplied_field(self) -> "UserReportUpdateInput":
@@ -178,6 +189,7 @@ class UserReportUpdateInput(_ReportPresentationFields):
             "name",
             "description",
             "user_policy_id",
+            "baseline_user_policy_id",
             "source_note",
             "provisions",
             "validation",
@@ -202,6 +214,7 @@ class UserReportRead:
     name: str | None
     description: str | None
     user_policy_id: UUID | None
+    baseline_user_policy_id: UUID | None
     source_note: str | None
     provisions: list[StoredJSONObject] | None
     validation: StoredJSONObject | None

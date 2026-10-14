@@ -37,6 +37,7 @@ from tests.unit.v2.user_route_support import (
 SIMULATION_ASSOCIATION_ID = UUID("00000000-0000-0000-0000-000000000062")
 REPORT_ASSOCIATION_ID = UUID("00000000-0000-0000-0000-000000000063")
 USER_POLICY_ID = UUID("00000000-0000-0000-0000-000000000064")
+BASELINE_USER_POLICY_ID = UUID("00000000-0000-0000-0000-000000000065")
 LAST_RUN_AT = datetime(2026, 2, 1, 12, tzinfo=timezone.utc)
 PROVISIONS = [
     {
@@ -50,6 +51,19 @@ PROVISIONS = [
         ],
     }
 ]
+# A value set from one year on that then grows with an index, rounded down.
+GROWING_PROVISION = {
+    "path": "gov.irs.credits.ctc.refundable.individual_max",
+    "breadcrumb": "Refundable CTC maximum",
+    "unit": "currency-USD",
+    "baseline_value": 1700,
+    "value": 2000,
+    "growth": "gov.irs.uprating",
+    "growth_start": 2027,
+    "growth_base": 2026,
+    "growth_round_to": 100,
+    "growth_round": "down",
+}
 VALIDATION = {
     "matched_at": "2026-02-01T12:00:00Z",
     "map_model_version": "1",
@@ -101,6 +115,7 @@ def _report_read() -> UserReportRead:
         name="CTC report",
         description=None,
         user_policy_id=USER_POLICY_ID,
+        baseline_user_policy_id=BASELINE_USER_POLICY_ID,
         source_note="from chat",
         provisions=PROVISIONS,
         validation=VALIDATION,
@@ -199,8 +214,9 @@ def test_report_routes_round_trip_v3_fields() -> None:
             "legacy_report_id": 615,
             "name": "CTC report",
             "user_policy_id": str(USER_POLICY_ID),
+            "baseline_user_policy_id": str(BASELINE_USER_POLICY_ID),
             "source_note": "from chat",
-            "provisions": PROVISIONS,
+            "provisions": PROVISIONS + [GROWING_PROVISION],
             "validation": VALIDATION,
             "budget_window_years": 10,
             "last_run_at": "2026-02-01T12:00:00Z",
@@ -212,12 +228,16 @@ def test_report_routes_round_trip_v3_fields() -> None:
     assert item["legacy_report_id"] == 615
     assert item["report_id"] is None
     assert item["user_policy_id"] == str(USER_POLICY_ID)
+    assert item["baseline_user_policy_id"] == str(BASELINE_USER_POLICY_ID)
     assert item["provisions"] == PROVISIONS
     assert item["validation"] == VALIDATION
     assert item["budget_window_years"] == 10
     assert item["last_run_at"] == "2026-02-01T12:00:00Z"
     fields = reports.calls[0][1]["association_input"]
     assert fields.provisions[0].intervals[0].value == 3000
+    assert fields.baseline_user_policy_id == BASELINE_USER_POLICY_ID
+    assert fields.provisions[1].growth == "gov.irs.uprating"
+    assert fields.provisions[1].growth_round == "down"
     assert fields.validation.calibration.matches[0].ring == "primary"
 
 
@@ -237,6 +257,10 @@ def test_report_routes_round_trip_v3_fields() -> None:
         },
         {"validation": {**VALIDATION, "scorecard": {"programs": "ctc"}}},
         {"provisions": [{**PROVISIONS[0], "value": "x" * (64 * 1024)}]},
+        {"provisions": [{**GROWING_PROVISION, "growth_round": "sideways"}]},
+        {"provisions": [{**GROWING_PROVISION, "growth_start": "next year"}]},
+        {"provisions": [{**GROWING_PROVISION, "growth_round_to": "ten"}]},
+        {"baseline_user_policy_id": "not-a-uuid"},
         {"budget_window_years": 1},
         {"budget_window_years": 76},
         {"budget_window_years": "ten"},
@@ -283,6 +307,7 @@ def test_report_patch_accepts_only_contract_fields() -> None:
         json={
             "legacy_report_id": 616,
             "user_policy_id": None,
+            "baseline_user_policy_id": None,
             "provisions": None,
             "budget_window_years": None,
             "last_run_at": "2026-03-01T00:00:00+00:00",
@@ -299,6 +324,7 @@ def test_report_patch_accepts_only_contract_fields() -> None:
     assert association_input.model_fields_set == {
         "legacy_report_id",
         "user_policy_id",
+        "baseline_user_policy_id",
         "provisions",
         "budget_window_years",
         "last_run_at",
@@ -340,6 +366,26 @@ def test_report_snapshots_echo_stored_keys_with_contract_nulls() -> None:
         "calibration": None,
         "scorecard": None,
     }
+
+
+def test_report_provisions_echo_growth_only_when_stored() -> None:
+    reports = RecordingService(
+        lambda _name, _kwargs: replace(
+            _report_read(), provisions=[*PROVISIONS, GROWING_PROVISION]
+        )
+    )
+    client, _flask_calls = user_route_client(
+        v2_user_report_service_factory=lambda: reports
+    )
+
+    item = client.get(f"/v2/user-reports/{REPORT_ASSOCIATION_ID}?country_id=us").json()[
+        "result"
+    ]["item"]
+
+    fixed_provision, growing_provision = item["provisions"]
+    assert growing_provision == {**GROWING_PROVISION, "intervals": None}
+    # The growth keys are optional, not nullable: a fixed value has none.
+    assert not any(key.startswith("growth") for key in fixed_provision)
 
 
 def test_openapi_types_report_and_policy_snapshots() -> None:

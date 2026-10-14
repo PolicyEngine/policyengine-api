@@ -294,6 +294,34 @@ def test_report_policy_links_require_the_same_owner_and_survive_deletion(
             association_input=UserReportUpdateInput(user_policy_id=bob_policy.id),
         )
 
+    with pytest.raises(AssociationLinkNotFoundError):
+        reports.create_user_report(
+            principal=ALICE,
+            association_input=UserReportCreateFields(
+                country_id="us",
+                legacy_report_id=615,
+                baseline_user_policy_id=bob_policy.id,
+            ),
+        )
+    with pytest.raises(AssociationLinkNotFoundError):
+        reports.patch_user_report(
+            principal=ALICE,
+            country_id="us",
+            association_id=report.id,
+            association_input=UserReportUpdateInput(
+                baseline_user_policy_id=bob_policy.id
+            ),
+        )
+    compared = reports.patch_user_report(
+        principal=ALICE,
+        country_id="us",
+        association_id=report.id,
+        association_input=UserReportUpdateInput(
+            baseline_user_policy_id=alice_policy.id
+        ),
+    )
+    assert compared.baseline_user_policy_id == alice_policy.id
+
     assert report.user_policy_id == alice_policy.id
     assert report.provisions == [
         {"path": "gov.x", "breadcrumb": "X", "baseline_value": 1, "value": 2}
