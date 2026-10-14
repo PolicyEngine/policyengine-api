@@ -197,7 +197,7 @@ def render_rules_md(registry: Registry) -> str:
             )
         out.append("")
         for chunk in _mermaid_chunks(group):
-            out += chunk + [""]
+            out += [*chunk, ""]
     return "\n".join(out).rstrip() + "\n"
 
 

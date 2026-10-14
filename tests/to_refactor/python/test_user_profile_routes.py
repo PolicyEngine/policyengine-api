@@ -1,5 +1,6 @@
 import json
 import time
+from typing import ClassVar
 
 from sqlalchemy import delete, select
 
@@ -14,7 +15,7 @@ class TestUserProfiles:
     # Simulate JS's Date.now()
     user_since = int(time.time())
 
-    test_profile = {
+    test_profile: ClassVar[dict] = {
         "auth0_id": auth0_id,
         "primary_country": primary_country,
         "user_since": user_since,

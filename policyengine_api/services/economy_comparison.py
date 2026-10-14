@@ -112,7 +112,9 @@ def labor_supply_response(baseline: dict, reform: dict) -> dict:
     }
 
 
-def detailed_budgetary_impact(baseline: dict, reform: dict, country_id: str) -> dict:
+def detailed_budgetary_impact(
+    baseline: dict, reform: dict, country_id: str | None
+) -> dict:
     """Return baseline, reform and difference for each UK programme's budget.
 
     Only the UK reports programme-level totals; other countries get an empty dict.
@@ -578,7 +580,7 @@ class UKLocalAuthorityBreakdown(BaseModel):
 
 
 def uk_constituency_breakdown(
-    baseline: dict, reform: dict, country_id: str, region: str | None = None
+    baseline: dict, reform: dict, country_id: str | None, region: str | None = None
 ) -> UKConstituencyBreakdown | None:
     """Return each UK constituency's average and relative household income change.
 
@@ -714,7 +716,7 @@ def uk_constituency_breakdown(
 
 
 def uk_local_authority_breakdown(
-    baseline: dict, reform: dict, country_id: str, region: str | None = None
+    baseline: dict, reform: dict, country_id: str | None, region: str | None = None
 ) -> UKLocalAuthorityBreakdown | None:
     """Return each UK local authority's average and relative household income change.
 
@@ -840,7 +842,7 @@ def uk_local_authority_breakdown(
 def compare_economic_outputs(
     baseline: dict,
     reform: dict,
-    country_id: str = None,
+    country_id: str | None = None,
     region: str | None = None,
 ) -> dict:
     """Compare the economic outputs of two economies.

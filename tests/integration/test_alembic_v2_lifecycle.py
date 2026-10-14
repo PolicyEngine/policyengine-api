@@ -669,7 +669,7 @@ def test_upgrade_to_head_validates_the_resulting_schema_against_metadata() -> No
 
         with pytest.raises(
             V2MigrationTargetError,
-            match="v2 head schema.*unreviewed_runtime_table",
+            match=r"v2 head schema.*unreviewed_runtime_table",
         ):
             command.upgrade(config, "head")
 
