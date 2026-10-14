@@ -22,7 +22,9 @@ import sys
 import time
 import uuid
 from collections import Counter
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from http import HTTPStatus
 from pathlib import Path
 
 import httpx
@@ -51,11 +53,11 @@ def _utc_now_iso() -> str:
 
 
 def _classify(status_code: int) -> str:
-    if status_code == 429:
+    if status_code == HTTPStatus.TOO_MANY_REQUESTS:
         return OUTCOME_HTTP_429
-    if status_code >= 500:
+    if status_code >= HTTPStatus.INTERNAL_SERVER_ERROR:
         return OUTCOME_HTTP_5XX
-    if status_code >= 400:
+    if status_code >= HTTPStatus.BAD_REQUEST:
         return OUTCOME_HTTP_4XX
     return OUTCOME_OK
 
@@ -72,38 +74,49 @@ async def _wait_for_readiness(
             raise RuntimeError(msg)
         try:
             response = await client.get(READINESS_PATH, timeout=20.0)
-            if response.status_code == 200:
+            if response.status_code == HTTPStatus.OK:
                 return waited
         except httpx.HTTPError:
             pass
         await asyncio.sleep(5.0)
 
 
+@dataclass(frozen=True)
+class _LoadCellRun:
+    """One load cell's settings and clock, shared by every closed-loop client.
+
+    Each client appends one record per request to ``records``.
+    """
+
+    args: argparse.Namespace
+    base_payload: dict
+    cache_bust: bool
+    run_token: str
+    warmup_until: float
+    deadline: float
+    records: list[dict]
+
+
 async def _client_loop(
     *,
     client_index: int,
     client: httpx.AsyncClient,
-    args: argparse.Namespace,
-    base_payload: dict,
-    cache_bust: bool,
-    run_token: str,
-    warmup_until: float,
-    deadline: float,
-    records: list[dict],
+    cell: _LoadCellRun,
 ) -> None:
+    args = cell.args
     rng = random.Random(args.seed * 1000 + client_index)
     seq = 0
-    while time.monotonic() < deadline:
+    while time.monotonic() < cell.deadline:
         seq += 1
         is_calculate = rng.random() < args.calculate_share
         if is_calculate:
-            payload = copy.deepcopy(base_payload)
-            if cache_bust:
+            payload = copy.deepcopy(cell.base_payload)
+            if cell.cache_bust:
                 # run_token makes the nonce unique across runs: without it,
                 # re-running a cell within Redis's 300s TTL replays identical
                 # body hashes and measures the cache instead of the engine.
                 payload["_loadtest"] = (
-                    f"{run_token}-{args.cell_label}-{client_index}-{seq}"
+                    f"{cell.run_token}-{args.cell_label}-{client_index}-{seq}"
                 )
             method, path = "POST", CALCULATE_PATH
             timeout = args.timeout_calculate
@@ -112,7 +125,7 @@ async def _client_loop(
             method, path = "GET", METADATA_PATH
             timeout = args.timeout_metadata
 
-        warmup = time.monotonic() < warmup_until
+        warmup = time.monotonic() < cell.warmup_until
         started = time.perf_counter()
         status = 0
         try:
@@ -123,7 +136,7 @@ async def _client_loop(
             outcome = OUTCOME_TIMEOUT
         except httpx.HTTPError:
             outcome = OUTCOME_CONNECT_ERROR
-        records.append(
+        cell.records.append(
             {
                 "endpoint": "calculate" if is_calculate else "metadata",
                 "warmup": warmup,
@@ -181,19 +194,18 @@ async def _run(args: argparse.Namespace, base_payload: dict) -> dict:
         start = time.monotonic()
         warmup_until = start + args.warmup_seconds
         deadline = warmup_until + args.duration_seconds
+        cell = _LoadCellRun(
+            args=args,
+            base_payload=base_payload,
+            cache_bust=cache_bust,
+            run_token=run_token,
+            warmup_until=warmup_until,
+            deadline=deadline,
+            records=records,
+        )
         await asyncio.gather(
             *(
-                _client_loop(
-                    client_index=i,
-                    client=client,
-                    args=args,
-                    base_payload=base_payload,
-                    cache_bust=cache_bust,
-                    run_token=run_token,
-                    warmup_until=warmup_until,
-                    deadline=deadline,
-                    records=records,
-                )
+                _client_loop(client_index=i, client=client, cell=cell)
                 for i in range(args.clients)
             )
         )
