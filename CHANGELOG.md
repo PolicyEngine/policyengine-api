@@ -1,3 +1,14 @@
+## [5.2.1] - 2026-10-14
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.3.4.
+
+### Fixed
+
+- Store list-valued UK region filters, such as England's nine English regions, as a JSON array in the catalog's existing filter text, so catalog extraction no longer fails on PolicyEngine 6.3.4.
+
+
 ## [5.2.0] - 2026-10-14
 
 ### Added
