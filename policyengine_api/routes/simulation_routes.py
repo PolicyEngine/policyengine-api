@@ -136,7 +136,7 @@ def create_simulation(country_id: str) -> Response:
             "Bad request creating simulation for country %s: %s", country_id, e
         )
         msg = f"Failed to create simulation: {e}"
-        raise BadRequest(msg)
+        raise BadRequest(msg) from e
     except Exception:
         current_app.logger.exception(
             "Unexpected error creating simulation for country %s", country_id
@@ -261,7 +261,7 @@ def update_simulation(country_id: str) -> Response:
             e,
         )
         msg = f"Failed to update simulation: {e}"
-        raise BadRequest(msg)
+        raise BadRequest(msg) from e
     except Exception:
         current_app.logger.exception(
             "Unexpected error updating simulation #%s for country %s",

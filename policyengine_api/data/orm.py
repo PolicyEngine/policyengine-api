@@ -49,7 +49,7 @@ def build_session_factory(engine: Engine) -> sessionmaker[Session]:
 
 
 def _build_remote_engine() -> Engine:
-    global _cloud_sql_connector
+    global _cloud_sql_connector  # noqa: PLW0603  # process-owned Cloud SQL state, created lazily and released by close_v1_engines
     config = get_remote_database_config()
     connector = Connector(
         ip_type=CLOUD_SQL_IP_TYPE,
@@ -81,7 +81,7 @@ def _build_remote_engine() -> Engine:
 
 def get_v1_engine() -> Engine:
     """Return the process-owned Cloud SQL engine; never select SQLite."""
-    global _v1_engine
+    global _v1_engine  # noqa: PLW0603  # process-owned Cloud SQL state, created lazily and released by close_v1_engines
     if _v1_engine is None:
         _v1_engine = _build_remote_engine()
     return _v1_engine
@@ -89,7 +89,7 @@ def get_v1_engine() -> Engine:
 
 def get_v1_session_factory() -> sessionmaker[Session]:
     """Return one configured Session factory for the Cloud SQL engine."""
-    global _v1_session_factory
+    global _v1_session_factory  # noqa: PLW0603  # process-owned Cloud SQL state, created lazily and released by close_v1_engines
     if _v1_session_factory is None:
         _v1_session_factory = build_session_factory(get_v1_engine())
     return _v1_session_factory
@@ -97,13 +97,13 @@ def get_v1_session_factory() -> sessionmaker[Session]:
 
 def clear_v1_session_factories() -> None:
     """Forget cached factories, primarily after replacing an Engine in tests."""
-    global _v1_session_factory
+    global _v1_session_factory  # noqa: PLW0603  # process-owned Cloud SQL state, created lazily and released by close_v1_engines
     _v1_session_factory = None
 
 
 def close_v1_engines() -> None:
     """Release process-owned SQLAlchemy pools and Cloud SQL connectors."""
-    global _cloud_sql_connector, _v1_engine
+    global _cloud_sql_connector, _v1_engine  # noqa: PLW0603  # process-owned Cloud SQL state, created lazily and released by close_v1_engines
     clear_v1_session_factories()
     if _v1_engine is not None:
         _v1_engine.dispose()

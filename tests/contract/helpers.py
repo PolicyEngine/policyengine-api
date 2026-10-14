@@ -25,7 +25,7 @@ def assert_subset(actual: Any, expected: Any) -> None:
     if isinstance(expected, list):
         assert isinstance(actual, list)
         assert len(actual) >= len(expected)
-        for actual_value, expected_value in zip(actual, expected):
+        for actual_value, expected_value in zip(actual, expected, strict=False):
             assert_subset(actual_value, expected_value)
         return
 

@@ -638,9 +638,12 @@ class PolicyEngineCountry:
                 node_type = type(parameter.values_list[-1].value)
                 if node_type is int:
                     node_type = float
+                numeric_value = value
                 with contextlib.suppress(TypeError, ValueError, OverflowError):
-                    value = float(value)
-                normalized_reform[parameter_name][time_period] = node_type(value)
+                    numeric_value = float(value)
+                normalized_reform[parameter_name][time_period] = node_type(
+                    numeric_value
+                )
         return normalized_reform
 
     def _apply_reform_to_system(
@@ -675,9 +678,9 @@ def create_policy_reform(policy_data: dict) -> dict:
             node = parameters
             for step in path.split("."):
                 if "[" in step:
-                    step, index = step.split("[")
+                    child_name, index = step.split("[")
                     index = int(index[:-1])
-                    node = node.children[step].brackets[index]
+                    node = node.children[child_name].brackets[index]
                 else:
                     node = node.children[step]
             for period, value in values.items():

@@ -357,7 +357,7 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
         "Gain more than 5%",
     ]
     for lower, upper, label in zip(
-        income_change_bounds[:-1], income_change_bounds[1:], outcome_labels
+        income_change_bounds[:-1], income_change_bounds[1:], outcome_labels, strict=True
     ):
         outcome_groups[label] = []
         for i in range(1, 11):
@@ -416,7 +416,7 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
         "Gain more than 5%",
     ]
     for lower, upper, label in zip(
-        income_change_bounds[:-1], income_change_bounds[1:], outcome_labels
+        income_change_bounds[:-1], income_change_bounds[1:], outcome_labels, strict=True
     ):
         outcome_groups[label] = []
         for i in range(1, 11):

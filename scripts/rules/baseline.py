@@ -33,6 +33,7 @@ def load_base_registry(root: Path, ref: str) -> Registry | None:
         cwd=root,
         capture_output=True,
         text=True,
+        check=False,
     )
     if verify.returncode != 0:
         raise BaseUnavailableError(ref)
@@ -41,6 +42,7 @@ def load_base_registry(root: Path, ref: str) -> Registry | None:
         cwd=root,
         capture_output=True,
         text=True,
+        check=False,
     )
     if shown.returncode != 0:
         return None

@@ -599,7 +599,7 @@ def test_capability_probe_resolves_the_installed_package_by_name(monkeypatch):
         raise ImportError(name)
 
     monkeypatch.setattr(spm.importlib, "import_module", record)
-    for country_id, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES):
+    for country_id, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES, strict=True):
         assert spm._installed_country_implements_spm(country_id) is False
         assert imported[-1] == package_name
     assert spm._installed_country_implements_spm("nowhere") is False
