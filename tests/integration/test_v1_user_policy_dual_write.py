@@ -31,6 +31,7 @@ from policyengine_api.data.v2.models import (
 )
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.user_policy_mirroring import (
+    UserPolicyMirrorCollaborators,
     UserPolicyMirrorUnavailableError,
     mirror_pending_user_policy_events_after_commit,
     mirror_user_policy_after_commit,
@@ -187,9 +188,11 @@ def test_create_update_and_v1_only_change_mirror_one_association(
             "us",
             created.user_policy.id,
             through_revision=created.mirror_revision,
-            event_service=saved_service,
-            reform_snapshot_loader=policy_service.get_policy_snapshot,
-            mirror_factory=lambda: mirror_service,
+            collaborators=UserPolicyMirrorCollaborators(
+                event_service=saved_service,
+                reform_snapshot_loader=policy_service.get_policy_snapshot,
+                mirror_factory=lambda: mirror_service,
+            ),
         )
 
         renamed = saved_service.update_user_policy(
@@ -202,9 +205,11 @@ def test_create_update_and_v1_only_change_mirror_one_association(
             "us",
             created.user_policy.id,
             through_revision=renamed.mirror_revision,
-            event_service=saved_service,
-            reform_snapshot_loader=policy_service.get_policy_snapshot,
-            mirror_factory=lambda: mirror_service,
+            collaborators=UserPolicyMirrorCollaborators(
+                event_service=saved_service,
+                reform_snapshot_loader=policy_service.get_policy_snapshot,
+                mirror_factory=lambda: mirror_service,
+            ),
         )
         v1_only = saved_service.update_user_policy(
             "us",
@@ -216,9 +221,11 @@ def test_create_update_and_v1_only_change_mirror_one_association(
             "us",
             created.user_policy.id,
             through_revision=v1_only.mirror_revision,
-            event_service=saved_service,
-            reform_snapshot_loader=policy_service.get_policy_snapshot,
-            mirror_factory=lambda: mirror_service,
+            collaborators=UserPolicyMirrorCollaborators(
+                event_service=saved_service,
+                reform_snapshot_loader=policy_service.get_policy_snapshot,
+                mirror_factory=lambda: mirror_service,
+            ),
         )
 
         assert first.association_id == rename_result.association_id
@@ -275,9 +282,11 @@ def test_failure_after_cloud_commit_and_identical_create_retry_are_idempotent(
                 "us",
                 created.user_policy.id,
                 through_revision=created.mirror_revision,
-                event_service=saved_service,
-                reform_snapshot_loader=policy_service.get_policy_snapshot,
-                mirror_factory=lambda: mirror_service,
+                collaborators=UserPolicyMirrorCollaborators(
+                    event_service=saved_service,
+                    reform_snapshot_loader=policy_service.get_policy_snapshot,
+                    mirror_factory=lambda: mirror_service,
+                ),
             )
 
         with v1_sessions() as session:
@@ -310,9 +319,11 @@ def test_failure_after_cloud_commit_and_identical_create_retry_are_idempotent(
             "us",
             retry.user_policy.id,
             through_revision=retry.mirror_revision,
-            event_service=saved_service,
-            reform_snapshot_loader=policy_service.get_policy_snapshot,
-            mirror_factory=lambda: mirror_service,
+            collaborators=UserPolicyMirrorCollaborators(
+                event_service=saved_service,
+                reform_snapshot_loader=policy_service.get_policy_snapshot,
+                mirror_factory=lambda: mirror_service,
+            ),
         )
 
         assert retry.created is False
@@ -374,9 +385,11 @@ def test_destination_commit_replays_when_source_processing_marker_is_missing(
             "us",
             created.user_policy.id,
             through_revision=created.mirror_revision,
-            event_service=saved_service,
-            reform_snapshot_loader=policy_service.get_policy_snapshot,
-            mirror_factory=lambda: mirror_service,
+            collaborators=UserPolicyMirrorCollaborators(
+                event_service=saved_service,
+                reform_snapshot_loader=policy_service.get_policy_snapshot,
+                mirror_factory=lambda: mirror_service,
+            ),
         )
 
         assert replayed.association_id == committed.association_id

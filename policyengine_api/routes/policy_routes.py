@@ -26,6 +26,7 @@ from policyengine_api.services.policy_mirroring import (
 )
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.user_policy_mirroring import (
+    UserPolicyMirrorCollaborators,
     UserPolicyMirrorUnavailableError,
     mirror_pending_user_policy_events_after_commit,
 )
@@ -274,8 +275,10 @@ def _mirror_user_policy_events(
             country_id,
             user_policy_id,
             through_revision=mirror_revision,
-            event_service=user_policy_service,
-            reform_snapshot_loader=policy_service.get_policy_snapshot,
+            collaborators=UserPolicyMirrorCollaborators(
+                event_service=user_policy_service,
+                reform_snapshot_loader=policy_service.get_policy_snapshot,
+            ),
         )
     except UserPolicyMirrorUnavailableError:
         return _user_policy_mirror_unavailable()

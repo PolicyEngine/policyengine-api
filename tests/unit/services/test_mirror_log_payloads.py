@@ -19,6 +19,7 @@ from policyengine_api.services.policy_mirroring import (
     mirror_policy_after_commit,
 )
 from policyengine_api.services.user_policy_mirroring import (
+    UserPolicyMirrorCollaborators,
     UserPolicyMirrorUnavailableError,
     mirror_pending_user_policy_events_after_commit,
     mirror_user_policy_after_commit,
@@ -373,9 +374,13 @@ def test_pending_saved_policy_events_log_one_complete_record_each() -> None:
             "us",
             11,
             through_revision=3,
-            event_service=_pending_event_service(failure=None),
-            reform_snapshot_loader=lambda _country_id, _policy_id: _policy_snapshot(),
-            mirror_factory=lambda: mirror,
+            collaborators=UserPolicyMirrorCollaborators(
+                event_service=_pending_event_service(failure=None),
+                reform_snapshot_loader=lambda _country_id, _policy_id: (
+                    _policy_snapshot()
+                ),
+                mirror_factory=lambda: mirror,
+            ),
         )
 
     assert result == _user_policy_result()
@@ -408,9 +413,13 @@ def test_pending_event_failure_logs_the_active_event_and_unwrapped_cause() -> No
             "us",
             11,
             through_revision=3,
-            event_service=_pending_event_service(failure=wrapped),
-            reform_snapshot_loader=lambda _country_id, _policy_id: _policy_snapshot(),
-            mirror_factory=lambda: mirror,
+            collaborators=UserPolicyMirrorCollaborators(
+                event_service=_pending_event_service(failure=wrapped),
+                reform_snapshot_loader=lambda _country_id, _policy_id: (
+                    _policy_snapshot()
+                ),
+                mirror_factory=lambda: mirror,
+            ),
         )
 
     assert raised.value.__cause__ is wrapped
@@ -438,9 +447,11 @@ def test_pending_event_failure_before_any_event_logs_the_request_identity() -> N
             "uk",
             12,
             through_revision=4,
-            event_service=event_service,
-            reform_snapshot_loader=lambda _country_id, _policy_id: None,
-            mirror_factory=MagicMock(),
+            collaborators=UserPolicyMirrorCollaborators(
+                event_service=event_service,
+                reform_snapshot_loader=lambda _country_id, _policy_id: None,
+                mirror_factory=MagicMock(),
+            ),
         )
 
     payload, severity = _logged(logger)
