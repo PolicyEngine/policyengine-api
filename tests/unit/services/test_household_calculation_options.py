@@ -13,6 +13,7 @@ from policyengine_api.runtime_cache.household_calculations import (
 from policyengine_api.services import household_calculation_service
 from policyengine_api.services.household_calculation_service import (
     CalculationResult,
+    HouseholdCalculationOptions,
     HouseholdCalculationResult,
     HouseholdCalculationService,
     PreparedHouseholdCalculation,
@@ -128,7 +129,12 @@ def test_default_calculation_sends_the_household_unchanged(service, country):
 
 
 def test_add_missing_fills_yearly_and_monthly_variables(service, country):
-    service.calculate_household("us", deepcopy(HOUSEHOLD), {}, add_missing=True)
+    service.calculate_household(
+        "us",
+        deepcopy(HOUSEHOLD),
+        {},
+        options=HouseholdCalculationOptions(add_missing=True),
+    )
 
     assert country.requests == [
         (
@@ -155,8 +161,9 @@ def test_spm_selection_and_request_flag_reach_the_country(
         "us",
         deepcopy(HOUSEHOLD),
         {},
-        spm=SPM_CONFIG,
-        spm_requested=spm_requested,
+        options=HouseholdCalculationOptions(
+            spm=SPM_CONFIG, spm_requested=spm_requested
+        ),
     )
 
     assert country.requests == [
@@ -170,9 +177,9 @@ def test_prepared_calculation_keeps_every_option(service, country):
         "us",
         deepcopy(HOUSEHOLD),
         {},
-        add_missing=True,
-        spm=SPM_CONFIG,
-        spm_requested=True,
+        options=HouseholdCalculationOptions(
+            add_missing=True, spm=SPM_CONFIG, spm_requested=True
+        ),
     )
 
     assert prepared == PreparedHouseholdCalculation(
@@ -197,6 +204,8 @@ def test_prepared_calculation_keeps_every_option(service, country):
 def test_preparing_does_not_change_the_callers_household(service):
     household = deepcopy(HOUSEHOLD)
 
-    service.prepare_household_calculation("us", household, {}, add_missing=True)
+    service.prepare_household_calculation(
+        "us", household, {}, options=HouseholdCalculationOptions(add_missing=True)
+    )
 
     assert household == HOUSEHOLD

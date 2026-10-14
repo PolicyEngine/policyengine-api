@@ -59,6 +59,24 @@ class HouseholdCalculationResult:
 
 
 @dataclass(frozen=True)
+class HouseholdCalculationOptions:
+    """How to calculate a request-supplied household.
+
+    ``add_missing`` adds every yearly, monthly and eternal variable the household
+    leaves out, ``spm`` is the SPM selection to calculate with, and
+    ``spm_requested`` says whether the caller sent that selection rather than
+    relying on the bundle's default.
+    """
+
+    add_missing: bool = False
+    spm: dict | None = None
+    spm_requested: bool = False
+
+
+DEFAULT_CALCULATION_OPTIONS = HouseholdCalculationOptions()
+
+
+@dataclass(frozen=True)
 class PreparedHouseholdCalculation:
     """Validated request inputs ready for calculation after cache lookup."""
 
@@ -390,16 +408,14 @@ class HouseholdCalculationService:
         household_json: dict,
         policy_json: dict,
         *,
-        add_missing: bool = False,
-        spm: dict | None = None,
-        spm_requested: bool = False,
+        options: HouseholdCalculationOptions = DEFAULT_CALCULATION_OPTIONS,
     ) -> PreparedHouseholdCalculation:
         """Validate request inputs before accepting a calculation."""
         countries = self._countries()
         country = countries.get(country_id)
-        spm = normalize_spm_selection(country_id, spm)
+        spm = normalize_spm_selection(country_id, options.spm)
         household_json = deepcopy(household_json)
-        if add_missing:
+        if options.add_missing:
             household_json = add_yearly_variables(
                 household_json,
                 country_id,
@@ -421,7 +437,7 @@ class HouseholdCalculationService:
             household_json=household_json,
             policy_json=policy_json,
             spm=spm,
-            spm_requested=spm_requested,
+            spm_requested=options.spm_requested,
             warnings=tuple(warning.message for warning in deprecated_inputs.warnings),
         )
 
@@ -501,17 +517,13 @@ class HouseholdCalculationService:
         household_json: dict,
         policy_json: dict,
         *,
-        add_missing: bool = False,
-        spm: dict | None = None,
-        spm_requested: bool = False,
+        options: HouseholdCalculationOptions = DEFAULT_CALCULATION_OPTIONS,
     ) -> HouseholdCalculationResult:
         """Validate and calculate request-provided household and policy data."""
         prepared = self.prepare_household_calculation(
             country_id,
             household_json,
             policy_json,
-            add_missing=add_missing,
-            spm=spm,
-            spm_requested=spm_requested,
+            options=options,
         )
         return self.calculate_prepared_household(prepared)
