@@ -102,45 +102,79 @@ def find_unrecognized_household_inputs(
         if not isinstance(entity_group, dict):
             continue
 
-        relationship_keys = {
-            role["plural"]
-            for role in entity.get("roles", {}).values()
-            if "plural" in role
-        }
-        for entity_id, entity_inputs in entity_group.items():
-            if not isinstance(entity_inputs, dict):
-                continue
-            for variable_name in entity_inputs:
-                if variable_name in relationship_keys:
-                    continue
-                variable = variables.get(variable_name)
-                path = f"household.{entity_plural}.{entity_id}.{variable_name}"
-                if variable is None:
-                    errors.append(
-                        UnrecognizedInput(
-                            input_type="household_variable",
-                            name=variable_name,
-                            path=path,
-                        )
-                    )
-                    continue
-                expected_entity = entities.get(variable["entity"], {})
-                expected_entity_plural = expected_entity.get("plural")
-                if (
-                    expected_entity_plural is not None
-                    and expected_entity_plural != entity_plural
-                ):
-                    errors.append(
-                        UnrecognizedInput(
-                            input_type="household_variable_wrong_entity",
-                            name=variable_name,
-                            path=path,
-                            expected_entity_plural=expected_entity_plural,
-                            actual_entity_plural=entity_plural,
-                        )
-                    )
+        errors.extend(
+            _find_unrecognized_entity_inputs(
+                entity_plural,
+                entity_group,
+                entity,
+                variables,
+                entities,
+            )
+        )
 
     return errors
+
+
+def _find_unrecognized_entity_inputs(
+    entity_plural: str,
+    entity_group: dict,
+    entity: dict,
+    variables: dict,
+    entities: dict,
+) -> list[UnrecognizedInput]:
+    """Find unknown and misplaced variables in one entity group's members.
+
+    Role membership keys and members that are not objects are skipped.
+    """
+    relationship_keys = {
+        role["plural"] for role in entity.get("roles", {}).values() if "plural" in role
+    }
+    errors: list[UnrecognizedInput] = []
+    for entity_id, entity_inputs in entity_group.items():
+        if not isinstance(entity_inputs, dict):
+            continue
+        for variable_name in entity_inputs:
+            if variable_name in relationship_keys:
+                continue
+            error = _unrecognized_variable(
+                variable_name,
+                path=f"household.{entity_plural}.{entity_id}.{variable_name}",
+                entity_plural=entity_plural,
+                variables=variables,
+                entities=entities,
+            )
+            if error is not None:
+                errors.append(error)
+    return errors
+
+
+def _unrecognized_variable(
+    variable_name: str,
+    *,
+    path: str,
+    entity_plural: str,
+    variables: dict,
+    entities: dict,
+) -> UnrecognizedInput | None:
+    """Report a variable the model lacks or that belongs on another entity, if so."""
+    variable = variables.get(variable_name)
+    if variable is None:
+        return UnrecognizedInput(
+            input_type="household_variable",
+            name=variable_name,
+            path=path,
+        )
+    expected_entity = entities.get(variable["entity"], {})
+    expected_entity_plural = expected_entity.get("plural")
+    if expected_entity_plural is not None and expected_entity_plural != entity_plural:
+        return UnrecognizedInput(
+            input_type="household_variable_wrong_entity",
+            name=variable_name,
+            path=path,
+            expected_entity_plural=expected_entity_plural,
+            actual_entity_plural=entity_plural,
+        )
+    return None
 
 
 def find_unrecognized_policy_inputs(
