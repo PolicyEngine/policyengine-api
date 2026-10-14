@@ -228,8 +228,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Update package lists
+        run: sudo apt-get update
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y redis-server
+        run: sudo apt-get install -y redis-server
       - name: Start Redis
         run: sudo systemctl start redis-server
       - name: Auth

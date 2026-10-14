@@ -25,6 +25,13 @@ from scripts.rules.resolve import clear_caches, workflow_jobs
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SEPARATOR = " :: "
+# Rule ids end with these names (``<repo>.ci.<name>``). Used to attribute a
+# finding to its rule once the rule is enforced and has no baseline left.
+RULE_NAMES = {
+    "multiline": "multiline-run-is-script",
+    "untested": "workflow-scripts-tested",
+    "shellcheck": "shell-scripts-pass-shellcheck",
+}
 
 
 @dataclass
@@ -118,9 +125,14 @@ def _baseline(root: Path, path: str) -> set[str]:
     }
 
 
-def _rule_for(registry: Registry, baseline: str) -> str | None:
+def _rule_for(registry: Registry, baseline: str, check: str) -> str | None:
     for rule in registry.rules:
         if rule.baseline is not None and rule.baseline.file == baseline:
+            return rule.id
+    for rule in registry.rules:
+        if rule.enforcer.get("name") == "ci-scripts" and rule.id.endswith(
+            f".ci.{RULE_NAMES[check]}"
+        ):
             return rule.id
     return None
 
@@ -130,6 +142,7 @@ def compare(registry: Registry, findings: Findings, root: Path) -> list[Violatio
     assert config is not None
     checks = (
         (
+            "multiline",
             "multi-line run: block",
             findings.multiline,
             config.multiline_baseline,
@@ -137,12 +150,14 @@ def compare(registry: Registry, findings: Findings, root: Path) -> list[Violatio
             f"{config.scripts_dir} and call it from a single-line run:",
         ),
         (
+            "untested",
             "untested workflow script",
             findings.untested,
             config.untested_baseline,
             "add a test that runs the script (see docs/engineering/skills/ci-workflows.md)",
         ),
         (
+            "shellcheck",
             "shellcheck finding in",
             findings.shellcheck,
             config.shellcheck_baseline,
@@ -150,10 +165,10 @@ def compare(registry: Registry, findings: Findings, root: Path) -> list[Violatio
         ),
     )
     violations = []
-    for label, found, baseline_path, fix in checks:
+    for check, label, found, baseline_path, fix in checks:
         if found is None:
             continue
-        rule_id = _rule_for(registry, baseline_path)
+        rule_id = _rule_for(registry, baseline_path, check)
         baseline = _baseline(root, baseline_path)
         for entry in sorted(found - baseline):
             violations.append(Violation(rule_id, "ci-scripts", f"{label} {entry}", fix))
@@ -199,7 +214,9 @@ def run_check(root: Path = REPO_ROOT) -> tuple[list[Violation], list[str]]:
     if findings.shellcheck is None and os.environ.get("GITHUB_ACTIONS"):
         violations.append(
             Violation(
-                _rule_for(registry, registry.ci_scripts.shellcheck_baseline),
+                _rule_for(
+                    registry, registry.ci_scripts.shellcheck_baseline, "shellcheck"
+                ),
                 "ci-scripts",
                 "shellcheck is not installed in this CI job",
                 "install it in the job (pip install shellcheck-py==<version>)",
