@@ -11,7 +11,10 @@ from sqlmodel import Session, col
 from policyengine_api.data.v2.models import Household, LegacyHouseholdMapping
 
 if TYPE_CHECKING:
-    from policyengine_api.services.v2.households.types import HouseholdCreationInput
+    from policyengine_api.services.v2.households.types import (
+        HouseholdCreationInput,
+        LegacyHouseholdSnapshot,
+    )
 
 
 def create_household(
@@ -48,27 +51,26 @@ def create_household(
 def create_legacy_household_mapping(
     session: Session,
     *,
-    country_id: str,
-    legacy_household_id: int,
+    snapshot: LegacyHouseholdSnapshot,
     household_id: UUID,
-    source_api_version: str,
     fingerprint_version: int,
     fingerprint_sha256: str,
 ) -> UUID | None:
     """Insert the mapping from a v1 household id to its v2 household.
 
-    Return the new mapping id, or None when a mapping for this country and v1 id
-    already exists (for example, a concurrent copy won the race).
+    The snapshot supplies the v1 country, id and source API version. Return the
+    new mapping id, or None when a mapping for this country and v1 id already
+    exists (for example, a concurrent copy won the race).
     """
     mapping_id = uuid4()
     statement = (
         insert(LegacyHouseholdMapping)
         .values(
             id=mapping_id,
-            country_id=country_id,
-            legacy_household_id=legacy_household_id,
+            country_id=snapshot.country_id,
+            legacy_household_id=snapshot.legacy_household_id,
             household_id=household_id,
-            source_api_version=source_api_version,
+            source_api_version=snapshot.api_version,
             fingerprint_version=fingerprint_version,
             fingerprint_sha256=fingerprint_sha256,
         )
