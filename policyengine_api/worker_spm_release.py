@@ -11,6 +11,8 @@ from typing_extensions import override
 from policyengine_api import constants
 from policyengine_api.worker_spm import SPMCapabilitySource, validate_worker_spm
 
+# The command line is the program name followed by the bundle version.
+COMMAND_LINE_LENGTH = 2
 REQUIRED_BUNDLE_PACKAGES = (
     "policyengine",
     "policyengine-core",
@@ -116,7 +118,7 @@ def validate_installed_worker(registry: dict, expected_bundle: str) -> dict | No
 
 def main() -> None:
     """Read a registry document from stdin and validate one bundle version."""
-    if len(sys.argv) != 2:
+    if len(sys.argv) != COMMAND_LINE_LENGTH:
         msg = "Usage: python -m policyengine_api.worker_spm_release BUNDLE_VERSION"
         raise SystemExit(msg)
     selection = validate_installed_worker(json.load(sys.stdin), sys.argv[1])
