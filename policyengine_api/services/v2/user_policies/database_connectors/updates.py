@@ -12,7 +12,10 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
     from policyengine_api.data.v2.models import LegacyUserPolicyMapping, UserPolicy
-    from policyengine_api.services.v2.user_policies.types import UserPolicyUpdateInput
+    from policyengine_api.services.v2.user_policies.types import (
+        LegacyUserPolicyRevision,
+        UserPolicyUpdateInput,
+    )
 
 
 def update_user_policy(
@@ -43,21 +46,19 @@ def update_legacy_user_policy_state(
     *,
     association: UserPolicy,
     mapping: LegacyUserPolicyMapping,
-    reform_label: str | None,
+    revision: LegacyUserPolicyRevision,
     update_name: bool,
-    fingerprint: str,
-    source_revision: int,
 ) -> None:
     """Record a newly applied v1 revision on its mapping.
 
     With ``update_name``, also set the association's name to the v1 reform label.
     """
     if update_name:
-        association.name = reform_label
+        association.name = revision.reform_label
         association.updated_at = utc_now()
         session.add(association)
-    mapping.fingerprint_sha256 = fingerprint
-    mapping.last_applied_source_revision = source_revision
+    mapping.fingerprint_sha256 = revision.fingerprint
+    mapping.last_applied_source_revision = revision.source_revision
     mapping.updated_at = utc_now()
     session.add(mapping)
     session.flush()

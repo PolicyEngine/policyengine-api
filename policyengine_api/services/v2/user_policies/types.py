@@ -164,6 +164,37 @@ class UserPolicyRead:
 
 
 @dataclass(frozen=True)
+class UserPolicyListing:
+    """One page of a user's associations to read, optionally for one policy.
+
+    ``policy_id`` names a v2 policy and ``legacy_policy_id`` a v1 one.
+    """
+
+    country_id: str
+    user_id: UUID
+    policy_id: UUID | None
+    offset: int
+    limit: int
+    legacy_policy_id: int | None = None
+
+
+@dataclass(frozen=True)
+class LegacyUserPolicyRevision:
+    """One revision of a v1 saved policy, as it is applied to its v2 association.
+
+    ``fingerprint`` identifies the complete v1 row at ``source_revision``, and
+    ``changed_fields`` names the v1 fields that revision changed.
+    """
+
+    country_id: str
+    legacy_user_policy_id: int
+    reform_label: str | None
+    fingerprint: str
+    source_revision: int
+    changed_fields: frozenset[str]
+
+
+@dataclass(frozen=True)
 class UserPolicyPage:
     """One page of associations in creation order; ``has_more`` says if more follow."""
 
