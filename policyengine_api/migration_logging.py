@@ -10,6 +10,7 @@ import flask
 
 from policyengine_api.gcp_logging import logger
 from policyengine_api.migration_flags import (
+    ExplicitDatabaseSources,
     RouteImplementation,
     get_migration_log_context,
     infer_route_group,
@@ -195,10 +196,8 @@ def _migration_context(
     route_group = infer_route_group(path)
     is_v2_metadata_read = _is_v2_metadata_resource_read(method, path)
     is_v2_supabase_resource = _is_v2_supabase_resource(method, path)
-    return get_migration_log_context(
-        route_group,
-        route_impl=route_impl,
-        use_configured_db_sources=not (is_v2_metadata_read or is_v2_supabase_resource),
+    uses_explicit_v2_source = is_v2_metadata_read or is_v2_supabase_resource
+    explicit_db_sources = ExplicitDatabaseSources(
         db_write_source=(
             "supabase" if is_v2_supabase_resource and method != "GET" else None
         ),
@@ -207,5 +206,10 @@ def _migration_context(
             if is_v2_metadata_read or (is_v2_supabase_resource and method == "GET")
             else None
         ),
+    )
+    return get_migration_log_context(
+        route_group,
+        route_impl=route_impl,
+        explicit_db_sources=explicit_db_sources if uses_explicit_v2_source else None,
         include_compute=_v2_resource_segment(path) not in V2_USER_RESOURCE_SEGMENTS,
     )

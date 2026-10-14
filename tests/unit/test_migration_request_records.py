@@ -8,6 +8,7 @@ import pytest
 from flask import Flask, Response
 
 from policyengine_api.migration_flags import (
+    ExplicitDatabaseSources,
     RouteImplementation,
     get_migration_context,
     infer_route_group,
@@ -69,9 +70,9 @@ def test_explicit_database_sources_replace_the_configured_sources() -> None:
     context = get_migration_context(
         "policy",
         route_impl=RouteImplementation.FASTAPI_NATIVE,
-        use_configured_db_sources=False,
-        db_write_source="supabase",
-        db_read_source=None,
+        explicit_db_sources=ExplicitDatabaseSources(
+            db_write_source="supabase", db_read_source=None
+        ),
     )
 
     assert context.to_log_dict() == {
@@ -92,9 +93,9 @@ def test_invalid_explicit_write_source_is_reported_before_the_read_source() -> N
     ):
         get_migration_context(
             "policy",
-            use_configured_db_sources=False,
-            db_write_source="bad-write",
-            db_read_source="bad-read",
+            explicit_db_sources=ExplicitDatabaseSources(
+                db_write_source="bad-write", db_read_source="bad-read"
+            ),
         )
 
 
