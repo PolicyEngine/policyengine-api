@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import threading
 import time
+from dataclasses import dataclass
 from functools import cache
 from http import HTTPStatus
 from typing import TYPE_CHECKING
@@ -111,6 +112,20 @@ def _require_all_or_none_gateway_auth_env() -> None:
             raise GatewayAuthError(msg)
 
 
+@dataclass(frozen=True)
+class GatewayAuthCredentials:
+    """Auth0 client_credentials settings for the simulation gateway.
+
+    A setting left None is read from its environment variable.
+    """
+
+    issuer: str | None = None
+    audience: str | None = None
+    client_id: str | None = None
+    client_secret: str | None = None
+    client_secret_resource: str | None = None
+
+
 class GatewayAuthTokenProvider:
     """Fetch and cache an Auth0 client_credentials access token."""
 
@@ -118,38 +133,36 @@ class GatewayAuthTokenProvider:
 
     def __init__(
         self,
-        issuer: str | None = None,
-        audience: str | None = None,
-        client_id: str | None = None,
-        client_secret: str | None = None,
-        client_secret_resource: str | None = None,
+        credentials: GatewayAuthCredentials | None = None,
         *,
         http_timeout: float = 10.0,
     ) -> None:
-        """Read each Auth0 setting from its argument, else its environment variable."""
+        """Read each Auth0 setting from ``credentials``, else its environment."""
+        if credentials is None:
+            credentials = GatewayAuthCredentials()
         self._issuer = (
-            issuer
-            if issuer is not None
+            credentials.issuer
+            if credentials.issuer is not None
             else os.environ.get(GATEWAY_AUTH_ISSUER_ENV, "")
         ).rstrip("/")
         self._audience = (
-            audience
-            if audience is not None
+            credentials.audience
+            if credentials.audience is not None
             else os.environ.get(GATEWAY_AUTH_AUDIENCE_ENV, "")
         )
         self._client_id = (
-            client_id
-            if client_id is not None
+            credentials.client_id
+            if credentials.client_id is not None
             else os.environ.get(GATEWAY_AUTH_CLIENT_ID_ENV, "")
         )
         self._client_secret = (
-            client_secret
-            if client_secret is not None
+            credentials.client_secret
+            if credentials.client_secret is not None
             else os.environ.get(GATEWAY_AUTH_CLIENT_SECRET_ENV, "")
         )
         self._client_secret_resource = (
-            client_secret_resource
-            if client_secret_resource is not None
+            credentials.client_secret_resource
+            if credentials.client_secret_resource is not None
             else os.environ.get(GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV, "")
         )
         self._http_timeout = http_timeout

@@ -15,6 +15,7 @@ from policyengine_api.libs.gateway_auth import (
     GATEWAY_AUTH_CORE_ENV_VARS,
     GATEWAY_AUTH_ENV_VARS,
     GATEWAY_AUTH_REQUIRED_ENV,
+    GatewayAuthCredentials,
     GatewayAuthError,
     GatewayAuthTokenProvider,
     GatewayBearerAuth,
@@ -54,30 +55,36 @@ class TestGatewayAuthTokenProvider:
     class TestConfigured:
         def test__given_all_kwargs__then_configured_true(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret=CLIENT_SECRET,
+                ),
             )
 
             assert provider.configured is True
 
         def test__given_missing_client_secret__then_configured_false(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret="",
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret="",
+                ),
             )
 
             assert provider.configured is False
 
         def test__given_secret_resource__then_configured_true(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret_resource=CLIENT_SECRET_RESOURCE,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret_resource=CLIENT_SECRET_RESOURCE,
+                ),
             )
 
             assert provider.configured is True
@@ -85,7 +92,9 @@ class TestGatewayAuthTokenProvider:
     class TestGetToken:
         def test__given_unconfigured_provider__then_raises(self):
             provider = GatewayAuthTokenProvider(
-                issuer="", audience="", client_id="", client_secret=""
+                GatewayAuthCredentials(
+                    issuer="", audience="", client_id="", client_secret=""
+                )
             )
 
             with pytest.raises(GatewayAuthError):
@@ -93,10 +102,12 @@ class TestGatewayAuthTokenProvider:
 
         def test__given_first_call__then_fetches_and_returns_token(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret=CLIENT_SECRET,
+                ),
             )
 
             with patch(
@@ -117,10 +128,12 @@ class TestGatewayAuthTokenProvider:
 
         def test__given_secret_manager_resource__then_loads_secret_once(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret_resource=CLIENT_SECRET_RESOURCE,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret_resource=CLIENT_SECRET_RESOURCE,
+                ),
             )
 
             with (
@@ -142,10 +155,12 @@ class TestGatewayAuthTokenProvider:
 
         def test__given_secret_manager_failure__then_raises(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret_resource=CLIENT_SECRET_RESOURCE,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret_resource=CLIENT_SECRET_RESOURCE,
+                ),
             )
 
             with (
@@ -162,10 +177,12 @@ class TestGatewayAuthTokenProvider:
 
         def test__given_trailing_slash_issuer__then_no_double_slash(self):
             provider = GatewayAuthTokenProvider(
-                issuer=f"{ISSUER}/",
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET,
+                GatewayAuthCredentials(
+                    issuer=f"{ISSUER}/",
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret=CLIENT_SECRET,
+                ),
             )
 
             with patch(
@@ -178,10 +195,12 @@ class TestGatewayAuthTokenProvider:
 
         def test__given_fresh_cached_token__then_second_call_reuses(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret=CLIENT_SECRET,
+                ),
             )
 
             with patch(
@@ -196,10 +215,12 @@ class TestGatewayAuthTokenProvider:
 
         def test__given_expired_token__then_second_call_refreshes(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret=CLIENT_SECRET,
+                ),
             )
 
             responses = [
@@ -220,10 +241,12 @@ class TestGatewayAuthTokenProvider:
 
         def test__given_network_error__then_raises_gateway_auth_error(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret=CLIENT_SECRET,
+                ),
             )
 
             with (
@@ -237,10 +260,12 @@ class TestGatewayAuthTokenProvider:
 
         def test__given_response_without_access_token__then_raises(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret=CLIENT_SECRET,
+                ),
             )
             response = MagicMock()
             response.status_code = 200
@@ -258,10 +283,12 @@ class TestGatewayAuthTokenProvider:
 
         def test__given_missing_expires_in__then_raises(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret=CLIENT_SECRET,
+                ),
             )
             response = MagicMock()
             response.status_code = 200
@@ -279,10 +306,12 @@ class TestGatewayAuthTokenProvider:
 
         def test__given_zero_expires_in__then_clamped_to_refresh_margin(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret=CLIENT_SECRET,
+                ),
             )
 
             with patch(
@@ -296,10 +325,12 @@ class TestGatewayAuthTokenProvider:
 
         def test__given_concurrent_callers__then_fetches_once(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret=CLIENT_SECRET,
+                ),
             )
 
             def slow_response(*_args, **_kwargs):
@@ -326,10 +357,12 @@ class TestGatewayAuthTokenProvider:
     class TestInvalidate:
         def test__given_invalidated_token__then_next_call_refetches(self):
             provider = GatewayAuthTokenProvider(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET,
+                GatewayAuthCredentials(
+                    issuer=ISSUER,
+                    audience=AUDIENCE,
+                    client_id=CLIENT_ID,
+                    client_secret=CLIENT_SECRET,
+                ),
             )
 
             responses = [
