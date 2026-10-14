@@ -119,17 +119,14 @@ def _serialize_region_filter_value(value: object, *, region_code: str) -> str:
                 value, ensure_ascii=False, separators=(",", ":"), allow_nan=False
             )
         except ValueError as error:
-            raise CatalogExtractionError(
-                f"region {region_code!r} has an unsupported filter value"
-            ) from error
+            msg = f"region {region_code!r} has an unsupported filter value"
+            raise CatalogExtractionError(msg) from error
     else:
-        raise CatalogExtractionError(
-            f"region {region_code!r} has an unsupported filter value"
-        )
+        msg = f"region {region_code!r} has an unsupported filter value"
+        raise CatalogExtractionError(msg)
     if len(serialized) > 255:
-        raise CatalogExtractionError(
-            f"region {region_code!r} filter value exceeds 255 characters"
-        )
+        msg = f"region {region_code!r} filter value exceeds 255 characters"
+        raise CatalogExtractionError(msg)
     return serialized
 
 
