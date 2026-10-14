@@ -238,7 +238,7 @@ def create_asgi_app(
                     context_token = _asgi_request_id.set(request_id)
             except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
                 pass
-            try:
+            try:  # noqa: SIM105  # kept as try/except: telemetry must never fail the request
                 request_runtime.set_context(
                     request_id=request_id,
                 )
@@ -248,7 +248,7 @@ def create_asgi_app(
         def log_native_route(status_code: int) -> None:
             if not native_request:
                 return
-            try:
+            try:  # noqa: SIM105  # kept as try/except: migration logging must never fail the request
                 log_migration_request(
                     request_id=request_id,
                     method=request.method,
@@ -271,15 +271,15 @@ def create_asgi_app(
             if not native_request:
                 return
             resolved_route = getattr(request.scope.get("route"), "path", initial_route)
-            try:
+            try:  # noqa: SIM105  # kept as try/except: telemetry must never fail the request
                 request_runtime.update_request_route(resolved_route)
             except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
                 pass
-            try:
+            try:  # noqa: SIM105  # kept as try/except: telemetry must never fail the request
                 request_runtime.update_request_status(status_code)
             except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
                 pass
-            try:
+            try:  # noqa: SIM105  # kept as try/except: telemetry must never fail the request
                 request_runtime.end_request(
                     status_code=status_code,
                     error=error,
@@ -301,7 +301,7 @@ def create_asgi_app(
                 )
             )
             if native_request and response_observability_id is not None:
-                try:
+                try:  # noqa: SIM105  # kept as try/except: telemetry must never fail the request
                     # Route-level spans have completed at this point, so this
                     # call applies the selected calculation identifier to the
                     # still-current server request span.

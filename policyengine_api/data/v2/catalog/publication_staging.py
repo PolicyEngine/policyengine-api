@@ -281,11 +281,10 @@ def copy_rows(
         sql.SQL(", ").join(sql.Identifier(column.name) for column in table.columns),
     )
     count = 0
-    with raw_connection.cursor() as cursor:
-        with cursor.copy(statement) as copy:
-            for row in rows:
-                copy.write_row(row)
-                count += 1
+    with raw_connection.cursor() as cursor, cursor.copy(statement) as copy:
+        for row in rows:
+            copy.write_row(row)
+            count += 1
     return count
 
 

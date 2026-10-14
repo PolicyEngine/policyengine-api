@@ -837,34 +837,32 @@ def test_baseline_region_default_enforces_same_model_dataset() -> None:
                 },
             )
 
-        with pytest.raises(sa.exc.IntegrityError):
-            with engine.begin() as connection:
-                connection.execute(
-                    text(
-                        "INSERT INTO regions "
-                        "(id, code, label, region_type, requires_filter, "
-                        "tax_benefit_model_id, default_dataset_id) "
-                        "VALUES (:id, 'state/ca', 'California', 'state', false, "
-                        ":model_id, :dataset_id)"
-                    ),
-                    {
-                        "id": uuid4(),
-                        "model_id": first_model_id,
-                        "dataset_id": second_dataset_id,
-                    },
-                )
+        with pytest.raises(sa.exc.IntegrityError), engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO regions "
+                    "(id, code, label, region_type, requires_filter, "
+                    "tax_benefit_model_id, default_dataset_id) "
+                    "VALUES (:id, 'state/ca', 'California', 'state', false, "
+                    ":model_id, :dataset_id)"
+                ),
+                {
+                    "id": uuid4(),
+                    "model_id": first_model_id,
+                    "dataset_id": second_dataset_id,
+                },
+            )
 
-        with pytest.raises(sa.exc.IntegrityError):
-            with engine.begin() as connection:
-                connection.execute(
-                    text(
-                        "INSERT INTO datasets "
-                        "(id, name, year, is_output_dataset, "
-                        "tax_benefit_model_id) "
-                        "VALUES (:id, 'missing-output-path', 2024, true, :model_id)"
-                    ),
-                    {"id": uuid4(), "model_id": first_model_id},
-                )
+        with pytest.raises(sa.exc.IntegrityError), engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO datasets "
+                    "(id, name, year, is_output_dataset, "
+                    "tax_benefit_model_id) "
+                    "VALUES (:id, 'missing-output-path', 2024, true, :model_id)"
+                ),
+                {"id": uuid4(), "model_id": first_model_id},
+            )
     finally:
         with engine.begin() as connection:
             connection.execute(

@@ -1402,7 +1402,7 @@ class EconomyService:
             return
         if most_recent_impact.options_hash != setup_options.options_hash:
             return
-        try:
+        try:  # noqa: SIM105  # kept as try/except: best effort: the typed SPM error is the answer, and the failure is already logged
             self._set_reform_impact_error(
                 setup_options=setup_options,
                 message=error.message,

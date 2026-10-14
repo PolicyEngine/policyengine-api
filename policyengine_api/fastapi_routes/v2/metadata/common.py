@@ -100,7 +100,7 @@ def read_resource(
         return v2_error_response(500, "V2 metadata query failed")
     finally:
         if reader is not None:
-            try:
+            try:  # noqa: SIM105  # kept as try/except: best-effort close must not replace the typed response
                 reader.close()
             except Exception:  # noqa: BLE001, S110  # best-effort close must not replace the typed response
                 pass

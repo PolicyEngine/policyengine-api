@@ -97,7 +97,7 @@ def _log_mirror_event(
     policy_created: bool | None = None,
     mapping_created: bool | None = None,
 ) -> None:
-    try:
+    try:  # noqa: SIM105  # kept as try/except: metric logging must not change the mirror outcome
         logger.log_struct(
             {
                 "message": "V1 policy immediate mirror completed",

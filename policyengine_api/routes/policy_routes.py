@@ -89,7 +89,7 @@ def _user_policy_persistence_failure(
 ) -> Response:
     """Return and record a failure without serializing exception details."""
     status_code = 503 if error.retryable else 500
-    try:
+    try:  # noqa: SIM105  # kept as try/except: a logging failure must not replace the persistence response
         logger.log_struct(
             {
                 "message": "V1 saved-policy persistence failed",

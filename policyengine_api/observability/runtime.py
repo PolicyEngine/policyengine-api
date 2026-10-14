@@ -74,7 +74,7 @@ def get_runtime() -> ObservabilityRuntime:
 
 def set_runtime_context(**attributes: object) -> None:
     """Bind local telemetry attributes without affecting application behavior."""
-    try:
+    try:  # noqa: SIM105  # kept as try/except: telemetry must never affect application behavior
         runtime.set_context(**attributes)
     except Exception:  # noqa: BLE001, S110  # telemetry must never affect application behavior
         pass

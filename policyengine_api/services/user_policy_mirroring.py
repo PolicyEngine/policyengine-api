@@ -112,7 +112,7 @@ def _log_mirror_operation(
     result: LegacyUserPolicyPersistenceResult | None = None,
     failure_category: str | None = None,
 ) -> None:
-    try:
+    try:  # noqa: SIM105  # kept as try/except: metric logging must not change the mirror outcome
         logger.log_struct(
             {
                 "message": "V1 saved-policy immediate mirror completed",

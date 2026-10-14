@@ -648,9 +648,12 @@ def uk_constituency_breakdown(
         code: str = constituency_names.iloc[i]["code"]
 
         # Filter to specific constituency if requested
-        if selected_constituency is not None:
-            if name != selected_constituency and code != selected_constituency:
-                continue
+        if (
+            selected_constituency is not None
+            and name != selected_constituency
+            and code != selected_constituency
+        ):
+            continue
 
         # Filter to specific country if requested. Constituency codes
         # are prefixed with a single letter that identifies the
@@ -777,9 +780,8 @@ def uk_local_authority_breakdown(
         code: str = local_authority_names.iloc[i]["code"]
 
         # Filter to specific local authority if requested
-        if selected_la is not None:
-            if name != selected_la and code != selected_la:
-                continue
+        if selected_la is not None and name != selected_la and code != selected_la:
+            continue
 
         # Filter to specific country if requested
         if selected_country is not None:

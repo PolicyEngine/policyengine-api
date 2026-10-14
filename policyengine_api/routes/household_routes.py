@@ -90,7 +90,7 @@ def _household_persistence_failure(
     started_at: float,
 ) -> Response:
     status_code = 503 if error.retryable else 500
-    try:
+    try:  # noqa: SIM105  # kept as try/except: metric logging must not replace the error response
         logger.log_struct(
             {
                 "message": "V1 household persistence failed",

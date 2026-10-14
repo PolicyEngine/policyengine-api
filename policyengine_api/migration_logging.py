@@ -102,7 +102,7 @@ def register_migration_request_logging(
         )
         flask.g.observability_id = None
         if runtime is not None:
-            try:
+            try:  # noqa: SIM105  # kept as try/except: telemetry must never fail the request
                 runtime.set_context(request_id=flask.g.request_id)
             except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
                 pass
@@ -144,7 +144,7 @@ def register_migration_request_logging(
                     route_impl=RouteImplementation.FLASK_FALLBACK,
                 )
         except Exception:  # noqa: BLE001  # logs the traceback below, guarded so logging cannot fail the response
-            try:
+            try:  # noqa: SIM105  # kept as try/except: a logging failure must not replace the response
                 app.logger.exception("Failed to log migration request context")
             except Exception:  # noqa: BLE001, S110  # a logging failure must not replace the response
                 pass

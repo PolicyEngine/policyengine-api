@@ -217,7 +217,7 @@ def main(
                 require_pending=True,
             )
     except Exception as error:  # noqa: BLE001  # command emits a safe result
-        try:
+        try:  # noqa: SIM105  # kept as try/except: outcome logging must not change the command result
             _record_command_outcome(
                 identity=identity,
                 country_id=args.country_id,
@@ -249,7 +249,7 @@ def main(
     finally:
         if v1_engine is not None:
             v1_engine.dispose()
-    try:
+    try:  # noqa: SIM105  # kept as try/except: outcome logging must not change the command result
         _record_command_outcome(
             identity=identity,
             country_id=args.country_id,
