@@ -101,6 +101,7 @@ def shellcheck_failures(config: CiScripts, root: Path) -> set[str] | None:
         cwd=root,
         capture_output=True,
         text=True,
+        check=False,
     )
     return {line.split(":", 1)[0] for line in result.stdout.splitlines() if ":" in line}
 

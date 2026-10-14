@@ -52,14 +52,14 @@ def validate_policy_runtime_configuration() -> None:
 
 def mark_not_ready() -> None:
     """Report not-ready — call before running the startup warmup."""
-    global _ready
+    global _ready  # noqa: PLW0603  # process-wide readiness flag, guarded by _lock
     with _lock:
         _ready = False
 
 
 def mark_ready() -> None:
     """Report ready — call once the startup warmup has completed."""
-    global _ready
+    global _ready  # noqa: PLW0603  # process-wide readiness flag, guarded by _lock
     with _lock:
         _ready = True
 

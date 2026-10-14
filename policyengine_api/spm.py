@@ -479,7 +479,9 @@ def _installed_country_implements_spm(country_id: str) -> bool:
         COUNTRY_PACKAGE_NAMES,
     )
 
-    package_name = dict(zip(COUNTRIES, COUNTRY_PACKAGE_NAMES)).get(country_id)
+    package_name = dict(zip(COUNTRIES, COUNTRY_PACKAGE_NAMES, strict=True)).get(
+        country_id
+    )
     if package_name is None:
         return False
     try:

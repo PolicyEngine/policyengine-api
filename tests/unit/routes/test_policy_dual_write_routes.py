@@ -92,12 +92,14 @@ def test_dual_write_mirrors_new_and_existing_rows_before_success(
     for existing, expected_status in ((False, 201), (True, 200)):
         events: list[str] = []
         service = MagicMock(
-            side_effect=lambda *_args, **_kwargs: (
+            side_effect=lambda *_args, events=events, existing=existing, **_kwargs: (
                 events.append("cloud_sql")
                 or _creation(existing=existing, country_id=country_id)
             )
         )
-        mirror = MagicMock(side_effect=lambda _snapshot: events.append("supabase"))
+        mirror = MagicMock(
+            side_effect=lambda _snapshot, events=events: events.append("supabase")
+        )
         with (
             patch(
                 "policyengine_api.routes.policy_routes.policy_service.set_policy",

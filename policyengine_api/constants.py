@@ -162,7 +162,7 @@ try:
     }
     COUNTRY_PACKAGE_VERSIONS = {
         country: _resolve_distribution_version(_dist_versions, package_name)
-        for country, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES)
+        for country, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES, strict=True)
     }
 except Exception:  # noqa: BLE001  # unreadable package metadata falls back to 0.0.0; import must not fail
     _dist_versions = {}

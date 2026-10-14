@@ -611,7 +611,7 @@ def _normalize_country(
 
     regions: list[RegionRecord] = []
     for source_region in source_regions:
-        code = str(getattr(source_region, "code"))
+        code = str(source_region.code)
         strategy = getattr(source_region, "scoping_strategy", None)
         requires_filter = bool(getattr(source_region, "requires_filter", False))
         if requires_filter:
@@ -649,7 +649,7 @@ def _normalize_country(
                     field_name=f"region {code} label",
                     maximum=255,
                 ),
-                region_type=str(getattr(source_region, "region_type")),
+                region_type=str(source_region.region_type),
                 requires_filter=requires_filter,
                 filter_field=filter_field,
                 filter_value=filter_value,

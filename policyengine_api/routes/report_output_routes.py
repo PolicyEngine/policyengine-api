@@ -126,7 +126,7 @@ def create_report_output(country_id: str) -> Response:
             "Bad request creating report output for country %s: %s", country_id, e
         )
         msg = f"Failed to create report output: {e}"
-        raise BadRequest(msg)
+        raise BadRequest(msg) from e
     except Exception:
         current_app.logger.exception(
             "Unexpected error creating report output for country %s", country_id
@@ -250,7 +250,7 @@ def update_report_output(country_id: str) -> Response:
             e,
         )
         msg = f"Failed to update report output: {e}"
-        raise BadRequest(msg)
+        raise BadRequest(msg) from e
     except Exception:
         current_app.logger.exception(
             "Unexpected error updating report #%s for country %s",
