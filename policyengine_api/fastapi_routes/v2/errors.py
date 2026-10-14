@@ -1,7 +1,7 @@
 """Shared error response contract for all native API v2 routes."""
 
-from collections.abc import Mapping
-from typing import Annotated, Literal
+from collections.abc import Callable, Mapping, Sequence
+from typing import Annotated, Literal, NamedTuple, TypeVar
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 from starlette.responses import JSONResponse
@@ -59,3 +59,38 @@ def v2_error_response(
         content=error.model_dump(mode="json"),
         headers=dict(headers) if headers is not None else None,
     )
+
+
+OperationT = TypeVar("OperationT")
+
+
+class V2ErrorMapping(NamedTuple):
+    """The API v2 error response for one family of service errors.
+
+    Without a ``message``, the response carries the error's own message.
+    """
+
+    error_types: tuple[type[Exception], ...]
+    status_code: int
+    message: str | None = None
+
+
+def run_v2_operation(
+    operation: Callable[[], OperationT],
+    error_mappings: Sequence[V2ErrorMapping],
+    *,
+    fallback_message: str,
+) -> OperationT | JSONResponse:
+    """Run ``operation``, answering a failure with the first matching v2 error.
+
+    A failure that no mapping matches becomes a 500 with ``fallback_message``,
+    so no unexpected detail reaches the response.
+    """
+    try:
+        return operation()
+    except Exception as error:  # noqa: BLE001  # return a secret-safe typed error
+        for mapping in error_mappings:
+            if isinstance(error, mapping.error_types):
+                message = str(error) if mapping.message is None else mapping.message
+                return v2_error_response(mapping.status_code, message)
+        return v2_error_response(500, fallback_message)
