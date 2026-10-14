@@ -12,6 +12,7 @@ Usage:
 import argparse
 import re
 import sys
+from http import HTTPStatus
 from typing import TypedDict
 
 import requests
@@ -38,7 +39,7 @@ def fetch_changelog(package: str) -> str | None:
     for branch in ("main", "master"):
         url = f"https://raw.githubusercontent.com/{repo}/{branch}/CHANGELOG.md"
         resp = requests.get(url, timeout=30)
-        if resp.status_code == 200:
+        if resp.status_code == HTTPStatus.OK:
             return resp.text
     return None
 
