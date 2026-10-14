@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Callable
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import h5py
 import numpy as np
@@ -719,13 +719,13 @@ def _uk_area_breakdown(
     reform_net_income: object,
     area_data: _UKAreaData,
     area_filter: _UKAreaFilter,
-) -> tuple[dict[str, dict], dict[str, dict[str, int]]]:
+) -> tuple[dict[str, Any], dict[str, dict[str, int]]]:
     """Return each selected area's income change and the bucket counts by region.
 
     The first mapping is keyed by area name in table order; the second counts
     the selected areas in the UK and each nation by income-change bucket.
     """
-    by_area: dict[str, dict] = {}
+    by_area: dict[str, Any] = {}
     outcomes_by_region = {
         region_name: dict.fromkeys(INCOME_CHANGE_BUCKETS, 0)
         for region_name in UK_OUTCOME_REGIONS
