@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.catalog.catalog_selection import (
@@ -46,7 +45,7 @@ from policyengine_api.services.v2.metadata.transformations import (
     metadata_region,
     metadata_variable,
     page_result,
-    utc_day_start,
+    parameter_value_selection,
 )
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
@@ -61,6 +60,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataParameterSummary,
     MetadataRegion,
     MetadataVariable,
+    ParameterValueFilter,
 )
 from policyengine_api.services.v2.metadata.validators import (
     require_metadata_resource,
@@ -321,7 +321,6 @@ class V2MetadataService:
             self._database_session.session,
             model_version_id=selected.model_version.id,
             parent_path=parent_path,
-            dialect=self._database_session.dialect_name,
             offset=offset,
             limit=limit,
         )
@@ -337,27 +336,25 @@ class V2MetadataService:
         country_id: str,
         policyengine_version: str | None = None,
         *,
-        parameter_id: UUID | None = None,
-        current: bool = False,
+        value_filter: ParameterValueFilter | None = None,
         offset: int = 0,
         limit: int = 100,
-        now: datetime | None = None,
     ) -> MetadataPageResult[MetadataCanonicalParameterValue]:
         """Return a page of current-law parameter values, newest first per parameter.
 
-        Values belonging to a reform or dynamic are never listed. parameter_id keeps
-        one parameter's values, and current=True keeps those in effect on the UTC
-        day of now (today by default).
+        Values belonging to a reform or dynamic are never listed. The filter's
+        parameter_id keeps one parameter's values, and current=True keeps those in
+        effect on the UTC day of now (today by default). No filter lists them all.
         """
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
         )
-        selected_day = utc_day_start(now or datetime.now(UTC)) if current else None
         rows = read_parameter_values(
             self._database_session.session,
             model_version_id=selected.model_version.id,
-            parameter_id=parameter_id,
-            selected_day=selected_day,
+            selection=parameter_value_selection(
+                value_filter if value_filter is not None else ParameterValueFilter()
+            ),
             offset=offset,
             limit=limit,
         )

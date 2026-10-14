@@ -2,12 +2,37 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, JsonValue
+
+
+@dataclass(frozen=True)
+class ParameterValueFilter:
+    """Which current-law parameter values a listing keeps.
+
+    ``parameter_id`` keeps one parameter's values, and ``current`` keeps the
+    values in effect on the UTC day of ``now`` (today when ``now`` is None).
+    """
+
+    parameter_id: UUID | None = None
+    current: bool = False
+    now: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ParameterValueSelection:
+    """The parameter and effective day a parameter-value read is narrowed to.
+
+    None for either leaves the read unnarrowed by it.
+    """
+
+    parameter_id: UUID | None
+    selected_day: datetime | None
 
 
 class StrictResponseModel(BaseModel):

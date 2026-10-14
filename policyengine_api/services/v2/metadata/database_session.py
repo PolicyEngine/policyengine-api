@@ -20,11 +20,6 @@ class MetadataDatabaseSession:
         """The open request session that every metadata query runs on."""
         return self._session
 
-    @property
-    def dialect_name(self) -> str:
-        """The bound dialect's name; it picks SQLite or PostgreSQL string functions."""
-        return self._session.get_bind().dialect.name
-
     def close(self) -> None:
         """Close the request's session."""
         self._session.close()
