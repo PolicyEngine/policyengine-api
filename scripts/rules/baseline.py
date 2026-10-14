@@ -85,6 +85,8 @@ def check_baselines(
                         "explicit and reviewable",
                     )
                 )
-    for rule_id in sorted(current_ids - {rule.id for rule in base.rules}):
-        notes.append(f"rule {rule_id} is new")
+    notes.extend(
+        f"rule {rule_id} is new"
+        for rule_id in sorted(current_ids - {rule.id for rule in base.rules})
+    )
     return violations, notes

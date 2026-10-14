@@ -138,26 +138,26 @@ class PolicyEngineCountry:
     def build_metadata(self) -> None:
         """Build the JSON-safe metadata document served by the metadata endpoints."""
         self.metadata = self._json_safe(
-            dict(
-                variables=self.build_variables(),
-                parameters=self.build_parameters(),
-                entities=self.build_entities(),
-                variableModules=self.tax_benefit_system.variable_module_metadata,
-                economy_options=self.build_microsimulation_options(),
-                current_law_id={
+            {
+                "variables": self.build_variables(),
+                "parameters": self.build_parameters(),
+                "entities": self.build_entities(),
+                "variableModules": self.tax_benefit_system.variable_module_metadata,
+                "economy_options": self.build_microsimulation_options(),
+                "current_law_id": {
                     "uk": 1,
                     "us": 2,
                     "ca": 3,
                     "ng": 4,
                     "il": 5,
                 }[self.country_id],
-                basicInputs=self.tax_benefit_system.basic_inputs,
-                modelled_policies=self.tax_benefit_system.modelled_policies,
-                spm=spm_metadata(self.country_id),
-                version=get_package_version(
+                "basicInputs": self.tax_benefit_system.basic_inputs,
+                "modelled_policies": self.tax_benefit_system.modelled_policies,
+                "spm": spm_metadata(self.country_id),
+                "version": get_package_version(
                     self.country_package_name.replace("_", "-")
                 ),
-            )
+            }
         )
 
     def _json_safe(
@@ -181,7 +181,7 @@ class PolicyEngineCountry:
         """Build the regions, time periods and datasets offered for economy runs."""
         # Shape: { region: [{ name: "uk", label: "the UK" }],
         #   time_period: [{ name: 2022, label: "2022", ... }] }
-        options = dict()
+        options = {}
         if self.country_id == "uk":
             constituency_names_path = (
                 Path(__file__).parent / "data" / "constituencies_2024.csv"
@@ -189,41 +189,41 @@ class PolicyEngineCountry:
             constituency_names = pd.read_csv(constituency_names_path)
             constituency_names = constituency_names.sort_values("name")
             region = [
-                dict(name="uk", label="the UK", type="national"),
-                dict(name="country/england", label="England", type="country"),
-                dict(name="country/scotland", label="Scotland", type="country"),
-                dict(name="country/wales", label="Wales", type="country"),
-                dict(name="country/ni", label="Northern Ireland", type="country"),
+                {"name": "uk", "label": "the UK", "type": "national"},
+                {"name": "country/england", "label": "England", "type": "country"},
+                {"name": "country/scotland", "label": "Scotland", "type": "country"},
+                {"name": "country/wales", "label": "Wales", "type": "country"},
+                {"name": "country/ni", "label": "Northern Ireland", "type": "country"},
             ]
-            for i in range(len(constituency_names)):
-                region.append(
-                    dict(
-                        name=f"constituency/{constituency_names.iloc[i]['name']}",
-                        label=constituency_names.iloc[i]["name"],
-                        type="constituency",
-                    )
-                )
+            region.extend(
+                {
+                    "name": f"constituency/{constituency_names.iloc[i]['name']}",
+                    "label": constituency_names.iloc[i]["name"],
+                    "type": "constituency",
+                }
+                for i in range(len(constituency_names))
+            )
             local_authority_names_path = (
                 Path(__file__).parent / "data" / "local_authorities_2021.csv"
             )
             local_authority_names = pd.read_csv(local_authority_names_path)
             local_authority_names = local_authority_names.sort_values("name")
-            for i in range(len(local_authority_names)):
-                region.append(
-                    dict(
-                        name=f"local_authority/{local_authority_names.iloc[i]['name']}",
-                        label=local_authority_names.iloc[i]["name"],
-                        type="local_authority",
-                    )
-                )
+            region.extend(
+                {
+                    "name": f"local_authority/{local_authority_names.iloc[i]['name']}",
+                    "label": local_authority_names.iloc[i]["name"],
+                    "type": "local_authority",
+                }
+                for i in range(len(local_authority_names))
+            )
             time_period = [
-                dict(name=2024, label="2024"),
-                dict(name=2025, label="2025"),
-                dict(name=2026, label="2026"),
-                dict(name=2027, label="2027"),
-                dict(name=2028, label="2028"),
-                dict(name=2029, label="2029"),
-                dict(name=2030, label="2030"),
+                {"name": 2024, "label": "2024"},
+                {"name": 2025, "label": "2025"},
+                {"name": 2026, "label": "2026"},
+                {"name": 2027, "label": "2027"},
+                {"name": 2028, "label": "2028"},
+                {"name": 2029, "label": "2029"},
+                {"name": 2030, "label": "2030"},
             ]
             datasets = [get_bundle_default_dataset_option("uk")]
             options["region"] = region
@@ -231,76 +231,76 @@ class PolicyEngineCountry:
             options["datasets"] = datasets
         elif self.country_id == "us":
             region = [
-                dict(name="us", label="the US", type="national"),
-                dict(name="state/al", label="Alabama", type="state"),
-                dict(name="state/ak", label="Alaska", type="state"),
-                dict(name="state/az", label="Arizona", type="state"),
-                dict(name="state/ar", label="Arkansas", type="state"),
-                dict(name="state/ca", label="California", type="state"),
-                dict(name="state/co", label="Colorado", type="state"),
-                dict(name="state/ct", label="Connecticut", type="state"),
-                dict(name="state/de", label="Delaware", type="state"),
-                dict(name="state/dc", label="District of Columbia", type="state"),
-                dict(name="state/fl", label="Florida", type="state"),
-                dict(name="state/ga", label="Georgia", type="state"),
-                dict(name="state/hi", label="Hawaii", type="state"),
-                dict(name="state/id", label="Idaho", type="state"),
-                dict(name="state/il", label="Illinois", type="state"),
-                dict(name="state/in", label="Indiana", type="state"),
-                dict(name="state/ia", label="Iowa", type="state"),
-                dict(name="state/ks", label="Kansas", type="state"),
-                dict(name="state/ky", label="Kentucky", type="state"),
-                dict(name="state/la", label="Louisiana", type="state"),
-                dict(name="state/me", label="Maine", type="state"),
-                dict(name="state/md", label="Maryland", type="state"),
-                dict(name="state/ma", label="Massachusetts", type="state"),
-                dict(name="state/mi", label="Michigan", type="state"),
-                dict(name="state/mn", label="Minnesota", type="state"),
-                dict(name="state/ms", label="Mississippi", type="state"),
-                dict(name="state/mo", label="Missouri", type="state"),
-                dict(name="state/mt", label="Montana", type="state"),
-                dict(name="state/ne", label="Nebraska", type="state"),
-                dict(name="state/nv", label="Nevada", type="state"),
-                dict(name="state/nh", label="New Hampshire", type="state"),
-                dict(name="state/nj", label="New Jersey", type="state"),
-                dict(name="state/nm", label="New Mexico", type="state"),
-                dict(name="state/ny", label="New York", type="state"),
-                dict(name="state/nc", label="North Carolina", type="state"),
-                dict(name="state/nd", label="North Dakota", type="state"),
-                dict(name="state/oh", label="Ohio", type="state"),
-                dict(name="state/ok", label="Oklahoma", type="state"),
-                dict(name="state/or", label="Oregon", type="state"),
-                dict(name="state/pa", label="Pennsylvania", type="state"),
-                dict(name="state/ri", label="Rhode Island", type="state"),
-                dict(name="state/sc", label="South Carolina", type="state"),
-                dict(name="state/sd", label="South Dakota", type="state"),
-                dict(name="state/tn", label="Tennessee", type="state"),
-                dict(name="state/tx", label="Texas", type="state"),
-                dict(name="state/ut", label="Utah", type="state"),
-                dict(name="state/vt", label="Vermont", type="state"),
-                dict(name="state/va", label="Virginia", type="state"),
-                dict(name="state/wa", label="Washington", type="state"),
-                dict(name="state/wv", label="West Virginia", type="state"),
-                dict(name="state/wi", label="Wisconsin", type="state"),
-                dict(name="state/wy", label="Wyoming", type="state"),
+                {"name": "us", "label": "the US", "type": "national"},
+                {"name": "state/al", "label": "Alabama", "type": "state"},
+                {"name": "state/ak", "label": "Alaska", "type": "state"},
+                {"name": "state/az", "label": "Arizona", "type": "state"},
+                {"name": "state/ar", "label": "Arkansas", "type": "state"},
+                {"name": "state/ca", "label": "California", "type": "state"},
+                {"name": "state/co", "label": "Colorado", "type": "state"},
+                {"name": "state/ct", "label": "Connecticut", "type": "state"},
+                {"name": "state/de", "label": "Delaware", "type": "state"},
+                {"name": "state/dc", "label": "District of Columbia", "type": "state"},
+                {"name": "state/fl", "label": "Florida", "type": "state"},
+                {"name": "state/ga", "label": "Georgia", "type": "state"},
+                {"name": "state/hi", "label": "Hawaii", "type": "state"},
+                {"name": "state/id", "label": "Idaho", "type": "state"},
+                {"name": "state/il", "label": "Illinois", "type": "state"},
+                {"name": "state/in", "label": "Indiana", "type": "state"},
+                {"name": "state/ia", "label": "Iowa", "type": "state"},
+                {"name": "state/ks", "label": "Kansas", "type": "state"},
+                {"name": "state/ky", "label": "Kentucky", "type": "state"},
+                {"name": "state/la", "label": "Louisiana", "type": "state"},
+                {"name": "state/me", "label": "Maine", "type": "state"},
+                {"name": "state/md", "label": "Maryland", "type": "state"},
+                {"name": "state/ma", "label": "Massachusetts", "type": "state"},
+                {"name": "state/mi", "label": "Michigan", "type": "state"},
+                {"name": "state/mn", "label": "Minnesota", "type": "state"},
+                {"name": "state/ms", "label": "Mississippi", "type": "state"},
+                {"name": "state/mo", "label": "Missouri", "type": "state"},
+                {"name": "state/mt", "label": "Montana", "type": "state"},
+                {"name": "state/ne", "label": "Nebraska", "type": "state"},
+                {"name": "state/nv", "label": "Nevada", "type": "state"},
+                {"name": "state/nh", "label": "New Hampshire", "type": "state"},
+                {"name": "state/nj", "label": "New Jersey", "type": "state"},
+                {"name": "state/nm", "label": "New Mexico", "type": "state"},
+                {"name": "state/ny", "label": "New York", "type": "state"},
+                {"name": "state/nc", "label": "North Carolina", "type": "state"},
+                {"name": "state/nd", "label": "North Dakota", "type": "state"},
+                {"name": "state/oh", "label": "Ohio", "type": "state"},
+                {"name": "state/ok", "label": "Oklahoma", "type": "state"},
+                {"name": "state/or", "label": "Oregon", "type": "state"},
+                {"name": "state/pa", "label": "Pennsylvania", "type": "state"},
+                {"name": "state/ri", "label": "Rhode Island", "type": "state"},
+                {"name": "state/sc", "label": "South Carolina", "type": "state"},
+                {"name": "state/sd", "label": "South Dakota", "type": "state"},
+                {"name": "state/tn", "label": "Tennessee", "type": "state"},
+                {"name": "state/tx", "label": "Texas", "type": "state"},
+                {"name": "state/ut", "label": "Utah", "type": "state"},
+                {"name": "state/vt", "label": "Vermont", "type": "state"},
+                {"name": "state/va", "label": "Virginia", "type": "state"},
+                {"name": "state/wa", "label": "Washington", "type": "state"},
+                {"name": "state/wv", "label": "West Virginia", "type": "state"},
+                {"name": "state/wi", "label": "Wisconsin", "type": "state"},
+                {"name": "state/wy", "label": "Wyoming", "type": "state"},
             ]
             # Add all 436 congressional districts (435 voting + DC)
             region.extend(build_congressional_district_metadata())
             time_period = [
-                dict(name=2035, label="2035"),
-                dict(name=2034, label="2034"),
-                dict(name=2033, label="2033"),
-                dict(name=2032, label="2032"),
-                dict(name=2031, label="2031"),
-                dict(name=2030, label="2030"),
-                dict(name=2029, label="2029"),
-                dict(name=2028, label="2028"),
-                dict(name=2027, label="2027"),
-                dict(name=2026, label="2026"),
-                dict(name=2025, label="2025"),
-                dict(name=2024, label="2024"),
-                dict(name=2023, label="2023"),
-                dict(name=2022, label="2022"),
+                {"name": 2035, "label": "2035"},
+                {"name": 2034, "label": "2034"},
+                {"name": 2033, "label": "2033"},
+                {"name": 2032, "label": "2032"},
+                {"name": 2031, "label": "2031"},
+                {"name": 2030, "label": "2030"},
+                {"name": 2029, "label": "2029"},
+                {"name": 2028, "label": "2028"},
+                {"name": 2027, "label": "2027"},
+                {"name": 2026, "label": "2026"},
+                {"name": 2025, "label": "2025"},
+                {"name": 2024, "label": "2024"},
+                {"name": 2023, "label": "2023"},
+                {"name": 2022, "label": "2022"},
             ]
             datasets = [get_bundle_default_dataset_option("us")]
             options["region"] = region
@@ -308,10 +308,10 @@ class PolicyEngineCountry:
             options["datasets"] = datasets
         elif self.country_id == "ca":
             region = [
-                dict(name="ca", label="Canada"),
+                {"name": "ca", "label": "Canada"},
             ]
             time_period = [
-                dict(name=2023, label="2023"),
+                {"name": 2023, "label": "2023"},
             ]
             datasets = [{}]
             options["region"] = region
@@ -319,10 +319,10 @@ class PolicyEngineCountry:
             options["datasets"] = datasets
         elif self.country_id == "ng":
             region = [
-                dict(name="ng", label="Nigeria"),
+                {"name": "ng", "label": "Nigeria"},
             ]
             time_period = [
-                dict(name=2023, label="2023"),
+                {"name": 2023, "label": "2023"},
             ]
             datasets = [{}]
             options["region"] = region
@@ -330,10 +330,10 @@ class PolicyEngineCountry:
             options["datasets"] = datasets
         elif self.country_id == "il":
             region = [
-                dict(name="il", label="Israel"),
+                {"name": "il", "label": "Israel"},
             ]
             time_period = [
-                dict(name=2023, label="2023"),
+                {"name": 2023, "label": "2023"},
             ]
             datasets = [{}]
             options["region"] = region
@@ -369,7 +369,7 @@ class PolicyEngineCountry:
             }
             if variable.value_type.__name__ == "Enum":
                 variable_data[variable_name]["possibleValues"] = [
-                    dict(value=value.name, label=value.value)
+                    {"value": value.name, "label": value.value}
                     for value in variable.possible_values
                 ]
                 variable_data[variable_name]["defaultValue"] = (

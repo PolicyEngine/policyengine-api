@@ -177,24 +177,25 @@ def compare(registry: Registry, findings: Findings, root: Path) -> list[Violatio
             "fix what `shellcheck <script>` reports",
         ),
     )
-    violations = []
+    violations: list[Violation] = []
     for check, label, found, baseline_path, fix in checks:
         if found is None:
             continue
         rule_id = _rule_for(registry, baseline_path, check)
         baseline = _baseline(root, baseline_path)
-        for entry in sorted(found - baseline):
-            violations.append(Violation(rule_id, "ci-scripts", f"{label} {entry}", fix))
-        for entry in sorted(baseline - found):
-            violations.append(
-                Violation(
-                    rule_id,
-                    "ci-scripts",
-                    f"baseline entry no longer applies: {entry}",
-                    f"remove it from {baseline_path} and lower the rule's "
-                    "baseline count",
-                )
+        violations.extend(
+            Violation(rule_id, "ci-scripts", f"{label} {entry}", fix)
+            for entry in sorted(found - baseline)
+        )
+        violations.extend(
+            Violation(
+                rule_id,
+                "ci-scripts",
+                f"baseline entry no longer applies: {entry}",
+                f"remove it from {baseline_path} and lower the rule's baseline count",
             )
+            for entry in sorted(baseline - found)
+        )
     return violations
 
 

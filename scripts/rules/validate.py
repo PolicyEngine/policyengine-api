@@ -87,15 +87,15 @@ def _check_fields(
                     f"make it a {expected}",
                 )
             )
-    for key in sorted(set(fields) - set(required) - set(optional)):
-        violations.append(
-            Violation(
-                rule.id,
-                "schema",
-                f"unknown key '{key}' in {where}",
-                f"remove it; allowed: {sorted({**required, **optional})}",
-            )
+    violations.extend(
+        Violation(
+            rule.id,
+            "schema",
+            f"unknown key '{key}' in {where}",
+            f"remove it; allowed: {sorted({**required, **optional})}",
         )
+        for key in sorted(set(fields) - set(required) - set(optional))
+    )
     return violations
 
 

@@ -125,16 +125,16 @@ def guard_names(root: Path, runner: str = DEFAULT_RUNNER) -> list[str] | None:
             and target.id == "GUARDS"
             and isinstance(value, ast.Tuple)
         ):
-            names = []
-            for element in value.elts:
+            return [
+                element.elts[0].value
+                for element in value.elts
                 if (
                     isinstance(element, ast.Tuple)
                     and element.elts
                     and isinstance(element.elts[0], ast.Constant)
                     and isinstance(element.elts[0].value, str)
-                ):
-                    names.append(element.elts[0].value)
-            return names
+                )
+            ]
     return []
 
 

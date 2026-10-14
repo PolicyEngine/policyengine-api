@@ -166,7 +166,7 @@ try:
     }
 except Exception:  # noqa: BLE001  # unreadable package metadata falls back to 0.0.0; import must not fail
     _dist_versions = {}
-    COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES}
+    COUNTRY_PACKAGE_VERSIONS = dict.fromkeys(COUNTRIES, "0.0.0")
 
 _policyengine_bundle = _load_policyengine_bundle()
 _bundle_package_versions = _resolve_bundle_package_versions(_policyengine_bundle)
