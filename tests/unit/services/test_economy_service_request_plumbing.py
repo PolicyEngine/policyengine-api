@@ -20,9 +20,11 @@ from policyengine_api.runtime_cache.reform_impacts import (
     reform_impact_id,
 )
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
+from policyengine_api.services.economic_impact_request import EconomicImpactRequest
 from policyengine_api.services.economy_service import (
     EconomicImpactResult,
     EconomyService,
+    RuntimeBundleIdentity,
 )
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
 from tests.fixtures.services.economy_service import (
@@ -133,15 +135,17 @@ def test_annual_request_resolves_complete_setup_options(economy_service, target)
 
     with patch.object(EconomyService, "_get_or_create_economic_impact", capture):
         result = economy_service.get_economic_impact(
-            country_id="us",
-            policy_id=MOCK_POLICY_ID,
-            baseline_policy_id=MOCK_BASELINE_POLICY_ID,
-            region="ca",
-            dataset="default",
+            EconomicImpactRequest(
+                country_id="us",
+                policy_id=MOCK_POLICY_ID,
+                baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                region="ca",
+                dataset="default",
+                options=MOCK_OPTIONS,
+                api_version=MOCK_API_VERSION,
+                target=target,
+            ),
             time_period="2025",
-            options=MOCK_OPTIONS,
-            api_version=MOCK_API_VERSION,
-            target=target,
         )
 
     assert result == EconomicImpactResult.computing()
@@ -152,15 +156,17 @@ def test_annual_submission_stores_record_and_sends_payload(
     economy_service, mock_simulation_entrypoint, mock_datetime
 ):
     result = economy_service.get_economic_impact(
-        country_id="us",
-        policy_id=MOCK_POLICY_ID,
-        baseline_policy_id=MOCK_BASELINE_POLICY_ID,
-        region="state/ca",
-        dataset="default",
+        EconomicImpactRequest(
+            country_id="us",
+            policy_id=MOCK_POLICY_ID,
+            baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+            region="state/ca",
+            dataset="default",
+            options=MOCK_OPTIONS,
+            api_version=MOCK_API_VERSION,
+            target="cliff",
+        ),
         time_period="2025",
-        options=MOCK_OPTIONS,
-        api_version=MOCK_API_VERSION,
-        target="cliff",
     )
 
     assert result == EconomicImpactResult.computing()
@@ -255,15 +261,17 @@ def _budget_window_key(service: EconomyService) -> str:
 
 def _request_budget_window(service: EconomyService) -> dict:
     result = service.get_budget_window_economic_impact(
-        country_id="us",
-        policy_id=MOCK_POLICY_ID,
-        baseline_policy_id=MOCK_BASELINE_POLICY_ID,
-        region="ca",
-        dataset="default",
+        EconomicImpactRequest(
+            country_id="us",
+            policy_id=MOCK_POLICY_ID,
+            baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+            region="ca",
+            dataset="default",
+            options=MOCK_OPTIONS,
+            api_version=MOCK_API_VERSION,
+        ),
         start_year="2026",
         window_size=3,
-        options=MOCK_OPTIONS,
-        api_version=MOCK_API_VERSION,
         max_active_years=2,
     )
     return {**result.to_dict(), "cache_status": result.cache_status}
@@ -396,7 +404,7 @@ def test_budget_window_poll_reports_running_years(
 )
 def test_options_hash_lists_options_then_bundle_fields(bundle_fields, expected):
     options_hash = EconomyService()._build_options_hash(
-        options={"b": {"c": 2}, "a": 1}, **bundle_fields
+        options={"b": {"c": 2}, "a": 1}, bundle=RuntimeBundleIdentity(**bundle_fields)
     )
 
     assert options_hash == expected
@@ -405,9 +413,9 @@ def test_options_hash_lists_options_then_bundle_fields(bundle_fields, expected):
 def test_options_hash_marks_spm_provenance_schema():
     options_hash = EconomyService()._build_options_hash(
         options={"spm": {"scenario": "x"}},
-        model_version="1",
-        dataset="default",
-        runtime_app_name="app",
+        bundle=RuntimeBundleIdentity(
+            dataset="default", model_version="1", runtime_app_name="app"
+        ),
     )
 
     assert options_hash == (
@@ -418,7 +426,7 @@ def test_options_hash_marks_spm_provenance_schema():
 
 def test_empty_options_hash_drops_the_leading_separator():
     options_hash = EconomyService()._build_options_hash(
-        options={}, model_version="1", dataset="default"
+        options={}, bundle=RuntimeBundleIdentity(dataset="default", model_version="1")
     )
 
     assert options_hash == "[dataset=default&model_version=1]"

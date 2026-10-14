@@ -7,7 +7,12 @@ from flask import Flask
 
 from policyengine_api.libs.simulation_entrypoint import SimulationEntrypointClient
 from policyengine_api.routes.economy_routes import economy_bp
-from policyengine_api.services.economy_service import EconomyService
+from policyengine_api.services.economic_impact_request import EconomicImpactRequest
+from policyengine_api.services.economy_service import (
+    EconomicImpactSetupOptions,
+    EconomyService,
+    RuntimeBundleIdentity,
+)
 from policyengine_api.spm import SPMValidationError
 from policyengine_api.worker_spm import validate_worker_result, validate_worker_spm
 
@@ -94,13 +99,15 @@ def test_canonical_economy_request_fails_before_cache_lookup(budget_window, opti
         simulation_entrypoint_=Mock(),
     )
     arguments = {
-        "country_id": "us",
-        "policy_id": 1,
-        "baseline_policy_id": 2,
-        "region": "us",
-        "dataset": "default",
-        "options": options,
-        "api_version": "test",
+        "impact_request": EconomicImpactRequest(
+            country_id="us",
+            policy_id=1,
+            baseline_policy_id=2,
+            region="us",
+            dataset="default",
+            options=options,
+            api_version="test",
+        ),
     }
     if budget_window:
         call = service.get_budget_window_economic_impact
@@ -230,32 +237,47 @@ def test_certified_worker_selection_enters_identity_and_submission():
         "policyengine_api.worker_spm.normalize_spm_selection", return_value=SELECTION
     ):
         setup = service._build_economic_impact_setup_options(
+            EconomicImpactRequest(
+                country_id="us",
+                policy_id=1,
+                baseline_policy_id=2,
+                region="us",
+                dataset="default",
+                options={},
+                api_version="test",
+            ),
+            time_period="2026",
+        )
+    assert setup.options["spm"] == SELECTION
+    changed = {**SELECTION, "scenario": "zero_real"}
+    bundle = RuntimeBundleIdentity(dataset="default", model_version="test")
+    assert service._build_options_hash(
+        options={"spm": SELECTION}, bundle=bundle
+    ) != service._build_options_hash(options={"spm": changed}, bundle=bundle)
+    assert (
+        "spm_provenance_schema=canonical-spm-comparison-v2"
+        in service._build_options_hash(options={"spm": SELECTION}, bundle=bundle)
+    )
+    assert "spm_provenance_schema" not in service._build_options_hash(
+        options={}, bundle=bundle
+    )
+    options = service._setup_sim_options(
+        EconomicImpactSetupOptions(
+            submission_claim_id="claim",
             country_id="us",
-            policy_id=1,
+            reform_policy_id=1,
             baseline_policy_id=2,
             region="us",
             dataset="default",
             time_period="2026",
-            options={},
+            options={"spm": SELECTION},
             api_version="test",
-        )
-    assert setup.options["spm"] == SELECTION
-    changed = {**SELECTION, "scenario": "zero_real"}
-    assert service._build_options_hash(
-        options={"spm": SELECTION}, model_version="test", dataset="default"
-    ) != service._build_options_hash(
-        options={"spm": changed}, model_version="test", dataset="default"
+            target="general",
+        ),
+        reform_policy={},
+        baseline_policy={},
+        time_period="2026",
     )
-    assert (
-        "spm_provenance_schema=canonical-spm-comparison-v2"
-        in service._build_options_hash(
-            options={"spm": SELECTION}, model_version="test", dataset="default"
-        )
-    )
-    assert "spm_provenance_schema" not in service._build_options_hash(
-        options={}, model_version="test", dataset="default"
-    )
-    options = service._setup_sim_options("us", {}, {}, "us", "2026", spm=SELECTION)
     assert options.model_dump(mode="json")["spm"] == SELECTION
 
 

@@ -84,7 +84,7 @@ def test_json_spm_selection_reaches_real_worker_validation(economy_http):
     )
     assert response.status_code == 200, response.get_json()
     assert response.get_json()["status"] == "computing"
-    assert dispatch.call_args.kwargs["options"] == {
+    assert dispatch.call_args.kwargs["impact_request"].options == {
         "spm": {"geography_kind": "national"}
     }
     assert setups[0].options["spm"]["geography_kind"] == "national"
@@ -171,9 +171,10 @@ def test_omitted_selection_and_query_defaults_are_preserved(economy_http):
     client, path, query, dispatch, _, setups = economy_http
     response = client.get(path, query_string=query)
     assert response.status_code == 200
-    assert dispatch.call_args.kwargs["options"] == {}
-    assert dispatch.call_args.kwargs["dataset"] == "default"
-    assert dispatch.call_args.kwargs["target"] == "general"
+    impact_request = dispatch.call_args.kwargs["impact_request"]
+    assert impact_request.options == {}
+    assert impact_request.dataset == "default"
+    assert impact_request.target == "general"
     assert setups[0].options["spm"]["geography_kind"] == "county"
 
 
@@ -225,7 +226,7 @@ def test_bundle_version_bump_without_measurements_still_dispatches(
     monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: False)
     response = client.get(path, query_string=query)
     assert response.status_code == 200, response.get_json()
-    assert dispatch.call_args.kwargs["options"] == {}
+    assert dispatch.call_args.kwargs["impact_request"].options == {}
     gateway.get_spm_capability.assert_not_called()
 
 
