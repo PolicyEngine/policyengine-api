@@ -1,3 +1,11 @@
+## [5.3.2] - 2026-10-14
+
+### Changed
+
+- Moved the multi-line steps in the deploy pipeline (push.yml) into tested scripts, so every workflow run: step is now a single line.
+- Ran ruff check in CI with the first group of rule families (imports, pyupgrade and other safe auto-fixes) and fixed every finding.
+
+
 ## [5.3.1] - 2026-10-14
 
 ### Changed
