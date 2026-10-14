@@ -8,7 +8,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 39 | 1 | 2 | 12 | 54 |
+| mechanical | 40 | 0 | 2 | 12 | 54 |
 | metric | 0 | 0 | 0 | 0 | 0 |
 | judgment | 0 | 0 | 0 | 0 | 0 |
 
@@ -64,7 +64,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Ratcheted (existing violations still tolerated)
 
-- `api.ci.multiline-run-is-script`: 7 remaining in `rules/baselines/ci-multiline-run.txt`
+- None.
 
 ### Exceptions and review dates
 
@@ -325,13 +325,13 @@ flowchart LR
 
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `api.ci.multiline-run-is-script` | A GitHub Actions run: block holds one line of code and no chained commands (&&, \|\|, ;); anything more lives in a tested script under .github/scripts/, called from a single-line step. | mechanical | ratcheted | yes | quality guard `ci-scripts` | `pr.yml:quality-guards` | yes |
+| `api.ci.multiline-run-is-script` | A GitHub Actions run: block holds one line of code and no chained commands (&&, \|\|, ;); anything more lives in a tested script under .github/scripts/, called from a single-line step. | mechanical | enforced | yes | quality guard `ci-scripts` | `pr.yml:quality-guards` | yes |
 | `api.ci.shell-scripts-pass-shellcheck` | Every shell script under .github/scripts/ passes shellcheck. | mechanical | enforced | yes | quality guard `ci-scripts` | `pr.yml:quality-guards` | yes |
 | `api.ci.workflow-scripts-tested` | Every shell script a workflow calls is run by at least one test. | mechanical | enforced | yes | quality guard `ci-scripts` | `pr.yml:quality-guards` | yes |
 
 ```mermaid
 flowchart LR
-  r_api_ci_multiline_run_is_script("api.ci.multiline-run-is-script (ratcheted)")
+  r_api_ci_multiline_run_is_script("api.ci.multiline-run-is-script (enforced)")
   e_quality_guard_ci_scripts["quality guard ci-scripts"]
   j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
   r_api_ci_shell_scripts_pass_shellcheck("api.ci.shell-scripts-pass-shellcheck (enforced)")
