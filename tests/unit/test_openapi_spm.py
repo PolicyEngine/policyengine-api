@@ -104,18 +104,7 @@ def test_household_specification_exposes_creation_without_content_update():
     assert "label remains editable" not in simulation_description
 
 
-def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
-    app = Flask(__name__)
-    app.register_blueprint(system_bp)
-    response = app.test_client().get("/specification")
-    assert response.status_code == 200
-    spec = response.get_json()
-    assert spec["openapi"] == "3.0.0"
-    paths = spec["paths"]
-    schemas = spec["components"]["schemas"]
-    selection_ref = {"$ref": "#/components/schemas/SPMSelection"}
-    provenance_ref = {"$ref": "#/components/schemas/SPMProvenance"}
-
+def _assert_spm_models_match_component_schemas(schemas: dict) -> None:
     for name, model in {
         "SPMSelection": SPMSelection,
         "SPMRuntimeVersions": SPMRuntimeVersions,
@@ -132,6 +121,8 @@ def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
         assert schema["additionalProperties"] is False
         assert '"type": "null"' not in json.dumps(schema)
 
+
+def _assert_selection_and_provenance_schemas(schemas: dict) -> None:
     selection = schemas["SPMSelection"]["properties"]
     assert selection["geography_kind"]["enum"] == ["county", "national", "metro"]
     assert all("default" not in field for field in selection.values())
@@ -182,6 +173,10 @@ def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
     }
     assert not removed_rich_fields.intersection(provenance["properties"])
 
+
+def _assert_spm_route_envelopes(
+    paths: dict, selection_ref: dict, provenance_ref: dict
+) -> None:
     for route in ("calculate", "calculate-full"):
         operation = paths[f"/{{country_id}}/{route}"]["post"]
         request = operation["requestBody"]["content"]["application/json"]["schema"]
@@ -228,6 +223,8 @@ def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
         assert result["properties"]["spm"] == selection_ref
         assert result["properties"]["household_json"]["type"] == "object"
 
+
+def _assert_spm_validation_error_response(spec: dict) -> None:
     error = spec["components"]["responses"]["SPMValidationError"]["content"][
         "application/json"
     ]["schema"]
@@ -236,3 +233,21 @@ def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
     assert error["properties"]["errors"]["items"]["required"] == ["message"]
     assert "code" in error["properties"]["errors"]["items"]["properties"]
     assert error["properties"]["result"]["nullable"] is True
+
+
+def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
+    app = Flask(__name__)
+    app.register_blueprint(system_bp)
+    response = app.test_client().get("/specification")
+    assert response.status_code == 200
+    spec = response.get_json()
+    assert spec["openapi"] == "3.0.0"
+    paths = spec["paths"]
+    schemas = spec["components"]["schemas"]
+    selection_ref = {"$ref": "#/components/schemas/SPMSelection"}
+    provenance_ref = {"$ref": "#/components/schemas/SPMProvenance"}
+
+    _assert_spm_models_match_component_schemas(schemas)
+    _assert_selection_and_provenance_schemas(schemas)
+    _assert_spm_route_envelopes(paths, selection_ref, provenance_ref)
+    _assert_spm_validation_error_response(spec)
