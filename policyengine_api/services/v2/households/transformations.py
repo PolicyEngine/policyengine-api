@@ -189,6 +189,22 @@ def _derive_default_year(values: list[object]) -> int | None:
     raise LegacyHouseholdTranslationError(msg)
 
 
+class _LegacyTranslation:
+    """What translating one v1 household builds up as its groups are read.
+
+    Holds the people's stable ids, each person's group memberships so far, and
+    every source value in reading order, from which the default year is derived.
+    """
+
+    def __init__(self, people_source: dict[str, Any]) -> None:
+        """Start a translation of the named people in ``people_source``."""
+        self.person_ids = _stable_ids("person", list(people_source))
+        self.person_memberships: dict[str, dict[str, str]] = {
+            name: {} for name in people_source
+        }
+        self.all_values: list[object] = []
+
+
 def translate_legacy_household(
     snapshot: LegacyHouseholdSnapshot,
 ) -> HouseholdCreationInput:
@@ -204,87 +220,17 @@ def translate_legacy_household(
         msg = "legacy household_json must be an object"
         raise TypeError(msg)
     collections = SUPPORTED_ENTITY_COLLECTIONS[snapshot.country_id]
-    allowed_source = {
-        "people",
-        *(LEGACY_COLLECTION_NAMES[item] for item in collections),
-    }
-    if snapshot.country_id == "us":
-        allowed_source.add("spm")
-    unsupported = sorted(set(source) - allowed_source)
-    if unsupported:
-        msg = f"legacy household contains unsupported collections: {unsupported}"
-        raise LegacyHouseholdTranslationError(msg)
+    _require_supported_legacy_collections(snapshot.country_id, source, collections)
     people_source = source.get("people", {})
     if type(people_source) is not dict:
         msg = "legacy people must be an object"
         raise LegacyHouseholdTranslationError(msg)
-    person_ids = _stable_ids("person", list(people_source))
-    all_values: list[object] = []
-    normalized_groups: dict[str, list[dict[str, Any]]] = {}
-    person_memberships: dict[str, dict[str, str]] = {name: {} for name in people_source}
-
-    for collection in collections:
-        source_name = LEGACY_COLLECTION_NAMES[collection]
-        source_groups = source.get(source_name, {})
-        if type(source_groups) is not dict:
-            msg = f"legacy {source_name} must be an object"
-            raise LegacyHouseholdTranslationError(msg)
-        group_ids = _stable_ids(collection, list(source_groups))
-        group_records: list[dict[str, Any]] = []
-        for group_name in sorted(source_groups):
-            group = source_groups[group_name]
-            if type(group) is not dict:
-                msg = f"legacy {source_name} records must be objects"
-                raise LegacyHouseholdTranslationError(msg)
-            values: dict[str, Any] = {}
-            for field, value in group.items():
-                if field != "members":
-                    values[field] = value
-                    all_values.append(value)
-                    continue
-                if type(value) is not list or not all(
-                    isinstance(item, str) and item in person_ids for item in value
-                ):
-                    msg = f"legacy {source_name} members must reference named people"
-                    raise LegacyHouseholdTranslationError(msg)
-                for raw_person_name in value:
-                    if not isinstance(raw_person_name, str):
-                        msg = f"legacy {source_name} member names must be strings"
-                        raise TypeError(msg)
-                    person_name = raw_person_name
-                    memberships = person_memberships[person_name]
-                    previous = memberships.get(collection)
-                    if previous is not None and previous != group_ids[group_name]:
-                        msg = (
-                            f"legacy person {person_name!r} belongs to multiple "
-                            f"{source_name} records"
-                        )
-                        raise LegacyHouseholdTranslationError(msg)
-                    memberships[collection] = group_ids[group_name]
-            group_records.append(
-                {
-                    "id": group_ids[group_name],
-                    "source_name": group_name,
-                    "values": values,
-                }
-            )
-        normalized_groups[collection] = group_records
-
-    people: list[dict[str, Any]] = []
-    for person_name in sorted(people_source):
-        person_values = people_source[person_name]
-        if type(person_values) is not dict:
-            msg = "legacy person records must be objects"
-            raise LegacyHouseholdTranslationError(msg)
-        all_values.extend(person_values.values())
-        people.append(
-            {
-                "id": person_ids[person_name],
-                "source_name": person_name,
-                "values": dict(person_values),
-                "memberships": person_memberships[person_name],
-            }
-        )
+    translation = _LegacyTranslation(people_source)
+    normalized_groups = {
+        collection: _translate_legacy_groups(source, collection, translation)
+        for collection in collections
+    }
+    people = _translate_legacy_people(people_source, translation)
 
     document: dict[str, Any] = {"people": people, **normalized_groups}
     if "spm" in source:
@@ -295,9 +241,137 @@ def translate_legacy_household(
         raise LegacyHouseholdTranslationError(str(error)) from error
     return HouseholdCreationInput(
         country_id=snapshot.country_id,
-        default_year=_derive_default_year(all_values),
+        default_year=_derive_default_year(translation.all_values),
         household_data=normalized,
     )
+
+
+def _require_supported_legacy_collections(
+    country_id: str,
+    source: dict[str, Any],
+    collections: tuple[str, ...],
+) -> None:
+    """Reject a v1 document with collections the country does not support."""
+    allowed_source = {
+        "people",
+        *(LEGACY_COLLECTION_NAMES[item] for item in collections),
+    }
+    if country_id == "us":
+        allowed_source.add("spm")
+    unsupported = sorted(set(source) - allowed_source)
+    if unsupported:
+        msg = f"legacy household contains unsupported collections: {unsupported}"
+        raise LegacyHouseholdTranslationError(msg)
+
+
+def _translate_legacy_groups(
+    source: dict[str, Any],
+    collection: str,
+    translation: _LegacyTranslation,
+) -> list[dict[str, Any]]:
+    """Translate one v1 collection's named groups into v2 records, in name order."""
+    source_name = LEGACY_COLLECTION_NAMES[collection]
+    source_groups = source.get(source_name, {})
+    if type(source_groups) is not dict:
+        msg = f"legacy {source_name} must be an object"
+        raise LegacyHouseholdTranslationError(msg)
+    group_ids = _stable_ids(collection, list(source_groups))
+    group_records: list[dict[str, Any]] = []
+    for group_name in sorted(source_groups):
+        group = source_groups[group_name]
+        if type(group) is not dict:
+            msg = f"legacy {source_name} records must be objects"
+            raise LegacyHouseholdTranslationError(msg)
+        values = _translate_legacy_group(
+            group,
+            collection=collection,
+            group_id=group_ids[group_name],
+            translation=translation,
+        )
+        group_records.append(
+            {
+                "id": group_ids[group_name],
+                "source_name": group_name,
+                "values": values,
+            }
+        )
+    return group_records
+
+
+def _translate_legacy_group(
+    group: dict[str, Any],
+    *,
+    collection: str,
+    group_id: str,
+    translation: _LegacyTranslation,
+) -> dict[str, Any]:
+    """Return a v1 group's values, recording its members' memberships."""
+    values: dict[str, Any] = {}
+    for field, value in group.items():
+        if field != "members":
+            values[field] = value
+            translation.all_values.append(value)
+            continue
+        _record_legacy_memberships(
+            value,
+            collection=collection,
+            group_id=group_id,
+            translation=translation,
+        )
+    return values
+
+
+def _record_legacy_memberships(
+    members: object,
+    *,
+    collection: str,
+    group_id: str,
+    translation: _LegacyTranslation,
+) -> None:
+    """Record that each named member belongs to ``group_id`` in ``collection``."""
+    source_name = LEGACY_COLLECTION_NAMES[collection]
+    if type(members) is not list or not all(
+        isinstance(item, str) and item in translation.person_ids for item in members
+    ):
+        msg = f"legacy {source_name} members must reference named people"
+        raise LegacyHouseholdTranslationError(msg)
+    for raw_person_name in members:
+        if not isinstance(raw_person_name, str):
+            msg = f"legacy {source_name} member names must be strings"
+            raise TypeError(msg)
+        person_name = raw_person_name
+        memberships = translation.person_memberships[person_name]
+        previous = memberships.get(collection)
+        if previous is not None and previous != group_id:
+            msg = (
+                f"legacy person {person_name!r} belongs to multiple "
+                f"{source_name} records"
+            )
+            raise LegacyHouseholdTranslationError(msg)
+        memberships[collection] = group_id
+
+
+def _translate_legacy_people(
+    people_source: dict[str, Any],
+    translation: _LegacyTranslation,
+) -> list[dict[str, Any]]:
+    """Translate the named v1 people into v2 person records, in name order."""
+    people: list[dict[str, Any]] = []
+    for person_name in sorted(people_source):
+        person_values = people_source[person_name]
+        if type(person_values) is not dict:
+            msg = "legacy person records must be objects"
+            raise LegacyHouseholdTranslationError(msg)
+        translation.all_values.extend(person_values.values())
+        people.append(
+            {
+                "id": translation.person_ids[person_name],
+                "source_name": person_name,
+                "values": dict(person_values),
+                "memberships": translation.person_memberships[person_name],
+            }
+        )
+    return people
 
 
 def legacy_household_fingerprint(snapshot: LegacyHouseholdSnapshot) -> str:
