@@ -21,6 +21,7 @@ from policyengine_api.data.v2.catalog.records import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Sequence
+    from uuid import UUID
 
 COPY_BATCH_SIZE = 10_000
 
@@ -150,121 +151,135 @@ def _optional_json(value: object) -> Jsonb | None:
     return None if value is None else Jsonb(value)
 
 
+def _model_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
+    """Yield the country's one model and model-version row."""
+    yield (
+        country.country_id,
+        country.model.id,
+        country.model.name,
+        country.model.description,
+        country.model_version.id,
+        country.model_version.version,
+        country.model_version.description,
+        country.model_version.current_law_id,
+        Jsonb(country.model_version.metadata_time_periods),
+    )
+
+
+def _variable_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
+    """Yield one row per variable, in bounded batches."""
+    for batch in iter_batches(country.variables, batch_size=COPY_BATCH_SIZE):
+        for record in batch:
+            yield (
+                country.country_id,
+                record.id,
+                record.name,
+                record.label,
+                record.entity,
+                record.description,
+                record.data_type,
+                _optional_json(record.possible_values),
+                Jsonb(record.default_value),
+                _optional_json(record.adds),
+                _optional_json(record.subtracts),
+            )
+
+
+def _parameter_node_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
+    """Yield one row per parameter node, in bounded batches."""
+    for batch in iter_batches(
+        country.parameter_nodes,
+        batch_size=COPY_BATCH_SIZE,
+    ):
+        for record in batch:
+            yield (
+                country.country_id,
+                record.id,
+                record.name,
+                record.label,
+                record.description,
+            )
+
+
+def _parameter_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
+    """Yield one row per parameter, in bounded batches."""
+    for batch in iter_batches(country.parameters, batch_size=COPY_BATCH_SIZE):
+        for record in batch:
+            yield (
+                country.country_id,
+                record.id,
+                record.name,
+                record.label,
+                record.description,
+                record.data_type,
+                record.unit,
+            )
+
+
+def _parameter_value_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
+    """Yield one row per parameter value, keyed by its parameter's name."""
+    parameter_names = {parameter.id: parameter.name for parameter in country.parameters}
+    for batch in country.parameter_value_batches(batch_size=COPY_BATCH_SIZE):
+        for record in batch:
+            yield (
+                country.country_id,
+                parameter_names[record.parameter_id],
+                record.id,
+                Jsonb(record.value_json),
+                record.start_date,
+                record.end_date,
+            )
+
+
+def _dataset_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
+    """Yield one row per logical input dataset, in bounded batches."""
+    for batch in iter_batches(country.datasets, batch_size=COPY_BATCH_SIZE):
+        for record in batch:
+            yield (
+                country.country_id,
+                record.id,
+                record.name,
+                record.description,
+                record.year,
+            )
+
+
+def _region_rows(
+    country: CountryCatalog,
+    dataset_names: dict[UUID, str],
+) -> Iterator[tuple[object, ...]]:
+    """Yield one row per region, naming its default dataset."""
+    for batch in iter_batches(country.regions, batch_size=COPY_BATCH_SIZE):
+        for record in batch:
+            yield (
+                country.country_id,
+                record.id,
+                record.code,
+                record.label,
+                record.region_type,
+                record.requires_filter,
+                record.filter_field,
+                record.filter_value,
+                record.filter_strategy,
+                record.parent_code,
+                record.state_code,
+                record.state_name,
+                dataset_names[record.default_dataset_id],
+            )
+
+
 def _catalog_rows(
     country: CountryCatalog,
 ) -> dict[Table, Iterator[tuple[object, ...]]]:
     dataset_names = {dataset.id: dataset.name for dataset in country.datasets}
-
-    def model_rows() -> Iterator[tuple[object, ...]]:
-        yield (
-            country.country_id,
-            country.model.id,
-            country.model.name,
-            country.model.description,
-            country.model_version.id,
-            country.model_version.version,
-            country.model_version.description,
-            country.model_version.current_law_id,
-            Jsonb(country.model_version.metadata_time_periods),
-        )
-
-    def variable_rows() -> Iterator[tuple[object, ...]]:
-        for batch in iter_batches(country.variables, batch_size=COPY_BATCH_SIZE):
-            for record in batch:
-                yield (
-                    country.country_id,
-                    record.id,
-                    record.name,
-                    record.label,
-                    record.entity,
-                    record.description,
-                    record.data_type,
-                    _optional_json(record.possible_values),
-                    Jsonb(record.default_value),
-                    _optional_json(record.adds),
-                    _optional_json(record.subtracts),
-                )
-
-    def parameter_node_rows() -> Iterator[tuple[object, ...]]:
-        for batch in iter_batches(
-            country.parameter_nodes,
-            batch_size=COPY_BATCH_SIZE,
-        ):
-            for record in batch:
-                yield (
-                    country.country_id,
-                    record.id,
-                    record.name,
-                    record.label,
-                    record.description,
-                )
-
-    def parameter_rows() -> Iterator[tuple[object, ...]]:
-        for batch in iter_batches(country.parameters, batch_size=COPY_BATCH_SIZE):
-            for record in batch:
-                yield (
-                    country.country_id,
-                    record.id,
-                    record.name,
-                    record.label,
-                    record.description,
-                    record.data_type,
-                    record.unit,
-                )
-
-    def parameter_value_rows() -> Iterator[tuple[object, ...]]:
-        parameter_names = {
-            parameter.id: parameter.name for parameter in country.parameters
-        }
-        for batch in country.parameter_value_batches(batch_size=COPY_BATCH_SIZE):
-            for record in batch:
-                yield (
-                    country.country_id,
-                    parameter_names[record.parameter_id],
-                    record.id,
-                    Jsonb(record.value_json),
-                    record.start_date,
-                    record.end_date,
-                )
-
-    def dataset_rows() -> Iterator[tuple[object, ...]]:
-        for batch in iter_batches(country.datasets, batch_size=COPY_BATCH_SIZE):
-            for record in batch:
-                yield (
-                    country.country_id,
-                    record.id,
-                    record.name,
-                    record.description,
-                    record.year,
-                )
-
-    def region_rows() -> Iterator[tuple[object, ...]]:
-        for batch in iter_batches(country.regions, batch_size=COPY_BATCH_SIZE):
-            for record in batch:
-                yield (
-                    country.country_id,
-                    record.id,
-                    record.code,
-                    record.label,
-                    record.region_type,
-                    record.requires_filter,
-                    record.filter_field,
-                    record.filter_value,
-                    record.filter_strategy,
-                    record.parent_code,
-                    record.state_code,
-                    record.state_name,
-                    dataset_names[record.default_dataset_id],
-                )
-
     return {
-        STAGE_CATALOG_MODELS: model_rows(),
-        STAGE_CATALOG_VARIABLES: variable_rows(),
-        STAGE_CATALOG_PARAMETER_NODES: parameter_node_rows(),
-        STAGE_CATALOG_PARAMETERS: parameter_rows(),
-        STAGE_CATALOG_PARAMETER_VALUES: parameter_value_rows(),
-        STAGE_CATALOG_DATASETS: dataset_rows(),
-        STAGE_CATALOG_REGIONS: region_rows(),
+        STAGE_CATALOG_MODELS: _model_rows(country),
+        STAGE_CATALOG_VARIABLES: _variable_rows(country),
+        STAGE_CATALOG_PARAMETER_NODES: _parameter_node_rows(country),
+        STAGE_CATALOG_PARAMETERS: _parameter_rows(country),
+        STAGE_CATALOG_PARAMETER_VALUES: _parameter_value_rows(country),
+        STAGE_CATALOG_DATASETS: _dataset_rows(country),
+        STAGE_CATALOG_REGIONS: _region_rows(country, dataset_names),
     }
 
 
