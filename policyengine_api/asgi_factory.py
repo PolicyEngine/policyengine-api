@@ -459,18 +459,13 @@ def create_asgi_app(
     # Measured on the real payload: level 9 = 5.5s -> 9.0MB, level 4 = 0.7s ->
     # 9.9MB — 7.5x faster for ~10% larger output.
     app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=4)
-    app.add_exception_handler(Exception, _add_headers_to_unhandled_errors)
-    app.add_exception_handler(
-        RequestValidationError,
-        _typed_v2_request_validation_error,
-    )
-    app.add_exception_handler(V2RequestTooLargeError, _oversized_v2_request)
-    app.add_exception_handler(
-        V2AuthenticationRequiredError, _unauthenticated_v2_request
-    )
-    app.add_exception_handler(V2PermissionDeniedError, _forbidden_v2_request)
-    app.add_exception_handler(
-        V2AuthenticationUnavailableError, _unavailable_v2_authentication
+    app.exception_handler(Exception)(_add_headers_to_unhandled_errors)
+    app.exception_handler(RequestValidationError)(_typed_v2_request_validation_error)
+    app.exception_handler(V2RequestTooLargeError)(_oversized_v2_request)
+    app.exception_handler(V2AuthenticationRequiredError)(_unauthenticated_v2_request)
+    app.exception_handler(V2PermissionDeniedError)(_forbidden_v2_request)
+    app.exception_handler(V2AuthenticationUnavailableError)(
+        _unavailable_v2_authentication
     )
     _register_request_context_middleware(app, request_runtime)
     _include_native_routers(app, route_settings, dependencies)
