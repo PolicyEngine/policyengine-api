@@ -506,7 +506,7 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
     assert 'op.create_table(\n        "user_identities"' in revision
     assert '"uq_user_identities_issuer_subject"' in revision
     assert 'op.drop_table("user_identities")' in revision
-    for table_name, reference in (
+    for _table_name, reference in (
         ("user_policies", "policy"),
         ("user_household_associations", "household"),
         ("user_simulation_associations", "simulation"),

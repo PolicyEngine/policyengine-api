@@ -135,7 +135,7 @@ def test_database_session_modules_do_not_construct_queries(
 
 @pytest.mark.parametrize(
     "relative_path",
-    (
+    [
         "identity/services.py",
         "legacy_refs/services.py",
         "user_accounts/services.py",
@@ -143,7 +143,7 @@ def test_database_session_modules_do_not_construct_queries(
         "user_policies/services.py",
         "user_reports/services.py",
         "user_simulations/services.py",
-    ),
+    ],
 )
 def test_user_services_construct_no_sql(relative_path: str) -> None:
     assert not _constructs_sql(SERVICES_ROOT / relative_path)
