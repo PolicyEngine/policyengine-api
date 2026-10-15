@@ -18,7 +18,6 @@ from policyengine_observability import (
     process_instance_id,
 )
 
-
 DISPATCH_ATTRIBUTE_KEYS = frozenset({"observability_id"})
 
 

@@ -10,8 +10,22 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 
 
+STACKED_PR_CONDITION = (
+    "${{ !github.event.pull_request.stack || "
+    "github.event.pull_request.stack.base.ref == github.event.pull_request.base.ref }}"
+)
+
+
 def _workflow(name: str) -> str:
     return (REPO / ".github" / "workflows" / name).read_text(encoding="utf-8")
+
+
+def _job_conditions(job_text: str) -> list[str]:
+    return [
+        line.strip().removeprefix("if:").strip()
+        for line in job_text.splitlines()
+        if line.strip().startswith("if:")
+    ]
 
 
 def _long_inline_run_blocks() -> list[str]:
@@ -74,9 +88,13 @@ def test_pr_always_runs_reusable_alembic_and_v2_integration_checks():
     assert "uses: ./.github/workflows/v2-integration-check.yml" in integration_job
     assert "CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}" in integration_job
     assert "needs:" not in alembic_job
-    assert "if:" not in alembic_job
     assert "needs:" not in integration_job
-    assert "if:" not in integration_job
+    # The only condition allowed is the stacked-PR one: these checks run on
+    # every PR that isn't stacked and on the lowest unmerged PR of a stack, and
+    # CI complete, which needs them, fails on the others
+    # (tests/unit/test_ci_complete_gate.py).
+    assert _job_conditions(alembic_job) == [STACKED_PR_CONDITION]
+    assert _job_conditions(integration_job) == [STACKED_PR_CONDITION]
 
 
 def test_push_requires_schema_and_v2_integration_checks_before_versioning():
@@ -117,7 +135,12 @@ def test_versioning_refreshes_the_lock_after_bumping_the_project_version():
     assert versioning_job.index("python .github/bump_version.py") < (
         versioning_job.index("uv lock")
     )
-    assert versioning_job.index("uv lock") < versioning_job.index("towncrier build")
+    assert versioning_job.index("uv lock") < (
+        versioning_job.index("bash .github/scripts/build_changelog.sh")
+    )
+    assert "towncrier build" in (REPO / ".github/scripts/build_changelog.sh").read_text(
+        encoding="utf-8"
+    )
     assert changelog_target.index("python .github/bump_version.py") < (
         changelog_target.index("uv lock")
     )
@@ -234,13 +257,13 @@ def test_release_migration_fails_closed_before_tests_and_cloud_run_deploy():
     cloud_run_job = workflow[workflow.index("  deploy-cloud-run-staging:") :]
     cloud_run_job = re.split(r"\n(?=  \S)", cloud_run_job, maxsplit=1)[0]
     assert "migrate-v1-staging-cloud-sql" in cloud_run_job
-    assert "make test" in cloud_run_job
-    assert cloud_run_job.index("make test") < cloud_run_job.index(
-        'uses: "google-github-actions/auth@v2"'
-    )
-    assert cloud_run_job.index("make test") < cloud_run_job.index(
-        "Build and push Cloud Run image"
-    )
+    assert "bash .github/scripts/run_release_tests.sh" in cloud_run_job
+    assert cloud_run_job.index(
+        "bash .github/scripts/run_release_tests.sh"
+    ) < cloud_run_job.index('uses: "google-github-actions/auth@v2"')
+    assert cloud_run_job.index(
+        "bash .github/scripts/run_release_tests.sh"
+    ) < cloud_run_job.index("Build and push Cloud Run image")
 
 
 def test_cloud_sql_workflow_uses_oidc_and_separate_database_credentials():

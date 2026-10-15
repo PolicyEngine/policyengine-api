@@ -294,4 +294,4 @@ class ReformImpactsService:
 
     @staticmethod
     def _now() -> datetime.datetime:
-        return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        return datetime.datetime.now(datetime.UTC).replace(tzinfo=None)

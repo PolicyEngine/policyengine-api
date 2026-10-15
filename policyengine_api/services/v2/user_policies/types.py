@@ -37,7 +37,7 @@ class UserPolicyUpdateInput(StrictAssociationInput):
     description: str | None = None
 
     @model_validator(mode="after")
-    def require_supplied_field(self) -> "UserPolicyUpdateInput":
+    def require_supplied_field(self) -> UserPolicyUpdateInput:
         if not self.model_fields_set.intersection({"name", "description"}):
             raise ValueError("At least one of name or description must be supplied")
         return self

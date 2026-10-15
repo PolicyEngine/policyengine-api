@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
 import math
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -17,7 +17,6 @@ from policyengine_api.services.v2.policies.transformations import (
 from policyengine_api.services.v2.policies.types import (
     ResolvedPolicyCreationInput,
 )
-
 
 MODEL_ID = UUID("00000000-0000-0000-0000-000000000010")
 MODEL_VERSION_ID = UUID("00000000-0000-0000-0000-000000000020")
@@ -220,7 +219,7 @@ def test_datetime_objects_are_rendered_at_fixed_microsecond_precision() -> None:
                     0,
                     0,
                     42,
-                    tzinfo=timezone.utc,
+                    tzinfo=UTC,
                 ),
             }
         ]

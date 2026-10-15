@@ -1,19 +1,20 @@
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pandas as pd
+import pytest
 from pydantic import ValidationError
 
 from policyengine_api.services.economy_comparison import (
-    UKConstituencyBreakdownByConstituency,
     UKConstituencyBreakdown,
-    UKLocalAuthorityBreakdownByLA,
+    UKConstituencyBreakdownByConstituency,
     UKLocalAuthorityBreakdown,
-    uk_constituency_breakdown,
-    uk_local_authority_breakdown,
+    UKLocalAuthorityBreakdownByLA,
     compute_income_change,
     intra_decile_impact,
     intra_wealth_decile_impact,
+    uk_constituency_breakdown,
+    uk_local_authority_breakdown,
 )
 
 
@@ -741,8 +742,8 @@ def _make_economy(
     n = len(incomes)
     return {
         "household_net_income": np.array(incomes, dtype=float),
-        "household_weight": np.array(weights if weights else [1.0] * n),
-        "household_count_people": np.array(people if people else [1.0] * n),
+        "household_weight": np.array(weights or [1.0] * n),
+        "household_count_people": np.array(people or [1.0] * n),
         decile_key: np.array(deciles, dtype=float),
     }
 

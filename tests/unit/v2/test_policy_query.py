@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlmodel import Session, create_engine
 import pytest
+from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
+    V2_METADATA,
     Parameter,
     ParameterValue,
     Policy,
     TaxBenefitModel,
     TaxBenefitModelVersion,
-    V2_METADATA,
 )
 from policyengine_api.services.v2.policies.services import (
     read_complete_policy,
@@ -38,7 +38,7 @@ def _stored_policies():
     )
     alpha = Parameter(name="gov.alpha", tax_benefit_model_version=version)
     zeta = Parameter(name="gov.zeta", tax_benefit_model_version=version)
-    created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    created = datetime(2026, 1, 1, tzinfo=UTC)
     first = Policy(
         id=UUID("00000000-0000-0000-0000-000000000010"),
         country_id="us",

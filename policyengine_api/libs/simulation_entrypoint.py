@@ -3,7 +3,6 @@
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -19,13 +18,13 @@ from policyengine_api.libs.gateway_auth import (
 )
 from policyengine_api.migration_flags import get_sim_entrypoint
 from policyengine_api.observability import get_runtime
+from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     current_observability_id,
     current_request_id,
 )
-from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
-from policyengine_api.worker_spm import validate_worker_spm, raise_worker_spm_error
+from policyengine_api.worker_spm import raise_worker_spm_error, validate_worker_spm
 
 
 def _required_base_url(env_name: str) -> str:
@@ -88,16 +87,16 @@ class SimulationRunProgress(BaseModel):
 
     model_config = ConfigDict(extra="ignore", frozen=True)
 
-    stage: Optional[str] = None
-    progress: Optional[int] = Field(default=None, ge=0, le=100)
-    progress_max: Optional[int] = Field(default=None, ge=0, le=100)
-    submitted_at: Optional[str] = None
-    started_at: Optional[str] = None
-    stage_started_at: Optional[str] = None
-    segments: Optional[SimulationRunSegments] = None
+    stage: str | None = None
+    progress: int | None = Field(default=None, ge=0, le=100)
+    progress_max: int | None = Field(default=None, ge=0, le=100)
+    submitted_at: str | None = None
+    started_at: str | None = None
+    stage_started_at: str | None = None
+    segments: SimulationRunSegments | None = None
 
     @classmethod
-    def from_status(cls, data: dict) -> Optional["SimulationRunProgress"]:
+    def from_status(cls, data: dict) -> "SimulationRunProgress | None":
         """Read the stage fields; never fail a poll because of them."""
         try:
             run_progress = cls.model_validate(data)
@@ -117,11 +116,11 @@ class ModalSimulationExecution:
 
     job_id: str
     status: str
-    result: Optional[dict] = None
-    error: Optional[str] = None
-    policyengine_bundle: Optional[dict] = None
-    resolved_app_name: Optional[str] = None
-    run_progress: Optional[SimulationRunProgress] = None
+    result: dict | None = None
+    error: str | None = None
+    policyengine_bundle: dict | None = None
+    resolved_app_name: str | None = None
+    run_progress: SimulationRunProgress | None = None
 
     @property
     def name(self) -> str:
@@ -137,13 +136,13 @@ class ModalBudgetWindowBatchExecution:
 
     batch_job_id: str
     status: str
-    progress: Optional[int] = None
+    progress: int | None = None
     completed_years: list[str] = field(default_factory=list)
     running_years: list[str] = field(default_factory=list)
     queued_years: list[str] = field(default_factory=list)
     failed_years: list[str] = field(default_factory=list)
-    result: Optional[dict] = None
-    error: Optional[str] = None
+    result: dict | None = None
+    error: str | None = None
 
     @property
     def name(self) -> str:
@@ -196,8 +195,8 @@ class SimulationEntrypointClient:
             raise ValueError("Dataset overrides are not supported")
 
         from policyengine_api.constants import (
-            POLICYENGINE_VERSION,
             COUNTRY_PACKAGE_VERSIONS,
+            POLICYENGINE_VERSION,
         )
 
         country = payload.get("country", "us")
@@ -408,8 +407,8 @@ class SimulationEntrypointClient:
     def resolve_app_name(
         self,
         country: str,
-        version: Optional[str] = None,
-        policyengine_version: Optional[str] = None,
+        version: str | None = None,
+        policyengine_version: str | None = None,
     ) -> tuple[str, str]:
         """Resolve the current gateway app name for a country/model version."""
         if policyengine_version is not None:
@@ -566,9 +565,7 @@ class SimulationEntrypointClient:
         """
         return execution.status
 
-    def get_execution_result(
-        self, execution: ModalSimulationExecution
-    ) -> Optional[dict]:
+    def get_execution_result(self, execution: ModalSimulationExecution) -> dict | None:
         """
         Get the result from a completed execution.
 

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
 import os
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from urllib.parse import SplitResult, urlsplit
 
 from pydantic import SecretStr
-
 
 RUNTIME_CACHE_MODE = "RUNTIME_CACHE_MODE"
 RUNTIME_CACHE_URL = "RUNTIME_CACHE_URL"

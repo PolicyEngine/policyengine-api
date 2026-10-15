@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
 import hashlib
 import json
+from decimal import Decimal
 from typing import Any, cast
 
-from policyengine_core.periods import period as parse_policyengine_period  # type: ignore[import-untyped]
+from policyengine_core.periods import (  # type: ignore[import-untyped]
+    period as parse_policyengine_period,
+)
 
 from policyengine_api.data.v2.models import Household
 from policyengine_api.services.v2.households.types import (
@@ -18,11 +20,10 @@ from policyengine_api.services.v2.households.types import (
     LegacyHouseholdSnapshot,
 )
 from policyengine_api.services.v2.households.validators import (
-    LegacyHouseholdTranslationError,
     SUPPORTED_ENTITY_COLLECTIONS,
+    LegacyHouseholdTranslationError,
     normalize_household_document,
 )
-
 
 HOUSEHOLD_CANONICALIZATION_VERSION = 1
 LEGACY_HOUSEHOLD_FINGERPRINT_VERSION = 1
@@ -36,7 +37,7 @@ LEGACY_COLLECTION_NAMES = {
 }
 
 
-def _canonical_number(value: int | float) -> str:
+def _canonical_number(value: float) -> str:
     number = Decimal(str(value))
     if number.is_zero():
         return "0"

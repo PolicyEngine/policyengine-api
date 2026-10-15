@@ -2,8 +2,8 @@
 
 import json
 
-from flask import Flask
 import pytest
+from flask import Flask
 from sqlalchemy import select
 
 from policyengine_api.data.v1_models import (

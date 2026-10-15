@@ -1,9 +1,9 @@
 from io import StringIO
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-import pytest
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base

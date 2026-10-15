@@ -1,12 +1,11 @@
-from datetime import datetime
 import json
+from datetime import datetime
 from typing import Any
 
 from flask import Blueprint, Response, request
 
 from policyengine_api.runtime_cache.reform_impacts import CachedReformImpact
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
-
 
 reform_impact_bp = Blueprint("reform_impact", __name__)
 reform_impacts_service = ReformImpactsService()

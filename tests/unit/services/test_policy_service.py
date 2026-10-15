@@ -6,7 +6,6 @@ from policyengine_api.data.v1_models import Policy
 from policyengine_api.services.policy_service import PolicyService, PolicySetResult
 from tests.fixtures.services.policy_service import valid_policy_data
 
-
 pytest_plugins = ["tests.fixtures.services.policy_service"]
 
 

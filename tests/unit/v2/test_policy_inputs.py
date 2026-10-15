@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from policyengine_api.services.v2.policies.types import (
     NativePolicyCreationInput,
@@ -49,7 +49,7 @@ def test_input_normalizes_country_and_effective_dates_to_utc() -> None:
         2026,
         1,
         1,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
 
@@ -139,8 +139,7 @@ def test_parameter_value_count_is_bounded_but_empty_policy_is_valid() -> None:
         {
             **repeated,
             "parameter_id": uuid4(),
-            "start_date": datetime(2026, 1, 1, tzinfo=timezone.utc)
-            + timedelta(days=index),
+            "start_date": datetime(2026, 1, 1, tzinfo=UTC) + timedelta(days=index),
         }
         for index in range(MAXIMUM_POLICY_PARAMETER_VALUES + 1)
     ]

@@ -5,18 +5,18 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-from flask import Flask
 import pytest
+from flask import Flask
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
     SQLAlchemyError,
+)
+from sqlalchemy.exc import (
     TimeoutError as SQLAlchemyTimeoutError,
 )
 
 from policyengine_api.data.v1_models import UserPolicy
-from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
-from policyengine_api.services.v2.user_policies.types import LegacyUserPolicySnapshot
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.services.user_policy_mirroring import (
     UserPolicyMirrorUnavailableError,
@@ -26,6 +26,8 @@ from policyengine_api.services.user_policy_service import (
     UserPolicyPersistenceError,
     UserPolicyUpdateResult,
 )
+from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+from policyengine_api.services.v2.user_policies.types import LegacyUserPolicySnapshot
 
 
 def _client():

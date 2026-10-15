@@ -1,0 +1,8 @@
+# Rule machinery: changes need review from a core developer other than the
+# author. Deliberately narrow: pyproject.toml and workflow files are not owned,
+# so dependency bots and everyday CI edits are not blocked.
+/rules/                         @PolicyEngine/core-developers
+/scripts/rules/                 @PolicyEngine/core-developers
+/scripts/guards/                @PolicyEngine/core-developers
+/scripts/run_quality_guards.py  @PolicyEngine/core-developers
+/.github/CODEOWNERS             @PolicyEngine/core-developers

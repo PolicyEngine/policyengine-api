@@ -21,15 +21,15 @@ from policyengine_api.request_context import (
     start_observability_id,
 )
 from policyengine_api.response_factory import _make_error_response
-from policyengine_api.services.household_mirroring import (
-    HouseholdMirrorUnavailableError,
-    process_household_event_after_commit,
-)
 from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationService,
     HouseholdNotFoundError,
     InvalidHouseholdInputsError,
     PolicyNotFoundError,
+)
+from policyengine_api.services.household_mirroring import (
+    HouseholdMirrorUnavailableError,
+    process_household_event_after_commit,
 )
 from policyengine_api.services.household_service import (
     HouseholdPersistenceError,
@@ -258,18 +258,17 @@ def get_household(country_id: str, household_id: int) -> Response:
     result = None if household is None else _serialize_household(household)
     if result is None:
         raise NotFound(f"Household #{household_id} not found.")
-    else:
-        return Response(
-            json.dumps(
-                {
-                    "status": "ok",
-                    "message": None,
-                    "result": result,
-                }
-            ),
-            status=200,
-            mimetype="application/json",
-        )
+    return Response(
+        json.dumps(
+            {
+                "status": "ok",
+                "message": None,
+                "result": result,
+            }
+        ),
+        status=200,
+        mimetype="application/json",
+    )
 
 
 @household_bp.route("/<country_id>/household", methods=["POST"])

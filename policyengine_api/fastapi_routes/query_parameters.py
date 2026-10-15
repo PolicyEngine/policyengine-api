@@ -15,7 +15,6 @@ from policyengine_api.query_parameters import (
     validate_scalar_query_multiplicity,
 )
 
-
 QueryParametersT = TypeVar("QueryParametersT", bound=StrictQueryParameters)
 
 

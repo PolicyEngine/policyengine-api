@@ -7,7 +7,6 @@ from policyengine_api.services.report_spec_service import (
     ReportSpecService,
 )
 
-
 service = ReportSpecService()
 
 

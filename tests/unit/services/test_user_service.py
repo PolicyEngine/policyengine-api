@@ -4,7 +4,6 @@ from policyengine_api.data.v1_models import UserProfile
 from policyengine_api.services.user_service import UserService
 from tests.fixtures.services.user_service import valid_user_record
 
-
 pytest_plugins = ["tests.fixtures.services.user_service"]
 
 

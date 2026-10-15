@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
 import pytest
+
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import (
     Household,
@@ -23,7 +24,6 @@ from policyengine_api.services.household_calculation_service import (
     PolicyNotFoundError,
 )
 from tests.fixtures.spm import INSTALLED_SPM_SELECTION, household_result_fields
-
 
 PACKAGE_ROOT = Path(__file__).parents[3] / "policyengine_api"
 

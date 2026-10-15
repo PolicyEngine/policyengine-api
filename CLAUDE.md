@@ -1,43 +1,8 @@
 # Claude Instructions
 
-These instructions apply repository-wide.
+Repository-wide guidance for AI agents lives in `AGENTS.md`. Read it first: it
+lists the engineering skill to read for each kind of change, and its generated
+Rules section lists every rule that governs this repository.
 
-## Canonical Guidance
-
-Repository-wide AI-facing engineering guidance lives in `AGENTS.md`.
-Canonical skills live under `docs/engineering/skills/`.
-
-Use those files as the source of truth. This file is a Claude adapter and should
-stay thin; do not duplicate detailed testing, CI, formatting, or architecture
-rules here.
-
-## Required Skill Lookup
-
-Before adding an HTTP route or changing an existing route's query-parameter
-contract, read `docs/engineering/skills/api-routes.md`.
-
-Before opening, replacing, or sharing a PR, read
-`docs/engineering/skills/github-prs.md`.
-
-When changing API v2 migration contracts, route-group migration metadata,
-generated migration docs, or migration guard scripts, read
-`docs/engineering/skills/migration_contracts.md`.
-
-When adding, moving, or reviewing tests, read
-`docs/engineering/skills/testing.md`.
-
-When changing SQLAlchemy models, Alembic configuration, database schemas, or
-migration revisions, read
-`docs/engineering/skills/alembic-migrations.md`.
-
-When adding or moving API v2 route, service, or database-access modules, read
-`docs/engineering/skills/v2-code-organization.md`.
-
-When modifying the `Makefile`, read
-`docs/engineering/skills/repository-maintenance.md`.
-
-## Safety Boundaries
-
-Do not claim a route, database table, compute path, or deployment surface has
-migrated unless the relevant contract tests, migration flags, and generated
-migration docs identify that state.
+This file is a Claude adapter. Keep it a pointer: put guidance in `AGENTS.md` or
+in a skill under `docs/engineering/skills/`, never here.

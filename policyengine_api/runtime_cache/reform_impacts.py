@@ -1,10 +1,10 @@
 """Recoverable reform-impact caching and submission coordination."""
 
-from dataclasses import asdict, dataclass, replace
-from datetime import datetime, timezone
 import hashlib
 import re
 import time
+from dataclasses import asdict, dataclass, replace
+from datetime import UTC, datetime
 from typing import Any
 
 from policyengine_api.observability.identifiers import normalize_observability_id
@@ -81,8 +81,8 @@ def _datetime_to_wire(value: datetime | None) -> str | None:
     if value is None:
         return None
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).isoformat()
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).isoformat()
 
 
 def _datetime_from_wire(value: Any) -> datetime | None:
@@ -92,7 +92,7 @@ def _datetime_from_wire(value: Any) -> datetime | None:
         raise ValueError("invalid cached datetime")
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is not None:
-        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
     return parsed
 
 
@@ -391,7 +391,7 @@ class ReformImpactCache:
             return time.time()
         value = impact.start_time
         if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
+            value = value.replace(tzinfo=UTC)
         return value.timestamp()
 
     def set(

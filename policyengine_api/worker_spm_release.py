@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from importlib.metadata import version as distribution_version
 import json
 import sys
+from importlib.metadata import version as distribution_version
 
 from policyengine_api import constants
 from policyengine_api.worker_spm import validate_worker_spm
-
 
 REQUIRED_BUNDLE_PACKAGES = (
     "policyengine",

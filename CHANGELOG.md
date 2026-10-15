@@ -1,3 +1,50 @@
+## [5.3.2] - 2026-10-14
+
+### Changed
+
+- Moved the multi-line steps in the deploy pipeline (push.yml) into tested scripts, so every workflow run: step is now a single line.
+- Ran ruff check in CI with the first group of rule families (imports, pyupgrade and other safe auto-fixes) and fixed every finding.
+
+
+## [5.3.1] - 2026-10-14
+
+### Changed
+
+- Turned the remaining multi-line steps outside the deploy pipeline into single-line steps or a tested script, added tests for the Cloud Run image cleanup script, and fixed a shellcheck finding in the observability collector deploy script.
+
+
+## [5.3.0] - 2026-10-14
+
+### Added
+
+- Made CLAUDE.md and the Copilot instructions thin pointers to AGENTS.md, required workflow logic longer than one line to live in tested and shellchecked scripts, and registered the tracking-issue rule.
+
+
+## [5.2.1] - 2026-10-14
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.3.4.
+
+### Fixed
+
+- Store list-valued UK region filters, such as England's nine English regions, as a JSON array in the catalog's existing filter text, so catalog extraction no longer fails on PolicyEngine 6.3.4.
+
+
+## [5.2.0] - 2026-10-14
+
+### Added
+
+- Added a rules registry (rules/registry.toml) with a standard-library tool that validates it, checks every rule is enforced where it claims, and renders docs/generated/rules.md and the Rules block in AGENTS.md.
+
+
+## [5.1.4] - 2026-10-13
+
+### Changed
+
+- Added CODEOWNERS for the rule machinery, pinned CI's ruff to the version in uv.lock with an explicit rule selection, made the v2 CRUD boundary tests discover modules so households and user_households are checked, and documented the tracking-issue, Fixes line and no-bypass PR rules. In a stack of pull requests, only the lowest unmerged one now runs the full PR workflow, behind a new "CI complete" gate job that fails on the others.
+
+
 ## [5.1.3] - 2026-10-09
 
 ### Changed

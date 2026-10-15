@@ -1,12 +1,11 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun
-
 
 REPORT_RUN_VERSION_FIELDS = (
     "country_package_version",
@@ -60,7 +59,7 @@ class ReportRunService:
             )
             or 0
         ) + 1
-        now = datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
+        now = datetime.now(UTC).replace(microsecond=0, tzinfo=None)
         values = {
             "status": status,
             "output": output,

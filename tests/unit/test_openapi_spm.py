@@ -4,7 +4,12 @@ import json
 
 from flask import Flask
 
+from policyengine_api.query_parameters import (
+    AnnualEconomyQuery,
+    BudgetWindowEconomyQuery,
+)
 from policyengine_api.routes.system_routes import system_bp
+from policyengine_api.specification import load_specification
 from policyengine_api.spm import (
     SPMComparisonProvenance,
     SPMExecutionProvenance,
@@ -12,11 +17,6 @@ from policyengine_api.spm import (
     SPMRuntimeVersions,
     SPMSelection,
 )
-from policyengine_api.query_parameters import (
-    AnnualEconomyQuery,
-    BudgetWindowEconomyQuery,
-)
-from policyengine_api.specification import load_specification
 
 
 def test_economy_query_and_receipt_schemas_match_public_http_contract():

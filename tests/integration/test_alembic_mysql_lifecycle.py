@@ -2,20 +2,20 @@
 
 import os
 
+import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
-import pytest
 from sqlalchemy import (
     Column,
-    delete,
     Integer,
     MetaData,
     String,
     Table,
     Text,
     create_engine,
+    delete,
     inspect,
 )
 from sqlalchemy.dialects.mysql import LONGTEXT
@@ -36,7 +36,6 @@ from scripts.v1_database_migration import (
     database_state,
     upgrade_database,
 )
-
 
 BASELINE_REVISION = "eafc2a547a4e"
 PREVIOUS_REVISION = "3d6e8f553ca5"

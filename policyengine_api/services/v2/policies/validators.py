@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import math
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -83,15 +83,15 @@ def normalize_utc(value: datetime) -> datetime:
 
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("effective dates must include a UTC offset")
-    return value.astimezone(timezone.utc)
+    return value.astimezone(UTC)
 
 
 def validate_policy_catalog(
-    policy_input: "PolicyCreationInput",
+    policy_input: PolicyCreationInput,
     *,
     selected: SelectedCatalog,
     resolved_parameter_ids: set[UUID],
-) -> "ResolvedPolicyCreationInput":
+) -> ResolvedPolicyCreationInput:
     """Validate preloaded catalog records and bind them to policy content."""
 
     from policyengine_api.services.v2.policies.types import ResolvedPolicyCreationInput

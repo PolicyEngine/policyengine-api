@@ -13,7 +13,6 @@ from policyengine_api.services.v2.households.types import (
 )
 from scripts import process_v1_household_mirror_event as command
 
-
 STAGING_ENVIRONMENT = {
     "DEPLOYMENT_ENVIRONMENT": "staging",
     "V2_SUPABASE_ENVIRONMENT": "staging",

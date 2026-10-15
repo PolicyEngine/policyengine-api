@@ -1,8 +1,8 @@
 """Typed worker failures become durable terminal HTTP polling responses."""
 
-from flask import Flask
 import httpx
 import pytest
+from flask import Flask
 
 from policyengine_api import worker_spm
 from policyengine_api.libs.simulation_entrypoint import SimulationEntrypointClient

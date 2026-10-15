@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 
 from sqlalchemy import select
@@ -116,7 +116,7 @@ class ReportOutputService:
 
     @staticmethod
     def _utc_timestamp() -> datetime:
-        return datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
+        return datetime.now(UTC).replace(microsecond=0, tzinfo=None)
 
     @staticmethod
     def format_run_timestamp(value: datetime | str | None) -> str | None:
@@ -125,9 +125,9 @@ class ReportOutputService:
         if isinstance(value, datetime):
             timestamp = value
             if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=timezone.utc)
+                timestamp = timestamp.replace(tzinfo=UTC)
             return (
-                timestamp.astimezone(timezone.utc)
+                timestamp.astimezone(UTC)
                 .replace(microsecond=0)
                 .isoformat()
                 .replace("+00:00", "Z")
@@ -144,9 +144,9 @@ class ReportOutputService:
         except ValueError:
             return normalized if normalized.endswith("Z") else f"{normalized}Z"
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
+            parsed = parsed.replace(tzinfo=UTC)
         return (
-            parsed.astimezone(timezone.utc)
+            parsed.astimezone(UTC)
             .replace(microsecond=0)
             .isoformat()
             .replace("+00:00", "Z")

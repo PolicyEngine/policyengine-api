@@ -1,0 +1,1021 @@
+# Rules registry for policyengine-api.
+#
+# Every rule that governs this repository is declared here: what it says, how
+# mechanically it is enforced, where it runs in CI, and whether a checker has
+# been proven to reject a bad example. `python -m scripts.rules guard` keeps this
+# file honest; `python -m scripts.rules render` regenerates
+# docs/generated/rules.md and the Rules block in AGENTS.md.
+#
+# How to add or change a rule: docs/engineering/skills/rules-registry.md
+
+schema_version = 1
+repo = "policyengine-api"
+
+[[category]]
+id = "v2-layers"
+title = "API v2 layer boundaries"
+
+[[category]]
+id = "runtime-layers"
+title = "Runtime persistence and route boundaries"
+
+[[category]]
+id = "startup"
+title = "Import and startup side effects"
+
+[[category]]
+id = "isolation"
+title = "Data source isolation"
+
+[[category]]
+id = "migration"
+title = "Migration and schema"
+
+[[category]]
+id = "quality"
+title = "Code quality and types"
+
+[[category]]
+id = "observability"
+title = "Observability"
+
+[[category]]
+id = "ci"
+title = "CI workflows and scripts"
+
+[[category]]
+id = "process"
+title = "Process and repository hygiene"
+
+[discovery]
+workflows = [".github/workflows/pr.yml"]
+guard_test_globs = [
+  "tests/**/test_*boundar*.py",
+  "tests/**/test_import_side_effects.py",
+  "tests/unit/v2/test_stage12_comparison_isolation.py",
+]
+extra_guard_tests = [
+  "tests/unit/v2/test_catalog_extraction.py::test_extractor_has_no_direct_core_country_or_v1_metadata_imports",
+  "tests/unit/v2/test_catalog_initialization.py::test_initializer_is_not_imported_by_application_startup_modules",
+  "tests/unit/v2/test_metadata_service.py::test_read_modules_import_no_policyengine_or_v1_metadata_source",
+  "tests/unit/v2/test_model_persistence.py::test_v2_models_do_not_create_a_parallel_sqlalchemy_orm_layer",
+  "tests/unit/v2/test_report_v1_runtime_selection.py::test_existing_report_route_and_service_import_only_v1_persistence",
+]
+
+[agents]
+instructions = "AGENTS.md"
+adapters = ["CLAUDE.md", ".github/copilot-instructions.md"]
+
+[ci_scripts]
+workflows = ".github/workflows/*.yml"
+scripts_dir = ".github/scripts"
+test_globs = ["tests/**/test_*.py"]
+multiline_baseline = "rules/baselines/ci-multiline-run.txt"
+untested_baseline = "rules/baselines/ci-untested-scripts.txt"
+shellcheck_baseline = "rules/baselines/ci-shellcheck.txt"
+
+# --- API v2 layer boundaries ----------------------------------------------
+
+[[rule]]
+id = "api.v2.connectors-mutations-no-reads"
+category = "v2-layers"
+statement = "v2 mutation connectors (creates, updates, deletes) never issue select or get reads."
+rationale = "docs/engineering/skills/v2-code-organization.md#database_connectors"
+scope = ["policyengine_api/services/v2/*/database_connectors/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_data_crud_boundaries.py::test_mutation_connectors_contain_no_database_reads"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.v2.connectors-reads-no-mutations"
+category = "v2-layers"
+statement = "v2 read connectors never insert, add or delete rows."
+rationale = "docs/engineering/skills/v2-code-organization.md#database_connectors"
+scope = ["policyengine_api/services/v2/*/database_connectors/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_data_crud_boundaries.py::test_read_connectors_contain_no_database_mutations"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.v2.validators-transformations-no-db"
+category = "v2-layers"
+statement = "v2 validators and transformations never import SQLAlchemy or SQLModel query or session APIs."
+rationale = "docs/engineering/skills/v2-code-organization.md#validatorspy"
+scope = ["policyengine_api/services/v2/*/validators.py", "policyengine_api/services/v2/*/transformations.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_data_crud_boundaries.py::test_validation_and_transformation_modules_have_no_database_query_dependency"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.validators-transformations-no-db/bad_validators.py"
+good_fixture = "rules/fixtures/api.v2.validators-transformations-no-db/good_validators.py"
+test = "tests/unit/v2/test_data_crud_boundaries.py::test_rule_proof_validators_transformations_no_db"
+
+[[rule]]
+id = "api.v2.session-modules-no-queries"
+category = "v2-layers"
+statement = "v2 database_session modules own session lifetime only and never build select, insert, update, delete or exec calls."
+rationale = "docs/engineering/skills/v2-code-organization.md#database_sessionpy"
+scope = ["policyengine_api/services/v2/*/database_session.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_data_crud_boundaries.py::test_database_session_modules_do_not_construct_queries"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.v2.crud-checks-cover-every-resource"
+category = "v2-layers"
+statement = "The v2 CRUD boundary checks find modules by filename, so every resource package is covered, and every connector module is named as a create, read, update or delete module."
+rationale = "docs/engineering/skills/v2-code-organization.md#resource-service-packages"
+scope = ["policyengine_api/services/v2/*/database_connectors/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_data_crud_boundaries.py::test_every_connector_module_is_classified"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.v2.routes-no-sessions-or-sql"
+category = "v2-layers"
+statement = "v2 route modules never open database sessions or construct SQL; they call one service method and map typed failures to HTTP."
+rationale = "docs/engineering/skills/v2-code-organization.md#http-adapters"
+scope = ["policyengine_api/fastapi_routes/v2/**/*.py"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "api.v2.services-no-sql"
+category = "v2-layers"
+statement = "v2 services sequence work but never construct SQL expressions, call Session.exec, or define HTTP response models."
+rationale = "docs/engineering/skills/v2-code-organization.md#servicespy"
+scope = ["policyengine_api/services/v2/*/services.py"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "api.v2.connectors-never-commit"
+category = "v2-layers"
+statement = "v2 connectors receive a session from the service and never open, commit, roll back or close it."
+rationale = "docs/engineering/skills/v2-code-organization.md#database_connectors"
+scope = ["policyengine_api/services/v2/*/database_connectors/*.py"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "api.v2.connectors-no-cross-calls"
+category = "v2-layers"
+statement = "v2 connector modules never call one another to sequence a workflow; the service does the sequencing."
+rationale = "docs/engineering/skills/v2-code-organization.md#database_connectors"
+scope = ["policyengine_api/services/v2/*/database_connectors/*.py"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "api.routes.shared-query-parameters"
+category = "v2-layers"
+statement = "Routes that accept query parameters define them through the shared typed query models, never with a second manual parser."
+rationale = "docs/engineering/skills/api-routes.md#parsing-rules"
+scope = ["policyengine_api/fastapi_routes/**/*.py"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+# --- Runtime persistence and route boundaries ------------------------------
+
+[[rule]]
+id = "api.data.runtime-sql-confined"
+category = "runtime-layers"
+statement = "Raw SQL is confined to the data-access layer; runtime modules and report orchestration use sessions and mapped models."
+rationale = "docs/engineering/skills/v2-code-organization.md#dependency-direction"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/data/test_runtime_sql_boundaries.py::test_runtime_sql_is_confined_to_the_data_access_layer",
+  "tests/unit/data/test_runtime_sql_boundaries.py::test_ordinary_runtime_modules_no_longer_use_raw_sql_facade",
+  "tests/unit/data/test_runtime_sql_boundaries.py::test_report_orchestration_uses_sessions_and_models_not_raw_sql",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.legacy.removed-layers-stay-removed"
+category = "runtime-layers"
+statement = "Removed legacy persistence layers, the temporary DAO module and the legacy endpoints package stay removed."
+rationale = "docs/engineering/skills/testing.md#migration-test-layout"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/data/test_runtime_sql_boundaries.py::test_legacy_persistence_compatibility_layers_are_absent",
+  "tests/unit/services/test_orm_service_boundaries.py::test_temporary_dao_module_has_been_removed",
+  "tests/unit/routes/test_flask_route_boundaries.py::test_legacy_endpoints_package_is_removed",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.routes.flask-blueprints-own-urls"
+category = "runtime-layers"
+statement = "Legacy Flask URLs are owned by blueprints, and the Flask app assembles blueprints without legacy endpoint wiring."
+rationale = "docs/engineering/skills/testing.md#migration-test-layout"
+scope = ["policyengine_api/routes/**/*.py", "policyengine_api/api.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/routes/test_flask_route_boundaries.py::test_legacy_flask_urls_are_owned_by_blueprints",
+  "tests/unit/routes/test_flask_route_boundaries.py::test_flask_app_assembles_blueprints_without_legacy_endpoint_wiring",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.routes.no-domain-logic-in-http"
+category = "runtime-layers"
+statement = "Flask routes delegate domain processing (economy comparison, calculation) to services instead of doing it in the HTTP layer."
+rationale = "docs/engineering/skills/testing.md#migration-test-layout"
+scope = ["policyengine_api/routes/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/routes/test_flask_route_boundaries.py::test_economy_comparison_logic_is_not_in_the_http_layer",
+  "tests/unit/routes/test_flask_route_boundaries.py::test_calculation_route_delegates_domain_processing_to_its_service",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.routes.no-inline-json-errors"
+category = "runtime-layers"
+statement = "Flask routes never build JSON error responses inline; they use the shared error handling."
+rationale = "docs/engineering/skills/testing.md#migration-test-layout"
+scope = ["policyengine_api/routes/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/routes/test_flask_route_boundaries.py::test_routes_do_not_construct_json_error_responses_inline"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.services.no-direct-queries"
+category = "runtime-layers"
+statement = "Services never issue database queries or open database connections directly; they delegate persistence to the data-access layer."
+rationale = "docs/engineering/skills/v2-code-organization.md#dependency-direction"
+scope = ["policyengine_api/services/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/services/test_local_data_service_boundaries.py::test_local_data_services_do_not_issue_queries_directly",
+  "tests/unit/services/test_orm_service_boundaries.py::test_migrated_services_do_not_issue_queries_directly",
+  "tests/unit/services/test_run_and_spec_service_database_boundaries.py::test_run_and_spec_services_do_not_issue_queries_directly",
+  "tests/unit/services/test_orchestration_service_database_boundaries.py::test_orchestration_services_do_not_access_database_connections",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.services.session-ownership"
+category = "runtime-layers"
+statement = "Migrated services use sessions and mapped models; their public methods never accept persistence objects, and routes and the economy service never manage sessions."
+rationale = "docs/engineering/skills/v2-code-organization.md#dependency-direction"
+scope = ["policyengine_api/services/**/*.py", "policyengine_api/routes/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/services/test_orm_service_boundaries.py::test_migrated_services_use_sessions_and_mapped_models",
+  "tests/unit/services/test_local_data_service_boundaries.py::test_local_service_public_methods_do_not_accept_persistence",
+  "tests/unit/services/test_local_data_service_boundaries.py::test_reform_impact_route_does_not_manage_sessions",
+  "tests/unit/services/test_local_data_service_boundaries.py::test_economy_service_delegates_persistence_without_opening_sessions",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+# --- Import and startup side effects ---------------------------------------
+
+[[rule]]
+id = "api.startup.no-import-side-effects"
+category = "startup"
+statement = "Importing v2 modules, starting up and serving a request open no network connections and create no files or runtime SQLite databases."
+rationale = "docs/engineering/skills/testing.md#focused-commands"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/v2/test_import_side_effects.py::test_importing_v2_modules_opens_no_network_and_creates_no_files",
+  "tests/unit/v2/test_import_side_effects.py::test_import_startup_and_request_never_create_runtime_sqlite",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.startup.no-runtime-sqlite-modules"
+category = "startup"
+statement = "Runtime SQLite modules are absent from the production package."
+rationale = "docs/engineering/skills/testing.md#focused-commands"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_import_side_effects.py::test_runtime_sqlite_modules_are_absent_from_production_package"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.startup.fail-closed-configuration"
+category = "startup"
+statement = "Default Cloud SQL startup needs no Supabase configuration, and a selected v2 runtime without its database URL fails closed."
+rationale = "docs/engineering/skills/testing.md#focused-commands"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/v2/test_import_side_effects.py::test_default_cloud_sql_startup_requires_no_supabase_configuration",
+  "tests/unit/v2/test_import_side_effects.py::test_selected_v2_runtime_without_its_url_fails_closed",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.catalog.initializer-not-at-startup"
+category = "startup"
+statement = "Application startup modules never import the metadata catalog initializer."
+rationale = "docs/engineering/skills/testing.md#focused-commands"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_catalog_initialization.py::test_initializer_is_not_imported_by_application_startup_modules"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+# --- Data source isolation -------------------------------------------------
+
+[[rule]]
+id = "api.catalog.extractor-import-isolation"
+category = "isolation"
+statement = "The catalog extractor never imports PolicyEngine core, country packages or v1 metadata directly."
+rationale = "docs/engineering/skills/v2-code-organization.md#dependency-direction"
+scope = ["policyengine_api/data/v2/catalog/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_catalog_extraction.py::test_extractor_has_no_direct_core_country_or_v1_metadata_imports"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.metadata.read-modules-isolated"
+category = "isolation"
+statement = "v2 metadata read modules never import PolicyEngine packages or v1 metadata sources."
+rationale = "docs/engineering/skills/v2-code-organization.md#dependency-direction"
+scope = ["policyengine_api/services/v2/metadata/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_metadata_service.py::test_read_modules_import_no_policyengine_or_v1_metadata_source"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.v2.single-orm-layer"
+category = "isolation"
+statement = "v2 models never create a parallel SQLAlchemy ORM layer alongside SQLModel."
+rationale = "docs/engineering/skills/alembic-migrations.md#separate-v1-and-v2-migration-domains"
+scope = ["policyengine_api/data/v2/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_model_persistence.py::test_v2_models_do_not_create_a_parallel_sqlalchemy_orm_layer"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.reports.v1-persistence-only"
+category = "isolation"
+statement = "The existing report route and service import only v1 persistence."
+rationale = "docs/engineering/skills/testing.md#migration-test-layout"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_report_v1_runtime_selection.py::test_existing_report_route_and_service_import_only_v1_persistence"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.stage12.comparison-tables-isolated"
+category = "isolation"
+statement = "Serving routes and services never read the Stage 12 comparison tables, and production tables never depend on them."
+rationale = "docs/migration/stage-12-worker-contract.md"
+scope = ["policyengine_api/services/v2/comparison_runs/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/v2/test_stage12_comparison_isolation.py::test_normal_routes_and_services_do_not_read_comparison_tables",
+  "tests/unit/v2/test_stage12_comparison_isolation.py::test_production_tables_have_no_comparison_table_dependency",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.stage12.retirement-owned"
+category = "isolation"
+statement = "Retiring the Stage 12 comparison schema stays owned by a named follow-up change in the Stage 12 worker contract."
+rationale = "docs/migration/stage-12-worker-contract.md"
+scope = ["docs/migration/stage-12-worker-contract.md"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_stage12_comparison_isolation.py::test_retirement_is_owned_by_a_named_follow_up_change"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+# --- Migration and schema --------------------------------------------------
+
+[[rule]]
+id = "api.migration.contracts-consistent"
+category = "migration"
+statement = "Migration route groups and workflow contracts are internally consistent, and their generated docs are current."
+rationale = "docs/engineering/skills/migration_contracts.md"
+scope = ["policyengine_api/migration_registry.py", "tests/contract/registry.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "migration-contracts"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+
+[[rule]]
+id = "api.migration.alembic-v1-qualified"
+category = "migration"
+statement = "v1 Alembic revisions qualify against a disposable MySQL database."
+rationale = "docs/engineering/skills/alembic-migrations.md#required-checks"
+scope = ["migrations/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "workflow-job"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "alembic-v1-check"
+invocation = "alembic-v1-check.yml"
+
+[[rule]]
+id = "api.migration.alembic-v2-qualified"
+category = "migration"
+statement = "v2 Alembic revisions qualify against a disposable Postgres database, and alembic check finds no schema drift."
+rationale = "docs/engineering/skills/alembic-migrations.md#required-checks"
+scope = ["migrations/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "workflow-job"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "alembic-v2-check"
+invocation = "alembic-v2-check.yml"
+
+[[rule]]
+id = "api.migration.cross-database-integration"
+category = "migration"
+statement = "Cross-database integration tests pass against real MySQL and Postgres."
+rationale = "docs/engineering/skills/testing.md#focused-commands"
+scope = ["tests/integration/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "workflow-job"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "v2-integration-check"
+invocation = "v2-integration-check.yml"
+
+[[rule]]
+id = "api.migration.alembic-autogenerated-only"
+category = "migration"
+statement = "Alembic revisions are autogenerated against an explicitly selected v1 or v2 configuration; never hand-written DDL or data operations."
+rationale = "docs/engineering/skills/alembic-migrations.md#mandatory-generation-rule"
+scope = ["migrations/**/*.py"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "api.migration.bundle-supported-by-simulation-api"
+category = "migration"
+statement = "A PolicyEngine bundle version change is supported by the simulation API before it merges."
+rationale = "docs/engineering/skills/github-prs.md"
+scope = ["pyproject.toml"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "workflow-job"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "ensure-policyengine-bundle-supported-by-simulation-api"
+invocation = "check-policyengine-bundle-supported.sh"
+
+# --- Code quality and types ------------------------------------------------
+
+[[rule]]
+id = "api.quality.ruff-format"
+category = "quality"
+statement = "All Python files are formatted with ruff format."
+rationale = "docs/engineering/skills/github-prs.md#commit-hygiene"
+scope = ["**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = true
+[rule.enforcer]
+kind = "ruff"
+mode = "format"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "lint"
+invocation = "ruff format --check"
+
+[[rule]]
+id = "api.quality.ruff-lint"
+category = "quality"
+statement = "All Python code passes ruff check with every rule family selected in pyproject.toml, with no ratchet; families are added one themed group at a time until the selection is ALL."
+rationale = "docs/engineering/skills/rules-registry.md#baselines"
+scope = ["**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = true
+[rule.enforcer]
+kind = "ruff"
+mode = "lint"
+codes = ["E4", "E7", "E9", "F", "FLY", "FURB", "I", "PIE", "PYI", "RET", "RSE", "UP", "W"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "lint"
+invocation = "ruff check ."
+
+[[rule]]
+id = "api.quality.alembic-revisions-unused-imports"
+category = "quality"
+statement = "Alembic revision files are exempt from ruff lint rules, because they must stay exactly as Alembic generates them."
+rationale = "docs/engineering/skills/alembic-migrations.md#mandatory-generation-rule"
+scope = ["migrations/*/versions/*.py"]
+tier = "mechanical"
+status = "advisory"
+autofix = false
+[rule.enforcer]
+kind = "ruff"
+mode = "per-file-ignore"
+pattern = "migrations/*/versions/*.py"
+codes = ["ALL"]
+
+[[rule]]
+id = "api.quality.mypy-v2"
+category = "quality"
+statement = "Shared query models, FastAPI dependencies, and v2 routes and services pass mypy with untyped definitions disallowed."
+rationale = "docs/engineering/skills/v2-code-organization.md"
+scope = ["policyengine_api/fastapi_routes/v2/**/*.py", "policyengine_api/services/v2/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "mypy"
+paths = [
+  "policyengine_api/query_parameters.py",
+  "policyengine_api/fastapi_routes/query_parameters.py",
+  "policyengine_api/fastapi_routes/dependencies.py",
+  "policyengine_api/fastapi_routes/v2",
+  "policyengine_api/services/v2",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "typecheck-v2"
+invocation = "mypy"
+
+[[rule]]
+id = "api.quality.tests-pass"
+category = "quality"
+statement = "The unit, contract and to-refactor test suites pass."
+rationale = "docs/engineering/skills/testing.md"
+scope = ["tests/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "workflow-job"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.quality.environment-variables-load"
+category = "quality"
+statement = "Required environment variables and credentials load in a deployed-like environment."
+rationale = "docs/engineering/skills/testing.md"
+scope = ["tests/env_variables/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "workflow-job"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test_env_vars"
+invocation = "tests/env_variables"
+
+# --- CI workflows and scripts ----------------------------------------------
+
+[[rule]]
+id = "api.ci.multiline-run-is-script"
+category = "ci"
+statement = "A GitHub Actions run: block holds one line of code and no chained commands (&&, ||, ;); anything more lives in a tested script under .github/scripts/, called from a single-line step."
+rationale = "docs/engineering/skills/ci-workflows.md#one-line-of-code-per-run-block"
+scope = [".github/workflows/*.yml"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "ci-scripts"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "scripts/rules/tests/fixtures/ci_scripts/multiline_bad"
+good_fixture = "scripts/rules/tests/fixtures/ci_scripts/multiline_good"
+test = "scripts/rules/tests/test_ci_scripts.py::TestCiScriptsProof::test_rule_proof_multiline_run"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
+id = "api.ci.workflow-scripts-tested"
+category = "ci"
+statement = "Every shell script a workflow calls is run by at least one test."
+rationale = "docs/engineering/skills/ci-workflows.md#testing-a-workflow-script"
+scope = [".github/scripts/*.sh"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "ci-scripts"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "scripts/rules/tests/fixtures/ci_scripts/untested_bad"
+good_fixture = "scripts/rules/tests/fixtures/ci_scripts/untested_good"
+test = "scripts/rules/tests/test_ci_scripts.py::TestCiScriptsProof::test_rule_proof_untested_script"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
+id = "api.ci.shell-scripts-pass-shellcheck"
+category = "ci"
+statement = "Every shell script under .github/scripts/ passes shellcheck."
+rationale = "docs/engineering/skills/ci-workflows.md#writing-a-workflow-script"
+scope = [".github/scripts/*.sh"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "ci-scripts"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "scripts/rules/tests/fixtures/ci_scripts/shellcheck/bad_script.sh"
+good_fixture = "scripts/rules/tests/fixtures/ci_scripts/shellcheck/good_script.sh"
+test = "scripts/rules/tests/test_ci_scripts.py::TestCiScriptsProof::test_rule_proof_shellcheck"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+# --- Process and repository hygiene ----------------------------------------
+
+[[rule]]
+id = "api.process.rules-registry"
+category = "process"
+statement = "Every rule is registered in rules/registry.toml, is enforced where it claims to be, and its rendered views are current."
+rationale = "docs/engineering/skills/rules-registry.md"
+scope = ["rules/registry.toml"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "rules-registry"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+
+[[rule]]
+id = "api.agents.adapters-point-to-agents-md"
+category = "process"
+statement = "CLAUDE.md and .github/copilot-instructions.md only point to AGENTS.md; skills and rules are listed in AGENTS.md alone."
+rationale = "AGENTS.md"
+scope = ["CLAUDE.md", ".github/copilot-instructions.md"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "rules-registry"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "scripts/rules/tests/fixtures/adapters/bad_CLAUDE.md"
+good_fixture = "scripts/rules/tests/fixtures/adapters/good_CLAUDE.md"
+test = "scripts/rules/tests/test_adapters.py::TestAdaptersProof::test_rule_proof_adapters"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
+id = "api.process.pr-tracking-issue"
+category = "process"
+statement = "Every PR has a tracking issue in this repository, and the first line of its description is Fixes #ISSUE_NUMBER."
+rationale = "docs/engineering/skills/github-prs.md#tracking-issues"
+scope = [".github/pull_request_template.md"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "api.process.changelog-fragment"
+category = "process"
+statement = "Every PR adds a changelog.d fragment."
+rationale = "docs/engineering/skills/github-prs.md"
+scope = ["changelog.d"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "workflow-job"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "check-changelog"
+invocation = "check_changelog_fragment.sh"
+
+[[rule]]
+id = "api.process.docker-image-builds"
+category = "process"
+statement = "The API Docker image builds."
+rationale = "docs/engineering/skills/testing.md"
+scope = ["docker/*"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "workflow-job"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test_container_builds"
+invocation = "docker build"
+
+[[rule]]
+id = "api.process.cloud-run-image-builds"
+category = "process"
+statement = "The Cloud Run container image builds."
+rationale = "docs/engineering/skills/testing.md"
+scope = ["gcp/cloud_run/Dockerfile"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "workflow-job"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test_cloud_run_container_builds"
+invocation = "gcp/cloud_run/Dockerfile"
+
+[[rule]]
+id = "api.process.rule-machinery-code-owned"
+category = "process"
+statement = "Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author."
+rationale = ".github/CODEOWNERS"
+scope = [".github/CODEOWNERS"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "api.process.agents-never-bypass"
+category = "process"
+statement = "Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human."
+rationale = "docs/engineering/skills/github-prs.md#branch-rules"
+scope = ["AGENTS.md"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "api.process.stacked-prs-full-ci-at-bottom"
+category = "process"
+statement = "In a stack of pull requests, only the lowest unmerged one runs the full PR workflow. Every pr.yml job is needed by the CI complete gate, which fails on the pull requests above it and otherwise passes only when every job passed, so a stack merges bottom-up and nothing merges untested."
+rationale = "docs/engineering/skills/github-prs.md#stacked-prs-and-ci"
+scope = [".github/workflows/pr.yml", ".github/scripts/check_ci_complete.sh"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/test_ci_complete_gate.py::test_pr_workflow_is_gated"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "ci-complete"
+invocation = "check_ci_complete.sh"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.process.stacked-prs-full-ci-at-bottom/bad_pr.yml"
+good_fixture = "rules/fixtures/api.process.stacked-prs-full-ci-at-bottom/good_pr.yml"
+test = "tests/unit/test_ci_complete_gate.py::test_rule_proof_gate_check"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.process.makefile-phony"
+category = "process"
+statement = "Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed."
+rationale = "docs/engineering/skills/repository-maintenance.md#command-only-make-targets"
+scope = ["Makefile"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "api.observability.id-is-diagnostic-only"
+category = "observability"
+statement = "observability_id is used only to query diagnostic records, never for idempotency, cache ownership, authorization, database identity, routing or calculation behavior."
+rationale = "docs/engineering/skills/observability.md#identifier-registry"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "api.observability.registered-stages-only"
+category = "observability"
+statement = "Span names come from the stage plans in policyengine_api.observability.stages; route and service code never adds span-name string literals."
+rationale = "docs/engineering/skills/observability.md#runtime-stages"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"

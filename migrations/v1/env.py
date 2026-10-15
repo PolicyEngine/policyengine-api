@@ -1,14 +1,13 @@
 """Alembic environment for the API v1 schema."""
 
-from logging.config import fileConfig
 import os
+from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine import make_url
 
 from policyengine_api.data.v1_models import V1Base
-
 
 config = context.config
 if config.config_file_name is not None:

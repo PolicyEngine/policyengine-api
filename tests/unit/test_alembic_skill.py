@@ -1,6 +1,5 @@
 from policyengine_api.constants import REPO
 
-
 SKILL = REPO / "docs" / "engineering" / "skills" / "alembic-migrations.md"
 
 
@@ -10,11 +9,12 @@ def test_model_agnostic_alembic_skill_is_discoverable():
         "alembic-migrations.md"
         in (REPO / "docs" / "engineering" / "skills" / "README.md").read_text()
     )
-    for adapter in ("AGENTS.md", "CLAUDE.md", ".github/copilot-instructions.md"):
-        assert (
-            "docs/engineering/skills/alembic-migrations.md"
-            in (REPO / adapter).read_text()
-        )
+    # AGENTS.md is the one source of agent instructions; CLAUDE.md and the
+    # Copilot instructions only point to it (rule api.agents.adapters-point-to-agents-md).
+    assert (
+        "docs/engineering/skills/alembic-migrations.md"
+        in (REPO / "AGENTS.md").read_text()
+    )
 
 
 def test_alembic_skill_forbids_handwritten_ai_revisions():

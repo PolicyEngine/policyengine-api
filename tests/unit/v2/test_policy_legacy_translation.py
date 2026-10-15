@@ -2,20 +2,25 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
 
+import pytest
 from pydantic import ValidationError
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine
-import pytest
 
 from policyengine_api.data.v2.models import (
+    V2_METADATA,
     Parameter,
     TaxBenefitModel,
     TaxBenefitModelVersion,
-    V2_METADATA,
 )
+from policyengine_api.services.policy_mirroring import (
+    PolicyMirrorUnavailableError,
+    mirror_policy_after_commit,
+)
+from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.v2.policies.database_connectors.reads import (
     read_parameters_by_name,
     read_policy_catalog,
@@ -28,11 +33,6 @@ from policyengine_api.services.v2.policies.transformations import (
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyTranslationError,
-)
-from policyengine_api.services.policy_service import PolicyService
-from policyengine_api.services.policy_mirroring import (
-    PolicyMirrorUnavailableError,
-    mirror_policy_after_commit,
 )
 from tests.fixtures.local_v1_database import create_test_v1_schema
 
@@ -104,16 +104,16 @@ def _translate(
 
 def test_year_day_and_explicit_range_periods_are_inclusive_utc() -> None:
     assert parse_legacy_period("2026") == (
-        datetime(2026, 1, 1, tzinfo=timezone.utc),
-        datetime(2026, 12, 31, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, tzinfo=UTC),
+        datetime(2026, 12, 31, tzinfo=UTC),
     )
     assert parse_legacy_period("2026-03-02") == (
-        datetime(2026, 3, 2, tzinfo=timezone.utc),
-        datetime(2026, 3, 2, tzinfo=timezone.utc),
+        datetime(2026, 3, 2, tzinfo=UTC),
+        datetime(2026, 3, 2, tzinfo=UTC),
     )
     assert parse_legacy_period("2026-02-01.2026-02-28") == (
-        datetime(2026, 2, 1, tzinfo=timezone.utc),
-        datetime(2026, 2, 28, tzinfo=timezone.utc),
+        datetime(2026, 2, 1, tzinfo=UTC),
+        datetime(2026, 2, 28, tzinfo=UTC),
     )
 
 

@@ -140,9 +140,11 @@ if [[ -n "${public_members}" || "${invoker_iam_disabled}" == "true" ]]; then
 fi
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-  echo "revision=${revision}" >> "${GITHUB_OUTPUT}"
-  echo "service_url=${service_url}" >> "${GITHUB_OUTPUT}"
-  echo "image_uri=${image_uri}" >> "${GITHUB_OUTPUT}"
+  {
+    echo "revision=${revision}"
+    echo "service_url=${service_url}"
+    echo "image_uri=${image_uri}"
+  } >> "${GITHUB_OUTPUT}"
 fi
 
 printf 'Deployed collector revision %s at %s\n' "${revision}" "${service_url}"

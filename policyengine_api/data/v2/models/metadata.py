@@ -1,7 +1,7 @@
 """Canonical SQLModel tables for v2 model metadata, regions, and datasets."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Optional
 from uuid import UUID
 
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from policyengine_api.data.v2.models.simulations import Simulation
 
 
-class RegionType(str, Enum):
+class RegionType(StrEnum):
     NATIONAL = "national"
     COUNTRY = "country"
     STATE = "state"

@@ -1,0 +1,26 @@
+# Proof fixture: a PR workflow where a job escapes the CI complete gate.
+# "test" has no stack condition and the gate doesn't need it, so on a stacked
+# pull request it would still run, and its failure would never block a merge.
+name: Pull request
+
+on: pull_request
+
+jobs:
+  ci-complete:
+    name: CI complete
+    if: ${{ always() }}
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - run: bash .github/scripts/check_ci_complete.sh
+  lint:
+    name: Lint
+    if: ${{ !github.event.pull_request.stack || github.event.pull_request.stack.base.ref == github.event.pull_request.base.ref }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: ruff format --check .
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - run: make test

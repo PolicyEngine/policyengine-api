@@ -18,6 +18,11 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.services.policy_mirroring import (
+    PolicyMirrorUnavailableError,
+    mirror_policy_after_commit,
+)
+from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.v2.policies.database_session import (
     PolicyDatabaseSession,
 )
@@ -25,11 +30,6 @@ from policyengine_api.services.v2.policies.services import (
     V2PolicyService,
     mirror_legacy_policy_in_session,
 )
-from policyengine_api.services.policy_mirroring import (
-    PolicyMirrorUnavailableError,
-    mirror_policy_after_commit,
-)
-from policyengine_api.services.policy_service import PolicyService
 
 
 def _v1_service(database_url: str):

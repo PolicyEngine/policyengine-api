@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import ast
-from datetime import datetime, timezone
+import json
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from types import SimpleNamespace
@@ -107,7 +108,7 @@ def test_normalizes_supported_json_scalars_dates_and_containers() -> None:
 
     assert normalize_json_value(
         {
-            "date": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "date": datetime(2026, 1, 1, tzinfo=UTC),
             "values": (Scalar(), True, 1.5),
         }
     ) == {
@@ -116,6 +117,66 @@ def test_normalizes_supported_json_scalars_dates_and_containers() -> None:
     }
     assert normalize_json_value(float("inf")) == "Infinity"
     assert normalize_json_value(float("-inf")) == "-Infinity"
+
+
+@pytest.mark.parametrize("value", [("NORTH_EAST", "LONDON"), ["NORTH_EAST", "LONDON"]])
+def test_serializes_region_membership_filters_in_the_existing_text_field(
+    value: object,
+) -> None:
+    models = source_models()
+    models["uk"].region_registry[1].scoping_strategy.variable_value = value
+
+    catalog = extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    )
+    england = next(
+        region
+        for region in catalog.country("uk").regions
+        if region.code == "country/england"
+    )
+
+    assert isinstance(england.filter_value, str)
+    assert json.loads(england.filter_value) == ["NORTH_EAST", "LONDON"]
+
+
+@pytest.mark.parametrize("value", ["ENGLAND", 6, True, 1.5])
+def test_preserves_existing_scalar_region_filter_serialization(value: object) -> None:
+    models = source_models()
+    models["uk"].region_registry[1].scoping_strategy.variable_value = value
+
+    catalog = extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    )
+    england = next(
+        region
+        for region in catalog.country("uk").regions
+        if region.code == "country/england"
+    )
+
+    assert england.filter_value == str(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [[], [["LONDON"]], [None], [object()], [float("nan")], ["x" * 256], "x" * 256],
+)
+def test_rejects_invalid_or_oversized_region_membership_values(value: object) -> None:
+    models = source_models()
+    models["uk"].region_registry[1].scoping_strategy.variable_value = value
+
+    with pytest.raises(CatalogExtractionError, match="filter value"):
+        extract_catalog(
+            bundle=bundle(),
+            policyengine_version=POLICYENGINE_VERSION,
+            models=models,
+            installed_version=installed_version,
+        )
 
 
 @pytest.mark.parametrize("value", [float("nan"), object(), {1: "x"}])
@@ -262,7 +323,7 @@ def test_rejects_duplicate_keys_invalid_intervals_and_unknown_region_types() -> 
     invalid_interval = source_models()
     invalid_interval["us"].parameters_by_name["gov.example.rate"].parameter_values[
         0
-    ].end_date = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    ].end_date = datetime(2026, 1, 1, tzinfo=UTC)
     with pytest.raises(CatalogExtractionError, match="canonical inclusive intervals"):
         extract_catalog(
             bundle=bundle(),
@@ -306,8 +367,8 @@ def test_collapses_equal_parameter_values_at_the_same_effective_date() -> None:
 
     values = catalog.country("us").parameters[0].values
     assert [(value.start_date, value.value_json) for value in values] == [
-        (datetime(2025, 1, 1, tzinfo=timezone.utc), 0.1),
-        (datetime(2026, 1, 1, tzinfo=timezone.utc), 0.2),
+        (datetime(2025, 1, 1, tzinfo=UTC), 0.1),
+        (datetime(2026, 1, 1, tzinfo=UTC), 0.2),
     ]
 
 
@@ -359,12 +420,12 @@ def test_preserves_consecutive_day_parameter_value_intervals() -> None:
     parameter.parameter_values = [
         SimpleNamespace(
             value=0.1,
-            start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            end_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            start_date=datetime(2026, 1, 1, tzinfo=UTC),
+            end_date=datetime(2026, 1, 1, tzinfo=UTC),
         ),
         SimpleNamespace(
             value=0.2,
-            start_date=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            start_date=datetime(2026, 1, 2, tzinfo=UTC),
             end_date=None,
         ),
     ]
@@ -378,7 +439,7 @@ def test_preserves_consecutive_day_parameter_value_intervals() -> None:
 
     values = catalog.country("us").parameters[0].values
     assert values[0].start_date == values[0].end_date
-    assert values[1].start_date == datetime(2026, 1, 2, tzinfo=timezone.utc)
+    assert values[1].start_date == datetime(2026, 1, 2, tzinfo=UTC)
     assert values[1].end_date is None
 
 

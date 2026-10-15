@@ -21,7 +21,6 @@ from policyengine_api.services.v2.households.validators import (
     LegacyHouseholdTranslationError,
 )
 
-
 HOUSEHOLD_ID = UUID("00000000-0000-0000-0000-000000000010")
 
 

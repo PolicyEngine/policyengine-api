@@ -1,11 +1,12 @@
-import hashlib
 import base64
+import hashlib
+
 import numpy as np
 
 
 def make_hashable(o):
     if isinstance(o, (tuple, list)):
-        return tuple((make_hashable(e) for e in o))
+        return tuple(make_hashable(e) for e in o)
 
     if isinstance(o, dict):
         return tuple(sorted((k, make_hashable(v)) for k, v in o.items()))
@@ -28,7 +29,7 @@ def get_safe_json(value):
     if isinstance(value, (int, float)):
         if value == np.inf:
             return "Infinity"
-        elif value == -np.inf:
+        if value == -np.inf:
             return "-Infinity"
         return value
     if isinstance(value, str):

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
-from datetime import date, datetime, timedelta, timezone
-from enum import Enum
-from importlib import metadata as importlib_metadata
+import json
 import math
 import re
+from collections import Counter
+from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, date, datetime, timedelta
+from enum import Enum
+from importlib import metadata as importlib_metadata
 from typing import Any
 from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -26,7 +27,6 @@ from policyengine_api.data.v2.catalog.records import (
     RegionRecord,
     VariableRecord,
 )
-
 
 SUPPORTED_COUNTRIES = ("us", "uk")
 REQUIRED_DEPENDENCIES = (
@@ -92,6 +92,40 @@ def _optional_text(
     return value
 
 
+def _serialize_region_filter_value(value: object, *, region_code: str) -> str:
+    """Keep scalar text or encode flat membership values in the existing column.
+
+    Since PolicyEngine 6.2.7, the England filter names all nine English regions. The
+    catalog's existing text column can retain that complete list as a JSON
+    array without changing its schema or the representation of scalar filters.
+    """
+    scalar_types = (str, int, float, bool)
+    if isinstance(value, scalar_types):
+        serialized = str(value)
+    elif (
+        isinstance(value, (list, tuple))
+        and value
+        and all(isinstance(item, scalar_types) for item in value)
+    ):
+        try:
+            serialized = json.dumps(
+                value, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+            )
+        except ValueError as error:
+            raise CatalogExtractionError(
+                f"region {region_code!r} has an unsupported filter value"
+            ) from error
+    else:
+        raise CatalogExtractionError(
+            f"region {region_code!r} has an unsupported filter value"
+        )
+    if len(serialized) > 255:
+        raise CatalogExtractionError(
+            f"region {region_code!r} filter value exceeds 255 characters"
+        )
+    return serialized
+
+
 def _type_name(value: object) -> str | None:
     if value is None:
         return None
@@ -144,8 +178,8 @@ def _aware_datetime(value: object, *, field_name: str) -> datetime:
     if not isinstance(value, datetime):
         raise CatalogExtractionError(f"{field_name} must be a date or datetime")
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _optional_aware_datetime(value: object, *, field_name: str) -> datetime | None:
@@ -592,11 +626,9 @@ def _normalize_country(
                 maximum=128,
             )
             filter_value_source = getattr(strategy, "variable_value", None)
-            if not isinstance(filter_value_source, (str, int, float, bool)):
-                raise CatalogExtractionError(
-                    f"region {code!r} has an unsupported filter value"
-                )
-            filter_value = str(filter_value_source)
+            filter_value = _serialize_region_filter_value(
+                filter_value_source, region_code=code
+            )
             additional_filters = getattr(strategy, "additional_filters", {})
             if additional_filters:
                 raise CatalogExtractionError(

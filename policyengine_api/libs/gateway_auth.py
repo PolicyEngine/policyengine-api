@@ -12,11 +12,9 @@ from __future__ import annotations
 import os
 import threading
 import time
-from functools import lru_cache
-from typing import Optional
+from functools import cache
 
 import httpx
-
 
 GATEWAY_AUTH_ISSUER_ENV = "GATEWAY_AUTH_ISSUER"
 GATEWAY_AUTH_AUDIENCE_ENV = "GATEWAY_AUTH_AUDIENCE"
@@ -56,7 +54,7 @@ def gateway_auth_required() -> bool:
     )
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_secret_from_secret_manager(resource_name: str) -> str:
     """Fetch one secret payload from Google Secret Manager."""
     from google.cloud import secretmanager
@@ -110,11 +108,11 @@ class GatewayAuthTokenProvider:
 
     def __init__(
         self,
-        issuer: Optional[str] = None,
-        audience: Optional[str] = None,
-        client_id: Optional[str] = None,
-        client_secret: Optional[str] = None,
-        client_secret_resource: Optional[str] = None,
+        issuer: str | None = None,
+        audience: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        client_secret_resource: str | None = None,
         *,
         http_timeout: float = 10.0,
     ):
@@ -144,7 +142,7 @@ class GatewayAuthTokenProvider:
             else os.environ.get(GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV, "")
         )
         self._http_timeout = http_timeout
-        self._token: Optional[str] = None
+        self._token: str | None = None
         self._expires_at: float = 0.0
         self._lock = threading.Lock()
 

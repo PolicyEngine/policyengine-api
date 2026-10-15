@@ -1,0 +1,8 @@
+name: CI
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: bash .github/scripts/deploy.sh

@@ -1,6 +1,5 @@
 from policyengine_api.utils.input_validation import find_unrecognized_inputs
 
-
 METADATA = {
     "variables": {
         "age": {"entity": "person"},

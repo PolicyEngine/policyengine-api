@@ -1,7 +1,7 @@
+from pathlib import Path
 from unittest.mock import Mock
 
 import sqlalchemy
-from pathlib import Path
 
 import policyengine_api.data.orm as orm
 

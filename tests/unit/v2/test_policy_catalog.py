@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlmodel import Session, create_engine
 import pytest
+from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogVersionNotFoundError,
 )
 from policyengine_api.data.v2.models import (
+    V2_METADATA,
     Parameter,
     TaxBenefitModel,
     TaxBenefitModelVersion,
-    V2_METADATA,
 )
 from policyengine_api.services.v2.policies.services import (
     resolve_policy_creation_input,
