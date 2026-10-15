@@ -87,6 +87,8 @@ select = [
     "E4", "E7", "E9", "F",
     # Group 1: safe auto-fixes.
     "FLY", "FURB", "I", "PIE", "PYI", "RET", "RSE", "UP", "W",
+    # Group 2: typing-only imports.
+    "TC",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -142,3 +144,55 @@ showcontent = true
 directory = "removed"
 name = "Removed"
 showcontent = true
+[tool.ruff.lint.flake8-type-checking]
+# Classes whose annotations Pydantic, SQLModel or SQLAlchemy evaluate at runtime, so their
+# imports must stay at runtime. Ruff checks direct bases only, so every
+# project class that other models inherit from is listed.
+runtime-evaluated-base-classes = [
+    "policyengine_api.data.v2.models.base.IdentifiedModel",
+    "policyengine_api.data.v2.models.base.TimestampedModel",
+    "policyengine_api.data.v2.models.comparison_runs.Stage12RunTimestamps",
+    "policyengine_api.data.v2.models.reports.GeographicImpactBase",
+    "policyengine_api.fastapi_routes.v2.households.document_models.HouseholdEntityRecord",
+    "policyengine_api.fastapi_routes.v2.households.document_models.StrictHouseholdDocumentModel",
+    "policyengine_api.fastapi_routes.v2.households.response_models.HouseholdSuccessResponse",
+    "policyengine_api.fastapi_routes.v2.households.response_models.StrictHouseholdAPIModel",
+    "policyengine_api.fastapi_routes.v2.metadata.response_models.MetadataResourceSuccessResponse",
+    "policyengine_api.fastapi_routes.v2.policies.response_models.PolicySuccessResponse",
+    "policyengine_api.fastapi_routes.v2.policies.response_models.StrictPolicyAPIModel",
+    "policyengine_api.fastapi_routes.v2.user_households.response_models.StrictUserHouseholdAPIModel",
+    "policyengine_api.fastapi_routes.v2.user_households.response_models.UserHouseholdSuccessResponse",
+    "policyengine_api.fastapi_routes.v2.user_policies.response_models.StrictUserPolicyAPIModel",
+    "policyengine_api.fastapi_routes.v2.user_policies.response_models.UserPolicySuccessResponse",
+    "policyengine_api.query_parameters.CatalogQuery",
+    "policyengine_api.query_parameters.CountryQuery",
+    "policyengine_api.query_parameters.EconomyQuery",
+    "policyengine_api.query_parameters.PaginationQuery",
+    "policyengine_api.query_parameters.StrictQueryParameters",
+    "policyengine_api.services.v2.households.types.HouseholdCreationInput",
+    "policyengine_api.services.v2.households.types.StrictHouseholdInput",
+    "policyengine_api.services.v2.metadata.types.MetadataModelVersion",
+    "policyengine_api.services.v2.metadata.types.StrictResponseModel",
+    "policyengine_api.services.v2.policies.types.PolicyCreationInput",
+    "policyengine_api.services.v2.policies.types.StrictPolicyInput",
+    "policyengine_api.services.v2.simulations.types.StrictContractModel",
+    "policyengine_api.services.v2.user_households.types.StrictUserHouseholdInput",
+    "policyengine_api.services.v2.user_households.types.UserHouseholdCreationInput",
+    "policyengine_api.services.v2.user_households.types.UserHouseholdUpdateInput",
+    "policyengine_api.services.v2.user_policies.types.StrictAssociationInput",
+    "policyengine_api.services.v2.user_policies.types.UserPolicyCreationInput",
+    "policyengine_api.services.v2.user_policies.types.UserPolicyUpdateInput",
+    "policyengine_api.data.v1_models.V1Base",
+    "pydantic.BaseModel",
+    "sqlalchemy.orm.DeclarativeBase",
+    "sqlmodel.SQLModel",
+]
+# FastAPI evaluates endpoint annotations when routes are registered.
+runtime-evaluated-decorators = [
+    "fastapi.APIRouter.api_route",
+    "fastapi.APIRouter.delete",
+    "fastapi.APIRouter.get",
+    "fastapi.APIRouter.patch",
+    "fastapi.APIRouter.post",
+    "fastapi.APIRouter.put",
+]

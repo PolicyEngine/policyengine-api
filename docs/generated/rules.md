@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 41 | 0 | 1 | 12 | 54 |
+| mechanical | 42 | 0 | 1 | 12 | 55 |
 | metric | 0 | 0 | 0 | 0 | 0 |
 | judgment | 0 | 0 | 0 | 0 | 0 |
 
-**Blocking:** 41 of 54 rules.
+**Blocking:** 42 of 55 rules.
 
 ## Gaps
 
@@ -44,6 +44,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 - `api.metadata.read-modules-isolated`
 - `api.migration.contracts-consistent`
 - `api.process.rules-registry`
+- `api.quality.runtime-evaluated-models-resolve`
 - `api.reports.v1-persistence-only`
 - `api.routes.flask-blueprints-own-urls`
 - `api.routes.no-domain-logic-in-http`
@@ -268,7 +269,8 @@ flowchart LR
 | `api.quality.environment-variables-load` | Required environment variables and credentials load in a deployed-like environment. | mechanical | enforced | yes | CI job `test_env_vars` | `pr.yml:test_env_vars` | — |
 | `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, and v2 routes and services pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:typecheck-v2` | — |
 | `api.quality.ruff-format` | All Python files are formatted with ruff format. | mechanical | enforced | yes | ruff format | `pr.yml:lint` | — |
-| `api.quality.ruff-lint` | All Python code passes ruff check with every rule family selected in pyproject.toml, with no ratchet; families are added one themed group at a time until the selection is ALL. | mechanical | enforced | yes | ruff check (E4, E7, E9, F, FLY, FURB, I, PIE, PYI, RET, RSE, UP, W) | `pr.yml:lint` | — |
+| `api.quality.ruff-lint` | All Python code passes ruff check with every rule family selected in pyproject.toml, with no ratchet; families are added one themed group at a time until the selection is ALL. | mechanical | enforced | yes | ruff check (E4, E7, E9, F, FLY, FURB, I, PIE, PYI, RET, RSE, TC, UP, W) | `pr.yml:lint` | — |
+| `api.quality.runtime-evaluated-models-resolve` | Every package model class that other models inherit from is listed in ruff's runtime-evaluated-base-classes, and every Pydantic model and SQLAlchemy mapper resolves its annotations once the package is imported. | mechanical | enforced | yes | pytest `tests/unit/test_runtime_evaluated_annotations.py` | `pr.yml:test` | **unproven** |
 | `api.quality.tests-pass` | The unit, contract and to-refactor test suites pass. | mechanical | enforced | yes | CI job `test` | `pr.yml:test` | — |
 
 ```mermaid
@@ -286,10 +288,12 @@ flowchart LR
   e_ruff_format["ruff format"]
   j_CI_pr_yml_lint["CI pr.yml:lint"]
   r_api_quality_ruff_lint("api.quality.ruff-lint (enforced)")
-  e_ruff_check__E4__E7__E9__F__FLY__FURB__I__PIE__PYI__RET__RSE__UP__W_["ruff check (E4, E7, E9, F, FLY, FURB, I, PIE, PYI, RET, RSE, UP, W)"]
+  e_ruff_check__E4__E7__E9__F__FLY__FURB__I__PIE__PYI__RET__RSE__TC__UP__W_["ruff check (E4, E7, E9, F, FLY, FURB, I, PIE, PYI, RET, RSE, TC, UP, W)"]
+  r_api_quality_runtime_evaluated_models_resolve("api.quality.runtime-evaluated-models-resolve (enforced)")
+  e_pytest_tests_unit_test_runtime_evaluated_annotations_py["pytest tests/unit/test_runtime_evaluated_annotations.py"]
+  j_CI_pr_yml_test["CI pr.yml:test"]
   r_api_quality_tests_pass("api.quality.tests-pass (enforced)")
   e_CI_job_test["CI job test"]
-  j_CI_pr_yml_test["CI pr.yml:test"]
   r_api_quality_alembic_revisions_unused_imports --> e_ruff_per_file_ignore_of_ALL_for_migrations___versions___py
   e_ruff_per_file_ignore_of_ALL_for_migrations___versions___py -.-> local_only
   r_api_quality_environment_variables_load --> e_CI_job_test_env_vars
@@ -298,8 +302,10 @@ flowchart LR
   e_mypy --> j_CI_pr_yml_typecheck_v2
   r_api_quality_ruff_format --> e_ruff_format
   e_ruff_format --> j_CI_pr_yml_lint
-  r_api_quality_ruff_lint --> e_ruff_check__E4__E7__E9__F__FLY__FURB__I__PIE__PYI__RET__RSE__UP__W_
-  e_ruff_check__E4__E7__E9__F__FLY__FURB__I__PIE__PYI__RET__RSE__UP__W_ --> j_CI_pr_yml_lint
+  r_api_quality_ruff_lint --> e_ruff_check__E4__E7__E9__F__FLY__FURB__I__PIE__PYI__RET__RSE__TC__UP__W_
+  e_ruff_check__E4__E7__E9__F__FLY__FURB__I__PIE__PYI__RET__RSE__TC__UP__W_ --> j_CI_pr_yml_lint
+  r_api_quality_runtime_evaluated_models_resolve --> e_pytest_tests_unit_test_runtime_evaluated_annotations_py
+  e_pytest_tests_unit_test_runtime_evaluated_annotations_py --> j_CI_pr_yml_test
   r_api_quality_tests_pass --> e_CI_job_test
   e_CI_job_test --> j_CI_pr_yml_test
 ```

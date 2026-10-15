@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.orm import get_v1_session_factory
@@ -32,6 +30,11 @@ from policyengine_api.spm import (
 )
 from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
 from policyengine_api.utils.input_validation import find_unrecognized_inputs
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from sqlalchemy.orm import Session, sessionmaker
 
 
 @dataclass(frozen=True)

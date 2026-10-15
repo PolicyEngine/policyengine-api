@@ -3,16 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
-from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
-from policyengine_api.data.v2.models import (
-    Dataset,
-    Parameter,
-    ParameterValue,
-    Region,
-    Variable,
-)
 from policyengine_api.dataset_display import get_dataset_display_label
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
@@ -31,6 +23,16 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataTimePeriodOption,
     MetadataVariable,
 )
+
+if TYPE_CHECKING:
+    from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
+    from policyengine_api.data.v2.models import (
+        Dataset,
+        Parameter,
+        ParameterValue,
+        Region,
+        Variable,
+    )
 
 ResourceT = TypeVar("ResourceT")
 

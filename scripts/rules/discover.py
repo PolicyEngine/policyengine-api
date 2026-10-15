@@ -8,7 +8,7 @@ reason in ``[discovery]``.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from scripts.rules.model import Kind, Registry, Violation
 from scripts.rules.resolve import (
@@ -21,6 +21,9 @@ from scripts.rules.resolve import (
     test_names,
     workflow_jobs,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _hidden(message: str, fix: str) -> Violation:

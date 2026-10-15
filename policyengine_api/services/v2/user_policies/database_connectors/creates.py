@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, col
@@ -13,7 +13,11 @@ from policyengine_api.data.v2.models import (
     User,
     UserPolicy,
 )
-from policyengine_api.services.v2.user_policies.types import UserPolicyCreationInput
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.services.v2.user_policies.types import UserPolicyCreationInput
 
 
 def create_user_policy(

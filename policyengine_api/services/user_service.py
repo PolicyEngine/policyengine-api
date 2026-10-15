@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import UserProfile
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session, sessionmaker
 
 
 class UserService:

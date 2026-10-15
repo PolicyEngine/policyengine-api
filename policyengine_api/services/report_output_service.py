@@ -46,7 +46,7 @@ def _canonicalize_annual_spm_output(
     return {
         **output,
         "spm_provenance": cast(
-            JSONValue,
+            "JSONValue",
             comparison.model_dump(mode="json", by_alias=True),
         ),
     }
@@ -61,7 +61,7 @@ def _canonicalize_society_wide_spm_output(
 
     if not isinstance(output, dict):
         return output
-    typed_output = cast(JSONObject, output)
+    typed_output = cast("JSONObject", output)
     if output.get("kind") != "budgetWindow":
         return _canonicalize_annual_spm_output(
             typed_output,
@@ -78,7 +78,7 @@ def _canonicalize_society_wide_spm_output(
         row_year = row.get("year")
         canonical_rows.append(
             _canonicalize_annual_spm_output(
-                cast(JSONObject, row),
+                cast("JSONObject", row),
                 expected_year=str(row_year) if row_year is not None else None,
             )
         )

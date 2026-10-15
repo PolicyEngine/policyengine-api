@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from uuid import UUID
-
-from sqlmodel import Session
+from typing import TYPE_CHECKING
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.services.v2.policies.database_connectors.creates import (
@@ -25,7 +22,6 @@ from policyengine_api.services.v2.policies.database_connectors.reads import (
     read_policy_rows,
     read_version_parameter_ids,
 )
-from policyengine_api.services.v2.policies.database_session import PolicyDatabaseSession
 from policyengine_api.services.v2.policies.transformations import (
     canonical_policy_document,
     canonicalize_policy,
@@ -55,6 +51,16 @@ from policyengine_api.services.v2.policies.validators import (
     validate_policy_catalog,
     verify_legacy_policy_mapping,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+    from uuid import UUID
+
+    from sqlmodel import Session
+
+    from policyengine_api.services.v2.policies.database_session import (
+        PolicyDatabaseSession,
+    )
 
 
 def resolve_policy_creation_input(

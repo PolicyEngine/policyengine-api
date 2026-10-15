@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.catalog.extraction import extract_catalog
-from policyengine_api.data.v2.catalog.records import NormalizedCatalog
+
+if TYPE_CHECKING:
+    from policyengine_api.data.v2.catalog.records import NormalizedCatalog
 
 POLICYENGINE_VERSION = "5.0.4"
 DEPENDENCY_VERSIONS = {

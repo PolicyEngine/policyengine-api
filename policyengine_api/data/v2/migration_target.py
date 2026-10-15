@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Connection, MetaData, inspect, text
 from sqlalchemy.engine import URL, make_url
@@ -19,6 +19,9 @@ from policyengine_api.data.v2.settings import (
     parse_persistent_postgres_url,
     validate_supabase_database_identity,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 V2_ALEMBIC_DISPOSABLE_TEST = "V2_ALEMBIC_DISPOSABLE_TEST"
 V2_ALEMBIC_HEAD_REVISION = "91af4fc8d8c1"

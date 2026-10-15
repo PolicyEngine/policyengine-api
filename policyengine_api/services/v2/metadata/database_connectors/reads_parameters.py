@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import Parameter, ParameterValue
 from policyengine_api.services.v2.metadata.database_connectors.reads import read_rows
+
+if TYPE_CHECKING:
+    from datetime import datetime
+    from uuid import UUID
 
 
 def _escape_like(value: str) -> str:

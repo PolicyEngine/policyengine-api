@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scripts.rules.model import Kind, Registry, Rule, Status, Tier, Violation
 from scripts.rules.resolve import node_exists
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 RULE_ID = re.compile(r"^[a-z0-9]+(\.[a-z0-9][a-z0-9-]*)+$")
 

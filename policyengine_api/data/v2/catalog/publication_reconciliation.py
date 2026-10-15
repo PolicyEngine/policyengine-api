@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import sqlalchemy as sa
 from sqlalchemy import Connection, Select
 from sqlalchemy.dialects.postgresql import JSONB
@@ -19,7 +21,6 @@ from policyengine_api.data.v2.catalog.publication_staging import (
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
 )
-from policyengine_api.data.v2.catalog.records import CountryCatalog
 from policyengine_api.data.v2.models import (
     Dataset,
     Parameter,
@@ -30,6 +31,9 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     Variable,
 )
+
+if TYPE_CHECKING:
+    from policyengine_api.data.v2.catalog.records import CountryCatalog
 
 DATASETS = Dataset.__table__
 MODELS = TaxBenefitModel.__table__

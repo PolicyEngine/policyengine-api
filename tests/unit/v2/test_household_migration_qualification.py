@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -13,6 +13,9 @@ from policyengine_api.data.v2.settings import (
     V2_SUPABASE_ENVIRONMENT,
     V2_SUPABASE_PROJECT_REF,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 ENVIRONMENT = {
     V2_MIGRATION_DATABASE_URL: (

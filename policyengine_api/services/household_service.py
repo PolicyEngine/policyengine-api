@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.exc import (
@@ -16,7 +16,6 @@ from sqlalchemy.exc import (
 from sqlalchemy.exc import (
     TimeoutError as SQLAlchemyTimeoutError,
 )
-from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import get_v1_session_factory
@@ -30,6 +29,11 @@ from policyengine_api.services.v2.households.types import (
 )
 from policyengine_api.spm import SPMValidationError, normalize_spm_selection
 from policyengine_api.utils import hash_object
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from sqlalchemy.orm import Session, sessionmaker
 
 
 def household_storage_json(country_id: str, household_json: dict, spm=None) -> dict:

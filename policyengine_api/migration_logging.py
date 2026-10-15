@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 import flask
-from policyengine_observability import ObservabilityRuntime
 
 from policyengine_api.gcp_logging import logger
 from policyengine_api.migration_flags import (
@@ -21,6 +21,9 @@ from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     generate_request_id,
 )
+
+if TYPE_CHECKING:
+    from policyengine_observability import ObservabilityRuntime
 
 V2_METADATA_RESOURCE_SEGMENTS = frozenset(
     {

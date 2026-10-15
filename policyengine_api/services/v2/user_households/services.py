@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
-
-from sqlmodel import Session
+from typing import TYPE_CHECKING
 
 from policyengine_api.services.v2.user_households.database_connectors.creates import (
     create_user_household,
@@ -21,24 +19,30 @@ from policyengine_api.services.v2.user_households.database_connectors.reads impo
 from policyengine_api.services.v2.user_households.database_connectors.updates import (
     update_user_household,
 )
-from policyengine_api.services.v2.user_households.database_session import (
-    UserHouseholdDatabaseSession,
-)
 from policyengine_api.services.v2.user_households.transformations import (
     user_household_page,
     user_household_read,
-)
-from policyengine_api.services.v2.user_households.types import (
-    UserHouseholdCreationInput,
-    UserHouseholdPage,
-    UserHouseholdRead,
-    UserHouseholdUpdateInput,
 )
 from policyengine_api.services.v2.user_households.validators import (
     require_user_household,
     validate_association_creation,
     validate_association_household,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlmodel import Session
+
+    from policyengine_api.services.v2.user_households.database_session import (
+        UserHouseholdDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_households.types import (
+        UserHouseholdCreationInput,
+        UserHouseholdPage,
+        UserHouseholdRead,
+        UserHouseholdUpdateInput,
+    )
 
 
 def read_complete_user_household(

@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
-from sqlmodel import Session
-
-from policyengine_api.data.v2.models import LegacyUserPolicyMapping
 from policyengine_api.services.v2.policies.services import (
     mirror_legacy_policy_in_session,
 )
-from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.user_policies.database_connectors.creates import (
     create_legacy_user_mapping,
     create_legacy_user_policy_mapping,
@@ -33,9 +29,6 @@ from policyengine_api.services.v2.user_policies.database_connectors.reads import
 from policyengine_api.services.v2.user_policies.database_connectors.updates import (
     update_legacy_user_policy_state,
     update_user_policy,
-)
-from policyengine_api.services.v2.user_policies.database_session import (
-    UserPolicyDatabaseSession,
 )
 from policyengine_api.services.v2.user_policies.transformations import (
     USER_POLICY_FINGERPRINT_VERSION,
@@ -63,6 +56,17 @@ from policyengine_api.services.v2.user_policies.validators import (
     validate_legacy_user_mapping_conflict,
     validate_legacy_user_policy_input,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlmodel import Session
+
+    from policyengine_api.data.v2.models import LegacyUserPolicyMapping
+    from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+    from policyengine_api.services.v2.user_policies.database_session import (
+        UserPolicyDatabaseSession,
+    )
 
 
 def read_complete_user_policy(

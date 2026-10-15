@@ -5,13 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 from decimal import Decimal
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from policyengine_core.periods import (  # type: ignore[import-untyped]
     period as parse_policyengine_period,
 )
 
-from policyengine_api.data.v2.models import Household
 from policyengine_api.services.v2.households.types import (
     CanonicalHouseholdContent,
     HouseholdCreationInput,
@@ -24,6 +23,9 @@ from policyengine_api.services.v2.households.validators import (
     LegacyHouseholdTranslationError,
     normalize_household_document,
 )
+
+if TYPE_CHECKING:
+    from policyengine_api.data.v2.models import Household
 
 HOUSEHOLD_CANONICALIZATION_VERSION = 1
 LEGACY_HOUSEHOLD_FINGERPRINT_VERSION = 1
@@ -68,17 +70,17 @@ def _canonical_json(value: Any) -> str:
 
 
 def canonical_household_document(household_input: HouseholdCreationInput) -> bytes:
-    content = dict(cast(dict[str, Any], household_input.household_data))
+    content = dict(cast("dict[str, Any]", household_input.household_data))
     for collection, records in content.items():
         if collection in {
             "people",
             *SUPPORTED_ENTITY_COLLECTIONS[household_input.country_id],
         }:
             assert isinstance(records, list)
-            typed_records = cast(list[dict[str, Any]], records)
+            typed_records = cast("list[dict[str, Any]]", records)
             content[collection] = sorted(
                 typed_records,
-                key=lambda record: cast(str, record["id"]),
+                key=lambda record: cast("str", record["id"]),
             )
     document = {
         "canonicalization_version": HOUSEHOLD_CANONICALIZATION_VERSION,

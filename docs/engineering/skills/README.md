@@ -27,5 +27,8 @@ Current skills:
   enforced, proven, and rendered into `docs/generated/rules.md`.
 - `testing.md`: focused test commands and dependency boundaries for migration
   work.
+- `typing-only-imports.md`: when ruff moves imports under `TYPE_CHECKING`, and
+  listing model bases whose annotations Pydantic, SQLModel and SQLAlchemy read
+  at runtime.
 - `v2-code-organization.md`: mandatory API v2 route, service, and database-access
   package boundaries and literal module-naming rules.

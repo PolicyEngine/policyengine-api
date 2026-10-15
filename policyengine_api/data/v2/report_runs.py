@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from datetime import datetime
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
@@ -17,6 +15,11 @@ from policyengine_api.data.v2.models import (
     ReportRunTrigger,
 )
 from policyengine_api.data.v2.models.base import utc_now
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from datetime import datetime
+    from uuid import UUID
 
 
 class ReportNotFoundError(LookupError):

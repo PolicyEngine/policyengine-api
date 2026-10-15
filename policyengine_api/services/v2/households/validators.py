@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import math
-from typing import Any
-from uuid import UUID
+from typing import TYPE_CHECKING, Any
 
-from policyengine_api.data.v2.models import LegacyHouseholdMapping
 from policyengine_api.spm import SPMSelection
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.data.v2.models import LegacyHouseholdMapping
 
 MAXIMUM_HOUSEHOLD_ENTITIES = 1_000
 MAXIMUM_HOUSEHOLD_RECORD_VALUES = 500

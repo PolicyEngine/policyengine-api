@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from sqlmodel import Session, select
 
@@ -10,10 +10,14 @@ from policyengine_api.data.v2.models import (
     Stage12ComparisonReport,
     Stage12ComparisonSimulation,
 )
-from policyengine_api.services.v2.comparison_runs.types import (
-    ComparisonReportRecord,
-    ComparisonSimulationRecord,
-)
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.services.v2.comparison_runs.types import (
+        ComparisonReportRecord,
+        ComparisonSimulationRecord,
+    )
 
 
 def read_comparison_report(

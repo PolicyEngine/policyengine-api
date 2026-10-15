@@ -7,7 +7,7 @@ import argparse
 import json
 import os
 import sys
-from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import URL
@@ -19,6 +19,9 @@ from policyengine_api.services.household_mirroring import (
     process_household_event_after_commit,
 )
 from policyengine_api.services.household_service import HouseholdService
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 
 class HouseholdEventCommandConfigurationError(RuntimeError):

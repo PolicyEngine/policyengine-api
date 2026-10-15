@@ -1,0 +1,1 @@
+Enabled ruff's typing-only import rules (TC) and moved annotation-only imports under TYPE_CHECKING, keeping runtime imports for Pydantic, SQLModel, SQLAlchemy and FastAPI; a new test fails if a model base is missing from ruff's runtime-evaluated list or any model's annotations don't resolve.
