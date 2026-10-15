@@ -963,10 +963,10 @@ class TestSimulationAPIModal:
             assert execution.status == MODAL_EXECUTION_STATUS_FAILED
             assert execution.error == "Simulation timed out"
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_running_job_with_stage_fields__then_reads_run_progress(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
@@ -1000,10 +1000,10 @@ class TestSimulationAPIModal:
                 "segments": {"completed": 19, "total": 20},
             }
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_running_job_without_stage_fields__then_has_no_run_progress(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
@@ -1018,10 +1018,10 @@ class TestSimulationAPIModal:
             # Then
             assert execution.run_progress is None
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_only_a_submission_time__then_relays_it(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given - a job on a worker app without stages, after
             # policyengine-sim-api#781 deploys its gateway
@@ -1042,10 +1042,10 @@ class TestSimulationAPIModal:
                 "submitted_at": "2026-10-13T12:00:00Z"
             }
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_a_malformed_timestamp__then_drops_the_stage_fields(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
@@ -1065,10 +1065,10 @@ class TestSimulationAPIModal:
             assert execution.status == MODAL_EXECUTION_STATUS_RUNNING
             assert execution.run_progress is None
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_malformed_stage_fields__then_still_returns_status(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(

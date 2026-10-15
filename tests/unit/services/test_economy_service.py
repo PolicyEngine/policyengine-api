@@ -2346,8 +2346,9 @@ class TestEconomyService:
             assert result.status == ImpactStatus.COMPUTING
             assert result.data is None
 
+        @pytest.mark.usefixtures("mock_logger")
         def test__given_modal_running_state_with_run_progress__then_relays_it(
-            self, economy_service, setup_options, mock_logger
+            self, economy_service, setup_options
         ):
             # Given
             reform_impact = create_mock_reform_impact(status="computing")
@@ -2373,8 +2374,9 @@ class TestEconomyService:
             }
             assert "run_progress" not in result.to_dict()
 
+        @pytest.mark.usefixtures("mock_logger")
         def test__given_modal_running_state_without_run_progress__then_has_none(
-            self, economy_service, setup_options, mock_logger
+            self, economy_service, setup_options
         ):
             # Given
             reform_impact = create_mock_reform_impact(status="computing")
