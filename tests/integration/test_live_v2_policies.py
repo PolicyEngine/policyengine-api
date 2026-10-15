@@ -33,6 +33,8 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from policyengine_api.query_parameters import MAXIMUM_QUERY_LIMIT
+
 AUTH0_ENVIRONMENT = (
     "STAGING_AUTH0_TEST_DOMAIN",
     "STAGING_AUTH0_TEST_AUDIENCE",
@@ -170,7 +172,7 @@ def _save_policy(api_client, headers: dict[str, str], legacy_policy_id: int) -> 
 def _policy_ids(api_client, headers: dict[str, str]) -> set[str]:
     response = api_client.get(
         "/v2/user-policies",
-        params={"country_id": COUNTRY_ID, "limit": 1000},
+        params={"country_id": COUNTRY_ID, "limit": MAXIMUM_QUERY_LIMIT},
         headers=headers,
     )
     assert response.status_code == 200, response.text[:500]
