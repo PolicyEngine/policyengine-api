@@ -70,6 +70,8 @@ def _attach_current_request_id(request: httpx.Request) -> None:
 
 
 class SimulationRunSegments(BaseModel):
+    """How many of a running job's segments have finished, out of its total."""
+
     model_config = ConfigDict(extra="ignore", frozen=True)
 
     completed: int = Field(ge=0)
@@ -105,6 +107,7 @@ class SimulationRunProgress(BaseModel):
         return run_progress if run_progress.to_dict() else None
 
     def to_dict(self) -> dict:
+        """Return the reported fields as JSON values, leaving out unreported ones."""
         return self.model_dump(mode="json", exclude_none=True)
 
 

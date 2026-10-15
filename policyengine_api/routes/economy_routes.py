@@ -78,8 +78,9 @@ def get_economic_impact(
     """Return the single-year economic impact, starting it if none is cached.
 
     A policy ID of 0 means current law. The result stays ``computing`` until the
-    simulation finishes. Invalid query parameters give 400 and a failed
-    calculation gives 502.
+    simulation finishes, and while computing the body also carries the stage
+    fields the Simulation Entrypoint reports. Invalid query parameters give 400
+    and a failed calculation gives 502.
     """
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(

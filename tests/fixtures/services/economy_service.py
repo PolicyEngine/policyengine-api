@@ -280,6 +280,8 @@ def create_mock_modal_execution(
         The error message if failed.
     policyengine_bundle : dict or None
         The runtime bundle the execution reports; defaults to MOCK_RUNTIME_BUNDLE.
+    run_progress : SimulationRunProgress or None
+        The stage fields the execution reports while it runs.
 
     Returns
     -------
