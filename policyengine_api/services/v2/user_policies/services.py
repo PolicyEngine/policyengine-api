@@ -60,6 +60,7 @@ from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicySnapshot,
     UserPolicyCreateFields,
     UserPolicyCreationInput,
+    UserPolicyFilter,
     UserPolicyListing,
     UserPolicyPage,
     UserPolicyRead,
@@ -460,16 +461,16 @@ class V2UserPolicyService:
         *,
         principal: AccountPrincipal,
         country_id: str,
-        policy_id: UUID | None = None,
-        legacy_policy_id: int | None = None,
+        policy_filter: UserPolicyFilter | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> UserPolicyPage:
         """Return a page of the principal's associations in this country.
 
-        ``policy_id`` and ``legacy_policy_id`` narrow it to one policy. A signed-out
-        browser that has not saved anything yet gets an empty page.
+        ``policy_filter`` narrows it to one policy. A signed-out browser that has
+        not saved anything yet gets an empty page.
         """
+        selected = policy_filter if policy_filter is not None else UserPolicyFilter()
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
@@ -481,10 +482,10 @@ class V2UserPolicyService:
                 UserPolicyListing(
                     country_id=country_id,
                     user_id=owner.user_id,
-                    policy_id=policy_id,
+                    policy_id=selected.policy_id,
                     offset=offset,
                     limit=limit,
-                    legacy_policy_id=legacy_policy_id,
+                    legacy_policy_id=selected.legacy_policy_id,
                 ),
             )
 

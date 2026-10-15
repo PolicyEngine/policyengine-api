@@ -38,6 +38,7 @@ from policyengine_api.services.v2.user_simulations.transformations import (
     user_simulation_page,
     user_simulation_read,
 )
+from policyengine_api.services.v2.user_simulations.types import UserSimulationListing
 from policyengine_api.services.v2.user_simulations.validators import (
     require_user_simulation,
 )
@@ -199,11 +200,13 @@ class V2UserSimulationService:
                 return user_simulation_page([], offset=offset, limit=limit)
             rows = read_user_simulation_rows(
                 session,
-                country_id=country_id,
-                user_id=owner.user_id,
-                legacy_simulation_id=legacy_simulation_id,
-                offset=offset,
-                limit=limit,
+                UserSimulationListing(
+                    country_id=country_id,
+                    user_id=owner.user_id,
+                    legacy_simulation_id=legacy_simulation_id,
+                    offset=offset,
+                    limit=limit,
+                ),
             )
             return user_simulation_page(rows, offset=offset, limit=limit)
 

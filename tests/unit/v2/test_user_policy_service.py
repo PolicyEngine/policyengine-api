@@ -31,6 +31,7 @@ from policyengine_api.services.v2.user_policies.transformations import (
 from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicySnapshot,
     UserPolicyCreateFields,
+    UserPolicyFilter,
     UserPolicyUpdateInput,
 )
 from policyengine_api.services.v2.user_policies.validators import (
@@ -194,7 +195,9 @@ def test_other_users_rows_are_not_found_and_lists_are_owner_scoped(store) -> Non
 
     page = service.list_user_policies(principal=ALICE, country_id="us", limit=1)
     filtered = service.list_user_policies(
-        principal=ALICE, country_id="us", legacy_policy_id=2
+        principal=ALICE,
+        country_id="us",
+        policy_filter=UserPolicyFilter(legacy_policy_id=2),
     )
     assert [item.name for item in page.items] == ["Alice"]
     assert page.has_more is True

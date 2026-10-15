@@ -164,6 +164,18 @@ class UserPolicyRead:
 
 
 @dataclass(frozen=True)
+class UserPolicyFilter:
+    """Which of the caller's saved policies a listing keeps.
+
+    ``policy_id`` keeps links to one v2 policy and ``legacy_policy_id`` links to
+    one v1 policy; with neither, every saved policy is kept.
+    """
+
+    policy_id: UUID | None = None
+    legacy_policy_id: int | None = None
+
+
+@dataclass(frozen=True)
 class UserPolicyListing:
     """One page of a user's associations to read, optionally for one policy.
 

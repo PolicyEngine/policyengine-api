@@ -593,8 +593,8 @@ def test_upgrade_merges_when_a_concurrent_first_sign_in_wins_the_identity(
         session.add(
             UserIdentity(
                 user_id=user.id,
-                issuer=identity["issuer"],
-                subject=identity["subject"],
+                issuer=identity["principal"].issuer,
+                subject=identity["principal"].subject,
             )
         )
         session.flush()
