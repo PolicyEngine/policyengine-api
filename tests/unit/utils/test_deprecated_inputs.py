@@ -17,6 +17,27 @@ from policyengine_api.utils.deprecated_inputs import (
 
 
 class TestDropDeprecatedInputs:
+    def test__removed_uk_variable__is_dropped_with_its_replacement_named(self):
+        household = {
+            "people": {
+                "claimant": {
+                    "age": {"2026": 40},
+                    "uc_has_limited_capability_for_work": {"2026": True},
+                }
+            }
+        }
+
+        result = drop_deprecated_inputs(household)
+
+        assert (
+            "uc_has_limited_capability_for_work"
+            not in (result.household["people"]["claimant"])
+        )
+        assert [warning.variable for warning in result.warnings] == [
+            "uc_has_limited_capability_for_work"
+        ]
+        assert "`uc_limited_capability_for_work`" in result.warnings[0].message
+
     def test__deprecated_variable__is_dropped_with_warning(self):
         household = {
             "people": {
