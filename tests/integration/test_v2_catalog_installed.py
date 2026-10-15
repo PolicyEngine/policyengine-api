@@ -36,15 +36,15 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         importlib_metadata.version(name) == expected
         for name, expected in expected_dependencies
     )
-    # Counts for the 6.3.4 bundle's models: US 2.2.1 and UK 2.126.12. Keep
+    # Counts for the 6.4.1 bundle's models: US 2.2.1 and UK 2.130.1. Keep
     # this exact assertion so later package changes require explicit review.
     assert catalog.entity_counts() == {
         "models": 2,
         "model_versions": 2,
-        "variables": 7_294,
-        "parameter_nodes": 29_300,
-        "parameters": 104_158,
-        "parameter_values": 1_194_256,
+        "variables": 7_330,
+        "parameter_nodes": 29_306,
+        "parameters": 104_171,
+        "parameter_values": 1_194_357,
         "datasets": 2,
         "regions": 826,
     }
@@ -95,9 +95,10 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "SOUTH_WEST",
     ]
 
-    # 6.3.4 points US state and congressional-district regions at the national
-    # dataset by explicit path (PolicyEngine/policyengine.py#604), so every US
-    # region uses it and only places still fall back to it.
+    # Since 6.3.4, the bundle points US state and congressional-district
+    # regions at the national dataset by explicit path
+    # (PolicyEngine/policyengine.py#604), so every US region uses it and only
+    # places still fall back to it.
     us_catalog = catalog.country("us")
     us_dataset_names = {dataset.id: dataset.name for dataset in us_catalog.datasets}
     assert {
