@@ -709,7 +709,7 @@ invocation = "ruff check ."
 [[rule]]
 id = "api.quality.runtime-evaluated-models-resolve"
 category = "quality"
-statement = "Every package model class that other models inherit from is listed in ruff's runtime-evaluated-base-classes, and every Pydantic model and SQLAlchemy mapper resolves its annotations once the package is imported."
+statement = "Every package model is one ruff treats as runtime-evaluated (a base resolves, through the import in its own module, to a name in runtime-evaluated-base-classes, or is a same-module class that does), and every Pydantic model and SQLAlchemy mapper resolves its annotations once the package is imported."
 rationale = "docs/engineering/skills/typing-only-imports.md#models-that-read-annotations-at-runtime"
 scope = ["policyengine_api/**/*.py", "pyproject.toml"]
 tier = "mechanical"
@@ -719,6 +719,7 @@ autofix = false
 kind = "pytest"
 nodes = [
   "tests/unit/test_runtime_evaluated_annotations.py::test_every_model_base_is_listed_for_ruff",
+  "tests/unit/test_runtime_evaluated_annotations.py::test_base_resolution_matches_ruff",
   "tests/unit/test_runtime_evaluated_annotations.py::test_every_pydantic_model_resolves_its_annotations",
   "tests/unit/test_runtime_evaluated_annotations.py::test_every_sqlalchemy_mapper_configures",
   "tests/unit/test_runtime_evaluated_annotations.py::test_skipped_app_modules_define_no_classes",
