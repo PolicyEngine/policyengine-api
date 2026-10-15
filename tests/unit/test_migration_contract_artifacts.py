@@ -1,5 +1,5 @@
-from collections import Counter
 import json
+from collections import Counter
 
 import pytest
 

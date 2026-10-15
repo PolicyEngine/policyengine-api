@@ -35,7 +35,6 @@ from tests.unit.v2.user_route_support import (
     user_route_client,
 )
 
-
 RECORD_ID = UUID("00000000-0000-0000-0000-000000000065")
 UNAUTHENTICATED_HEADERS = {"PolicyEngine-Unauthenticated-User": str(BROWSER_USER_ID)}
 

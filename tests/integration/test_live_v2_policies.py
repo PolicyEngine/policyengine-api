@@ -33,7 +33,6 @@ from uuid import uuid4
 import httpx
 import pytest
 
-
 AUTH0_ENVIRONMENT = (
     "STAGING_AUTH0_TEST_DOMAIN",
     "STAGING_AUTH0_TEST_AUDIENCE",

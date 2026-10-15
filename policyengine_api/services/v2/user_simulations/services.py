@@ -9,20 +9,15 @@ unauthenticated user; one that does not exist yet owns no records.
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
-from sqlmodel import Session
-
-from policyengine_api.data.v2.models import UserSimulationAssociation
 from policyengine_api.services.v2.associations.services import (
     require_legacy_reference,
 )
-from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_for_read_in_session,
     resolve_principal_user_in_session,
 )
-from policyengine_api.services.v2.identity.types import AccountPrincipal
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.user_simulations.database_connectors.creates import (
     create_user_simulation,
@@ -38,23 +33,32 @@ from policyengine_api.services.v2.user_simulations.database_connectors.reads imp
 from policyengine_api.services.v2.user_simulations.database_connectors.updates import (
     update_user_simulation,
 )
-from policyengine_api.services.v2.user_simulations.database_session import (
-    UserSimulationDatabaseSession,
-)
 from policyengine_api.services.v2.user_simulations.transformations import (
     owned_user_simulation_input,
     user_simulation_page,
     user_simulation_read,
 )
-from policyengine_api.services.v2.user_simulations.types import (
-    UserSimulationCreateFields,
-    UserSimulationPage,
-    UserSimulationRead,
-    UserSimulationUpdateInput,
-)
 from policyengine_api.services.v2.user_simulations.validators import (
     require_user_simulation,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlmodel import Session
+
+    from policyengine_api.data.v2.models import UserSimulationAssociation
+    from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
+    from policyengine_api.services.v2.identity.types import AccountPrincipal
+    from policyengine_api.services.v2.user_simulations.database_session import (
+        UserSimulationDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_simulations.types import (
+        UserSimulationCreateFields,
+        UserSimulationPage,
+        UserSimulationRead,
+        UserSimulationUpdateInput,
+    )
 
 
 def read_owned_user_simulation(

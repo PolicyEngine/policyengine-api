@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-
-from sqlmodel import Session
+from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.models import UserReportAssociation
-from policyengine_api.services.v2.user_reports.types import UserReportCreationInput
+
+if TYPE_CHECKING:
+    from sqlmodel import Session
+
+    from policyengine_api.services.v2.user_reports.types import UserReportCreationInput
 
 
 def create_user_report(

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
-from uuid import UUID
+from typing import TYPE_CHECKING, Any
 
-from policyengine_api.data.v2.models import UserPolicy, UserReportAssociation
 from policyengine_api.services.v2.user_reports.types import (
     SharedBaselineReformRead,
     SharedUserReportRead,
@@ -17,6 +15,11 @@ from policyengine_api.services.v2.user_reports.types import (
     stored_provisions,
     stored_validation,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.data.v2.models import UserPolicy, UserReportAssociation
 
 
 def user_report_read(association: UserReportAssociation) -> UserReportRead:

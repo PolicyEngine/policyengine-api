@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from policyengine_api.data.v2.models import User
 from policyengine_api.services.v2.user_accounts.types import (
     AccountRead,
     AccountUpdateInput,
 )
+
+if TYPE_CHECKING:
+    from policyengine_api.data.v2.models import User
 
 
 def account_read(user: User, *, email: str | None) -> AccountRead:

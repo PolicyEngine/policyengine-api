@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -21,11 +21,13 @@ from policyengine_api.fastapi_routes.v2.user_simulations.response_models import 
     UserSimulationItem,
 )
 from policyengine_api.query_parameters import CountryId
-from policyengine_api.services.v2.user_accounts.types import (
-    AccountExport,
-    AccountRead,
-    AccountUpgrade,
-)
+
+if TYPE_CHECKING:
+    from policyengine_api.services.v2.user_accounts.types import (
+        AccountExport,
+        AccountRead,
+        AccountUpgrade,
+    )
 
 
 class StrictAccountAPIModel(BaseModel):
@@ -43,7 +45,7 @@ class MeItem(StrictAccountAPIModel):
     created_at: datetime
 
     @classmethod
-    def from_read(cls, item: AccountRead) -> "MeItem":
+    def from_read(cls, item: AccountRead) -> MeItem:
         return cls.model_validate(item)
 
 
@@ -60,7 +62,7 @@ class MeExportResult(StrictAccountAPIModel):
     reports: list[UserReportItem]
 
     @classmethod
-    def from_export(cls, export: AccountExport) -> "MeExportResult":
+    def from_export(cls, export: AccountExport) -> MeExportResult:
         return cls(
             user=None if export.user is None else MeItem.from_read(export.user),
             policies=[UserPolicyItem.from_read(item) for item in export.policies],
@@ -79,7 +81,7 @@ class MeUpgradeResult(StrictAccountAPIModel):
     outcome: Literal["converted", "merged", "none"]
 
     @classmethod
-    def from_upgrade(cls, upgrade: AccountUpgrade) -> "MeUpgradeResult":
+    def from_upgrade(cls, upgrade: AccountUpgrade) -> MeUpgradeResult:
         return cls(
             item=MeItem.from_read(upgrade.account),
             outcome=upgrade.outcome.value,

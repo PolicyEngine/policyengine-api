@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime
 import json
-from typing import Annotated, Literal
-from uuid import UUID
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import (
     AwareDatetime,
@@ -26,6 +24,9 @@ from policyengine_api.services.v2.associations.types import (
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
 from policyengine_api.utils.budget_window import BUDGET_WINDOW_MAX_YEARS
 
+if TYPE_CHECKING:
+    from datetime import datetime
+    from uuid import UUID
 
 MAXIMUM_PROVISIONS_BYTES = 64 * 1024
 REPORT_SOURCE_NOTE_MAX_LENGTH = 10_000
@@ -146,7 +147,7 @@ class _ReportPresentationFields(StrictUserReportModel):
     last_run_at: AwareDatetime | None = None
 
     @model_validator(mode="after")
-    def bound_provisions(self) -> "_ReportPresentationFields":
+    def bound_provisions(self) -> _ReportPresentationFields:
         stored_provisions(self.provisions)
         return self
 
@@ -183,7 +184,7 @@ class UserReportUpdateInput(_ReportPresentationFields):
     baseline_user_policy_id: ResourceId | None = None
 
     @model_validator(mode="after")
-    def require_valid_supplied_field(self) -> "UserReportUpdateInput":
+    def require_valid_supplied_field(self) -> UserReportUpdateInput:
         mutable_fields = {
             "legacy_report_id",
             "name",

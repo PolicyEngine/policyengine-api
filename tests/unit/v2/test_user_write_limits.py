@@ -6,8 +6,8 @@ import json
 from typing import Any
 from uuid import UUID
 
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from policyengine_api.fastapi_routes.v2.user_resources import (
     MAXIMUM_USER_WRITE_REQUEST_BYTES,
@@ -42,7 +42,6 @@ from tests.unit.v2.user_route_support import (
     RecordingService,
     user_route_client,
 )
-
 
 UUID_PATH_VALUE = "00000000-0000-0000-0000-000000000001"
 

@@ -6,7 +6,6 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, StringConstraints
 from starlette.responses import JSONResponse
 
-
 BEARER_CHALLENGE = "Bearer"
 INVALID_TOKEN_BEARER_CHALLENGE = 'Bearer error="invalid_token"'
 

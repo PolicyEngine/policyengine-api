@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from policyengine_api.data.v1_models import (
     Household,
@@ -15,6 +14,10 @@ from policyengine_api.data.v1_models import (
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 
+if TYPE_CHECKING:
+    from collections.abc import Collection
+
+    from sqlalchemy.orm import InstrumentedAttribute, Session
 
 READ_BATCH_SIZE = 500
 

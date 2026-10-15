@@ -16,19 +16,20 @@ This module never logs a token, subject, email address, or browser UUID.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
-from enum import StrEnum
-from functools import lru_cache
 import logging
 import os
 import re
-from typing import Any, Protocol
+from dataclasses import dataclass
+from enum import StrEnum
+from functools import lru_cache
+from typing import TYPE_CHECKING, Any, Protocol
 from urllib.parse import urlparse
 from uuid import UUID
 
 import jwt
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 PUBLIC_API_AUTH_REQUIRED_ENV = "PUBLIC_API_AUTH_REQUIRED"
 PUBLIC_API_AUTH_ISSUER_ENV = "PUBLIC_API_AUTH_ISSUER"

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
+from typing import TYPE_CHECKING
 
-from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
+if TYPE_CHECKING:
+    from collections.abc import Collection
+
+    from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 
 
 class LegacyReferenceNotFoundError(LookupError):

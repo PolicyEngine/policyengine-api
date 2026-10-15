@@ -42,14 +42,14 @@ from policyengine_api.services.v2.households.validators import (
     HouseholdContentHashCollisionError,
     LegacyHouseholdMappingIntegrityError,
 )
+from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.user_households.database_session import (
     UserHouseholdDatabaseSession,
 )
 from policyengine_api.services.v2.user_households.services import (
     V2UserHouseholdService,
 )
-from policyengine_api.services.v2.identity.types import UserPrincipal
-from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.user_households.types import (
     UserHouseholdCreateFields,
     UserHouseholdUpdateInput,

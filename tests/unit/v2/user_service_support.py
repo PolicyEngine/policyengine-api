@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -13,6 +13,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
+    V2_METADATA,
     Household,
     LegacyHouseholdMapping,
     LegacyPolicyMapping,
@@ -21,7 +22,6 @@ from policyengine_api.data.v2.models import (
     Policy,
     TaxBenefitModel,
     TaxBenefitModelVersion,
-    V2_METADATA,
 )
 from policyengine_api.services.v2.identity.types import (
     UnauthenticatedPrincipal,
@@ -32,6 +32,8 @@ from policyengine_api.services.v2.legacy_refs.validators import (
     require_legacy_references,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Collection, Iterator, Mapping
 
 ISSUER = "https://auth.example.test/"
 ALICE = UserPrincipal(issuer=ISSUER, subject="google-oauth2|alice")
@@ -156,7 +158,7 @@ def v2_store() -> Iterator[V2Store]:
             parameter=parameter,
             policy=policy,
             value_json=0.2,
-            start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            start_date=datetime(2026, 1, 1, tzinfo=UTC),
         )
         household = Household(
             country_id="us",

@@ -14,17 +14,19 @@ custom domains. This module never logs a subject, token, or secret.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
-from functools import lru_cache
 import os
 import re
 import threading
 import time
+from dataclasses import dataclass, field
+from functools import cache
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 import httpx
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 AUTH0_MANAGEMENT_DOMAIN_ENV = "AUTH0_MANAGEMENT_DOMAIN"
 AUTH0_MANAGEMENT_CLIENT_ID_ENV = "AUTH0_MANAGEMENT_CLIENT_ID"
@@ -102,7 +104,7 @@ def load_auth0_management_settings(
     )
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_secret_from_secret_manager(resource_name: str) -> str:
     from google.cloud import secretmanager
 

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
-import logging
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
@@ -98,6 +98,8 @@ from tests.unit.v2.user_service_support import (
     v2_store,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 BROWSER_USER_ID = SIGNED_OUT_BROWSER.user_id
 

@@ -26,11 +26,8 @@ credential, so its log records carry only the user type.
 
 from __future__ import annotations
 
-from datetime import datetime
 import logging
-from uuid import UUID
-
-from sqlmodel import Session
+from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.models import UserType
 from policyengine_api.data.v2.models.base import utc_now
@@ -77,6 +74,11 @@ from policyengine_api.services.v2.identity.validators import (
     require_unauthenticated_user,
 )
 
+if TYPE_CHECKING:
+    from datetime import datetime
+    from uuid import UUID
+
+    from sqlmodel import Session
 
 logger = logging.getLogger(__name__)
 

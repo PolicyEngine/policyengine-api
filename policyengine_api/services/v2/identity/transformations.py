@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.models import User, UserIdentity, UserType
 from policyengine_api.services.v2.identity.types import ResolvedUser
 
+if TYPE_CHECKING:
+    from uuid import UUID
 
 LAST_SEEN_REFRESH_INTERVAL = timedelta(hours=1)
 
 
 def _aware(value: datetime) -> datetime:
-    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 def refreshed_identity_email(identity: UserIdentity, email: str | None) -> str | None:

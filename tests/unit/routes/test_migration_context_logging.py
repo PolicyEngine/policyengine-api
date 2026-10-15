@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 from flask import Flask, Response
 
 from policyengine_api.asgi_factory import NativeRouteDependencies, create_asgi_app

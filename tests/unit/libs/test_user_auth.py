@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import UUID
 
-from cryptography.hazmat.primitives.asymmetric import rsa
 import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from policyengine_api.libs.user_auth import (
     InvalidBearerTokenError,
@@ -24,7 +24,6 @@ from policyengine_api.libs.user_auth import (
     load_user_auth_settings,
     unauthenticated_user_id,
 )
-
 
 ISSUER = "https://auth.example.test/"
 AUDIENCE = "https://api.policyengine.org/"
@@ -46,7 +45,7 @@ class StaticJWKClient:
 
 
 def _token(*, key=SIGNING_KEY, algorithm: str = "RS256", **claims) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "iss": ISSUER,
         "aud": [AUDIENCE, f"{ISSUER}userinfo"],
@@ -99,7 +98,7 @@ def test_issuer_configured_without_a_trailing_slash_is_normalized() -> None:
 @pytest.mark.parametrize(
     "token",
     [
-        _token(exp=datetime.now(timezone.utc) - timedelta(minutes=1)),
+        _token(exp=datetime.now(UTC) - timedelta(minutes=1)),
         _token(aud="https://other-api.example.test/"),
         _token(iss="https://evil.example.test/"),
         _token(iss=ISSUER.rstrip("/")),

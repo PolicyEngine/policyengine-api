@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sqlmodel import Session
-
-from policyengine_api.data.v2.models import UserReportAssociation
 from policyengine_api.data.v2.models.base import utc_now
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from sqlmodel import Session
+
+    from policyengine_api.data.v2.models import UserReportAssociation
 
 
 def update_user_report(

@@ -1,9 +1,9 @@
 """Exercise the isolated v2 Alembic lifecycle against disposable Postgres."""
 
-from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
 import itertools
 import os
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -433,7 +433,7 @@ def _test_value(table: sa.Table, column: sa.Column, sequence: Iterator[int]):
         return 0.0
     if isinstance(column_type, sa.DateTime):
         # Later than every server-default created_at, as retention checks need.
-        return datetime.now(timezone.utc) + timedelta(days=1)
+        return datetime.now(UTC) + timedelta(days=1)
     if isinstance(column_type, sa.JSON):
         return {}
     if isinstance(column_type, sa.String):

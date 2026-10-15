@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from policyengine_api.data.v2.models import User
+from typing import TYPE_CHECKING
+
 from policyengine_api.services.v2.identity.types import (
     AccountPrincipal,
     ResolvedUser,
     UserPrincipal,
 )
+
+if TYPE_CHECKING:
+    from policyengine_api.data.v2.models import User
 
 
 class AccountNotFoundError(LookupError):

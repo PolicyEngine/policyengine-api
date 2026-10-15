@@ -9,16 +9,12 @@ requires a credential; authentication is a router-level dependency.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header
 from starlette.responses import JSONResponse, Response
 
-from policyengine_api.fastapi_routes.dependencies import (
-    NativeRouteDependencies,
-    V2AccountResourceService,
-)
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
 from policyengine_api.fastapi_routes.v2.me.request_models import (
@@ -48,6 +44,14 @@ from policyengine_api.services.v2.identity.types import (
     AccountPrincipal,
     UserPrincipal,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from policyengine_api.fastapi_routes.dependencies import (
+        NativeRouteDependencies,
+        V2AccountResourceService,
+    )
 
 
 def _service_factory(

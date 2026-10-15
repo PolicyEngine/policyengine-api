@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from sqlmodel import Session
+from typing import TYPE_CHECKING
 
-from policyengine_api.data.v2.models import UserSimulationAssociation
 from policyengine_api.data.v2.models.base import utc_now
-from policyengine_api.services.v2.user_simulations.types import (
-    UserSimulationUpdateInput,
-)
+
+if TYPE_CHECKING:
+    from sqlmodel import Session
+
+    from policyengine_api.data.v2.models import UserSimulationAssociation
+    from policyengine_api.services.v2.user_simulations.types import (
+        UserSimulationUpdateInput,
+    )
 
 
 def update_user_simulation(

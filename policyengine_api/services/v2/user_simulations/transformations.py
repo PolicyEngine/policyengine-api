@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
-from policyengine_api.data.v2.models import UserSimulationAssociation
 from policyengine_api.services.v2.user_simulations.types import (
     UserSimulationCreateFields,
     UserSimulationCreationInput,
     UserSimulationPage,
     UserSimulationRead,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.data.v2.models import UserSimulationAssociation
 
 
 def user_simulation_read(

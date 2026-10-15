@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlmodel import select
@@ -170,7 +170,7 @@ def test_concurrent_first_calls_converge_on_one_user(store, monkeypatch) -> None
 
 
 def test_identity_activity_is_written_at_most_hourly(store) -> None:
-    now = datetime(2026, 5, 1, 12, tzinfo=timezone.utc)
+    now = datetime(2026, 5, 1, 12, tzinfo=UTC)
     verified = UserPrincipal(issuer=ISSUER, subject=ALICE.subject, email="a@x.test")
 
     def resolve(principal, at):
@@ -180,7 +180,7 @@ def test_identity_activity_is_written_at_most_hourly(store) -> None:
             )
         with store.sessions() as session:
             identity = session.exec(select(UserIdentity)).one()
-            return identity.last_seen_at.replace(tzinfo=timezone.utc), identity.email
+            return identity.last_seen_at.replace(tzinfo=UTC), identity.email
 
     assert resolve(ALICE, now) == (now, None)
     assert resolve(ALICE, now + timedelta(minutes=59)) == (now, None)

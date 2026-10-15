@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -21,10 +21,9 @@ from tests.unit.v2.user_route_support import (
     user_route_client,
 )
 
-
 REPORT_ASSOCIATION_ID = UUID("00000000-0000-0000-0000-000000000063")
 SHARED_PATH = f"/v2/shared-reports/{REPORT_ASSOCIATION_ID}"
-LAST_RUN_AT = datetime(2026, 2, 1, 12, tzinfo=timezone.utc)
+LAST_RUN_AT = datetime(2026, 2, 1, 12, tzinfo=UTC)
 PROVISIONS = [
     {
         "path": "gov.irs.credits.ctc.amount",

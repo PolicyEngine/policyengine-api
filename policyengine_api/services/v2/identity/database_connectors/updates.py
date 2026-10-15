@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from sqlalchemy import update
 from sqlmodel import Session, col
@@ -18,6 +17,9 @@ from policyengine_api.data.v2.models import (
     UserType,
 )
 
+if TYPE_CHECKING:
+    from datetime import datetime
+    from uuid import UUID
 
 USER_ASSOCIATION_TABLES = (
     UserPolicy,

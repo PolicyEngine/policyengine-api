@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 AUTHORIZATION_HEADER = "Authorization"
 UNAUTHENTICATED_USER_HEADER = "PolicyEngine-Unauthenticated-User"
 USER_AUTH_HEADERS = (AUTHORIZATION_HEADER,)

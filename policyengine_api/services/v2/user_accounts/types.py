@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Annotated, Protocol
-from uuid import UUID
+from typing import TYPE_CHECKING, Annotated, Protocol
 
 from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 from policyengine_api.query_parameters import CountryId
-from policyengine_api.services.v2.identity.types import AccountConversionOutcome
-from policyengine_api.services.v2.user_households.types import UserHouseholdRead
-from policyengine_api.services.v2.user_policies.types import UserPolicyRead
-from policyengine_api.services.v2.user_reports.types import UserReportRead
-from policyengine_api.services.v2.user_simulations.types import UserSimulationRead
 
+if TYPE_CHECKING:
+    from datetime import datetime
+    from uuid import UUID
+
+    from policyengine_api.services.v2.identity.types import AccountConversionOutcome
+    from policyengine_api.services.v2.user_households.types import UserHouseholdRead
+    from policyengine_api.services.v2.user_policies.types import UserPolicyRead
+    from policyengine_api.services.v2.user_reports.types import UserReportRead
+    from policyengine_api.services.v2.user_simulations.types import UserSimulationRead
 
 PersonName = Annotated[str, StringConstraints(max_length=255)]
 
@@ -30,7 +32,7 @@ class AccountUpdateInput(StrictAccountInput):
     primary_country: CountryId | None = None
 
     @model_validator(mode="after")
-    def require_valid_supplied_field(self) -> "AccountUpdateInput":
+    def require_valid_supplied_field(self) -> AccountUpdateInput:
         supplied = self.model_fields_set.intersection(
             {"first_name", "last_name", "primary_country"}
         )

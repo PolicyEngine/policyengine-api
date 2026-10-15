@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 from policyengine_api.query_parameters import CountryId
-from policyengine_api.services.v2.user_simulations.types import (
-    UserSimulationPage,
-    UserSimulationRead,
-)
+
+if TYPE_CHECKING:
+    from policyengine_api.services.v2.user_simulations.types import (
+        UserSimulationPage,
+        UserSimulationRead,
+    )
 
 
 class StrictUserSimulationAPIModel(BaseModel):
@@ -31,7 +33,7 @@ class UserSimulationItem(StrictUserSimulationAPIModel):
     updated_at: datetime
 
     @classmethod
-    def from_read(cls, item: UserSimulationRead) -> "UserSimulationItem":
+    def from_read(cls, item: UserSimulationRead) -> UserSimulationItem:
         return cls.model_validate(item)
 
 
@@ -46,7 +48,7 @@ class UserSimulationPageResult(StrictUserSimulationAPIModel):
     has_more: bool
 
     @classmethod
-    def from_page(cls, page: UserSimulationPage) -> "UserSimulationPageResult":
+    def from_page(cls, page: UserSimulationPage) -> UserSimulationPageResult:
         return cls(
             items=[UserSimulationItem.from_read(item) for item in page.items],
             offset=page.offset,

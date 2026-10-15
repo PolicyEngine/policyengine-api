@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
-from sqlmodel import Session
-
-from policyengine_api.data.v2.models import UserHouseholdAssociation
 from policyengine_api.data.v2.models.base import utc_now
-from policyengine_api.services.v2.user_households.types import (
-    UserHouseholdUpdateInput,
-)
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlmodel import Session
+
+    from policyengine_api.data.v2.models import UserHouseholdAssociation
+    from policyengine_api.services.v2.user_households.types import (
+        UserHouseholdUpdateInput,
+    )
 
 
 def update_user_household(

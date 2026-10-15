@@ -8,19 +8,23 @@ transaction. It never writes, so it deliberately avoids
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Mapping
+from typing import TYPE_CHECKING
 
-from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
 from policyengine_api.services.v2.legacy_refs.database_connectors.reads import (
     read_existing_legacy_ids,
 )
-from policyengine_api.services.v2.legacy_refs.database_session import (
-    LegacyReferenceDatabaseSession,
-)
-from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.legacy_refs.validators import (
     require_legacy_references,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Collection, Mapping
+
+    from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
+    from policyengine_api.services.v2.legacy_refs.database_session import (
+        LegacyReferenceDatabaseSession,
+    )
+    from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 
 
 class V1LegacyReferenceService:

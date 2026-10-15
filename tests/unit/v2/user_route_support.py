@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from fastapi.testclient import TestClient
@@ -22,13 +21,15 @@ from policyengine_api.services.v2.identity.types import (
     UserPrincipal,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 ISSUER = "https://auth.example.test/"
 PRINCIPAL = UserPrincipal(issuer=ISSUER, subject="google-oauth2|1234")
 BROWSER_USER_ID = UUID("6f1c2a4e-8b3d-4c5e-9a7f-1e2d3c4b5a69")
 UNAUTHENTICATED_PRINCIPAL = UnauthenticatedPrincipal(user_id=BROWSER_USER_ID)
 OWNER_ID = UUID("00000000-0000-0000-0000-000000000070")
-CREATED_AT = datetime(2026, 1, 1, tzinfo=timezone.utc)
+CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def signed_in_user() -> UserPrincipal:
@@ -64,7 +65,7 @@ def user_route_client(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
-        specification_provider=lambda: {},
+        specification_provider=dict,
         **overrides,
     )
     settings = RouteImplementationSettings(

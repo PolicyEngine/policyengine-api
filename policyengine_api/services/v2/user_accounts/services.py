@@ -16,9 +16,8 @@ logged.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.models import UserType
 from policyengine_api.services.v2.identity.database_connectors.deletes import (
@@ -45,9 +44,6 @@ from policyengine_api.services.v2.user_accounts.database_connectors.reads import
 )
 from policyengine_api.services.v2.user_accounts.database_connectors.updates import (
     update_account_user,
-)
-from policyengine_api.services.v2.user_accounts.database_session import (
-    AccountDatabaseSession,
 )
 from policyengine_api.services.v2.user_accounts.transformations import (
     account_read,
@@ -81,6 +77,13 @@ from policyengine_api.services.v2.user_simulations.services import (
     read_all_user_simulations,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from uuid import UUID
+
+    from policyengine_api.services.v2.user_accounts.database_session import (
+        AccountDatabaseSession,
+    )
 
 logger = logging.getLogger(__name__)
 

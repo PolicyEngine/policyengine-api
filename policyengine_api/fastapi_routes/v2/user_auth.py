@@ -27,11 +27,11 @@ from policyengine_api.fastapi_routes.v2.errors import (
     V2PermissionDeniedError,
 )
 from policyengine_api.libs.user_auth import (
+    UNAUTHENTICATED_USER_HEADER,
     InvalidBearerTokenError,
     InvalidUnauthenticatedUserError,
     MissingBearerTokenError,
     PrincipalKind,
-    UNAUTHENTICATED_USER_HEADER,
     UserAuthConfigurationError,
     UserAuthUnavailableError,
     authenticate_bearer,

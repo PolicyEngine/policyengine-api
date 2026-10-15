@@ -7,7 +7,6 @@ from typing import Annotated
 
 from pydantic import Field, Strict
 
-
 MAXIMUM_LEGACY_RECORD_ID = 2**63 - 1
 
 LegacyRecordId = Annotated[

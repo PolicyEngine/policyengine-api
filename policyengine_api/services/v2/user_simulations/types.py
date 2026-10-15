@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from pydantic import model_validator
 
@@ -15,6 +14,10 @@ from policyengine_api.services.v2.associations.types import (
     StrictAssociationModel,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
+
+if TYPE_CHECKING:
+    from datetime import datetime
+    from uuid import UUID
 
 
 class StrictUserSimulationInput(StrictAssociationModel):
@@ -44,7 +47,7 @@ class UserSimulationUpdateInput(StrictUserSimulationInput):
     description: AssociationDescription | None = None
 
     @model_validator(mode="after")
-    def require_valid_supplied_field(self) -> "UserSimulationUpdateInput":
+    def require_valid_supplied_field(self) -> UserSimulationUpdateInput:
         supplied = self.model_fields_set.intersection(
             {"legacy_simulation_id", "name", "description"}
         )

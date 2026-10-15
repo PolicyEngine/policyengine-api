@@ -6,26 +6,16 @@ shareable link, read without one through ``/v2/shared-reports``.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse, Response
 
-from policyengine_api.fastapi_routes.dependencies import (
-    NativeRouteDependencies,
-    V2UserReportResourceService,
-)
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import (
     V2ErrorResponse,
     v2_error_response,
-)
-from policyengine_api.fastapi_routes.v2.user_resources import (
-    USER_RESOURCE_ERROR_RESPONSES,
-    enforce_user_write_request_size,
-    user_resource_operation,
 )
 from policyengine_api.fastapi_routes.v2.user_reports.request_models import (
     UserReportCreateRequest,
@@ -41,12 +31,24 @@ from policyengine_api.fastapi_routes.v2.user_reports.response_models import (
     UserReportPageResponse,
     UserReportPageResult,
 )
+from policyengine_api.fastapi_routes.v2.user_resources import (
+    USER_RESOURCE_ERROR_RESPONSES,
+    enforce_user_write_request_size,
+    user_resource_operation,
+)
 from policyengine_api.query_parameters import (
     CountryQuery,
     UserReportCollectionQuery,
 )
 from policyengine_api.services.v2.identity.types import AccountPrincipal
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from policyengine_api.fastapi_routes.dependencies import (
+        NativeRouteDependencies,
+        V2UserReportResourceService,
+    )
 
 SHARED_REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {

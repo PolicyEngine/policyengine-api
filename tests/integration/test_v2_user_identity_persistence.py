@@ -9,12 +9,12 @@ deletion.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-import os
 from threading import Barrier
-import time
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
@@ -24,6 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
 
+from policyengine_api.data.v2 import user_association_migration_qualification
 from policyengine_api.data.v2.migration_target import (
     V2_ALEMBIC_DISPOSABLE_TEST,
     load_v2_alembic_settings,
@@ -42,7 +43,6 @@ from policyengine_api.data.v2.settings import (
     V2_SUPABASE_ENVIRONMENT,
     V2_SUPABASE_PROJECT_REF,
 )
-from policyengine_api.data.v2 import user_association_migration_qualification
 from policyengine_api.services.v2.identity.services import (
     convert_unauthenticated_user_in_session,
     resolve_principal_user_in_session,
@@ -90,6 +90,8 @@ from policyengine_api.services.v2.user_simulations.types import (
 )
 from tests.unit.v2.user_service_support import default_legacy_references
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 # Long enough for a write that is not blocked by a held row lock to finish.
 LOCK_WAIT_SECONDS = 1.0

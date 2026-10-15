@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Protocol, TypeAlias
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from policyengine_api.data.v2.models import UserType
-
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from sqlmodel import Session
+
+    from policyengine_api.data.v2.models import UserType
 
 
 IdentityText = Annotated[str, StringConstraints(min_length=1)]

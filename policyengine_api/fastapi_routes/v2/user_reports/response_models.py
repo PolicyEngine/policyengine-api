@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from policyengine_api.query_parameters import CountryId
-from policyengine_api.services.v2.user_reports.types import (
-    SharedUserReportRead,
-    UserReportPage,
-    UserReportRead,
-)
+
+if TYPE_CHECKING:
+    from policyengine_api.services.v2.user_reports.types import (
+        SharedUserReportRead,
+        UserReportPage,
+        UserReportRead,
+    )
 
 
 class StrictUserReportAPIModel(BaseModel):
@@ -116,7 +118,7 @@ class UserReportItem(StrictUserReportAPIModel):
     updated_at: datetime
 
     @classmethod
-    def from_read(cls, item: UserReportRead) -> "UserReportItem":
+    def from_read(cls, item: UserReportRead) -> UserReportItem:
         return cls.model_validate(item)
 
 
@@ -141,7 +143,7 @@ class SharedUserReportItem(StrictUserReportAPIModel):
     updated_at: datetime
 
     @classmethod
-    def from_read(cls, item: SharedUserReportRead) -> "SharedUserReportItem":
+    def from_read(cls, item: SharedUserReportRead) -> SharedUserReportItem:
         return cls.model_validate(item)
 
 
@@ -160,7 +162,7 @@ class UserReportPageResult(StrictUserReportAPIModel):
     has_more: bool
 
     @classmethod
-    def from_page(cls, page: UserReportPage) -> "UserReportPageResult":
+    def from_page(cls, page: UserReportPage) -> UserReportPageResult:
         return cls(
             items=[UserReportItem.from_read(item) for item in page.items],
             offset=page.offset,

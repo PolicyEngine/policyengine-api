@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -33,12 +33,11 @@ from tests.unit.v2.user_route_support import (
     user_route_client,
 )
 
-
 SIMULATION_ASSOCIATION_ID = UUID("00000000-0000-0000-0000-000000000062")
 REPORT_ASSOCIATION_ID = UUID("00000000-0000-0000-0000-000000000063")
 USER_POLICY_ID = UUID("00000000-0000-0000-0000-000000000064")
 BASELINE_USER_POLICY_ID = UUID("00000000-0000-0000-0000-000000000065")
-LAST_RUN_AT = datetime(2026, 2, 1, 12, tzinfo=timezone.utc)
+LAST_RUN_AT = datetime(2026, 2, 1, 12, tzinfo=UTC)
 PROVISIONS = [
     {
         "path": "gov.irs.credits.ctc.amount",

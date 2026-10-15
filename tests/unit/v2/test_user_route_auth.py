@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import pytest
@@ -17,6 +16,8 @@ from policyengine_api.services.v2.user_accounts.types import AccountExport
 from policyengine_api.services.v2.user_policies.types import UserPolicyPage
 from tests.unit.v2.user_route_support import RecordingService, user_route_client
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 ISSUER = "https://auth.example.test/"
 AUDIENCE = "https://api.policyengine.org/"
@@ -269,7 +270,7 @@ def _recorded_failure_logs(operation) -> tuple[object, list]:
     return response, handler.records
 
 
-SECRET_SUBJECT = "|".join(("google-oauth2", "secret-subject"))
+SECRET_SUBJECT = "google-oauth2|secret-subject"
 
 
 def test_unexpected_failures_are_logged_without_their_message() -> None:

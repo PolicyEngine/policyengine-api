@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sqlmodel import Session
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
-from policyengine_api.data.v2.models import User
+    from sqlmodel import Session
+
+    from policyengine_api.data.v2.models import User
 
 
 def update_account_user(

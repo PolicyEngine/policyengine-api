@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 import logging
 import traceback
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
-from fastapi import Request
+# FastAPI reads the request-size dependency's annotations when routes are
+# registered, so Request must exist at runtime.
+from fastapi import Request  # noqa: TC002
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from starlette.responses import JSONResponse
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.v2.errors import (
@@ -43,6 +43,10 @@ from policyengine_api.services.v2.user_policies.validators import (
     AssociationPolicyNotFoundError,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from starlette.responses import JSONResponse
 
 MAXIMUM_USER_WRITE_REQUEST_BYTES = 256 * 1024
 

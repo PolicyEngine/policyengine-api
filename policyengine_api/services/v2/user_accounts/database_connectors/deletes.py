@@ -6,12 +6,15 @@ first. Deleting the user then cascades to identities and every association.
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from sqlalchemy import delete
 from sqlmodel import Session, col
 
 from policyengine_api.data.v2.models import LegacyUserMapping, User
+
+if TYPE_CHECKING:
+    from uuid import UUID
 
 
 def delete_account_legacy_user_mappings(session: Session, *, user_id: UUID) -> None:

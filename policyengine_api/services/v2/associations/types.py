@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping
-from typing import TYPE_CHECKING, Annotated, Protocol, TypeAlias, Union
+from typing import TYPE_CHECKING, Annotated, Protocol, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, FiniteFloat, StringConstraints
 from typing_extensions import TypeAliasType
-
-from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
-
 
 ASSOCIATION_DESCRIPTION_MAX_LENGTH = 10_000
 
@@ -18,27 +14,29 @@ ASSOCIATION_DESCRIPTION_MAX_LENGTH = 10_000
 # Type checkers get the plain recursive alias (as Pydantic's own JsonValue
 # does); Pydantic needs TypeAliasType to build the recursive validator.
 if TYPE_CHECKING:
-    FiniteJsonValue: TypeAlias = Union[
-        list["FiniteJsonValue"],
-        dict[str, "FiniteJsonValue"],
-        str,
-        bool,
-        int,
-        float,
-        None,
-    ]
+    from collections.abc import Collection, Mapping
+
+    from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
+
+    FiniteJsonValue: TypeAlias = (
+        list["FiniteJsonValue"]
+        | dict[str, "FiniteJsonValue"]
+        | str
+        | bool
+        | int
+        | float
+        | None
+    )
 else:
     FiniteJsonValue = TypeAliasType(
         "FiniteJsonValue",
-        Union[
-            list["FiniteJsonValue"],
-            dict[str, "FiniteJsonValue"],
-            str,
-            bool,
-            int,
-            FiniteFloat,
-            None,
-        ],
+        list["FiniteJsonValue"]
+        | dict[str, "FiniteJsonValue"]
+        | str
+        | bool
+        | int
+        | FiniteFloat
+        | None,
     )
 
 AssociationName = Annotated[str, StringConstraints(max_length=255)]

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from sqlmodel import Session
+from typing import TYPE_CHECKING
 
-from policyengine_api.data.v2.models import UserReportAssociation
+if TYPE_CHECKING:
+    from sqlmodel import Session
+
+    from policyengine_api.data.v2.models import UserReportAssociation
 
 
 def delete_user_report(

@@ -14,7 +14,6 @@ from policyengine_api.libs.auth0_management import (
     load_auth0_management_settings,
 )
 
-
 DOMAIN = "policyengine.us.auth0.com"
 SECRET_RESOURCE = "projects/p/secrets/auth0-management/versions/latest"
 
