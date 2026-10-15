@@ -487,7 +487,8 @@ def test_upgrade_converts_an_unauthenticated_user_in_place(
         identity = session.exec(select(UserIdentity)).one()
         report = session.get(UserReportAssociation, records.report_id)
     assert (identity.user_id, identity.subject) == (BROWSER_USER_ID, ALICE.subject)
-    assert report is not None and report.user_policy_id == records.policy_id
+    assert report is not None
+    assert report.user_policy_id == records.policy_id
     signed_in = services.accounts.get_account(principal=ALICE, country_id="us")
     assert signed_in.id == BROWSER_USER_ID
     with pytest.raises(StandardUserRequiresSignInError):
@@ -528,7 +529,8 @@ def test_upgrade_merges_every_association_into_an_existing_account(
         updated_after = {
             row.id: row.updated_at for row in session.exec(select(UserPolicy)).all()
         }
-    assert report is not None and report.user_policy_id == records.policy_id
+    assert report is not None
+    assert report.user_policy_id == records.policy_id
     assert updated_after == updated_before
     linked = services.reports.get_user_report(
         principal=ALICE, country_id="us", association_id=records.report_id

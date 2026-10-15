@@ -31,7 +31,7 @@ def _client(handler, **settings) -> tuple[Auth0ManagementClient, list[httpx.Requ
         Auth0ManagementClient(
             Auth0ManagementSettings(**values),
             http_client=httpx.Client(transport=httpx.MockTransport(record)),
-            secret_loader=lambda resource: "loaded-secret",
+            secret_loader=lambda _resource: "loaded-secret",
         ),
         requests,
     )
@@ -149,7 +149,8 @@ def test_deleters_share_one_client_and_its_token(monkeypatch) -> None:
 
     first = build_auth0_user_deleter(environ)
     second = build_auth0_user_deleter(environ)
-    assert first is not None and second is not None
+    assert first is not None
+    assert second is not None
     first.delete_user("auth0|1")
     second.delete_user("auth0|2")
 

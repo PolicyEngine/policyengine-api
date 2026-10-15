@@ -155,10 +155,10 @@ def test_deferred_service_builds_the_v1_service_once_on_first_check() -> None:
     builds: list[int] = []
 
     class Built:
-        def existing_ids(self, *, country_id, requested):
+        def existing_ids(self, *, country_id, requested):  # noqa: ARG002  # implements the LegacyReferenceChecker methods the deferred service calls
             return {kind: frozenset(ids) for kind, ids in requested.items()}
 
-        def require_existing(self, *, country_id, requested):
+        def require_existing(self, *, country_id, requested):  # noqa: ARG002  # implements the LegacyReferenceChecker methods the deferred service calls
             return None
 
     def build():
