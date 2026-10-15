@@ -44,7 +44,7 @@ def require_legacy_reference_checker(
     return legacy_references
 
 
-def require_not_mirror_owned(mirror_owned: bool, *, association_id: UUID) -> None:
+def require_not_mirror_owned(*, mirror_owned: bool, association_id: UUID) -> None:
     """Raise MirrorOwnedAssociationError if the v1 saved-policy mirror owns the row."""
     if mirror_owned:
         msg = (
