@@ -5,6 +5,10 @@ from unittest.mock import MagicMock, call, patch
 import httpx
 import pytest
 
+from policyengine_api.libs.simulation_entrypoint import (
+    ModalSimulationExecution,
+    SimulationRunProgress,
+)
 from policyengine_api.runtime_cache.core import CacheCoordinationError
 from policyengine_api.runtime_cache.reform_impacts import ReformImpactStartClaim
 from policyengine_api.services.budget_window_cache import BudgetWindowCacheState
@@ -17,10 +21,6 @@ from policyengine_api.services.economy_service import (
     EconomyService,
     ImpactAction,
     ImpactStatus,
-)
-from policyengine_api.libs.simulation_entrypoint import (
-    ModalSimulationExecution,
-    SimulationRunProgress,
 )
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
@@ -2294,7 +2294,7 @@ class TestEconomyService:
 
             # Then
             assert result.status == ImpactStatus.COMPUTING
-            assert result.run_progress == {
+            assert result.run_progress.to_dict() == {
                 "stage": "reform",
                 "progress": 67,
                 "progress_max": 96,

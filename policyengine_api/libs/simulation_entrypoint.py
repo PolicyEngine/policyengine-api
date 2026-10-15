@@ -7,7 +7,8 @@ from urllib.parse import urlparse
 
 import httpx
 from policyengine_observability import instrument_httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
+
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.gateway_auth import (
     GatewayAuthError,
@@ -90,9 +91,9 @@ class SimulationRunProgress(BaseModel):
     stage: str | None = None
     progress: int | None = Field(default=None, ge=0, le=100)
     progress_max: int | None = Field(default=None, ge=0, le=100)
-    submitted_at: str | None = None
-    started_at: str | None = None
-    stage_started_at: str | None = None
+    submitted_at: AwareDatetime | None = None
+    started_at: AwareDatetime | None = None
+    stage_started_at: AwareDatetime | None = None
     segments: SimulationRunSegments | None = None
 
     @classmethod

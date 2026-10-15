@@ -136,7 +136,7 @@ class EconomicImpactResult(BaseModel):
     message: str | None = None
     # Stage fields relayed from the Simulation Entrypoint while computing.
     # Kept out of to_dict(); the route adds them only when present.
-    run_progress: dict | None = None
+    run_progress: SimulationRunProgress | None = None
 
     model_config = {"frozen": True}  # Make model immutable
 
@@ -158,7 +158,9 @@ class EconomicImpactResult(BaseModel):
         return cls(status=ImpactStatus.OK, data=data)
 
     @classmethod
-    def computing(cls, run_progress: dict | None = None) -> "EconomicImpactResult":
+    def computing(
+        cls, run_progress: SimulationRunProgress | None = None
+    ) -> "EconomicImpactResult":
         """
         Create an EconomicImpactResult for a computing impact calculation.
         """
@@ -1282,13 +1284,8 @@ class EconomyService:
                 {"message": "Sim API execution is still running"},
                 severity="INFO",
             )
-            run_progress = getattr(execution, "run_progress", None)
             return EconomicImpactResult.computing(
-                run_progress=(
-                    run_progress.to_dict()
-                    if isinstance(run_progress, SimulationRunProgress)
-                    else None
-                )
+                run_progress=execution.run_progress if execution is not None else None
             )
 
         raise ValueError(f"Unexpected sim API execution state: {execution_state}")

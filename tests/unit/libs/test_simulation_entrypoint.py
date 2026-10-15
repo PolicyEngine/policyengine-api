@@ -1016,6 +1016,53 @@ class TestSimulationAPIModal:
             # Then
             assert execution.run_progress is None
 
+        def test__given_only_a_submission_time__then_relays_it(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            # Given - a job on a worker app without stages, after
+            # policyengine-sim-api#781 deploys its gateway
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data={
+                    **MOCK_POLL_RESPONSE_RUNNING,
+                    "submitted_at": "2026-10-13T12:00:00Z",
+                },
+            )
+            api = SimulationAPIModal()
+
+            # When
+            execution = api.get_execution_by_id(MOCK_MODAL_JOB_ID)
+
+            # Then
+            assert execution.run_progress.to_dict() == {
+                "submitted_at": "2026-10-13T12:00:00Z"
+            }
+
+        def test__given_a_malformed_timestamp__then_drops_the_stage_fields(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            # Given
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data={
+                    **MOCK_POLL_RESPONSE_RUNNING,
+                    "stage": "reform",
+                    "stage_started_at": "yesterday",
+                },
+            )
+            api = SimulationAPIModal()
+
+            # When
+            execution = api.get_execution_by_id(MOCK_MODAL_JOB_ID)
+
+            # Then
+            assert execution.status == MODAL_EXECUTION_STATUS_RUNNING
+            assert execution.run_progress is None
+
         def test__given_malformed_stage_fields__then_still_returns_status(
             self,
             mock_httpx_client,

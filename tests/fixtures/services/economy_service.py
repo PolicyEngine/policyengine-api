@@ -264,6 +264,7 @@ def create_mock_modal_execution(
     result=None,
     error=None,
     policyengine_bundle=None,
+    run_progress=None,
 ):
     """
     Helper function to create mock Modal execution objects.
@@ -292,6 +293,7 @@ def create_mock_modal_execution(
     mock_execution.error = error
     mock_execution.policyengine_bundle = policyengine_bundle or MOCK_RUNTIME_BUNDLE
     mock_execution.resolved_app_name = MOCK_RESOLVED_APP_NAME
+    mock_execution.run_progress = run_progress
     return mock_execution
 
 

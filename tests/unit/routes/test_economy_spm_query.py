@@ -46,6 +46,7 @@ def economy_http(request, monkeypatch):
         setups.append(setup)
         return SimpleNamespace(
             cache_status=None,
+            run_progress=None,
             to_dict=lambda: {
                 "status": "computing",
                 "message": None,

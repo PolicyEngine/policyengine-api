@@ -109,10 +109,12 @@ def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int
         "result": result_dict["data"],
     }
     # Stage fields from the Simulation Entrypoint, only while computing and
-    # only when the worker reports them, so other bodies keep their shape.
-    run_progress = getattr(economic_impact_result, "run_progress", None)
-    if result_dict["status"] == "computing" and isinstance(run_progress, dict):
-        body.update(run_progress)
+    # only when the entrypoint reports them, so other bodies keep their shape.
+    if (
+        result_dict["status"] == "computing"
+        and economic_impact_result.run_progress is not None
+    ):
+        body.update(economic_impact_result.run_progress.to_dict())
     return _json_response(body)
 
 
