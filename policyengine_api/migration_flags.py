@@ -257,25 +257,22 @@ def get_migration_context(
     route_group: str,
     *,
     route_impl: RouteImplementation | None = None,
-    db_entity: str | None = None,
-    sim_flow: str | None = None,
     explicit_db_sources: ExplicitDatabaseSources | None = None,
     include_compute: bool = True,
 ) -> MigrationContext:
     """Return current migration flag values for a request or route group.
 
-    ``explicit_db_sources`` replaces the configured database source flags.
+    The route group's configuration names its database entity and simulation
+    flow. ``explicit_db_sources`` replaces the configured database source flags.
     ``include_compute=False`` describes a persistence-only request in a route
     group that also computes, so it carries no simulation flow or compute
     selection.
     """
     route_config = ROUTE_GROUP_CONFIG_BY_NAME.get(route_group)
-    if db_entity is None and route_config is not None:
-        db_entity = route_config.db_entity
-    if not include_compute:
-        sim_flow = None
-    elif sim_flow is None and route_config is not None:
-        sim_flow = route_config.sim_flow
+    db_entity = route_config.db_entity if route_config is not None else None
+    sim_flow = (
+        route_config.sim_flow if include_compute and route_config is not None else None
+    )
 
     if explicit_db_sources is None:
         db_write = get_db_write(db_entity) if db_entity else None
