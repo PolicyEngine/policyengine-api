@@ -85,7 +85,11 @@ from policyengine_api.data.v2.models.simulations import (  # noqa: E402
     SimulationStatus,
     SimulationType,
 )
-from policyengine_api.data.v2.models.users import User  # noqa: E402
+from policyengine_api.data.v2.models.users import (  # noqa: E402
+    User,
+    UserIdentity,
+    UserType,
+)
 
 V2_METADATA = SQLModel.metadata
 validate_v2_metadata_table_names(V2_METADATA.tables)
@@ -138,9 +142,11 @@ __all__ = [
     "TaxBenefitModelVersion",
     "User",
     "UserHouseholdAssociation",
+    "UserIdentity",
     "UserPolicy",
     "UserReportAssociation",
     "UserSimulationAssociation",
+    "UserType",
     "V2_METADATA",
     "Variable",
 ]

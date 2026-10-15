@@ -1,0 +1,113 @@
+# PROPOSED (not deployed): Stage 12A application-rollback guard.
+#
+# Apply this rule BEFORE shifting production traffic back to a Public API
+# revision older than Stage 12A (revision fbb7488ebe8a) once any user-owned
+# record exists, signed in or not. Those revisions serve /v2/user-policies and
+# /v2/user-households without authentication: anyone could list, read, create,
+# rename or delete a user's saved work by user or record ID. This rule denies
+# every user-owned route (/v2/me*, including /v2/me/upgrade, and /v2/user-*)
+# at the edge instead. Saved work is unavailable while it is in place; v1
+# routes and the /v2 metadata, policy and household routes are unaffected.
+#
+# This is the newest deployed snapshot
+# (../20260830T141827Z-pol-api-lb-metadata-enforced.yaml) plus one deny rule at
+# priority 900, evaluated before every throttle. It lives under proposed/ so it
+# is never mistaken for the authoritative deployed state, and it is independent
+# of the proposed Stage 12A write throttle (priority 1200).
+#
+# Apply (enforced at once: a rollback guard that only logs protects nothing):
+#
+#   gcloud compute security-policies rules create 900 \
+#     --project=$PROJECT --security-policy=pol-api-lb \
+#     --description="Stage 12A rollback guard: deny user-owned routes" \
+#     --expression="request.path.matches('^/v2/(?:me|user-(?:policies|households|simulations|reports))(?:/.*)?$')" \
+#     --action=deny-403
+#
+# Cloud Armor only sees traffic that crosses the load balancer, and the
+# service's *.run.app URLs (including revision tag URLs) bypass it. While the
+# guard is in place, close that path too:
+#
+#   gcloud run services update policyengine-api \
+#     --project=$PROJECT --region=us-central1 \
+#     --ingress=internal-and-cloud-load-balancing
+#
+# Then shift traffic to the previous revision, verify that
+# `curl -i https://api.policyengine.org/v2/user-policies?country_id=us` returns
+# 403, export and commit a timestamped snapshot (runbook "Snapshot after every
+# policy change").
+#
+# Remove the guard only after a Stage 12A-or-later revision serves 100% of
+# traffic again:
+#
+#   gcloud run services update policyengine-api \
+#     --project=$PROJECT --region=us-central1 --ingress=all
+#   gcloud compute security-policies rules delete 900 \
+#     --project=$PROJECT --security-policy=pol-api-lb
+#
+# Design notes:
+# - deny-403, not a throttle, and no preview period: this is an emergency
+#   control, an explicit exception to the runbook's preview-first rule.
+# - All methods are denied, including GET and OPTIONS: the previous revision's
+#   reads expose saved work as well as its writes.
+# - The path list is explicit so /v2 metadata and resource routes stay open;
+#   Cloud Armor CEL regexes reject capture groups, so groups are (?:...).
+# - Restoring ingress to "all" re-opens the run.app URLs that CI smoke tests
+#   and the staging promotion use; they are unavailable while the guard holds.
+creationTimestamp: '2026-07-21T07:16:39.177-07:00'
+description: Rate limiting for api.policyengine.org (lb-api). See docs/migration/lb-cloud-armor-runbook.md
+fingerprint: dT_5QmeI6h8=
+id: '200433714284642728'
+kind: compute#securityPolicy
+labelFingerprint: 42WmSpB8rSM=
+name: pol-api-lb
+rules:
+- action: deny(403)
+  description: 'Stage 12A rollback guard: deny user-owned routes'
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path.matches('^/v2/(?:me|user-(?:policies|households|simulations|reports))(?:/.*)?$')
+  preview: false
+  priority: 900
+- action: throttle
+  description: ''
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path.matches('^/[a-z]{2}/metadata$')
+  preview: false
+  priority: 1000
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 30
+      intervalSec: 60
+- action: throttle
+  description: ''
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path.matches('^/[a-z]{2}/calculate(?:-full)?$')
+  preview: true
+  priority: 1100
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 75
+      intervalSec: 60
+- action: allow
+  description: default rule
+  kind: compute#securityPolicyRule
+  match:
+    config:
+      srcIpRanges:
+      - '*'
+    versionedExpr: SRC_IPS_V1
+  preview: false
+  priority: 2147483647
+selfLink: https://www.googleapis.com/compute/v1/projects/policyengine-api/global/securityPolicies/pol-api-lb
+type: CLOUD_ARMOR

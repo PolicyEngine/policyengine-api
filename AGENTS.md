@@ -83,6 +83,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 - `api.v2.routes-no-sessions-or-sql`: v2 route modules never open database sessions or construct SQL; they call one service method and map typed failures to HTTP. (doc-only, not checked: follow it yourself)
 - `api.v2.services-no-sql`: v2 services sequence work but never construct SQL expressions, call Session.exec, or define HTTP response models. (doc-only, not checked: follow it yourself)
 - `api.v2.session-modules-no-queries`: v2 database_session modules own session lifetime only and never build select, insert, update, delete or exec calls. (blocking: pytest `tests/unit/v2/test_data_crud_boundaries.py`)
+- `api.v2.user-services-no-sql`: v2 user services (identity, accounts, legacy references and user associations) never build or run SQL themselves or import SQLAlchemy; their connectors do. (blocking: pytest `tests/unit/v2/test_data_crud_boundaries.py`)
 - `api.v2.validators-transformations-no-db`: v2 validators and transformations never import SQLAlchemy or SQLModel query or session APIs. (blocking: pytest `tests/unit/v2/test_data_crud_boundaries.py`)
 
 ### Runtime persistence and route boundaries
@@ -124,7 +125,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 - `api.quality.alembic-revisions-unused-imports`: Alembic revision files are exempt from ruff lint rules, because they must stay exactly as Alembic generates them. (advisory: ruff per-file ignore of ALL for `migrations/*/versions/*.py`, not blocking)
 - `api.quality.environment-variables-load`: Required environment variables and credentials load in a deployed-like environment. (blocking: CI job `test_env_vars`)
-- `api.quality.mypy-v2`: Shared query models, FastAPI dependencies, and v2 routes and services pass mypy with untyped definitions disallowed. (blocking: mypy)
+- `api.quality.mypy-v2`: Shared query models, FastAPI dependencies, v2 routes and services, and the user sign-in and account-deletion libraries pass mypy with untyped definitions disallowed. (blocking: mypy)
 - `api.quality.ruff-format`: All Python files are formatted with ruff format. (blocking: ruff format)
 - `api.quality.ruff-lint`: All Python code passes ruff check with every rule family selected in pyproject.toml, with no ratchet; families are added one themed group at a time until the selection is ALL. (blocking: ruff check (E4, E7, E9, F, FLY, FURB, I, PIE, PYI, RET, RSE, TC, UP, W))
 - `api.quality.runtime-evaluated-models-resolve`: Every package model class that other models inherit from is listed in ruff's runtime-evaluated-base-classes, and every Pydantic model and SQLAlchemy mapper resolves its annotations once the package is imported. (blocking: pytest `tests/unit/test_runtime_evaluated_annotations.py`)

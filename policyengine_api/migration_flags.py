@@ -214,12 +214,20 @@ def get_migration_context(
     use_configured_db_sources: bool = True,
     db_write_source: str | None = None,
     db_read_source: str | None = None,
+    include_compute: bool = True,
 ) -> MigrationContext:
-    """Return current migration flag values for a request or route group."""
+    """Return current migration flag values for a request or route group.
+
+    ``include_compute=False`` describes a persistence-only request in a route
+    group that also computes, so it carries no simulation flow or compute
+    selection.
+    """
     route_config = ROUTE_GROUP_CONFIG_BY_NAME.get(route_group)
     if db_entity is None and route_config is not None:
         db_entity = route_config.db_entity
-    if sim_flow is None and route_config is not None:
+    if not include_compute:
+        sim_flow = None
+    elif sim_flow is None and route_config is not None:
         sim_flow = route_config.sim_flow
 
     if use_configured_db_sources:
@@ -256,6 +264,7 @@ def get_migration_log_context(
     use_configured_db_sources: bool = True,
     db_write_source: str | None = None,
     db_read_source: str | None = None,
+    include_compute: bool = True,
 ) -> dict:
     """Best-effort logging context; never raises on invalid flag settings."""
     try:
@@ -265,6 +274,7 @@ def get_migration_log_context(
             use_configured_db_sources=use_configured_db_sources,
             db_write_source=db_write_source,
             db_read_source=db_read_source,
+            include_compute=include_compute,
         ).to_log_dict()
     except ValueError as error:
         return {

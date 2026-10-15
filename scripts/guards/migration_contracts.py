@@ -9,6 +9,13 @@ from scripts import export_migration_contracts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ALLOWED_CURRENT_CONTRACTS = frozenset({"api_v1_compatible", "typed_v2_resources"})
+# User-owned routes must never become less restrictive during a cutover: each
+# contract requires a signed-in user's bearer token or a signed-out browser's
+# unauthenticated-user UUID.
+USER_OWNED_PATH_PREFIXES = ("/v2/me", "/v2/user-")
+AUTHORIZATION_HEADER = "Authorization"
+UNAUTHENTICATED_USER_HEADER = "PolicyEngine-Unauthenticated-User"
+USER_CREDENTIAL_HEADERS = frozenset({AUTHORIZATION_HEADER, UNAUTHENTICATED_USER_HEADER})
 
 
 def _check_unique_values(
@@ -76,8 +83,12 @@ def _check_workflows(payload: dict[str, Any]) -> list[str]:
             violations.append(f"{workflow['name']}: at least one request is required")
 
         for request in workflow["requests"]:
+            headers = request.get("headers", [])
             context = f"{workflow['name']} {request['method']} {request['path']}"
-            request_keys.append(f"{request['method']} {request['path']}")
+            # One route may be recorded once per credential that can call it.
+            request_keys.append(
+                " ".join((request["method"], request["path"], *sorted(headers)))
+            )
             if request["route_group"] not in declared_route_groups:
                 violations.append(
                     f"{context}: unknown route_group {request['route_group']!r}"
@@ -89,6 +100,13 @@ def _check_workflows(payload: dict[str, Any]) -> list[str]:
                 violations.append(f"{context}: stable_response_fields is required")
             if not request["path"].startswith("/"):
                 violations.append(f"{context}: path must start with /")
+            if request["path"].startswith(
+                USER_OWNED_PATH_PREFIXES
+            ) and USER_CREDENTIAL_HEADERS.isdisjoint(headers):
+                violations.append(
+                    f"{context}: user-owned routes must require the "
+                    f"{AUTHORIZATION_HEADER} or {UNAUTHENTICATED_USER_HEADER} header"
+                )
             if request["expected_status"] not in {200, 201, 202, 204}:
                 violations.append(
                     f"{context}: unexpected status {request['expected_status']}"

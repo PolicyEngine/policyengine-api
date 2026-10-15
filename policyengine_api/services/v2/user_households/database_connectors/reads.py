@@ -6,14 +6,15 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Session, col, select
 
-from policyengine_api.data.v2.models import Household, User, UserHouseholdAssociation
+from policyengine_api.data.v2.models import (
+    Household,
+    LegacyHouseholdMapping,
+    UserHouseholdAssociation,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from uuid import UUID
-
-
-def read_user(session: Session, user_id: UUID) -> User | None:
-    return session.get(User, user_id)
 
 
 def read_household_for_association(
@@ -25,9 +26,10 @@ def read_household_for_association(
     ).one_or_none()
 
 
-def read_user_household_row(
+def read_owned_user_household_row(
     session: Session,
     *,
+    user_id: UUID,
     country_id: str,
     association_id: UUID,
 ) -> UserHouseholdAssociation | None:
@@ -35,6 +37,7 @@ def read_user_household_row(
         select(UserHouseholdAssociation).where(
             UserHouseholdAssociation.id == association_id,
             UserHouseholdAssociation.country_id == country_id,
+            UserHouseholdAssociation.user_id == user_id,
         )
     ).one_or_none()
 
@@ -47,6 +50,7 @@ def read_user_household_rows(
     household_id: UUID | None,
     offset: int,
     limit: int,
+    legacy_household_id: int | None = None,
 ) -> list[UserHouseholdAssociation]:
     statement = select(UserHouseholdAssociation).where(
         UserHouseholdAssociation.country_id == country_id,
@@ -55,6 +59,10 @@ def read_user_household_rows(
     if household_id is not None:
         statement = statement.where(
             UserHouseholdAssociation.household_id == household_id
+        )
+    if legacy_household_id is not None:
+        statement = statement.where(
+            UserHouseholdAssociation.legacy_household_id == legacy_household_id
         )
     return list(
         session.exec(
@@ -66,3 +74,45 @@ def read_user_household_rows(
             .limit(limit + 1)
         ).all()
     )
+
+
+def read_all_user_household_rows(
+    session: Session, *, user_id: UUID
+) -> list[UserHouseholdAssociation]:
+    return list(
+        session.exec(
+            select(UserHouseholdAssociation)
+            .where(UserHouseholdAssociation.user_id == user_id)
+            .order_by(
+                col(UserHouseholdAssociation.created_at),
+                col(UserHouseholdAssociation.id),
+            )
+        ).all()
+    )
+
+
+def read_copied_household_ids(
+    session: Session,
+    *,
+    country_id: str,
+    legacy_household_ids: Collection[int],
+) -> dict[int, UUID]:
+    """Return v2 household UUIDs for v1 households that Stage 11 copied."""
+
+    if not legacy_household_ids:
+        return {}
+    rows = session.exec(
+        select(
+            LegacyHouseholdMapping.legacy_household_id,
+            LegacyHouseholdMapping.household_id,
+        ).where(
+            LegacyHouseholdMapping.country_id == country_id,
+            col(LegacyHouseholdMapping.legacy_household_id).in_(
+                sorted(set(legacy_household_ids))
+            ),
+        )
+    ).all()
+    return {
+        int(legacy_household_id): household_id
+        for legacy_household_id, household_id in rows
+    }

@@ -1,11 +1,17 @@
 """Database inserts for v2 user-household associations."""
 
-from sqlmodel import Session
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.models import UserHouseholdAssociation
-from policyengine_api.services.v2.user_households.types import (
-    UserHouseholdCreationInput,
-)
+
+if TYPE_CHECKING:
+    from sqlmodel import Session
+
+    from policyengine_api.services.v2.user_households.types import (
+        UserHouseholdCreationInput,
+    )
 
 
 def create_user_household(

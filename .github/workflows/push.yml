@@ -209,6 +209,9 @@ jobs:
       DB_WRITE_POLICY: ${{ vars.DB_WRITE_POLICY }}
       DB_READ_HOUSEHOLD: ${{ vars.DB_READ_HOUSEHOLD }}
       DB_WRITE_HOUSEHOLD: ${{ vars.DB_WRITE_HOUSEHOLD }}
+      PUBLIC_API_AUTH_REQUIRED: ${{ vars.PUBLIC_API_AUTH_REQUIRED }}
+      PUBLIC_API_AUTH_ISSUER: ${{ vars.PUBLIC_API_AUTH_ISSUER }}
+      PUBLIC_API_AUTH_AUDIENCE: ${{ vars.PUBLIC_API_AUTH_AUDIENCE }}
       CLOUD_RUN_SERVICE: policyengine-api-staging
       CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT: staging
       CLOUD_RUN_RUNTIME_CACHE_URL_SECRET: policyengine-api-staging-runtime-cache-url:latest
@@ -324,6 +327,14 @@ jobs:
           API_BASE_URL: ${{ steps.candidate.outputs.url }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ steps.cloud_run.outputs.revision_tag }}
           V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
+          # Staging-only Auth0 CI application (password grant) and test user.
+          STAGING_AUTH0_TEST_DOMAIN: ${{ vars.STAGING_AUTH0_TEST_DOMAIN }}
+          STAGING_AUTH0_TEST_AUDIENCE: ${{ vars.STAGING_AUTH0_TEST_AUDIENCE }}
+          STAGING_AUTH0_TEST_CLIENT_ID: ${{ secrets.STAGING_AUTH0_TEST_CLIENT_ID }}
+          STAGING_AUTH0_TEST_CLIENT_SECRET: ${{ secrets.STAGING_AUTH0_TEST_CLIENT_SECRET }}
+          STAGING_AUTH0_TEST_USERNAME: ${{ secrets.STAGING_AUTH0_TEST_USERNAME }}
+          STAGING_AUTH0_TEST_PASSWORD: ${{ secrets.STAGING_AUTH0_TEST_PASSWORD }}
+          STAGING_AUTH0_TEST_REALM: ${{ vars.STAGING_AUTH0_TEST_REALM }}
 
   parallel-live-simulation-tests-staging-cloud-run:
     name: Run live simulations against the staging candidate
@@ -487,6 +498,12 @@ jobs:
       DB_WRITE_POLICY: ${{ vars.DB_WRITE_POLICY }}
       DB_READ_HOUSEHOLD: ${{ vars.DB_READ_HOUSEHOLD }}
       DB_WRITE_HOUSEHOLD: ${{ vars.DB_WRITE_HOUSEHOLD }}
+      PUBLIC_API_AUTH_REQUIRED: ${{ vars.PUBLIC_API_AUTH_REQUIRED }}
+      PUBLIC_API_AUTH_ISSUER: ${{ vars.PUBLIC_API_AUTH_ISSUER }}
+      PUBLIC_API_AUTH_AUDIENCE: ${{ vars.PUBLIC_API_AUTH_AUDIENCE }}
+      AUTH0_MANAGEMENT_DOMAIN: ${{ vars.AUTH0_MANAGEMENT_DOMAIN }}
+      AUTH0_MANAGEMENT_CLIENT_ID: ${{ vars.AUTH0_MANAGEMENT_CLIENT_ID }}
+      AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE: ${{ secrets.AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE }}
       CLOUD_RUN_SERVICE: policyengine-api
       CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT: production
       CLOUD_RUN_RUNTIME_CACHE_URL_SECRET: policyengine-api-prod-runtime-cache-url:latest

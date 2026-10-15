@@ -1,4 +1,4 @@
-"""Strict HTTP response models for native v2 user-household associations."""
+"""Strict HTTP response models for v2 user-household associations."""
 
 from __future__ import annotations
 
@@ -8,8 +8,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
-from policyengine_api.query_parameters import CountryId, ResourceId, UserId
+from policyengine_api.fastapi_routes.v2.user_resources import (
+    USER_RESOURCE_ERROR_RESPONSES,
+)
+from policyengine_api.query_parameters import CountryId
 
 if TYPE_CHECKING:
     from policyengine_api.services.v2.user_households.types import (
@@ -25,8 +27,9 @@ class StrictUserHouseholdAPIModel(BaseModel):
 class UserHouseholdItem(StrictUserHouseholdAPIModel):
     id: UUID
     country_id: CountryId
-    user_id: UserId
-    household_id: ResourceId
+    user_id: UUID
+    household_id: UUID | None
+    legacy_household_id: int | None
     name: str | None
     description: str | None
     created_at: datetime
@@ -76,29 +79,6 @@ class UserHouseholdPageResponse(UserHouseholdSuccessResponse[UserHouseholdPageRe
     pass
 
 
-USER_HOUSEHOLD_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    400: {
-        "model": V2ErrorResponse,
-        "description": "Association content or country selection is invalid.",
-    },
-    404: {
-        "model": V2ErrorResponse,
-        "description": "The selected user, household, or association does not exist.",
-    },
-    409: {
-        "model": V2ErrorResponse,
-        "description": "Association state conflicts with stored state.",
-    },
-    422: {
-        "model": V2ErrorResponse,
-        "description": "The request does not match the association schema.",
-    },
-    500: {
-        "model": V2ErrorResponse,
-        "description": "The association operation could not be completed.",
-    },
-    503: {
-        "model": V2ErrorResponse,
-        "description": "Supabase association persistence is unavailable.",
-    },
-}
+USER_HOUSEHOLD_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = (
+    USER_RESOURCE_ERROR_RESPONSES
+)

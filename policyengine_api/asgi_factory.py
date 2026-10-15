@@ -27,6 +27,9 @@ from policyengine_api.fastapi_routes.specification import (
     build_specification_router,
 )
 from policyengine_api.fastapi_routes.v2.errors import (
+    V2AuthenticationRequiredError,
+    V2AuthenticationUnavailableError,
+    V2PermissionDeniedError,
     V2RequestTooLargeError,
     v2_error_response,
 )
@@ -170,6 +173,31 @@ def create_asgi_app(
         error: V2RequestTooLargeError,
     ) -> Response:
         return v2_error_response(413, str(error))
+
+    @app.exception_handler(V2AuthenticationRequiredError)
+    async def unauthenticated_v2_request(
+        _request: Request,
+        error: V2AuthenticationRequiredError,
+    ) -> Response:
+        return v2_error_response(
+            401,
+            str(error),
+            headers={"WWW-Authenticate": error.challenge},
+        )
+
+    @app.exception_handler(V2PermissionDeniedError)
+    async def forbidden_v2_request(
+        _request: Request,
+        error: V2PermissionDeniedError,
+    ) -> Response:
+        return v2_error_response(403, str(error))
+
+    @app.exception_handler(V2AuthenticationUnavailableError)
+    async def unavailable_v2_authentication(
+        _request: Request,
+        error: V2AuthenticationUnavailableError,
+    ) -> Response:
+        return v2_error_response(503, str(error))
 
     @app.middleware("http")
     async def add_request_context_and_migration_logging(request, call_next):
@@ -316,7 +344,11 @@ def create_asgi_app(
         allow_origin_regex=".*",
         allow_methods=["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
         allow_headers=["*"],
-        expose_headers=[REQUEST_ID_HEADER, OBSERVABILITY_ID_HEADER],
+        expose_headers=[
+            REQUEST_ID_HEADER,
+            OBSERVABILITY_ID_HEADER,
+            "WWW-Authenticate",
+        ],
         allow_credentials=False,
         max_age=600,
     )

@@ -112,6 +112,9 @@ def test_release_tests_drop_deployment_settings(tmp_path: Path) -> None:
             "DB_WRITE_HOUSEHOLD": "dual",
             "CLOUD_RUN_SERVICE": "policyengine-api-staging",
             "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE": "projects/x/secrets/y",
+            "PUBLIC_API_AUTH_REQUIRED": "1",
+            "PUBLIC_API_AUTH_ISSUER": "https://auth.example.test/",
+            "PUBLIC_API_AUTH_AUDIENCE": "https://api.policyengine.org/",
             "RUNTIME_CACHE_MODE": "local",
             "RUNTIME_CACHE_URL": "redis://127.0.0.1:6379/0",
         },
@@ -125,6 +128,9 @@ def test_release_tests_drop_deployment_settings(tmp_path: Path) -> None:
     assert "DB_WRITE_HOUSEHOLD" not in names
     assert "CLOUD_RUN_SERVICE" not in names
     assert "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE" not in names
+    assert "PUBLIC_API_AUTH_REQUIRED" not in names
+    assert "PUBLIC_API_AUTH_ISSUER" not in names
+    assert "PUBLIC_API_AUTH_AUDIENCE" not in names
     assert "RUNTIME_CACHE_MODE=local" in dumped
     assert "RUNTIME_CACHE_URL=redis://127.0.0.1:6379/0" in dumped
 

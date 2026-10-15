@@ -27,6 +27,8 @@ from policyengine_api.query_parameters import (
     UserHouseholdDetailQuery,
     UserHouseholdUpdateQuery,
     UserPolicyCollectionQuery,
+    UserReportCollectionQuery,
+    UserSimulationCollectionQuery,
     parse_multidict_query,
     parse_query_items,
 )
@@ -117,22 +119,21 @@ def test_duplicate_scalar_is_rejected_and_explicit_list_is_preserved() -> None:
 
 def test_multidict_adapter_preserves_the_canonical_contract() -> None:
     policy_id = uuid4()
-    user_id = uuid4()
     parsed = parse_multidict_query(
         UserPolicyCollectionQuery,
         MultiDict(
             [
                 ("country_id", "UK"),
-                ("user_id", str(user_id)),
                 ("policy_id", str(policy_id)),
+                ("legacy_policy_id", "95762"),
                 ("offset", "2"),
             ]
         ),
     )
 
     assert parsed.country_id == "uk"
-    assert parsed.user_id == user_id
     assert parsed.policy_id == policy_id
+    assert parsed.legacy_policy_id == 95762
     assert parsed.offset == 2
 
 
@@ -232,7 +233,6 @@ def test_uuid_filter_is_materialized_as_uuid() -> None:
 
 def test_household_query_contracts_compose_canonical_fields() -> None:
     household_id = uuid4()
-    user_id = uuid4()
 
     collection = parse_query_items(
         HouseholdCollectionQuery,
@@ -247,8 +247,8 @@ def test_household_query_contracts_compose_canonical_fields() -> None:
         UserHouseholdCollectionQuery,
         [
             ("country_id", "US"),
-            ("user_id", str(user_id)),
             ("household_id", str(household_id)),
+            ("legacy_household_id", "123"),
         ],
     )
 
@@ -259,8 +259,8 @@ def test_household_query_contracts_compose_canonical_fields() -> None:
         "default_year": 2026,
     }
     assert associations.country_id == "us"
-    assert associations.user_id == user_id
     assert associations.household_id == household_id
+    assert associations.legacy_household_id == 123
     assert associations.offset == 0
     assert associations.limit == 100
 
@@ -288,17 +288,33 @@ def test_household_default_year_is_bounded(default_year: str) -> None:
     assert raised.value.errors()[0]["loc"] == ("default_year",)
 
 
-def test_user_household_collection_requires_a_uuid_user() -> None:
-    with pytest.raises(ValidationError) as missing:
-        parse_query_items(UserHouseholdCollectionQuery, [("country_id", "us")])
-    assert missing.value.errors()[0]["loc"] == ("user_id",)
+@pytest.mark.parametrize(
+    ("model_type", "field_name"),
+    [
+        (UserPolicyCollectionQuery, "legacy_policy_id"),
+        (UserHouseholdCollectionQuery, "legacy_household_id"),
+        (UserSimulationCollectionQuery, "legacy_simulation_id"),
+        (UserReportCollectionQuery, "legacy_report_id"),
+    ],
+)
+def test_user_association_collections_take_the_owner_from_the_session(
+    model_type, field_name: str
+) -> None:
+    parsed = parse_query_items(model_type, [("country_id", "us")])
+    assert getattr(parsed, field_name) is None
+    assert (parsed.offset, parsed.limit) == (0, 100)
 
-    with pytest.raises(ValidationError) as malformed:
+    with pytest.raises(ValidationError) as user_supplied:
         parse_query_items(
-            UserHouseholdCollectionQuery,
-            [("country_id", "us"), ("user_id", "not-a-uuid")],
+            model_type,
+            [("country_id", "us"), ("user_id", str(uuid4()))],
         )
-    assert malformed.value.errors()[0]["loc"] == ("user_id",)
+    assert user_supplied.value.errors()[0]["loc"] == ("user_id",)
+
+    for invalid in ("0", "-1", "not-an-id", str(2**63)):
+        with pytest.raises(ValidationError) as malformed:
+            parse_query_items(model_type, [("country_id", "us"), (field_name, invalid)])
+        assert malformed.value.errors()[0]["loc"] == (field_name,)
 
 
 @pytest.mark.parametrize(

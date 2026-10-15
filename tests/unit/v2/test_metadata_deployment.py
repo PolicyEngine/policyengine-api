@@ -91,6 +91,20 @@ def test_household_data_qualification_precedes_schema_upgrade() -> None:
     assert isolation < policy_qualification < household_qualification < upgrade
 
 
+def test_user_association_qualification_precedes_schema_upgrade() -> None:
+    workflow = _read(".github/workflows/seed-v2-database.yml")
+
+    household_qualification = workflow.index(
+        "scripts/qualify_v2_household_migration.py"
+    )
+    user_association_qualification = workflow.index(
+        "scripts/qualify_v2_user_association_migration.py"
+    )
+    upgrade = workflow.index("migrate_v2_metadata_schema.sh")
+
+    assert household_qualification < user_association_qualification < upgrade
+
+
 def test_seeding_success_is_required_before_candidate_creation() -> None:
     workflow = _read(".github/workflows/push.yml")
     staging_seed = _job(workflow, "seed-v2-staging-database")

@@ -298,3 +298,52 @@ uv run --frozen pytest \
   tests/unit/test_cloud_run_deploy_scripts.py \
   tests/unit/v2/test_metadata_deployment.py -q
 ```
+
+## Stage 12A User Login and Associations
+
+Run the static type check, then the user route, service, authentication,
+contract, and deployment tests:
+
+```bash
+uv run --frozen --extra dev mypy
+uv run --frozen pytest \
+  tests/unit/libs/test_user_auth.py \
+  tests/unit/libs/test_auth0_management.py \
+  tests/unit/v2/test_user_route_auth.py \
+  tests/unit/v2/test_me_routes.py \
+  tests/unit/v2/test_user_policy_routes.py \
+  tests/unit/v2/test_user_household_routes.py \
+  tests/unit/v2/test_user_simulation_report_routes.py \
+  tests/unit/v2/test_user_policy_service.py \
+  tests/unit/v2/test_user_household_service.py \
+  tests/unit/v2/test_user_account_service.py \
+  tests/unit/v2/test_unauthenticated_user_service.py \
+  tests/unit/v2/test_legacy_reference_service.py \
+  tests/unit/v2/test_user_association_migration_qualification.py \
+  tests/unit/v2/test_models.py \
+  tests/unit/v2/test_alembic_v2.py \
+  tests/unit/test_readiness.py \
+  tests/unit/test_cloud_run_deploy_scripts.py \
+  tests/unit/test_migration_contract_artifacts.py \
+  tests/contract -q
+```
+
+Prove provisioning races (signed-in and signed-out), conversion and merge at
+sign-in under concurrency, the row locks that keep a signed-out browser from
+acting on its converted user, named conflict targets, and the reshape
+lifecycle against the disposable Postgres database:
+
+```bash
+V2_ALEMBIC_DISPOSABLE_TEST=1 \
+V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
+uv run --frozen pytest \
+  tests/integration/test_alembic_v2_lifecycle.py \
+  tests/integration/test_v2_user_identity_persistence.py -q
+```
+
+Route tests inject a principal (a `UserPrincipal` or an
+`UnauthenticatedPrincipal`) through `NativeRouteDependencies(require_user=...)`;
+omit it to exercise the fail-closed default authenticator.
+`tests/integration/test_live_v2_policies.py` is a staging deploy gate that
+signs in the staging Auth0 test user and saves work as fresh signed-out
+browsers; it is not run locally.

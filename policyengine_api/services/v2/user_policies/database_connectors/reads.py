@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import (
+    LegacyPolicyMapping,
     LegacyUserMapping,
     LegacyUserPolicyMapping,
     Policy,
@@ -15,6 +16,7 @@ from policyengine_api.data.v2.models import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from uuid import UUID
 
 
@@ -64,13 +66,18 @@ def read_mapped_user_policy(
     ).one_or_none()
 
 
-def read_user_policy_row(
-    session: Session, *, country_id: str, association_id: UUID
+def read_owned_user_policy_row(
+    session: Session,
+    *,
+    user_id: UUID,
+    country_id: str,
+    association_id: UUID,
 ) -> UserPolicy | None:
     return session.exec(
         select(UserPolicy).where(
             UserPolicy.id == association_id,
             UserPolicy.country_id == country_id,
+            UserPolicy.user_id == user_id,
         )
     ).one_or_none()
 
@@ -83,6 +90,7 @@ def read_user_policy_rows(
     policy_id: UUID | None,
     offset: int,
     limit: int,
+    legacy_policy_id: int | None = None,
 ) -> list[UserPolicy]:
     statement = select(UserPolicy).where(
         UserPolicy.country_id == country_id,
@@ -90,6 +98,8 @@ def read_user_policy_rows(
     )
     if policy_id is not None:
         statement = statement.where(UserPolicy.policy_id == policy_id)
+    if legacy_policy_id is not None:
+        statement = statement.where(UserPolicy.legacy_policy_id == legacy_policy_id)
     return list(
         session.exec(
             statement.order_by(col(UserPolicy.created_at), col(UserPolicy.id))
@@ -97,3 +107,47 @@ def read_user_policy_rows(
             .limit(limit + 1)
         ).all()
     )
+
+
+def read_all_user_policy_rows(session: Session, *, user_id: UUID) -> list[UserPolicy]:
+    return list(
+        session.exec(
+            select(UserPolicy)
+            .where(UserPolicy.user_id == user_id)
+            .order_by(col(UserPolicy.created_at), col(UserPolicy.id))
+        ).all()
+    )
+
+
+def read_user_policy_mirror_exists(session: Session, *, association_id: UUID) -> bool:
+    return (
+        session.exec(
+            select(LegacyUserPolicyMapping.id).where(
+                LegacyUserPolicyMapping.user_policy_id == association_id
+            )
+        ).first()
+        is not None
+    )
+
+
+def read_mirrored_policy_ids(
+    session: Session,
+    *,
+    country_id: str,
+    legacy_policy_ids: Collection[int],
+) -> dict[int, UUID]:
+    """Return v2 policy UUIDs for v1 policies that the Stage 10 mirror copied."""
+
+    if not legacy_policy_ids:
+        return {}
+    rows = session.exec(
+        select(
+            LegacyPolicyMapping.legacy_policy_id, LegacyPolicyMapping.policy_id
+        ).where(
+            LegacyPolicyMapping.country_id == country_id,
+            col(LegacyPolicyMapping.legacy_policy_id).in_(
+                sorted(set(legacy_policy_ids))
+            ),
+        )
+    ).all()
+    return {int(legacy_policy_id): policy_id for legacy_policy_id, policy_id in rows}

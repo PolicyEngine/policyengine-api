@@ -1,0 +1,106 @@
+# PROPOSED (not deployed): Stage 12A per-IP throttle for user-owned writes.
+#
+# This is the newest deployed snapshot
+# (../20260830T141827Z-pol-api-lb-metadata-enforced.yaml) plus one new rule at
+# priority 1200. It lives under proposed/ so it is never mistaken for the
+# authoritative deployed state. An operator applies the rule with the
+# runbook's preview-first procedure (docs/migration/lb-cloud-armor-runbook.md),
+# then exports and commits a new timestamped snapshot:
+#
+#   gcloud compute security-policies rules create 1200 \
+#     --project=$PROJECT --security-policy=pol-api-lb \
+#     --expression="request.method.matches('^(?:POST|PUT|PATCH|DELETE)$') && request.path.matches('^/v2/(?:me|user-)')" \
+#     --action=throttle \
+#     --rate-limit-threshold-count=120 --rate-limit-threshold-interval-sec=60 \
+#     --conform-action=allow --exceed-action=deny-429 --enforce-on-key=IP \
+#     --preview
+#
+# Design notes:
+# - The rule covers signed-in and signed-out writes alike: requests with a
+#   bearer token and requests with the PolicyEngine-Unauthenticated-User
+#   header reach the same /v2/me* and /v2/user-* routes. It includes
+#   POST /v2/me/upgrade, which app v3 sends once per sign-in to move the
+#   browser's signed-out work into the account.
+# - Anyone can mint unauthenticated users: the first write with a new UUID in
+#   the header creates one, with no sign-in. This per-IP write throttle is the
+#   only bound on how fast one IP can create them (and their rows); the
+#   256 KiB body limit and the per-field bounds limit what each write stores.
+#   Reads never create a user.
+# - Reads (GET) and CORS preflights (OPTIONS) are excluded: app v3 lists saved
+#   reforms and reports and reads GET /v2/me on its account page; NAT'd
+#   offices share IPs.
+# - App v3 saves signed-out work one record at a time as the user creates it,
+#   so a busy browser sends a handful of writes per minute; 120 per minute per
+#   IP leaves room for offices and campuses behind shared NAT. A throttled
+#   write (429) fails that save, and the app reports it.
+# - The earlier import throttle (priority 1150, POST /v2/me/imports) is gone:
+#   that route was removed before release.
+# - Cloud Armor CEL regexes reject capture groups, so the plan's
+#   ^/v2/(me|user-) is written ^/v2/(?:me|user-).
+# - The threshold is a starting point; confirm with >=24h of preview logs and
+#   the runbook's empirical threshold check before enforcing.
+creationTimestamp: '2026-07-21T07:16:39.177-07:00'
+description: Rate limiting for api.policyengine.org (lb-api). See docs/migration/lb-cloud-armor-runbook.md
+fingerprint: dT_5QmeI6h8=
+id: '200433714284642728'
+kind: compute#securityPolicy
+labelFingerprint: 42WmSpB8rSM=
+name: pol-api-lb
+rules:
+- action: throttle
+  description: ''
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path.matches('^/[a-z]{2}/metadata$')
+  preview: false
+  priority: 1000
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 30
+      intervalSec: 60
+- action: throttle
+  description: ''
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path.matches('^/[a-z]{2}/calculate(?:-full)?$')
+  preview: true
+  priority: 1100
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 75
+      intervalSec: 60
+- action: throttle
+  description: 'Stage 12A: per-IP limit on user-owned writes'
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.method.matches('^(?:POST|PUT|PATCH|DELETE)$') && request.path.matches('^/v2/(?:me|user-)')
+  preview: true
+  priority: 1200
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 120
+      intervalSec: 60
+- action: allow
+  description: default rule
+  kind: compute#securityPolicyRule
+  match:
+    config:
+      srcIpRanges:
+      - '*'
+    versionedExpr: SRC_IPS_V1
+  preview: false
+  priority: 2147483647
+selfLink: https://www.googleapis.com/compute/v1/projects/policyengine-api/global/securityPolicies/pol-api-lb
+type: CLOUD_ARMOR

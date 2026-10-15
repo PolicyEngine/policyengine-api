@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicySnapshot,
+    UserPolicyCreateFields,
     UserPolicyCreationInput,
     UserPolicyPage,
     UserPolicyRead,
@@ -27,8 +28,11 @@ def user_policy_read(association: UserPolicy) -> UserPolicyRead:
         country_id=association.country_id,
         user_id=association.user_id,
         policy_id=association.policy_id,
+        legacy_policy_id=association.legacy_policy_id,
         name=association.name,
         description=association.description,
+        baseline=association.baseline,
+        provenance=association.provenance,
         created_at=association.created_at,
         updated_at=association.updated_at,
     )
@@ -74,8 +78,24 @@ def project_legacy_user_policy(
         country_id=snapshot.country_id,
         user_id=user_id,
         policy_id=policy_id,
+        legacy_policy_id=snapshot.reform_id,
         name=snapshot.reform_label,
         description=None,
+    )
+
+
+def owned_user_policy_input(
+    fields: UserPolicyCreateFields,
+    *,
+    user_id: UUID,
+    policy_id: UUID | None,
+) -> UserPolicyCreationInput:
+    """Attach the session owner and the resolved v2 policy reference."""
+
+    return UserPolicyCreationInput(
+        **fields.model_dump(exclude={"policy_id"}),
+        user_id=user_id,
+        policy_id=policy_id,
     )
 
 

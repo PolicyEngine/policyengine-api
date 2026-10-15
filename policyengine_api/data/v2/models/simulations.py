@@ -18,7 +18,6 @@ from policyengine_api.data.v2.models.metadata import (
 from policyengine_api.data.v2.models.policies import Dynamic, Policy
 
 if TYPE_CHECKING:
-    from policyengine_api.data.v2.models.associations import UserSimulationAssociation
     from policyengine_api.data.v2.models.reports import Report
 
 
@@ -135,8 +134,4 @@ class Simulation(TimestampedModel, table=True):
     reform_reports: list["Report"] = Relationship(
         back_populates="reform_simulation",
         sa_relationship_kwargs={"foreign_keys": "Report.reform_simulation_id"},
-    )
-    user_associations: list["UserSimulationAssociation"] = Relationship(
-        back_populates="simulation",
-        cascade_delete=True,
     )

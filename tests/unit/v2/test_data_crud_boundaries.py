@@ -46,6 +46,15 @@ def _has_database_query_dependency(path: Path) -> bool:
     )
 
 
+def _constructs_sql(path: Path) -> bool:
+    """Whether a module builds or runs SQL itself instead of calling a connector."""
+    calls = _called_names(path)
+    imports = _imported_modules(path)
+    return not calls.isdisjoint(
+        {"select", "insert", "update", "delete", "exec", "text"}
+    ) or any(module.startswith("sqlalchemy") for module in imports)
+
+
 def _discover(*patterns: str) -> list[str]:
     """Modules under SERVICES_ROOT matching any pattern, as sorted relative paths.
 
@@ -122,3 +131,26 @@ def test_database_session_modules_do_not_construct_queries(
 ) -> None:
     calls = _called_names(SERVICES_ROOT / relative_path)
     assert calls.isdisjoint({"select", "insert", "update", "delete", "exec"})
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    (
+        "identity/services.py",
+        "legacy_refs/services.py",
+        "user_accounts/services.py",
+        "user_households/services.py",
+        "user_policies/services.py",
+        "user_reports/services.py",
+        "user_simulations/services.py",
+    ),
+)
+def test_user_services_construct_no_sql(relative_path: str) -> None:
+    assert not _constructs_sql(SERVICES_ROOT / relative_path)
+
+
+def test_rule_proof_user_services_no_sql() -> None:
+    """Proof for rule api.v2.user-services-no-sql (rules/registry.toml)."""
+    fixtures = PROJECT_ROOT / "rules/fixtures/api.v2.user-services-no-sql"
+    assert _constructs_sql(fixtures / "bad_services.py")
+    assert not _constructs_sql(fixtures / "good_services.py")

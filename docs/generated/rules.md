@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 42 | 0 | 1 | 12 | 55 |
+| mechanical | 43 | 0 | 1 | 12 | 56 |
 | metric | 0 | 0 | 0 | 0 | 0 |
 | judgment | 0 | 0 | 0 | 0 | 0 |
 
-**Blocking:** 42 of 55 rules.
+**Blocking:** 43 of 56 rules.
 
 ## Gaps
 
@@ -83,6 +83,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 | `api.v2.routes-no-sessions-or-sql` | v2 route modules never open database sessions or construct SQL; they call one service method and map typed failures to HTTP. | mechanical | doc-only | no | nothing | — | — |
 | `api.v2.services-no-sql` | v2 services sequence work but never construct SQL expressions, call Session.exec, or define HTTP response models. | mechanical | doc-only | no | nothing | — | — |
 | `api.v2.session-modules-no-queries` | v2 database_session modules own session lifetime only and never build select, insert, update, delete or exec calls. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | **unproven** |
+| `api.v2.user-services-no-sql` | v2 user services (identity, accounts, legacy references and user associations) never build or run SQL themselves or import SQLAlchemy; their connectors do. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | yes |
 | `api.v2.validators-transformations-no-db` | v2 validators and transformations never import SQLAlchemy or SQLModel query or session APIs. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | yes |
 
 ```mermaid
@@ -99,6 +100,7 @@ flowchart LR
   r_api_v2_routes_no_sessions_or_sql("api.v2.routes-no-sessions-or-sql (doc-only)")
   r_api_v2_services_no_sql("api.v2.services-no-sql (doc-only)")
   r_api_v2_session_modules_no_queries("api.v2.session-modules-no-queries (enforced)")
+  r_api_v2_user_services_no_sql("api.v2.user-services-no-sql (enforced)")
   r_api_v2_validators_transformations_no_db("api.v2.validators-transformations-no-db (enforced)")
   r_api_routes_shared_query_parameters -.-> gap_unenforced
   r_api_v2_connectors_mutations_no_reads --> e_pytest_tests_unit_v2_test_data_crud_boundaries_py
@@ -110,6 +112,7 @@ flowchart LR
   r_api_v2_routes_no_sessions_or_sql -.-> gap_unenforced
   r_api_v2_services_no_sql -.-> gap_unenforced
   r_api_v2_session_modules_no_queries --> e_pytest_tests_unit_v2_test_data_crud_boundaries_py
+  r_api_v2_user_services_no_sql --> e_pytest_tests_unit_v2_test_data_crud_boundaries_py
   r_api_v2_validators_transformations_no_db --> e_pytest_tests_unit_v2_test_data_crud_boundaries_py
 ```
 
@@ -267,7 +270,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `api.quality.alembic-revisions-unused-imports` | Alembic revision files are exempt from ruff lint rules, because they must stay exactly as Alembic generates them. | mechanical | advisory | no | ruff per-file ignore of ALL for `migrations/*/versions/*.py` | — | — |
 | `api.quality.environment-variables-load` | Required environment variables and credentials load in a deployed-like environment. | mechanical | enforced | yes | CI job `test_env_vars` | `pr.yml:test_env_vars` | — |
-| `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, and v2 routes and services pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:typecheck-v2` | — |
+| `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, v2 routes and services, and the user sign-in and account-deletion libraries pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:typecheck-v2` | — |
 | `api.quality.ruff-format` | All Python files are formatted with ruff format. | mechanical | enforced | yes | ruff format | `pr.yml:lint` | — |
 | `api.quality.ruff-lint` | All Python code passes ruff check with every rule family selected in pyproject.toml, with no ratchet; families are added one themed group at a time until the selection is ALL. | mechanical | enforced | yes | ruff check (E4, E7, E9, F, FLY, FURB, I, PIE, PYI, RET, RSE, TC, UP, W) | `pr.yml:lint` | — |
 | `api.quality.runtime-evaluated-models-resolve` | Every package model class that other models inherit from is listed in ruff's runtime-evaluated-base-classes, and every Pydantic model and SQLAlchemy mapper resolves its annotations once the package is imported. | mechanical | enforced | yes | pytest `tests/unit/test_runtime_evaluated_annotations.py` | `pr.yml:test` | **unproven** |

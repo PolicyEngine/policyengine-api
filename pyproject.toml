@@ -47,7 +47,7 @@ dependencies = [
     # versions certified by this PolicyEngine bundle. Cloud Run installs the
     # complete frozen environment from uv.lock; the generic image installs
     # this requirement directly.
-    "policyengine[models]==6.3.4",
+    "policyengine[models]==6.4.1",
     "pydantic",
     "pymysql",
     "python-dotenv",
@@ -59,6 +59,7 @@ dependencies = [
     "werkzeug",
     "sqlmodel>=0.0.39,<0.1",
     "psycopg[binary]>=3.3,<4",
+    "pyjwt[crypto]>=2.10,<3",
 ]
 
 [project.optional-dependencies]
@@ -104,6 +105,8 @@ files = [
     "policyengine_api/fastapi_routes/dependencies.py",
     "policyengine_api/fastapi_routes/v2",
     "policyengine_api/services/v2",
+    "policyengine_api/libs/user_auth.py",
+    "policyengine_api/libs/auth0_management.py",
 ]
 explicit_package_bases = true
 follow_imports = "silent"
@@ -157,6 +160,8 @@ runtime-evaluated-base-classes = [
     "policyengine_api.fastapi_routes.v2.households.document_models.StrictHouseholdDocumentModel",
     "policyengine_api.fastapi_routes.v2.households.response_models.HouseholdSuccessResponse",
     "policyengine_api.fastapi_routes.v2.households.response_models.StrictHouseholdAPIModel",
+    "policyengine_api.fastapi_routes.v2.me.response_models.AccountSuccessResponse",
+    "policyengine_api.fastapi_routes.v2.me.response_models.StrictAccountAPIModel",
     "policyengine_api.fastapi_routes.v2.metadata.response_models.MetadataResourceSuccessResponse",
     "policyengine_api.fastapi_routes.v2.policies.response_models.PolicySuccessResponse",
     "policyengine_api.fastapi_routes.v2.policies.response_models.StrictPolicyAPIModel",
@@ -164,11 +169,17 @@ runtime-evaluated-base-classes = [
     "policyengine_api.fastapi_routes.v2.user_households.response_models.UserHouseholdSuccessResponse",
     "policyengine_api.fastapi_routes.v2.user_policies.response_models.StrictUserPolicyAPIModel",
     "policyengine_api.fastapi_routes.v2.user_policies.response_models.UserPolicySuccessResponse",
+    "policyengine_api.fastapi_routes.v2.user_reports.response_models.StoredSnapshotItem",
+    "policyengine_api.fastapi_routes.v2.user_reports.response_models.StrictUserReportAPIModel",
+    "policyengine_api.fastapi_routes.v2.user_reports.response_models.UserReportSuccessResponse",
+    "policyengine_api.fastapi_routes.v2.user_simulations.response_models.StrictUserSimulationAPIModel",
+    "policyengine_api.fastapi_routes.v2.user_simulations.response_models.UserSimulationSuccessResponse",
     "policyengine_api.query_parameters.CatalogQuery",
     "policyengine_api.query_parameters.CountryQuery",
     "policyengine_api.query_parameters.EconomyQuery",
     "policyengine_api.query_parameters.PaginationQuery",
     "policyengine_api.query_parameters.StrictQueryParameters",
+    "policyengine_api.services.v2.associations.types.StrictAssociationModel",
     "policyengine_api.services.v2.households.types.HouseholdCreationInput",
     "policyengine_api.services.v2.households.types.StrictHouseholdInput",
     "policyengine_api.services.v2.metadata.types.MetadataModelVersion",
@@ -176,12 +187,23 @@ runtime-evaluated-base-classes = [
     "policyengine_api.services.v2.policies.types.PolicyCreationInput",
     "policyengine_api.services.v2.policies.types.StrictPolicyInput",
     "policyengine_api.services.v2.simulations.types.StrictContractModel",
+    "policyengine_api.services.v2.user_accounts.types.AccountUpdateInput",
+    "policyengine_api.services.v2.user_accounts.types.StrictAccountInput",
     "policyengine_api.services.v2.user_households.types.StrictUserHouseholdInput",
+    "policyengine_api.services.v2.user_households.types.UserHouseholdCreateFields",
     "policyengine_api.services.v2.user_households.types.UserHouseholdCreationInput",
     "policyengine_api.services.v2.user_households.types.UserHouseholdUpdateInput",
     "policyengine_api.services.v2.user_policies.types.StrictAssociationInput",
+    "policyengine_api.services.v2.user_policies.types.UserPolicyCreateFields",
     "policyengine_api.services.v2.user_policies.types.UserPolicyCreationInput",
     "policyengine_api.services.v2.user_policies.types.UserPolicyUpdateInput",
+    "policyengine_api.services.v2.user_reports.types.StrictUserReportModel",
+    "policyengine_api.services.v2.user_reports.types.UserReportCreateFields",
+    "policyengine_api.services.v2.user_reports.types.UserReportUpdateInput",
+    "policyengine_api.services.v2.user_reports.types._ReportPresentationFields",
+    "policyengine_api.services.v2.user_simulations.types.StrictUserSimulationInput",
+    "policyengine_api.services.v2.user_simulations.types.UserSimulationCreateFields",
+    "policyengine_api.services.v2.user_simulations.types.UserSimulationUpdateInput",
     "policyengine_api.data.v1_models.V1Base",
     "pydantic.BaseModel",
     "sqlalchemy.orm.DeclarativeBase",
