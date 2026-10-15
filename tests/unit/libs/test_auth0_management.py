@@ -15,7 +15,7 @@ from policyengine_api.libs.auth0_management import (
 )
 
 DOMAIN = "policyengine.us.auth0.com"
-SECRET_RESOURCE = "projects/p/secrets/auth0-management/versions/latest"
+SECRET_RESOURCE = "projects/p/secrets/auth0-management/versions/latest"  # noqa: S105  # a Secret Manager resource path, not a secret
 
 
 def _client(handler, **settings) -> tuple[Auth0ManagementClient, list[httpx.Request]]:
