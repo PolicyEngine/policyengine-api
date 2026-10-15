@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from datetime import datetime
     from uuid import UUID
 
+    from policyengine_api.services.v2.identity.types import UserPrincipal
+
 
 def create_provisioned_user(session: Session, *, primary_country: str) -> User:
     """Insert a standard user for a new sign-in identity and return it with its ID."""
@@ -42,19 +44,17 @@ def create_user_identity(
     session: Session,
     *,
     user_id: UUID,
-    issuer: str,
-    subject: str,
-    email: str | None,
+    principal: UserPrincipal,
     seen_at: datetime,
 ) -> UUID | None:
-    """Insert one identity, returning its user unless another request won."""
+    """Insert the principal's identity; return its user unless another request won."""
     return session.execute(
         insert(UserIdentity)
         .values(
             user_id=user_id,
-            issuer=issuer,
-            subject=subject,
-            email=email,
+            issuer=principal.issuer,
+            subject=principal.subject,
+            email=principal.email,
             last_seen_at=seen_at,
         )
         .on_conflict_do_nothing(constraint="uq_user_identities_issuer_subject")

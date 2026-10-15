@@ -62,12 +62,14 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.user_households.types import (
         UserHouseholdCreateFields,
+        UserHouseholdFilter,
         UserHouseholdPage,
         UserHouseholdRead,
         UserHouseholdUpdateInput,
     )
     from policyengine_api.services.v2.user_policies.types import (
         UserPolicyCreateFields,
+        UserPolicyFilter,
         UserPolicyPage,
         UserPolicyRead,
         UserPolicyUpdateInput,
@@ -408,8 +410,7 @@ class V2UserPolicyResourceService(Protocol):
         *,
         principal: AccountPrincipal,
         country_id: str,
-        policy_id: UUID | None = None,
-        legacy_policy_id: int | None = None,
+        policy_filter: UserPolicyFilter | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> UserPolicyPage:
@@ -468,8 +469,7 @@ class V2UserHouseholdResourceService(Protocol):
         *,
         principal: AccountPrincipal,
         country_id: str,
-        household_id: UUID | None = None,
-        legacy_household_id: int | None = None,
+        household_filter: UserHouseholdFilter | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> UserHouseholdPage:

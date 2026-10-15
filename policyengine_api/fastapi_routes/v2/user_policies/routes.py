@@ -35,6 +35,7 @@ from policyengine_api.query_parameters import (
     UserPolicyCollectionQuery,
 )
 from policyengine_api.services.v2.identity.types import AccountPrincipal
+from policyengine_api.services.v2.user_policies.types import UserPolicyFilter
 
 CountryQueryDependency = Annotated[
     CountryQuery, Depends(query_dependency(CountryQuery))
@@ -151,8 +152,10 @@ def build_v2_user_policy_router(
             page = service_factory().list_user_policies(
                 principal=principal,
                 country_id=query.country_id,
-                policy_id=query.policy_id,
-                legacy_policy_id=query.legacy_policy_id,
+                policy_filter=UserPolicyFilter(
+                    policy_id=query.policy_id,
+                    legacy_policy_id=query.legacy_policy_id,
+                ),
                 offset=query.offset,
                 limit=query.limit,
             )

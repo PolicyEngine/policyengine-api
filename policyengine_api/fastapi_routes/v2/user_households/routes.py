@@ -38,6 +38,7 @@ from policyengine_api.query_parameters import (
     UserHouseholdUpdateQuery,
 )
 from policyengine_api.services.v2.identity.types import AccountPrincipal
+from policyengine_api.services.v2.user_households.types import UserHouseholdFilter
 
 UserHouseholdCreateQueryDependency = Annotated[
     UserHouseholdCreateQuery, Depends(query_dependency(UserHouseholdCreateQuery))
@@ -160,8 +161,10 @@ def build_v2_user_household_router(
             page = service_factory().list_user_households(
                 principal=principal,
                 country_id=query.country_id,
-                household_id=query.household_id,
-                legacy_household_id=query.legacy_household_id,
+                household_filter=UserHouseholdFilter(
+                    household_id=query.household_id,
+                    legacy_household_id=query.legacy_household_id,
+                ),
                 offset=query.offset,
                 limit=query.limit,
             )
