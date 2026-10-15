@@ -1,3 +1,10 @@
+## [5.5.0] - 2026-10-15
+
+### Added
+
+- Annual economy responses relay the simulation entrypoint's optional stage fields (`stage`, `progress`, `progress_max`, timestamps and `segments`) while a run is computing.
+
+
 ## [5.4.0] - 2026-10-15
 
 ### Added
