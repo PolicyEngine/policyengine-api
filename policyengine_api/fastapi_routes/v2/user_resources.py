@@ -163,7 +163,7 @@ def _log_failure(event: str, error: Exception) -> None:
                 }
             },
         )
-    except Exception:  # noqa: BLE001  # observability must not alter the response
+    except Exception:  # noqa: BLE001, S110  # observability must not alter the response
         pass
 
 

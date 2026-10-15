@@ -231,9 +231,9 @@ def main() -> int:
     try:
         evidence = qualify_user_association_migration()
     except Exception as error:  # noqa: BLE001  # command must emit safe evidence
-        print(json.dumps(_error_payload(error), sort_keys=True), file=sys.stderr)
+        print(json.dumps(_error_payload(error), sort_keys=True), file=sys.stderr)  # noqa: T201  # the command's JSON evidence is its output
         return 1
-    print(json.dumps(evidence.as_dict(), sort_keys=True))
+    print(json.dumps(evidence.as_dict(), sort_keys=True))  # noqa: T201  # the command's JSON evidence is its output
     return 0
 
 

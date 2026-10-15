@@ -19,6 +19,7 @@ TEST_V2_ENVIRONMENT = "test-foundation"
 TEST_V2_RUNTIME_SECRET_RESOURCE = (
     "projects/test-project/secrets/v2-runtime-database-url/versions/latest"  # noqa: S105  # a Secret Manager resource path, not a secret
 )
+TEST_AUTH0_SECRET_RESOURCE = "projects/p/secrets/auth0-management/versions/latest"  # noqa: S105  # a Secret Manager resource path, not a secret
 TEST_OTEL_ENDPOINT = "https://collector.example.test"
 CLOUD_RUN_SERVICE_SCRIPTS = (
     "scripts/deploy_cloud_run_candidate.sh",
@@ -2535,16 +2536,14 @@ def test_deploy_cloud_run_candidate_passes_user_auth_settings():
             CLOUD_RUN_TAG="stage3-test",
             AUTH0_MANAGEMENT_DOMAIN="policyengine.us.auth0.com",
             AUTH0_MANAGEMENT_CLIENT_ID="management-client",
-            AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE=(
-                "projects/p/secrets/auth0-management/versions/latest"
-            ),
+            AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE=TEST_AUTH0_SECRET_RESOURCE,
         ),
     )
     assert with_management.returncode == 0, with_management.stderr
     assert "AUTH0_MANAGEMENT_DOMAIN=policyengine.us.auth0.com" in with_management.stdout
     assert (
-        "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE="
-        "projects/p/secrets/auth0-management/versions/latest" in with_management.stdout
+        f"AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE={TEST_AUTH0_SECRET_RESOURCE}"
+        in with_management.stdout
     )
 
 
@@ -2583,9 +2582,7 @@ def test_validate_cloud_run_deploy_env_keeps_auth0_management_out_of_staging():
     management = {
         "AUTH0_MANAGEMENT_DOMAIN": "policyengine.us.auth0.com",
         "AUTH0_MANAGEMENT_CLIENT_ID": "management-client",
-        "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE": (
-            "projects/p/secrets/auth0-management/versions/latest"
-        ),
+        "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE": TEST_AUTH0_SECRET_RESOURCE,
     }
     staging = _script_env(**_staging_runtime_env(), **management)
     production = _script_env(**_required_runtime_env(), **management)
