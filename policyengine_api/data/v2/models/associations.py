@@ -39,7 +39,7 @@ def _jsonb_type() -> sa.types.TypeEngine[Any]:
 
 
 class UserHouseholdAssociation(TimestampedModel, table=True):
-    """A user's saved, named link to a household in the same country.
+    """A user's saved, named link to a v2 or v1 household in the same country.
 
     Deleted with the user; a household that users have saved cannot be deleted.
     """
@@ -100,7 +100,7 @@ class UserHouseholdAssociation(TimestampedModel, table=True):
 
 
 class UserPolicy(TimestampedModel, table=True):
-    """A user's saved, named link to a policy in the same country.
+    """A user's saved, named link to a v2 or v1 policy in the same country.
 
     Deleted with the user, together with any v1 mapping it was mirrored from; a
     policy that users have saved cannot be deleted.

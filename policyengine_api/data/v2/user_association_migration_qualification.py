@@ -66,9 +66,11 @@ class UserAssociationCounts:
 
     @property
     def dormant_total(self) -> int:
+        """Rows in the two reshaped tables, which must be empty before the reshape."""
         return self.user_simulation_associations + self.user_report_associations
 
     def as_dict(self) -> dict[str, int]:
+        """Return the counts keyed by table name, for the evidence and errors."""
         return {
             "user_policies": self.user_policies,
             "user_household_associations": self.user_household_associations,
@@ -87,6 +89,7 @@ class UserAssociationQualification:
     migration_pending: bool
 
     def as_dict(self) -> dict[str, object]:
+        """Return the evidence as the JSON object the qualification command prints."""
         return {
             "outcome": "ok",
             "revision": USER_ASSOCIATION_MIGRATION_REVISION,
@@ -102,6 +105,7 @@ class RetainedDormantAssociationError(RuntimeError):
     """Raised when a dormant association table holds rows before the reshape."""
 
     def __init__(self, counts: UserAssociationCounts) -> None:
+        """Keep the counts and say in the message how to proceed safely."""
         self.counts = counts
         super().__init__(
             "the configured Supabase target contains user_simulation_associations="
@@ -142,6 +146,7 @@ def require_empty_dormant_associations(
     *,
     migration_pending: bool,
 ) -> None:
+    """Raise RetainedDormantAssociationError if a pending reshape would affect rows."""
     if migration_pending and counts.dormant_total:
         raise RetainedDormantAssociationError(counts)
 
