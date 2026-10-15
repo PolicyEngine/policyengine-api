@@ -49,8 +49,6 @@ from policyengine_api.services.v2.identity.types import AccountPrincipal
 
 
 SHARED_REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    status: USER_RESOURCE_ERROR_RESPONSES[status] for status in (500, 503)
-} | {
     404: {
         "model": V2ErrorResponse,
         "description": "No saved report has this ID in this country.",
@@ -59,6 +57,8 @@ SHARED_REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": "The ID or the query does not match the schema.",
     },
+    500: USER_RESOURCE_ERROR_RESPONSES[500],
+    503: USER_RESOURCE_ERROR_RESPONSES[503],
 }
 
 
