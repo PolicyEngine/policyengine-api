@@ -109,7 +109,6 @@ def _v1_id(api_client, path: str, body: dict, field: str) -> int:
 
 def _create_v1_artifacts(api_client) -> dict[str, int]:
     """Create (or reuse deduplicated) v1 artifacts without running compute."""
-
     policy_id = _v1_id(api_client, "policy", {"data": {}}, "policy_id")
     household_id = _v1_id(
         api_client,
@@ -150,7 +149,6 @@ def _delete_account(api_client, headers: dict[str, str]) -> None:
 
 def _browser_headers() -> dict[str, str]:
     """A fresh signed-out browser; its UUID never leaves the request headers."""
-
     return {UNAUTHENTICATED_USER_HEADER: str(uuid4())}
 
 
@@ -409,7 +407,6 @@ def test_live_unauthenticated_users_round_trip_and_upgrade(
     Every run uses fresh browser UUIDs and starts and ends by deleting the
     test user's account, so it leaves nothing behind and can run repeatedly.
     """
-
     params = {"country_id": COUNTRY_ID}
     legacy_policy_id = _v1_id(api_client, "policy", {"data": {}}, "policy_id")
     converted_browser = _browser_headers()

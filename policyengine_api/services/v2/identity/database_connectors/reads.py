@@ -38,7 +38,6 @@ def read_user(
     together but waits for a conversion holding ``FOR UPDATE``, then re-reads
     the row as that conversion committed it.
     """
-
     statement = select(User).where(User.id == user_id)
     if for_share:
         statement = statement.with_for_update(read=True)
@@ -57,7 +56,6 @@ def read_unauthenticated_user_for_update(
     concurrent transaction is re-checked once that transaction commits, so
     it is no longer returned.
     """
-
     return session.exec(
         select(User)
         .where(

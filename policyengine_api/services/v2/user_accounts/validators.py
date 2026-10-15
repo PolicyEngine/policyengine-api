@@ -32,7 +32,6 @@ class AccountDeletionUnavailableError(RuntimeError):
 
 def require_resolved_account(owner: ResolvedUser | None) -> ResolvedUser:
     """An unauthenticated principal has no account until its first write."""
-
     if owner is None:
         raise AccountNotFoundError("The account was not found")
     return owner

@@ -721,7 +721,6 @@ def _default_require_user(
     unauthenticated_user: str | None = Depends(_unauthenticated_user_scheme),
 ) -> AccountPrincipal:
     """Authenticate the request's account; fails closed without a credential."""
-
     from policyengine_api.fastapi_routes.v2.user_auth import (
         authenticate_account_request,
     )
@@ -748,7 +747,6 @@ def _build_v1_legacy_reference_service() -> LegacyReferenceChecker:
 
 def _default_legacy_reference_checker() -> LegacyReferenceChecker:
     """Defer the v1 session factory until a request checks a v1 reference."""
-
     from policyengine_api.services.v2.legacy_refs.services import (
         DeferredLegacyReferenceService,
     )

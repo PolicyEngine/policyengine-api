@@ -35,7 +35,6 @@ def read_user_report_row(
     association_id: UUID,
 ) -> UserReportAssociation | None:
     """Read a row whoever owns it: a saved report's ID is its shareable link."""
-
     return session.exec(
         select(UserReportAssociation).where(
             UserReportAssociation.id == association_id,

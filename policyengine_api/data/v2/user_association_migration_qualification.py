@@ -148,7 +148,6 @@ def require_empty_dormant_associations(
 
 def user_association_migration_is_pending(connection: Connection) -> bool:
     """Return whether the Stage 12A revision is in the upgrade path."""
-
     current_heads = MigrationContext.configure(connection).get_current_heads()
     revisions = ScriptDirectory.from_config(
         Config(V2_ALEMBIC_CONFIG)
@@ -160,7 +159,6 @@ def user_association_migration_is_pending(connection: Connection) -> bool:
 
 def build_qualification_engine(settings: V2DatabaseSettings) -> Engine:
     """Build an isolated connection pool for one qualification attempt."""
-
     return create_engine(settings.connection.url, poolclass=NullPool)
 
 
@@ -182,7 +180,6 @@ def qualify_user_association_migration(
     ),
 ) -> UserAssociationQualification:
     """Report counts and stop when a pending reshape would affect rows."""
-
     settings = load_v2_migration_database_settings(environ)
     engine = engine_builder(settings)
     try:
@@ -226,7 +223,6 @@ def _error_payload(error: Exception) -> dict[str, object]:
 
 def main() -> int:
     """Run qualification and return a shell-compatible status."""
-
     try:
         evidence = qualify_user_association_migration()
     except Exception as error:  # noqa: BLE001 - command must emit safe evidence

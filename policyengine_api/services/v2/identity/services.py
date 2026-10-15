@@ -230,7 +230,6 @@ def account_provisioning_for(
     principal: AccountPrincipal,
 ) -> AccountProvisioningStrategy:
     """Select the provisioning strategy for a principal's type."""
-
     if isinstance(principal, UnauthenticatedPrincipal):
         return UnauthenticatedAccountProvisioning(principal)
     return StandardAccountProvisioning(principal)
@@ -241,7 +240,6 @@ def find_principal_user_in_session(
     principal: AccountPrincipal,
 ) -> ResolvedUser | None:
     """Return the existing user for a principal without provisioning one."""
-
     return account_provisioning_for(principal).find_in_session(session)
 
 
@@ -253,7 +251,6 @@ def resolve_principal_user_in_session(
     now: datetime | None = None,
 ) -> ResolvedUser:
     """Return the principal's v2 user, provisioning it on first use."""
-
     return account_provisioning_for(principal).resolve_in_session(
         session, country_id=country_id, now=now
     )
@@ -270,7 +267,6 @@ def resolve_principal_user_for_read_in_session(
     A standard principal is provisioned as on any request. An unauthenticated
     principal is not: ``None`` means it owns no records yet.
     """
-
     return account_provisioning_for(principal).resolve_for_read_in_session(
         session, country_id=country_id
     )
@@ -303,7 +299,6 @@ def convert_unauthenticated_user_in_session(
     ``UNIQUE(issuer, subject)``: when it wins, this conversion merges into
     its user instead.
     """
-
     seen_at = now or utc_now()
     standard_provisioning = StandardAccountProvisioning(principal)
     unauthenticated_user = read_unauthenticated_user_for_update(

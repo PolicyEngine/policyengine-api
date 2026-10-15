@@ -82,7 +82,6 @@ def read_owned_user_report(
     association_id: UUID,
 ) -> UserReportAssociation:
     """``user_id`` is None for an unauthenticated user that owns nothing yet."""
-
     return require_user_report(
         None
         if user_id is None
@@ -120,7 +119,6 @@ def read_all_user_reports(
     session: Session, *, user_id: UUID
 ) -> tuple[UserReportRead, ...]:
     """Return every report association owned by a user, across countries."""
-
     return tuple(
         user_report_read(row)
         for row in read_all_user_report_rows(session, user_id=user_id)
@@ -206,7 +204,6 @@ class V2UserReportService:
         association_id: UUID,
     ) -> SharedUserReportRead:
         """Read a saved report for anyone holding its link; no credential."""
-
         with self._database_session.transaction() as session:
             association = require_user_report(
                 read_user_report_row(

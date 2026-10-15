@@ -68,7 +68,6 @@ def _service_factory(
 
 def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
     """Build account routes without opening a connection."""
-
     require_user = dependencies.require_user
     router = APIRouter(
         prefix="/v2",

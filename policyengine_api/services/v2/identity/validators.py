@@ -31,7 +31,6 @@ def is_unauthenticated_user(user: User) -> bool:
 
 def require_unauthenticated_user(user: User | None) -> User | None:
     """Pass through an absent or unauthenticated user; refuse a standard one."""
-
     if user is not None and not is_unauthenticated_user(user):
         raise StandardUserRequiresSignInError(
             "This browser's saved work now belongs to a signed-in account; "

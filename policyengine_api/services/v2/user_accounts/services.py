@@ -106,7 +106,6 @@ class V2AccountService:
         Only account deletion needs the Management API, so its settings are
         read here rather than for every /v2/me request.
         """
-
         if self._auth0_user_deleter_factory is None:
             return None
         try:
@@ -214,7 +213,6 @@ class V2AccountService:
         self, principal: UnauthenticatedPrincipal
     ) -> AccountDeletion:
         """Delete a browser's unauthenticated user; there is no Auth0 user."""
-
         with self._database_session.transaction() as session:
             owner = find_principal_user_in_session(session, principal)
             if owner is not None:

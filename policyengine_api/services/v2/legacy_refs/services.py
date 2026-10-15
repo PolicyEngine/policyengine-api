@@ -40,7 +40,6 @@ class V1LegacyReferenceService:
         requested: Mapping[LegacyRecordKind, Collection[int]],
     ) -> dict[LegacyRecordKind, frozenset[int]]:
         """Return existing IDs per kind using one short v1 transaction."""
-
         selected = {kind: ids for kind, ids in requested.items() if ids}
         if not selected:
             return {kind: frozenset() for kind in requested}
@@ -63,7 +62,6 @@ class V1LegacyReferenceService:
         requested: Mapping[LegacyRecordKind, Collection[int]],
     ) -> None:
         """Raise ``LegacyReferenceNotFoundError`` for any missing reference."""
-
         existing = self.existing_ids(country_id=country_id, requested=requested)
         for kind, ids in requested.items():
             require_legacy_references(

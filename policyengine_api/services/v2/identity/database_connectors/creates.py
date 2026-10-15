@@ -26,7 +26,6 @@ def create_unauthenticated_user(session: Session, *, user_id: UUID) -> bool:
 
     Returns whether this call inserted the row.
     """
-
     return (
         session.execute(
             insert(User)
@@ -48,7 +47,6 @@ def create_user_identity(
     seen_at: datetime,
 ) -> UUID | None:
     """Insert one identity, returning its user unless another request won."""
-
     return session.execute(
         insert(UserIdentity)
         .values(

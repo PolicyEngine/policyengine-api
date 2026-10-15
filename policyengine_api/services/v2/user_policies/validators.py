@@ -80,7 +80,6 @@ def resolve_association_policy_id(
     mapped_policy_id: UUID | None,
 ) -> UUID | None:
     """Combine an explicit v2 reference with the v1 mapping, if both exist."""
-
     if (
         requested_policy_id is not None
         and mapped_policy_id is not None
@@ -185,7 +184,6 @@ def validate_existing_legacy_user_policy_mapping(
 
 def require_mirrored_policy_id(projection: UserPolicyCreationInput) -> UUID:
     """The Stage 10 mirror always links a saved policy to its v2 policy."""
-
     if projection.policy_id is None:
         raise LegacyUserPolicyIntegrityError(
             "mirrored saved policy has no v2 policy reference"

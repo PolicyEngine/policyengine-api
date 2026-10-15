@@ -69,7 +69,6 @@ def read_owned_user_simulation(
     association_id: UUID,
 ) -> UserSimulationAssociation:
     """``user_id`` is None for an unauthenticated user that owns nothing yet."""
-
     return require_user_simulation(
         None
         if user_id is None
@@ -87,7 +86,6 @@ def read_all_user_simulations(
     session: Session, *, user_id: UUID
 ) -> tuple[UserSimulationRead, ...]:
     """Return every simulation association owned by a user, across countries."""
-
     return tuple(
         user_simulation_read(row)
         for row in read_all_user_simulation_rows(session, user_id=user_id)

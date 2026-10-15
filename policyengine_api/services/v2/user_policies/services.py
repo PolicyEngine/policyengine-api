@@ -120,7 +120,6 @@ def read_owned_user_policy(
     association_id: UUID,
 ) -> UserPolicy:
     """``user_id`` is None for an unauthenticated user that owns nothing yet."""
-
     return require_user_policy(
         None
         if user_id is None
@@ -142,7 +141,6 @@ def resolve_user_policy_reference(
     legacy_policy_id: int | None,
 ) -> UUID | None:
     """Validate an explicit v2 policy and combine it with the v1 mapping."""
-
     if policy_id is not None:
         validate_association_policy(
             country_id=country_id,
@@ -168,7 +166,6 @@ def read_all_user_policies(
     session: Session, *, user_id: UUID
 ) -> tuple[UserPolicyRead, ...]:
     """Return every association owned by a user, across countries."""
-
     return tuple(
         user_policy_read(row)
         for row in read_all_user_policy_rows(session, user_id=user_id)

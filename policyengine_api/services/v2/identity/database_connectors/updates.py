@@ -68,7 +68,6 @@ def reassign_user_associations(
     the moved rows (a report's ``user_policy_id`` and
     ``baseline_user_policy_id``) stay valid.
     """
-
     for table in USER_ASSOCIATION_TABLES:
         session.execute(
             update(table)

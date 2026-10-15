@@ -72,7 +72,6 @@ def read_owned_user_household(
     association_id: UUID,
 ) -> UserHouseholdAssociation:
     """``user_id`` is None for an unauthenticated user that owns nothing yet."""
-
     return require_user_household(
         None
         if user_id is None
@@ -94,7 +93,6 @@ def resolve_user_household_reference(
     legacy_household_id: int | None,
 ) -> UUID | None:
     """Validate an explicit v2 household and combine it with the v1 mapping."""
-
     if household_id is not None:
         validate_association_household(
             country_id=country_id,
@@ -120,7 +118,6 @@ def read_all_user_households(
     session: Session, *, user_id: UUID
 ) -> tuple[UserHouseholdRead, ...]:
     """Return every household association owned by a user, across countries."""
-
     return tuple(
         user_household_read(row)
         for row in read_all_user_household_rows(session, user_id=user_id)

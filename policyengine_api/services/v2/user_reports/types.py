@@ -116,7 +116,6 @@ def stored_provisions(
     provisions: list[ReportProvision] | None,
 ) -> list[StoredJSONObject] | None:
     """Serialize provisions exactly as supplied, enforcing the 64 KiB cap."""
-
     if provisions is None:
         return None
     stored = [

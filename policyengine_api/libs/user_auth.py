@@ -137,7 +137,6 @@ def load_user_auth_settings(
     environ: Mapping[str, str] | None = None,
 ) -> UserAuthSettings:
     """Load and validate the inbound user-authentication configuration."""
-
     values = os.environ if environ is None else environ
     required_value = values.get(PUBLIC_API_AUTH_REQUIRED_ENV, "").strip()
     if required_value not in {"", "0", "1"}:
@@ -199,13 +198,11 @@ def _decoder(issuer: str, audience: str) -> JWTDecoder:
 
 def reset_decoder_cache() -> None:
     """Clear cached decoders for tests and signing-key or tenant rotations."""
-
     _decoder.cache_clear()
 
 
 def bearer_token(authorization: str | None) -> str:
     """Return the credentials of an ``Authorization: Bearer`` header."""
-
     if not authorization:
         raise MissingBearerTokenError("a bearer access token is required")
     scheme, _, credentials = authorization.strip().partition(" ")
@@ -217,7 +214,6 @@ def bearer_token(authorization: str | None) -> str:
 
 def unauthenticated_user_id(value: str) -> UUID:
     """Return the browser UUID carried by the unauthenticated-user header."""
-
     if re.fullmatch(CANONICAL_UUID_PATTERN, value) is None:
         raise InvalidUnauthenticatedUserError(
             f"{UNAUTHENTICATED_USER_HEADER} must be a canonical UUID"
@@ -237,7 +233,6 @@ def _verified_email(claims: Mapping[str, Any]) -> str | None:
 
 def classify_principal(claims: Mapping[str, Any]) -> VerifiedPrincipal:
     """Build a principal from already-validated token claims."""
-
     subject = claims.get("sub")
     issuer = claims.get("iss")
     if not isinstance(subject, str) or not subject.strip():
@@ -263,7 +258,6 @@ def authenticate_bearer(
     decoder: TokenDecoder | None = None,
 ) -> VerifiedPrincipal:
     """Validate one Authorization header and classify its principal."""
-
     token = bearer_token(authorization)
     if not settings.configured:
         raise UserAuthUnavailableError("user authentication is not configured")

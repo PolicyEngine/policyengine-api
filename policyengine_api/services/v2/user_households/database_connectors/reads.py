@@ -105,7 +105,6 @@ def read_copied_household_ids(
     legacy_household_ids: Collection[int],
 ) -> dict[int, UUID]:
     """Return v2 household UUIDs for v1 households that Stage 11 copied."""
-
     if not legacy_household_ids:
         return {}
     rows = session.exec(

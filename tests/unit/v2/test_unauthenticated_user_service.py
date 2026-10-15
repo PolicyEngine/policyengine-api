@@ -201,7 +201,6 @@ def _users(services: Services) -> list[User]:
 @contextmanager
 def _recorded_logs(*loggers: logging.Logger) -> Iterator[list[logging.LogRecord]]:
     """Record INFO logs; Alembic tests may have disabled these loggers."""
-
     records: list[logging.LogRecord] = []
 
     class RecordingHandler(logging.Handler):

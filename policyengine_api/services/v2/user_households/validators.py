@@ -70,7 +70,6 @@ def resolve_association_household_id(
     mapped_household_id: UUID | None,
 ) -> UUID | None:
     """Combine an explicit v2 reference with the v1 mapping, if both exist."""
-
     if (
         requested_household_id is not None
         and mapped_household_id is not None

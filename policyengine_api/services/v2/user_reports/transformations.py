@@ -99,7 +99,6 @@ def user_report_update_values(
     association_input: UserReportUpdateInput,
 ) -> dict[str, Any]:
     """Return explicitly supplied fields with JSON documents normalized."""
-
     values = association_input.model_dump(
         exclude_unset=True,
         exclude={"provisions", "validation"},

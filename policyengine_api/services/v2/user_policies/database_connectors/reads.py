@@ -152,7 +152,6 @@ def read_mirrored_policy_ids(
     legacy_policy_ids: Collection[int],
 ) -> dict[int, UUID]:
     """Return v2 policy UUIDs for v1 policies that the Stage 10 mirror copied."""
-
     if not legacy_policy_ids:
         return {}
     rows = session.exec(

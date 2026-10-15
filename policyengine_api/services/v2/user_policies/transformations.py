@@ -94,7 +94,6 @@ def owned_user_policy_input(
     policy_id: UUID | None,
 ) -> UserPolicyCreationInput:
     """Attach the session owner and the resolved v2 policy reference."""
-
     return UserPolicyCreationInput(
         **fields.model_dump(exclude={"policy_id"}),
         user_id=user_id,
