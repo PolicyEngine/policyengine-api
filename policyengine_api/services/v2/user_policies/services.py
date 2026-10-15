@@ -539,7 +539,9 @@ class V2UserPolicyService:
         """
         repoint = "legacy_policy_id" in association_input.model_fields_set
         if repoint:
-            assert association_input.legacy_policy_id is not None
+            if association_input.legacy_policy_id is None:
+                msg = "legacy_policy_id must not be null"
+                raise TypeError(msg)
             self._require_legacy_policy(
                 country_id=country_id,
                 legacy_policy_id=association_input.legacy_policy_id,
