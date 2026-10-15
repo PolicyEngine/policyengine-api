@@ -62,6 +62,38 @@ def _service_factory(
     return _default_v2_account_service_factory
 
 
+def _signed_in_user_dependency(
+    require_user: Callable[..., AccountPrincipal],
+) -> Callable[..., UserPrincipal]:
+    """Build a dependency that admits only a signed-in principal of ``require_user``."""
+
+    def require_signed_in_user(
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
+    ) -> UserPrincipal:
+        return require_signed_in_principal(principal)
+
+    return require_signed_in_user
+
+
+def _upgrade_account(
+    service_factory: Callable[[], V2AccountResourceService],
+    principal: UserPrincipal,
+    unauthenticated_user: str,
+    country_id: str,
+) -> MeUpgradeResponse | JSONResponse:
+    """Move a browser's unauthenticated user into the signed-in account."""
+
+    def upgrade() -> MeUpgradeResponse:
+        result = service_factory().upgrade_account(
+            principal=principal,
+            unauthenticated_user_id=UUID(unauthenticated_user),
+            country_id=country_id,
+        )
+        return MeUpgradeResponse(result=MeUpgradeResult.from_upgrade(result))
+
+    return user_resource_operation(upgrade)
+
+
 def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
     """Build account routes without opening a connection."""
     require_user = dependencies.require_user
@@ -71,11 +103,7 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         dependencies=[Depends(require_user)],
     )
     service_factory = _service_factory(dependencies)
-
-    def require_signed_in_user(
-        principal: Annotated[AccountPrincipal, Depends(require_user)],
-    ) -> UserPrincipal:
-        return require_signed_in_principal(principal)
+    require_signed_in_user = _signed_in_user_dependency(require_user)
 
     @router.get(
         "/me",
@@ -216,14 +244,8 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         ],
         _size: Annotated[None, Depends(enforce_user_write_request_size)],
     ) -> MeUpgradeResponse | JSONResponse:
-        def upgrade() -> MeUpgradeResponse:
-            result = service_factory().upgrade_account(
-                principal=principal,
-                unauthenticated_user_id=UUID(unauthenticated_user),
-                country_id=query.country_id,
-            )
-            return MeUpgradeResponse(result=MeUpgradeResult.from_upgrade(result))
-
-        return user_resource_operation(upgrade)
+        return _upgrade_account(
+            service_factory, principal, unauthenticated_user, query.country_id
+        )
 
     return router

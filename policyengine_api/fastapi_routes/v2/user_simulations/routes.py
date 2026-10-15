@@ -53,6 +53,28 @@ def _service_factory(
     return _default_v2_user_simulation_service_factory
 
 
+def _create_user_simulation(
+    service_factory: Callable[[], V2UserSimulationResourceService],
+    body: UserSimulationCreateRequest,
+    query: CountryQuery,
+    principal: AccountPrincipal,
+) -> UserSimulationDetailResponse | JSONResponse:
+    """Create an association once the body and query agree on its country."""
+    if body.country_id != query.country_id:
+        return v2_error_response(400, "Body country_id must match query country_id")
+
+    def create() -> UserSimulationDetailResponse:
+        item = service_factory().create_user_simulation(
+            principal=principal,
+            association_input=body,
+        )
+        return UserSimulationDetailResponse(
+            result=UserSimulationDetailResult(item=UserSimulationItem.from_read(item))
+        )
+
+    return user_resource_operation(create)
+
+
 def build_v2_user_simulation_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
@@ -89,21 +111,7 @@ def build_v2_user_simulation_router(
         query: CountryQueryDependency,
         principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserSimulationDetailResponse | JSONResponse:
-        if body.country_id != query.country_id:
-            return v2_error_response(400, "Body country_id must match query country_id")
-
-        def create() -> UserSimulationDetailResponse:
-            item = service_factory().create_user_simulation(
-                principal=principal,
-                association_input=body,
-            )
-            return UserSimulationDetailResponse(
-                result=UserSimulationDetailResult(
-                    item=UserSimulationItem.from_read(item)
-                )
-            )
-
-        return user_resource_operation(create)
+        return _create_user_simulation(service_factory, body, query, principal)
 
     @router.get(
         "/user-simulations/{association_id}",
