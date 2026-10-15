@@ -1,3 +1,10 @@
+## [5.5.1] - 2026-10-15
+
+### Fixed
+
+- The live staging test lists a browser's saved policies within the Public API's page limit, so the staging deploy's integration step can pass.
+
+
 ## [5.5.0] - 2026-10-15
 
 ### Added
