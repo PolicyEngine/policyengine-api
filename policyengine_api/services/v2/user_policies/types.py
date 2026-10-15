@@ -55,9 +55,8 @@ class UserPolicyCreateFields(StrictAssociationInput):
     def require_policy_reference(self) -> UserPolicyCreateFields:
         """Require a v2 policy_id, a v1 legacy_policy_id, or both."""
         if self.policy_id is None and self.legacy_policy_id is None:
-            raise ValueError(
-                "At least one of legacy_policy_id or policy_id is required"
-            )
+            msg = "At least one of legacy_policy_id or policy_id is required"
+            raise ValueError(msg)
         return self
 
 
@@ -78,9 +77,8 @@ class UserPolicyCreationInput(StrictAssociationInput):
     def require_policy_reference(self) -> UserPolicyCreationInput:
         """Require a v2 policy_id, a v1 legacy_policy_id, or both."""
         if self.policy_id is None and self.legacy_policy_id is None:
-            raise ValueError(
-                "At least one of legacy_policy_id or policy_id is required"
-            )
+            msg = "At least one of legacy_policy_id or policy_id is required"
+            raise ValueError(msg)
         return self
 
 
@@ -104,12 +102,14 @@ class UserPolicyUpdateInput(StrictAssociationInput):
             {"legacy_policy_id", "name", "description", "baseline", "provenance"}
         )
         if not supplied:
-            raise ValueError(
+            msg = (
                 "At least one of legacy_policy_id, name, description, baseline, "
                 "or provenance must be supplied"
             )
+            raise ValueError(msg)
         if "legacy_policy_id" in supplied and self.legacy_policy_id is None:
-            raise ValueError("legacy_policy_id must not be null")
+            msg = "legacy_policy_id must not be null"
+            raise ValueError(msg)
         return self
 
 

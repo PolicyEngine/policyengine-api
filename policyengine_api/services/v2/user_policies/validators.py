@@ -70,11 +70,11 @@ def validate_association_policy(
     Raise AssociationPolicyNotFoundError or AssociationCountryConflictError.
     """
     if policy is None:
-        raise AssociationPolicyNotFoundError(f"policy {policy_id} was not found")
+        msg = f"policy {policy_id} was not found"
+        raise AssociationPolicyNotFoundError(msg)
     if policy.country_id != country_id:
-        raise AssociationCountryConflictError(
-            "Association country_id must match the referenced policy"
-        )
+        msg = "Association country_id must match the referenced policy"
+        raise AssociationCountryConflictError(msg)
 
 
 def resolve_association_policy_id(
@@ -88,9 +88,8 @@ def resolve_association_policy_id(
         and mapped_policy_id is not None
         and requested_policy_id != mapped_policy_id
     ):
-        raise AssociationReferenceConflictError(
-            "policy_id does not match the policy mirrored from legacy_policy_id"
-        )
+        msg = "policy_id does not match the policy mirrored from legacy_policy_id"
+        raise AssociationReferenceConflictError(msg)
     return requested_policy_id if requested_policy_id is not None else mapped_policy_id
 
 
@@ -182,7 +181,6 @@ def require_mirrored_policy_id(projection: UserPolicyCreationInput) -> UUID:
     Raise LegacyUserPolicyIntegrityError when it is missing.
     """
     if projection.policy_id is None:
-        raise LegacyUserPolicyIntegrityError(
-            "mirrored saved policy has no v2 policy reference"
-        )
+        msg = "mirrored saved policy has no v2 policy reference"
+        raise LegacyUserPolicyIntegrityError(msg)
     return projection.policy_id

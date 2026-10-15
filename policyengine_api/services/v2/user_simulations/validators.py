@@ -25,7 +25,6 @@ def require_user_simulation(
 ) -> UserSimulationAssociation:
     """Return the association, or raise UserSimulationNotFoundError if it is None."""
     if association is None:
-        raise UserSimulationNotFoundError(
-            f"user-simulation association {association_id} was not found"
-        )
+        msg = f"user-simulation association {association_id} was not found"
+        raise UserSimulationNotFoundError(msg)
     return association

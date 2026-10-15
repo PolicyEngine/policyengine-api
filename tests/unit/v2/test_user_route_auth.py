@@ -274,7 +274,8 @@ SECRET_SUBJECT = "google-oauth2|secret-subject"
 
 def test_unexpected_failures_are_logged_without_their_message() -> None:
     def fail():
-        raise RuntimeError(f"{SECRET_SUBJECT} leaked into a message")
+        msg = f"{SECRET_SUBJECT} leaked into a message"
+        raise RuntimeError(msg)
 
     response, records = _recorded_failure_logs(fail)
 
@@ -292,9 +293,8 @@ def test_persistence_failures_are_logged_without_their_message() -> None:
     from sqlalchemy.exc import DataError
 
     def fail_in_database():
-        raise DataError(
-            "INSERT ...", {"subject": SECRET_SUBJECT}, Exception("bad value")
-        )
+        msg = "INSERT ..."
+        raise DataError(msg, {"subject": SECRET_SUBJECT}, Exception("bad value"))
 
     response, records = _recorded_failure_logs(fail_in_database)
 

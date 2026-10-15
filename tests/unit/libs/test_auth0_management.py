@@ -217,7 +217,8 @@ def test_prepare_deletion_loads_the_secret_and_fetches_a_token() -> None:
 
 def test_prepare_deletion_fails_when_the_secret_cannot_be_read() -> None:
     def unreadable(_resource: str) -> str:
-        raise PermissionError("secretmanager.versions.access denied")
+        msg = "secretmanager.versions.access denied"
+        raise PermissionError(msg)
 
     requests: list[httpx.Request] = []
     client = Auth0ManagementClient(

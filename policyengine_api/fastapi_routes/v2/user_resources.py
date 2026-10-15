@@ -66,13 +66,14 @@ def request_size_limit(
             try:
                 declared_length = int(content_length)
             except ValueError as error:
-                raise V2RequestTooLargeError(
-                    "Request Content-Length is invalid"
-                ) from error
+                msg = "Request Content-Length is invalid"
+                raise V2RequestTooLargeError(msg) from error
             if declared_length > maximum_bytes:
-                raise V2RequestTooLargeError(f"Request body exceeds {label}")
+                msg = f"Request body exceeds {label}"
+                raise V2RequestTooLargeError(msg)
         if len(await request.body()) > maximum_bytes:
-            raise V2RequestTooLargeError(f"Request body exceeds {label}")
+            msg = f"Request body exceeds {label}"
+            raise V2RequestTooLargeError(msg)
 
     return enforce
 

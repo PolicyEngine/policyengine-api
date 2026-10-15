@@ -52,10 +52,11 @@ def _staging_user_token() -> str:
     values = {name: os.environ.get(name, "").strip() for name in AUTH0_ENVIRONMENT}
     missing = [name for name, value in values.items() if not value]
     if missing:
-        raise RuntimeError(
+        msg = (
             "The live signed-in route checks require staging Auth0 test "
             f"settings: {', '.join(missing)}"
         )
+        raise RuntimeError(msg)
     domain = values["STAGING_AUTH0_TEST_DOMAIN"].removeprefix("https://").rstrip("/")
     form = {
         "grant_type": "password",
@@ -72,12 +73,12 @@ def _staging_user_token() -> str:
         form["realm"] = realm
     response = httpx.post(f"https://{domain}/oauth/token", data=form, timeout=30.0)
     if response.status_code != 200:
-        raise RuntimeError(
-            f"Staging Auth0 password grant failed: HTTP {response.status_code}"
-        )
+        msg = f"Staging Auth0 password grant failed: HTTP {response.status_code}"
+        raise RuntimeError(msg)
     token = response.json().get("access_token")
     if not isinstance(token, str) or not token:
-        raise RuntimeError("Staging Auth0 password grant returned no access token")
+        msg = "Staging Auth0 password grant returned no access token"
+        raise RuntimeError(msg)
     return token
 
 

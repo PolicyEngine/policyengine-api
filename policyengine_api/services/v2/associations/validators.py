@@ -39,16 +39,16 @@ def require_legacy_reference_checker(
 ) -> LegacyReferenceChecker:
     """Return the checker, or raise LegacyReferenceCheckUnavailableError if None."""
     if legacy_references is None:
-        raise LegacyReferenceCheckUnavailableError(
-            "v1 reference checks are not configured"
-        )
+        msg = "v1 reference checks are not configured"
+        raise LegacyReferenceCheckUnavailableError(msg)
     return legacy_references
 
 
 def require_not_mirror_owned(mirror_owned: bool, *, association_id: UUID) -> None:
     """Raise MirrorOwnedAssociationError if the v1 saved-policy mirror owns the row."""
     if mirror_owned:
-        raise MirrorOwnedAssociationError(
+        msg = (
             f"association {association_id} is maintained from v1 saved policies "
             "and cannot be changed here"
         )
+        raise MirrorOwnedAssociationError(msg)
