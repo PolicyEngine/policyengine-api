@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Protocol
 from fastapi import Depends
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
+from policyengine_api.fastapi_routes.v2.user_auth import authenticate_account_request
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.readiness import is_ready
 
@@ -800,10 +801,6 @@ def _default_require_user(
     unauthenticated_user: str | None = Depends(_unauthenticated_user_scheme),
 ) -> AccountPrincipal:
     """Authenticate the request's account; fails closed without a credential."""
-    from policyengine_api.fastapi_routes.v2.user_auth import (
-        authenticate_account_request,
-    )
-
     return authenticate_account_request(
         None if credentials is None else f"Bearer {credentials.credentials}",
         unauthenticated_user,
@@ -811,11 +808,13 @@ def _default_require_user(
 
 
 def _build_v1_legacy_reference_service() -> LegacyReferenceChecker:
-    from policyengine_api.data.orm import get_v1_session_factory
-    from policyengine_api.services.v2.legacy_refs.database_session import (
+    from policyengine_api.data.orm import (  # noqa: PLC0415  # looked up per call, so tests can replace the v1 session factory
+        get_v1_session_factory,
+    )
+    from policyengine_api.services.v2.legacy_refs.database_session import (  # noqa: PLC0415  # v1 reference checks load only when a request checks one
         LegacyReferenceDatabaseSession,
     )
-    from policyengine_api.services.v2.legacy_refs.services import (
+    from policyengine_api.services.v2.legacy_refs.services import (  # noqa: PLC0415  # v1 reference checks load only when a request checks one
         V1LegacyReferenceService,
     )
 
@@ -826,7 +825,7 @@ def _build_v1_legacy_reference_service() -> LegacyReferenceChecker:
 
 def _default_legacy_reference_checker() -> LegacyReferenceChecker:
     """Defer the v1 session factory until a request checks a v1 reference."""
-    from policyengine_api.services.v2.legacy_refs.services import (
+    from policyengine_api.services.v2.legacy_refs.services import (  # noqa: PLC0415  # v1 reference checks load only when a default factory runs
         DeferredLegacyReferenceService,
     )
 
@@ -868,11 +867,13 @@ def _default_v2_user_household_service_factory() -> V2UserHouseholdResourceServi
 
 
 def _default_v2_user_simulation_service_factory() -> V2UserSimulationResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.services.v2.user_simulations.database_session import (
+    from policyengine_api.data.v2.database import (  # noqa: PLC0415  # registers an atexit hook at import; v2 persistence loads only when needed
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.user_simulations.database_session import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         UserSimulationDatabaseSession,
     )
-    from policyengine_api.services.v2.user_simulations.services import (
+    from policyengine_api.services.v2.user_simulations.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         V2UserSimulationService,
     )
 
@@ -883,11 +884,13 @@ def _default_v2_user_simulation_service_factory() -> V2UserSimulationResourceSer
 
 
 def _default_v2_user_report_service_factory() -> V2UserReportResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.services.v2.user_reports.database_session import (
+    from policyengine_api.data.v2.database import (  # noqa: PLC0415  # registers an atexit hook at import; v2 persistence loads only when needed
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.user_reports.database_session import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         UserReportDatabaseSession,
     )
-    from policyengine_api.services.v2.user_reports.services import (
+    from policyengine_api.services.v2.user_reports.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         V2UserReportService,
     )
 
@@ -898,12 +901,16 @@ def _default_v2_user_report_service_factory() -> V2UserReportResourceService:
 
 
 def _default_v2_account_service_factory() -> V2AccountResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.libs.auth0_management import build_auth0_user_deleter
-    from policyengine_api.services.v2.user_accounts.database_session import (
+    from policyengine_api.data.v2.database import (  # noqa: PLC0415  # registers an atexit hook at import; v2 persistence loads only when needed
+        get_v2_session_factory,
+    )
+    from policyengine_api.libs.auth0_management import (  # noqa: PLC0415  # Auth0 Management loads only when a default factory runs
+        build_auth0_user_deleter,
+    )
+    from policyengine_api.services.v2.user_accounts.database_session import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         AccountDatabaseSession,
     )
-    from policyengine_api.services.v2.user_accounts.services import (
+    from policyengine_api.services.v2.user_accounts.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         V2AccountService,
     )
 

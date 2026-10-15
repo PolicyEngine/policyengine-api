@@ -112,7 +112,9 @@ def load_auth0_management_settings(
 
 @cache
 def _load_secret_from_secret_manager(resource_name: str) -> str:
-    from google.cloud import secretmanager
+    from google.cloud import (  # noqa: PLC0415  # the Google client loads only when Auth0 Management reads a secret
+        secretmanager,
+    )
 
     client = secretmanager.SecretManagerServiceClient()
     response = client.access_secret_version(request={"name": resource_name})
