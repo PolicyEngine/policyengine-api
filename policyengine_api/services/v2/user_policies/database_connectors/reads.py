@@ -82,7 +82,7 @@ def read_owned_user_policy_row(
     country_id: str,
     association_id: UUID,
 ) -> UserPolicy | None:
-    """Return the association with this id in this country, or None."""
+    """Return the user's association with this id in this country, or None."""
     return session.exec(
         select(UserPolicy).where(
             UserPolicy.id == association_id,
@@ -104,8 +104,9 @@ def read_user_policy_rows(
 ) -> list[UserPolicy]:
     """Return up to ``limit + 1`` of a user's associations in creation order.
 
-    With ``policy_id``, only associations to that policy are returned. The extra
-    row lets the caller report whether another page exists.
+    With ``policy_id`` or ``legacy_policy_id``, only associations to that policy
+    are returned. The extra row lets the caller report whether another page
+    exists.
     """
     statement = select(UserPolicy).where(
         UserPolicy.country_id == country_id,
@@ -125,6 +126,7 @@ def read_user_policy_rows(
 
 
 def read_all_user_policy_rows(session: Session, *, user_id: UUID) -> list[UserPolicy]:
+    """Return every association the user owns, in any country, in creation order."""
     return list(
         session.exec(
             select(UserPolicy)
@@ -135,6 +137,7 @@ def read_all_user_policy_rows(session: Session, *, user_id: UUID) -> list[UserPo
 
 
 def read_user_policy_mirror_exists(session: Session, *, association_id: UUID) -> bool:
+    """Return whether the Stage 10 v1 saved-policy mirror maintains the association."""
     return (
         session.exec(
             select(LegacyUserPolicyMapping.id).where(

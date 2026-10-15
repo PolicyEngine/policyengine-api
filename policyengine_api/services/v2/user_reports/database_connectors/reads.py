@@ -19,6 +19,7 @@ def read_owned_user_report_row(
     country_id: str,
     association_id: UUID,
 ) -> UserReportAssociation | None:
+    """Return the user's association with this id in this country, or None."""
     return session.exec(
         select(UserReportAssociation).where(
             UserReportAssociation.id == association_id,
@@ -52,6 +53,11 @@ def read_user_report_rows(
     offset: int,
     limit: int,
 ) -> list[UserReportAssociation]:
+    """Return up to ``limit + 1`` of a user's associations in creation order.
+
+    With ``legacy_report_id``, only associations to that v1 report output are
+    returned. The extra row lets the caller report whether another page exists.
+    """
     statement = select(UserReportAssociation).where(
         UserReportAssociation.country_id == country_id,
         UserReportAssociation.user_id == user_id,
@@ -75,6 +81,7 @@ def read_user_report_rows(
 def read_all_user_report_rows(
     session: Session, *, user_id: UUID
 ) -> list[UserReportAssociation]:
+    """Return every association the user owns, in every country, in creation order."""
     return list(
         session.exec(
             select(UserReportAssociation)
@@ -94,6 +101,7 @@ def read_owned_user_policy_row(
     country_id: str,
     user_policy_id: UUID,
 ) -> UserPolicy | None:
+    """Return the user's saved policy with this id in this country, or None."""
     return session.exec(
         select(UserPolicy).where(
             UserPolicy.id == user_policy_id,
@@ -110,6 +118,7 @@ def read_owned_user_policy_exists(
     country_id: str,
     user_policy_id: UUID,
 ) -> bool:
+    """Return whether the user has a saved policy with this id in this country."""
     return (
         session.exec(
             select(UserPolicy.id).where(

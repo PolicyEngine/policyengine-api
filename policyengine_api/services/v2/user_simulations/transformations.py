@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 def user_simulation_read(
     association: UserSimulationAssociation,
 ) -> UserSimulationRead:
+    """Convert a stored association row to the service's read model."""
     return UserSimulationRead(
         id=association.id,
         country_id=association.country_id,
@@ -39,6 +40,10 @@ def user_simulation_page(
     offset: int,
     limit: int,
 ) -> UserSimulationPage:
+    """Build a page from up to ``limit + 1`` rows.
+
+    The extra row is not returned; it only sets ``has_more``.
+    """
     return UserSimulationPage(
         items=tuple(user_simulation_read(row) for row in rows[:limit]),
         offset=offset,
@@ -52,4 +57,5 @@ def owned_user_simulation_input(
     *,
     user_id: UUID,
 ) -> UserSimulationCreationInput:
+    """Add the owner resolved from the session principal to the caller's fields."""
     return UserSimulationCreationInput(**fields.model_dump(), user_id=user_id)

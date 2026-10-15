@@ -58,6 +58,7 @@ def owned_user_household_input(
     user_id: UUID,
     household_id: UUID | None,
 ) -> UserHouseholdCreationInput:
+    """Add the session's owner and the resolved v2 household to the caller's fields."""
     return UserHouseholdCreationInput(
         **fields.model_dump(exclude={"household_id"}),
         user_id=user_id,

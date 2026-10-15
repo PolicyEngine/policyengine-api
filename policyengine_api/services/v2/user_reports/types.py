@@ -48,6 +48,12 @@ class StrictUserReportModel(StrictAssociationModel):
 
 
 class ReportProvisionInterval(StrictUserReportModel):
+    """One dated value in a provision's schedule, from ``start_date`` to ``end_date``.
+
+    Dates are ``YYYY-MM-DD`` strings and ``value`` is any finite JSON value.
+    ``parameter`` is optional, and is left out of the stored report when unset.
+    """
+
     # The contract makes this key optional rather than nullable.
     parameter: str | None = Field(default=None, exclude_if=lambda value: value is None)
     start_date: IsoDate
@@ -56,6 +62,15 @@ class ReportProvisionInterval(StrictUserReportModel):
 
 
 class ReportProvision(StrictUserReportModel):
+    """One provision of the report's reform: a parameter's baseline and reform values.
+
+    ``path`` is the parameter path and ``breadcrumb`` its readable label, and
+    ``intervals`` optionally gives a dated schedule. ``growth`` says how a value
+    set from one year on moves in later years (``fixed``, ``current_law`` or an
+    index's parameter path); the other ``growth_*`` fields say when it moves and
+    how grown values round. They are absent for a hand-set schedule.
+    """
+
     path: str
     breadcrumb: str
     unit: str | None = None
@@ -73,6 +88,8 @@ class ReportProvision(StrictUserReportModel):
 
 
 class ReportCalibrationWorst(StrictUserReportModel):
+    """The calibration target a match fits worst, with its source and geography."""
+
     name: LongLabelText
     source: LongLabelText
     geography: ShortText
@@ -80,6 +97,13 @@ class ReportCalibrationWorst(StrictUserReportModel):
 
 
 class ReportCalibrationMatch(StrictUserReportModel):
+    """Calibration of one variable: how closely its targets are met.
+
+    ``ring`` is ``primary``, ``mechanism`` or ``downstream``.
+    ``mean_abs_relative_error`` is averaged over the variable's ``target_count``
+    targets, and ``worst`` is the target with the largest error.
+    """
+
     variable: LabelText
     depth: int
     ring: Literal["primary", "mechanism", "downstream"]
@@ -89,6 +113,8 @@ class ReportCalibrationMatch(StrictUserReportModel):
 
 
 class ReportCalibration(StrictUserReportModel):
+    """Calibration results for one geography, with at most 500 variable matches."""
+
     release_id: LabelText | None = None
     geography: ShortText
     reached_count: int
@@ -99,10 +125,18 @@ class ReportCalibration(StrictUserReportModel):
 
 
 class ReportScorecard(StrictUserReportModel):
+    """The programs on the report's validation scorecard, at most 200 names."""
+
     programs: Annotated[list[LabelText], Field(max_length=MAXIMUM_SCORECARD_PROGRAMS)]
 
 
 class ReportValidation(StrictUserReportModel):
+    """The validation snapshot saved with a report.
+
+    ``calibration`` and ``scorecard`` are optional, and the stored snapshot keeps
+    only the keys supplied.
+    """
+
     matched_at: ShortText
     map_model_version: LabelText
     calibration: ReportCalibration | None = None
@@ -131,6 +165,7 @@ def stored_provisions(
 def stored_validation(
     validation: ReportValidation | None,
 ) -> StoredJSONObject | None:
+    """Serialize the validation snapshot with only the keys supplied, or return None."""
     if validation is None:
         return None
     return validation.model_dump(mode="json", exclude_unset=True)
@@ -178,12 +213,20 @@ class UserReportCreationInput(StrictUserReportModel):
 
 
 class UserReportUpdateInput(_ReportPresentationFields):
+    """A partial update of a saved report; only supplied fields change.
+
+    At least one field must be supplied. ``legacy_report_id`` repoints the saved
+    report to another v1 report output and cannot be cleared; the saved-reform
+    links are cleared with null.
+    """
+
     legacy_report_id: LegacyRecordId | None = None
     user_policy_id: ResourceId | None = None
     baseline_user_policy_id: ResourceId | None = None
 
     @model_validator(mode="after")
     def require_valid_supplied_field(self) -> UserReportUpdateInput:
+        """Require a supplied field and reject a null ``legacy_report_id``."""
         mutable_fields = {
             "legacy_report_id",
             "name",
@@ -206,6 +249,12 @@ class UserReportUpdateInput(_ReportPresentationFields):
 
 @dataclass(frozen=True)
 class UserReportRead:
+    """A stored user-report association as the service returns it to its owner.
+
+    Unlike SharedUserReportRead, it includes the owner, the description and the
+    owner's saved-reform links.
+    """
+
     id: UUID
     country_id: str
     user_id: UUID
@@ -255,6 +304,8 @@ class SharedUserReportRead:
 
 @dataclass(frozen=True)
 class UserReportPage:
+    """One page of associations in creation order; ``has_more`` says if more follow."""
+
     items: tuple[UserReportRead, ...]
     offset: int
     limit: int

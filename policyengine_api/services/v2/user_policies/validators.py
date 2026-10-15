@@ -66,6 +66,10 @@ def validate_association_policy(
     policy_id: UUID,
     policy: Policy | None,
 ) -> None:
+    """Check that a referenced policy exists and is in the association's country.
+
+    Raise AssociationPolicyNotFoundError or AssociationCountryConflictError.
+    """
     if policy is None:
         raise AssociationPolicyNotFoundError(f"policy {policy_id} was not found")
     if policy.country_id != country_id:
@@ -183,7 +187,10 @@ def validate_existing_legacy_user_policy_mapping(
 
 
 def require_mirrored_policy_id(projection: UserPolicyCreationInput) -> UUID:
-    """The Stage 10 mirror always links a saved policy to its v2 policy."""
+    """Return the projection's v2 policy, which the Stage 10 mirror always sets.
+
+    Raise LegacyUserPolicyIntegrityError when it is missing.
+    """
     if projection.policy_id is None:
         raise LegacyUserPolicyIntegrityError(
             "mirrored saved policy has no v2 policy reference"

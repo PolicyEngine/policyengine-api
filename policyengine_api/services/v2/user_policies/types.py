@@ -53,6 +53,7 @@ class UserPolicyCreateFields(StrictAssociationInput):
 
     @model_validator(mode="after")
     def require_policy_reference(self) -> UserPolicyCreateFields:
+        """Require a v2 policy_id, a v1 legacy_policy_id, or both."""
         if self.policy_id is None and self.legacy_policy_id is None:
             raise ValueError(
                 "At least one of legacy_policy_id or policy_id is required"
@@ -75,6 +76,7 @@ class UserPolicyCreationInput(StrictAssociationInput):
 
     @model_validator(mode="after")
     def require_policy_reference(self) -> UserPolicyCreationInput:
+        """Require a v2 policy_id, a v1 legacy_policy_id, or both."""
         if self.policy_id is None and self.legacy_policy_id is None:
             raise ValueError(
                 "At least one of legacy_policy_id or policy_id is required"
@@ -83,6 +85,12 @@ class UserPolicyCreationInput(StrictAssociationInput):
 
 
 class UserPolicyUpdateInput(StrictAssociationInput):
+    """A partial update of a saved policy; only supplied fields are changed.
+
+    At least one field must be supplied. ``legacy_policy_id`` may point the
+    association at another v1 policy but cannot be cleared.
+    """
+
     legacy_policy_id: LegacyRecordId | None = None
     name: AssociationName | None = None
     description: AssociationDescription | None = None
@@ -91,6 +99,7 @@ class UserPolicyUpdateInput(StrictAssociationInput):
 
     @model_validator(mode="after")
     def require_supplied_field(self) -> UserPolicyUpdateInput:
+        """Require a supplied field, and reject an explicit null legacy_policy_id."""
         supplied = self.model_fields_set.intersection(
             {"legacy_policy_id", "name", "description", "baseline", "provenance"}
         )

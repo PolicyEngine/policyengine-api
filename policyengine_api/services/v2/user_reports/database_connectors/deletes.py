@@ -14,5 +14,6 @@ def delete_user_report(
     session: Session,
     association: UserReportAssociation,
 ) -> None:
+    """Delete an association row; the report and the saved policies it links stay."""
     session.delete(association)
     session.flush()

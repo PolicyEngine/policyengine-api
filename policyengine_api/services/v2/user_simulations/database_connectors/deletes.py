@@ -14,5 +14,6 @@ def delete_user_simulation(
     session: Session,
     association: UserSimulationAssociation,
 ) -> None:
+    """Delete an association row; the simulation it names is not touched."""
     session.delete(association)
     session.flush()

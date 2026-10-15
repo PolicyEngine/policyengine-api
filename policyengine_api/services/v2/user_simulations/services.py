@@ -100,6 +100,12 @@ class V2UserSimulationService:
         database_session: UserSimulationDatabaseSession,
         legacy_references: LegacyReferenceChecker | None = None,
     ) -> None:
+        """Open sessions through ``database_session``.
+
+        ``legacy_references`` checks v1 simulations before a write. Without it,
+        creating a saved simulation or repointing one raises
+        LegacyReferenceCheckUnavailableError.
+        """
         self._database_session = database_session
         self._legacy_references = legacy_references
 
@@ -119,6 +125,12 @@ class V2UserSimulationService:
         principal: AccountPrincipal,
         association_input: UserSimulationCreateFields,
     ) -> UserSimulationRead:
+        """Save a v1 simulation for the principal, provisioning its v2 user if needed.
+
+        The v1 simulation is checked first, in a read-only v1 transaction, and
+        LegacyReferenceNotFoundError is raised if it does not exist in the
+        country.
+        """
         self._require_legacy_simulation(
             country_id=association_input.country_id,
             legacy_simulation_id=association_input.legacy_simulation_id,
@@ -146,6 +158,11 @@ class V2UserSimulationService:
         country_id: str,
         association_id: UUID,
     ) -> UserSimulationRead:
+        """Return the principal's association, or raise UserSimulationNotFoundError.
+
+        The association must be in this country. A signed-out browser that has
+        never saved anything owns nothing, and is not provisioned by the read.
+        """
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
@@ -168,6 +185,12 @@ class V2UserSimulationService:
         offset: int = 0,
         limit: int = 100,
     ) -> UserSimulationPage:
+        """Return a page of the principal's associations in this country.
+
+        With ``legacy_simulation_id``, only saves of that v1 simulation are
+        listed. A signed-out browser that has never saved anything gets an empty
+        page and is not provisioned.
+        """
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
@@ -192,6 +215,12 @@ class V2UserSimulationService:
         association_id: UUID,
         association_input: UserSimulationUpdateInput,
     ) -> UserSimulationRead:
+        """Update the supplied fields of one of the principal's associations.
+
+        A new ``legacy_simulation_id`` is checked in v1 first, as on create. Raise
+        UserSimulationNotFoundError if the principal has no such association in
+        this country.
+        """
         if association_input.legacy_simulation_id is not None:
             self._require_legacy_simulation(
                 country_id=country_id,
@@ -221,6 +250,10 @@ class V2UserSimulationService:
         country_id: str,
         association_id: UUID,
     ) -> None:
+        """Delete one of the principal's associations in this country.
+
+        Raise UserSimulationNotFoundError if the principal has no such association.
+        """
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
                 session, principal, country_id=country_id
