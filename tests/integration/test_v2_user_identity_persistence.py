@@ -148,7 +148,7 @@ def _principal(sessions, subject: str) -> UserPrincipal:
 
 
 def _browser(sessions) -> UnauthenticatedPrincipal:
-    """A fresh signed-out browser whose user the fixture removes afterwards."""
+    """Return a fresh signed-out browser whose user the fixture removes afterwards."""
     user_id = uuid4()
     sessions.kw["info"]["browser_user_ids"].append(user_id)
     return UnauthenticatedPrincipal(user_id=user_id)

@@ -148,7 +148,7 @@ def _delete_account(api_client, headers: dict[str, str]) -> None:
 
 
 def _browser_headers() -> dict[str, str]:
-    """A fresh signed-out browser; its UUID never leaves the request headers."""
+    """Return headers for a fresh signed-out browser, whose UUID stays in them."""
     return {UNAUTHENTICATED_USER_HEADER: str(uuid4())}
 
 

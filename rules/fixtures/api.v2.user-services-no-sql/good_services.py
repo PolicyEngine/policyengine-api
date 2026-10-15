@@ -7,4 +7,5 @@ from policyengine_api.services.v2.user_policies.database_connectors import reads
 
 
 def list_user_policies(session: Session, user_id: str) -> list[UserPolicy]:
+    """List the user's policies through the read connector."""
     return reads.list_user_policies(session, user_id=user_id)
