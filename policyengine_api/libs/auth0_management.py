@@ -84,24 +84,24 @@ def load_auth0_management_settings(
     if not any((domain, client_id, client_secret, secret_resource)):
         return None
     if client_secret and secret_resource:
-        raise Auth0ManagementConfigurationError(
+        msg = (
             f"Set exactly one of {AUTH0_MANAGEMENT_CLIENT_SECRET_ENV} or "
             f"{AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE_ENV}"
         )
+        raise Auth0ManagementConfigurationError(msg)
     if not domain or not client_id or not (client_secret or secret_resource):
-        raise Auth0ManagementConfigurationError(
+        msg = (
             "Auth0 Management API deletion is partially configured: set "
             f"{AUTH0_MANAGEMENT_DOMAIN_ENV}, {AUTH0_MANAGEMENT_CLIENT_ID_ENV}, and "
             "exactly one client-secret source"
         )
+        raise Auth0ManagementConfigurationError(msg)
     if DOMAIN_PATTERN.fullmatch(domain) is None:
-        raise Auth0ManagementConfigurationError(
-            f"{AUTH0_MANAGEMENT_DOMAIN_ENV} must be a bare host name"
-        )
+        msg = f"{AUTH0_MANAGEMENT_DOMAIN_ENV} must be a bare host name"
+        raise Auth0ManagementConfigurationError(msg)
     if secret_resource and SECRET_RESOURCE_PATTERN.fullmatch(secret_resource) is None:
-        raise Auth0ManagementConfigurationError(
-            f"{AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE_ENV} is invalid"
-        )
+        msg = f"{AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE_ENV} is invalid"
+        raise Auth0ManagementConfigurationError(msg)
     return Auth0ManagementSettings(
         domain=domain,
         client_id=client_id,
@@ -152,11 +152,11 @@ class Auth0ManagementClient:
         try:
             secret = self._secret_loader(self._settings.client_secret_resource).strip()
         except Exception as error:
-            raise Auth0ManagementError(
-                "the Management API client secret could not be loaded"
-            ) from error
+            msg = "the Management API client secret could not be loaded"
+            raise Auth0ManagementError(msg) from error
         if not secret:
-            raise Auth0ManagementError("the Management API client secret is empty")
+            msg = "the Management API client secret is empty"
+            raise Auth0ManagementError(msg)
         return secret
 
     def _request(self, method: str, url: str, **kwargs: object) -> httpx.Response:
@@ -166,9 +166,8 @@ class Auth0ManagementClient:
             with httpx.Client(timeout=HTTP_TIMEOUT_SECONDS) as client:
                 return client.request(method, url, **kwargs)  # type: ignore[arg-type]
         except httpx.HTTPError as error:
-            raise Auth0ManagementError(
-                f"Management API request failed: {type(error).__name__}"
-            ) from error
+            msg = f"Management API request failed: {type(error).__name__}"
+            raise Auth0ManagementError(msg) from error
 
     def _access_token(self) -> str:
         with self._lock:
@@ -189,16 +188,18 @@ class Auth0ManagementClient:
                 },
             )
             if response.status_code != 200:
-                raise Auth0ManagementError(
+                msg = (
                     f"Management API token request failed: HTTP {response.status_code}"
                 )
+                raise Auth0ManagementError(msg)
             payload = response.json()
             token = payload.get("access_token") if isinstance(payload, dict) else None
             expires_in = (
                 payload.get("expires_in") if isinstance(payload, dict) else None
             )
             if not isinstance(token, str) or not token:
-                raise Auth0ManagementError("Management API token response is invalid")
+                msg = "Management API token response is invalid"
+                raise Auth0ManagementError(msg)
             lifetime = int(expires_in) if isinstance(expires_in, int) else 0
             self._token = token
             self._expires_at = now + max(lifetime, TOKEN_REFRESH_MARGIN_SECONDS * 2)
@@ -239,9 +240,8 @@ class Auth0ManagementClient:
             response = self._delete_request(subject, self._access_token())
         if response.status_code in {200, 202, 204, 404}:
             return
-        raise Auth0ManagementError(
-            f"Management API user deletion failed: HTTP {response.status_code}"
-        )
+        msg = f"Management API user deletion failed: HTTP {response.status_code}"
+        raise Auth0ManagementError(msg)
 
 
 _shared_clients: dict[Auth0ManagementSettings, Auth0ManagementClient] = {}

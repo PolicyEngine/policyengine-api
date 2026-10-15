@@ -286,7 +286,8 @@ def test_unauthenticated_account_items_have_no_primary_country() -> None:
 def test_absent_unauthenticated_users_read_as_not_found_and_export_empty() -> None:
     def result(name: str, kwargs: dict):
         if name == "get_account":
-            raise AccountNotFoundError("The account was not found")
+            msg = "The account was not found"
+            raise AccountNotFoundError(msg)
         return AccountExport(
             user=None, policies=(), households=(), simulations=(), reports=()
         )

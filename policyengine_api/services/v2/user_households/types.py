@@ -37,9 +37,8 @@ class UserHouseholdCreateFields(StrictUserHouseholdInput):
     def require_household_reference(self) -> UserHouseholdCreateFields:
         """Require a v2 household_id, a v1 legacy_household_id, or both."""
         if self.household_id is None and self.legacy_household_id is None:
-            raise ValueError(
-                "At least one of legacy_household_id or household_id is required"
-            )
+            msg = "At least one of legacy_household_id or household_id is required"
+            raise ValueError(msg)
         return self
 
 
@@ -57,9 +56,8 @@ class UserHouseholdCreationInput(StrictUserHouseholdInput):
     def require_household_reference(self) -> UserHouseholdCreationInput:
         """Require a v2 household_id, a v1 legacy_household_id, or both."""
         if self.household_id is None and self.legacy_household_id is None:
-            raise ValueError(
-                "At least one of legacy_household_id or household_id is required"
-            )
+            msg = "At least one of legacy_household_id or household_id is required"
+            raise ValueError(msg)
         return self
 
 
@@ -80,12 +78,14 @@ class UserHouseholdUpdateInput(StrictUserHouseholdInput):
         mutable_fields = {"legacy_household_id", "name", "description"}
         supplied = self.model_fields_set.intersection(mutable_fields)
         if not supplied:
-            raise ValueError(
+            msg = (
                 "At least one of legacy_household_id, name, or description must be "
                 "supplied"
             )
+            raise ValueError(msg)
         if "legacy_household_id" in supplied and self.legacy_household_id is None:
-            raise ValueError("legacy_household_id must not be null")
+            msg = "legacy_household_id must not be null"
+            raise ValueError(msg)
         return self
 
 

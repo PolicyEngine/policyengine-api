@@ -42,12 +42,14 @@ class AccountUpdateInput(StrictAccountInput):
             {"first_name", "last_name", "primary_country"}
         )
         if not supplied:
-            raise ValueError(
+            msg = (
                 "At least one of first_name, last_name, or primary_country must be "
                 "supplied"
             )
+            raise ValueError(msg)
         if "primary_country" in supplied and self.primary_country is None:
-            raise ValueError("primary_country must not be null")
+            msg = "primary_country must not be null"
+            raise ValueError(msg)
         return self
 
 

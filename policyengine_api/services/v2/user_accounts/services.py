@@ -122,9 +122,8 @@ class V2AccountService:
                 "auth0_user_deletion_unavailable",
                 extra={"policyengine_attributes": {"error_type": type(error).__name__}},
             )
-            raise AccountDeletionUnavailableError(
-                "Account deletion is temporarily unavailable; nothing was deleted"
-            ) from error
+            msg = "Account deletion is temporarily unavailable; nothing was deleted"
+            raise AccountDeletionUnavailableError(msg) from error
         return deleter
 
     def get_account(
@@ -309,8 +308,9 @@ class V2AccountService:
                     }
                 },
             )
-            raise AccountIdentityDeletionError(
+            msg = (
                 "Account data was deleted but the sign-in account could not be "
                 "removed; retry the request"
-            ) from error
+            )
+            raise AccountIdentityDeletionError(msg) from error
         return AccountDeletion(user_id=deleted_user_id, auth0_subjects=subjects)

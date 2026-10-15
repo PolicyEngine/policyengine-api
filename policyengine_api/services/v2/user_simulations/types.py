@@ -61,12 +61,14 @@ class UserSimulationUpdateInput(StrictUserSimulationInput):
             {"legacy_simulation_id", "name", "description"}
         )
         if not supplied:
-            raise ValueError(
+            msg = (
                 "At least one of legacy_simulation_id, name, or description must "
                 "be supplied"
             )
+            raise ValueError(msg)
         if "legacy_simulation_id" in supplied and self.legacy_simulation_id is None:
-            raise ValueError("legacy_simulation_id must not be null")
+            msg = "legacy_simulation_id must not be null"
+            raise ValueError(msg)
         return self
 
 

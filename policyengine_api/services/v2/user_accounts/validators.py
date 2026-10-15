@@ -36,19 +36,22 @@ def require_resolved_account(owner: ResolvedUser | None) -> ResolvedUser:
     An unauthenticated principal has no account until its first write.
     """
     if owner is None:
-        raise AccountNotFoundError("The account was not found")
+        msg = "The account was not found"
+        raise AccountNotFoundError(msg)
     return owner
 
 
 def require_account(user: User | None) -> User:
     """Return the stored user, or raise AccountNotFoundError if it is None."""
     if user is None:
-        raise AccountNotFoundError("The account was not found")
+        msg = "The account was not found"
+        raise AccountNotFoundError(msg)
     return user
 
 
 def require_editable_account(principal: AccountPrincipal) -> UserPrincipal:
     """Return a signed-in principal, or raise AccountEditRequiresSignInError."""
     if not isinstance(principal, UserPrincipal):
-        raise AccountEditRequiresSignInError("Sign in to edit your account details.")
+        msg = "Sign in to edit your account details."
+        raise AccountEditRequiresSignInError(msg)
     return principal

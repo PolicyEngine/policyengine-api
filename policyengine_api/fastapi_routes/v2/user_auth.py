@@ -50,26 +50,27 @@ def authenticate_user_request(authorization: str | None) -> UserPrincipal:
     try:
         settings = load_user_auth_settings()
     except UserAuthConfigurationError as error:
-        raise V2AuthenticationUnavailableError(
-            "User authentication is unavailable"
-        ) from error
+        msg = "User authentication is unavailable"
+        raise V2AuthenticationUnavailableError(msg) from error
     try:
         principal = authenticate_bearer(authorization, settings)
     except MissingBearerTokenError as error:
-        raise V2AuthenticationRequiredError("Authentication is required") from error
+        msg = "Authentication is required"
+        raise V2AuthenticationRequiredError(msg) from error
     except InvalidBearerTokenError as error:
+        msg = "The bearer access token is invalid"
         raise V2AuthenticationRequiredError(
-            "The bearer access token is invalid",
+            msg,
             invalid_token=True,
         ) from error
     except UserAuthUnavailableError as error:
-        raise V2AuthenticationUnavailableError(
-            "User authentication is unavailable"
-        ) from error
+        msg = "User authentication is unavailable"
+        raise V2AuthenticationUnavailableError(msg) from error
     if principal.kind is PrincipalKind.CLIENT:
-        raise V2PermissionDeniedError(
+        msg = (
             "This resource requires a signed-in user; machine clients are not permitted"
         )
+        raise V2PermissionDeniedError(msg)
     return UserPrincipal(
         issuer=principal.issuer,
         subject=principal.subject,
@@ -93,9 +94,8 @@ def authenticate_account_request(
                 user_id=unauthenticated_user_id(unauthenticated_user)
             )
         except InvalidUnauthenticatedUserError as error:
-            raise V2AuthenticationRequiredError(
-                f"The {UNAUTHENTICATED_USER_HEADER} header must be a canonical UUID"
-            ) from error
+            msg = f"The {UNAUTHENTICATED_USER_HEADER} header must be a canonical UUID"
+            raise V2AuthenticationRequiredError(msg) from error
     return authenticate_user_request(authorization)
 
 
@@ -103,4 +103,5 @@ def require_signed_in_principal(principal: AccountPrincipal) -> UserPrincipal:
     """Refuse an unauthenticated principal where only a signed-in user may act."""
     if isinstance(principal, UserPrincipal):
         return principal
-    raise V2AuthenticationRequiredError("Sign in with a bearer access token")
+    msg = "Sign in with a bearer access token"
+    raise V2AuthenticationRequiredError(msg)

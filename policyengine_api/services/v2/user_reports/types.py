@@ -158,7 +158,8 @@ def stored_provisions(
     ]
     encoded = json.dumps(stored, separators=(",", ":"), ensure_ascii=False)
     if len(encoded.encode("utf-8")) > MAXIMUM_PROVISIONS_BYTES:
-        raise ValueError("provisions must not exceed 64 KiB when serialized")
+        msg = "provisions must not exceed 64 KiB when serialized"
+        raise ValueError(msg)
     return stored
 
 
@@ -241,9 +242,11 @@ class UserReportUpdateInput(_ReportPresentationFields):
         }
         supplied = self.model_fields_set.intersection(mutable_fields)
         if not supplied:
-            raise ValueError("At least one mutable user-report field must be supplied")
+            msg = "At least one mutable user-report field must be supplied"
+            raise ValueError(msg)
         if "legacy_report_id" in supplied and self.legacy_report_id is None:
-            raise ValueError("legacy_report_id must not be null")
+            msg = "legacy_report_id must not be null"
+            raise ValueError(msg)
         return self
 
 
