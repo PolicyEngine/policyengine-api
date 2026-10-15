@@ -7,14 +7,18 @@ an absent one returns 404 and exporting it returns nothing. Every route
 requires a credential; authentication is a router-level dependency.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header
 from starlette.responses import JSONResponse, Response
 
+from policyengine_api.fastapi_routes.dependencies import (
+    NativeRouteDependencies,
+    V2AccountResourceService,
+    _default_v2_account_service_factory,
+)
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
 from policyengine_api.fastapi_routes.v2.me.request_models import (
@@ -45,13 +49,9 @@ from policyengine_api.services.v2.identity.types import (
     UserPrincipal,
 )
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from policyengine_api.fastapi_routes.dependencies import (
-        NativeRouteDependencies,
-        V2AccountResourceService,
-    )
+CountryQueryDependency = Annotated[
+    CountryQuery, Depends(query_dependency(CountryQuery))
+]
 
 
 def _service_factory(
@@ -59,10 +59,6 @@ def _service_factory(
 ) -> Callable[[], V2AccountResourceService]:
     if dependencies.v2_account_service_factory is not None:
         return dependencies.v2_account_service_factory
-    from policyengine_api.fastapi_routes.dependencies import (
-        _default_v2_account_service_factory,
-    )
-
     return _default_v2_account_service_factory
 
 
@@ -74,11 +70,10 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         responses=USER_RESOURCE_ERROR_RESPONSES,
         dependencies=[Depends(require_user)],
     )
-    country_query = query_dependency(CountryQuery)
     service_factory = _service_factory(dependencies)
 
     def require_signed_in_user(
-        principal: AccountPrincipal = Depends(require_user),
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserPrincipal:
         return require_signed_in_principal(principal)
 
@@ -95,8 +90,8 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         ),
     )
     def get_me(
-        query: CountryQuery = Depends(country_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: CountryQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> MeDetailResponse | JSONResponse:
         def read() -> MeDetailResponse:
             item = service_factory().get_account(
@@ -115,9 +110,9 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
     )
     def patch_me(
         body: AccountPatchRequest,
-        query: CountryQuery = Depends(country_query),
-        principal: AccountPrincipal = Depends(require_user),
-        _size: None = Depends(enforce_user_write_request_size),
+        query: CountryQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
+        _size: Annotated[None, Depends(enforce_user_write_request_size)],
     ) -> MeDetailResponse | JSONResponse:
         def patch() -> MeDetailResponse:
             item = service_factory().update_account(
@@ -161,8 +156,8 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         ),
     )
     def delete_me(
-        query: CountryQuery = Depends(country_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: CountryQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> Response | JSONResponse:
         def delete() -> Response:
             service_factory().delete_account(principal=principal)
@@ -180,8 +175,8 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         ),
     )
     def export_me(
-        query: CountryQuery = Depends(country_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: CountryQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> MeExportResponse | JSONResponse:
         def export() -> MeExportResponse:
             result = service_factory().export_account(
@@ -209,14 +204,17 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         ),
     )
     def upgrade_me(
-        query: CountryQuery = Depends(country_query),
-        principal: UserPrincipal = Depends(require_signed_in_user),
-        unauthenticated_user: str = Header(
-            alias=UNAUTHENTICATED_USER_HEADER,
-            pattern=CANONICAL_UUID_PATTERN,
-            description="The browser's unauthenticated user ID (a canonical UUID).",
-        ),
-        _size: None = Depends(enforce_user_write_request_size),
+        query: CountryQueryDependency,
+        principal: Annotated[UserPrincipal, Depends(require_signed_in_user)],
+        unauthenticated_user: Annotated[
+            str,
+            Header(
+                alias=UNAUTHENTICATED_USER_HEADER,
+                pattern=CANONICAL_UUID_PATTERN,
+                description="The browser's unauthenticated user ID (a canonical UUID).",
+            ),
+        ],
+        _size: Annotated[None, Depends(enforce_user_write_request_size)],
     ) -> MeUpgradeResponse | JSONResponse:
         def upgrade() -> MeUpgradeResponse:
             result = service_factory().upgrade_account(

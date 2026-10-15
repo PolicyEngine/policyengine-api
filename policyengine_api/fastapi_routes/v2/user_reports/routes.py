@@ -4,14 +4,18 @@ The owner routes need a credential. A saved report's ID is also its
 shareable link, read without one through ``/v2/shared-reports``.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse, Response
 
+from policyengine_api.fastapi_routes.dependencies import (
+    NativeRouteDependencies,
+    V2UserReportResourceService,
+    _default_v2_user_report_service_factory,
+)
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import (
     V2ErrorResponse,
@@ -42,14 +46,6 @@ from policyengine_api.query_parameters import (
 )
 from policyengine_api.services.v2.identity.types import AccountPrincipal
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from policyengine_api.fastapi_routes.dependencies import (
-        NativeRouteDependencies,
-        V2UserReportResourceService,
-    )
-
 SHARED_REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {
         "model": V2ErrorResponse,
@@ -64,15 +60,19 @@ SHARED_REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 
 
+CountryQueryDependency = Annotated[
+    CountryQuery, Depends(query_dependency(CountryQuery))
+]
+UserReportCollectionQueryDependency = Annotated[
+    UserReportCollectionQuery, Depends(query_dependency(UserReportCollectionQuery))
+]
+
+
 def _service_factory(
     dependencies: NativeRouteDependencies,
 ) -> Callable[[], V2UserReportResourceService]:
     if dependencies.v2_user_report_service_factory is not None:
         return dependencies.v2_user_report_service_factory
-    from policyengine_api.fastapi_routes.dependencies import (
-        _default_v2_user_report_service_factory,
-    )
-
     return _default_v2_user_report_service_factory
 
 
@@ -93,8 +93,6 @@ def build_v2_user_report_router(
             Depends(enforce_user_write_request_size),
         ],
     )
-    country_query = query_dependency(CountryQuery)
-    collection_query = query_dependency(UserReportCollectionQuery)
     service_factory = _service_factory(dependencies)
 
     @router.post(
@@ -112,8 +110,8 @@ def build_v2_user_report_router(
     )
     def create_user_report(
         body: UserReportCreateRequest,
-        query: CountryQuery = Depends(country_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: CountryQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserReportDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
             return v2_error_response(400, "Body country_id must match query country_id")
@@ -136,8 +134,8 @@ def build_v2_user_report_router(
     )
     def get_user_report(
         association_id: UUID,
-        query: CountryQuery = Depends(country_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: CountryQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserReportDetailResponse | JSONResponse:
         def read() -> UserReportDetailResponse:
             item = service_factory().get_user_report(
@@ -157,8 +155,8 @@ def build_v2_user_report_router(
         summary="List the current user's saved reports",
     )
     def get_user_reports(
-        query: UserReportCollectionQuery = Depends(collection_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: UserReportCollectionQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserReportPageResponse | JSONResponse:
         def read() -> UserReportPageResponse:
             page = service_factory().list_user_reports(
@@ -180,8 +178,8 @@ def build_v2_user_report_router(
     def patch_user_report_route(
         association_id: UUID,
         body: UserReportPatchRequest,
-        query: CountryQuery = Depends(country_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: CountryQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserReportDetailResponse | JSONResponse:
         def patch() -> UserReportDetailResponse:
             item = service_factory().patch_user_report(
@@ -205,8 +203,8 @@ def build_v2_user_report_router(
     )
     def delete_user_report_route(
         association_id: UUID,
-        query: CountryQuery = Depends(country_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: CountryQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> Response | JSONResponse:
         def delete() -> Response:
             service_factory().delete_user_report(
@@ -226,7 +224,6 @@ def build_v2_shared_report_router(
 ) -> APIRouter:
     """Build the credential-free read of a saved report by its link."""
     router = APIRouter(prefix="/v2", responses=SHARED_REPORT_ERROR_RESPONSES)
-    country_query = query_dependency(CountryQuery)
     service_factory = _service_factory(dependencies)
 
     @router.get(
@@ -242,7 +239,7 @@ def build_v2_shared_report_router(
     )
     def get_shared_report(
         association_id: UUID,
-        query: CountryQuery = Depends(country_query),
+        query: CountryQueryDependency,
     ) -> SharedUserReportDetailResponse | JSONResponse:
         def read() -> SharedUserReportDetailResponse:
             item = service_factory().get_shared_user_report(

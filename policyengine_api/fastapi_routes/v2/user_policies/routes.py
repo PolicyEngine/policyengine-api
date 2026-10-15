@@ -1,14 +1,15 @@
 """Native FastAPI routes for v2 user-policy associations."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Annotated
+from collections.abc import Callable
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse, Response
 
 from policyengine_api.fastapi_routes.dependencies import (
+    NativeRouteDependencies,
+    V2UserPolicyResourceService,
     _default_v2_user_policy_service_factory,
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
@@ -34,15 +35,6 @@ from policyengine_api.query_parameters import (
     UserPolicyCollectionQuery,
 )
 from policyengine_api.services.v2.identity.types import AccountPrincipal
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from policyengine_api.fastapi_routes.dependencies import (
-        NativeRouteDependencies,
-        V2UserPolicyResourceService,
-    )
-
 
 CountryQueryDependency = Annotated[
     CountryQuery, Depends(query_dependency(CountryQuery))
@@ -95,7 +87,7 @@ def build_v2_user_policy_router(
     def create_user_policy(
         body: UserPolicyCreateRequest,
         query: CountryQueryDependency,
-        principal: AccountPrincipal = Depends(require_user),
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserPolicyDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
             return v2_error_response(
@@ -122,7 +114,7 @@ def build_v2_user_policy_router(
     def get_user_policy(
         association_id: UUID,
         query: CountryQueryDependency,
-        principal: AccountPrincipal = Depends(require_user),
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserPolicyDetailResponse | JSONResponse:
         def read() -> UserPolicyDetailResponse:
             item = service_factory().get_user_policy(
@@ -143,7 +135,7 @@ def build_v2_user_policy_router(
     )
     def get_user_policies(
         query: UserPolicyCollectionQueryDependency,
-        principal: AccountPrincipal = Depends(require_user),
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserPolicyPageResponse | JSONResponse:
         def read() -> UserPolicyPageResponse:
             page = service_factory().list_user_policies(
@@ -172,7 +164,7 @@ def build_v2_user_policy_router(
         association_id: UUID,
         body: UserPolicyPatchRequest,
         query: CountryQueryDependency,
-        principal: AccountPrincipal = Depends(require_user),
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserPolicyDetailResponse | JSONResponse:
         def patch() -> UserPolicyDetailResponse:
             item = service_factory().patch_user_policy(
@@ -197,7 +189,7 @@ def build_v2_user_policy_router(
     def delete_user_policy_route(
         association_id: UUID,
         query: CountryQueryDependency,
-        principal: AccountPrincipal = Depends(require_user),
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> Response | JSONResponse:
         def delete() -> Response:
             service_factory().delete_user_policy(

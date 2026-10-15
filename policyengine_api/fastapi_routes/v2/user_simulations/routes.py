@@ -1,13 +1,17 @@
 """Native FastAPI routes for v2 user-simulation associations."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse, Response
 
+from policyengine_api.fastapi_routes.dependencies import (
+    NativeRouteDependencies,
+    V2UserSimulationResourceService,
+    _default_v2_user_simulation_service_factory,
+)
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import v2_error_response
 from policyengine_api.fastapi_routes.v2.user_resources import (
@@ -32,13 +36,13 @@ from policyengine_api.query_parameters import (
 )
 from policyengine_api.services.v2.identity.types import AccountPrincipal
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from policyengine_api.fastapi_routes.dependencies import (
-        NativeRouteDependencies,
-        V2UserSimulationResourceService,
-    )
+CountryQueryDependency = Annotated[
+    CountryQuery, Depends(query_dependency(CountryQuery))
+]
+UserSimulationCollectionQueryDependency = Annotated[
+    UserSimulationCollectionQuery,
+    Depends(query_dependency(UserSimulationCollectionQuery)),
+]
 
 
 def _service_factory(
@@ -46,10 +50,6 @@ def _service_factory(
 ) -> Callable[[], V2UserSimulationResourceService]:
     if dependencies.v2_user_simulation_service_factory is not None:
         return dependencies.v2_user_simulation_service_factory
-    from policyengine_api.fastapi_routes.dependencies import (
-        _default_v2_user_simulation_service_factory,
-    )
-
     return _default_v2_user_simulation_service_factory
 
 
@@ -70,8 +70,6 @@ def build_v2_user_simulation_router(
             Depends(enforce_user_write_request_size),
         ],
     )
-    country_query = query_dependency(CountryQuery)
-    collection_query = query_dependency(UserSimulationCollectionQuery)
     service_factory = _service_factory(dependencies)
 
     @router.post(
@@ -88,8 +86,8 @@ def build_v2_user_simulation_router(
     )
     def create_user_simulation(
         body: UserSimulationCreateRequest,
-        query: CountryQuery = Depends(country_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: CountryQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserSimulationDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
             return v2_error_response(400, "Body country_id must match query country_id")
@@ -114,8 +112,8 @@ def build_v2_user_simulation_router(
     )
     def get_user_simulation(
         association_id: UUID,
-        query: CountryQuery = Depends(country_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: CountryQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserSimulationDetailResponse | JSONResponse:
         def read() -> UserSimulationDetailResponse:
             item = service_factory().get_user_simulation(
@@ -137,8 +135,8 @@ def build_v2_user_simulation_router(
         summary="List the current user's saved simulations",
     )
     def get_user_simulations(
-        query: UserSimulationCollectionQuery = Depends(collection_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: UserSimulationCollectionQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserSimulationPageResponse | JSONResponse:
         def read() -> UserSimulationPageResponse:
             page = service_factory().list_user_simulations(
@@ -162,8 +160,8 @@ def build_v2_user_simulation_router(
     def patch_user_simulation_route(
         association_id: UUID,
         body: UserSimulationPatchRequest,
-        query: CountryQuery = Depends(country_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: CountryQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserSimulationDetailResponse | JSONResponse:
         def patch() -> UserSimulationDetailResponse:
             item = service_factory().patch_user_simulation(
@@ -189,8 +187,8 @@ def build_v2_user_simulation_router(
     )
     def delete_user_simulation_route(
         association_id: UUID,
-        query: CountryQuery = Depends(country_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: CountryQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> Response | JSONResponse:
         def delete() -> Response:
             service_factory().delete_user_simulation(
