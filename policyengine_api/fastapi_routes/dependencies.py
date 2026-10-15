@@ -70,6 +70,7 @@ if TYPE_CHECKING:
         UserHouseholdUpdateInput,
     )
     from policyengine_api.services.v2.user_reports.types import (
+        SharedUserReportRead,
         UserReportCreateFields,
         UserReportPage,
         UserReportRead,
@@ -444,6 +445,13 @@ class V2UserReportResourceService(Protocol):
         country_id: str,
         association_id: UUID,
     ) -> "UserReportRead": ...
+
+    def get_shared_user_report(
+        self,
+        *,
+        country_id: str,
+        association_id: UUID,
+    ) -> "SharedUserReportRead": ...
 
     def list_user_reports(
         self,

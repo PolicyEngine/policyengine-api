@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from policyengine_api.query_parameters import CountryId
 from policyengine_api.services.v2.user_reports.types import (
+    SharedUserReportRead,
     UserReportPage,
     UserReportRead,
 )
@@ -119,6 +120,35 @@ class UserReportItem(StrictUserReportAPIModel):
         return cls.model_validate(item)
 
 
+class SharedBaselineReformItem(StrictUserReportAPIModel):
+    name: str | None
+
+
+class SharedUserReportItem(StrictUserReportAPIModel):
+    """A saved report as anyone holding its link reads it."""
+
+    id: UUID
+    country_id: CountryId
+    legacy_report_id: int | None
+    name: str | None
+    source_note: str | None
+    provisions: list[ReportProvisionItem] | None
+    validation: ReportValidationItem | None
+    budget_window_years: int | None
+    baseline_reform: SharedBaselineReformItem | None
+    last_run_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_read(cls, item: SharedUserReportRead) -> "SharedUserReportItem":
+        return cls.model_validate(item)
+
+
+class SharedUserReportDetailResult(StrictUserReportAPIModel):
+    item: SharedUserReportItem
+
+
 class UserReportDetailResult(StrictUserReportAPIModel):
     item: UserReportItem
 
@@ -153,4 +183,10 @@ class UserReportDetailResponse(UserReportSuccessResponse[UserReportDetailResult]
 
 
 class UserReportPageResponse(UserReportSuccessResponse[UserReportPageResult]):
+    pass
+
+
+class SharedUserReportDetailResponse(
+    UserReportSuccessResponse[SharedUserReportDetailResult]
+):
     pass

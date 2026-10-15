@@ -225,6 +225,35 @@ class UserReportRead:
 
 
 @dataclass(frozen=True)
+class SharedBaselineReformRead:
+    """The saved reform a shared report was compared with, by name only."""
+
+    name: str | None
+
+
+@dataclass(frozen=True)
+class SharedUserReportRead:
+    """What anyone holding a saved report's link may read.
+
+    The owner and the owner's saved-reform IDs stay private; the reform the
+    report was compared with is named instead of linked.
+    """
+
+    id: UUID
+    country_id: str
+    legacy_report_id: int | None
+    name: str | None
+    source_note: str | None
+    provisions: list[StoredJSONObject] | None
+    validation: StoredJSONObject | None
+    budget_window_years: int | None
+    baseline_reform: SharedBaselineReformRead | None
+    last_run_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
 class UserReportPage:
     items: tuple[UserReportRead, ...]
     offset: int

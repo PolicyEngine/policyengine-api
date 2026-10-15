@@ -44,8 +44,12 @@ from policyengine_api.services.v2.user_reports.database_session import (
 )
 from policyengine_api.services.v2.user_reports.services import V2UserReportService
 from policyengine_api.services.v2.user_reports.types import (
+    SharedBaselineReformRead,
     UserReportCreateFields,
     UserReportUpdateInput,
+)
+from policyengine_api.services.v2.user_reports.validators import (
+    UserReportNotFoundError,
 )
 from policyengine_api.services.v2.user_simulations.database_session import (
     UserSimulationDatabaseSession,
@@ -333,6 +337,65 @@ def test_report_policy_links_require_the_same_owner_and_survive_deletion(
         principal=ALICE, country_id="us", association_id=report.id
     )
     assert refreshed.user_policy_id is None
+
+
+def test_anyone_reads_a_saved_report_by_its_link_without_the_owner(store) -> None:
+    _accounts, policies, _simulations, reports = _services(store)
+    compared = policies.create_user_policy(
+        principal=ALICE,
+        association_input=UserPolicyCreateFields(
+            country_id="us", legacy_policy_id=1, name="Current plan"
+        ),
+    )
+    report = reports.create_user_report(
+        principal=ALICE,
+        association_input=UserReportCreateFields.model_validate(
+            {
+                "country_id": "us",
+                "legacy_report_id": 615,
+                "name": "CTC report",
+                "source_note": "from chat",
+                "user_policy_id": str(compared.id),
+                "baseline_user_policy_id": str(compared.id),
+                "budget_window_years": 10,
+                "provisions": [
+                    {
+                        "path": "gov.x",
+                        "breadcrumb": "X",
+                        "baseline_value": 1,
+                        "value": 2,
+                    }
+                ],
+            }
+        ),
+    )
+
+    # No principal: the report's ID is the link.
+    shared = reports.get_shared_user_report(country_id="us", association_id=report.id)
+
+    assert (shared.id, shared.legacy_report_id, shared.name, shared.source_note) == (
+        report.id,
+        615,
+        "CTC report",
+        "from chat",
+    )
+    assert shared.provisions == report.provisions
+    assert shared.budget_window_years == 10
+    assert shared.baseline_reform == SharedBaselineReformRead(name="Current plan")
+    for private_field in ("user_id", "user_policy_id", "baseline_user_policy_id"):
+        assert not hasattr(shared, private_field)
+    with pytest.raises(UserReportNotFoundError):
+        reports.get_shared_user_report(country_id="uk", association_id=report.id)
+
+    policies.delete_user_policy(
+        principal=ALICE, country_id="us", association_id=compared.id
+    )
+    assert (
+        reports.get_shared_user_report(
+            country_id="us", association_id=report.id
+        ).baseline_reform
+        is None
+    )
 
 
 def test_export_covers_every_country(store) -> None:

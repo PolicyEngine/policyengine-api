@@ -25,6 +25,22 @@ def read_owned_user_report_row(
     ).one_or_none()
 
 
+def read_user_report_row(
+    session: Session,
+    *,
+    country_id: str,
+    association_id: UUID,
+) -> UserReportAssociation | None:
+    """Read a row whoever owns it: a saved report's ID is its shareable link."""
+
+    return session.exec(
+        select(UserReportAssociation).where(
+            UserReportAssociation.id == association_id,
+            UserReportAssociation.country_id == country_id,
+        )
+    ).one_or_none()
+
+
 def read_user_report_rows(
     session: Session,
     *,
@@ -67,6 +83,22 @@ def read_all_user_report_rows(
             )
         ).all()
     )
+
+
+def read_owned_user_policy_row(
+    session: Session,
+    *,
+    user_id: UUID,
+    country_id: str,
+    user_policy_id: UUID,
+) -> UserPolicy | None:
+    return session.exec(
+        select(UserPolicy).where(
+            UserPolicy.id == user_policy_id,
+            UserPolicy.user_id == user_id,
+            UserPolicy.country_id == country_id,
+        )
+    ).one_or_none()
 
 
 def read_owned_user_policy_exists(

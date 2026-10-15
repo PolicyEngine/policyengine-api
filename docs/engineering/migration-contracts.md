@@ -8,7 +8,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | ---: |
 | route group count | 9 |
 | workflow count | 16 |
-| request count | 88 |
+| request count | 89 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -23,7 +23,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `household` | `household`, `households`, `user-household`, `user-households`, `calculate`, `calculate-full` | `household` | `household` |
 | `economy` | `economy` | `simulation` | `economy` |
 | `simulation` | `simulation`, `simulations`, `user-simulations` | `simulation` | `economy` |
-| `report` | `report`, `user-reports` | `report` | `report` |
+| `report` | `report`, `user-reports`, `shared-reports` | `report` | `report` |
 | `user_profile` | `user-profile`, `me` | `user` | `none` |
 
 ## App V2 Workflow Contracts
@@ -153,6 +153,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `GET` | `/v2/user-reports?country_id=us` | 200 | `report` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
 | `PATCH` | `/v2/user-reports/{association_id}?country_id=us` | 200 | `report` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.item.id`, `result.item.legacy_report_id`, `result.item.name`, `result.item.description`, `result.item.user_policy_id`, `result.item.baseline_user_policy_id`, `result.item.source_note`, `result.item.provisions`, `result.item.validation`, `result.item.budget_window_years`, `result.item.last_run_at`, `result.item.updated_at` |
 | `DELETE` | `/v2/user-reports/{association_id}?country_id=us` | 204 | `report` | `PolicyEngine-Unauthenticated-User` |  |
+| `GET` | `/v2/shared-reports/{association_id}?country_id=us` | 200 | `report` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.legacy_report_id`, `result.item.name`, `result.item.source_note`, `result.item.provisions`, `result.item.validation`, `result.item.budget_window_years`, `result.item.baseline_reform`, `result.item.last_run_at`, `result.item.created_at`, `result.item.updated_at` |
 
 ### `user_account_v2`
 

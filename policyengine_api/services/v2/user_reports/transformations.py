@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from policyengine_api.data.v2.models import UserReportAssociation
+from policyengine_api.data.v2.models import UserPolicy, UserReportAssociation
 from policyengine_api.services.v2.user_reports.types import (
+    SharedBaselineReformRead,
+    SharedUserReportRead,
     UserReportCreateFields,
     UserReportCreationInput,
     UserReportPage,
@@ -32,6 +34,31 @@ def user_report_read(association: UserReportAssociation) -> UserReportRead:
         provisions=association.provisions,
         validation=association.validation,
         budget_window_years=association.budget_window_years,
+        last_run_at=association.last_run_at,
+        created_at=association.created_at,
+        updated_at=association.updated_at,
+    )
+
+
+def shared_user_report_read(
+    association: UserReportAssociation,
+    *,
+    baseline_reform: UserPolicy | None,
+) -> SharedUserReportRead:
+    return SharedUserReportRead(
+        id=association.id,
+        country_id=association.country_id,
+        legacy_report_id=association.legacy_report_id,
+        name=association.name,
+        source_note=association.source_note,
+        provisions=association.provisions,
+        validation=association.validation,
+        budget_window_years=association.budget_window_years,
+        baseline_reform=(
+            None
+            if baseline_reform is None
+            else SharedBaselineReformRead(name=baseline_reform.name)
+        ),
         last_run_at=association.last_run_at,
         created_at=association.created_at,
         updated_at=association.updated_at,

@@ -26,6 +26,10 @@ routes. The legacy builder stays browser-only, signed in or not.
 - **Saved work.** App v3 reads and writes `/v2/user-policies` (its reforms)
   and `/v2/user-reports`. `/v2/user-households` and `/v2/user-simulations`
   have no app consumer yet.
+- **Shared reports.** An app v3 report link carries the report's
+  user-report ID. Whoever opens it, signed in, signed out, or another user,
+  reads `GET /v2/shared-reports/{id}?country_id=` with no credential (see
+  "Shared reports").
 
 ## User types and credentials
 
@@ -231,6 +235,24 @@ contract shared with `policyengine-app-v2`. The generated route inventory is in
 | `POST /v2/me/upgrade?country_id=` | Requires the header too (422 without it); `{"item": MeItem, "outcome": ...}` | 401 (a bearer token is required) |
 | `DELETE /v2/me` | 204; deletes data, then the Auth0 user when configured | 204; deletes data, never calls Auth0 |
 | `/v2/user-policies`, `/v2/user-households`, `/v2/user-simulations`, `/v2/user-reports` | POST (201), list, GET, PATCH, DELETE (204), owner-scoped | The same; reads never provision |
+| `GET /v2/shared-reports/{id}?country_id=` | No credential: any user's saved report in that country, without its owner (404 when none) | The same |
+
+### Shared reports
+
+A saved report's ID is its shareable link, so `GET /v2/shared-reports/{id}`
+takes no credential and sits outside the authenticated user-report router. It
+never provisions a user. Its item is `{id, country_id, legacy_report_id, name,
+source_note, provisions, validation, budget_window_years, baseline_reform,
+last_run_at, created_at, updated_at}`:
+
+- `user_id`, `user_policy_id`, and `baseline_user_policy_id` are left out;
+  the owner and the owner's saved reforms stay private.
+- `baseline_reform` is `{"name": ...}` when the report was compared with one
+  of the owner's saved reforms, and null otherwise, including after that
+  reform is deleted.
+- Anyone holding the ID can read the report's name, source note, and
+  provisions. There is no shared list or search, and the owner routes stay
+  owner-scoped.
 
 `MeItem` is `{id, user_type, primary_country, first_name, last_name, email,
 created_at}`; `user_type` is `standard` or `unauthenticated`, and

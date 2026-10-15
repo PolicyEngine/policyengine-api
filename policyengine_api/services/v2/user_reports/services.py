@@ -8,6 +8,9 @@ browser's unauthenticated user; one that does not exist yet owns no records.
 An optional ``user_policy_id`` (the saved reform the report was run from) and
 an optional ``baseline_user_policy_id`` (the saved reform it was compared with)
 must each name the same owner's saved policy in the same country.
+
+A saved report's ID is also its shareable link: anyone holding it can read
+the report without a credential, minus the owner and the owner's links.
 """
 
 from __future__ import annotations
@@ -36,7 +39,9 @@ from policyengine_api.services.v2.user_reports.database_connectors.deletes impor
 from policyengine_api.services.v2.user_reports.database_connectors.reads import (
     read_all_user_report_rows,
     read_owned_user_policy_exists,
+    read_owned_user_policy_row,
     read_owned_user_report_row,
+    read_user_report_row,
     read_user_report_rows,
 )
 from policyengine_api.services.v2.user_reports.database_connectors.updates import (
@@ -47,11 +52,13 @@ from policyengine_api.services.v2.user_reports.database_session import (
 )
 from policyengine_api.services.v2.user_reports.transformations import (
     owned_user_report_input,
+    shared_user_report_read,
     user_report_page,
     user_report_read,
     user_report_update_values,
 )
 from policyengine_api.services.v2.user_reports.types import (
+    SharedUserReportRead,
     UserReportCreateFields,
     UserReportPage,
     UserReportRead,
@@ -186,6 +193,38 @@ class V2UserReportService:
                     country_id=country_id,
                     association_id=association_id,
                 )
+            )
+
+    def get_shared_user_report(
+        self,
+        *,
+        country_id: str,
+        association_id: UUID,
+    ) -> SharedUserReportRead:
+        """Read a saved report for anyone holding its link; no credential."""
+
+        with self._database_session.transaction() as session:
+            association = require_user_report(
+                read_user_report_row(
+                    session,
+                    country_id=country_id,
+                    association_id=association_id,
+                ),
+                association_id=association_id,
+            )
+            baseline_user_policy_id = association.baseline_user_policy_id
+            return shared_user_report_read(
+                association,
+                baseline_reform=(
+                    None
+                    if baseline_user_policy_id is None
+                    else read_owned_user_policy_row(
+                        session,
+                        user_id=association.user_id,
+                        country_id=country_id,
+                        user_policy_id=baseline_user_policy_id,
+                    )
+                ),
             )
 
     def list_user_reports(

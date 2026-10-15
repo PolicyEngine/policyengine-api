@@ -111,3 +111,21 @@ def test_user_routes_record_signed_in_and_signed_out_contracts() -> None:
     assert not any(
         "/v2/me/imports" in path for _method, path, _headers in user_requests
     )
+
+
+def test_shared_reports_are_read_without_a_credential() -> None:
+    shared_reads = [
+        request
+        for request in APP_V2_ROUTE_CONTRACTS
+        if request.path.startswith("/v2/shared-reports/")
+    ]
+
+    assert [(request.method, request.headers) for request in shared_reads] == [
+        ("GET", ())
+    ]
+    # The owner and the owner's saved-reform IDs stay private.
+    assert not {
+        "result.item.user_id",
+        "result.item.user_policy_id",
+        "result.item.baseline_user_policy_id",
+    } & set(shared_reads[0].stable_response_fields)

@@ -74,7 +74,7 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
     ),
     RouteGroupConfig(
         name="report",
-        path_segments=("report", "user-reports"),
+        path_segments=("report", "user-reports", "shared-reports"),
         db_entity="report",
         sim_flow="report",
     ),

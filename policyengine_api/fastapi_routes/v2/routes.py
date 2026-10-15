@@ -28,6 +28,7 @@ from policyengine_api.fastapi_routes.v2.user_households.routes import (
     build_v2_user_household_router,
 )
 from policyengine_api.fastapi_routes.v2.user_reports.routes import (
+    build_v2_shared_report_router,
     build_v2_user_report_router,
 )
 from policyengine_api.fastapi_routes.v2.user_simulations.routes import (
@@ -43,6 +44,7 @@ def build_v2_router(
     router = APIRouter()
     router.include_router(build_v2_me_router(dependencies))
     router.include_router(build_v2_user_report_router(dependencies))
+    router.include_router(build_v2_shared_report_router(dependencies))
     router.include_router(build_v2_user_simulation_router(dependencies))
     router.include_router(build_v2_user_household_router(dependencies))
     router.include_router(build_v2_user_policy_router(dependencies))

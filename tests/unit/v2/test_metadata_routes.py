@@ -550,6 +550,7 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/user-simulations/{association_id}",
         "/v2/user-reports",
         "/v2/user-reports/{association_id}",
+        "/v2/shared-reports/{association_id}",
         "/v2/me",
         "/v2/me/export",
         "/v2/me/upgrade",
