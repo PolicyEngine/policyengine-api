@@ -31,6 +31,7 @@ class V1LegacyReferenceService:
     """Batched, read-only v1 existence checks."""
 
     def __init__(self, database_session: LegacyReferenceDatabaseSession) -> None:
+        """Open every v1 read through ``database_session``."""
         self._database_session = database_session
 
     def existing_ids(
@@ -80,6 +81,7 @@ class DeferredLegacyReferenceService:
     """
 
     def __init__(self, build: Callable[[], LegacyReferenceChecker]) -> None:
+        """Call ``build`` at the first check and reuse its service afterwards."""
         self._build = build
         self._service: LegacyReferenceChecker | None = None
 
@@ -94,6 +96,7 @@ class DeferredLegacyReferenceService:
         country_id: str,
         requested: Mapping[LegacyRecordKind, Collection[int]],
     ) -> dict[LegacyRecordKind, frozenset[int]]:
+        """Return the existing IDs per kind from the built v1 reference service."""
         return self._resolved().existing_ids(country_id=country_id, requested=requested)
 
     def require_existing(
@@ -102,4 +105,5 @@ class DeferredLegacyReferenceService:
         country_id: str,
         requested: Mapping[LegacyRecordKind, Collection[int]],
     ) -> None:
+        """Raise ``LegacyReferenceNotFoundError`` for any missing reference."""
         self._resolved().require_existing(country_id=country_id, requested=requested)

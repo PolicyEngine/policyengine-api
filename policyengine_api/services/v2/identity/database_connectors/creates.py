@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 
 def create_provisioned_user(session: Session, *, primary_country: str) -> User:
+    """Insert a standard user for a new sign-in identity and return it with its ID."""
     user = User(primary_country=primary_country, user_type=UserType.STANDARD.value)
     session.add(user)
     session.flush()

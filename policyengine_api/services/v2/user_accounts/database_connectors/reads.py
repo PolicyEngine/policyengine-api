@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 
 def read_account_user(session: Session, user_id: UUID) -> User | None:
+    """Return the v2 user with this id, or None."""
     return session.get(User, user_id)
 
 
@@ -22,6 +23,7 @@ def read_identity_subjects(
     user_id: UUID,
     issuer: str,
 ) -> list[str]:
+    """Return the user's sign-in subjects from ``issuer``, oldest identity first."""
     return list(
         session.exec(
             select(UserIdentity.subject)

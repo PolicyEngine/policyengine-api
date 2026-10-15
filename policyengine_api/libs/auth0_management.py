@@ -57,6 +57,13 @@ class Auth0ManagementError(RuntimeError):
 
 @dataclass(frozen=True)
 class Auth0ManagementSettings:
+    """Validated Management API settings for one Auth0 tenant.
+
+    Exactly one of ``client_secret`` and ``client_secret_resource`` (a Secret
+    Manager version name) is set. The secret is kept out of ``repr``, and equal
+    settings share one client, so its token is reused.
+    """
+
     domain: str
     client_id: str
     client_secret: str = field(default="", repr=False)
@@ -122,6 +129,12 @@ class Auth0ManagementClient:
         http_client: httpx.Client | None = None,
         secret_loader: Callable[[str], str] = _load_secret_from_secret_manager,
     ) -> None:
+        """Use ``settings`` for the tenant and client credentials.
+
+        ``http_client`` replaces the per-request client (tests pass a mock
+        transport), and ``secret_loader`` reads ``client_secret_resource`` when
+        no direct secret is set.
+        """
         self._settings = settings
         self._http_client = http_client
         self._secret_loader = secret_loader

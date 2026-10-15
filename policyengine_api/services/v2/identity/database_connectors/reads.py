@@ -18,6 +18,7 @@ def read_user_identity(
     issuer: str,
     subject: str,
 ) -> UserIdentity | None:
+    """Return the identity for this issuer and subject, or None if never seen."""
     return session.exec(
         select(UserIdentity).where(
             UserIdentity.issuer == issuer,

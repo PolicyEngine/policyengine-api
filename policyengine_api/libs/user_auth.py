@@ -81,6 +81,11 @@ class InvalidUnauthenticatedUserError(UserAuthError):
 
 
 class PrincipalKind(StrEnum):
+    """Whether a token was issued to a person or to a machine-to-machine client.
+
+    User routes refuse client principals.
+    """
+
     USER = "user"
     CLIENT = "client"
 
@@ -95,6 +100,7 @@ class UserAuthSettings:
 
     @property
     def configured(self) -> bool:
+        """Whether an issuer and audience are set, so bearer tokens can be checked."""
         return bool(self.issuer and self.audience)
 
 
@@ -109,7 +115,11 @@ class VerifiedPrincipal:
 
 
 class TokenDecoder(Protocol):
-    def decode(self, token: str) -> Mapping[str, Any]: ...
+    """Verify an access token and return its claims; tests inject a fake."""
+
+    def decode(self, token: str) -> Mapping[str, Any]:
+        """Return the claims of a valid token, or raise a PyJWT error."""
+        ...
 
 
 def _normalized_issuer(value: str) -> str:
@@ -171,6 +181,11 @@ class JWTDecoder:
         *,
         jwks_client: jwt.PyJWKClient | None = None,
     ) -> None:
+        """Accept tokens from ``issuer`` for ``audience``.
+
+        Without ``jwks_client``, signing keys are fetched from the issuer's
+        ``.well-known/jwks.json`` and cached by key ID.
+        """
         self.issuer = issuer
         self.audience = audience
         self.jwks_client = jwks_client or jwt.PyJWKClient(
@@ -180,6 +195,11 @@ class JWTDecoder:
         )
 
     def decode(self, token: str) -> Mapping[str, Any]:
+        """Verify the signature, issuer, audience and required claims; return claims.
+
+        Raise ``jwt.PyJWKClientConnectionError`` when the signing keys cannot be
+        fetched, and another ``jwt.PyJWTError`` when the token is invalid.
+        """
         signing_key = self.jwks_client.get_signing_key_from_jwt(token).key
         return jwt.decode(
             token,

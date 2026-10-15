@@ -91,9 +91,11 @@ class StandardAccountProvisioning:
     """Provision the standard user of a verified sign-in identity on any request."""
 
     def __init__(self, principal: UserPrincipal) -> None:
+        """Act for the verified sign-in identity ``principal``."""
         self._principal = principal
 
     def find_in_session(self, session: Session) -> ResolvedUser | None:
+        """Return the identity's standard user, or None before its first request."""
         identity = read_user_identity(
             session,
             issuer=self._principal.issuer,
@@ -110,6 +112,13 @@ class StandardAccountProvisioning:
         country_id: str,
         now: datetime | None = None,
     ) -> ResolvedUser:
+        """Return the identity's user, provisioning it with ``country_id`` if absent.
+
+        A known identity's email and last-seen time are written at most hourly,
+        or when the email changes. When a concurrent first request wins the
+        ``UNIQUE(issuer, subject)`` race, its user is returned instead; raise
+        IdentityProvisioningError if that user's identity cannot be re-read.
+        """
         principal = self._principal
         seen_at = now or utc_now()
         identity = read_user_identity(
@@ -167,6 +176,7 @@ class StandardAccountProvisioning:
         *,
         country_id: str,
     ) -> ResolvedUser | None:
+        """Return the identity's user, provisioning it as on any request."""
         # A signed-in account exists from its first request, read or write.
         return self.resolve_in_session(session, country_id=country_id)
 
@@ -175,9 +185,14 @@ class UnauthenticatedAccountProvisioning:
     """Provision a signed-out browser's unauthenticated user on its first write."""
 
     def __init__(self, principal: UnauthenticatedPrincipal) -> None:
+        """Act for the signed-out browser whose UUID ``principal`` carries."""
         self._principal = principal
 
     def find_in_session(self, session: Session) -> ResolvedUser | None:
+        """Return the browser's user, or None if it has not saved anything yet.
+
+        Raise StandardUserRequiresSignInError if the UUID names a standard user.
+        """
         user = require_unauthenticated_user(read_user(session, self._principal.user_id))
         return None if user is None else unauthenticated_resolved_user(user)
 
@@ -188,6 +203,12 @@ class UnauthenticatedAccountProvisioning:
         country_id: str,
         now: datetime | None = None,
     ) -> ResolvedUser:
+        """Return the browser's user, inserting it on the browser's first write.
+
+        The user is held ``FOR SHARE`` until the transaction ends, and the insert
+        is retried once if the user is deleted before it is re-read. Raise
+        StandardUserRequiresSignInError if the UUID names a standard user.
+        """
         # An unauthenticated user has no primary country or sign-in activity.
         del country_id, now
         user_id = self._principal.user_id
@@ -221,6 +242,7 @@ class UnauthenticatedAccountProvisioning:
         *,
         country_id: str,
     ) -> ResolvedUser | None:
+        """Return the browser's existing user, or None; reads never provision one."""
         # Reads never provision: an absent user simply owns no records.
         del country_id
         return self.find_in_session(session)

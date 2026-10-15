@@ -15,10 +15,12 @@ class LegacyReferenceDatabaseSession:
     """Open one v1 transaction that is always rolled back and closed."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
+        """Use ``session_factory``, the v1 database's, to open every session."""
         self._session_factory = session_factory
 
     @contextmanager
     def read(self) -> Iterator[Session]:
+        """Yield a v1 session whose transaction is rolled back on exit."""
         with self._session_factory() as session:
             transaction = session.begin()
             try:

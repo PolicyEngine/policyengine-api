@@ -21,6 +21,7 @@ def require_legacy_references(
     requested: Collection[int],
     existing: Collection[int],
 ) -> None:
+    """Raise LegacyReferenceNotFoundError naming every requested ID not in existing."""
     missing = sorted(set(requested) - set(existing))
     if missing:
         rendered = ", ".join(str(legacy_id) for legacy_id in missing)

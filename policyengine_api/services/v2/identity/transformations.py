@@ -36,13 +36,15 @@ def identity_refresh_required(
 
 
 def standard_resolved_user(user_id: UUID, *, email: str | None) -> ResolvedUser:
+    """Describe a signed-in identity's standard user and its verified email."""
     return ResolvedUser(user_id=user_id, email=email, user_type=UserType.STANDARD)
 
 
 def unauthenticated_resolved_user(user: User) -> ResolvedUser:
+    """Describe a signed-out browser's user, which never has an email."""
     return ResolvedUser(user_id=user.id, email=None, user_type=UserType.UNAUTHENTICATED)
 
 
 def converted_primary_country(user: User, *, country_id: str) -> str:
-    """A converted user keeps any primary country, or takes the request's."""
+    """Return the user's primary country, or the request's if it has none."""
     return user.primary_country or country_id
