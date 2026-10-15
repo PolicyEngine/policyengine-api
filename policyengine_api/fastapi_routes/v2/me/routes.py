@@ -156,7 +156,7 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         ),
     )
     def delete_me(
-        query: CountryQueryDependency,
+        _query: CountryQueryDependency,
         principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> Response | JSONResponse:
         def delete() -> Response:

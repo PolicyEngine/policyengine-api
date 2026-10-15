@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib import metadata as importlib_metadata
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Annotated, Protocol
 
 from fastapi import Depends
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
@@ -791,8 +791,10 @@ _unauthenticated_user_scheme = APIKeyHeader(
 
 
 def _default_require_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_user_bearer_scheme),
-    unauthenticated_user: str | None = Depends(_unauthenticated_user_scheme),
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(_user_bearer_scheme)
+    ],
+    unauthenticated_user: Annotated[str | None, Depends(_unauthenticated_user_scheme)],
 ) -> AccountPrincipal:
     """Authenticate the request's account; fails closed without a credential."""
     return authenticate_account_request(

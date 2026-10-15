@@ -558,7 +558,9 @@ class V2UserPolicyService:
                 association_id=association_id,
             )
             require_not_mirror_owned(
-                read_user_policy_mirror_exists(session, association_id=association.id),
+                mirror_owned=read_user_policy_mirror_exists(
+                    session, association_id=association.id
+                ),
                 association_id=association.id,
             )
             repointed_policy_id = (
@@ -603,7 +605,9 @@ class V2UserPolicyService:
                 association_id=association_id,
             )
             require_not_mirror_owned(
-                read_user_policy_mirror_exists(session, association_id=association.id),
+                mirror_owned=read_user_policy_mirror_exists(
+                    session, association_id=association.id
+                ),
                 association_id=association.id,
             )
             delete_user_policy(session, association)
