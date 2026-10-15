@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from uuid import UUID
-
-from sqlmodel import Session
+from typing import TYPE_CHECKING
 
 from policyengine_api.services.v2.households.database_connectors.creates import (
     create_household,
@@ -16,9 +13,6 @@ from policyengine_api.services.v2.households.database_connectors.reads import (
     read_household_row,
     read_household_rows,
     read_legacy_household_mapping,
-)
-from policyengine_api.services.v2.households.database_session import (
-    HouseholdDatabaseSession,
 )
 from policyengine_api.services.v2.households.transformations import (
     LEGACY_HOUSEHOLD_FINGERPRINT_VERSION,
@@ -49,6 +43,16 @@ from policyengine_api.services.v2.households.validators import (
     normalize_household_document,
     verify_legacy_household_mapping,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from uuid import UUID
+
+    from sqlmodel import Session
+
+    from policyengine_api.services.v2.households.database_session import (
+        HouseholdDatabaseSession,
+    )
 
 
 def normalize_creation_input(

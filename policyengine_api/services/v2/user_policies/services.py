@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
-from sqlmodel import Session
-
-from policyengine_api.data.v2.models import LegacyUserPolicyMapping, UserPolicy
 from policyengine_api.services.v2.associations.services import (
     require_legacy_reference,
 )
-from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
 from policyengine_api.services.v2.associations.validators import (
     require_not_mirror_owned,
 )
@@ -18,12 +14,10 @@ from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_for_read_in_session,
     resolve_principal_user_in_session,
 )
-from policyengine_api.services.v2.identity.types import AccountPrincipal
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.policies.services import (
     mirror_legacy_policy_in_session,
 )
-from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.user_policies.database_connectors.creates import (
     create_legacy_user_mapping,
     create_legacy_user_policy_mapping,
@@ -49,9 +43,6 @@ from policyengine_api.services.v2.user_policies.database_connectors.reads import
 from policyengine_api.services.v2.user_policies.database_connectors.updates import (
     update_legacy_user_policy_state,
     update_user_policy,
-)
-from policyengine_api.services.v2.user_policies.database_session import (
-    UserPolicyDatabaseSession,
 )
 from policyengine_api.services.v2.user_policies.transformations import (
     USER_POLICY_FINGERPRINT_VERSION,
@@ -83,6 +74,19 @@ from policyengine_api.services.v2.user_policies.validators import (
     validate_legacy_user_mapping_conflict,
     validate_legacy_user_policy_input,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlmodel import Session
+
+    from policyengine_api.data.v2.models import LegacyUserPolicyMapping, UserPolicy
+    from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
+    from policyengine_api.services.v2.identity.types import AccountPrincipal
+    from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+    from policyengine_api.services.v2.user_policies.database_session import (
+        UserPolicyDatabaseSession,
+    )
 
 
 def read_user_policy_page(

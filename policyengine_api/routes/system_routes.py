@@ -3,7 +3,6 @@ from flask import Blueprint, Response, jsonify
 from policyengine_api.readiness import is_ready
 from policyengine_api.specification import OPENAPI_SPECIFICATION
 
-
 system_bp = Blueprint("system", __name__)
 
 

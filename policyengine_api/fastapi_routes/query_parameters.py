@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from inspect import Parameter, Signature
-from typing import Annotated, TypeVar
+from typing import TYPE_CHECKING, Annotated, TypeVar
 
 from fastapi import Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -15,6 +14,8 @@ from policyengine_api.query_parameters import (
     validate_scalar_query_multiplicity,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 QueryParametersT = TypeVar("QueryParametersT", bound=StrictQueryParameters)
 

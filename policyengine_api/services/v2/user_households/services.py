@@ -8,20 +8,15 @@ in a short read-only v1 transaction before the v2 transaction opens.
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
-from sqlmodel import Session
-
-from policyengine_api.data.v2.models import UserHouseholdAssociation
 from policyengine_api.services.v2.associations.services import (
     require_legacy_reference,
 )
-from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_for_read_in_session,
     resolve_principal_user_in_session,
 )
-from policyengine_api.services.v2.identity.types import AccountPrincipal
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.user_households.database_connectors.creates import (
     create_user_household,
@@ -39,25 +34,34 @@ from policyengine_api.services.v2.user_households.database_connectors.reads impo
 from policyengine_api.services.v2.user_households.database_connectors.updates import (
     update_user_household,
 )
-from policyengine_api.services.v2.user_households.database_session import (
-    UserHouseholdDatabaseSession,
-)
 from policyengine_api.services.v2.user_households.transformations import (
     owned_user_household_input,
     user_household_page,
     user_household_read,
-)
-from policyengine_api.services.v2.user_households.types import (
-    UserHouseholdCreateFields,
-    UserHouseholdPage,
-    UserHouseholdRead,
-    UserHouseholdUpdateInput,
 )
 from policyengine_api.services.v2.user_households.validators import (
     require_user_household,
     resolve_association_household_id,
     validate_association_household,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlmodel import Session
+
+    from policyengine_api.data.v2.models import UserHouseholdAssociation
+    from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
+    from policyengine_api.services.v2.identity.types import AccountPrincipal
+    from policyengine_api.services.v2.user_households.database_session import (
+        UserHouseholdDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_households.types import (
+        UserHouseholdCreateFields,
+        UserHouseholdPage,
+        UserHouseholdRead,
+        UserHouseholdUpdateInput,
+    )
 
 
 def read_owned_user_household(

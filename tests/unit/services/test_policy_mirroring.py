@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from uuid import UUID
 from unittest.mock import MagicMock, patch
+from uuid import UUID
 
 import pytest
 from sqlalchemy.exc import OperationalError, TimeoutError
 
+from policyengine_api.services.policy_mirroring import (
+    PolicyMirrorUnavailableError,
+    mirror_policy_after_commit,
+)
 from policyengine_api.services.v2.policies.types import (
     LegacyPolicyPersistenceResult,
     LegacyPolicySnapshot,
@@ -15,11 +19,6 @@ from policyengine_api.services.v2.policies.types import (
 from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyMappingIntegrityError,
 )
-from policyengine_api.services.policy_mirroring import (
-    PolicyMirrorUnavailableError,
-    mirror_policy_after_commit,
-)
-
 
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000010")
 

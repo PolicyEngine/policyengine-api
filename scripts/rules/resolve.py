@@ -10,13 +10,15 @@ from __future__ import annotations
 import ast
 import re
 import tomllib
-from collections.abc import Callable
 from functools import cache
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scripts.rules.model import CiRef, Kind, Rule, Violation
 from scripts.rules.workflows import JobBlock, parse_jobs
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
 
 DEFAULT_RUNNER = "scripts/run_quality_guards.py"
 RUFF_DEFAULT_SELECT = ("E4", "E7", "E9", "F")

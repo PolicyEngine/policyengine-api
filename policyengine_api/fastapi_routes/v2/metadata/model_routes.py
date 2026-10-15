@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Query
 from starlette.responses import JSONResponse
 
+from policyengine_api.fastapi_routes.v2.metadata.common import (
+    ERROR_RESPONSES,
+    read_resource,
+)
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataModelDetailResponse,
     MetadataModelPageResponse,
@@ -17,12 +21,9 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataVariableDetailResponse,
     MetadataVariablePageResponse,
 )
-from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-from policyengine_api.fastapi_routes.v2.metadata.common import (
-    ERROR_RESPONSES,
-    read_resource,
-)
 
+if TYPE_CHECKING:
+    from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 
 Offset = Annotated[int, Query(ge=0)]
 Limit = Annotated[int, Query(ge=1, le=500)]

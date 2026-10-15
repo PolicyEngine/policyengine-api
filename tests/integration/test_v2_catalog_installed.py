@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from importlib import metadata as importlib_metadata
 import json
 import os
+from importlib import metadata as importlib_metadata
 
 import pytest
-
 from policyengine.bundle import get_current_bundle
-from policyengine_api.data.v2.catalog.extraction import extract_installed_catalog
 
+from policyengine_api.data.v2.catalog.extraction import extract_installed_catalog
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("RUN_V2_CATALOG_COMPATIBILITY") != "1",

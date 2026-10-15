@@ -7,6 +7,7 @@ from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v1_models import V1Base
 from policyengine_api.data.v2.models import (
+    V2_METADATA,
     DatasetVersion,
     Dynamic,
     Household,
@@ -26,9 +27,7 @@ from policyengine_api.data.v2.models import (
     UserReportAssociation,
     UserSimulationAssociation,
     UserType,
-    V2_METADATA,
 )
-
 
 RUN_OUTPUT_TABLES = frozenset(
     {

@@ -1,3 +1,25 @@
+## [5.3.3] - 2026-10-15
+
+### Changed
+
+- Enabled ruff's typing-only import rules (TC) and moved annotation-only imports under TYPE_CHECKING, keeping runtime imports for Pydantic, SQLModel, SQLAlchemy and FastAPI; a new test fails if a model base is missing from ruff's runtime-evaluated list or any model's annotations don't resolve.
+
+
+## [5.3.2] - 2026-10-14
+
+### Changed
+
+- Moved the multi-line steps in the deploy pipeline (push.yml) into tested scripts, so every workflow run: step is now a single line.
+- Ran ruff check in CI with the first group of rule families (imports, pyupgrade and other safe auto-fixes) and fixed every finding.
+
+
+## [5.3.1] - 2026-10-14
+
+### Changed
+
+- Turned the remaining multi-line steps outside the deploy pipeline into single-line steps or a tested script, added tests for the Cloud Run image cleanup script, and fixed a shellcheck finding in the observability collector deploy script.
+
+
 ## [5.3.0] - 2026-10-14
 
 ### Added

@@ -3,15 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from uuid import UUID
 
-from policyengine_api.data.v2.models import (
-    LegacyUserMapping,
-    LegacyUserPolicyMapping,
-    Policy,
-    User,
-    UserPolicy,
-)
 from policyengine_api.services.v2.associations.validators import (
     AssociationNotFoundError,
     AssociationReferenceConflictError,
@@ -21,6 +13,15 @@ from policyengine_api.services.v2.user_policies.types import (
 )
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.data.v2.models import (
+        LegacyUserMapping,
+        LegacyUserPolicyMapping,
+        Policy,
+        User,
+        UserPolicy,
+    )
     from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
     from policyengine_api.services.v2.user_policies.types import (
         LegacyUserPolicySnapshot,
@@ -111,8 +112,8 @@ def validate_legacy_user_mapping_conflict(
 
 
 def validate_legacy_user_policy_input(
-    snapshot: "LegacyUserPolicySnapshot",
-    reform_snapshot: "LegacyPolicySnapshot",
+    snapshot: LegacyUserPolicySnapshot,
+    reform_snapshot: LegacyPolicySnapshot,
     *,
     source_revision: int,
 ) -> None:
@@ -171,7 +172,7 @@ def validate_existing_legacy_user_policy_mapping(
     return LegacyUserPolicyMappingAction.UPDATE, association
 
 
-def require_mirrored_policy_id(projection: "UserPolicyCreationInput") -> UUID:
+def require_mirrored_policy_id(projection: UserPolicyCreationInput) -> UUID:
     """The Stage 10 mirror always links a saved policy to its v2 policy."""
 
     if projection.policy_id is None:

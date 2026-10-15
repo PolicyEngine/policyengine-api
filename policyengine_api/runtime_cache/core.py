@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
 import random
 import time
-from typing import Any, Callable, Protocol
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Protocol
 
 from policyengine_api.gcp_logging import logger
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 CACHE_KEY_ROOT = "policyengine"
 COMPLETED_RESULT_TTL_JITTER_FRACTION = 0.10

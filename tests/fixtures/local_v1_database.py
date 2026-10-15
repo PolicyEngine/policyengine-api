@@ -1,9 +1,8 @@
 """SQLite-only v1 schema helper confined to explicit test fixtures."""
 
-from sqlalchemy import Column, Engine, Integer, JSON, MetaData, String, Table
+from sqlalchemy import JSON, Column, Engine, Integer, MetaData, String, Table
 
 from policyengine_api.data.v1_models import Policy, V1Base
-
 
 _sqlite_policy_metadata = MetaData()
 Table(

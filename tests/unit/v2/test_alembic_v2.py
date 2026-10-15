@@ -1,27 +1,27 @@
 """Unit guards for the isolated and qualified v2 Alembic environment."""
 
-from io import StringIO
-from pathlib import Path
 import re
 import shutil
+from io import StringIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from alembic.script.revision import ResolutionError
 from alembic.util import CommandError
-import pytest
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base
 from policyengine_api.data.v2.migration_target import (
-    ConfiguredSupabaseTarget,
     DISPOSABLE_DATABASE_NAME,
     MIGRATION_ROLE,
     V2_ALEMBIC_DISPOSABLE_TEST,
     V2_ALEMBIC_HEAD_REVISION,
+    ConfiguredSupabaseTarget,
     V2AlembicSettings,
     V2MigrationTargetError,
     load_v2_alembic_settings,

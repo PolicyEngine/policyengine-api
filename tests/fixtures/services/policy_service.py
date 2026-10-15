@@ -1,6 +1,7 @@
-import pytest
 import json
 from unittest.mock import patch
+
+import pytest
 
 from policyengine_api.data.v1_models import Policy
 

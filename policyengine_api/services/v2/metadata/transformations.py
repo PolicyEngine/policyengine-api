@@ -2,17 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, TypeVar
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, TypeVar
 
-from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
-from policyengine_api.data.v2.models import (
-    Dataset,
-    Parameter,
-    ParameterValue,
-    Region,
-    Variable,
-)
 from policyengine_api.dataset_display import get_dataset_display_label
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
@@ -32,6 +24,15 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataVariable,
 )
 
+if TYPE_CHECKING:
+    from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
+    from policyengine_api.data.v2.models import (
+        Dataset,
+        Parameter,
+        ParameterValue,
+        Region,
+        Variable,
+    )
 
 ResourceT = TypeVar("ResourceT")
 
@@ -117,8 +118,8 @@ def metadata_parameter_value(value: ParameterValue) -> MetadataCanonicalParamete
 
 def utc_day_start(selected_time: datetime) -> datetime:
     if selected_time.tzinfo is None:
-        selected_time = selected_time.replace(tzinfo=timezone.utc)
-    return selected_time.astimezone(timezone.utc).replace(
+        selected_time = selected_time.replace(tzinfo=UTC)
+    return selected_time.astimezone(UTC).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
 

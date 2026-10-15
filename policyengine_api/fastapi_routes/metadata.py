@@ -2,24 +2,27 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 from fastapi import APIRouter
+from starlette.responses import Response, StreamingResponse
+
 from policyengine_api.country_validation import (
     InvalidCountryError,
     ensure_supported_country,
 )
-from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.fastapi_routes.responses import (
     LegacyJSONResponse,
     render_legacy_json,
 )
-from policyengine_api.json_types import JSONObject
 from policyengine_api.utils.streaming_json import (
     iter_body_chunks,
     should_stream_body,
 )
-from starlette.responses import Response, StreamingResponse
+
+if TYPE_CHECKING:
+    from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+    from policyengine_api.json_types import JSONObject
 
 
 class MetadataSuccessPayload(TypedDict):

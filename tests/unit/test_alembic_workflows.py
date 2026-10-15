@@ -135,7 +135,12 @@ def test_versioning_refreshes_the_lock_after_bumping_the_project_version():
     assert versioning_job.index("python .github/bump_version.py") < (
         versioning_job.index("uv lock")
     )
-    assert versioning_job.index("uv lock") < versioning_job.index("towncrier build")
+    assert versioning_job.index("uv lock") < (
+        versioning_job.index("bash .github/scripts/build_changelog.sh")
+    )
+    assert "towncrier build" in (REPO / ".github/scripts/build_changelog.sh").read_text(
+        encoding="utf-8"
+    )
     assert changelog_target.index("python .github/bump_version.py") < (
         changelog_target.index("uv lock")
     )
@@ -253,13 +258,13 @@ def test_release_migration_fails_closed_before_tests_and_cloud_run_deploy():
     cloud_run_job = workflow[workflow.index("  deploy-cloud-run-staging:") :]
     cloud_run_job = re.split(r"\n(?=  \S)", cloud_run_job, maxsplit=1)[0]
     assert "migrate-v1-staging-cloud-sql" in cloud_run_job
-    assert "make test" in cloud_run_job
-    assert cloud_run_job.index("make test") < cloud_run_job.index(
-        'uses: "google-github-actions/auth@v2"'
-    )
-    assert cloud_run_job.index("make test") < cloud_run_job.index(
-        "Build and push Cloud Run image"
-    )
+    assert "bash .github/scripts/run_release_tests.sh" in cloud_run_job
+    assert cloud_run_job.index(
+        "bash .github/scripts/run_release_tests.sh"
+    ) < cloud_run_job.index('uses: "google-github-actions/auth@v2"')
+    assert cloud_run_job.index(
+        "bash .github/scripts/run_release_tests.sh"
+    ) < cloud_run_job.index("Build and push Cloud Run image")
 
 
 def test_cloud_sql_workflow_uses_oidc_and_separate_database_credentials():

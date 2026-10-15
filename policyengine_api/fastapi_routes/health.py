@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, HTTPException
-from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from pydantic import BaseModel
 from starlette.responses import PlainTextResponse
+
+if TYPE_CHECKING:
+    from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 
 
 class HealthResponse(BaseModel):

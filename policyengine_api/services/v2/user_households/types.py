@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from pydantic import model_validator
 
@@ -15,6 +14,10 @@ from policyengine_api.services.v2.associations.types import (
     StrictAssociationModel,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
+
+if TYPE_CHECKING:
+    from datetime import datetime
+    from uuid import UUID
 
 
 class StrictUserHouseholdInput(StrictAssociationModel):
@@ -31,7 +34,7 @@ class UserHouseholdCreateFields(StrictUserHouseholdInput):
     description: AssociationDescription | None = None
 
     @model_validator(mode="after")
-    def require_household_reference(self) -> "UserHouseholdCreateFields":
+    def require_household_reference(self) -> UserHouseholdCreateFields:
         if self.household_id is None and self.legacy_household_id is None:
             raise ValueError(
                 "At least one of legacy_household_id or household_id is required"
@@ -50,7 +53,7 @@ class UserHouseholdCreationInput(StrictUserHouseholdInput):
     description: str | None = None
 
     @model_validator(mode="after")
-    def require_household_reference(self) -> "UserHouseholdCreationInput":
+    def require_household_reference(self) -> UserHouseholdCreationInput:
         if self.household_id is None and self.legacy_household_id is None:
             raise ValueError(
                 "At least one of legacy_household_id or household_id is required"
@@ -64,7 +67,7 @@ class UserHouseholdUpdateInput(StrictUserHouseholdInput):
     description: AssociationDescription | None = None
 
     @model_validator(mode="after")
-    def require_valid_supplied_field(self) -> "UserHouseholdUpdateInput":
+    def require_valid_supplied_field(self) -> UserHouseholdUpdateInput:
         mutable_fields = {"legacy_household_id", "name", "description"}
         supplied = self.model_fields_set.intersection(mutable_fields)
         if not supplied:

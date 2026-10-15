@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import yaml
+
 from policyengine_api.constants import VERSION
-from policyengine_api.json_types import JSONObject
 from policyengine_api.query_parameters import (
     AnnualEconomyQuery,
     BudgetWindowEconomyQuery,
@@ -21,6 +21,8 @@ from policyengine_api.spm import (
     SPMSelection,
 )
 
+if TYPE_CHECKING:
+    from policyengine_api.json_types import JSONObject
 
 DEFAULT_SPECIFICATION_PATH = Path(__file__).with_name("openapi_spec.yaml")
 
@@ -110,7 +112,7 @@ def load_specification(
             ] + _economy_query_parameters(query_model)
     # YAML accepts both quoted and numeric response codes. JSON object keys are
     # strings; normalize before Flask sorts them while serializing the document.
-    return cast(JSONObject, json.loads(json.dumps(document)))
+    return cast("JSONObject", json.loads(json.dumps(document)))
 
 
 OPENAPI_SPECIFICATION = load_specification()

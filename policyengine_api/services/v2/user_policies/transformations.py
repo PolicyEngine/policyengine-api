@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from hashlib import sha256
 import json
-from uuid import UUID
+from hashlib import sha256
+from typing import TYPE_CHECKING
 
-from policyengine_api.data.v2.models import UserPolicy
 from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicySnapshot,
     UserPolicyCreateFields,
@@ -15,6 +14,10 @@ from policyengine_api.services.v2.user_policies.types import (
     UserPolicyRead,
 )
 
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.data.v2.models import UserPolicy
 
 USER_POLICY_FINGERPRINT_VERSION = 1
 

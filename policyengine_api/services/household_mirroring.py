@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import time
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -15,16 +14,20 @@ from policyengine_api.services.household_service import (
     HouseholdService,
     PendingHouseholdMirrorEvent,
 )
-from policyengine_api.services.v2.households.types import (
-    LegacyHouseholdPersistenceResult,
-    LegacyHouseholdSnapshot,
-)
 from policyengine_api.services.v2.households.validators import (
     HouseholdContentHashCollisionError,
     HouseholdCreationIntegrityError,
     LegacyHouseholdMappingIntegrityError,
     LegacyHouseholdTranslationError,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from policyengine_api.services.v2.households.types import (
+        LegacyHouseholdPersistenceResult,
+        LegacyHouseholdSnapshot,
+    )
 
 
 class LegacyHouseholdMirror(Protocol):

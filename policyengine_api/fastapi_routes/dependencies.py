@@ -2,21 +2,35 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from functools import lru_cache
 from importlib import metadata as importlib_metadata
 from typing import TYPE_CHECKING, Protocol
-from uuid import UUID
 
 from fastapi import Depends
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
-from policyengine_api.json_types import JSONObject
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from datetime import datetime
+    from uuid import UUID
+
+    from policyengine_api.json_types import JSONObject
+    from policyengine_api.services.v2.associations.types import (
+        LegacyReferenceChecker,
+    )
+    from policyengine_api.services.v2.households.types import (
+        HouseholdPage,
+        HouseholdRead,
+        NativeHouseholdCreation,
+        NativeHouseholdCreationInput,
+    )
+    from policyengine_api.services.v2.identity.types import (
+        AccountPrincipal,
+        UserPrincipal,
+    )
     from policyengine_api.services.v2.metadata.types import (
         MetadataCanonicalParameterValue,
         MetadataDataset,
@@ -37,19 +51,6 @@ if TYPE_CHECKING:
         PolicyPage,
         PolicyRead,
     )
-    from policyengine_api.services.v2.households.types import (
-        HouseholdPage,
-        HouseholdRead,
-        NativeHouseholdCreation,
-        NativeHouseholdCreationInput,
-    )
-    from policyengine_api.services.v2.associations.types import (
-        LegacyReferenceChecker,
-    )
-    from policyengine_api.services.v2.identity.types import (
-        AccountPrincipal,
-        UserPrincipal,
-    )
     from policyengine_api.services.v2.user_accounts.types import (
         AccountDeletion,
         AccountExport,
@@ -57,17 +58,17 @@ if TYPE_CHECKING:
         AccountUpdateInput,
         AccountUpgrade,
     )
-    from policyengine_api.services.v2.user_policies.types import (
-        UserPolicyCreateFields,
-        UserPolicyPage,
-        UserPolicyRead,
-        UserPolicyUpdateInput,
-    )
     from policyengine_api.services.v2.user_households.types import (
         UserHouseholdCreateFields,
         UserHouseholdPage,
         UserHouseholdRead,
         UserHouseholdUpdateInput,
+    )
+    from policyengine_api.services.v2.user_policies.types import (
+        UserPolicyCreateFields,
+        UserPolicyPage,
+        UserPolicyRead,
+        UserPolicyUpdateInput,
     )
     from policyengine_api.services.v2.user_reports.types import (
         SharedUserReportRead,
@@ -102,20 +103,20 @@ class V2MetadataResourceReader(Protocol):
         *,
         offset: int = 0,
         limit: int = 100,
-    ) -> "MetadataPageResult[MetadataModel]": ...
+    ) -> MetadataPageResult[MetadataModel]: ...
 
     def get_model(
         self,
         country_id: str,
         model_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataModel]": ...
+    ) -> MetadataDetailResult[MetadataModel]: ...
 
     def get_model_by_country(
         self,
         country_id: str,
         policyengine_version: str | None = None,
-    ) -> "MetadataModelSelectionResult": ...
+    ) -> MetadataModelSelectionResult: ...
 
     def list_model_versions(
         self,
@@ -124,14 +125,14 @@ class V2MetadataResourceReader(Protocol):
         *,
         offset: int = 0,
         limit: int = 100,
-    ) -> "MetadataPageResult[MetadataModelVersionDetail]": ...
+    ) -> MetadataPageResult[MetadataModelVersionDetail]: ...
 
     def get_model_version(
         self,
         country_id: str,
         version_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataModelVersionDetail]": ...
+    ) -> MetadataDetailResult[MetadataModelVersionDetail]: ...
 
     def list_variables(
         self,
@@ -141,14 +142,14 @@ class V2MetadataResourceReader(Protocol):
         offset: int = 0,
         limit: int = 100,
         search: str | None = None,
-    ) -> "MetadataPageResult[MetadataVariable]": ...
+    ) -> MetadataPageResult[MetadataVariable]: ...
 
     def get_variable(
         self,
         country_id: str,
         variable_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataVariable]": ...
+    ) -> MetadataDetailResult[MetadataVariable]: ...
 
     def list_parameters(
         self,
@@ -158,14 +159,14 @@ class V2MetadataResourceReader(Protocol):
         offset: int = 0,
         limit: int = 100,
         search: str | None = None,
-    ) -> "MetadataPageResult[MetadataParameterSummary]": ...
+    ) -> MetadataPageResult[MetadataParameterSummary]: ...
 
     def get_parameter(
         self,
         country_id: str,
         parameter_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataParameterSummary]": ...
+    ) -> MetadataDetailResult[MetadataParameterSummary]: ...
 
     def list_parameter_children(
         self,
@@ -175,7 +176,7 @@ class V2MetadataResourceReader(Protocol):
         parent_path: str = "",
         offset: int = 0,
         limit: int = 100,
-    ) -> "MetadataPageResult[MetadataParameterChild]": ...
+    ) -> MetadataPageResult[MetadataParameterChild]: ...
 
     def list_parameter_values(
         self,
@@ -187,14 +188,14 @@ class V2MetadataResourceReader(Protocol):
         offset: int = 0,
         limit: int = 100,
         now: datetime | None = None,
-    ) -> "MetadataPageResult[MetadataCanonicalParameterValue]": ...
+    ) -> MetadataPageResult[MetadataCanonicalParameterValue]: ...
 
     def get_parameter_value(
         self,
         country_id: str,
         value_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataCanonicalParameterValue]": ...
+    ) -> MetadataDetailResult[MetadataCanonicalParameterValue]: ...
 
     def list_datasets(
         self,
@@ -203,14 +204,14 @@ class V2MetadataResourceReader(Protocol):
         *,
         offset: int = 0,
         limit: int = 100,
-    ) -> "MetadataPageResult[MetadataDataset]": ...
+    ) -> MetadataPageResult[MetadataDataset]: ...
 
     def get_dataset(
         self,
         country_id: str,
         dataset_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataDataset]": ...
+    ) -> MetadataDetailResult[MetadataDataset]: ...
 
     def list_regions(
         self,
@@ -220,27 +221,27 @@ class V2MetadataResourceReader(Protocol):
         region_type: str | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> "MetadataPageResult[MetadataRegion]": ...
+    ) -> MetadataPageResult[MetadataRegion]: ...
 
     def get_region(
         self,
         country_id: str,
         region_id: UUID,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataRegion]": ...
+    ) -> MetadataDetailResult[MetadataRegion]: ...
 
     def get_region_by_code(
         self,
         country_id: str,
         region_code: str,
         policyengine_version: str | None = None,
-    ) -> "MetadataDetailResult[MetadataRegion]": ...
+    ) -> MetadataDetailResult[MetadataRegion]: ...
 
     def get_economy_options(
         self,
         country_id: str,
         policyengine_version: str | None = None,
-    ) -> "MetadataEconomyOptionsResult": ...
+    ) -> MetadataEconomyOptionsResult: ...
 
 
 class V2PolicyResourceService(Protocol):
@@ -248,10 +249,10 @@ class V2PolicyResourceService(Protocol):
 
     def create_policy(
         self,
-        command: "NativePolicyCreationInput",
-    ) -> "NativePolicyCreation": ...
+        command: NativePolicyCreationInput,
+    ) -> NativePolicyCreation: ...
 
-    def get_policy(self, *, country_id: str, policy_id: UUID) -> "PolicyRead": ...
+    def get_policy(self, *, country_id: str, policy_id: UUID) -> PolicyRead: ...
 
     def list_policies(
         self,
@@ -260,7 +261,7 @@ class V2PolicyResourceService(Protocol):
         tax_benefit_model_id: UUID | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> "PolicyPage": ...
+    ) -> PolicyPage: ...
 
 
 class V2HouseholdResourceService(Protocol):
@@ -268,15 +269,15 @@ class V2HouseholdResourceService(Protocol):
 
     def create_household(
         self,
-        household_input: "NativeHouseholdCreationInput",
-    ) -> "NativeHouseholdCreation": ...
+        household_input: NativeHouseholdCreationInput,
+    ) -> NativeHouseholdCreation: ...
 
     def get_household(
         self,
         *,
         country_id: str,
         household_id: UUID,
-    ) -> "HouseholdRead": ...
+    ) -> HouseholdRead: ...
 
     def list_households(
         self,
@@ -285,7 +286,7 @@ class V2HouseholdResourceService(Protocol):
         default_year: int | None,
         offset: int,
         limit: int,
-    ) -> "HouseholdPage": ...
+    ) -> HouseholdPage: ...
 
 
 class V2UserPolicyResourceService(Protocol):
@@ -294,42 +295,42 @@ class V2UserPolicyResourceService(Protocol):
     def create_user_policy(
         self,
         *,
-        principal: "AccountPrincipal",
-        association_input: "UserPolicyCreateFields",
-    ) -> "UserPolicyRead": ...
+        principal: AccountPrincipal,
+        association_input: UserPolicyCreateFields,
+    ) -> UserPolicyRead: ...
 
     def get_user_policy(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-    ) -> "UserPolicyRead": ...
+    ) -> UserPolicyRead: ...
 
     def list_user_policies(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         policy_id: UUID | None = None,
         legacy_policy_id: int | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> "UserPolicyPage": ...
+    ) -> UserPolicyPage: ...
 
     def patch_user_policy(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-        association_input: "UserPolicyUpdateInput",
-    ) -> "UserPolicyRead": ...
+        association_input: UserPolicyUpdateInput,
+    ) -> UserPolicyRead: ...
 
     def delete_user_policy(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
     ) -> None: ...
@@ -341,42 +342,42 @@ class V2UserHouseholdResourceService(Protocol):
     def create_user_household(
         self,
         *,
-        principal: "AccountPrincipal",
-        association_input: "UserHouseholdCreateFields",
-    ) -> "UserHouseholdRead": ...
+        principal: AccountPrincipal,
+        association_input: UserHouseholdCreateFields,
+    ) -> UserHouseholdRead: ...
 
     def get_user_household(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-    ) -> "UserHouseholdRead": ...
+    ) -> UserHouseholdRead: ...
 
     def list_user_households(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         household_id: UUID | None = None,
         legacy_household_id: int | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> "UserHouseholdPage": ...
+    ) -> UserHouseholdPage: ...
 
     def patch_user_household(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-        association_input: "UserHouseholdUpdateInput",
-    ) -> "UserHouseholdRead": ...
+        association_input: UserHouseholdUpdateInput,
+    ) -> UserHouseholdRead: ...
 
     def delete_user_household(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
     ) -> None: ...
@@ -388,41 +389,41 @@ class V2UserSimulationResourceService(Protocol):
     def create_user_simulation(
         self,
         *,
-        principal: "AccountPrincipal",
-        association_input: "UserSimulationCreateFields",
-    ) -> "UserSimulationRead": ...
+        principal: AccountPrincipal,
+        association_input: UserSimulationCreateFields,
+    ) -> UserSimulationRead: ...
 
     def get_user_simulation(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-    ) -> "UserSimulationRead": ...
+    ) -> UserSimulationRead: ...
 
     def list_user_simulations(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         legacy_simulation_id: int | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> "UserSimulationPage": ...
+    ) -> UserSimulationPage: ...
 
     def patch_user_simulation(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-        association_input: "UserSimulationUpdateInput",
-    ) -> "UserSimulationRead": ...
+        association_input: UserSimulationUpdateInput,
+    ) -> UserSimulationRead: ...
 
     def delete_user_simulation(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
     ) -> None: ...
@@ -434,48 +435,48 @@ class V2UserReportResourceService(Protocol):
     def create_user_report(
         self,
         *,
-        principal: "AccountPrincipal",
-        association_input: "UserReportCreateFields",
-    ) -> "UserReportRead": ...
+        principal: AccountPrincipal,
+        association_input: UserReportCreateFields,
+    ) -> UserReportRead: ...
 
     def get_user_report(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-    ) -> "UserReportRead": ...
+    ) -> UserReportRead: ...
 
     def get_shared_user_report(
         self,
         *,
         country_id: str,
         association_id: UUID,
-    ) -> "SharedUserReportRead": ...
+    ) -> SharedUserReportRead: ...
 
     def list_user_reports(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         legacy_report_id: int | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> "UserReportPage": ...
+    ) -> UserReportPage: ...
 
     def patch_user_report(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-        association_input: "UserReportUpdateInput",
-    ) -> "UserReportRead": ...
+        association_input: UserReportUpdateInput,
+    ) -> UserReportRead: ...
 
     def delete_user_report(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
     ) -> None: ...
@@ -485,30 +486,30 @@ class V2AccountResourceService(Protocol):
     """Route-independent account operations for one request."""
 
     def get_account(
-        self, *, principal: "AccountPrincipal", country_id: str
-    ) -> "AccountRead": ...
+        self, *, principal: AccountPrincipal, country_id: str
+    ) -> AccountRead: ...
 
     def update_account(
         self,
         *,
-        principal: "AccountPrincipal",
+        principal: AccountPrincipal,
         country_id: str,
-        account_input: "AccountUpdateInput",
-    ) -> "AccountRead": ...
+        account_input: AccountUpdateInput,
+    ) -> AccountRead: ...
 
     def export_account(
-        self, *, principal: "AccountPrincipal", country_id: str
-    ) -> "AccountExport": ...
+        self, *, principal: AccountPrincipal, country_id: str
+    ) -> AccountExport: ...
 
     def upgrade_account(
         self,
         *,
-        principal: "UserPrincipal",
+        principal: UserPrincipal,
         unauthenticated_user_id: UUID,
         country_id: str,
-    ) -> "AccountUpgrade": ...
+    ) -> AccountUpgrade: ...
 
-    def delete_account(self, *, principal: "AccountPrincipal") -> "AccountDeletion": ...
+    def delete_account(self, *, principal: AccountPrincipal) -> AccountDeletion: ...
 
 
 class SimulationGatewayProbe(Protocol):
@@ -604,7 +605,7 @@ _unauthenticated_user_scheme = APIKeyHeader(
 def _default_require_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_user_bearer_scheme),
     unauthenticated_user: str | None = Depends(_unauthenticated_user_scheme),
-) -> "AccountPrincipal":
+) -> AccountPrincipal:
     """Authenticate the request's account; fails closed without a credential."""
 
     from policyengine_api.fastapi_routes.v2.user_auth import (
@@ -617,7 +618,7 @@ def _default_require_user(
     )
 
 
-def _build_v1_legacy_reference_service() -> "LegacyReferenceChecker":
+def _build_v1_legacy_reference_service() -> LegacyReferenceChecker:
     from policyengine_api.data.orm import get_v1_session_factory
     from policyengine_api.services.v2.legacy_refs.database_session import (
         LegacyReferenceDatabaseSession,
@@ -631,7 +632,7 @@ def _build_v1_legacy_reference_service() -> "LegacyReferenceChecker":
     )
 
 
-def _default_legacy_reference_checker() -> "LegacyReferenceChecker":
+def _default_legacy_reference_checker() -> LegacyReferenceChecker:
     """Defer the v1 session factory until a request checks a v1 reference."""
 
     from policyengine_api.services.v2.legacy_refs.services import (
@@ -745,10 +746,10 @@ class NativeRouteDependencies:
     # Auth0 bearer token, or else accepts the unauthenticated-user header, and
     # fails closed (401/403/503); tests replace it with a callable returning a
     # fixed principal.
-    require_user: Callable[..., "AccountPrincipal"] = _default_require_user
+    require_user: Callable[..., AccountPrincipal] = _default_require_user
 
     @classmethod
-    def defaults(cls) -> "NativeRouteDependencies":
+    def defaults(cls) -> NativeRouteDependencies:
         """Build lazy defaults without importing country models unnecessarily."""
         return cls(
             readiness_probe=_default_readiness_probe,

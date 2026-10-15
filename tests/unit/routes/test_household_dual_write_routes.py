@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from flask import Flask
 import pytest
+from flask import Flask
 
 from policyengine_api.data.v1_models import Household
 from policyengine_api.routes.household_routes import household_bp

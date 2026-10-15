@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Annotated, Any
-from uuid import UUID
+from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import (
     BaseModel,
@@ -19,6 +17,9 @@ from pydantic import (
 from policyengine_api.query_parameters import CountryId, DefaultYear
 from policyengine_api.services.v2.households.validators import require_json_value
 
+if TYPE_CHECKING:
+    from datetime import datetime
+    from uuid import UUID
 
 StrictJsonValue = Annotated[JsonValue, BeforeValidator(require_json_value)]
 

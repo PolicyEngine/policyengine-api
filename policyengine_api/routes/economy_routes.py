@@ -1,27 +1,29 @@
+import json
+from http import HTTPStatus
+
 from flask import Blueprint, Response, request
 from pydantic import ValidationError
+
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.query_parameters import (
-    AnnualEconomyQuery,
     BUDGET_WINDOW_MAX_YEARS,
+    AnnualEconomyQuery,
     BudgetWindowEconomyQuery,
     parse_multidict_query,
 )
-from policyengine_api.services.economy_service import (
-    EconomyService,
-    EconomicImpactResult,
-    BudgetWindowEconomicImpactResult,
-)
 from policyengine_api.response_factory import _make_error_response
-from policyengine_api.utils import get_current_law_policy_id
-from policyengine_api.utils.payload_validators import validate_country
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.services.economy_service import (
+    BudgetWindowEconomicImpactResult,
+    EconomicImpactResult,
+    EconomyService,
+)
 from policyengine_api.spm import (
     SPMValidationError,
     readable_validation_error,
     spm_error_detail,
 )
-import json
-from http import HTTPStatus
+from policyengine_api.utils import get_current_law_policy_id
+from policyengine_api.utils.payload_validators import validate_country
 
 economy_bp = Blueprint("economy", __name__)
 economy_service = EconomyService()

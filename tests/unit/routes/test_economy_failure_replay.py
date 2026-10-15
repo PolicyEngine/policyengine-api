@@ -3,9 +3,10 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from flask import Flask
 import pytest
+from flask import Flask
 
+from policyengine_api import worker_spm
 from policyengine_api.routes import economy_routes
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
@@ -13,8 +14,6 @@ from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
 from policyengine_api.services import economy_service as economy_module
 from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
-from policyengine_api import worker_spm
-
 
 SELECTION = {
     "forecast_content_sha256": "a" * 64,

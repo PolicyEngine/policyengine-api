@@ -116,7 +116,7 @@ class SPMResolvedConfiguration(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_location(self) -> "SPMResolvedConfiguration":
+    def validate_location(self) -> SPMResolvedConfiguration:
         if self.geography_kind == "metro":
             if self.geography_id is None or not self.geography_id.strip():
                 raise ValueError("An SPM area selection requires geography_id")
@@ -138,7 +138,7 @@ class SPMProvenance(BaseModel):
     county_vintage: str = Field(pattern=r"^[0-9]{4}$")
     as_of: date | None
     years: tuple[str, ...]
-    runtime_versions: "SPMRuntimeVersions"
+    runtime_versions: SPMRuntimeVersions
 
     @field_validator("years")
     @classmethod
@@ -152,7 +152,7 @@ class SPMProvenance(BaseModel):
         return years
 
     @model_validator(mode="after")
-    def validate_location(self) -> "SPMProvenance":
+    def validate_location(self) -> SPMProvenance:
         if self.geography_kind == "metro":
             if self.geography_id is None or not self.geography_id.strip():
                 raise ValueError("A metro SPM receipt requires geography_id")
@@ -191,7 +191,7 @@ class SPMComparisonProvenance(BaseModel):
     reform: SPMExecutionProvenance
 
     @model_validator(mode="after")
-    def validate_compatible_receipts(self) -> "SPMComparisonProvenance":
+    def validate_compatible_receipts(self) -> SPMComparisonProvenance:
         if self.baseline.receipt != self.reform.receipt:
             raise ValueError("baseline and reform SPM receipts differ")
         return self

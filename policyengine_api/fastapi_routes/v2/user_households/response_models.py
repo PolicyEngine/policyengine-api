@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -12,10 +12,12 @@ from policyengine_api.fastapi_routes.v2.user_resources import (
     USER_RESOURCE_ERROR_RESPONSES,
 )
 from policyengine_api.query_parameters import CountryId
-from policyengine_api.services.v2.user_households.types import (
-    UserHouseholdPage,
-    UserHouseholdRead,
-)
+
+if TYPE_CHECKING:
+    from policyengine_api.services.v2.user_households.types import (
+        UserHouseholdPage,
+        UserHouseholdRead,
+    )
 
 
 class StrictUserHouseholdAPIModel(BaseModel):
@@ -34,7 +36,7 @@ class UserHouseholdItem(StrictUserHouseholdAPIModel):
     updated_at: datetime
 
     @classmethod
-    def from_read(cls, item: UserHouseholdRead) -> "UserHouseholdItem":
+    def from_read(cls, item: UserHouseholdRead) -> UserHouseholdItem:
         return cls.model_validate(item)
 
 
@@ -49,7 +51,7 @@ class UserHouseholdPageResult(StrictUserHouseholdAPIModel):
     has_more: bool
 
     @classmethod
-    def from_page(cls, page: UserHouseholdPage) -> "UserHouseholdPageResult":
+    def from_page(cls, page: UserHouseholdPage) -> UserHouseholdPageResult:
         return cls(
             items=[UserHouseholdItem.from_read(item) for item in page.items],
             offset=page.offset,

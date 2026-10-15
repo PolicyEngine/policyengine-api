@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter
-from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from starlette.responses import JSONResponse
+
+if TYPE_CHECKING:
+    from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 
 
 def build_specification_router(

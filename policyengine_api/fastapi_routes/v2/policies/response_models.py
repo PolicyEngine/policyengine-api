@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
-from policyengine_api.services.v2.policies.types import PolicyPage, PolicyRead
+
+if TYPE_CHECKING:
+    from policyengine_api.services.v2.policies.types import PolicyPage, PolicyRead
 
 
 class StrictPolicyAPIModel(BaseModel):
@@ -40,7 +42,7 @@ class PolicyItem(StrictPolicyAPIModel):
     parameter_values: list[PolicyParameterValueItem]
 
     @classmethod
-    def from_read(cls, item: PolicyRead) -> "PolicyItem":
+    def from_read(cls, item: PolicyRead) -> PolicyItem:
         return cls.model_validate(item)
 
 
@@ -55,7 +57,7 @@ class PolicyPageResult(StrictPolicyAPIModel):
     has_more: bool
 
     @classmethod
-    def from_page(cls, page: PolicyPage) -> "PolicyPageResult":
+    def from_page(cls, page: PolicyPage) -> PolicyPageResult:
         return cls(
             items=[PolicyItem.from_read(item) for item in page.items],
             offset=page.offset,

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import importlib.metadata
 import os
-from pathlib import Path
 import socket
 import subprocess
 import sys
@@ -18,7 +17,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
-
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HEALTH_PATHS = ("/liveness-check", "/readiness-check")

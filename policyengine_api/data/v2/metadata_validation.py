@@ -2,7 +2,6 @@
 
 from collections.abc import Iterable
 
-
 # These names belong only to the existing v1 database domain. Names that are
 # intentionally shared between v1 and v2, such as `simulations` and
 # `user_policies`, are excluded from this targeted rejection set.

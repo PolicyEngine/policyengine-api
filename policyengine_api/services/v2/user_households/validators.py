@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
-from policyengine_api.data.v2.models import Household, UserHouseholdAssociation
 from policyengine_api.services.v2.associations.validators import (
     AssociationNotFoundError,
     AssociationReferenceConflictError,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.data.v2.models import Household, UserHouseholdAssociation
 
 
 class UserHouseholdNotFoundError(AssociationNotFoundError):

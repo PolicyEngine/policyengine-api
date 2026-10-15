@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from sqlmodel import Session
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlmodel import Session
 
 
 class MetadataDatabaseSession:

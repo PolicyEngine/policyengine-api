@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
-import pytest
 from sqlalchemy.exc import OperationalError, TimeoutError
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
+)
+from policyengine_api.data.v2.settings import V2ConfigurationError
+from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+from policyengine_api.migration_flags import (
+    RouteImplementation,
+    RouteImplementationSettings,
 )
 from policyengine_api.services.v2.policies.types import (
     NativePolicyCreation,
@@ -27,20 +33,13 @@ from policyengine_api.services.v2.policies.validators import (
     PolicyCreationIntegrityError,
     PolicyNotFoundError,
 )
-from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-from policyengine_api.migration_flags import (
-    RouteImplementation,
-    RouteImplementationSettings,
-)
-
 
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000010")
 MODEL_ID = UUID("00000000-0000-0000-0000-000000000020")
 MODEL_VERSION_ID = UUID("00000000-0000-0000-0000-000000000030")
 PARAMETER_ID = UUID("00000000-0000-0000-0000-000000000040")
 VALUE_ID = UUID("00000000-0000-0000-0000-000000000050")
-CREATED_AT = datetime(2026, 1, 1, tzinfo=timezone.utc)
+CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _policy_read(*, policy_id: UUID = POLICY_ID, country_id: str = "us") -> PolicyRead:
@@ -110,7 +109,7 @@ def _client(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
-        specification_provider=lambda: {},
+        specification_provider=dict,
         v2_policy_service_factory=lambda: service,
     )
     settings = RouteImplementationSettings(

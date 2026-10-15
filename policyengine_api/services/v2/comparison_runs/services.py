@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
-
-from sqlmodel import Session
+from typing import TYPE_CHECKING
 
 from policyengine_api.services.v2.comparison_runs.database_connectors.creates import (
     create_comparison_report,
@@ -21,17 +19,14 @@ from policyengine_api.services.v2.comparison_runs.database_connectors.updates im
     update_comparison_simulation,
     update_report_result_comparison,
 )
-from policyengine_api.services.v2.comparison_runs.database_session import (
-    ComparisonRunDatabaseSession,
-)
 from policyengine_api.services.v2.comparison_runs.transformations import (
     report_record,
     simulation_record,
 )
 from policyengine_api.services.v2.comparison_runs.types import (
-    ComparisonRunLifecycleStatus,
     ComparisonReportPersistenceResult,
     ComparisonReportRecord,
+    ComparisonRunLifecycleStatus,
     ComparisonSimulationPersistenceResult,
     ComparisonSimulationRecord,
 )
@@ -51,6 +46,15 @@ from policyengine_api.services.v2.comparison_runs.validators import (
     require_successful_report_replay,
     require_successful_simulation_replay,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlmodel import Session
+
+    from policyengine_api.services.v2.comparison_runs.database_session import (
+        ComparisonRunDatabaseSession,
+    )
 
 
 def create_or_resolve_report(

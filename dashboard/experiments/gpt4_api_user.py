@@ -1,11 +1,12 @@
-import streamlit as st
-import openai
-from openai.embeddings_utils import get_embedding, cosine_similarity
-import pandas as pd
 import json
-import requests
-import time
 import os
+import time
+
+import openai
+import pandas as pd
+import requests
+import streamlit as st
+from openai.embeddings_utils import cosine_similarity, get_embedding
 
 # Point OpenAI to the API key
 openai.api_key = os.environ["OPENAI_API_KEY"]
@@ -58,19 +59,17 @@ top5 = embeddings_df.sort_values("similarities", ascending=False).head(5)["json"
 
 
 def write_prompt(question, relevant_parameters):
-    prompt = f"""Question: {question}
+    return f"""Question: {question}
     Here's some metadata about the parameters that are relevant to your question:
     Relevant parameters: {relevant_parameters}
 
     Task: Convert the question into a reform of the syntax below. If not specified, assume the reform starts on 2023-01-01 and ends on 2024-01-01.
-    
+
 
     Reform syntax you should write in: {{ "parameter_name": {{ "start_date.end_date": value }} }}
     e.g. "basic rate at 25%" -> {{ "hmrc.income_tax.rates.uk[0].rate": {{ "2023-01-01.2024-01-01": 0.25 }} }}
     Reply only with valid JSON.
     """
-
-    return prompt
 
 
 reform_generation_prompt = write_prompt(question, top5)
@@ -80,11 +79,10 @@ reform_generation_prompt = write_prompt(question, top5)
 
 @st.cache_data
 def get_gpt4_response(prompt):
-    response = openai.ChatCompletion.create(
+    return openai.ChatCompletion.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}],
     )["choices"][0]["message"]["content"]
-    return response
 
 
 response = get_gpt4_response(reform_generation_prompt)
@@ -117,9 +115,7 @@ def get_policyengine_impact(reform):
         time.sleep(5)
         response = requests.get(url).json()
 
-    impact = response["result"]
-
-    return impact
+    return response["result"]
 
 
 # Now, get GPT4 to answer the question with the impact JSON.

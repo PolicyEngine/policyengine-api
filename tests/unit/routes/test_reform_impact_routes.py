@@ -5,12 +5,12 @@ use the shared runtime cache, but the public limit, input-safety, ordering, and
 v1 response-shape contracts remain unchanged.
 """
 
-from datetime import datetime
 import json
+from datetime import datetime
 
+import pytest
 from fastapi.testclient import TestClient
 from flask import Flask
-import pytest
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.routes import reform_impact_routes
@@ -22,7 +22,6 @@ from policyengine_api.runtime_cache.reform_impacts import (
     reform_impact_id,
 )
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
-
 
 COMPLETED_AT = datetime(2026, 1, 1, 1)
 

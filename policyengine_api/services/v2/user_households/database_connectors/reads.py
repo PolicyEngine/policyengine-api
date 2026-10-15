@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from sqlmodel import Session, col, select
 
@@ -12,6 +11,10 @@ from policyengine_api.data.v2.models import (
     LegacyHouseholdMapping,
     UserHouseholdAssociation,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Collection
+    from uuid import UUID
 
 
 def read_household_for_association(

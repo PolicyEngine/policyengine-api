@@ -6,6 +6,7 @@ import uuid
 from contextvars import ContextVar
 
 import flask
+
 from policyengine_api.observability.identifiers import (
     generate_observability_id,
     normalize_observability_id,

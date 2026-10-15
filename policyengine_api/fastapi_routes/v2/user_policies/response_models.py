@@ -53,7 +53,7 @@ class UserPolicyItem(StrictUserPolicyAPIModel):
     updated_at: datetime
 
     @classmethod
-    def from_read(cls, item: UserPolicyRead) -> "UserPolicyItem":
+    def from_read(cls, item: UserPolicyRead) -> UserPolicyItem:
         return cls.model_validate(item)
 
 
@@ -68,7 +68,7 @@ class UserPolicyPageResult(StrictUserPolicyAPIModel):
     has_more: bool
 
     @classmethod
-    def from_page(cls, page: UserPolicyPage) -> "UserPolicyPageResult":
+    def from_page(cls, page: UserPolicyPage) -> UserPolicyPageResult:
         return cls(
             items=[UserPolicyItem.from_read(item) for item in page.items],
             offset=page.offset,

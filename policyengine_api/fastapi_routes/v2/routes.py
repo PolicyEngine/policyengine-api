@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, Request
 from starlette.responses import JSONResponse
 
-from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
+from policyengine_api.fastapi_routes.v2.households.routes import (
+    build_v2_household_router,
+)
+from policyengine_api.fastapi_routes.v2.me.routes import build_v2_me_router
 from policyengine_api.fastapi_routes.v2.metadata.geography_routes import (
     build_v2_metadata_geography_router,
 )
@@ -16,16 +21,12 @@ from policyengine_api.fastapi_routes.v2.metadata.model_routes import (
 from policyengine_api.fastapi_routes.v2.metadata.parameter_routes import (
     build_v2_metadata_parameter_router,
 )
-from policyengine_api.fastapi_routes.v2.households.routes import (
-    build_v2_household_router,
-)
-from policyengine_api.fastapi_routes.v2.me.routes import build_v2_me_router
 from policyengine_api.fastapi_routes.v2.policies.routes import build_v2_policy_router
-from policyengine_api.fastapi_routes.v2.user_policies.routes import (
-    build_v2_user_policy_router,
-)
 from policyengine_api.fastapi_routes.v2.user_households.routes import (
     build_v2_user_household_router,
+)
+from policyengine_api.fastapi_routes.v2.user_policies.routes import (
+    build_v2_user_policy_router,
 )
 from policyengine_api.fastapi_routes.v2.user_reports.routes import (
     build_v2_shared_report_router,
@@ -34,6 +35,9 @@ from policyengine_api.fastapi_routes.v2.user_reports.routes import (
 from policyengine_api.fastapi_routes.v2.user_simulations.routes import (
     build_v2_user_simulation_router,
 )
+
+if TYPE_CHECKING:
+    from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 
 
 def build_v2_router(

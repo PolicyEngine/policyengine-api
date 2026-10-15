@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Any, Literal
-from uuid import UUID
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import Field, StringConstraints, model_validator
 
@@ -23,6 +21,9 @@ from policyengine_api.services.v2.associations.types import (
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
 
+if TYPE_CHECKING:
+    from datetime import datetime
+    from uuid import UUID
 
 UserPolicyBaseline = Literal["current-law", "current-policy"]
 
@@ -51,7 +52,7 @@ class UserPolicyCreateFields(StrictAssociationInput):
     provenance: PolicyProvenance | None = None
 
     @model_validator(mode="after")
-    def require_policy_reference(self) -> "UserPolicyCreateFields":
+    def require_policy_reference(self) -> UserPolicyCreateFields:
         if self.policy_id is None and self.legacy_policy_id is None:
             raise ValueError(
                 "At least one of legacy_policy_id or policy_id is required"
@@ -73,7 +74,7 @@ class UserPolicyCreationInput(StrictAssociationInput):
     provenance: PolicyProvenance | None = None
 
     @model_validator(mode="after")
-    def require_policy_reference(self) -> "UserPolicyCreationInput":
+    def require_policy_reference(self) -> UserPolicyCreationInput:
         if self.policy_id is None and self.legacy_policy_id is None:
             raise ValueError(
                 "At least one of legacy_policy_id or policy_id is required"
@@ -89,7 +90,7 @@ class UserPolicyUpdateInput(StrictAssociationInput):
     provenance: PolicyProvenance | None = None
 
     @model_validator(mode="after")
-    def require_supplied_field(self) -> "UserPolicyUpdateInput":
+    def require_supplied_field(self) -> UserPolicyUpdateInput:
         supplied = self.model_fields_set.intersection(
             {"legacy_policy_id", "name", "description", "baseline", "provenance"}
         )

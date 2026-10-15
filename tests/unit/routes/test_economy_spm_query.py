@@ -4,8 +4,8 @@ import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from flask import Flask
 import pytest
+from flask import Flask
 
 from policyengine_api import spm
 from policyengine_api.routes import economy_routes

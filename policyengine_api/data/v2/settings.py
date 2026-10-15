@@ -7,16 +7,17 @@ no local fallback.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
-from functools import lru_cache
 import os
 import re
-from typing import Callable
+from dataclasses import dataclass, field
+from functools import cache
+from typing import TYPE_CHECKING
 
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 V2_RUNTIME_DATABASE_URL = "V2_RUNTIME_DATABASE_URL"
 V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE = "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE"
@@ -88,7 +89,7 @@ def _required(environ: Mapping[str, str], name: str) -> str:
     return value.strip()
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_secret_from_secret_manager(resource_name: str) -> str:
     """Resolve a v2 runtime URL only when a preview request selects it."""
 

@@ -1,30 +1,34 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
     SQLAlchemyError,
+)
+from sqlalchemy.exc import (
     TimeoutError as SQLAlchemyTimeoutError,
 )
-from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import UserPolicy, UserPolicyMirrorEvent
+from policyengine_api.services.v2.user_policies.transformations import (
+    fingerprint_legacy_user_policy,
+)
 from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicyPersistenceResult,
     LegacyUserPolicySnapshot,
 )
-from policyengine_api.services.v2.user_policies.transformations import (
-    fingerprint_legacy_user_policy,
-)
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from sqlalchemy.orm import Session, sessionmaker
 
 USER_POLICY_IDENTITY_FIELDS = (
     "country_id",
@@ -406,7 +410,7 @@ class UserPolicyService:
                     break
                 pending = self._decode_mirror_event(event)
                 processed_result = processor(pending)
-                event.processed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                event.processed_at = datetime.now(UTC).replace(tzinfo=None)
                 session.add(event)
                 session.flush()
             latest_result = processed_result

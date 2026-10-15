@@ -1,9 +1,11 @@
-from flask import Blueprint, Response, request
-from policyengine_api.data.v1_models import UserProfile
-from policyengine_api.utils.payload_validators import validate_country
 import json
-from policyengine_api.services.user_service import UserService
+
+from flask import Blueprint, Response, request
 from werkzeug.exceptions import BadRequest, NotFound
+
+from policyengine_api.data.v1_models import UserProfile
+from policyengine_api.services.user_service import UserService
+from policyengine_api.utils.payload_validators import validate_country
 
 user_profile_bp = Blueprint("user_profile", __name__)
 user_service = UserService()

@@ -9,7 +9,6 @@ from pydantic import BaseModel, ValidationError
 
 from policyengine_api import spm
 
-
 ARTIFACT_HASH = "a" * 64
 LEGACY_BUNDLE = {
     "policyengine_version": "5.2.0",
@@ -481,7 +480,7 @@ COUNTRY_RECEIPT = {
             spm_config={**RESOLVED_SELECTION, "threshold_method": "canonical"},
             spm_provenance=lambda: COUNTRY_RECEIPT,
         ),
-        SimpleNamespace(spm_config=RESOLVED_SELECTION, spm_provenance=lambda: {}),
+        SimpleNamespace(spm_config=RESOLVED_SELECTION, spm_provenance=dict),
     ],
     ids=["extra-setting", "incomplete-receipt"],
 )

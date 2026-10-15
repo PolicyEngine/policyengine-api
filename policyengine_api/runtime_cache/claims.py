@@ -10,7 +10,6 @@ from policyengine_api.runtime_cache.core import (
     record_cache_event,
 )
 
-
 COMPARE_AND_DELETE = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
   return redis.call('del', KEYS[1])

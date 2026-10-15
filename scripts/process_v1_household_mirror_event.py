@@ -4,10 +4,10 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping, Sequence
 import json
 import os
 import sys
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import URL
@@ -15,10 +15,13 @@ from sqlalchemy.pool import NullPool
 
 from policyengine_api.data.orm import build_session_factory
 from policyengine_api.gcp_logging import logger
-from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.household_mirroring import (
     process_household_event_after_commit,
 )
+from policyengine_api.services.household_service import HouseholdService
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 
 class HouseholdEventCommandConfigurationError(RuntimeError):

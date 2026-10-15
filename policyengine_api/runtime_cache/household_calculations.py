@@ -15,7 +15,6 @@ from policyengine_api.spm import (
     validate_spm_calculation_provenance,
 )
 
-
 HOUSEHOLD_CALCULATION_SCHEMA_VERSION = 4
 HOUSEHOLD_CALCULATION_TTL_SECONDS = 86_400
 

@@ -1,6 +1,6 @@
 """Canonical SQLModel persistence and bounded SQLAlchemy escape-hatch tests."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, create_engine, select
 
 from policyengine_api.data.v2.models import (
+    V2_METADATA,
     Dynamic,
     LegacyPolicyMapping,
     LegacyUserMapping,
@@ -20,7 +21,6 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     User,
     UserPolicy,
-    V2_METADATA,
 )
 from policyengine_api.data.v2.models.base import DIRECT_SQLALCHEMY_EXCEPTIONS
 
@@ -172,7 +172,7 @@ def test_canonical_parameter_values_are_unique_by_parameter_and_start_date() -> 
         name="gov.example.rate",
         tax_benefit_model_version=version,
     )
-    start_date = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    start_date = datetime(2026, 1, 1, tzinfo=UTC)
 
     with Session(engine) as session:
         session.add_all(
@@ -218,7 +218,7 @@ def test_policy_parameter_value_owner_period_and_identity_constraints() -> None:
     engine = _relational_sqlite_engine()
     _model, _version, parameter, policy = _policy_graph(content_hash="b" * 64)
     dynamic = Dynamic(name="dynamic")
-    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
 
     with Session(engine) as session:
         session.add_all([parameter, policy, dynamic])

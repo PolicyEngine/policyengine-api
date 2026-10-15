@@ -15,11 +15,11 @@ from flask import Flask, g
 os.environ.setdefault("FLASK_DEBUG", "1")
 
 from policyengine_api.constants import (  # noqa: E402
-    POLICYENGINE_VERSION,
     MODAL_EXECUTION_STATUS_COMPLETE,
     MODAL_EXECUTION_STATUS_FAILED,
     MODAL_EXECUTION_STATUS_RUNNING,
     MODAL_EXECUTION_STATUS_SUBMITTED,
+    POLICYENGINE_VERSION,
 )
 from policyengine_api.libs.simulation_entrypoint import (  # noqa: E402
     ModalBudgetWindowBatchExecution,
@@ -28,6 +28,9 @@ from policyengine_api.libs.simulation_entrypoint import (  # noqa: E402
     SimulationEntrypointClient,
     resolve_simulation_entrypoint_url,
 )
+from policyengine_api.observability.identifiers import (  # noqa: E402
+    OBSERVABILITY_ID_HEADER,
+)
 from policyengine_api.request_context import (  # noqa: E402
     REQUEST_ID_HEADER,
     _asgi_observability_id,
@@ -35,10 +38,6 @@ from policyengine_api.request_context import (  # noqa: E402
     current_observability_id,
     start_observability_id,
 )
-from policyengine_api.observability.identifiers import (  # noqa: E402
-    OBSERVABILITY_ID_HEADER,
-)
-
 from tests.fixtures.libs.simulation_entrypoint import (  # noqa: E402
     MOCK_BATCH_JOB_ID,
     MOCK_BATCH_POLL_RESPONSE_COMPLETE,
@@ -48,12 +47,12 @@ from tests.fixtures.libs.simulation_entrypoint import (  # noqa: E402
     MOCK_HEALTH_RESPONSE,
     MOCK_MODAL_BASE_URL,
     MOCK_MODAL_JOB_ID,
+    MOCK_OBSERVABILITY_ID,
     MOCK_POLICYENGINE_BUNDLE,
     MOCK_POLL_RESPONSE_COMPLETE,
     MOCK_POLL_RESPONSE_FAILED,
     MOCK_POLL_RESPONSE_RUNNING,
     MOCK_RESOLVED_APP_NAME,
-    MOCK_OBSERVABILITY_ID,
     MOCK_SIMULATION_PAYLOAD,
     MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY,
     MOCK_SIMULATION_RESULT,

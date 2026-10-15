@@ -1,12 +1,13 @@
 import json
+
 from flask import Blueprint, Response
 
+from policyengine_api.services.metadata_service import MetadataService
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.utils.streaming_json import (
     iter_body_chunks,
     should_stream_body,
 )
-from policyengine_api.services.metadata_service import MetadataService
 
 metadata_bp = Blueprint("metadata", __name__)
 metadata_service = MetadataService()

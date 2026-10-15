@@ -1,12 +1,12 @@
 from policyengine_api.country import COUNTRIES
 from tests.fixtures.integration.simulations import (
+    SMALL_AXES_COUNT,
     TEST_COUNTRY_ID,
     TEST_STATE,
     TEST_YEAR,
-    SMALL_AXES_COUNT,
-    setup_small_axes_household,
     create_base_household,
     create_small_axes,
+    setup_small_axes_household,
 )
 
 

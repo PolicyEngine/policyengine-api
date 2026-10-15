@@ -150,11 +150,10 @@ def decile_impact(baseline: dict, reform: dict) -> dict:
     )
     rel_decile_dict = rel_income_change_by_decile.to_dict()
     avg_decile_dict = avg_income_change_by_decile.to_dict()
-    result = dict(
+    return dict(
         relative={int(k): v for k, v in rel_decile_dict.items()},
         average={int(k): v for k, v in avg_decile_dict.items()},
     )
-    return result
 
 
 def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
@@ -191,11 +190,10 @@ def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     )
     rel_decile_dict = rel_income_change_by_decile.to_dict()
     avg_decile_dict = avg_income_change_by_decile.to_dict()
-    result = dict(
+    return dict(
         relative={int(k): v for k, v in rel_decile_dict.items()},
         average={int(k): v for k, v in avg_decile_dict.items()},
     )
-    return result
 
 
 def inequality_impact(baseline: dict, reform: dict) -> dict:
@@ -610,11 +608,11 @@ def uk_constituency_breakdown(
         if selected_country is not None:
             if selected_country == "ENGLAND" and not code.startswith("E"):
                 continue
-            elif selected_country == "SCOTLAND" and not code.startswith("S"):
+            if selected_country == "SCOTLAND" and not code.startswith("S"):
                 continue
-            elif selected_country == "WALES" and not code.startswith("W"):
+            if selected_country == "WALES" and not code.startswith("W"):
                 continue
-            elif selected_country == "NORTHERN_IRELAND" and not code.startswith("N"):
+            if selected_country == "NORTHERN_IRELAND" and not code.startswith("N"):
                 continue
 
         weight: np.ndarray = weights[i]
@@ -729,11 +727,11 @@ def uk_local_authority_breakdown(
         if selected_country is not None:
             if selected_country == "england" and not code.startswith("E"):
                 continue
-            elif selected_country == "scotland" and not code.startswith("S"):
+            if selected_country == "scotland" and not code.startswith("S"):
                 continue
-            elif selected_country == "wales" and not code.startswith("W"):
+            if selected_country == "wales" and not code.startswith("W"):
                 continue
-            elif selected_country == "northern_ireland" and not code.startswith("N"):
+            if selected_country == "northern_ireland" and not code.startswith("N"):
                 continue
 
         weight: np.ndarray = weights[i]
@@ -847,7 +845,7 @@ def compare_economic_outputs(
             constituency_impact=constituency_impact_data,
             local_authority_impact=local_authority_impact_data,
         )
-    elif baseline.get("type") == "cliff":
+    if baseline.get("type") == "cliff":
         return dict(
             baseline=dict(
                 cliff_gap=baseline["cliff_gap"],
@@ -858,3 +856,4 @@ def compare_economic_outputs(
                 cliff_share=reform["cliff_share"],
             ),
         )
+    return None

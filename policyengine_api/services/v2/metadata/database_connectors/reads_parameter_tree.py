@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
-from uuid import UUID
+from typing import TYPE_CHECKING, Any
 
 import sqlalchemy as sa
 from sqlmodel import Session, col
 
 from policyengine_api.data.v2.models import Parameter, ParameterNode
 from policyengine_api.services.v2.metadata.database_connectors.reads import read_rows
+
+if TYPE_CHECKING:
+    from uuid import UUID
 
 
 def _escaped_like(value: str) -> str:

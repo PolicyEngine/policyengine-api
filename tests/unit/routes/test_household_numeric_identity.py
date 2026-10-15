@@ -1,17 +1,16 @@
 """Immutable households retain strict numeric simulation alias boundaries."""
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 
-from flask import Flask
 import pytest
+from flask import Flask
 
 from policyengine_api.data.v1_models import Simulation, SimulationRun
 from policyengine_api.routes import household_routes, simulation_routes
 from policyengine_api.services import household_service
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.simulation_service import SimulationService
-
 
 INPUTS = {"people": {"you": {"age": {"2026": 40}}}}
 NATIONAL = {

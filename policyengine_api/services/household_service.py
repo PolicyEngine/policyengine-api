@@ -1,20 +1,21 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 import copy
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
     SQLAlchemyError,
+)
+from sqlalchemy.exc import (
     TimeoutError as SQLAlchemyTimeoutError,
 )
-from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import get_v1_session_factory
@@ -26,8 +27,13 @@ from policyengine_api.services.v2.households.types import (
     LegacyHouseholdPersistenceResult,
     LegacyHouseholdSnapshot,
 )
-from policyengine_api.utils import hash_object
 from policyengine_api.spm import SPMValidationError, normalize_spm_selection
+from policyengine_api.utils import hash_object
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from sqlalchemy.orm import Session, sessionmaker
 
 
 def household_storage_json(country_id: str, household_json: dict, spm=None) -> dict:
@@ -80,7 +86,7 @@ class HouseholdPersistenceError(RuntimeError):
         }
 
     @classmethod
-    def from_exception(cls, error: Exception) -> "HouseholdPersistenceError":
+    def from_exception(cls, error: Exception) -> HouseholdPersistenceError:
         if isinstance(error, SQLAlchemyTimeoutError):
             return cls(HouseholdPersistenceFailureCategory.TIMEOUT)
         if isinstance(error, OperationalError):
@@ -289,7 +295,7 @@ class HouseholdService:
                 )
             result = processor(pending)
             if event.processed_at is None:
-                event.processed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                event.processed_at = datetime.now(UTC).replace(tzinfo=None)
                 session.add(event)
                 session.flush()
         if after_processed_commit is not None:

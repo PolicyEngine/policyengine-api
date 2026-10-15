@@ -11,7 +11,6 @@ from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.spm import SPMValidationError
 
-
 INPUTS = {"people": {"you": {"age": {"2026": 40}}}}
 NATIONAL = {
     "forecast_content_sha256": "a" * 64,

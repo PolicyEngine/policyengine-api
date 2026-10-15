@@ -3,29 +3,29 @@ import inspect
 import json
 import logging
 from dataclasses import dataclass
-from policyengine_core.taxbenefitsystems import TaxBenefitSystem
-from typing import Any, Union
-from policyengine_api.utils import get_safe_json
-from policyengine_core.parameters import (
-    ParameterNode,
-    Parameter,
-    ParameterScale,
-    ParameterScaleBracket,
-)
-from policyengine_core.parameters import get_parameter
+from datetime import date, datetime
 from importlib.metadata import version as get_package_version
-from policyengine_core.model_api import Reform, Enum
-from policyengine_core.periods import instant
+from pathlib import Path
+from typing import Any
+
 import dpath
 import pandas as pd
-from datetime import date, datetime
-from pathlib import Path
-from policyengine_api.data.congressional_districts import (
-    build_congressional_district_metadata,
+from policyengine_core.model_api import Enum, Reform
+from policyengine_core.parameters import (
+    Parameter,
+    ParameterNode,
+    ParameterScale,
+    ParameterScaleBracket,
+    get_parameter,
 )
+from policyengine_core.periods import instant
+from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 
 from policyengine_api.constants import (
     get_bundle_default_dataset_option,
+)
+from policyengine_api.data.congressional_districts import (
+    build_congressional_district_metadata,
 )
 from policyengine_api.services.household_calculation_service import CalculationResult
 from policyengine_api.spm import (
@@ -35,7 +35,7 @@ from policyengine_api.spm import (
     spm_error_detail,
     spm_metadata,
 )
-
+from policyengine_api.utils import get_safe_json
 
 logger = logging.getLogger(__name__)
 
@@ -441,7 +441,7 @@ class PolicyEngineCountry:
     def calculate(
         self,
         household: dict,
-        reform: Union[dict, None],
+        reform: dict | None,
         spm: dict | None = None,
         spm_requested: bool = False,
         prepared: PreparedCountryCalculation | None = None,
@@ -539,7 +539,7 @@ class PolicyEngineCountry:
     def prepare_calculation(
         self,
         household: dict,
-        reform: Union[dict, None],
+        reform: dict | None,
         spm: dict | None = None,
         spm_requested: bool = False,
     ) -> PreparedCountryCalculation:
@@ -565,7 +565,7 @@ class PolicyEngineCountry:
     def _create_simulation(
         self,
         household: dict,
-        reform: Union[dict, None],
+        reform: dict | None,
         spm: dict | None = None,
     ):
         selection = normalize_spm_selection(getattr(self, "country_id", ""), spm)

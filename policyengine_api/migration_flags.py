@@ -128,7 +128,7 @@ class RouteImplementationSettings:
     metadata: RouteImplementation
 
     @classmethod
-    def from_environment(cls) -> "RouteImplementationSettings":
+    def from_environment(cls) -> RouteImplementationSettings:
         """Read and validate each Stage 6 route selector independently."""
         return cls(
             health=get_route_impl("health"),

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
 import time
+from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from sqlalchemy import Connection, Engine
@@ -23,7 +23,6 @@ from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
     PublicationEvidence,
 )
-from policyengine_api.data.v2.catalog.records import NormalizedCatalog
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
 from policyengine_api.data.v2.models import (
     DatasetVersion,
@@ -32,6 +31,10 @@ from policyengine_api.data.v2.models import (
     Simulation,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from policyengine_api.data.v2.catalog.records import NormalizedCatalog
 
 # Stable application-defined PostgreSQL lock ID shared by all v2 catalog publishers.
 PUBLICATION_ADVISORY_LOCK_KEY = 8_629_020_026_090_001

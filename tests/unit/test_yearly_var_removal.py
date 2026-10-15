@@ -5,7 +5,6 @@ from policyengine_api.services.household_calculation_service import (
     add_yearly_variables,
 )
 
-
 TEST_YEAR = "2023"
 
 

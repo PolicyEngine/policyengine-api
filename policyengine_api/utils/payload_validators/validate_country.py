@@ -1,5 +1,4 @@
 from functools import wraps
-from typing import Union
 
 from flask import Response
 
@@ -21,9 +20,7 @@ def validate_country(func):
     """
 
     @wraps(func)
-    def validate_country_wrapper(
-        country_id: str, *args, **kwargs
-    ) -> Union[None, Response]:
+    def validate_country_wrapper(country_id: str, *args, **kwargs) -> None | Response:
         print("Validating country")
         try:
             ensure_supported_country(country_id)

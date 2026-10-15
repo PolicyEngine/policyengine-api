@@ -2,30 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import time
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
-)
-from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
-from policyengine_api.services.v2.policies.validators import (
-    LegacyPolicyMappingIntegrityError,
-    LegacyPolicyTranslationError,
-    PolicyCatalogValidationError,
-    PolicyContentHashCollisionError,
-    PolicyCreationIntegrityError,
-)
-from policyengine_api.services.v2.user_policies.types import (
-    LegacyUserPolicyPersistenceResult,
-    LegacyUserPolicySnapshot,
-)
-from policyengine_api.services.v2.user_policies.validators import (
-    LegacyUserPolicyIntegrityError,
 )
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.gcp_logging import logger
@@ -34,6 +18,25 @@ from policyengine_api.services.user_policy_service import (
     PendingUserPolicyMirrorEvent,
     UserPolicyService,
 )
+from policyengine_api.services.v2.policies.validators import (
+    LegacyPolicyMappingIntegrityError,
+    LegacyPolicyTranslationError,
+    PolicyCatalogValidationError,
+    PolicyContentHashCollisionError,
+    PolicyCreationIntegrityError,
+)
+from policyengine_api.services.v2.user_policies.validators import (
+    LegacyUserPolicyIntegrityError,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+    from policyengine_api.services.v2.user_policies.types import (
+        LegacyUserPolicyPersistenceResult,
+        LegacyUserPolicySnapshot,
+    )
 
 
 class LegacyUserPolicyMirror(Protocol):

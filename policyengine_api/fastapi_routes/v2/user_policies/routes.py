@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse, Response
 
-from policyengine_api.fastapi_routes.dependencies import (
-    NativeRouteDependencies,
-    V2UserPolicyResourceService,
-)
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import v2_error_response
 from policyengine_api.fastapi_routes.v2.user_policies.request_models import (
@@ -35,6 +31,14 @@ from policyengine_api.query_parameters import (
     UserPolicyCollectionQuery,
 )
 from policyengine_api.services.v2.identity.types import AccountPrincipal
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from policyengine_api.fastapi_routes.dependencies import (
+        NativeRouteDependencies,
+        V2UserPolicyResourceService,
+    )
 
 
 def _service_factory(

@@ -33,7 +33,6 @@ from tests.unit.v2.user_route_support import (
     user_route_client,
 )
 
-
 ASSOCIATION_ID = UUID("00000000-0000-0000-0000-000000000060")
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000010")
 PROVENANCE = {"source": "chat", "ref": "thread-1", "confidence": "exact"}

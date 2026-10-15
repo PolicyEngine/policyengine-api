@@ -10,7 +10,11 @@ from sqlmodel import Session
 from policyengine_api.constants import POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import (
     Policy as V1Policy,
+)
+from policyengine_api.data.v1_models import (
     UserPolicy as V1UserPolicy,
+)
+from policyengine_api.data.v1_models import (
     UserPolicyMirrorEvent,
 )
 from policyengine_api.data.v2.models import (
@@ -25,10 +29,6 @@ from policyengine_api.data.v2.models import (
     User,
     UserPolicy,
 )
-from policyengine_api.services.v2.user_policies.database_session import (
-    UserPolicyDatabaseSession,
-)
-from policyengine_api.services.v2.user_policies.services import V2UserPolicyService
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.user_policy_mirroring import (
     UserPolicyMirrorUnavailableError,
@@ -36,6 +36,10 @@ from policyengine_api.services.user_policy_mirroring import (
     mirror_user_policy_after_commit,
 )
 from policyengine_api.services.user_policy_service import UserPolicyService
+from policyengine_api.services.v2.user_policies.database_session import (
+    UserPolicyDatabaseSession,
+)
+from policyengine_api.services.v2.user_policies.services import V2UserPolicyService
 
 
 def _v1_services(database_url: str):

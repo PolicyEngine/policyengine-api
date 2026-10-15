@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
-import pytest
 from sqlalchemy.exc import OperationalError, TimeoutError
 
 from policyengine_api.asgi_factory import create_asgi_app
@@ -29,9 +29,8 @@ from policyengine_api.services.v2.households.validators import (
     HouseholdValidationError,
 )
 
-
 HOUSEHOLD_ID = UUID("00000000-0000-0000-0000-000000000010")
-CREATED_AT = datetime(2026, 1, 1, tzinfo=timezone.utc)
+CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _document() -> dict[str, object]:
@@ -120,7 +119,7 @@ def _client(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
-        specification_provider=lambda: {},
+        specification_provider=dict,
         v2_household_service_factory=lambda: service,
     )
     settings = RouteImplementationSettings(

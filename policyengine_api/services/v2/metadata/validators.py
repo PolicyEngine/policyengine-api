@@ -41,12 +41,12 @@ def require_metadata_resource(
 
 
 def validate_economy_options(
-    selected: "SelectedCatalog",
+    selected: SelectedCatalog,
     *,
     country_id: str,
-    regions: list["Region"],
-    national_dataset: "Dataset | None",
-) -> "Dataset":
+    regions: list[Region],
+    national_dataset: Dataset | None,
+) -> Dataset:
     """Validate preloaded records required by the economy-options response."""
 
     if not any(region.code == country_id for region in regions):

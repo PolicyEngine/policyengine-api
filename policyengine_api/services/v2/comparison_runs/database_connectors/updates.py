@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlmodel import Session
+from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.models import (
     Stage12AggregationStatus,
@@ -11,10 +11,14 @@ from policyengine_api.data.v2.models import (
     Stage12ResultComparisonStatus,
     Stage12RunStatus,
 )
-from policyengine_api.services.v2.comparison_runs.types import (
-    ComparisonReportRecord,
-    ComparisonSimulationRecord,
-)
+
+if TYPE_CHECKING:
+    from sqlmodel import Session
+
+    from policyengine_api.services.v2.comparison_runs.types import (
+        ComparisonReportRecord,
+        ComparisonSimulationRecord,
+    )
 
 REPORT_MUTABLE_FIELDS = (
     "coordinator_invocation_id",

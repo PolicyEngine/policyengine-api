@@ -6,8 +6,8 @@ from dataclasses import replace
 from unittest.mock import Mock
 from uuid import uuid4
 
-from sqlalchemy.dialects import postgresql
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from policyengine_api.data.v2.models import Household, LegacyHouseholdMapping
 from policyengine_api.services.v2.households.database_connectors import creates

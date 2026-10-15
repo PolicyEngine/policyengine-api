@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from policyengine_api.services.v2.households.transformations import (
     LEGACY_COLLECTION_NAMES,
@@ -17,7 +17,6 @@ from policyengine_api.services.v2.households.types import LegacyHouseholdSnapsho
 from policyengine_api.services.v2.households.validators import (
     LegacyHouseholdTranslationError,
 )
-
 
 DATA = Path(__file__).parents[2] / "data"
 
@@ -189,6 +188,7 @@ def test_saved_spm_translation_preserves_selection_without_current_bundle_resolu
 ) -> None:
     from copy import deepcopy
     from unittest.mock import Mock
+
     from policyengine_api import spm
     from policyengine_api.services.v2.households.transformations import (
         canonicalize_household,

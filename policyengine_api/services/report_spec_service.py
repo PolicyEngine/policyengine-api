@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from policyengine_api.data.v1_models import ReportOutput, Simulation
 from policyengine_api.utils.population_identity import canonical_numeric_household_id
 
-
 REPORT_SPEC_SCHEMA_VERSION = 1
 REPORT_SPEC_STATUSES = {"explicit", "backfilled_assumed"}
 HOUSEHOLD_REPORT_KINDS = {"household_single", "household_comparison"}

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from sqlmodel import Session, col, select
 
@@ -18,6 +18,9 @@ from policyengine_api.data.v2.models import (
     Policy,
     TaxBenefitModelVersion,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
 
 
 def read_policy_catalog(

@@ -15,7 +15,6 @@ from policyengine_api.data.v2.settings import (
     load_v2_runtime_database_settings,
 )
 
-
 PROJECT_REF = "abcdefghijklmnopqrst"
 TARGET_ENVIRONMENT = {
     V2_SUPABASE_PROJECT_REF: PROJECT_REF,

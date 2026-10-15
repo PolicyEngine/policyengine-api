@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pydantic import BaseModel
-from starlette.responses import JSONResponse
 
 from policyengine_api.data.v2.catalog.catalog_selection import (
     InvalidPolicyEngineVersionError,
@@ -14,20 +12,25 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogVersionNotFoundError,
     UnsupportedPreviewCountryError,
 )
-from policyengine_api.services.v2.metadata.validators import (
-    InvalidMetadataPageError,
-    MetadataResourceNotFoundError,
-)
+from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.v2.errors import (
     V2ErrorResponse,
     v2_error_response,
 )
-from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.fastapi_routes.dependencies import (
-    NativeRouteDependencies,
-    V2MetadataResourceReader,
+from policyengine_api.services.v2.metadata.validators import (
+    InvalidMetadataPageError,
+    MetadataResourceNotFoundError,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from starlette.responses import JSONResponse
+
+    from policyengine_api.fastapi_routes.dependencies import (
+        NativeRouteDependencies,
+        V2MetadataResourceReader,
+    )
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {

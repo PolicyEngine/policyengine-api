@@ -6,12 +6,12 @@ import itertools
 import os
 from uuid import UUID, uuid4
 
+import pytest
+import sqlalchemy as sa
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
-import pytest
-import sqlalchemy as sa
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 
@@ -24,7 +24,6 @@ from policyengine_api.data.v2.migration_target import (
 )
 from policyengine_api.data.v2.models import V2_METADATA
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
-
 
 BASELINE_REVISION = "f5ef4347cb2a"
 STAGE_11_PREVIOUS_REVISION = "af34023a728f"

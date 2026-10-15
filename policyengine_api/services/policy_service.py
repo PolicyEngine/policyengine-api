@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from collections.abc import Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Policy
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.utils import hash_object
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.orm import Session, sessionmaker
 
 
 @dataclass(frozen=True)

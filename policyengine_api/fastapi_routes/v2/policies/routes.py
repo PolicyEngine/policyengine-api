@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -13,6 +12,12 @@ from starlette.responses import JSONResponse
 from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
+)
+from policyengine_api.data.v2.settings import V2ConfigurationError
+from policyengine_api.fastapi_routes.query_parameters import query_dependency
+from policyengine_api.fastapi_routes.v2.errors import (
+    V2RequestTooLargeError,
+    v2_error_response,
 )
 from policyengine_api.fastapi_routes.v2.policies.request_models import (
     MAXIMUM_POLICY_REQUEST_BYTES,
@@ -26,9 +31,10 @@ from policyengine_api.fastapi_routes.v2.policies.response_models import (
     PolicyPageResponse,
     PolicyPageResult,
 )
-from policyengine_api.fastapi_routes.v2.errors import (
-    V2RequestTooLargeError,
-    v2_error_response,
+from policyengine_api.query_parameters import (
+    PolicyCollectionQuery,
+    PolicyCreateQuery,
+    PolicyDetailQuery,
 )
 from policyengine_api.services.v2.policies.types import NativePolicyCreationInput
 from policyengine_api.services.v2.policies.validators import (
@@ -37,17 +43,14 @@ from policyengine_api.services.v2.policies.validators import (
     PolicyCreationIntegrityError,
     PolicyNotFoundError,
 )
-from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.fastapi_routes.dependencies import (
-    NativeRouteDependencies,
-    V2PolicyResourceService,
-)
-from policyengine_api.fastapi_routes.query_parameters import query_dependency
-from policyengine_api.query_parameters import (
-    PolicyCollectionQuery,
-    PolicyCreateQuery,
-    PolicyDetailQuery,
-)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from policyengine_api.fastapi_routes.dependencies import (
+        NativeRouteDependencies,
+        V2PolicyResourceService,
+    )
 
 
 async def enforce_policy_request_size(request: Request) -> None:

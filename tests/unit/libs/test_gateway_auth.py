@@ -22,7 +22,6 @@ from policyengine_api.libs.gateway_auth import (
     gateway_auth_required,
 )
 
-
 ISSUER = "https://policyengine.uk.auth0.com"
 AUDIENCE = "https://sim-gateway.policyengine.org"
 CLIENT_ID = "test-client-id"

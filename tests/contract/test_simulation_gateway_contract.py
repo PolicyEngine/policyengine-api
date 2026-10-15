@@ -1,10 +1,10 @@
 from unittest.mock import MagicMock
 
 import httpx
-import policyengine_api.libs.simulation_entrypoint as simulation_entrypoint
 import pytest
-from policyengine_api.libs.simulation_entrypoint import SimulationAPIModal
 
+import policyengine_api.libs.simulation_entrypoint as simulation_entrypoint
+from policyengine_api.libs.simulation_entrypoint import SimulationAPIModal
 from tests.fixtures.libs.simulation_entrypoint import (
     MOCK_BATCH_JOB_ID,
     MOCK_BATCH_POLL_RESPONSE_COMPLETE,

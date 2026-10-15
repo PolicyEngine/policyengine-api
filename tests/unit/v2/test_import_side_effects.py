@@ -1,9 +1,9 @@
 """Import/startup tests for dormant and fail-closed v2 configuration."""
 
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -14,7 +14,6 @@ from policyengine_api.data.v2.settings import (
     V2ConfigurationError,
     load_v2_runtime_database_settings,
 )
-
 
 V2_ENVIRONMENT_NAMES = (
     "V2_RUNTIME_DATABASE_URL",
