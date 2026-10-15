@@ -389,7 +389,9 @@ class V2UserPolicyResourceService(Protocol):
         *,
         principal: AccountPrincipal,
         association_input: UserPolicyCreateFields,
-    ) -> UserPolicyRead: ...
+    ) -> UserPolicyRead:
+        """Save a policy for the caller, provisioning their user if needed."""
+        ...
 
     def get_user_policy(
         self,
@@ -398,7 +400,7 @@ class V2UserPolicyResourceService(Protocol):
         country_id: str,
         association_id: UUID,
     ) -> UserPolicyRead:
-        """Return the country's association, or raise ``UserPolicyNotFoundError``."""
+        """Return the caller's association, or raise ``UserPolicyNotFoundError``."""
         ...
 
     def list_user_policies(
@@ -411,7 +413,7 @@ class V2UserPolicyResourceService(Protocol):
         offset: int = 0,
         limit: int = 100,
     ) -> UserPolicyPage:
-        """Return a page of one user's associations, optionally for one policy."""
+        """Return a page of the caller's associations, optionally for one policy."""
         ...
 
     def patch_user_policy(
@@ -422,7 +424,10 @@ class V2UserPolicyResourceService(Protocol):
         association_id: UUID,
         association_input: UserPolicyUpdateInput,
     ) -> UserPolicyRead:
-        """Update only the supplied presentation fields and return the association."""
+        """Update the supplied fields of the caller's association and return it.
+
+        A new ``legacy_policy_id`` repoints it to another v1 policy.
+        """
         ...
 
     def delete_user_policy(
@@ -432,7 +437,7 @@ class V2UserPolicyResourceService(Protocol):
         country_id: str,
         association_id: UUID,
     ) -> None:
-        """Delete the country's association, or raise ``UserPolicyNotFoundError``."""
+        """Delete the caller's association, or raise ``UserPolicyNotFoundError``."""
         ...
 
 
@@ -444,7 +449,9 @@ class V2UserHouseholdResourceService(Protocol):
         *,
         principal: AccountPrincipal,
         association_input: UserHouseholdCreateFields,
-    ) -> UserHouseholdRead: ...
+    ) -> UserHouseholdRead:
+        """Save a household for the caller, provisioning their user if needed."""
+        ...
 
     def get_user_household(
         self,
@@ -453,7 +460,7 @@ class V2UserHouseholdResourceService(Protocol):
         country_id: str,
         association_id: UUID,
     ) -> UserHouseholdRead:
-        """Return the country's association, or raise ``UserHouseholdNotFoundError``."""
+        """Return the caller's association, or raise ``UserHouseholdNotFoundError``."""
         ...
 
     def list_user_households(
@@ -466,7 +473,7 @@ class V2UserHouseholdResourceService(Protocol):
         offset: int = 0,
         limit: int = 100,
     ) -> UserHouseholdPage:
-        """Return a page of one user's associations, optionally for one household."""
+        """Return a page of the caller's associations, optionally for one household."""
         ...
 
     def patch_user_household(
@@ -477,10 +484,9 @@ class V2UserHouseholdResourceService(Protocol):
         association_id: UUID,
         association_input: UserHouseholdUpdateInput,
     ) -> UserHouseholdRead:
-        """Update only the supplied fields and return the association.
+        """Update the supplied fields of the caller's association and return it.
 
-        A supplied ``household_id`` re-points the association to another
-        household, which must exist in the association's country.
+        A new ``legacy_household_id`` repoints it to another v1 household.
         """
         ...
 
@@ -491,7 +497,7 @@ class V2UserHouseholdResourceService(Protocol):
         country_id: str,
         association_id: UUID,
     ) -> None:
-        """Delete the country's association, or raise ``UserHouseholdNotFoundError``."""
+        """Delete the caller's association, or raise ``UserHouseholdNotFoundError``."""
         ...
 
 
@@ -503,7 +509,9 @@ class V2UserSimulationResourceService(Protocol):
         *,
         principal: AccountPrincipal,
         association_input: UserSimulationCreateFields,
-    ) -> UserSimulationRead: ...
+    ) -> UserSimulationRead:
+        """Save a v1 simulation for the caller, provisioning their user if needed."""
+        ...
 
     def get_user_simulation(
         self,
@@ -511,7 +519,9 @@ class V2UserSimulationResourceService(Protocol):
         principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-    ) -> UserSimulationRead: ...
+    ) -> UserSimulationRead:
+        """Return the caller's association, or raise ``UserSimulationNotFoundError``."""
+        ...
 
     def list_user_simulations(
         self,
@@ -521,7 +531,9 @@ class V2UserSimulationResourceService(Protocol):
         legacy_simulation_id: int | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> UserSimulationPage: ...
+    ) -> UserSimulationPage:
+        """Return a page of the caller's associations, optionally for one simulation."""
+        ...
 
     def patch_user_simulation(
         self,
@@ -530,7 +542,12 @@ class V2UserSimulationResourceService(Protocol):
         country_id: str,
         association_id: UUID,
         association_input: UserSimulationUpdateInput,
-    ) -> UserSimulationRead: ...
+    ) -> UserSimulationRead:
+        """Update the supplied fields of the caller's association and return it.
+
+        A new ``legacy_simulation_id`` repoints it to another v1 simulation.
+        """
+        ...
 
     def delete_user_simulation(
         self,
@@ -538,7 +555,9 @@ class V2UserSimulationResourceService(Protocol):
         principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-    ) -> None: ...
+    ) -> None:
+        """Delete the caller's association, or raise ``UserSimulationNotFoundError``."""
+        ...
 
 
 class V2UserReportResourceService(Protocol):
@@ -549,7 +568,12 @@ class V2UserReportResourceService(Protocol):
         *,
         principal: AccountPrincipal,
         association_input: UserReportCreateFields,
-    ) -> UserReportRead: ...
+    ) -> UserReportRead:
+        """Save a v1 report for the caller, provisioning their user if needed.
+
+        Linked saved reforms must be the caller's own.
+        """
+        ...
 
     def get_user_report(
         self,
@@ -557,14 +581,21 @@ class V2UserReportResourceService(Protocol):
         principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-    ) -> UserReportRead: ...
+    ) -> UserReportRead:
+        """Return the caller's association, or raise ``UserReportNotFoundError``."""
+        ...
 
     def get_shared_user_report(
         self,
         *,
         country_id: str,
         association_id: UUID,
-    ) -> SharedUserReportRead: ...
+    ) -> SharedUserReportRead:
+        """Return any user's saved report to a link holder, without its owner.
+
+        Raise ``UserReportNotFoundError`` when the country has no such report.
+        """
+        ...
 
     def list_user_reports(
         self,
@@ -574,7 +605,9 @@ class V2UserReportResourceService(Protocol):
         legacy_report_id: int | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> UserReportPage: ...
+    ) -> UserReportPage:
+        """Return a page of the caller's associations, optionally for one v1 report."""
+        ...
 
     def patch_user_report(
         self,
@@ -583,7 +616,9 @@ class V2UserReportResourceService(Protocol):
         country_id: str,
         association_id: UUID,
         association_input: UserReportUpdateInput,
-    ) -> UserReportRead: ...
+    ) -> UserReportRead:
+        """Update the supplied fields of the caller's association and return it."""
+        ...
 
     def delete_user_report(
         self,
@@ -591,7 +626,9 @@ class V2UserReportResourceService(Protocol):
         principal: AccountPrincipal,
         country_id: str,
         association_id: UUID,
-    ) -> None: ...
+    ) -> None:
+        """Delete the caller's association, or raise ``UserReportNotFoundError``."""
+        ...
 
 
 class V2AccountResourceService(Protocol):
@@ -599,7 +636,13 @@ class V2AccountResourceService(Protocol):
 
     def get_account(
         self, *, principal: AccountPrincipal, country_id: str
-    ) -> AccountRead: ...
+    ) -> AccountRead:
+        """Return the caller's account, provisioning a signed-in user on first use.
+
+        Raise ``AccountNotFoundError`` for an unauthenticated user that has not
+        saved anything yet.
+        """
+        ...
 
     def update_account(
         self,
@@ -607,11 +650,18 @@ class V2AccountResourceService(Protocol):
         principal: AccountPrincipal,
         country_id: str,
         account_input: AccountUpdateInput,
-    ) -> AccountRead: ...
+    ) -> AccountRead:
+        """Change the supplied fields of a signed-in user's account and return it.
+
+        Raise ``AccountEditRequiresSignInError`` for an unauthenticated user.
+        """
+        ...
 
     def export_account(
         self, *, principal: AccountPrincipal, country_id: str
-    ) -> AccountExport: ...
+    ) -> AccountExport:
+        """Return the caller's account and all its associations, in every country."""
+        ...
 
     def upgrade_account(
         self,
@@ -619,9 +669,21 @@ class V2AccountResourceService(Protocol):
         principal: UserPrincipal,
         unauthenticated_user_id: UUID,
         country_id: str,
-    ) -> AccountUpgrade: ...
+    ) -> AccountUpgrade:
+        """Move a browser's unauthenticated user into the signed-in account.
 
-    def delete_account(self, *, principal: AccountPrincipal) -> AccountDeletion: ...
+        The outcome says whether it was converted in place, merged into an
+        existing account, or absent.
+        """
+        ...
+
+    def delete_account(self, *, principal: AccountPrincipal) -> AccountDeletion:
+        """Delete the caller's user and associations; an absent user succeeds.
+
+        A signed-in user's Auth0 user is deleted too when Auth0 Management is
+        configured.
+        """
+        ...
 
 
 class SimulationGatewayProbe(Protocol):
