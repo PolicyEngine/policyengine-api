@@ -732,17 +732,14 @@ invocation = "make test"
 [[rule]]
 id = "api.quality.alembic-revisions-unused-imports"
 category = "quality"
-statement = "Alembic revision files are exempt from ruff lint rules, because they must stay exactly as Alembic generates them."
+statement = "Ruff doesn't lint Alembic revision files (lint.exclude in pyproject.toml), because they must stay exactly as Alembic generates them."
 rationale = "docs/engineering/skills/alembic-migrations.md#mandatory-generation-rule"
 scope = ["migrations/*/versions/*.py"]
 tier = "mechanical"
 status = "advisory"
 autofix = false
 [rule.enforcer]
-kind = "ruff"
-mode = "per-file-ignore"
-pattern = "migrations/*/versions/*.py"
-codes = ["ALL"]
+kind = "none"
 
 [[rule]]
 id = "api.quality.tests-ruff-exemptions"
