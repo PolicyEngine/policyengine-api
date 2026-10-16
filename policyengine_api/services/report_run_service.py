@@ -58,7 +58,8 @@ class ReportRunService:
             .with_for_update()
         )
         if parent is None:
-            raise ValueError(f"Report output #{report_output_id} not found")
+            msg = f"Report output #{report_output_id} not found"
+            raise ValueError(msg)
         sequence = (
             session.scalar(
                 select(func.max(ReportOutputRun.run_sequence)).where(

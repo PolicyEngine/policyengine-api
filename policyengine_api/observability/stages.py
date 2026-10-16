@@ -55,9 +55,8 @@ class StagePlan:
     def name(self, stage: Stage) -> str:
         """Return the span name for ``stage``; raise ValueError if not in this plan."""
         if stage not in self.stages:
-            raise ValueError(
-                f"{stage.value!r} is not registered for {self.configuration.value!r}"
-            )
+            msg = f"{stage.value!r} is not registered for {self.configuration.value!r}"
+            raise ValueError(msg)
         return stage.value
 
 

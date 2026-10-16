@@ -96,7 +96,8 @@ def _datetime_from_wire(value: object) -> datetime | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValueError("invalid cached datetime")
+        msg = "invalid cached datetime"
+        raise TypeError(msg)
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is not None:
         parsed = parsed.astimezone(UTC).replace(tzinfo=None)
@@ -234,9 +235,8 @@ class ReformImpactCache:
             }
         )
         if claim is None:
-            raise ValueError(
-                "a claim token and valid observability identifier are required"
-            )
+            msg = "a claim token and valid observability identifier are required"
+            raise ValueError(msg)
         return self._start_claims.acquire(
             self._start_claim_key(
                 country_id=country_id,
@@ -289,9 +289,8 @@ class ReformImpactCache:
                 started_at=started_at,
                 severity="WARNING",
             )
-            raise CacheCoordinationError(
-                "reform-impact submission ownership is unavailable"
-            ) from error
+            msg = "reform-impact submission ownership is unavailable"
+            raise CacheCoordinationError(msg) from error
 
         payload = decode_envelope(
             encoded,
@@ -307,9 +306,8 @@ class ReformImpactCache:
                 started_at=started_at,
                 severity="WARNING",
             )
-            raise CacheCoordinationError(
-                "reform-impact submission ownership is unreadable"
-            )
+            msg = "reform-impact submission ownership is unreadable"
+            raise CacheCoordinationError(msg)
 
         record_cache_event(
             family=self.family,
@@ -342,9 +340,8 @@ class ReformImpactCache:
             }
         )
         if claim is None:
-            raise ValueError(
-                "a claim token and valid observability identifier are required"
-            )
+            msg = "a claim token and valid observability identifier are required"
+            raise ValueError(msg)
 
         return self._start_claims.release(
             self._start_claim_key(
@@ -414,7 +411,8 @@ class ReformImpactCache:
         # the original record key and lookup indexes stable.
         record_execution_id = record_execution_id or impact.execution_id
         if not record_execution_id:
-            raise ValueError("a reform-impact cache record identifier is required")
+            msg = "a reform-impact cache record identifier is required"
+            raise ValueError(msg)
         record_key = self._record_key(record_execution_id)
         indexes = (self._scope_index(impact), self._recent_index())
         try:
@@ -438,7 +436,7 @@ class ReformImpactCache:
                     )
                     pipeline.expire(index, ttl_seconds)
                 pipeline.execute()
-        except Exception:
+        except Exception:  # noqa: BLE001  # a failed cache write returns False instead of failing the request
             record_cache_event(
                 family=self.family,
                 event="write-failed",
@@ -452,7 +450,7 @@ class ReformImpactCache:
         """Return the job's impact, or None if absent, unreadable or unreachable."""
         try:
             value = self.client.get(self._record_key(execution_id))
-        except Exception:
+        except Exception:  # noqa: BLE001  # a cache outage reads as absent, never a failed request
             return None
         return _impact_from_wire(
             decode_envelope(
@@ -466,7 +464,7 @@ class ReformImpactCache:
         try:
             keys = self.client.zrevrange(index, 0, max(limit - 1, 0))  # type: ignore[attr-defined]
             values = [self.client.get(key) for key in keys]
-        except Exception:
+        except Exception:  # noqa: BLE001  # a cache outage reads as empty, never a failed request
             return []
         impacts = [
             _impact_from_wire(
@@ -605,7 +603,7 @@ class ReformImpactCache:
                     pipeline.zrem(self._scope_index(impact), key)
                     pipeline.zrem(self._recent_index(), key)
                 pipeline.execute()
-        except Exception:
+        except Exception:  # noqa: BLE001  # best-effort cleanup of stale computing records
             return
 
 

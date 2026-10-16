@@ -96,11 +96,11 @@ def read_resource(
         return v2_error_response(404, str(error))
     except (V2ConfigurationError, MetadataCatalogUnavailableError):
         return v2_error_response(503, "V2 metadata catalog is unavailable")
-    except Exception:  # noqa: BLE001 - preview must return typed errors
+    except Exception:  # noqa: BLE001  # preview must return typed errors
         return v2_error_response(500, "V2 metadata query failed")
     finally:
         if reader is not None:
             try:
                 reader.close()
-            except Exception:
+            except Exception:  # noqa: BLE001  # best-effort close must not replace the typed response
                 pass

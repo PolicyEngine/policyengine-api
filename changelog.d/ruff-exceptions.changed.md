@@ -1,0 +1,1 @@
+Enabled ruff's exception rules (TRY, EM, BLE): exception messages are built before the raise, raises inside try blocks moved into helpers, the v1 services raise typed exceptions, and every deliberate catch-all carries a reasoned suppression; error responses and message text are unchanged.

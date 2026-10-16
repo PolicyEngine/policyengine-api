@@ -22,6 +22,10 @@ if TYPE_CHECKING:
     from policyengine_api.json_types import JSONValue
 
 
+class InvalidPolicyIdError(Exception):
+    """Raised when a policy ID is not a non-negative integer."""
+
+
 @dataclass(frozen=True)
 class PolicySetResult:
     """Existing v1 return values and an optional detached mirror snapshot."""
@@ -55,9 +59,8 @@ class PolicyService:
     @staticmethod
     def _validate_policy_id(policy_id: int) -> None:
         if type(policy_id) is not int or policy_id < 0:
-            raise Exception(
-                f"Invalid policy ID: {policy_id}. Must be a positive integer."
-            )
+            msg = f"Invalid policy ID: {policy_id}. Must be a positive integer."
+            raise InvalidPolicyIdError(msg)
 
     def get_policy(
         self,
@@ -66,12 +69,13 @@ class PolicyService:
     ) -> Policy | None:
         """Return the stored policy in this country, or None if there is none.
 
-        Raise Exception if ``policy_id`` is not a non-negative int, and ValueError for
-        an empty ``country_id``.
+        Raise InvalidPolicyIdError if ``policy_id`` is not a non-negative int, and
+        ValueError for an empty ``country_id``.
         """
         self._validate_policy_id(policy_id)
         if not country_id:
-            raise ValueError("country_id cannot be empty or None")
+            msg = "country_id cannot be empty or None"
+            raise ValueError(msg)
         with self._sessions() as session:
             return self._get_policy(session, country_id, policy_id)
 
@@ -163,7 +167,8 @@ class PolicyService:
         """
         country_id = country_id.lower()
         if country_id not in COUNTRY_PACKAGE_VERSIONS:
-            raise ValueError(f"Invalid country_id: {country_id}")
+            msg = f"Invalid country_id: {country_id}"
+            raise ValueError(msg)
 
         policy_hash = hash_object(policy_json)
         with self._sessions.begin() as session:

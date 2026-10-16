@@ -52,8 +52,9 @@ def household_storage_json(
     household's replay assert a measurement the caller never asked for.
     """
     if "spm" in household_json:
+        error_code = "SPM_SETTINGS_INVALID"
         raise SPMValidationError(
-            "SPM_SETTINGS_INVALID", "Supply spm beside data, not inside household data."
+            error_code, "Supply spm beside data, not inside household data."
         )
     result = deepcopy(household_json)
     selected = normalize_spm_selection(country_id, spm)
@@ -67,6 +68,10 @@ HOUSEHOLD_MIRROR_PAYLOAD_SCHEMA_VERSION = 1
 
 class HouseholdMirrorEventIntegrityError(RuntimeError):
     """Raised when retained household copy input is invalid or inconsistent."""
+
+
+class InvalidHouseholdIdError(Exception):
+    """Raised when a household ID is not a non-negative integer."""
 
 
 class HouseholdPersistenceFailureCategory(StrEnum):
@@ -149,12 +154,11 @@ class HouseholdService:
     ) -> Household | None:
         """Return the stored household in this country, or None if there is none.
 
-        Raise Exception if ``household_id`` is not a non-negative int.
+        Raise InvalidHouseholdIdError if ``household_id`` is not a non-negative int.
         """
         if type(household_id) is not int or household_id < 0:
-            raise Exception(
-                f"Invalid household ID: {household_id}. Must be a positive integer."
-            )
+            msg = f"Invalid household ID: {household_id}. Must be a positive integer."
+            raise InvalidHouseholdIdError(msg)
         with self._sessions() as session:
             return self._get_household(session, country_id, household_id)
 
@@ -249,32 +253,27 @@ class HouseholdService:
         event: HouseholdMirrorEvent,
     ) -> PendingHouseholdMirrorEvent:
         if event.payload_schema_version != HOUSEHOLD_MIRROR_PAYLOAD_SCHEMA_VERSION:
-            raise HouseholdMirrorEventIntegrityError(
-                "household mirror event payload version is unsupported"
-            )
+            msg = "household mirror event payload version is unsupported"
+            raise HouseholdMirrorEventIntegrityError(msg)
         payload = event.payload_json
         if not isinstance(payload, dict) or set(payload) != {"snapshot"}:
-            raise HouseholdMirrorEventIntegrityError(
-                "household mirror event payload has an invalid shape"
-            )
+            msg = "household mirror event payload has an invalid shape"
+            raise HouseholdMirrorEventIntegrityError(msg)
         try:
             snapshot = LegacyHouseholdSnapshot.model_validate(payload["snapshot"])
         except (TypeError, ValueError) as error:
-            raise HouseholdMirrorEventIntegrityError(
-                "household mirror event snapshot is invalid"
-            ) from error
+            msg = "household mirror event snapshot is invalid"
+            raise HouseholdMirrorEventIntegrityError(msg) from error
         if (
             snapshot.country_id != event.country_id
             or snapshot.legacy_household_id != event.legacy_household_id
         ):
-            raise HouseholdMirrorEventIntegrityError(
-                "household mirror event identity conflicts with its payload"
-            )
+            msg = "household mirror event identity conflicts with its payload"
+            raise HouseholdMirrorEventIntegrityError(msg)
         fingerprint = legacy_household_fingerprint(snapshot)
         if fingerprint != event.source_fingerprint_sha256:
-            raise HouseholdMirrorEventIntegrityError(
-                "household mirror event fingerprint conflicts with its payload"
-            )
+            msg = "household mirror event fingerprint conflicts with its payload"
+            raise HouseholdMirrorEventIntegrityError(msg)
         return PendingHouseholdMirrorEvent(
             event_id=event.id,
             snapshot=snapshot,
@@ -309,14 +308,12 @@ class HouseholdService:
                 .with_for_update()
             )
             if event is None:
-                raise HouseholdMirrorEventIntegrityError(
-                    "household mirror request has no retained event"
-                )
+                msg = "household mirror request has no retained event"
+                raise HouseholdMirrorEventIntegrityError(msg)
             pending = self._decode_mirror_event(event)
             if require_pending and pending.was_processed:
-                raise HouseholdMirrorEventIntegrityError(
-                    "household mirror event is already processed"
-                )
+                msg = "household mirror event is already processed"
+                raise HouseholdMirrorEventIntegrityError(msg)
             result = processor(pending)
             if event.processed_at is None:
                 event.processed_at = datetime.now(UTC).replace(tzinfo=None)

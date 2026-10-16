@@ -68,7 +68,8 @@ def _canonical_json(
             for key in sorted(value)
         )
         return "{" + ",".join(members) + "}"
-    raise TypeError("canonical household content contains a non-JSON value")
+    msg = "canonical household content contains a non-JSON value"
+    raise TypeError(msg)
 
 
 def canonical_household_document(household_input: HouseholdCreationInput) -> bytes:
@@ -165,7 +166,7 @@ def _period_years(value: object) -> set[int] | None:
             continue
         try:
             parsed = parse_policyengine_period(period_key)
-        except Exception:  # noqa: BLE001 - parser exposes several value errors
+        except Exception:  # noqa: BLE001  # parser exposes several value errors
             return None
         years.add(parsed.start.year)
         years.add(parsed.stop.year)
@@ -179,10 +180,11 @@ def _derive_default_year(values: list[object]) -> int | None:
         return next(iter(years))
     if all(item is not None for item in explicit_periods):
         return None
-    raise LegacyHouseholdTranslationError(
+    msg = (
         "legacy household has values without explicit periods and no "
         "unambiguous default year"
     )
+    raise LegacyHouseholdTranslationError(msg)
 
 
 def translate_legacy_household(
@@ -206,12 +208,12 @@ def translate_legacy_household(
         allowed_source.add("spm")
     unsupported = sorted(set(source) - allowed_source)
     if unsupported:
-        raise LegacyHouseholdTranslationError(
-            f"legacy household contains unsupported collections: {unsupported}"
-        )
+        msg = f"legacy household contains unsupported collections: {unsupported}"
+        raise LegacyHouseholdTranslationError(msg)
     people_source = source.get("people", {})
     if type(people_source) is not dict:
-        raise LegacyHouseholdTranslationError("legacy people must be an object")
+        msg = "legacy people must be an object"
+        raise LegacyHouseholdTranslationError(msg)
     person_ids = _stable_ids("person", list(people_source))
     all_values: list[object] = []
     normalized_groups: dict[str, list[dict[str, Any]]] = {}
@@ -221,17 +223,15 @@ def translate_legacy_household(
         source_name = LEGACY_COLLECTION_NAMES[collection]
         source_groups = source.get(source_name, {})
         if type(source_groups) is not dict:
-            raise LegacyHouseholdTranslationError(
-                f"legacy {source_name} must be an object"
-            )
+            msg = f"legacy {source_name} must be an object"
+            raise LegacyHouseholdTranslationError(msg)
         group_ids = _stable_ids(collection, list(source_groups))
         group_records: list[dict[str, Any]] = []
         for group_name in sorted(source_groups):
             group = source_groups[group_name]
             if type(group) is not dict:
-                raise LegacyHouseholdTranslationError(
-                    f"legacy {source_name} records must be objects"
-                )
+                msg = f"legacy {source_name} records must be objects"
+                raise LegacyHouseholdTranslationError(msg)
             values: dict[str, Any] = {}
             for field, value in group.items():
                 if field != "members":
@@ -241,19 +241,19 @@ def translate_legacy_household(
                 if type(value) is not list or not all(
                     isinstance(item, str) and item in person_ids for item in value
                 ):
-                    raise LegacyHouseholdTranslationError(
-                        f"legacy {source_name} members must reference named people"
-                    )
+                    msg = f"legacy {source_name} members must reference named people"
+                    raise LegacyHouseholdTranslationError(msg)
                 for raw_person_name in value:
                     assert isinstance(raw_person_name, str)
                     person_name = raw_person_name
                     memberships = person_memberships[person_name]
                     previous = memberships.get(collection)
                     if previous is not None and previous != group_ids[group_name]:
-                        raise LegacyHouseholdTranslationError(
+                        msg = (
                             f"legacy person {person_name!r} belongs to multiple "
                             f"{source_name} records"
                         )
+                        raise LegacyHouseholdTranslationError(msg)
                     memberships[collection] = group_ids[group_name]
             group_records.append(
                 {
@@ -268,9 +268,8 @@ def translate_legacy_household(
     for person_name in sorted(people_source):
         person_values = people_source[person_name]
         if type(person_values) is not dict:
-            raise LegacyHouseholdTranslationError(
-                "legacy person records must be objects"
-            )
+            msg = "legacy person records must be objects"
+            raise LegacyHouseholdTranslationError(msg)
         all_values.extend(person_values.values())
         people.append(
             {

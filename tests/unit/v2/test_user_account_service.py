@@ -483,7 +483,8 @@ def test_reads_lists_and_account_routes_never_build_the_v1_checker(store) -> Non
     )
 
     def unavailable():
-        raise AssertionError("the v1 reference service must not be built")
+        msg = "the v1 reference service must not be built"
+        raise AssertionError(msg)
 
     references = DeferredLegacyReferenceService(unavailable)
     accounts = V2AccountService(AccountDatabaseSession(store.sessions))
@@ -510,7 +511,8 @@ def test_auth0_credential_failures_stop_deletion_before_any_data_changes(
     store, failure
 ) -> None:
     def unusable_settings():
-        raise RuntimeError("AUTH0_MANAGEMENT_DOMAIN must be a bare host name")
+        msg = "AUTH0_MANAGEMENT_DOMAIN must be a bare host name"
+        raise RuntimeError(msg)
 
     if failure == "settings":
         accounts, *_ = _services(store, deleter_factory=unusable_settings)
@@ -551,7 +553,8 @@ def test_auth0_credentials_are_prepared_before_data_is_deleted(store) -> None:
 
 def test_only_account_deletion_builds_the_auth0_deleter(store) -> None:
     def unexpected_build():
-        raise AssertionError("the Auth0 deleter must be built only for deletion")
+        msg = "the Auth0 deleter must be built only for deletion"
+        raise AssertionError(msg)
 
     accounts, *_ = _services(store, deleter_factory=unexpected_build)
 

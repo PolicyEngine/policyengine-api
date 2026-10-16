@@ -135,7 +135,8 @@ def test_missing_references_raise_the_422_error(v1_sessions) -> None:
 
 def test_empty_requests_open_no_v1_session() -> None:
     def reject_session():
-        raise AssertionError("no v1 session should be opened")
+        msg = "no v1 session should be opened"
+        raise AssertionError(msg)
 
     service = V1LegacyReferenceService(
         LegacyReferenceDatabaseSession(reject_session)  # type: ignore[arg-type]
@@ -183,7 +184,8 @@ def test_default_reference_checker_does_not_touch_the_v1_database(
     from policyengine_api.fastapi_routes import dependencies
 
     def unavailable():
-        raise RuntimeError("v1 database is not configured")
+        msg = "v1 database is not configured"
+        raise RuntimeError(msg)
 
     monkeypatch.setattr(orm, "get_v1_session_factory", unavailable)
 

@@ -64,7 +64,8 @@ def _event_service(*, fail_after_destination: bool = False):
         )
         result = processor(event)
         if fail_after_destination:
-            raise OperationalError("update secret", {}, Exception("credential"))
+            msg = "update secret"
+            raise OperationalError(msg, {}, Exception("credential"))
         after_processed_commit(event, result)
         return result
 

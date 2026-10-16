@@ -246,7 +246,7 @@ def main() -> int:
     """Run qualification and return a shell-compatible status."""
     try:
         evidence = qualify_policy_migration_if_pending()
-    except Exception as error:  # noqa: BLE001 - command must emit safe evidence
+    except Exception as error:  # noqa: BLE001  # command must emit safe evidence
         print(json.dumps(_error_payload(error), sort_keys=True), file=sys.stderr)
         return 1
     print(json.dumps(evidence.as_dict(), sort_keys=True))

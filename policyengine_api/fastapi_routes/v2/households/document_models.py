@@ -87,7 +87,8 @@ class USHouseholdDocument(StrictHouseholdDocumentModel):
     def require_spm_object(cls, value: object) -> object:
         """Reject an explicit null ``spm``; omit the field to make no selection."""
         if value is None:
-            raise ValueError("spm must be an object when supplied")
+            msg = "spm must be an object when supplied"
+            raise ValueError(msg)
         return value
 
     @model_serializer(mode="wrap")

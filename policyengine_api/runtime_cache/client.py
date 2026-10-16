@@ -23,7 +23,8 @@ def build_runtime_cache_client(settings: RuntimeCacheSettings) -> redis.Redis:
     Raise RuntimeError when the cache is disabled or TLS has no CA bundle.
     """
     if not settings.enabled or settings.url is None:
-        raise RuntimeError("the shared runtime cache is disabled")
+        msg = "the shared runtime cache is disabled"
+        raise RuntimeError(msg)
     kwargs: dict[str, Any] = {
         "decode_responses": True,
         "max_connections": settings.max_connections,
@@ -35,7 +36,8 @@ def build_runtime_cache_client(settings: RuntimeCacheSettings) -> redis.Redis:
     if settings.tls:
         kwargs["ssl_cert_reqs"] = "required"
         if settings.ca_cert is None:
-            raise RuntimeError("the shared runtime cache TLS CA is missing")
+            msg = "the shared runtime cache TLS CA is missing"
+            raise RuntimeError(msg)
         kwargs["ssl_ca_data"] = settings.ca_cert.get_secret_value()
     return redis.Redis.from_url(settings.url.get_secret_value(), **kwargs)
 

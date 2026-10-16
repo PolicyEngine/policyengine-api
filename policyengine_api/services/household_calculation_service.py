@@ -95,11 +95,13 @@ def _validated_spm_provenance(
     if expected_selection is None:
         if spm_provenance is None:
             return None
-        raise ValueError("Unexpected SPM provenance for a calculation without SPM")
+        msg = "Unexpected SPM provenance for a calculation without SPM"
+        raise ValueError(msg)
     receipt = validate_spm_calculation_provenance(spm_provenance)
     canonical_config = resolved_spm_configuration(receipt).model_dump(mode="json")
     if canonical_config != expected_selection:
-        raise ValueError("SPM calculation configuration differs from the request")
+        msg = "SPM calculation configuration differs from the request"
+        raise ValueError(msg)
     return receipt.model_dump(mode="json", by_alias=True)
 
 

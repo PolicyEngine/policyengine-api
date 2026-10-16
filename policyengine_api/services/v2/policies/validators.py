@@ -53,18 +53,22 @@ def require_json_value(
 ) -> object:
     """Reject values that cannot be represented as standards-compliant JSON."""
     if depth > MAXIMUM_JSON_NESTING:
-        raise ValueError("JSON values must not exceed 100 nested containers")
+        msg = "JSON values must not exceed 100 nested containers"
+        raise ValueError(msg)
     if value is None or type(value) in {str, bool, int}:
         return value
     if type(value) is float:
         if not math.isfinite(value):
-            raise ValueError("JSON numbers must be finite")
+            msg = "JSON numbers must be finite"
+            raise ValueError(msg)
         return value
     if type(value) not in {list, dict}:
-        raise ValueError("value must contain only standards-compliant JSON types")
+        msg = "value must contain only standards-compliant JSON types"
+        raise ValueError(msg)
     identity = id(value)
     if identity in containers:
-        raise ValueError("JSON values must not contain reference cycles")
+        msg = "JSON values must not contain reference cycles"
+        raise ValueError(msg)
     nested_containers = containers | {identity}
     if type(value) is list:
         for item in value:
@@ -72,7 +76,8 @@ def require_json_value(
         return value
     for key, item in value.items():
         if type(key) is not str:
-            raise ValueError("JSON object keys must be strings")
+            msg = "JSON object keys must be strings"
+            raise ValueError(msg)
         require_json_value(item, depth=depth + 1, containers=nested_containers)
     return value
 
@@ -80,7 +85,8 @@ def require_json_value(
 def normalize_utc(value: datetime) -> datetime:
     """Require a time-zone-aware value and normalize it to UTC."""
     if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError("effective dates must include a UTC offset")
+        msg = "effective dates must include a UTC offset"
+        raise ValueError(msg)
     return value.astimezone(UTC)
 
 
@@ -94,16 +100,14 @@ def validate_policy_catalog(
     from policyengine_api.services.v2.policies.types import ResolvedPolicyCreationInput
 
     if policy_input.tax_benefit_model_id != selected.model.id:
-        raise PolicyCatalogValidationError(
-            "tax_benefit_model_id does not match the selected country catalog"
-        )
+        msg = "tax_benefit_model_id does not match the selected country catalog"
+        raise PolicyCatalogValidationError(msg)
     requested_parameter_ids = {
         value.parameter_id for value in policy_input.parameter_values
     }
     if resolved_parameter_ids != requested_parameter_ids:
-        raise PolicyCatalogValidationError(
-            "every parameter_id must belong to the selected model version"
-        )
+        msg = "every parameter_id must belong to the selected model version"
+        raise PolicyCatalogValidationError(msg)
     return ResolvedPolicyCreationInput(
         country_id=policy_input.country_id,
         tax_benefit_model_id=selected.model.id,
@@ -121,10 +125,8 @@ def verify_legacy_policy_mapping(
 ) -> None:
     """Validate an existing mapping without performing SQL."""
     if mapping.source_policy_hash != source_policy_hash:
-        raise LegacyPolicyMappingIntegrityError(
-            "legacy policy identity was presented with a different source hash"
-        )
+        msg = "legacy policy identity was presented with a different source hash"
+        raise LegacyPolicyMappingIntegrityError(msg)
     if expected_policy_id is not None and mapping.policy_id != expected_policy_id:
-        raise LegacyPolicyMappingIntegrityError(
-            "legacy policy mapping does not match translated immutable content"
-        )
+        msg = "legacy policy mapping does not match translated immutable content"
+        raise LegacyPolicyMappingIntegrityError(msg)

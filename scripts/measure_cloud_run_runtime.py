@@ -68,9 +68,8 @@ async def _wait_for_readiness(
     while True:
         waited = time.monotonic() - started
         if waited > timeout_seconds:
-            raise RuntimeError(
-                f"{READINESS_PATH} not ready after {timeout_seconds:.0f}s"
-            )
+            msg = f"{READINESS_PATH} not ready after {timeout_seconds:.0f}s"
+            raise RuntimeError(msg)
         try:
             response = await client.get(READINESS_PATH, timeout=20.0)
             if response.status_code == 200:

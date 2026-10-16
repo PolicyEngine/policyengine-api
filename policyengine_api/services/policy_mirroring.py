@@ -117,7 +117,7 @@ def _log_mirror_event(
             },
             severity="INFO" if outcome == "ok" else "ERROR",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001  # metric logging must not change the mirror outcome
         pass
 
 
@@ -140,9 +140,8 @@ def mirror_policy_after_commit(
             actual_write_sources=["cloud_sql"],
             failure_category=_failure_category(error),
         )
-        raise PolicyMirrorUnavailableError(
-            "The committed v1 policy could not be mirrored to v2"
-        ) from error
+        msg = "The committed v1 policy could not be mirrored to v2"
+        raise PolicyMirrorUnavailableError(msg) from error
 
     _log_mirror_event(
         snapshot=snapshot,

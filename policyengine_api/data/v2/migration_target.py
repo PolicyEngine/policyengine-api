@@ -64,7 +64,8 @@ class V2AlembicSettings:
 def _required(environ: Mapping[str, str], name: str) -> str:
     value = environ.get(name)
     if value is None or not value.strip():
-        raise V2MigrationTargetError(f"{name} is required")
+        msg = f"{name} is required"
+        raise V2MigrationTargetError(msg)
     return value.strip()
 
 
@@ -72,26 +73,24 @@ def _parse_url(raw_url: str) -> URL:
     try:
         url = make_url(raw_url)
     except ArgumentError as error:
-        raise V2MigrationTargetError(
-            f"{V2_MIGRATION_DATABASE_URL} is not a valid URL"
-        ) from error
+        msg = f"{V2_MIGRATION_DATABASE_URL} is not a valid URL"
+        raise V2MigrationTargetError(msg) from error
     if url.drivername != POSTGRES_DRIVER:
-        raise V2MigrationTargetError(
-            f"{V2_MIGRATION_DATABASE_URL} must use the {POSTGRES_DRIVER} driver"
-        )
+        msg = f"{V2_MIGRATION_DATABASE_URL} must use the {POSTGRES_DRIVER} driver"
+        raise V2MigrationTargetError(msg)
     return url
 
 
 def _validate_disposable_url(url: URL) -> None:
     if url.host not in DISPOSABLE_HOSTS or url.database != DISPOSABLE_DATABASE_NAME:
-        raise V2MigrationTargetError(
+        msg = (
             "disposable v2 Alembic mode requires the isolated local "
             f"{DISPOSABLE_DATABASE_NAME} database"
         )
+        raise V2MigrationTargetError(msg)
     if not url.username or url.password is None:
-        raise V2MigrationTargetError(
-            "disposable v2 Alembic mode requires explicit test credentials"
-        )
+        msg = "disposable v2 Alembic mode requires explicit test credentials"
+        raise V2MigrationTargetError(msg)
 
 
 def load_v2_alembic_settings(
@@ -103,9 +102,8 @@ def load_v2_alembic_settings(
     url = _parse_url(raw_url)
     disposable_value = values.get(V2_ALEMBIC_DISPOSABLE_TEST)
     if disposable_value not in {None, "", "0", "1"}:
-        raise V2MigrationTargetError(
-            f"{V2_ALEMBIC_DISPOSABLE_TEST} must be 1 when explicitly enabled"
-        )
+        msg = f"{V2_ALEMBIC_DISPOSABLE_TEST} must be 1 when explicitly enabled"
+        raise V2MigrationTargetError(msg)
     if disposable_value == "1":
         _validate_disposable_url(url)
         return V2AlembicSettings(url=url, disposable_test=True, target=None)
@@ -144,38 +142,40 @@ def qualify_v2_connection(
 ) -> None:
     """Verify live target identity and first-use state before Alembic runs."""
     if connection.dialect.name != "postgresql":
-        raise V2MigrationTargetError("v2 Alembic requires a Postgres connection")
+        msg = "v2 Alembic requires a Postgres connection"
+        raise V2MigrationTargetError(msg)
     if settings.disposable_test:
         return
 
     target = settings.target
     if target is None:
-        raise V2MigrationTargetError("persistent v2 Alembic target is missing")
+        msg = "persistent v2 Alembic target is missing"
+        raise V2MigrationTargetError(msg)
     identity = connection.execute(text("SELECT current_database(), current_user")).one()
     if identity[0] != target.database_name or identity[1] != target.migration_role:
-        raise V2MigrationTargetError(
+        msg = (
             "the live database or migration identity does not match the configured "
             "v2 target"
         )
+        raise V2MigrationTargetError(msg)
     can_create = connection.execute(
         text("SELECT has_schema_privilege(current_user, 'public', 'CREATE')")
     ).scalar_one()
     if can_create is not True:
-        raise V2MigrationTargetError(
-            "the configured v2 migration identity lacks public schema CREATE"
-        )
+        msg = "the configured v2 migration identity lacks public schema CREATE"
+        raise V2MigrationTargetError(msg)
 
     public_tables = set(inspect(connection).get_table_names(schema="public"))
     if "alembic_version" not in public_tables:
         if not target.freshness_audit_passed:
-            raise V2MigrationTargetError(
-                "the configured first-use freshness audit has not passed"
-            )
+            msg = "the configured first-use freshness audit has not passed"
+            raise V2MigrationTargetError(msg)
         if public_tables:
-            raise V2MigrationTargetError(
+            msg = (
                 "the unstamped v2 target is not fresh; reset and adoption are "
                 "prohibited"
             )
+            raise V2MigrationTargetError(msg)
 
 
 def validate_v2_head_schema(connection: Connection, metadata: MetaData) -> None:
@@ -186,7 +186,8 @@ def validate_v2_head_schema(connection: Connection, metadata: MetaData) -> None:
     unexpected = application_tables - metadata_tables
     missing = metadata_tables - application_tables
     if unexpected or missing:
-        raise V2MigrationTargetError(
+        msg = (
             "the v2 head schema differs from SQLModel metadata: "
             f"missing={sorted(missing)}, unexpected={sorted(unexpected)}"
         )
+        raise V2MigrationTargetError(msg)

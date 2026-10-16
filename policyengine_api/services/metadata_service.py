@@ -11,8 +11,7 @@ class MetadataService:
         """Return the country's metadata; raise RuntimeError for an unknown country."""
         country = COUNTRIES.get(country_id)
         if country is None:
-            raise RuntimeError(
-                f"Attempted to get metadata for a nonexistant country: '{country_id}'"
-            )
+            msg = f"Attempted to get metadata for a nonexistant country: '{country_id}'"
+            raise RuntimeError(msg)
 
         return country.metadata

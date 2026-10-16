@@ -76,7 +76,8 @@ def _read_choice(env_name: str, default: str, valid_values: frozenset[str]) -> s
     value = os.environ.get(env_name, default)
     if value not in valid_values:
         choices = ", ".join(sorted(valid_values))
-        raise ValueError(f"{env_name}={value!r} is invalid; expected one of: {choices}")
+        msg = f"{env_name}={value!r} is invalid; expected one of: {choices}"
+        raise ValueError(msg)
     return value
 
 
@@ -250,13 +251,11 @@ def get_migration_context(
         db_read = get_db_read(db_entity) if db_entity else None
     else:
         if db_write_source is not None and db_write_source not in DB_WRITE_SOURCES:
-            raise ValueError(
-                f"invalid explicit database write source {db_write_source!r}"
-            )
+            msg = f"invalid explicit database write source {db_write_source!r}"
+            raise ValueError(msg)
         if db_read_source is not None and db_read_source not in DB_READ_SOURCES:
-            raise ValueError(
-                f"invalid explicit database read source {db_read_source!r}"
-            )
+            msg = f"invalid explicit database read source {db_read_source!r}"
+            raise ValueError(msg)
         db_write = db_write_source
         db_read = db_read_source
 

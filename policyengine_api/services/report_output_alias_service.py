@@ -27,9 +27,8 @@ class ReportOutputAliasService:
         if alias is not None:
             canonical_id = alias.canonical_report_output_id
             if session.get(ReportOutput, canonical_id) is None:
-                raise ValueError(
-                    f"Alias points to missing canonical report output #{canonical_id}"
-                )
+                msg = f"Alias points to missing canonical report output #{canonical_id}"
+                raise ValueError(msg)
             return canonical_id
         report = session.get(ReportOutput, requested_report_output_id)
         return report.id if report is not None else None
@@ -49,24 +48,24 @@ class ReportOutputAliasService:
         """
         legacy = session.get(ReportOutput, legacy_report_output_id)
         if legacy is None:
-            raise ValueError(
-                f"Legacy report output #{legacy_report_output_id} not found"
-            )
+            msg = f"Legacy report output #{legacy_report_output_id} not found"
+            raise ValueError(msg)
         canonical = session.get(ReportOutput, canonical_report_output_id)
         if canonical is None:
-            raise ValueError(
-                f"Canonical report output #{canonical_report_output_id} not found"
-            )
+            msg = f"Canonical report output #{canonical_report_output_id} not found"
+            raise ValueError(msg)
         if legacy_report_output_id == canonical_report_output_id:
-            raise ValueError("Legacy and canonical report outputs must be different")
+            msg = "Legacy and canonical report outputs must be different"
+            raise ValueError(msg)
         existing = self.get_alias(session, legacy_report_output_id)
         if existing is not None:
             if existing.canonical_report_output_id == canonical_report_output_id:
                 return True
-            raise ValueError(
+            msg = (
                 "Legacy report output alias already points to canonical report output "
                 f"#{existing.canonical_report_output_id}"
             )
+            raise ValueError(msg)
         logical_fields = (
             "country_id",
             "simulation_1_id",
@@ -77,9 +76,8 @@ class ReportOutputAliasService:
             getattr(legacy, field) != getattr(canonical, field)
             for field in logical_fields
         ):
-            raise ValueError(
-                "Legacy and canonical report outputs must describe the same report"
-            )
+            msg = "Legacy and canonical report outputs must describe the same report"
+            raise ValueError(msg)
         session.add(
             LegacyReportOutputAlias(
                 legacy_report_output_id=legacy_report_output_id,

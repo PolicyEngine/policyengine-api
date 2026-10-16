@@ -79,7 +79,8 @@ class UserService:
         ``user_id`` wins when both are given. Raise ValueError if neither is given.
         """
         if auth0_id is None and user_id is None:
-            raise ValueError("you must specify either auth0_id or user_id")
+            msg = "you must specify either auth0_id or user_id"
+            raise ValueError(msg)
         with self._sessions() as session:
             return self._get_profile(session, auth0_id, user_id)
 
@@ -108,7 +109,8 @@ class UserService:
         Raise ValueError if ``user_id`` is None.
         """
         if user_id is None:
-            raise ValueError("you must specify either auth0_id or user_id")
+            msg = "you must specify either auth0_id or user_id"
+            raise ValueError(msg)
         with self._sessions.begin() as session:
             return self._update_profile(
                 session,

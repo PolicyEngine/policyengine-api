@@ -125,7 +125,8 @@ def test_runtime_rejects_ambiguous_or_invalid_secret_sources(
 
 def test_runtime_secret_resolution_error_hides_internal_details() -> None:
     def fail_to_load(resource: str) -> str:
-        raise RuntimeError(f"private failure for {resource}")
+        msg = f"private failure for {resource}"
+        raise RuntimeError(msg)
 
     with pytest.raises(V2ConfigurationError) as raised:
         load_v2_runtime_database_settings(

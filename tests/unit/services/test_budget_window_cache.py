@@ -29,20 +29,24 @@ class RaisingRedis:
 
     def get(self, key):
         if self.method == "get":
-            raise RuntimeError("redis unavailable")
+            msg = "redis unavailable"
+            raise RuntimeError(msg)
         return
 
     def set(self, key, value, nx=False, ex=None):
         if self.method == "set":
-            raise RuntimeError("redis unavailable")
+            msg = "redis unavailable"
+            raise RuntimeError(msg)
         return True
 
     def delete(self, key):
         if self.method == "delete":
-            raise RuntimeError("redis unavailable")
+            msg = "redis unavailable"
+            raise RuntimeError(msg)
 
     def eval(self, *_args, **_kwargs):
-        raise RuntimeError("redis unavailable")
+        msg = "redis unavailable"
+        raise RuntimeError(msg)
 
 
 @pytest.mark.parametrize(

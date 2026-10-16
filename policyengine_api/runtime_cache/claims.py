@@ -38,7 +38,8 @@ class ExpiringClaimStore:
         proceed as if they owned the work.
         """
         if not token or ttl_seconds <= 0:
-            raise ValueError("claim token and positive TTL are required")
+            msg = "claim token and positive TTL are required"
+            raise ValueError(msg)
         started_at = time.perf_counter()
         try:
             acquired = bool(self.client.set(key, token, nx=True, ex=ttl_seconds))
@@ -50,9 +51,8 @@ class ExpiringClaimStore:
                 started_at=started_at,
                 severity="WARNING",
             )
-            raise CacheCoordinationError(
-                "shared-cache ownership could not be established"
-            ) from error
+            msg = "shared-cache ownership could not be established"
+            raise CacheCoordinationError(msg) from error
         record_cache_event(
             family=self.family,
             event="claim-acquired" if acquired else "claim-contended",
@@ -78,9 +78,8 @@ class ExpiringClaimStore:
                 started_at=started_at,
                 severity="WARNING",
             )
-            raise CacheCoordinationError(
-                "shared-cache ownership could not be released safely"
-            ) from error
+            msg = "shared-cache ownership could not be released safely"
+            raise CacheCoordinationError(msg) from error
         record_cache_event(
             family=self.family,
             event="claim-released" if released else "claim-release-rejected",

@@ -44,7 +44,8 @@ def _locked_report(session: Session, report_id: UUID) -> Report:
     statement = select(Report).where(Report.id == report_id).with_for_update()
     report = session.exec(statement).one_or_none()
     if report is None:
-        raise ReportNotFoundError(f"report {report_id} does not exist")
+        msg = f"report {report_id} does not exist"
+        raise ReportNotFoundError(msg)
     return report
 
 
@@ -63,9 +64,8 @@ def set_report_type(
         select(ReportRun.id).where(ReportRun.report_id == report_id).limit(1)
     ).first()
     if existing_run_id is not None:
-        raise ReportTypeImmutableError(
-            "report type is immutable after the first report run"
-        )
+        msg = "report type is immutable after the first report run"
+        raise ReportTypeImmutableError(msg)
 
     report.type = report_type
     session.add(report)
@@ -85,9 +85,11 @@ def create_report_run(
     """Create one run, or return the run for a retried idempotent request."""
     _locked_report(session, report_id)
     if trigger is ReportRunTrigger.MANUAL and idempotency_key is None:
-        raise ValueError("manual report reruns require an idempotency key")
+        msg = "manual report reruns require an idempotency key"
+        raise ValueError(msg)
     if not country_package_version or not policyengine_version:
-        raise ValueError("report run package versions must be non-empty")
+        msg = "report run package versions must be non-empty"
+        raise ValueError(msg)
 
     run = ReportRun(
         report_id=report_id,
@@ -132,9 +134,11 @@ def begin_report_run(
         select(ReportRun).where(ReportRun.id == report_run_id).with_for_update()
     ).one_or_none()
     if run is None:
-        raise ReportRunNotFoundError(f"report run {report_run_id} does not exist")
+        msg = f"report run {report_run_id} does not exist"
+        raise ReportRunNotFoundError(msg)
     if run.status in {ReportRunStatus.SUCCEEDED, ReportRunStatus.FAILED}:
-        raise ReportRunStateError("a terminal report run cannot be resumed")
+        msg = "a terminal report run cannot be resumed"
+        raise ReportRunStateError(msg)
     if run.status is ReportRunStatus.PENDING:
         run.status = ReportRunStatus.RUNNING
         run.started_at = started_at or utc_now()
@@ -188,7 +192,8 @@ def select_current_report_run(
     """Select the deterministic current successful run for deployed versions."""
     report = session.get(Report, report_id)
     if report is None:
-        raise ReportNotFoundError(f"report {report_id} does not exist")
+        msg = f"report {report_id} does not exist"
+        raise ReportNotFoundError(msg)
     country_package_version = country_package_versions.get(report.country)
     if country_package_version is None:
         return None

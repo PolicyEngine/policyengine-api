@@ -183,9 +183,11 @@ class GeographySelection(StrictContractModel):
     def require_complete_filter(self) -> GeographySelection:
         """Require filter_field with filter_value, and both for filter_strategy."""
         if (self.filter_field is None) != (self.filter_value is None):
-            raise ValueError("filter_field and filter_value must be supplied together")
+            msg = "filter_field and filter_value must be supplied together"
+            raise ValueError(msg)
         if self.filter_strategy is not None and self.filter_field is None:
-            raise ValueError("filter_strategy requires filter_field and filter_value")
+            msg = "filter_strategy requires filter_field and filter_value"
+            raise ValueError(msg)
         return self
 
 
@@ -200,7 +202,8 @@ class RequestedSimulationOutput(StrictContractModel):
     def require_unique_variables(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         """Reject a variable list that names any variable twice."""
         if len(value) != len(set(value)):
-            raise ValueError("requested variables must be unique")
+            msg = "requested variables must be unique"
+            raise ValueError(msg)
         return value
 
 
@@ -237,7 +240,8 @@ class RowIdentity(StrictContractModel):
     def require_unique_columns(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         """Reject identifier columns that name any column twice."""
         if len(value) != len(set(value)):
-            raise ValueError("row identifier columns must be unique")
+            msg = "row identifier columns must be unique"
+            raise ValueError(msg)
         return value
 
 

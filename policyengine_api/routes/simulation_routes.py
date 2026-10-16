@@ -45,6 +45,14 @@ def _serialize_v1_simulation(simulation: Simulation) -> dict:
     return response
 
 
+def _require_updated_simulation(simulation: Simulation | None) -> Simulation:
+    """Return the updated simulation, or raise BadRequest if nothing changed."""
+    if simulation is None:
+        msg = "No fields to update"
+        raise BadRequest(msg)
+    return simulation
+
+
 @simulation_bp.route("/<country_id>/simulation", methods=["POST"])
 @validate_country
 def create_simulation(country_id: str) -> Response:
@@ -63,7 +71,8 @@ def create_simulation(country_id: str) -> Response:
 
     payload = request.json
     if payload is None:
-        raise BadRequest("Payload missing from request")
+        msg = "Payload missing from request"
+        raise BadRequest(msg)
     if (response := _spm_override_response(payload)) is not None:
         return response
 
@@ -74,15 +83,20 @@ def create_simulation(country_id: str) -> Response:
 
     # Validate required fields
     if not population_id:
-        raise BadRequest("population_id is required")
+        msg = "population_id is required"
+        raise BadRequest(msg)
     if not population_type:
-        raise BadRequest("population_type is required")
+        msg = "population_type is required"
+        raise BadRequest(msg)
     if population_type not in ["household", "geography"]:
-        raise BadRequest("population_type must be 'household' or 'geography'")
+        msg = "population_type must be 'household' or 'geography'"
+        raise BadRequest(msg)
     if policy_id is None:
-        raise BadRequest("policy_id is required")
+        msg = "policy_id is required"
+        raise BadRequest(msg)
     if not isinstance(policy_id, int):
-        raise BadRequest("policy_id must be an integer")
+        msg = "policy_id must be an integer"
+        raise BadRequest(msg)
 
     try:
         creation = simulation_service.get_or_create_simulation(
@@ -119,7 +133,8 @@ def create_simulation(country_id: str) -> Response:
         current_app.logger.warning(
             "Bad request creating simulation for country %s: %s", country_id, e
         )
-        raise BadRequest(f"Failed to create simulation: {e}")
+        msg = f"Failed to create simulation: {e}"
+        raise BadRequest(msg)
     except Exception:
         current_app.logger.exception(
             "Unexpected error creating simulation for country %s", country_id
@@ -140,15 +155,18 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
     print(f"Getting simulation {simulation_id} for country {country_id}")
 
     if not isinstance(simulation_id, int):
-        raise BadRequest("simulation_id must be an integer")
+        msg = "simulation_id must be an integer"
+        raise BadRequest(msg)
     if simulation_id <= 0:
-        raise BadRequest("simulation_id must be a positive integer")
+        msg = "simulation_id must be a positive integer"
+        raise BadRequest(msg)
 
     simulation = simulation_service.get_simulation(country_id, simulation_id)
     result = None if simulation is None else _serialize_v1_simulation(simulation)
 
     if result is None:
-        raise NotFound(f"Simulation #{simulation_id} not found.")
+        msg = f"Simulation #{simulation_id} not found."
+        raise NotFound(msg)
 
     response_body = dict(
         status="ok",
@@ -181,7 +199,8 @@ def update_simulation(country_id: str) -> Response:
     """
     payload = request.json
     if payload is None:
-        raise BadRequest("Payload missing from request")
+        msg = "Payload missing from request"
+        raise BadRequest(msg)
     if (response := _spm_override_response(payload)) is not None:
         return response
 
@@ -194,23 +213,24 @@ def update_simulation(country_id: str) -> Response:
 
     # Validate status if provided
     if status is not None and status not in ["pending", "complete", "error"]:
-        raise BadRequest("status must be 'pending', 'complete', or 'error'")
+        msg = "status must be 'pending', 'complete', or 'error'"
+        raise BadRequest(msg)
 
     # Validate that complete status has output
     if status == "complete" and output is None:
-        raise BadRequest("output is required when status is 'complete'")
+        msg = "output is required when status is 'complete'"
+        raise BadRequest(msg)
 
     try:
-        simulation = simulation_service.update_simulation(
-            country_id=country_id,
-            simulation_id=simulation_id,
-            status=status,
-            output=output,
-            error_message=error_message,
+        simulation = _require_updated_simulation(
+            simulation_service.update_simulation(
+                country_id=country_id,
+                simulation_id=simulation_id,
+                status=status,
+                output=output,
+                error_message=error_message,
+            )
         )
-
-        if simulation is None:
-            raise BadRequest("No fields to update")
 
         result = _serialize_v1_simulation(simulation)
 
@@ -227,7 +247,8 @@ def update_simulation(country_id: str) -> Response:
         )
 
     except LookupError:
-        raise NotFound(f"Simulation #{simulation_id} not found.") from None
+        msg = f"Simulation #{simulation_id} not found."
+        raise NotFound(msg) from None
     except HTTPException:
         # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
         # through without being logged as "Unexpected error".
@@ -239,7 +260,8 @@ def update_simulation(country_id: str) -> Response:
             country_id,
             e,
         )
-        raise BadRequest(f"Failed to update simulation: {e}")
+        msg = f"Failed to update simulation: {e}"
+        raise BadRequest(msg)
     except Exception:
         current_app.logger.exception(
             "Unexpected error updating simulation #%s for country %s",

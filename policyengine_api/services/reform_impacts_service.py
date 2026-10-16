@@ -217,9 +217,8 @@ class ReformImpactsService:
             observability_id=observability_id,
         )
         if not self._cache.set(impact):
-            raise ReformImpactHandoffError(
-                "submitted reform-impact execution could not be stored"
-            )
+            msg = "submitted reform-impact execution could not be stored"
+            raise ReformImpactHandoffError(msg)
         return impact
 
     def delete_reform_impact(

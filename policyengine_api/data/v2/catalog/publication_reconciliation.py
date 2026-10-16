@@ -292,9 +292,8 @@ def assert_country_matches(
     """
     for staged, actual in _comparison_pairs(country):
         if _sets_differ(connection, staged, actual):
-            raise CatalogPublicationError(
-                f"persisted {country.country_id} catalog differs from PolicyEngine.py"
-            )
+            msg = f"persisted {country.country_id} catalog differs from PolicyEngine.py"
+            raise CatalogPublicationError(msg)
 
 
 INSERT_MODEL = (
@@ -660,6 +659,5 @@ def assert_canonical_value_uniqueness(connection: Connection) -> None:
         .limit(1)
     )
     if connection.execute(duplicates).first() is not None:
-        raise CatalogPublicationError(
-            "canonical parameter-value uniqueness validation failed"
-        )
+        msg = "canonical parameter-value uniqueness validation failed"
+        raise CatalogPublicationError(msg)

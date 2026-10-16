@@ -41,17 +41,18 @@ def build_budget_window_request_setup(
     1..BUDGET_WINDOW_MAX_YEARS, or a last year after BUDGET_WINDOW_MAX_END_YEAR.
     """
     if target != "general":
-        raise ValueError("Budget-window calculations only support target='general'")
+        msg = "Budget-window calculations only support target='general'"
+        raise ValueError(msg)
 
     start_year_int = int(start_year)
     if not 1 <= window_size <= BUDGET_WINDOW_MAX_YEARS:
-        raise ValueError(f"window_size must be between 1 and {BUDGET_WINDOW_MAX_YEARS}")
+        msg = f"window_size must be between 1 and {BUDGET_WINDOW_MAX_YEARS}"
+        raise ValueError(msg)
 
     end_year = start_year_int + window_size - 1
     if end_year > BUDGET_WINDOW_MAX_END_YEAR:
-        raise ValueError(
-            f"budget-window end_year must be {BUDGET_WINDOW_MAX_END_YEAR} or earlier"
-        )
+        msg = f"budget-window end_year must be {BUDGET_WINDOW_MAX_END_YEAR} or earlier"
+        raise ValueError(msg)
 
     normalized_start_year = str(start_year_int)
     return BudgetWindowRequestSetup(

@@ -337,9 +337,8 @@ def persist_legacy_user_policy_mapping(
         lock=False,
     )
     if concurrent is None:
-        raise LegacyUserPolicyIntegrityError(
-            "legacy user-policy mapping conflict did not resolve to a stored row"
-        )
+        msg = "legacy user-policy mapping conflict did not resolve to a stored row"
+        raise LegacyUserPolicyIntegrityError(msg)
     return apply_existing_legacy_user_policy_mapping(
         session,
         mapping=concurrent,

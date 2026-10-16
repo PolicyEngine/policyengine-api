@@ -236,13 +236,13 @@ def create_asgi_app(
                     request.state.policyengine_request_id = request_id
                     _asgi_request_id.reset(context_token)
                     context_token = _asgi_request_id.set(request_id)
-            except Exception:
+            except Exception:  # noqa: BLE001  # telemetry must never fail the request
                 pass
             try:
                 request_runtime.set_context(
                     request_id=request_id,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001  # telemetry must never fail the request
                 pass
 
         def log_native_route(status_code: int) -> None:
@@ -261,7 +261,7 @@ def create_asgi_app(
                     ),
                     route_impl=RouteImplementation.FASTAPI_NATIVE,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001  # migration logging must never fail the request
                 pass
 
         def finish_native_route(
@@ -273,18 +273,18 @@ def create_asgi_app(
             resolved_route = getattr(request.scope.get("route"), "path", initial_route)
             try:
                 request_runtime.update_request_route(resolved_route)
-            except Exception:
+            except Exception:  # noqa: BLE001  # telemetry must never fail the request
                 pass
             try:
                 request_runtime.update_request_status(status_code)
-            except Exception:
+            except Exception:  # noqa: BLE001  # telemetry must never fail the request
                 pass
             try:
                 request_runtime.end_request(
                     status_code=status_code,
                     error=error,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001  # telemetry must never fail the request
                 pass
 
         try:
@@ -308,13 +308,13 @@ def create_asgi_app(
                     request_runtime.set_context(
                         observability_id=response_observability_id
                     )
-                except Exception:
+                except Exception:  # noqa: BLE001  # telemetry must never fail the request
                     pass
             if native_request:
                 try:
                     for name, value in request_runtime.response_headers().items():
                         response.headers[name] = value
-                except Exception:
+                except Exception:  # noqa: BLE001  # telemetry must never fail the request
                     pass
             _apply_request_id_header(response, request_id)
             if response_observability_id is not None:

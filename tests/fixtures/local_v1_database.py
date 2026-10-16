@@ -19,7 +19,8 @@ Table(
 
 def create_test_v1_schema(engine: Engine) -> None:
     if engine.dialect.name != "sqlite":
-        raise ValueError("the test-only v1 schema helper requires SQLite")
+        msg = "the test-only v1 schema helper requires SQLite"
+        raise ValueError(msg)
     V1Base.metadata.create_all(
         engine,
         tables=[

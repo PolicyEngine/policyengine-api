@@ -399,7 +399,8 @@ def test_complete_transaction_rolls_back_and_native_delete_is_isolated() -> None
                     reform,
                     source_revision=1,
                 )
-                raise RuntimeError("forced rollback")
+                msg = "forced rollback"
+                raise RuntimeError(msg)
 
         with sessions() as session:
             assert session.scalar(select(func.count()).select_from(Policy)) == 0

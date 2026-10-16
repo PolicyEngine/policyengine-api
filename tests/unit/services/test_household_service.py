@@ -149,7 +149,8 @@ def test_household_and_event_roll_back_together_when_event_insert_fails(
         flush_count += 1
         original_flush(session, *args, **kwargs)
         if flush_count == 2:
-            raise RuntimeError("event insert failed")
+            msg = "event insert failed"
+            raise RuntimeError(msg)
 
     monkeypatch.setattr(session_type, "flush", fail_event_flush)
     service = HouseholdService(orm_session_factory)
@@ -182,7 +183,8 @@ def test_exact_event_processing_marks_completion_only_after_processor_success(
     )
 
     def fail(_event):
-        raise RuntimeError("destination unavailable")
+        msg = "destination unavailable"
+        raise RuntimeError(msg)
 
     with pytest.raises(RuntimeError, match="destination unavailable"):
         service.process_mirror_event(

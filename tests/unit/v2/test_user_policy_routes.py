@@ -393,7 +393,8 @@ def test_native_association_routes_do_not_use_cloud_sql_or_flask(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def reject_cloud_sql():
-        raise AssertionError("Cloud SQL must not be selected")
+        msg = "Cloud SQL must not be selected"
+        raise AssertionError(msg)
 
     monkeypatch.setattr(
         "policyengine_api.data.orm.get_v1_session_factory",

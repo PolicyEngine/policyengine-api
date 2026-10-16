@@ -113,7 +113,7 @@ def _log_copy_operation(
             },
             severity="INFO" if outcome == "ok" else "ERROR",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001  # metric logging must not change the mirror outcome
         pass
 
 
@@ -176,6 +176,5 @@ def process_household_event_after_commit(
             result=destination_result,
             failure_category=_failure_category(error),
         )
-        raise HouseholdMirrorUnavailableError(
-            "The committed v1 household event could not be copied to v2"
-        ) from error
+        msg = "The committed v1 household event could not be copied to v2"
+        raise HouseholdMirrorUnavailableError(msg) from error

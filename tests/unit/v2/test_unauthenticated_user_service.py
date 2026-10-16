@@ -115,7 +115,8 @@ class Services:
 
 
 def _never_build_the_auth0_deleter():
-    raise AssertionError("unauthenticated users have no Auth0 user")
+    msg = "unauthenticated users have no Auth0 user"
+    raise AssertionError(msg)
 
 
 @pytest.fixture

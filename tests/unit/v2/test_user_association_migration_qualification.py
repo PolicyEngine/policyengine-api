@@ -134,7 +134,8 @@ def test_revision_constant_names_a_revision_in_the_v2_chain() -> None:
 
 def test_main_redacts_unexpected_errors(monkeypatch, capsys) -> None:
     def fail():
-        raise RuntimeError("postgresql://user:secret@host/db")
+        msg = "postgresql://user:secret@host/db"
+        raise RuntimeError(msg)
 
     monkeypatch.setattr(qualification, "qualify_user_association_migration", fail)
 
