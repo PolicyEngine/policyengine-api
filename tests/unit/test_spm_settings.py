@@ -578,7 +578,7 @@ def test_a_model_this_build_cannot_load_reads_as_no_canonical_model(
     a 500 rather than the legacy behaviour that bundle actually has.
     """
 
-    def refuse(name):  # noqa: ARG001  # stands in for importlib.import_module, whose callers may pass name by keyword
+    def refuse(name):
         raise failure
 
     monkeypatch.setattr(spm, "_current_bundle", lambda: deepcopy(LEGACY_BUNDLE))

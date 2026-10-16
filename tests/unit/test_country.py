@@ -43,10 +43,10 @@ class TestHouseholdCalculation:
         class SimulationWithoutTracing:
             __slots__ = ()
 
-            def calculate(self, variable_name, period):  # noqa: ARG002  # implements the Simulation methods PolicyEngineCountry calls
+            def calculate(self, variable_name, period):
                 return np.array([40])
 
-            def get_population(self, entity_plural):  # noqa: ARG002  # implements the Simulation methods PolicyEngineCountry calls
+            def get_population(self, entity_plural):
                 return SimpleNamespace(get_index=lambda _entity_id: 0)
 
         variable = SimpleNamespace(value_type=int)
@@ -151,11 +151,11 @@ class TestAxisResults:
         class BrokenSimulation:
             __slots__ = ()
 
-            def calculate(self, variable_name, period):  # noqa: ARG002  # implements the Simulation methods PolicyEngineCountry calls
+            def calculate(self, variable_name, period):
                 msg = "calculation failed"
                 raise RuntimeError(msg)
 
-            def get_population(self, entity_plural):  # noqa: ARG002  # implements the Simulation methods PolicyEngineCountry calls
+            def get_population(self, entity_plural):
                 return SimpleNamespace(count=5)
 
         variable = SimpleNamespace(value_type=float)

@@ -1227,11 +1227,11 @@ class TestEconomyService:
         @pytest.fixture
         def economy_service(
             self,
-            mock_country_package_versions,  # noqa: ARG002  # requested for its side effect; usefixtures marks don't apply to fixtures
-            mock_policy_service,  # noqa: ARG002  # requested for its side effect; usefixtures marks don't apply to fixtures
-            mock_logger,  # noqa: ARG002  # requested for its side effect; usefixtures marks don't apply to fixtures
-            mock_datetime,  # noqa: ARG002  # requested for its side effect; usefixtures marks don't apply to fixtures
-            mock_submission_claim_id,  # noqa: ARG002  # requested for its side effect; usefixtures marks don't apply to fixtures
+            mock_country_package_versions,
+            mock_policy_service,
+            mock_logger,
+            mock_datetime,
+            mock_submission_claim_id,
         ):
             return EconomyService()
 

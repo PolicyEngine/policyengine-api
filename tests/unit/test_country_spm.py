@@ -179,7 +179,7 @@ def test_country_passes_resolved_spm_and_uses_the_simulations_private_system(
     )
 
     class Simulation:
-        def __init__(self, *, tax_benefit_system, situation, spm):  # noqa: ARG002  # stands in for a country Simulation, which is constructed by keyword
+        def __init__(self, *, tax_benefit_system, situation, spm):
             self.tax_benefit_system = object()
             self.spm_config = spm
 

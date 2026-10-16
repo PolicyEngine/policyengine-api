@@ -150,7 +150,7 @@ def mock_simulation_entrypoint():
     mock_api.get_spm_capability.return_value = worker_spm_capability()
     mock_api.run.return_value = mock_execution
     mock_api.resolve_app_name.side_effect = (
-        lambda country_id, version=None, policyengine_version=None: (  # noqa: ARG005  # EconomyService passes policyengine_version by keyword
+        lambda country_id, version=None, policyengine_version=None: (
             MOCK_RESOLVED_APP_NAME,
             version or MOCK_MODEL_VERSION,
         )
@@ -336,7 +336,7 @@ def mock_simulation_entrypoint_legacy():
     mock_api.run.return_value = mock_execution
     mock_api.get_spm_capability.return_value = None
     mock_api.resolve_app_name.side_effect = (
-        lambda country_id, version=None, policyengine_version=None: (  # noqa: ARG005  # EconomyService passes policyengine_version by keyword
+        lambda country_id, version=None, policyengine_version=None: (
             MOCK_RESOLVED_APP_NAME,
             version or MOCK_MODEL_VERSION,
         )
