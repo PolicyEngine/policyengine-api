@@ -28,6 +28,7 @@ must not configure the Auth0 Management API deletion for this user's tenant
 from __future__ import annotations
 
 import os
+from typing import NamedTuple
 from uuid import uuid4
 
 import httpx
@@ -266,6 +267,146 @@ def test_live_native_policy_resources_and_v2_policy_save(
     assert deleted.status_code == 204, deleted.text[:500]
 
 
+class _SavedResource(NamedTuple):
+    path: str
+    legacy_field: str
+    legacy_id: int
+
+
+def _assert_saved_resource_lifecycle(
+    api_client,
+    headers: dict[str, str],
+    saved: _SavedResource,
+    *,
+    name: str,
+    user_id: str,
+) -> None:
+    """Save, reject an unknown v1 id, read, list, describe and delete one record."""
+    params = {"country_id": COUNTRY_ID}
+    resource, legacy_field, legacy_id = saved
+    created = api_client.post(
+        f"/v2/{resource}",
+        params=params,
+        headers=headers,
+        json={"country_id": COUNTRY_ID, legacy_field: legacy_id, "name": name},
+    )
+    assert created.status_code == 201, (resource, created.text[:500])
+    item = created.json()["result"]["item"]
+    assert item["user_id"] == user_id
+    assert item[legacy_field] == legacy_id
+
+    missing = api_client.post(
+        f"/v2/{resource}",
+        params=params,
+        headers=headers,
+        json={"country_id": COUNTRY_ID, legacy_field: UNKNOWN_LEGACY_ID},
+    )
+    assert missing.status_code == 422, (resource, missing.text[:500])
+
+    detail_path = f"/v2/{resource}/{item['id']}"
+    detail = api_client.get(detail_path, params=params, headers=headers)
+    assert detail.status_code == 200, (resource, detail.text[:500])
+    assert detail.json()["result"]["item"] == item
+    listed = api_client.get(
+        f"/v2/{resource}",
+        params={**params, legacy_field: legacy_id},
+        headers=headers,
+    )
+    assert listed.status_code == 200, (resource, listed.text[:500])
+    assert item["id"] in {row["id"] for row in listed.json()["result"]["items"]}
+    patched = api_client.patch(
+        detail_path,
+        params=params,
+        headers=headers,
+        json={"description": "Renamed by the live probe"},
+    )
+    assert patched.status_code == 200, (resource, patched.text[:500])
+    assert patched.json()["result"]["item"]["description"] == (
+        "Renamed by the live probe"
+    )
+    deleted = api_client.delete(detail_path, params=params, headers=headers)
+    assert deleted.status_code == 204, (resource, deleted.text[:500])
+    absent = api_client.get(detail_path, params=params, headers=headers)
+    assert absent.status_code == 404, (resource, absent.text[:500])
+
+
+def _assert_export_links_the_saved_reform(
+    api_client, headers: dict[str, str], legacy: dict[str, int], *, user_id: str
+) -> None:
+    """Save a reform and a report that links it, then check the account export."""
+    params = {"country_id": COUNTRY_ID}
+    policy = api_client.post(
+        "/v2/user-policies",
+        params=params,
+        headers=headers,
+        json={
+            "country_id": COUNTRY_ID,
+            "legacy_policy_id": legacy["policy"],
+            "baseline": "current-law",
+            "provenance": {"source": "manual"},
+        },
+    )
+    assert policy.status_code == 201, policy.text[:500]
+    policy_id = policy.json()["result"]["item"]["id"]
+    report = api_client.post(
+        "/v2/user-reports",
+        params=params,
+        headers=headers,
+        json={
+            "country_id": COUNTRY_ID,
+            "legacy_report_id": legacy["report"],
+            "user_policy_id": policy_id,
+        },
+    )
+    assert report.status_code == 201, report.text[:500]
+    report_id = report.json()["result"]["item"]["id"]
+
+    exported = api_client.get("/v2/me/export", params=params, headers=headers)
+    assert exported.status_code == 200, exported.text[:500]
+    export = exported.json()["result"]
+    assert export["user"]["id"] == user_id
+    assert export["user"]["user_type"] == "standard"
+    exported_report = next(row for row in export["reports"] if row["id"] == report_id)
+    assert exported_report["user_policy_id"] == policy_id
+    assert [row["id"] for row in export["policies"]] == [policy_id]
+
+
+def _assert_signed_out_saving(
+    api_client, browser: dict[str, str], legacy_policy_id: int
+) -> dict:
+    """Check a signed-out browser saves a policy without editing its account.
+
+    Return the saved policy.
+    """
+    params = {"country_id": COUNTRY_ID}
+    # Reads never create an unauthenticated user.
+    absent = api_client.get("/v2/me", params=params, headers=browser)
+    assert absent.status_code == 404, absent.text[:500]
+    assert _policy_ids(api_client, browser) == set()
+
+    saved = _save_policy(api_client, browser, legacy_policy_id)
+    assert saved["user_id"] == browser[UNAUTHENTICATED_USER_HEADER]
+    detail = api_client.get(
+        f"/v2/user-policies/{saved['id']}",
+        params=params,
+        headers=browser,
+    )
+    assert detail.status_code == 200, detail.text[:500]
+    assert detail.json()["result"]["item"] == saved
+    me = api_client.get("/v2/me", params=params, headers=browser)
+    assert me.status_code == 200, me.text[:500]
+    assert me.json()["result"]["item"]["user_type"] == "unauthenticated"
+    assert me.json()["result"]["item"]["primary_country"] is None
+    edited = api_client.patch(
+        "/v2/me",
+        params=params,
+        headers=browser,
+        json={"first_name": "Signed out"},
+    )
+    assert edited.status_code == 403, edited.text[:500]
+    return saved
+
+
 def test_live_signed_in_user_lifecycle(
     api_client,
     integration_probe_id: str,
@@ -291,100 +432,27 @@ def test_live_signed_in_user_lifecycle(
         assert patched_me.json()["result"]["item"]["first_name"] == "Stage 12A"
 
         legacy = _create_v1_artifacts(api_client)
-        resources = {
-            "user-policies": ("legacy_policy_id", legacy["policy"]),
-            "user-households": ("legacy_household_id", legacy["household"]),
-            "user-simulations": ("legacy_simulation_id", legacy["simulation"]),
-            "user-reports": ("legacy_report_id", legacy["report"]),
-        }
-        for resource, (legacy_field, legacy_id) in resources.items():
-            created = api_client.post(
-                f"/v2/{resource}",
-                params=params,
-                headers=user_headers,
-                json={
-                    "country_id": COUNTRY_ID,
-                    legacy_field: legacy_id,
-                    "name": f"Stage 12A {resource} {integration_probe_id}",
-                },
+        for saved in (
+            _SavedResource("user-policies", "legacy_policy_id", legacy["policy"]),
+            _SavedResource(
+                "user-households", "legacy_household_id", legacy["household"]
+            ),
+            _SavedResource(
+                "user-simulations", "legacy_simulation_id", legacy["simulation"]
+            ),
+            _SavedResource("user-reports", "legacy_report_id", legacy["report"]),
+        ):
+            _assert_saved_resource_lifecycle(
+                api_client,
+                user_headers,
+                saved,
+                name=f"Stage 12A {saved.path} {integration_probe_id}",
+                user_id=user_id,
             )
-            assert created.status_code == 201, (resource, created.text[:500])
-            item = created.json()["result"]["item"]
-            assert item["user_id"] == user_id
-            assert item[legacy_field] == legacy_id
 
-            missing = api_client.post(
-                f"/v2/{resource}",
-                params=params,
-                headers=user_headers,
-                json={"country_id": COUNTRY_ID, legacy_field: UNKNOWN_LEGACY_ID},
-            )
-            assert missing.status_code == 422, (resource, missing.text[:500])
-
-            detail_path = f"/v2/{resource}/{item['id']}"
-            detail = api_client.get(detail_path, params=params, headers=user_headers)
-            assert detail.status_code == 200, (resource, detail.text[:500])
-            assert detail.json()["result"]["item"] == item
-            listed = api_client.get(
-                f"/v2/{resource}",
-                params={**params, legacy_field: legacy_id},
-                headers=user_headers,
-            )
-            assert listed.status_code == 200, (resource, listed.text[:500])
-            assert item["id"] in {row["id"] for row in listed.json()["result"]["items"]}
-            patched = api_client.patch(
-                detail_path,
-                params=params,
-                headers=user_headers,
-                json={"description": "Renamed by the live probe"},
-            )
-            assert patched.status_code == 200, (resource, patched.text[:500])
-            assert patched.json()["result"]["item"]["description"] == (
-                "Renamed by the live probe"
-            )
-            deleted = api_client.delete(
-                detail_path, params=params, headers=user_headers
-            )
-            assert deleted.status_code == 204, (resource, deleted.text[:500])
-            absent = api_client.get(detail_path, params=params, headers=user_headers)
-            assert absent.status_code == 404, (resource, absent.text[:500])
-
-        policy = api_client.post(
-            "/v2/user-policies",
-            params=params,
-            headers=user_headers,
-            json={
-                "country_id": COUNTRY_ID,
-                "legacy_policy_id": legacy["policy"],
-                "baseline": "current-law",
-                "provenance": {"source": "manual"},
-            },
+        _assert_export_links_the_saved_reform(
+            api_client, user_headers, legacy, user_id=user_id
         )
-        assert policy.status_code == 201, policy.text[:500]
-        policy_id = policy.json()["result"]["item"]["id"]
-        report = api_client.post(
-            "/v2/user-reports",
-            params=params,
-            headers=user_headers,
-            json={
-                "country_id": COUNTRY_ID,
-                "legacy_report_id": legacy["report"],
-                "user_policy_id": policy_id,
-            },
-        )
-        assert report.status_code == 201, report.text[:500]
-        report_id = report.json()["result"]["item"]["id"]
-
-        exported = api_client.get("/v2/me/export", params=params, headers=user_headers)
-        assert exported.status_code == 200, exported.text[:500]
-        export = exported.json()["result"]
-        assert export["user"]["id"] == user_id
-        assert export["user"]["user_type"] == "standard"
-        exported_report = next(
-            row for row in export["reports"] if row["id"] == report_id
-        )
-        assert exported_report["user_policy_id"] == policy_id
-        assert [row["id"] for row in export["policies"]] == [policy_id]
 
         _delete_account(api_client, user_headers)
         reprovisioned = api_client.get("/v2/me", params=params, headers=user_headers)
@@ -416,31 +484,9 @@ def test_live_unauthenticated_users_round_trip_and_upgrade(
     # The upgrade must convert, so no account may exist for the test user yet.
     _delete_account(api_client, user_headers)
     try:
-        # Reads never create an unauthenticated user.
-        absent = api_client.get("/v2/me", params=params, headers=converted_browser)
-        assert absent.status_code == 404, absent.text[:500]
-        assert _policy_ids(api_client, converted_browser) == set()
-
-        saved = _save_policy(api_client, converted_browser, legacy_policy_id)
-        assert saved["user_id"] == converted_browser[UNAUTHENTICATED_USER_HEADER]
-        detail = api_client.get(
-            f"/v2/user-policies/{saved['id']}",
-            params=params,
-            headers=converted_browser,
+        saved = _assert_signed_out_saving(
+            api_client, converted_browser, legacy_policy_id
         )
-        assert detail.status_code == 200, detail.text[:500]
-        assert detail.json()["result"]["item"] == saved
-        me = api_client.get("/v2/me", params=params, headers=converted_browser)
-        assert me.status_code == 200, me.text[:500]
-        assert me.json()["result"]["item"]["user_type"] == "unauthenticated"
-        assert me.json()["result"]["item"]["primary_country"] is None
-        edited = api_client.patch(
-            "/v2/me",
-            params=params,
-            headers=converted_browser,
-            json={"first_name": "Signed out"},
-        )
-        assert edited.status_code == 403, edited.text[:500]
 
         # A signed-out browser's work is invisible to the signed-in user...
         other_work = _save_policy(api_client, signed_out_only_browser, legacy_policy_id)
