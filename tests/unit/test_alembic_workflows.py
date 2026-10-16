@@ -288,7 +288,7 @@ def test_cloud_sql_workflow_uses_oidc_and_separate_database_credentials():
 
 def test_database_environment_validation_rejects_production_migration_credentials_in_staging():
     result = subprocess.run(
-        ["bash", ".github/scripts/validate_database_environment.sh", "cloud-sql"],  # noqa: S607  # bash comes from the test environment's PATH
+        ["bash", ".github/scripts/validate_database_environment.sh", "cloud-sql"],
         cwd=REPO,
         env={
             **os.environ,
@@ -355,7 +355,7 @@ def _run_migration_orchestrator(tmp_path: Path, database_state: str):
     python_calls = tmp_path / "python-calls"
     gcloud_calls = tmp_path / "gcloud-calls"
     result = subprocess.run(
-        ["bash", ".github/scripts/migrate_v1_cloud_sql.sh"],  # noqa: S607  # bash comes from the test environment's PATH
+        ["bash", ".github/scripts/migrate_v1_cloud_sql.sh"],
         cwd=REPO,
         env={
             **os.environ,

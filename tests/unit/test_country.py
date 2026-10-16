@@ -28,7 +28,7 @@ class TestCountryJsonSafety:
         result = country._json_safe(
             {
                 "release_date": date(2026, 5, 12),
-                "nested": [datetime(2026, 5, 12, 8, 30, 45)],  # noqa: DTZ001  # checks the offset-free isoformat of a naive datetime
+                "nested": [datetime(2026, 5, 12, 8, 30, 45)],
             }
         )
 

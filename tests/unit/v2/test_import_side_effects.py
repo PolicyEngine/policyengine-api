@@ -76,7 +76,7 @@ assert "policyengine_api.data.v2.household_migration_qualification" not in sys.m
 assert "policyengine_api.data.v2.user_association_migration_qualification" not in sys.modules
 """
 
-    result = subprocess.run(  # noqa: S603  # runs fixed test code with the current interpreter
+    result = subprocess.run(
         [sys.executable, "-c", script],
         cwd=tmp_path,
         env=_environment_without_v2(),
@@ -125,7 +125,7 @@ assert not Path('policyengine.db').exists()
 assert not list(Path.cwd().glob('*.db'))
 assert not list(Path.cwd().glob('*.init.lock'))
 """
-    result = subprocess.run(  # noqa: S603  # runs fixed test code with the current interpreter
+    result = subprocess.run(
         [sys.executable, "-c", script],
         cwd=tmp_path,
         env=environment,

@@ -744,8 +744,8 @@ kind = "none"
 [[rule]]
 id = "api.quality.tests-ruff-exemptions"
 category = "quality"
-statement = "Test files may use pytest's bare assert and need no docstrings, annotations or named constants for magic numbers (S101, D1, ANN, PLR2004); every other ruff rule applies to tests."
-rationale = "docs/engineering/skills/rules-registry.md#baselines"
+statement = "Test files may use pytest's bare assert and need no docstrings, annotations or named constants for magic numbers (S101, D1, ANN, PLR2004). They may also use fake credentials, naive datetimes, subprocess calls to repository scripts, SQL built from strings and prints (S105, S106, DTZ001, DTZ011, S603, S607, S608, T201). Every other ruff rule applies to tests."
+rationale = "docs/engineering/skills/rules-registry.md#file-level-exceptions"
 scope = ["tests/**/*.py", "scripts/rules/tests/**/*.py"]
 tier = "mechanical"
 status = "enforced"
@@ -754,7 +754,70 @@ autofix = false
 kind = "ruff"
 mode = "per-file-ignore"
 pattern = "**/tests/**"
-codes = ["ANN", "D1", "PLR2004", "S101"]
+codes = ["ANN", "D1", "DTZ001", "DTZ011", "PLR2004", "S101", "S105", "S106", "S603", "S607", "S608", "T201"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "lint"
+invocation = "ruff check ."
+
+[[rule]]
+id = "api.quality.ci-cd-scripts-ruff-exemptions"
+category = "quality"
+statement = "CI/CD scripts under .github may print their results and fetch fixed URLs (T201, S310); every other ruff rule applies to them."
+rationale = "docs/engineering/skills/rules-registry.md#file-level-exceptions"
+scope = [".github/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "ruff"
+mode = "per-file-ignore"
+pattern = ".github/**"
+codes = ["S310", "T201"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "lint"
+invocation = "ruff check ."
+
+[[rule]]
+id = "api.quality.command-line-scripts-ruff-exemptions"
+category = "quality"
+statement = "Command-line scripts under scripts/ may print their output, run other programs, fetch fixed URLs, stamp today's date and pick random samples (T201, S603, S607, S310, DTZ011, S311); every other ruff rule applies to them."
+rationale = "docs/engineering/skills/rules-registry.md#file-level-exceptions"
+scope = ["scripts/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "ruff"
+mode = "per-file-ignore"
+pattern = "scripts/**"
+codes = ["DTZ011", "S310", "S311", "S603", "S607", "T201"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "lint"
+invocation = "ruff check ."
+
+[[rule]]
+id = "api.quality.command-line-modules-ruff-exemptions"
+category = "quality"
+statement = "Application modules that also run as command-line programs (if __name__ == \"__main__\") may print their output (T201); every other ruff rule applies to them."
+rationale = "docs/engineering/skills/rules-registry.md#file-level-exceptions"
+scope = [
+    "policyengine_api/data/v2/catalog/initialization.py",
+    "policyengine_api/data/v2/household_migration_qualification.py",
+    "policyengine_api/data/v2/policy_migration_qualification.py",
+    "policyengine_api/data/v2/user_association_migration_qualification.py",
+    "policyengine_api/worker_spm_release.py",
+]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "ruff"
+mode = "per-file-ignore"
+pattern = "policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/user_association_migration_qualification,worker_spm_release}.py"
+codes = ["T201"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "lint"

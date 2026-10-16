@@ -19,10 +19,10 @@ from policyengine_api.runtime_cache.reform_impacts import (
 )
 
 # Claim tokens are opaque ids that tell competing workers apart.
-OWNER_CLAIM_TOKEN = "owner"  # noqa: S105  # an opaque claim id, not a secret
-CONTENDER_CLAIM_TOKEN = "contender"  # noqa: S105  # an opaque claim id, not a secret
-CLIFF_OWNER_CLAIM_TOKEN = "cliff-owner"  # noqa: S105  # an opaque claim id, not a secret
-NEXT_OWNER_CLAIM_TOKEN = "next-owner"  # noqa: S105  # an opaque claim id, not a secret
+OWNER_CLAIM_TOKEN = "owner"
+CONTENDER_CLAIM_TOKEN = "contender"
+CLIFF_OWNER_CLAIM_TOKEN = "cliff-owner"
+NEXT_OWNER_CLAIM_TOKEN = "next-owner"
 
 
 def _namespace() -> CacheNamespace:
@@ -44,7 +44,7 @@ def _impact(execution_id: str, options_hash: str, day: int) -> CachedReformImpac
         reform_impact_json={},
         status="computing",
         message=None,
-        start_time=datetime(2026, 1, day),  # noqa: DTZ001  # reform_impact start_time is a naive column
+        start_time=datetime(2026, 1, day),
         end_time=None,
         execution_id=execution_id,
     )

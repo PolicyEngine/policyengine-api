@@ -230,7 +230,7 @@ def main(
             if isinstance(error, safe_types)
             else "household create-event processing failed"
         )
-        print(  # noqa: T201  # the command's JSON outcome is its output
+        print(
             json.dumps(
                 {
                     "outcome": "error",
@@ -255,7 +255,7 @@ def main(
             outcome="ok",
             destination_household_id=result.household_id,
         )
-    print(  # noqa: T201  # the command's JSON outcome is its output
+    print(
         json.dumps(
             {
                 "outcome": "ok",

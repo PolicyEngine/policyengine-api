@@ -138,16 +138,16 @@ def main() -> int:
 
     changelog_text = fetch_changelog(args.package)
     if not changelog_text:
-        print(f"Could not fetch changelog for {args.package}.", file=sys.stderr)  # noqa: T201  # the command reports a missing changelog on stderr
+        print(f"Could not fetch changelog for {args.package}.", file=sys.stderr)
         return 0
 
     entries = parse_changelog(changelog_text)
     changes = get_changes_between(entries, args.old_version, args.new_version)
 
     if changes:
-        print(format_changes(changes))  # noqa: T201  # the formatted changelog is this command's output
+        print(format_changes(changes))
     else:
-        print("No changelog entries found between these versions.")  # noqa: T201  # the command reports that nothing changed
+        print("No changelog entries found between these versions.")
 
     return 0
 

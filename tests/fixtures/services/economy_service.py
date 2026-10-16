@@ -198,7 +198,7 @@ def mock_logger():
 @pytest.fixture
 def mock_datetime():
     """Mock datetime.datetime.now()."""
-    mock_now = datetime.datetime(2025, 6, 26, 12, 0, 0)  # noqa: DTZ001  # stands in for the naive local time that economy_service stores
+    mock_now = datetime.datetime(2025, 6, 26, 12, 0, 0)
     with patch("policyengine_api.services.economy_service.datetime.datetime") as mock:
         mock.now.return_value = mock_now
         yield mock
@@ -251,8 +251,8 @@ def create_mock_reform_impact(
         reform_impact_json=reform_impact_json or default_reform_impact_json,
         execution_id=execution_id,
         message=message,
-        start_time=start_time or datetime.datetime(2025, 6, 26, 12, 0, 0),  # noqa: DTZ001  # reform_impact start_time is a naive column
-        end_time=(datetime.datetime(2025, 6, 26, 12, 5, 0) if status == "ok" else None),  # noqa: DTZ001  # reform_impact end_time is a naive column
+        start_time=start_time or datetime.datetime(2025, 6, 26, 12, 0, 0),
+        end_time=(datetime.datetime(2025, 6, 26, 12, 5, 0) if status == "ok" else None),
     )
     impact.observability_id = MOCK_OBSERVABILITY_ID
     return impact

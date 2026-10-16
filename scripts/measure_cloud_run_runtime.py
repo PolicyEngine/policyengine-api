@@ -91,7 +91,7 @@ async def _client_loop(
     deadline: float,
     records: list[dict],
 ) -> None:
-    rng = random.Random(args.seed * 1000 + client_index)  # noqa: S311  # a seeded generator makes the request mix reproducible; nothing secret depends on it
+    rng = random.Random(args.seed * 1000 + client_index)
     seq = 0
     while time.monotonic() < deadline:
         seq += 1
@@ -171,7 +171,7 @@ async def _run(args: argparse.Namespace) -> dict:
                 CALCULATE_PATH, json=throwaway, timeout=args.timeout_calculate
             )
         except httpx.HTTPError as error:
-            print(  # noqa: T201  # the command warns on stderr and keeps measuring
+            print(
                 f"warning: warm-up calculate failed ({type(error).__name__}); "
                 "continuing",
                 file=sys.stderr,

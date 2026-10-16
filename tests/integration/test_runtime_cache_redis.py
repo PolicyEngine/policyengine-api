@@ -24,8 +24,8 @@ from policyengine_api.runtime_cache.reform_impacts import (
 
 RUNTIME_CACHE_TEST_URL = "RUNTIME_CACHE_TEST_URL"
 # Claim tokens are opaque ids that tell competing workers apart.
-WRITER_CLAIM_TOKEN = "writer"  # noqa: S105  # an opaque claim id, not a secret
-CONTENDER_CLAIM_TOKEN = "contender"  # noqa: S105  # an opaque claim id, not a secret
+WRITER_CLAIM_TOKEN = "writer"
+CONTENDER_CLAIM_TOKEN = "contender"
 
 
 @pytest.fixture
@@ -243,7 +243,7 @@ def test_real_reform_indexes_are_cross_connection_bounded_and_expiring(
                 reform_impact_json={},
                 status="computing",
                 message=None,
-                start_time=datetime(2026, 1, day),  # noqa: DTZ001  # reform_impact start_time is a naive column
+                start_time=datetime(2026, 1, day),
                 end_time=None,
                 execution_id=execution_id,
             )

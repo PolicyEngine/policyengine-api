@@ -109,9 +109,26 @@ ignore = ["D203", "D213"]
 exclude = ["migrations/*/versions/*.py"]
 
 [tool.ruff.lint.per-file-ignores]
+# File-level exceptions are allowed only for tests, CI/CD scripts and
+# command-line scripts; the rules guard checks each pattern covers nothing else
+# (docs/engineering/skills/rules-registry.md#file-level-exceptions).
 # Tests may use pytest's bare assert, and need no docstrings, annotations or
-# named constants for magic numbers. Every other rule applies to tests.
-"**/tests/**" = ["ANN", "D1", "PLR2004", "S101"]
+# named constants for magic numbers. They may also use fake credentials, naive
+# datetimes, subprocess calls to repository scripts, SQL built from strings and
+# prints. Every other rule applies to tests.
+"**/tests/**" = [
+    "ANN", "D1", "DTZ001", "DTZ011", "PLR2004", "S101", "S105", "S106", "S603",
+    "S607", "S608", "T201",
+]
+# CI/CD scripts print their results and fetch fixed URLs.
+".github/**" = ["S310", "T201"]
+# Command-line scripts print their output, run other programs, fetch fixed
+# URLs, stamp today's date and pick random samples.
+"scripts/**" = [
+    "DTZ011", "S310", "S311", "S603", "S607", "T201",
+]
+# Modules that also run as command-line programs print their output.
+"policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/user_association_migration_qualification,worker_spm_release}.py" = ["T201"]
 
 [tool.mypy]
 python_version = "3.11"

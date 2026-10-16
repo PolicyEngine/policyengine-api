@@ -105,7 +105,7 @@ def test_complete_installed_catalog_bulk_publication() -> None:
             evidence.entity_counts["regions"],
         )
         assert all(representative)
-        print(  # noqa: T201  # the qualification evidence is this test's report
+        print(
             json.dumps(
                 {
                     **evidence.as_dict(),

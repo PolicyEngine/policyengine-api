@@ -199,12 +199,12 @@ def _raise_for_partial_rejection(
 
 
 def _get_json(url: str, access_token: str) -> dict[str, object] | None:
-    request = Request(  # noqa: S310  # callers pass only https Google Cloud API URLs
+    request = Request(
         url,
         headers={"Authorization": f"Bearer {access_token}"},
     )
     try:
-        with urlopen(request, timeout=15) as response:  # noqa: S310  # callers pass only https Google Cloud API URLs
+        with urlopen(request, timeout=15) as response:
             return json.load(response)
     except HTTPError as error:
         if error.code == 404:
@@ -391,7 +391,7 @@ def main() -> None:
         metric_location=args.metric_location,
         access_token=os.environ["GOOGLE_OAUTH_ACCESS_TOKEN"],
     )
-    print(  # noqa: T201  # the command reports the verified ingestion
+    print(
         "Verified collector ingestion "
         f"(verification_id={probe.verification_id}, trace_id={probe.trace_id})"
     )

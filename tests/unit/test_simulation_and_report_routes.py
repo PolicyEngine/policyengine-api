@@ -220,9 +220,9 @@ def test_report_get_serializes_display_run_timestamps(orm_session_factory):
     with orm_session_factory.begin() as session:
         report = session.get(ReportOutput, report_id)
         run = session.get(ReportOutputRun, report.latest_successful_run_id)
-        run.requested_at = datetime(2026, 5, 4, 12, 0)  # noqa: DTZ001  # report run timestamps are naive columns
-        run.started_at = datetime(2026, 5, 4, 12, 1)  # noqa: DTZ001  # report run timestamps are naive columns
-        run.finished_at = datetime(2026, 5, 4, 12, 2)  # noqa: DTZ001  # report run timestamps are naive columns
+        run.requested_at = datetime(2026, 5, 4, 12, 0)
+        run.started_at = datetime(2026, 5, 4, 12, 1)
+        run.finished_at = datetime(2026, 5, 4, 12, 2)
 
     result = create_test_client().get(f"/us/report/{report_id}").get_json()["result"]
 

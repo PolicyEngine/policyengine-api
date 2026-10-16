@@ -11,7 +11,7 @@ import pytest
 
 ROOT = Path(__file__).parents[2]
 VERIFIER_PATH = ROOT / ".github" / "scripts" / "verify_observability_collector.py"
-ACCESS_TOKEN = "access-token"  # noqa: S105  # a fake test token
+ACCESS_TOKEN = "access-token"
 
 
 def _load_verifier():
