@@ -1,3 +1,28 @@
+## [5.5.1] - 2026-10-15
+
+### Fixed
+
+- The live staging test lists a browser's saved policies within the Public API's page limit, so the staging deploy's integration step can pass.
+
+
+## [5.5.0] - 2026-10-15
+
+### Added
+
+- Annual economy responses relay the simulation entrypoint's optional stage fields (`stage`, `progress`, `progress_max`, timestamps and `segments`) while a run is computing.
+
+
+## [5.4.0] - 2026-10-15
+
+### Added
+
+- Add Auth0 user login and signed-out saving for app v3: /v2/me (provisioning, profile, export, upgrade of a browser's unauthenticated user at sign-in, account deletion), standard and unauthenticated user types identified by a bearer token or the PolicyEngine-Unauthenticated-User header, owner-scoped v1-anchored user associations for policies, households, simulations, and reports, a credential-free read of a saved report by its ID (/v2/shared-reports) so report links can be shared, and the user_identities schema.
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.4.1.
+
+
 ## [5.3.3] - 2026-10-15
 
 ### Changed

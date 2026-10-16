@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 from flask import Flask
 
+from policyengine_api.libs.simulation_entrypoint import SimulationRunProgress
 from policyengine_api.routes.economy_routes import economy_bp
 
 
@@ -92,12 +93,91 @@ def test_economy_route_keeps_computing_response_as_http_200(mock_get_economic_im
         "data": None,
         "message": None,
     }
+    mock_result.run_progress = None
     mock_get_economic_impact.return_value = mock_result
     client = _client_with_economy_blueprint()
 
     response = client.get("/us/economy/123/over/456?region=us&time_period=2026")
 
     assert response.status_code == 200
+    assert json.loads(response.data) == {
+        "status": "computing",
+        "message": None,
+        "result": None,
+    }
+
+
+@patch("policyengine_api.routes.economy_routes.economy_service.get_economic_impact")
+def test_economy_route_relays_stage_fields_while_computing(mock_get_economic_impact):
+    mock_result = Mock()
+    mock_result.to_dict.return_value = {
+        "status": "computing",
+        "data": None,
+        "message": None,
+    }
+    mock_result.run_progress = SimulationRunProgress(
+        stage="reform",
+        progress=67,
+        progress_max=96,
+        stage_started_at="2026-10-13T12:01:00Z",
+    )
+    mock_get_economic_impact.return_value = mock_result
+    client = _client_with_economy_blueprint()
+
+    response = client.get("/us/economy/123/over/456?region=us&time_period=2026")
+
+    assert response.status_code == 200
+    assert json.loads(response.data) == {
+        "status": "computing",
+        "message": None,
+        "result": None,
+        "stage": "reform",
+        "progress": 67,
+        "progress_max": 96,
+        "stage_started_at": "2026-10-13T12:01:00Z",
+    }
+
+
+@patch("policyengine_api.routes.economy_routes.economy_service.get_economic_impact")
+def test_economy_route_relays_submission_time_for_workers_without_stages(
+    mock_get_economic_impact,
+):
+    # After policyengine-sim-api#781 deploys, the entrypoint reports
+    # submitted_at for every new job, also on worker apps without stages.
+    mock_result = Mock()
+    mock_result.to_dict.return_value = {
+        "status": "computing",
+        "data": None,
+        "message": None,
+    }
+    mock_result.run_progress = SimulationRunProgress(
+        submitted_at="2026-10-13T12:00:00Z"
+    )
+    mock_get_economic_impact.return_value = mock_result
+    client = _client_with_economy_blueprint()
+
+    response = client.get("/us/economy/123/over/456?region=us&time_period=2026")
+
+    assert json.loads(response.data) == {
+        "status": "computing",
+        "message": None,
+        "result": None,
+        "submitted_at": "2026-10-13T12:00:00Z",
+    }
+
+
+@patch("policyengine_api.routes.economy_routes.economy_service.get_economic_impact")
+def test_economy_route_never_adds_stage_fields_to_completed_results(
+    mock_get_economic_impact,
+):
+    mock_result = _mock_economic_result()
+    mock_result.run_progress = SimulationRunProgress(stage="outputs", progress=97)
+    mock_get_economic_impact.return_value = mock_result
+    client = _client_with_economy_blueprint()
+
+    response = client.get("/us/economy/123/over/456?region=us&time_period=2026")
+
+    assert set(json.loads(response.data)) == {"status", "message", "result"}
 
 
 @patch(

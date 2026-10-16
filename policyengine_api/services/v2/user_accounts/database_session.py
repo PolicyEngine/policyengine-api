@@ -1,0 +1,27 @@
+"""Database session lifetime management for v2 account services."""
+
+from __future__ import annotations
+
+from contextlib import contextmanager
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
+
+class AccountDatabaseSession:
+    def __init__(self, session_factory: sessionmaker[Session]) -> None:
+        self._session_factory = session_factory
+
+    @contextmanager
+    def read(self) -> Iterator[Session]:
+        with self._session_factory() as session:
+            yield session
+
+    @contextmanager
+    def transaction(self) -> Iterator[Session]:
+        with self._session_factory.begin() as session:
+            yield session

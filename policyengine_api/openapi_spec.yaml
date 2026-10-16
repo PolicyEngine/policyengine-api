@@ -879,7 +879,7 @@ paths:
         # Query parameters are generated from policyengine_api.query_parameters.
       responses:
         200:
-          description: Annual economic impact, progress, or persisted error state. Canonical completed results include actual baseline/reform receipts containing the selected SPM configuration.
+          description: Annual economic impact, progress, or persisted error state. Canonical completed results include actual baseline/reform receipts containing the selected SPM configuration. While computing, the optional stage fields come from the simulation entrypoint and appear only when its worker reports stages.
           content:
             application/json:
               schema:
@@ -897,6 +897,41 @@ paths:
                     properties:
                       spm_provenance:
                         $ref: '#/components/schemas/SPMComparisonProvenance'
+                  stage:
+                    type: string
+                    description: Current stage of a computing run, such as queued, loading_data, baseline, reform, simulating or outputs. Later versions may add stages; clients must accept a value they do not know.
+                  progress:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+                    description: Coarse completion percent at the start of the current stage. It changes only at stage boundaries.
+                  progress_max:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+                    description: Highest percent the run reaches before its next stage starts. A client can move a time-based estimate between progress and progress_max.
+                  submitted_at:
+                    type: string
+                    format: date-time
+                    description: When the simulation entrypoint accepted the run.
+                  started_at:
+                    type: string
+                    format: date-time
+                    description: When a worker started the run.
+                  stage_started_at:
+                    type: string
+                    format: date-time
+                    description: When the current stage started.
+                  segments:
+                    type: object
+                    description: Completed region segments of a segmented US national run.
+                    properties:
+                      completed:
+                        type: integer
+                        minimum: 0
+                      total:
+                        type: integer
+                        minimum: 1
         400:
           $ref: '#/components/responses/SPMValidationError'
         404:

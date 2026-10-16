@@ -22,9 +22,11 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     User,
     UserHouseholdAssociation,
+    UserIdentity,
     UserPolicy,
     UserReportAssociation,
     UserSimulationAssociation,
+    UserType,
 )
 
 RUN_OUTPUT_TABLES = frozenset(
@@ -47,6 +49,7 @@ RUN_OUTPUT_TABLES = frozenset(
 def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
     expected_modules = {
         User: "users",
+        UserIdentity: "users",
         Policy: "policies",
         Dynamic: "policies",
         Household: "households",
@@ -337,17 +340,39 @@ def test_report_definition_and_run_columns_are_separated() -> None:
     assert report_run.c.idempotency_key.type.as_uuid
 
 
-def test_user_primary_country_is_required_and_limited_to_supported_values() -> None:
+def test_standard_users_require_a_supported_primary_country() -> None:
     users = V2_METADATA.tables["users"]
 
-    assert not users.c.primary_country.nullable
+    # Nullable only for unauthenticated users; a check requires it otherwise.
+    assert users.c.primary_country.nullable
     assert users.c.first_name.nullable
     assert users.c.last_name.nullable
     assert users.c.email.nullable
     assert users.c.primary_country.type.length == 2
-    assert "ck_users_primary_country" in {
-        constraint.name for constraint in users.constraints
+    checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in users.constraints
+        if isinstance(constraint, sa.CheckConstraint)
     }
+    assert checks == {
+        "ck_users_primary_country": "primary_country IN ('us', 'uk')",
+        "ck_users_user_type": "user_type IN ('unauthenticated', 'standard')",
+        "ck_users_standard_primary_country": (
+            "user_type = 'unauthenticated' OR primary_country IS NOT NULL"
+        ),
+    }
+
+
+def test_user_type_defaults_to_standard_for_every_writer() -> None:
+    users = V2_METADATA.tables["users"]
+
+    assert not users.c.user_type.nullable
+    assert users.c.user_type.type.length == 16
+    # The server default covers inserts by Public API revisions that predate
+    # the column; the Python default covers this revision's ORM inserts.
+    assert users.c.user_type.server_default.arg == "standard"
+    assert User().user_type == "standard"
+    assert [member.value for member in UserType] == ["unauthenticated", "standard"]
 
 
 def test_regions_have_one_same_model_version_default_logical_dataset() -> None:
@@ -519,3 +544,94 @@ def test_complete_metadata_compiles_for_postgres_without_mutation() -> None:
 
     assert len(statements) == len(V2_METADATA.tables)
     assert all("CREATE TABLE" in statement for statement in statements)
+
+
+def test_user_identity_maps_one_issuer_subject_to_one_user() -> None:
+    identities = V2_METADATA.tables["user_identities"]
+
+    unique_columns = {
+        constraint.name: tuple(column.name for column in constraint.columns)
+        for constraint in identities.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert unique_columns == {
+        "uq_user_identities_issuer_subject": ("issuer", "subject")
+    }
+    assert isinstance(identities.c.issuer.type, sa.Text)
+    assert isinstance(identities.c.subject.type, sa.Text)
+    assert identities.c.email.nullable
+    assert identities.c.email.type.length == 320
+    assert not identities.c.last_seen_at.nullable
+    user_foreign_key = next(iter(identities.c.user_id.foreign_keys))
+    assert user_foreign_key.target_fullname == "users.id"
+    assert user_foreign_key.ondelete == "CASCADE"
+    assert "ix_user_identities_user_id" in {index.name for index in identities.indexes}
+    assert sa.inspect(User).relationships["identities"].back_populates == "user"
+
+
+def test_associations_are_v1_anchored_without_client_refs() -> None:
+    for table_name, reference in (
+        ("user_policies", "policy"),
+        ("user_household_associations", "household"),
+        ("user_simulation_associations", "simulation"),
+        ("user_report_associations", "report"),
+    ):
+        table = V2_METADATA.tables[table_name]
+        assert table.c[f"{reference}_id"].nullable
+        assert table.c[f"legacy_{reference}_id"].nullable
+        assert isinstance(table.c[f"legacy_{reference}_id"].type, sa.BigInteger)
+        assert "client_ref" not in table.c
+        assert not table.c.country_id.nullable
+        assert table.c.country_id.type.length == 2
+        constraints = {constraint.name: constraint for constraint in table.constraints}
+        reference_check = constraints[f"ck_{table_name}_{reference}_ref"]
+        assert str(reference_check.sqltext) == (
+            f"{reference}_id IS NOT NULL OR legacy_{reference}_id IS NOT NULL"
+        )
+        # No uniqueness involves the owner, so a merge at sign-in can move
+        # any association to another user unchanged.
+        assert {
+            tuple(column.name for column in constraint.columns)
+            for constraint in table.constraints
+            if isinstance(constraint, sa.UniqueConstraint)
+        } == {("id", "country_id")}
+
+
+def test_simulation_and_report_associations_have_no_cross_service_keys() -> None:
+    simulations = V2_METADATA.tables["user_simulation_associations"]
+    reports = V2_METADATA.tables["user_report_associations"]
+
+    # The retired columns stay, nullable, for the previous Public API revision.
+    for table in (simulations, reports):
+        assert table.c.country.nullable
+        assert table.c.label.nullable
+    assert {
+        foreign_key.target_fullname for foreign_key in simulations.foreign_keys
+    } == {"users.id"}
+    assert {foreign_key.target_fullname for foreign_key in reports.foreign_keys} == {
+        "users.id",
+        "user_policies.id",
+    }
+    user_policy_key = next(iter(reports.c.user_policy_id.foreign_keys))
+    assert user_policy_key.ondelete == "SET NULL"
+    for column_name in ("provisions", "validation"):
+        postgres_type = reports.c[column_name].type.dialect_impl(postgresql.dialect())
+        assert isinstance(postgres_type, postgresql.JSONB)
+    assert set(sa.inspect(UserSimulationAssociation).relationships.keys()) == {"user"}
+    assert set(sa.inspect(UserReportAssociation).relationships.keys()) == {"user"}
+    assert "user_associations" not in sa.inspect(Simulation).relationships.keys()
+
+
+def test_user_policy_records_v3_reform_fields() -> None:
+    policies = V2_METADATA.tables["user_policies"]
+
+    assert policies.c.baseline.type.length == 16
+    baseline_check = next(
+        constraint
+        for constraint in policies.constraints
+        if constraint.name == "ck_user_policies_baseline"
+    )
+    assert "current-law" in str(baseline_check.sqltext)
+    assert "current-policy" in str(baseline_check.sqltext)
+    postgres_type = policies.c.provenance.type.dialect_impl(postgresql.dialect())
+    assert isinstance(postgres_type, postgresql.JSONB)

@@ -15,11 +15,15 @@ _ready = True
 
 
 def validate_policy_runtime_configuration() -> None:
-    """Validate v1 source selectors, v2 persistence and measurement settings."""
+    """Validate v1 source selectors, v2 persistence, user auth and measurement."""
 
     from policyengine_api.data.v2.settings import (
         load_v2_runtime_database_settings,
     )
+    from policyengine_api.libs.auth0_management import (
+        load_auth0_management_settings,
+    )
+    from policyengine_api.libs.user_auth import load_user_auth_settings
     from policyengine_api.migration_flags import (
         get_v1_household_read_source,
         get_v1_household_write_source,
@@ -33,6 +37,10 @@ def validate_policy_runtime_configuration() -> None:
     get_v1_household_write_source()
     get_v1_household_read_source()
     load_v2_runtime_database_settings()
+    # User-owned routes fail closed without these settings; an inconsistent
+    # or required-but-missing configuration must stop the deployment here.
+    load_user_auth_settings()
+    load_auth0_management_settings()
     # A bundle whose measurement configuration this build cannot serve would
     # reject every country request. Report it here, where the deployment is
     # gated, instead of only on the requests themselves.

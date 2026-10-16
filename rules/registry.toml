@@ -190,6 +190,27 @@ autofix = false
 kind = "none"
 
 [[rule]]
+id = "api.v2.user-services-no-sql"
+category = "v2-layers"
+statement = "v2 user services (identity, accounts, legacy references and user associations) never build or run SQL themselves or import SQLAlchemy; their connectors do."
+rationale = "docs/engineering/skills/v2-code-organization.md#servicespy"
+scope = ["policyengine_api/services/v2/identity/services.py", "policyengine_api/services/v2/legacy_refs/services.py", "policyengine_api/services/v2/user_*/services.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/v2/test_data_crud_boundaries.py::test_user_services_construct_no_sql"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.user-services-no-sql/bad_services.py"
+good_fixture = "rules/fixtures/api.v2.user-services-no-sql/good_services.py"
+test = "tests/unit/v2/test_data_crud_boundaries.py::test_rule_proof_user_services_no_sql"
+
+[[rule]]
 id = "api.v2.connectors-never-commit"
 category = "v2-layers"
 statement = "v2 connectors receive a session from the service and never open, commit, roll back or close it."
@@ -725,9 +746,9 @@ codes = ["ALL"]
 [[rule]]
 id = "api.quality.mypy-v2"
 category = "quality"
-statement = "Shared query models, FastAPI dependencies, and v2 routes and services pass mypy with untyped definitions disallowed."
+statement = "Shared query models, FastAPI dependencies, v2 routes and services, and the user sign-in and account-deletion libraries pass mypy with untyped definitions disallowed."
 rationale = "docs/engineering/skills/v2-code-organization.md"
-scope = ["policyengine_api/fastapi_routes/v2/**/*.py", "policyengine_api/services/v2/**/*.py"]
+scope = ["policyengine_api/fastapi_routes/v2/**/*.py", "policyengine_api/services/v2/**/*.py", "policyengine_api/libs/user_auth.py", "policyengine_api/libs/auth0_management.py"]
 tier = "mechanical"
 status = "enforced"
 autofix = false
@@ -739,6 +760,8 @@ paths = [
   "policyengine_api/fastapi_routes/dependencies.py",
   "policyengine_api/fastapi_routes/v2",
   "policyengine_api/services/v2",
+  "policyengine_api/libs/user_auth.py",
+  "policyengine_api/libs/auth0_management.py",
 ]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"

@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 from policyengine_observability import instrument_httpx
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.gateway_auth import (
@@ -69,6 +70,45 @@ def _attach_current_request_id(request: httpx.Request) -> None:
         request.headers[OBSERVABILITY_ID_HEADER] = observability_id
 
 
+class SimulationRunSegments(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    completed: int = Field(ge=0)
+    total: int = Field(ge=1)
+
+
+class SimulationRunProgress(BaseModel):
+    """Stage fields of a running Simulation Entrypoint job.
+
+    The entrypoint adds these optional fields to ``GET /jobs/{job_id}`` for
+    jobs on workers that report stages (policyengine-sim-api#781). The API
+    relays them while an economy run is computing. ``stage`` stays a string:
+    later entrypoint versions may add stages, and clients must accept them.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    stage: str | None = None
+    progress: int | None = Field(default=None, ge=0, le=100)
+    progress_max: int | None = Field(default=None, ge=0, le=100)
+    submitted_at: AwareDatetime | None = None
+    started_at: AwareDatetime | None = None
+    stage_started_at: AwareDatetime | None = None
+    segments: SimulationRunSegments | None = None
+
+    @classmethod
+    def from_status(cls, data: dict) -> "SimulationRunProgress | None":
+        """Read the stage fields; never fail a poll because of them."""
+        try:
+            run_progress = cls.model_validate(data)
+        except ValidationError:
+            return None
+        return run_progress if run_progress.to_dict() else None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(mode="json", exclude_none=True)
+
+
 @dataclass
 class ModalSimulationExecution:
     """
@@ -81,6 +121,7 @@ class ModalSimulationExecution:
     error: str | None = None
     policyengine_bundle: dict | None = None
     resolved_app_name: str | None = None
+    run_progress: SimulationRunProgress | None = None
 
     @property
     def name(self) -> str:
@@ -441,6 +482,7 @@ class SimulationEntrypointClient:
                 error=data.get("error"),
                 policyengine_bundle=data.get("policyengine_bundle"),
                 resolved_app_name=data.get("resolved_app_name"),
+                run_progress=SimulationRunProgress.from_status(data),
             )
 
         except httpx.HTTPStatusError as e:

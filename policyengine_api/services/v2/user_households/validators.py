@@ -4,21 +4,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from policyengine_api.services.v2.associations.validators import (
+    AssociationNotFoundError,
+    AssociationReferenceConflictError,
+)
+
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from policyengine_api.data.v2.models import (
-        Household,
-        User,
-        UserHouseholdAssociation,
-    )
-    from policyengine_api.services.v2.user_households.types import (
-        UserHouseholdCreationInput,
-    )
+    from policyengine_api.data.v2.models import Household, UserHouseholdAssociation
 
 
-class UserHouseholdNotFoundError(LookupError):
-    """Raised when an association is absent from the selected country."""
+class UserHouseholdNotFoundError(AssociationNotFoundError):
+    """Raised when an association is absent for the caller and country."""
 
 
 class AssociationHouseholdNotFoundError(LookupError):
@@ -29,7 +27,7 @@ class AssociationUserNotFoundError(LookupError):
     """Raised when an association references an unknown v2 user UUID."""
 
 
-class AssociationCountryConflictError(ValueError):
+class AssociationCountryConflictError(AssociationReferenceConflictError):
     """Raised when an association and household have different countries."""
 
 
@@ -43,23 +41,6 @@ def require_user_household(
             f"user-household association {association_id} was not found"
         )
     return association
-
-
-def validate_association_creation(
-    association_input: UserHouseholdCreationInput,
-    *,
-    user: User | None,
-    household: Household | None,
-) -> None:
-    if user is None:
-        raise AssociationUserNotFoundError(
-            f"user {association_input.user_id} was not found"
-        )
-    validate_association_household(
-        country_id=association_input.country_id,
-        household_id=association_input.household_id,
-        household=household,
-    )
 
 
 def validate_association_household(
@@ -76,3 +57,25 @@ def validate_association_household(
         raise AssociationCountryConflictError(
             "Association country_id must match the referenced household"
         )
+
+
+def resolve_association_household_id(
+    *,
+    requested_household_id: UUID | None,
+    mapped_household_id: UUID | None,
+) -> UUID | None:
+    """Combine an explicit v2 reference with the v1 mapping, if both exist."""
+
+    if (
+        requested_household_id is not None
+        and mapped_household_id is not None
+        and requested_household_id != mapped_household_id
+    ):
+        raise AssociationReferenceConflictError(
+            "household_id does not match the household copied from legacy_household_id"
+        )
+    return (
+        requested_household_id
+        if requested_household_id is not None
+        else mapped_household_id
+    )

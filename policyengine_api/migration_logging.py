@@ -37,40 +37,46 @@ V2_METADATA_RESOURCE_SEGMENTS = frozenset(
         "variables",
     }
 )
-V2_POLICY_RESOURCE_SEGMENTS = frozenset({"policies", "user-policies"})
-V2_HOUSEHOLD_RESOURCE_SEGMENTS = frozenset({"households", "user-households"})
+# Native v2 resources served from Supabase. The signed-in user resources
+# (/v2/me*, /v2/user-*) keep their data only in Supabase, whatever the route
+# group's configured v1 database flags say.
+V2_SUPABASE_RESOURCE_SEGMENTS = frozenset(
+    {
+        "policies",
+        "user-policies",
+        "households",
+        "user-households",
+        "user-simulations",
+        "user-reports",
+        "me",
+    }
+)
+# Signed-in user resources only store and read saved work. Their route groups
+# (household, simulation, report, user_profile) also compute, but these
+# requests never do, so they log no simulation flow or compute selection.
+V2_USER_RESOURCE_SEGMENTS = frozenset(
+    {"user-policies", "user-households", "user-simulations", "user-reports", "me"}
+)
+V2_RESOURCE_METHODS = frozenset({"GET", "POST", "PATCH", "DELETE"})
+
+
+def _v2_resource_segment(path: str) -> str | None:
+    segments = [segment for segment in path.strip("/").split("/") if segment]
+    if len(segments) >= 2 and segments[0] == "v2":
+        return segments[1]
+    return None
 
 
 def _is_v2_metadata_resource_read(method: str, path: str) -> bool:
-    if method != "GET":
-        return False
-    segments = [segment for segment in path.strip("/").split("/") if segment]
     return (
-        len(segments) >= 2
-        and segments[0] == "v2"
-        and segments[1] in V2_METADATA_RESOURCE_SEGMENTS
+        method == "GET" and _v2_resource_segment(path) in V2_METADATA_RESOURCE_SEGMENTS
     )
 
 
-def _is_v2_policy_resource(method: str, path: str) -> bool:
-    if method not in {"GET", "POST", "PATCH", "DELETE"}:
-        return False
-    segments = [segment for segment in path.strip("/").split("/") if segment]
+def _is_v2_supabase_resource(method: str, path: str) -> bool:
     return (
-        len(segments) >= 2
-        and segments[0] == "v2"
-        and segments[1] in V2_POLICY_RESOURCE_SEGMENTS
-    )
-
-
-def _is_v2_household_resource(method: str, path: str) -> bool:
-    if method not in {"GET", "POST", "PATCH", "DELETE"}:
-        return False
-    segments = [segment for segment in path.strip("/").split("/") if segment]
-    return (
-        len(segments) >= 2
-        and segments[0] == "v2"
-        and segments[1] in V2_HOUSEHOLD_RESOURCE_SEGMENTS
+        method in V2_RESOURCE_METHODS
+        and _v2_resource_segment(path) in V2_SUPABASE_RESOURCE_SEGMENTS
     )
 
 
@@ -190,26 +196,18 @@ def _migration_context(
 ) -> dict[str, str | None]:
     route_group = infer_route_group(path)
     is_v2_metadata_read = _is_v2_metadata_resource_read(method, path)
-    is_v2_policy_resource = _is_v2_policy_resource(method, path)
-    is_v2_household_resource = _is_v2_household_resource(method, path)
-    uses_explicit_v2_source = (
-        is_v2_metadata_read or is_v2_policy_resource or is_v2_household_resource
-    )
+    is_v2_supabase_resource = _is_v2_supabase_resource(method, path)
     return get_migration_log_context(
         route_group,
         route_impl=route_impl,
-        use_configured_db_sources=not uses_explicit_v2_source,
+        use_configured_db_sources=not (is_v2_metadata_read or is_v2_supabase_resource),
         db_write_source=(
-            "supabase"
-            if (is_v2_policy_resource or is_v2_household_resource)
-            and method in {"POST", "PATCH", "DELETE"}
-            else None
+            "supabase" if is_v2_supabase_resource and method != "GET" else None
         ),
         db_read_source=(
             "supabase"
-            if is_v2_metadata_read
-            or (is_v2_policy_resource or is_v2_household_resource)
-            and method == "GET"
+            if is_v2_metadata_read or (is_v2_supabase_resource and method == "GET")
             else None
         ),
+        include_compute=_v2_resource_segment(path) not in V2_USER_RESOURCE_SEGMENTS,
     )

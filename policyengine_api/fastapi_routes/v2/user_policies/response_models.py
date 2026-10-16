@@ -1,21 +1,22 @@
-"""Strict HTTP response models for native v2 user-policy associations."""
+"""Strict HTTP response models for v2 user-policy associations."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
-from policyengine_api.query_parameters import CountryId, ResourceId, UserId
-
-if TYPE_CHECKING:
-    from policyengine_api.services.v2.user_policies.types import (
-        UserPolicyPage,
-        UserPolicyRead,
-    )
+from policyengine_api.fastapi_routes.v2.user_resources import (
+    USER_RESOURCE_ERROR_RESPONSES,
+)
+from policyengine_api.query_parameters import CountryId
+from policyengine_api.services.v2.user_policies.types import (
+    UserPolicyBaseline,
+    UserPolicyPage,
+    UserPolicyRead,
+)
 
 
 class StrictUserPolicyAPIModel(BaseModel):
@@ -24,13 +25,30 @@ class StrictUserPolicyAPIModel(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
 
+class PolicyProvenanceItem(BaseModel):
+    """Stored v3 reform provenance as responses publish it.
+
+    It mirrors the contract without the input bounds and ignores unknown keys,
+    so any stored row serializes.
+    """
+
+    model_config = ConfigDict(extra="ignore", from_attributes=True)
+
+    source: str
+    ref: str | None = None
+    confidence: str | None = None
+
+
 class UserPolicyItem(StrictUserPolicyAPIModel):
     id: UUID
     country_id: CountryId
-    user_id: UserId
-    policy_id: ResourceId
+    user_id: UUID
+    policy_id: UUID | None
+    legacy_policy_id: int | None
     name: str | None
     description: str | None
+    baseline: UserPolicyBaseline | None
+    provenance: PolicyProvenanceItem | None
     created_at: datetime
     updated_at: datetime
 
@@ -76,29 +94,6 @@ class UserPolicyPageResponse(UserPolicySuccessResponse[UserPolicyPageResult]):
     pass
 
 
-USER_POLICY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    400: {
-        "model": V2ErrorResponse,
-        "description": "Association content or country selection is invalid.",
-    },
-    404: {
-        "model": V2ErrorResponse,
-        "description": "The selected user, policy, or association does not exist.",
-    },
-    409: {
-        "model": V2ErrorResponse,
-        "description": "Association state conflicts with stored state.",
-    },
-    422: {
-        "model": V2ErrorResponse,
-        "description": "The request does not match the association schema.",
-    },
-    500: {
-        "model": V2ErrorResponse,
-        "description": "The association operation could not be completed.",
-    },
-    503: {
-        "model": V2ErrorResponse,
-        "description": "Supabase association persistence is unavailable.",
-    },
-}
+USER_POLICY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = (
+    USER_RESOURCE_ERROR_RESPONSES
+)

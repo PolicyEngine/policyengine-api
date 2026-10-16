@@ -93,6 +93,11 @@ Supabase connection. The routes are registered as preview resources;
 `ROUTE_IMPL_POLICY=fastapi_native` declares them operational for deployment
 readiness validation without moving v1 routes away from Flask.
 
+Stage 12A update: `/v2/user-policies` now requires a signed-in user's bearer
+token, takes the owner from the token (requests no longer carry `user_id`),
+accepts `legacy_policy_id`, and returns 409 for rows maintained by this mirror.
+See `docs/migration/stage-12a-user-login.md`.
+
 Native user-policy requests use an existing `users.id` UUID. V1 saved-policy
 mirroring keeps the opaque Cloud SQL user identifier out of that foreign-key
 column: `legacy_user_mappings` maps the exact v1 string one-to-one to a v2 user
