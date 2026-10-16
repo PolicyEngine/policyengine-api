@@ -18,6 +18,12 @@ from policyengine_api.runtime_cache.reform_impacts import (
     reform_impact_id,
 )
 
+# Claim tokens are opaque ids that tell competing workers apart.
+OWNER_CLAIM_TOKEN = "owner"
+CONTENDER_CLAIM_TOKEN = "contender"
+CLIFF_OWNER_CLAIM_TOKEN = "cliff-owner"
+NEXT_OWNER_CLAIM_TOKEN = "next-owner"
+
 
 def _namespace() -> CacheNamespace:
     return CacheNamespace("test", "api")
@@ -70,7 +76,7 @@ def test_reform_impact_start_claim_is_atomic_exact_ttl_and_token_safe() -> None:
     assert (
         cache.claim_start(
             **arguments,
-            claim_token="owner",
+            claim_token=OWNER_CLAIM_TOKEN,
             observability_id=owner_observability_id,
         )
         is True
@@ -78,7 +84,7 @@ def test_reform_impact_start_claim_is_atomic_exact_ttl_and_token_safe() -> None:
     assert (
         cache.claim_start(
             **arguments,
-            claim_token="contender",
+            claim_token=CONTENDER_CLAIM_TOKEN,
             observability_id=contender_observability_id,
         )
         is False
@@ -86,7 +92,7 @@ def test_reform_impact_start_claim_is_atomic_exact_ttl_and_token_safe() -> None:
     assert (
         cache.claim_start(
             **_claim_arguments(target="cliff"),
-            claim_token="cliff-owner",
+            claim_token=CLIFF_OWNER_CLAIM_TOKEN,
             observability_id=owner_observability_id,
         )
         is True
@@ -95,12 +101,12 @@ def test_reform_impact_start_claim_is_atomic_exact_ttl_and_token_safe() -> None:
 
     claim = cache.get_start_claim(**arguments)
     assert claim is not None
-    assert claim.submission_claim_id == "owner"
+    assert claim.submission_claim_id == OWNER_CLAIM_TOKEN
     assert claim.observability_id == owner_observability_id
     assert (
         cache.release_start(
             **arguments,
-            claim_token="contender",
+            claim_token=CONTENDER_CLAIM_TOKEN,
             observability_id=contender_observability_id,
         )
         is False
@@ -108,7 +114,7 @@ def test_reform_impact_start_claim_is_atomic_exact_ttl_and_token_safe() -> None:
     assert (
         cache.release_start(
             **arguments,
-            claim_token="owner",
+            claim_token=OWNER_CLAIM_TOKEN,
             observability_id=contender_observability_id,
         )
         is False
@@ -116,7 +122,7 @@ def test_reform_impact_start_claim_is_atomic_exact_ttl_and_token_safe() -> None:
     assert (
         cache.release_start(
             **arguments,
-            claim_token="owner",
+            claim_token=OWNER_CLAIM_TOKEN,
             observability_id=owner_observability_id,
         )
         is True
@@ -124,7 +130,7 @@ def test_reform_impact_start_claim_is_atomic_exact_ttl_and_token_safe() -> None:
     assert (
         cache.claim_start(
             **arguments,
-            claim_token="next-owner",
+            claim_token=NEXT_OWNER_CLAIM_TOKEN,
             observability_id=contender_observability_id,
         )
         is True

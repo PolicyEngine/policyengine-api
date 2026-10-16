@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, StringConstraints
 from starlette.responses import JSONResponse
 
 BEARER_CHALLENGE = "Bearer"
-INVALID_TOKEN_BEARER_CHALLENGE = 'Bearer error="invalid_token"'
+INVALID_TOKEN_BEARER_CHALLENGE = 'Bearer error="invalid_token"'  # noqa: S105  # a WWW-Authenticate challenge, not a secret
 
 
 class V2RequestTooLargeError(ValueError):

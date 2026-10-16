@@ -54,6 +54,10 @@ from policyengine_api.utils.payload_validators import (
 
 _ViewResult = TypeVar("_ViewResult")
 
+# Standard-library logger for tracebacks; ``logger`` is the structured
+# log_struct facade.
+module_logger = logging.getLogger(__name__)
+
 household_bp = Blueprint("household", __name__)
 household_service = HouseholdService()
 household_calculation_service = HouseholdCalculationService()
@@ -105,7 +109,7 @@ def _household_persistence_failure(
             },
             severity="ERROR",
         )
-    except Exception:  # noqa: BLE001  # metric logging must not replace the error response
+    except Exception:  # noqa: BLE001, S110  # metric logging must not replace the error response
         pass
     message = (
         "Household database is temporarily unavailable; please try again later."
@@ -412,7 +416,7 @@ def get_household_under_policy(
         response = _spm_error_response(error)
         if response is not None:
             return response
-        logging.exception(
+        module_logger.exception(
             "Error calculating household #%s under policy #%s",
             household_id,
             policy_id,
@@ -446,7 +450,7 @@ def _calculate() -> dict | Response:
         if response is not None:
             return response
         start_observability_id()
-        logging.exception("Error calculating household under policy")
+        module_logger.exception("Error calculating household under policy")
         return _make_error_response(
             f"Error calculating household under policy: {error}",
             500,
@@ -476,7 +480,7 @@ def _calculate() -> dict | Response:
         response = _spm_error_response(error)
         if response is not None:
             return response
-        logging.exception("Error calculating household under policy")
+        module_logger.exception("Error calculating household under policy")
         return _make_error_response(
             f"Error calculating household under policy: {error}",
             500,

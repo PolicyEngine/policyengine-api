@@ -23,6 +23,9 @@ from policyengine_api.runtime_cache.reform_impacts import (
 )
 
 RUNTIME_CACHE_TEST_URL = "RUNTIME_CACHE_TEST_URL"
+# Claim tokens are opaque ids that tell competing workers apart.
+WRITER_CLAIM_TOKEN = "writer"
+CONTENDER_CLAIM_TOKEN = "contender"
 
 
 @pytest.fixture
@@ -184,30 +187,30 @@ def test_reform_submission_claim_is_shared_across_connections(redis_pair) -> Non
 
     assert writer.claim_start(
         **arguments,
-        claim_token="writer",
+        claim_token=WRITER_CLAIM_TOKEN,
         observability_id=writer_observability_id,
     )
     assert not contender.claim_start(
         **arguments,
-        claim_token="contender",
+        claim_token=CONTENDER_CLAIM_TOKEN,
         observability_id=contender_observability_id,
     )
     winning_claim = contender.get_start_claim(**arguments)
-    assert winning_claim.submission_claim_id == "writer"
+    assert winning_claim.submission_claim_id == WRITER_CLAIM_TOKEN
     assert winning_claim.observability_id == writer_observability_id
     assert not contender.release_start(
         **arguments,
-        claim_token="contender",
+        claim_token=CONTENDER_CLAIM_TOKEN,
         observability_id=contender_observability_id,
     )
     assert writer.release_start(
         **arguments,
-        claim_token="writer",
+        claim_token=WRITER_CLAIM_TOKEN,
         observability_id=writer_observability_id,
     )
     assert contender.claim_start(
         **arguments,
-        claim_token="contender",
+        claim_token=CONTENDER_CLAIM_TOKEN,
         observability_id=contender_observability_id,
     )
 

@@ -537,7 +537,7 @@ class ReformImpactCache:
             selected,
             key=lambda impact: (
                 impact.options_hash == options_hash,
-                impact.start_time or datetime.min,
+                impact.start_time or datetime.min,  # noqa: DTZ901  # start_time is a naive column, so the fallback must be naive to compare with it
                 impact.reform_impact_id,
             ),
             reverse=True,

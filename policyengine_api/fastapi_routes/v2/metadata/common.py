@@ -102,5 +102,5 @@ def read_resource(
         if reader is not None:
             try:
                 reader.close()
-            except Exception:  # noqa: BLE001  # best-effort close must not replace the typed response
+            except Exception:  # noqa: BLE001, S110  # best-effort close must not replace the typed response
                 pass

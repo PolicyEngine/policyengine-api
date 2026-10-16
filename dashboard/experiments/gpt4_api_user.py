@@ -5,6 +5,7 @@ reform as JSON, runs it on the public PolicyEngine API, and asks GPT-4 to answer
 from the resulting economic impact.
 """
 
+import ast
 import json
 import os
 import time
@@ -21,10 +22,10 @@ openai.api_key = os.environ["OPENAI_API_KEY"]
 
 @st.cache_data
 def get_embeddings_df() -> pd.DataFrame:
-    """Load parameter_embeddings.csv.gz, evaluating each embedding string to a list."""
+    """Load parameter_embeddings.csv.gz, parsing each embedding string to a list."""
     embeddings_df = pd.read_csv("parameter_embeddings.csv.gz", compression="gzip")
     embeddings_df.parameter_embedding = embeddings_df.parameter_embedding.apply(
-        lambda x: eval(x)
+        ast.literal_eval
     )
     return embeddings_df
 
@@ -46,8 +47,9 @@ question = st.text_input(
     "Revenue impact of changing the basic rate of income tax to 25%",
 )
 
-# First task: convert to:
-# { 'hmrc.income_tax.rates.uk[0].rate': { '2023-01-01.2024-01-01': 0.25 } }
+# First task: convert the question to a reform that maps each parameter path to
+# its values by period, for example hmrc.income_tax.rates.uk[0].rate set to 0.25
+# for the period 2023-01-01.2024-01-01.
 
 # We're going to do this with GPT4- we'll pass in the question, the related parameter metadata, and the task description.
 
@@ -112,7 +114,7 @@ def get_policyengine_impact(reform: object) -> object:
     payload = {"data": reform}
     url = "https://api.policyengine.org/uk/policy"
 
-    response = requests.post(url, json=payload)
+    response = requests.post(url, json=payload)  # noqa: S113  # a timeout would change this experiment's behaviour; it waits as long as the API takes
 
     # json.result.policy_id
 
@@ -122,13 +124,13 @@ def get_policyengine_impact(reform: object) -> object:
 
     url = f"https://api.policyengine.org/uk/economy/{policy_id}/over/1?time_period=2023&region=uk"
 
-    response = requests.get(url).json()
+    response = requests.get(url).json()  # noqa: S113  # a timeout would change this experiment's behaviour; it waits as long as the API takes
 
     # if 'status' = 'computing', wait 5 seconds and try again until 'status' = 'ok'
 
     while response["status"] == "computing":
         time.sleep(5)
-        response = requests.get(url).json()
+        response = requests.get(url).json()  # noqa: S113  # a timeout would change this experiment's behaviour; it waits as long as the API takes
 
     return response["result"]
 

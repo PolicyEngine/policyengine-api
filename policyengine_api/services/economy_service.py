@@ -1392,7 +1392,7 @@ class EconomyService:
                 error_code=error.code,
                 execution_id=most_recent_impact.execution_id,
             )
-        except Exception:  # noqa: BLE001  # best effort: the typed SPM error is the answer, and the failure is already logged
+        except Exception:  # noqa: BLE001, S110  # best effort: the typed SPM error is the answer, and the failure is already logged
             pass
 
     @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_FAILED))
@@ -1794,7 +1794,7 @@ class EconomyService:
                 status=ImpactStatus.COMPUTING.value,
                 api_version=setup_options.api_version,
                 reform_impact_json={},
-                start_time=datetime.datetime.now(),
+                start_time=datetime.datetime.now(),  # noqa: DTZ005  # start_time is a naive column that has always held local time
                 execution_id=execution_id,
                 observability_id=setup_options.observability_id,
             )

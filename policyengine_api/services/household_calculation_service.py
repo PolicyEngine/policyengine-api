@@ -110,7 +110,7 @@ def get_household_year(household: dict) -> int | str:
 
     This is the period used when filling in missing yearly variables.
     """
-    household_year: int | str = date.today().year
+    household_year: int | str = date.today().year  # noqa: DTZ011  # the default period is the host's local calendar year
     household_age_list = list(
         household.get("people", {}).get("you", {}).get("age", {}).keys()
     )

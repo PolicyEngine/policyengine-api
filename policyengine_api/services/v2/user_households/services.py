@@ -265,7 +265,9 @@ class V2UserHouseholdService:
         """
         repoint = "legacy_household_id" in association_input.model_fields_set
         if repoint:
-            assert association_input.legacy_household_id is not None
+            if association_input.legacy_household_id is None:
+                msg = "legacy_household_id must not be null"
+                raise TypeError(msg)
             self._require_legacy_household(
                 country_id=country_id,
                 legacy_household_id=association_input.legacy_household_id,

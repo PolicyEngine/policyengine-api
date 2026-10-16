@@ -18,7 +18,7 @@ POST = "POST"
 UPDATE = "UPDATE"
 LIST = "LIST"
 VERSION = "3.38.1"
-CURRENT_YEAR = str(datetime.now().year)
+CURRENT_YEAR = str(datetime.now().year)  # noqa: DTZ005  # the default year is the host's local calendar year
 COUNTRIES = ("uk", "us", "ca", "ng", "il")
 COUNTRY_PACKAGE_NAMES = (
     "policyengine_uk",
@@ -220,8 +220,8 @@ def _build_runtime_cache_version(
             schema_version,
         )
     )
-    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:digest_length]
-    return f"{prefix}{schema_version}{digest}"
+    digest = hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()
+    return f"{prefix}{schema_version}{digest[:digest_length]}"
 
 
 def get_economy_impact_cache_version(

@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 44 | 0 | 1 | 12 | 57 |
+| mechanical | 47 | 0 | 1 | 12 | 60 |
 | metric | 0 | 0 | 0 | 0 | 0 |
 | judgment | 0 | 0 | 0 | 0 | 0 |
 
-**Blocking:** 44 of 57 rules.
+**Blocking:** 47 of 60 rules.
 
 ## Gaps
 
@@ -33,7 +33,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Advisory (checked but not blocking)
 
-- `api.quality.alembic-revisions-unused-imports`: Alembic revision files are exempt from ruff lint rules, because they must stay exactly as Alembic generates them.
+- `api.quality.alembic-revisions-unused-imports`: Ruff doesn't lint Alembic revision files (lint.exclude in pyproject.toml), because they must stay exactly as Alembic generates them.
 
 ### Unproven (no proof that the checker rejects a bad example)
 
@@ -268,20 +268,29 @@ flowchart LR
 
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `api.quality.alembic-revisions-unused-imports` | Alembic revision files are exempt from ruff lint rules, because they must stay exactly as Alembic generates them. | mechanical | advisory | no | ruff per-file ignore of ALL for `migrations/*/versions/*.py` | — | — |
+| `api.quality.alembic-revisions-unused-imports` | Ruff doesn't lint Alembic revision files (lint.exclude in pyproject.toml), because they must stay exactly as Alembic generates them. | mechanical | advisory | no | nothing | — | — |
+| `api.quality.ci-cd-scripts-ruff-exemptions` | CI/CD scripts under .github may print their results and fetch fixed URLs (T201, S310); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of S310, T201 for `.github/**` | `pr.yml:lint` | — |
+| `api.quality.command-line-modules-ruff-exemptions` | Application modules that also run as command-line programs (if __name__ == "__main__") may print their output (T201); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of T201 for `policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/user_association_migration_qualification,worker_spm_release}.py` | `pr.yml:lint` | — |
+| `api.quality.command-line-scripts-ruff-exemptions` | Command-line scripts under scripts/ may print their output, run other programs, fetch fixed URLs, stamp today's date, pick random samples and ignore a failed best-effort step (T201, S603, S607, S310, DTZ011, S311, S110); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of DTZ011, S110, S310, S311, S603, S607, T201 for `scripts/**` | `pr.yml:lint` | — |
 | `api.quality.environment-variables-load` | Required environment variables and credentials load in a deployed-like environment. | mechanical | enforced | yes | CI job `test_env_vars` | `pr.yml:test_env_vars` | — |
 | `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, v2 routes and services, and the user sign-in and account-deletion libraries pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:typecheck-v2` | — |
 | `api.quality.ruff-format` | All Python files are formatted with ruff format. | mechanical | enforced | yes | ruff format | `pr.yml:lint` | — |
-| `api.quality.ruff-lint` | All Python code passes ruff check with every rule family selected in pyproject.toml, with no ratchet; families are added one themed group at a time until the selection is ALL. | mechanical | enforced | yes | ruff check (ANN, BLE, D, E4, E7, E9, EM, F, FLY, FURB, I, PIE, PYI, RET, RSE, TC, TRY, UP, W) | `pr.yml:lint` | — |
+| `api.quality.ruff-lint` | All Python code passes ruff check with every rule family selected in pyproject.toml, with no ratchet; families are added one themed group at a time until the selection is ALL. | mechanical | enforced | yes | ruff check (ANN, BLE, D, DTZ, E4, E7, E9, EM, ERA, EXE, F, FIX, FLY, FURB, G, I, LOG, PIE, PYI, RET, RSE, S, T20, TC, TD, TRY, UP, W) | `pr.yml:lint` | — |
 | `api.quality.runtime-evaluated-models-resolve` | Every package model is one ruff treats as runtime-evaluated (a base resolves, through the import in its own module, to a name in runtime-evaluated-base-classes, or is a same-module class that does), and every Pydantic model and SQLAlchemy mapper resolves its annotations once the package is imported. | mechanical | enforced | yes | pytest `tests/unit/test_runtime_evaluated_annotations.py` | `pr.yml:test` | **unproven** |
 | `api.quality.tests-pass` | The unit, contract and to-refactor test suites pass. | mechanical | enforced | yes | CI job `test` | `pr.yml:test` | — |
-| `api.quality.tests-ruff-exemptions` | Test files may use pytest's bare assert and need no docstrings, annotations or named constants for magic numbers (S101, D1, ANN, PLR2004); every other ruff rule applies to tests. | mechanical | enforced | yes | ruff per-file ignore of ANN, D1, PLR2004, S101 for `**/tests/**` | `pr.yml:lint` | — |
+| `api.quality.tests-ruff-exemptions` | Test files may use pytest's bare assert and need no docstrings, annotations or named constants for magic numbers (S101, D1, ANN, PLR2004). They may also use fake credentials, naive datetimes, subprocess calls to repository scripts, SQL built from strings and prints (S105, S106, DTZ001, DTZ011, S603, S607, S608, T201). Every other ruff rule applies to tests. | mechanical | enforced | yes | ruff per-file ignore of ANN, D1, DTZ001, DTZ011, PLR2004, S101, S105, S106, S603, S607, S608, T201 for `**/tests/**` | `pr.yml:lint` | — |
 
 ```mermaid
 flowchart LR
   r_api_quality_alembic_revisions_unused_imports("api.quality.alembic-revisions-unused-imports (advisory)")
-  e_ruff_per_file_ignore_of_ALL_for_migrations___versions___py["ruff per-file ignore of ALL for migrations/*/versions/*.py"]
-  local_only>"not run in CI"]
+  gap_unenforced>"not enforced"]
+  r_api_quality_ci_cd_scripts_ruff_exemptions("api.quality.ci-cd-scripts-ruff-exemptions (enforced)")
+  e_ruff_per_file_ignore_of_S310__T201_for__github___["ruff per-file ignore of S310, T201 for .github/**"]
+  j_CI_pr_yml_lint["CI pr.yml:lint"]
+  r_api_quality_command_line_modules_ruff_exemptions("api.quality.command-line-modules-ruff-exemptions (enforced)")
+  e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_user_association_migration_qualification_worker_spm_release__py["ruff per-file ignore of T201 for policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/user_association_migration_qualification,worker_spm_release}.py"]
+  r_api_quality_command_line_scripts_ruff_exemptions("api.quality.command-line-scripts-ruff-exemptions (enforced)")
+  e_ruff_per_file_ignore_of_DTZ011__S110__S310__S311__S603__S607__T201_for_scripts___["ruff per-file ignore of DTZ011, S110, S310, S311, S603, S607, T201 for scripts/**"]
   r_api_quality_environment_variables_load("api.quality.environment-variables-load (enforced)")
   e_CI_job_test_env_vars["CI job test_env_vars"]
   j_CI_pr_yml_test_env_vars["CI pr.yml:test_env_vars"]
@@ -290,32 +299,36 @@ flowchart LR
   j_CI_pr_yml_typecheck_v2["CI pr.yml:typecheck-v2"]
   r_api_quality_ruff_format("api.quality.ruff-format (enforced)")
   e_ruff_format["ruff format"]
-  j_CI_pr_yml_lint["CI pr.yml:lint"]
   r_api_quality_ruff_lint("api.quality.ruff-lint (enforced)")
-  e_ruff_check__ANN__BLE__D__E4__E7__E9__EM__F__FLY__FURB__I__PIE__PYI__RET__RSE__TC__TRY__UP__W_["ruff check (ANN, BLE, D, E4, E7, E9, EM, F, FLY, FURB, I, PIE, PYI, RET, RSE, TC, TRY, UP, W)"]
+  e_ruff_check__ANN__BLE__D__DTZ__E4__E7__E9__EM__ERA__EXE__F__FIX__FLY__FURB__G__I__LOG__PIE__PYI__RET__RSE__S__T20__TC__TD__TRY__UP__W_["ruff check (ANN, BLE, D, DTZ, E4, E7, E9, EM, ERA, EXE, F, FIX, FLY, FURB, G, I, LOG, PIE, PYI, RET, RSE, S, T20, TC, TD, TRY, UP, W)"]
   r_api_quality_runtime_evaluated_models_resolve("api.quality.runtime-evaluated-models-resolve (enforced)")
   e_pytest_tests_unit_test_runtime_evaluated_annotations_py["pytest tests/unit/test_runtime_evaluated_annotations.py"]
   j_CI_pr_yml_test["CI pr.yml:test"]
   r_api_quality_tests_pass("api.quality.tests-pass (enforced)")
   e_CI_job_test["CI job test"]
   r_api_quality_tests_ruff_exemptions("api.quality.tests-ruff-exemptions (enforced)")
-  e_ruff_per_file_ignore_of_ANN__D1__PLR2004__S101_for____tests___["ruff per-file ignore of ANN, D1, PLR2004, S101 for **/tests/**"]
-  r_api_quality_alembic_revisions_unused_imports --> e_ruff_per_file_ignore_of_ALL_for_migrations___versions___py
-  e_ruff_per_file_ignore_of_ALL_for_migrations___versions___py -.-> local_only
+  e_ruff_per_file_ignore_of_ANN__D1__DTZ001__DTZ011__PLR2004__S101__S105__S106__S603__S607__S608__T201_for____tests___["ruff per-file ignore of ANN, D1, DTZ001, DTZ011, PLR2004, S101, S105, S106, S603, S607, S608, T201 for **/tests/**"]
+  r_api_quality_alembic_revisions_unused_imports -.-> gap_unenforced
+  r_api_quality_ci_cd_scripts_ruff_exemptions --> e_ruff_per_file_ignore_of_S310__T201_for__github___
+  e_ruff_per_file_ignore_of_S310__T201_for__github___ --> j_CI_pr_yml_lint
+  r_api_quality_command_line_modules_ruff_exemptions --> e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_user_association_migration_qualification_worker_spm_release__py
+  e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_user_association_migration_qualification_worker_spm_release__py --> j_CI_pr_yml_lint
+  r_api_quality_command_line_scripts_ruff_exemptions --> e_ruff_per_file_ignore_of_DTZ011__S110__S310__S311__S603__S607__T201_for_scripts___
+  e_ruff_per_file_ignore_of_DTZ011__S110__S310__S311__S603__S607__T201_for_scripts___ --> j_CI_pr_yml_lint
   r_api_quality_environment_variables_load --> e_CI_job_test_env_vars
   e_CI_job_test_env_vars --> j_CI_pr_yml_test_env_vars
   r_api_quality_mypy_v2 --> e_mypy
   e_mypy --> j_CI_pr_yml_typecheck_v2
   r_api_quality_ruff_format --> e_ruff_format
   e_ruff_format --> j_CI_pr_yml_lint
-  r_api_quality_ruff_lint --> e_ruff_check__ANN__BLE__D__E4__E7__E9__EM__F__FLY__FURB__I__PIE__PYI__RET__RSE__TC__TRY__UP__W_
-  e_ruff_check__ANN__BLE__D__E4__E7__E9__EM__F__FLY__FURB__I__PIE__PYI__RET__RSE__TC__TRY__UP__W_ --> j_CI_pr_yml_lint
+  r_api_quality_ruff_lint --> e_ruff_check__ANN__BLE__D__DTZ__E4__E7__E9__EM__ERA__EXE__F__FIX__FLY__FURB__G__I__LOG__PIE__PYI__RET__RSE__S__T20__TC__TD__TRY__UP__W_
+  e_ruff_check__ANN__BLE__D__DTZ__E4__E7__E9__EM__ERA__EXE__F__FIX__FLY__FURB__G__I__LOG__PIE__PYI__RET__RSE__S__T20__TC__TD__TRY__UP__W_ --> j_CI_pr_yml_lint
   r_api_quality_runtime_evaluated_models_resolve --> e_pytest_tests_unit_test_runtime_evaluated_annotations_py
   e_pytest_tests_unit_test_runtime_evaluated_annotations_py --> j_CI_pr_yml_test
   r_api_quality_tests_pass --> e_CI_job_test
   e_CI_job_test --> j_CI_pr_yml_test
-  r_api_quality_tests_ruff_exemptions --> e_ruff_per_file_ignore_of_ANN__D1__PLR2004__S101_for____tests___
-  e_ruff_per_file_ignore_of_ANN__D1__PLR2004__S101_for____tests___ --> j_CI_pr_yml_lint
+  r_api_quality_tests_ruff_exemptions --> e_ruff_per_file_ignore_of_ANN__D1__DTZ001__DTZ011__PLR2004__S101__S105__S106__S603__S607__S608__T201_for____tests___
+  e_ruff_per_file_ignore_of_ANN__D1__DTZ001__DTZ011__PLR2004__S101__S105__S106__S603__S607__S608__T201_for____tests___ --> j_CI_pr_yml_lint
 ```
 
 ## Observability

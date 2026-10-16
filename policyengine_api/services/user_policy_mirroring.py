@@ -144,7 +144,7 @@ def _log_mirror_operation(
             },
             severity="INFO" if outcome == "ok" else "ERROR",
         )
-    except Exception:  # noqa: BLE001  # metric logging must not change the mirror outcome
+    except Exception:  # noqa: BLE001, S110  # metric logging must not change the mirror outcome
         pass
 
 
