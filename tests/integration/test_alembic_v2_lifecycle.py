@@ -428,32 +428,39 @@ def _new_required_columns(parent_table: sa.Table, head_table: sa.Table) -> set[s
     }
 
 
+def _string_test_value(column_type: sa.String, sequence: Iterator[int]) -> str:
+    length = column_type.length or 255
+    if length == 64:
+        return uuid4().hex + uuid4().hex
+    return f"value-{next(sequence)}"[:length]
+
+
+# Checked in order: a column takes the value of the first type it is an
+# instance of, so Enum, a String subclass, comes before String.
+TYPED_TEST_VALUES = (
+    (sa.Enum, lambda column_type, _sequence: column_type.enums[0]),
+    (sa.Uuid, lambda _column_type, _sequence: uuid4()),
+    (sa.Boolean, lambda _column_type, _sequence: False),
+    (sa.Integer, lambda _column_type, _sequence: 1),
+    (sa.Float, lambda _column_type, _sequence: 0.0),
+    # Later than every server-default created_at, as retention checks need.
+    (
+        sa.DateTime,
+        lambda _column_type, _sequence: datetime.now(UTC) + timedelta(days=1),
+    ),
+    (sa.JSON, lambda _column_type, _sequence: {}),
+    (sa.String, _string_test_value),
+)
+
+
 def _test_value(table: sa.Table, column: sa.Column, sequence: Iterator[int]):
     if (table.name, column.name) in CHECKED_VALUES:
         return CHECKED_VALUES[(table.name, column.name)]
     if column.name in COUNTRY_COLUMN_NAMES:
         return "us"
-    column_type = column.type
-    if isinstance(column_type, sa.Enum):
-        return column_type.enums[0]
-    if isinstance(column_type, sa.Uuid):
-        return uuid4()
-    if isinstance(column_type, sa.Boolean):
-        return False
-    if isinstance(column_type, sa.Integer):
-        return 1
-    if isinstance(column_type, sa.Float):
-        return 0.0
-    if isinstance(column_type, sa.DateTime):
-        # Later than every server-default created_at, as retention checks need.
-        return datetime.now(UTC) + timedelta(days=1)
-    if isinstance(column_type, sa.JSON):
-        return {}
-    if isinstance(column_type, sa.String):
-        length = column_type.length or 255
-        if length == 64:
-            return uuid4().hex + uuid4().hex
-        return f"value-{next(sequence)}"[:length]
+    for column_type, test_value in TYPED_TEST_VALUES:
+        if isinstance(column.type, column_type):
+            return test_value(column.type, sequence)
     msg = f"no test value for {table.name}.{column.name}"
     raise AssertionError(msg)
 
