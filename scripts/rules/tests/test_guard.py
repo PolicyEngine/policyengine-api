@@ -38,6 +38,34 @@ def with_rule(extra: str) -> dict[str, str]:
     return {"rules/registry.toml": REGISTRY + extra}
 
 
+def per_file_ignore_rule(name: str, pattern: str) -> str:
+    """Return a registry rule describing a ruff per-file ignore of E501."""
+    return f"""
+[[rule]]
+id = "ex.quality.{name}-ignores"
+category = "quality"
+statement = "Long lines are allowed here."
+rationale = "docs/guide.md"
+scope = ["rules/registry.toml"]
+tier = "mechanical"
+status = "advisory"
+autofix = false
+[rule.enforcer]
+kind = "ruff"
+mode = "per-file-ignore"
+pattern = "{pattern}"
+codes = ["E501"]
+"""
+
+
+def per_file_ignore_config(pattern: str) -> str:
+    """Return a pyproject.toml whose ruff config ignores E501 for ``pattern``."""
+    return (
+        '[tool.mypy]\nfiles = ["pkg"]\n\n'
+        f'[tool.ruff.lint.per-file-ignores]\n"{pattern}" = ["E501"]\n'
+    )
+
+
 class ValidRepositoryTest(unittest.TestCase):
     def test_valid_repository_passes(self) -> None:
         with Repo() as repo:
@@ -441,6 +469,66 @@ class HiddenRuleTest(unittest.TestCase):
                 '[tool.mypy]\nfiles = ["pkg"]\n\n[tool.ruff.lint.per-file-ignores]\n"pkg/*.py" = ["E501"]\n',
             )
             self.assertViolation(repo, "ruff per-file-ignores 'pkg/*.py' has no rule")
+
+    def test_file_level_exceptions_only_for_tests_ci_and_scripts(self) -> None:
+        program = 'def main():\n    pass\n\n\nif __name__ == "__main__":\n    main()\n'
+        allowed = {
+            "tests/**": "tests",
+            ".github/**": "ci",
+            "scripts/**": "scripts",
+            "pkg/cli.py": "cli",
+        }
+        for pattern, name in allowed.items():
+            with (
+                self.subTest(pattern=pattern),
+                Repo(
+                    {
+                        "pkg/cli.py": program,
+                        ".github/scripts/release.py": "print(1)\n",
+                        **with_rule(per_file_ignore_rule(name, pattern)),
+                    }
+                ) as repo,
+            ):
+                repo.write("pyproject.toml", per_file_ignore_config(pattern))
+                self.assertEqual([m for m in repo.messages() if "per-file" in m], [])
+
+    def test_file_level_exception_outside_allowed_files_is_rejected(self) -> None:
+        with Repo(with_rule(per_file_ignore_rule("routes", "pkg/*.py"))) as repo:
+            repo.write("pyproject.toml", per_file_ignore_config("pkg/*.py"))
+            self.assertViolation(
+                repo,
+                "covers files that may not take file-level exceptions: pkg/routes.py",
+            )
+
+    def test_file_level_exception_needs_a_program_outside_scripts(self) -> None:
+        # A module with a main() that is never run as a program isn't a
+        # command-line script.
+        with Repo(
+            {
+                "pkg/cli.py": "def main():\n    pass\n",
+                **with_rule(per_file_ignore_rule("cli", "pkg/cli.py")),
+            }
+        ) as repo:
+            repo.write("pyproject.toml", per_file_ignore_config("pkg/cli.py"))
+            self.assertViolation(repo, "may not take file-level exceptions: pkg/cli.py")
+
+    def test_file_level_exception_star_crosses_directories(self) -> None:
+        # Ruff's * also matches "/", so "*/routes.py" reaches pkg/routes.py.
+        with Repo(with_rule(per_file_ignore_rule("star", "*/routes.py"))) as repo:
+            repo.write("pyproject.toml", per_file_ignore_config("*/routes.py"))
+            self.assertViolation(
+                repo, "may not take file-level exceptions: pkg/routes.py"
+            )
+
+    def test_negated_file_level_exception_is_rejected(self) -> None:
+        with Repo(with_rule(per_file_ignore_rule("negated", "!tests/**"))) as repo:
+            repo.write("pyproject.toml", per_file_ignore_config("!tests/**"))
+            self.assertViolation(repo, "pattern '!tests/**' is negated")
+
+    def test_file_level_exception_must_match_a_file(self) -> None:
+        with Repo(with_rule(per_file_ignore_rule("stale", "nowhere/**"))) as repo:
+            repo.write("pyproject.toml", per_file_ignore_config("nowhere/**"))
+            self.assertViolation(repo, "pattern 'nowhere/**' matches no files")
 
     def test_unregistered_ci_job(self) -> None:
         with Repo() as repo:
