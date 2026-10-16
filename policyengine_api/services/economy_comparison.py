@@ -1,6 +1,8 @@
 """Reusable economy comparison calculations and response models."""
 
 import logging
+from collections.abc import Callable
+from typing import Any, NamedTuple
 
 import h5py
 import numpy as np
@@ -10,6 +12,43 @@ from policyengine_core.tools.hugging_face import download_huggingface_dataset
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+# Poverty is broken down into children (under 18), working-age adults and
+# seniors (65 and over).
+ADULT_MIN_AGE = 18
+SENIOR_MIN_AGE = 65
+
+# A relative income change above 5% (or below -5%) is large, and one within
+# 0.1% of zero counts as no change.
+LARGE_INCOME_CHANGE = 0.05
+NO_INCOME_CHANGE_TOLERANCE = 1e-3
+
+# Each bucket's label and the relative change an area must exceed to land in
+# it, checked in order; an area that exceeds none loses more than 5%.
+INCOME_CHANGE_BUCKET_THRESHOLDS = (
+    ("Gain more than 5%", LARGE_INCOME_CHANGE),
+    ("Gain less than 5%", NO_INCOME_CHANGE_TOLERANCE),
+    ("No change", -NO_INCOME_CHANGE_TOLERANCE),
+    ("Lose less than 5%", -LARGE_INCOME_CHANGE),
+)
+LARGEST_LOSS_BUCKET = "Lose more than 5%"
+INCOME_CHANGE_BUCKETS = (
+    *(label for label, _threshold in INCOME_CHANGE_BUCKET_THRESHOLDS),
+    LARGEST_LOSS_BUCKET,
+)
+
+# Constituency and local-authority codes start with a letter for their nation.
+UK_NATION_CODE_PREFIXES = {
+    "england": "E",
+    "scotland": "S",
+    "wales": "W",
+    "northern_ireland": "N",
+}
+UK_OUTCOME_REGIONS = ("uk", *UK_NATION_CODE_PREFIXES)
+
+# These UK breakdown artifacts are postprocessor inputs, not the certified
+# primary simulation dataset resolved through the PolicyEngine bundle.
+UK_AREA_NAMES_REPO = "policyengine/policyengine-uk-data-public"
 
 
 def budgetary_impact(baseline: dict, reform: dict) -> dict:
@@ -265,18 +304,22 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
     )
     age = MicroSeries(baseline["age"])
 
+    is_child = age < ADULT_MIN_AGE
+    is_adult = (age >= ADULT_MIN_AGE) & (age < SENIOR_MIN_AGE)
+    is_senior = age >= SENIOR_MIN_AGE
+
     poverty = {
         "child": {
-            "baseline": float(baseline_poverty[age < 18].mean()),
-            "reform": float(reform_poverty[age < 18].mean()),
+            "baseline": float(baseline_poverty[is_child].mean()),
+            "reform": float(reform_poverty[is_child].mean()),
         },
         "adult": {
-            "baseline": float(baseline_poverty[(age >= 18) & (age < 65)].mean()),
-            "reform": float(reform_poverty[(age >= 18) & (age < 65)].mean()),
+            "baseline": float(baseline_poverty[is_adult].mean()),
+            "reform": float(reform_poverty[is_adult].mean()),
         },
         "senior": {
-            "baseline": float(baseline_poverty[age >= 65].mean()),
-            "reform": float(reform_poverty[age >= 65].mean()),
+            "baseline": float(baseline_poverty[is_senior].mean()),
+            "reform": float(reform_poverty[is_senior].mean()),
         },
         "all": {
             "baseline": float(baseline_poverty.mean()),
@@ -286,16 +329,16 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
 
     deep_poverty = {
         "child": {
-            "baseline": float(baseline_deep_poverty[age < 18].mean()),
-            "reform": float(reform_deep_poverty[age < 18].mean()),
+            "baseline": float(baseline_deep_poverty[is_child].mean()),
+            "reform": float(reform_deep_poverty[is_child].mean()),
         },
         "adult": {
-            "baseline": float(baseline_deep_poverty[(age >= 18) & (age < 65)].mean()),
-            "reform": float(reform_deep_poverty[(age >= 18) & (age < 65)].mean()),
+            "baseline": float(baseline_deep_poverty[is_adult].mean()),
+            "reform": float(reform_deep_poverty[is_adult].mean()),
         },
         "senior": {
-            "baseline": float(baseline_deep_poverty[age >= 65].mean()),
-            "reform": float(reform_deep_poverty[age >= 65].mean()),
+            "baseline": float(baseline_deep_poverty[is_senior].mean()),
+            "reform": float(reform_deep_poverty[is_senior].mean()),
         },
         "all": {
             "baseline": float(baseline_deep_poverty.mean()),
@@ -579,6 +622,142 @@ class UKLocalAuthorityBreakdown(BaseModel):
     outcomes_by_region: dict[str, dict[str, int]]
 
 
+class _UKAreaData(NamedTuple):
+    """One UK area family's household weights and its area table.
+
+    ``weights[i, j]`` is the weight of household record ``j`` in the area on row
+    ``i`` of ``names``, whose columns are code, name and map position (x, y).
+    """
+
+    weights: np.ndarray
+    names: pd.DataFrame
+
+
+class _UKAreaFilter(NamedTuple):
+    """The single area, or the nation's code prefix, a region limits output to."""
+
+    selected_area: str | None
+    nation_code_prefix: str | None
+
+    def includes(self, name: str, code: str) -> bool:
+        """Return whether the area with this name and code passes the filter."""
+        if self.selected_area is not None and self.selected_area not in (
+            name,
+            code,
+        ):
+            return False
+        # Match the leading nation letter with startswith, so a letter anywhere
+        # else in the code cannot place the area in the wrong nation.
+        return self.nation_code_prefix is None or code.startswith(
+            self.nation_code_prefix
+        )
+
+
+def _uk_area_filter(
+    region: str | None,
+    *,
+    area_region_prefix: str,
+    normalize_nation: Callable[[str], str],
+) -> _UKAreaFilter:
+    """Read the area or nation a region selects.
+
+    ``normalize_nation`` gives the case in which the region's nation name is
+    compared with the known nations.
+    """
+    selected_area = None
+    if region is not None and region.startswith(area_region_prefix):
+        selected_area = region.split("/", 1)[1]
+
+    nation_code_prefix = None
+    if region is not None and region.startswith("country/"):
+        selected_nation = normalize_nation(region.split("/", 1)[1])
+        nation_code_prefix = {
+            normalize_nation(nation): prefix
+            for nation, prefix in UK_NATION_CODE_PREFIXES.items()
+        }.get(selected_nation)
+    return _UKAreaFilter(selected_area, nation_code_prefix)
+
+
+def _load_uk_area_data(
+    *, weights_repo: str, weights_filename: str, names_filename: str
+) -> _UKAreaData:
+    """Download one area family's 2025 household weights and its area table."""
+    weights_path = download_huggingface_dataset(
+        repo=weights_repo,
+        repo_filename=weights_filename,
+    )
+    with h5py.File(weights_path, "r") as weights_file:
+        weights = weights_file["2025"][...]
+
+    names_path = download_huggingface_dataset(
+        repo=UK_AREA_NAMES_REPO,
+        repo_filename=names_filename,
+    )
+    return _UKAreaData(weights=weights, names=pd.read_csv(names_path))
+
+
+def _income_change_bucket(relative_change: float) -> str:
+    """Return the income-change bucket a relative household income change is in."""
+    for label, threshold in INCOME_CHANGE_BUCKET_THRESHOLDS:
+        if relative_change > threshold:
+            return label
+    return LARGEST_LOSS_BUCKET
+
+
+def _outcome_regions(code: str) -> list[str]:
+    """Return the UK and, when its code names one, the nation an area counts in."""
+    regions = ["uk"]
+    for nation, prefix in UK_NATION_CODE_PREFIXES.items():
+        if code.startswith(prefix):
+            regions.append(nation)
+            break
+    return regions
+
+
+def _uk_area_breakdown(
+    baseline_net_income: object,
+    reform_net_income: object,
+    area_data: _UKAreaData,
+    area_filter: _UKAreaFilter,
+) -> tuple[dict[str, Any], dict[str, dict[str, int]]]:
+    """Return each selected area's income change and the bucket counts by region.
+
+    The first mapping is keyed by area name in table order; the second counts
+    the selected areas in the UK and each nation by income-change bucket.
+    """
+    by_area: dict[str, Any] = {}
+    outcomes_by_region = {
+        region_name: dict.fromkeys(INCOME_CHANGE_BUCKETS, 0)
+        for region_name in UK_OUTCOME_REGIONS
+    }
+    for index in range(len(area_data.names)):
+        name: str = area_data.names.iloc[index]["name"]
+        code: str = area_data.names.iloc[index]["code"]
+        if not area_filter.includes(name, code):
+            continue
+
+        weight: np.ndarray = area_data.weights[index]
+        baseline_income = MicroSeries(baseline_net_income, weights=weight)
+        reform_income = MicroSeries(reform_net_income, weights=weight)
+        average_household_income_change: float = (
+            reform_income.sum() - baseline_income.sum()
+        ) / baseline_income.count()
+        percent_household_income_change: float = (
+            reform_income.sum() / baseline_income.sum() - 1
+        )
+        by_area[name] = {
+            "average_household_income_change": average_household_income_change,
+            "relative_household_income_change": percent_household_income_change,
+            "x": int(area_data.names.iloc[index]["x"]),  # Geographic positions
+            "y": int(area_data.names.iloc[index]["y"]),
+        }
+
+        bucket = _income_change_bucket(percent_household_income_change)
+        for region_name in _outcome_regions(code):
+            outcomes_by_region[region_name][bucket] += 1
+    return by_area, outcomes_by_region
+
+
 def uk_constituency_breakdown(
     baseline: dict, reform: dict, country_id: str | None, region: str | None = None
 ) -> UKConstituencyBreakdown | None:
@@ -595,124 +774,25 @@ def uk_constituency_breakdown(
     if region is not None and region.startswith("local_authority/"):
         return None
 
-    # Determine if we're filtering to a specific constituency
-    selected_constituency = None
-    if region is not None and region.startswith("constituency/"):
-        selected_constituency = region.split("/", 1)[1]
-
-    # Determine if we're filtering to a specific country
-    selected_country = None
-    if region is not None and region.startswith("country/"):
-        selected_country = region.split("/", 1)[1].upper()
-
-    output = {
-        "by_constituency": {},
-        "outcomes_by_region": {},
-    }
-    for region_name in [
-        "uk",
-        "england",
-        "scotland",
-        "wales",
-        "northern_ireland",
-    ]:
-        output["outcomes_by_region"][region_name] = {
-            "Gain more than 5%": 0,
-            "Gain less than 5%": 0,
-            "No change": 0,
-            "Lose less than 5%": 0,
-            "Lose more than 5%": 0,
-        }
-    baseline_hnet = baseline["household_net_income"]
-    reform_hnet = reform["household_net_income"]
-
-    # These UK breakdown artifacts are postprocessor inputs, not the certified
-    # primary simulation dataset resolved through the PolicyEngine bundle.
-    constituency_weights_path = download_huggingface_dataset(
-        repo="policyengine/policyengine-uk-data",
-        repo_filename="parliamentary_constituency_weights.h5",
+    area_filter = _uk_area_filter(
+        region,
+        area_region_prefix="constituency/",
+        normalize_nation=str.upper,
     )
-    with h5py.File(constituency_weights_path, "r") as f:
-        # {2025: array(650, 100180) where cell i, j is the weight of household
-        # record i in constituency j}
-        weights = f["2025"][...]
-
-    constituency_names_path = download_huggingface_dataset(
-        repo="policyengine/policyengine-uk-data-public",
-        repo_filename="constituencies_2024.csv",
+    baseline_net_income = baseline["household_net_income"]
+    reform_net_income = reform["household_net_income"]
+    constituencies = _load_uk_area_data(
+        weights_repo="policyengine/policyengine-uk-data",
+        weights_filename="parliamentary_constituency_weights.h5",
+        names_filename="constituencies_2024.csv",
     )
-    # Columns: code (constituency code), name (constituency name), x, y
-    # (geographic position).
-    constituency_names = pd.read_csv(constituency_names_path)
-
-    for i in range(len(constituency_names)):
-        name: str = constituency_names.iloc[i]["name"]
-        code: str = constituency_names.iloc[i]["code"]
-
-        # Filter to specific constituency if requested
-        if (
-            selected_constituency is not None
-            and name != selected_constituency
-            and code != selected_constituency
-        ):
-            continue
-
-        # Filter to specific country if requested. Constituency codes
-        # are prefixed with a single letter that identifies the
-        # country (E=England, S=Scotland, W=Wales, N=Northern
-        # Ireland); use startswith so we don't accidentally match a
-        # letter anywhere else in the code.
-        if selected_country is not None:
-            if selected_country == "ENGLAND" and not code.startswith("E"):
-                continue
-            if selected_country == "SCOTLAND" and not code.startswith("S"):
-                continue
-            if selected_country == "WALES" and not code.startswith("W"):
-                continue
-            if selected_country == "NORTHERN_IRELAND" and not code.startswith("N"):
-                continue
-
-        weight: np.ndarray = weights[i]
-        baseline_income = MicroSeries(baseline_hnet, weights=weight)
-        reform_income = MicroSeries(reform_hnet, weights=weight)
-        average_household_income_change: float = (
-            reform_income.sum() - baseline_income.sum()
-        ) / baseline_income.count()
-        percent_household_income_change: float = (
-            reform_income.sum() / baseline_income.sum() - 1
-        )
-        output["by_constituency"][name] = {
-            "average_household_income_change": average_household_income_change,
-            "relative_household_income_change": percent_household_income_change,
-            "x": int(constituency_names.iloc[i]["x"]),  # Geographic positions
-            "y": int(constituency_names.iloc[i]["y"]),
-        }
-
-        regions = ["uk"]
-        if code.startswith("E"):
-            regions.append("england")
-        elif code.startswith("S"):
-            regions.append("scotland")
-        elif code.startswith("W"):
-            regions.append("wales")
-        elif code.startswith("N"):
-            regions.append("northern_ireland")
-
-        if percent_household_income_change > 0.05:
-            bucket = "Gain more than 5%"
-        elif percent_household_income_change > 1e-3:
-            bucket = "Gain less than 5%"
-        elif percent_household_income_change > -1e-3:
-            bucket = "No change"
-        elif percent_household_income_change > -0.05:
-            bucket = "Lose less than 5%"
-        else:
-            bucket = "Lose more than 5%"
-
-        for region_ in regions:
-            output["outcomes_by_region"][region_][bucket] += 1
-
-    return UKConstituencyBreakdown(**output)
+    by_constituency, outcomes_by_region = _uk_area_breakdown(
+        baseline_net_income, reform_net_income, constituencies, area_filter
+    )
+    return UKConstituencyBreakdown(
+        by_constituency=by_constituency,
+        outcomes_by_region=outcomes_by_region,
+    )
 
 
 def uk_local_authority_breakdown(
@@ -731,112 +811,25 @@ def uk_local_authority_breakdown(
     if region is not None and region.startswith("constituency/"):
         return None
 
-    # Determine if we're filtering to a specific local authority
-    selected_la = None
-    if region is not None and region.startswith("local_authority/"):
-        selected_la = region.split("/", 1)[1]
-
-    # Determine if we're filtering to a specific country
-    selected_country = None
-    if region is not None and region.startswith("country/"):
-        selected_country = region.split("/", 1)[1].lower()
-
-    output = {
-        "by_local_authority": {},
-        "outcomes_by_region": {},
-    }
-    for region_name in [
-        "uk",
-        "england",
-        "scotland",
-        "wales",
-        "northern_ireland",
-    ]:
-        output["outcomes_by_region"][region_name] = {
-            "Gain more than 5%": 0,
-            "Gain less than 5%": 0,
-            "No change": 0,
-            "Lose less than 5%": 0,
-            "Lose more than 5%": 0,
-        }
-    baseline_hnet = baseline["household_net_income"]
-    reform_hnet = reform["household_net_income"]
-
-    # These UK breakdown artifacts are postprocessor inputs, not the certified
-    # primary simulation dataset resolved through the PolicyEngine bundle.
-    local_authority_weights_path = download_huggingface_dataset(
-        repo="policyengine/policyengine-uk-data-private",
-        repo_filename="local_authority_weights.h5",
+    area_filter = _uk_area_filter(
+        region,
+        area_region_prefix="local_authority/",
+        normalize_nation=str.lower,
     )
-    with h5py.File(local_authority_weights_path, "r") as f:
-        weights = f["2025"][...]
-
-    local_authority_names_path = download_huggingface_dataset(
-        repo="policyengine/policyengine-uk-data-public",
-        repo_filename="local_authorities_2021.csv",
+    baseline_net_income = baseline["household_net_income"]
+    reform_net_income = reform["household_net_income"]
+    local_authorities = _load_uk_area_data(
+        weights_repo="policyengine/policyengine-uk-data-private",
+        weights_filename="local_authority_weights.h5",
+        names_filename="local_authorities_2021.csv",
     )
-    local_authority_names = pd.read_csv(local_authority_names_path)
-
-    for i in range(len(local_authority_names)):
-        name: str = local_authority_names.iloc[i]["name"]
-        code: str = local_authority_names.iloc[i]["code"]
-
-        # Filter to specific local authority if requested
-        if selected_la is not None and name != selected_la and code != selected_la:
-            continue
-
-        # Filter to specific country if requested
-        if selected_country is not None:
-            if selected_country == "england" and not code.startswith("E"):
-                continue
-            if selected_country == "scotland" and not code.startswith("S"):
-                continue
-            if selected_country == "wales" and not code.startswith("W"):
-                continue
-            if selected_country == "northern_ireland" and not code.startswith("N"):
-                continue
-
-        weight: np.ndarray = weights[i]
-        baseline_income = MicroSeries(baseline_hnet, weights=weight)
-        reform_income = MicroSeries(reform_hnet, weights=weight)
-        average_household_income_change: float = (
-            reform_income.sum() - baseline_income.sum()
-        ) / baseline_income.count()
-        percent_household_income_change: float = (
-            reform_income.sum() / baseline_income.sum() - 1
-        )
-        output["by_local_authority"][name] = {
-            "average_household_income_change": average_household_income_change,
-            "relative_household_income_change": percent_household_income_change,
-            "x": int(local_authority_names.iloc[i]["x"]),
-            "y": int(local_authority_names.iloc[i]["y"]),
-        }
-
-        regions = ["uk"]
-        if code.startswith("E"):
-            regions.append("england")
-        elif code.startswith("S"):
-            regions.append("scotland")
-        elif code.startswith("W"):
-            regions.append("wales")
-        elif code.startswith("N"):
-            regions.append("northern_ireland")
-
-        if percent_household_income_change > 0.05:
-            bucket = "Gain more than 5%"
-        elif percent_household_income_change > 1e-3:
-            bucket = "Gain less than 5%"
-        elif percent_household_income_change > -1e-3:
-            bucket = "No change"
-        elif percent_household_income_change > -0.05:
-            bucket = "Lose less than 5%"
-        else:
-            bucket = "Lose more than 5%"
-
-        for region_ in regions:
-            output["outcomes_by_region"][region_][bucket] += 1
-
-    return UKLocalAuthorityBreakdown(**output)
+    by_local_authority, outcomes_by_region = _uk_area_breakdown(
+        baseline_net_income, reform_net_income, local_authorities, area_filter
+    )
+    return UKLocalAuthorityBreakdown(
+        by_local_authority=by_local_authority,
+        outcomes_by_region=outcomes_by_region,
+    )
 
 
 def compare_economic_outputs(

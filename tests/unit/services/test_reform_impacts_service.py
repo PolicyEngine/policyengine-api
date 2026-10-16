@@ -5,8 +5,13 @@ import pytest
 
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
+from policyengine_api.runtime_cache.reform_impacts import (
+    ReformImpactCache,
+    ReformImpactIdentity,
+    ReformImpactScope,
+)
 from policyengine_api.services.reform_impacts_service import (
+    ReformImpactExecution,
     ReformImpactHandoffError,
     ReformImpactsService,
 )
@@ -14,6 +19,14 @@ from policyengine_api.services.reform_impacts_service import (
 # Claim tokens are opaque ids that tell competing workers apart.
 OWNER_CLAIM_TOKEN = "owner"
 CONTENDER_CLAIM_TOKEN = "contender"
+SCOPE = ReformImpactScope(
+    country_id="us",
+    reform_policy_id=2,
+    baseline_policy_id=1,
+    region="us",
+    dataset="default",
+    time_period="2026",
+)
 
 
 @pytest.fixture
@@ -34,19 +47,14 @@ def _create_impact(
     day: int,
 ):
     return service.set_reform_impact(
-        country_id="us",
-        policy_id=2,
-        baseline_policy_id=1,
-        region="us",
-        dataset="default",
-        time_period="2026",
+        ReformImpactIdentity(scope=SCOPE, api_version="1", options_hash=options_hash),
+        ReformImpactExecution(
+            execution_id=execution_id,
+            start_time=datetime(2026, 1, day),
+        ),
         options={"hash": options_hash},
-        options_hash=options_hash,
         status="computing",
-        api_version="1",
         reform_impact_json={},
-        start_time=datetime(2026, 1, day),
-        execution_id=execution_id,
     )
 
 
@@ -89,14 +97,9 @@ def test_get_recent_reform_impacts_orders_and_limits_results(service):
 
 def test_reform_impact_start_claim_is_exclusive_and_releasable(service):
     arguments = {
-        "country_id": "us",
-        "policy_id": 2,
-        "baseline_policy_id": 1,
-        "region": "us",
-        "dataset": "default",
-        "time_period": "2026",
-        "options_hash": "resolved-hash",
-        "api_version": "1",
+        "identity": ReformImpactIdentity(
+            scope=SCOPE, api_version="1", options_hash="resolved-hash"
+        ),
         "target": "general",
     }
     owner_observability_id = "00000000-0000-4000-8000-000000000001"
@@ -141,26 +144,12 @@ def test_reform_impact_service_round_trips_models_and_transitions(service):
         day=2,
     )
 
-    exact_results = service.get_all_reform_impacts(
-        "us",
-        2,
-        1,
-        "us",
-        "default",
-        "2026",
-        "hash-exact",
-        "1",
+    exact_identity = ReformImpactIdentity(
+        scope=SCOPE, api_version="1", options_hash="hash-exact"
     )
+    exact_results = service.get_all_reform_impacts(exact_identity)
     compatible_results = service.get_all_reform_impacts_by_options_hash_prefix(
-        "us",
-        2,
-        1,
-        "us",
-        "default",
-        "2026",
-        "hash-exact",
-        "hash-%",
-        "1",
+        exact_identity, "hash-%"
     )
 
     assert [impact.reform_impact_id for impact in exact_results] == [
@@ -171,27 +160,9 @@ def test_reform_impact_service_round_trips_models_and_transitions(service):
         compatible.reform_impact_id,
     ]
     completed = service.set_complete_reform_impact(
-        "us",
-        2,
-        1,
-        "us",
-        "default",
-        "2026",
-        "hash-exact",
-        {"result": 1},
-        "exact-job",
+        "exact-job", reform_impact_json={"result": 1}
     )
-    failed = service.set_error_reform_impact(
-        "us",
-        2,
-        1,
-        "us",
-        "default",
-        "2026",
-        "hash-compatible",
-        "failed",
-        "compatible-job",
-    )
+    failed = service.set_error_reform_impact("compatible-job", message="failed")
 
     assert completed.status == "ok"
     assert completed.reform_impact_json == {"result": 1}
@@ -215,15 +186,7 @@ def test_reform_impact_service_deletes_only_matching_computing_rows(
         day=2,
     )
 
-    service.delete_reform_impact(
-        "us",
-        2,
-        1,
-        "us",
-        "default",
-        "2026",
-        "delete-hash",
-    )
+    service.delete_reform_impact(SCOPE, "delete-hash")
 
     remaining = service.get_recent_reform_impacts(10)
     assert all(impact.execution_id != "delete-job" for impact in remaining)
@@ -233,17 +196,4 @@ def test_reform_impact_service_deletes_only_matching_computing_rows(
 
 
 def test_reform_impact_transitions_return_none_for_missing_execution(service):
-    assert (
-        service.set_error_reform_impact(
-            "us",
-            2,
-            1,
-            "us",
-            "default",
-            "2026",
-            "hash",
-            "missing",
-            "missing-job",
-        )
-        is None
-    )
+    assert service.set_error_reform_impact("missing-job", message="missing") is None

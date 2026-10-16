@@ -19,6 +19,8 @@ from policyengine_api.runtime_cache.household_calculations import (
 from policyengine_api.runtime_cache.reform_impacts import (
     CachedReformImpact,
     ReformImpactCache,
+    ReformImpactIdentity,
+    ReformImpactScope,
     reform_impact_id,
 )
 
@@ -172,14 +174,18 @@ def test_reform_submission_claim_is_shared_across_connections(redis_pair) -> Non
     writer = ReformImpactCache(first, namespace)
     contender = ReformImpactCache(second, namespace)
     arguments = {
-        "country_id": "us",
-        "reform_policy_id": 2,
-        "baseline_policy_id": 1,
-        "region": "us",
-        "dataset": "default",
-        "time_period": "2026",
-        "api_version": "v1",
-        "options_hash": "resolved-hash",
+        "identity": ReformImpactIdentity(
+            scope=ReformImpactScope(
+                country_id="us",
+                reform_policy_id=2,
+                baseline_policy_id=1,
+                region="us",
+                dataset="default",
+                time_period="2026",
+            ),
+            api_version="v1",
+            options_hash="resolved-hash",
+        ),
         "target": "general",
     }
     writer_observability_id = "00000000-0000-4000-8000-000000000001"

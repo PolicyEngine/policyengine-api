@@ -11,7 +11,7 @@ import inspect
 from collections.abc import Mapping, Sequence
 from datetime import date
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, NoReturn, Self
 
 from pydantic import (
     BaseModel,
@@ -29,6 +29,9 @@ if TYPE_CHECKING:
     from policyengine_core.simulations import Simulation
     from pydantic import SerializerFunctionWrapHandler
     from spm_calculator.rolling_forecast import SPMForecast
+
+# Receipts and worker results name years as four-digit calendar years.
+CALENDAR_YEAR_LENGTH = 4
 
 
 class SPMSelection(BaseModel):
@@ -168,7 +171,10 @@ class SPMProvenance(BaseModel):
     def validate_years(cls, years: tuple[str, ...]) -> tuple[str, ...]:
         """Require sorted, unique four-digit year strings."""
         if any(
-            len(year) != 4 or not year.isascii() or not year.isdigit() for year in years
+            len(year) != CALENDAR_YEAR_LENGTH
+            or not year.isascii()
+            or not year.isdigit()
+            for year in years
         ):
             msg = "years must contain four-digit calendar years"
             raise ValueError(msg)
@@ -564,37 +570,64 @@ def normalize_spm_selection(
             )
         return None
 
+    chosen = _requested_spm_selection(selection)
+    configured = _certified_spm_configuration(
+        country_id, selection_sent=selection is not None
+    )
+    if configured is None:
+        return None
+    return _resolve_certified_selection(chosen, configured, stored=stored)
+
+
+def _requested_spm_selection(selection: object) -> SPMSelection:
+    """Parse the caller's settings; raise SPM_SETTINGS_INVALID if they are invalid."""
     try:
-        chosen = SPMSelection.model_validate({} if selection is None else selection)
+        return SPMSelection.model_validate({} if selection is None else selection)
     except ValidationError as error:
         error_code = "SPM_SETTINGS_INVALID"
         raise SPMValidationError(
             error_code, readable_validation_error(error)
         ) from error
 
+
+def _certified_spm_configuration(
+    country_id: str, *, selection_sent: bool
+) -> dict | None:
+    """Return the bundle's certified SPM settings, or None for a legacy bundle.
+
+    Raise SPM_CONFIGURATION_UNAVAILABLE for an unreadable manifest or for a model
+    that can run canonical SPM but has no certified configuration, and
+    SPM_SETTINGS_UNSUPPORTED when settings were sent to a legacy bundle.
+    """
     bundle = _current_bundle()
     if not isinstance(bundle, dict):
         error_code = "SPM_CONFIGURATION_UNAVAILABLE"
         raise SPMValidationError(error_code, "The installed bundle manifest is invalid")
     measurements = bundle.get("measurements")
     configured = measurements.get("spm") if isinstance(measurements, dict) else None
-    if not isinstance(configured, dict):
-        if _installed_country_implements_spm(country_id):
-            # A model that can run canonical SPM must never run it uncertified,
-            # whichever settings the caller did or did not send.
-            error_code = "SPM_CONFIGURATION_UNAVAILABLE"
-            raise SPMValidationError(
-                error_code,
-                "The installed bundle has no certified SPM measurement configuration",
-            )
-        if selection is None:
-            return None
-        error_code = "SPM_SETTINGS_UNSUPPORTED"
+    if isinstance(configured, dict):
+        return configured
+    if _installed_country_implements_spm(country_id):
+        # A model that can run canonical SPM must never run it uncertified,
+        # whichever settings the caller did or did not send.
+        error_code = "SPM_CONFIGURATION_UNAVAILABLE"
         raise SPMValidationError(
             error_code,
-            "This US model bundle does not support canonical SPM settings",
+            "The installed bundle has no certified SPM measurement configuration",
         )
+    if not selection_sent:
+        return None
+    error_code = "SPM_SETTINGS_UNSUPPORTED"
+    raise SPMValidationError(
+        error_code,
+        "This US model bundle does not support canonical SPM settings",
+    )
 
+
+def _resolve_certified_selection(
+    chosen: SPMSelection, configured: dict, *, stored: bool
+) -> dict:
+    """Merge the caller's settings over the certified defaults and validate them."""
     try:
         defaults, forecast = _certified_bundle_spm(configured)
     except (AttributeError, ImportError, ValueError, TypeError, OSError) as error:
@@ -606,22 +639,44 @@ def normalize_spm_selection(
         raise SPMValidationError(error_code, error_message(error)) from error
 
     if chosen.forecast_content_sha256 not in (None, defaults.forecast_content_sha256):
-        # A saved selection is identity, not a request. The caller sent nothing
-        # wrong; this deployment simply does not have the artifact the household
-        # was measured against, which is the same class of failure as an
-        # uncertified bundle rather than a correctable caller mistake.
-        if stored:
-            error_code = "SPM_CONFIGURATION_UNAVAILABLE"
-            raise SPMValidationError(
-                error_code,
-                "This deployment does not have the SPM artifact this household's "
-                "saved selection was measured against",
-            )
+        _raise_unavailable_artifact(stored=stored)
+    values = _merged_selection_values(chosen, defaults)
+    try:
+        resolved = _validated_spm_selection(values, forecast)
+    except ValueError as error:
         error_code = "SPM_SETTINGS_INVALID"
+        raise SPMValidationError(error_code, error_message(error)) from error
+    if resolved.geography_kind == "metro":
+        _validate_metro_selection(forecast, resolved)
+    return resolved.model_dump(mode="json")
+
+
+def _raise_unavailable_artifact(*, stored: bool) -> NoReturn:
+    """Reject a selection naming a forecast artifact this bundle does not have."""
+    # A saved selection is identity, not a request. The caller sent nothing
+    # wrong; this deployment simply does not have the artifact the household
+    # was measured against, which is the same class of failure as an
+    # uncertified bundle rather than a correctable caller mistake.
+    if stored:
+        error_code = "SPM_CONFIGURATION_UNAVAILABLE"
         raise SPMValidationError(
             error_code,
-            "SPM selection does not match this bundle's artifact hash",
+            "This deployment does not have the SPM artifact this household's "
+            "saved selection was measured against",
         )
+    error_code = "SPM_SETTINGS_INVALID"
+    raise SPMValidationError(
+        error_code,
+        "SPM selection does not match this bundle's artifact hash",
+    )
+
+
+def _merged_selection_values(chosen: SPMSelection, defaults: SPMSelection) -> dict:
+    """Overlay the settings the caller sent on the bundle defaults.
+
+    Changing the geography kind also replaces an inherited geography ID, and the
+    artifact hash always comes from the bundle.
+    """
     values = {name: getattr(defaults, name) for name in SPMSelection.model_fields}
     values.update(chosen.model_dump(exclude_unset=True))
     if (
@@ -631,14 +686,7 @@ def normalize_spm_selection(
         values["geography_id"] = chosen.geography_id
     values["forecast_content_sha256"] = defaults.forecast_content_sha256
     values["scenario"] = chosen.scenario or defaults.scenario
-    try:
-        resolved = _validated_spm_selection(values, forecast)
-    except ValueError as error:
-        error_code = "SPM_SETTINGS_INVALID"
-        raise SPMValidationError(error_code, error_message(error)) from error
-    if resolved.geography_kind == "metro":
-        _validate_metro_selection(forecast, resolved)
-    return resolved.model_dump(mode="json")
+    return values
 
 
 def _validate_metro_selection(forecast: SPMForecast, selection: SPMSelection) -> None:

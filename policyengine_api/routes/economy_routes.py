@@ -14,6 +14,7 @@ from policyengine_api.query_parameters import (
     parse_multidict_query,
 )
 from policyengine_api.response_factory import _make_error_response
+from policyengine_api.services.economic_impact_request import EconomicImpactRequest
 from policyengine_api.services.economy_service import (
     BudgetWindowEconomicImpactResult,
     EconomicImpactResult,
@@ -91,15 +92,18 @@ def get_economic_impact(
         query = parse_multidict_query(AnnualEconomyQuery, request.args)
         economic_impact_result: EconomicImpactResult = (
             economy_service.get_economic_impact(
-                country_id=country_id,
-                policy_id=policy_id,
-                baseline_policy_id=baseline_policy_id,
-                region=query.region,
-                dataset="default",
+                impact_request=EconomicImpactRequest(
+                    country_id=country_id,
+                    policy_id=policy_id,
+                    baseline_policy_id=baseline_policy_id,
+                    region=query.region,
+                    dataset="default",
+                    options=query.calculation_options(),
+                    api_version=query.version
+                    or COUNTRY_PACKAGE_VERSIONS.get(country_id),
+                    target=query.target,
+                ),
                 time_period=query.time_period,
-                options=query.calculation_options(),
-                api_version=query.version or COUNTRY_PACKAGE_VERSIONS.get(country_id),
-                target=query.target,
             )
         )
     except ValueError as error:
@@ -153,16 +157,19 @@ def get_budget_window_economic_impact(
         query = parse_multidict_query(BudgetWindowEconomyQuery, request.args)
         economic_impact_result: BudgetWindowEconomicImpactResult = (
             economy_service.get_budget_window_economic_impact(
-                country_id=country_id,
-                policy_id=policy_id,
-                baseline_policy_id=baseline_policy_id,
-                region=query.region,
-                dataset="default",
+                impact_request=EconomicImpactRequest(
+                    country_id=country_id,
+                    policy_id=policy_id,
+                    baseline_policy_id=baseline_policy_id,
+                    region=query.region,
+                    dataset="default",
+                    options=query.calculation_options(),
+                    api_version=query.version
+                    or COUNTRY_PACKAGE_VERSIONS.get(country_id),
+                    target=query.target,
+                ),
                 start_year=query.start_year,
                 window_size=query.window_size,
-                options=query.calculation_options(),
-                api_version=query.version or COUNTRY_PACKAGE_VERSIONS.get(country_id),
-                target=query.target,
             )
         )
     except ValueError as error:

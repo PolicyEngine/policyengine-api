@@ -27,6 +27,7 @@ from policyengine_api.request_context import (
 )
 from policyengine_api.response_factory import _make_error_response
 from policyengine_api.services.household_calculation_service import (
+    HouseholdCalculationOptions,
     HouseholdCalculationResult,
     HouseholdCalculationService,
     HouseholdNotFoundError,
@@ -214,14 +215,16 @@ def _validate_calculation_request(
                         country_id,
                         payload.get("household", {}),
                         payload.get("policy", {}),
-                        add_missing=add_missing,
-                        **(
-                            {
-                                "spm": g.spm,
-                                "spm_requested": g.spm_requested,
-                            }
-                            if g.spm is not None
-                            else {}
+                        options=HouseholdCalculationOptions(
+                            add_missing=add_missing,
+                            **(
+                                {
+                                    "spm": g.spm,
+                                    "spm_requested": g.spm_requested,
+                                }
+                                if g.spm is not None
+                                else {}
+                            ),
                         ),
                     )
                 )
