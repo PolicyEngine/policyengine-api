@@ -69,7 +69,7 @@ gap is visible, rather than leaving it out.
 | --- | --- | --- |
 | `pytest` | `nodes` (`path::test` or `path::Class::test`), optional `project` (sub-project directory the paths are relative to) | Each test exists, and the CI job's command collects it |
 | `quality-guard` | `name`, optional `runner` | The name is in `GUARDS` in `scripts/run_quality_guards.py` |
-| `ruff` | `mode` = `format`, `lint` (with `codes`) or `per-file-ignore` (with `pattern`, `codes`) | Codes are selected / the ignore entry exists |
+| `ruff` | `mode` = `format`, `lint` (with `codes`) or `per-file-ignore` (with `pattern`, `codes`) | Codes are selected / the ignore entry exists and covers only [files allowed file-level exceptions](#file-level-exceptions) |
 | `mypy` | `paths` | Each path is in `[tool.mypy].files` |
 | `workflow-job` | optional `step` | The CI job exists (the job itself is the check) |
 | `pyright`, `import-linter` | `config` (+ `contract` for Import Linter) | The config file exists |
@@ -117,12 +117,34 @@ fail the guard yet.
 
 - **Ruff is never ratcheted.** Adopting a ruff rule family is one standalone PR
   that changes the select list and fixes every resulting violation. Don't use
-  `--add-noqa` or blanket per-file ignores.
+  `--add-noqa`. A finding that is kept gets an inline `# noqa: CODE  # reason`,
+  except in the files below.
 - Other enforcers (mypy, Pyright, Import Linter, custom guards) may start
   `ratcheted` with a baseline file of tolerated violations. Baselines may only
   shrink: the guard compares counts against the base branch.
 - Moving a rule from enforced/ratcheted to advisory/doc-only needs an explicit
   `[rule.downgrade] reason`.
+
+## File-level exceptions
+
+A ruff `per-file-ignores` entry switches rules off for whole files. It is
+allowed only where that's the norm rather than an exception to it:
+
+- **tests**: files under a `tests` or `authenticated_tests` directory;
+- **CI/CD scripts**: files under `.github`;
+- **command-line scripts**: files under a `scripts` directory, or modules that
+  run as a program through `if __name__ == "__main__":`.
+
+Everywhere else, keep a finding only with an inline suppression and its reason.
+
+Each entry needs a `per-file-ignore` rule (see below). The guard expands the
+entry's pattern like ruff does and fails when the pattern:
+
+- covers any other file;
+- is negated;
+- matches nothing.
+
+`scripts/rules/file_exceptions.py` holds these definitions.
 
 ## Hidden rules
 
