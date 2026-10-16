@@ -10,7 +10,7 @@ from typing import Any
 
 import dpath
 import pandas as pd
-from policyengine_core.model_api import Enum, Reform
+from policyengine_core.model_api import Enum, Reform, Variable
 from policyengine_core.parameters import (
     Parameter,
     ParameterNode,
@@ -19,7 +19,10 @@ from policyengine_core.parameters import (
     get_parameter,
 )
 from policyengine_core.periods import instant
+from policyengine_core.populations import Population
+from policyengine_core.simulations import Simulation
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
+from policyengine_core.types import ArrayLike
 
 from policyengine_api.constants import (
     get_bundle_default_dataset_option,
@@ -52,7 +55,7 @@ class PreparedCountryCalculation:
     spm_requested: bool
 
 
-def _serialize_float(value):
+def _serialize_float(value: object) -> float | str:
     serialized = float(str(value))
     if serialized == float("inf"):
         return "Infinity"
@@ -61,11 +64,18 @@ def _serialize_float(value):
     return serialized
 
 
-def _serialize_axis_result(result, variable, entity_index, count_entities):
+def _serialize_axis_result(
+    result: ArrayLike,
+    variable: Variable,
+    entity_index: int,
+    count_entities: int,
+) -> list[object]:
     if variable.value_type == Enum:
         result = result.decode_to_str()
 
-    entity_values = result.reshape((-1, count_entities)).T[entity_index].tolist()
+    entity_values: list[object] = (
+        result.reshape((-1, count_entities)).T[entity_index].tolist()
+    )
 
     if variable.value_type is float:
         return [_serialize_float(value) for value in entity_values]
@@ -79,7 +89,7 @@ def _record_calculation_failure(
     calculation_warnings: list[str],
     *,
     has_axes: bool,
-    population,
+    population: Population,
     entity_plural: str,
     entity_id: str,
     variable_name: str,
@@ -111,7 +121,7 @@ def _record_calculation_failure(
 
 
 class PolicyEngineCountry:
-    def __init__(self, country_package_name: str, country_id: str):
+    def __init__(self, country_package_name: str, country_id: str) -> None:
         self.country_package_name = country_package_name
         self.country_id = country_id
         self.country_package = importlib.import_module(country_package_name)
@@ -120,7 +130,7 @@ class PolicyEngineCountry:
         )
         self.build_metadata()
 
-    def build_metadata(self):
+    def build_metadata(self) -> None:
         self.metadata = self._json_safe(
             dict(
                 variables=self.build_variables(),
@@ -144,7 +154,10 @@ class PolicyEngineCountry:
             )
         )
 
-    def _json_safe(self, value):
+    def _json_safe(
+        self,
+        value: object,
+    ) -> Any:  # noqa: ANN401  # other values pass through, assumed JSON-safe
         if isinstance(value, Path):
             return str(value)
         if isinstance(value, (date, datetime)):
@@ -567,7 +580,7 @@ class PolicyEngineCountry:
         household: dict,
         reform: dict | None,
         spm: dict | None = None,
-    ):
+    ) -> tuple[Simulation, TaxBenefitSystem]:
         selection = normalize_spm_selection(getattr(self, "country_id", ""), spm)
         normalized_reform = None
         if reform:
@@ -671,7 +684,7 @@ def create_policy_reform(policy_data: dict) -> dict:
         return parameters
 
     class reform(Reform):
-        def apply(self):
+        def apply(self) -> None:
             self.modify_parameters(modify_parameters)
 
     return reform
@@ -682,7 +695,7 @@ def get_requested_computations(
     *,
     include_provided_values: bool = False,
     variable_names: set[str] | None = None,
-):
+) -> list[tuple[str, str, str, str]]:
     requested_computations = dpath.util.search(
         household,
         "*/*/*/*",

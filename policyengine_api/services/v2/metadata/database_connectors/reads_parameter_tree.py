@@ -13,12 +13,16 @@ from policyengine_api.services.v2.metadata.database_connectors.reads import read
 if TYPE_CHECKING:
     from uuid import UUID
 
+    from sqlalchemy.orm import Mapped
+
 
 def _escaped_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _path_segment(remainder: Any, dialect: str) -> Any:
+def _path_segment(
+    remainder: sa.ColumnElement[str], dialect: str
+) -> sa.ColumnElement[str]:
     dot_position = (
         sa.func.instr(remainder, ".")
         if dialect == "sqlite"
@@ -30,17 +34,23 @@ def _path_segment(remainder: Any, dialect: str) -> Any:
     )
 
 
-def _child_path(column: Any, prefix: str, dialect: str) -> Any:
+def _child_path(
+    column: Mapped[str], prefix: str, dialect: str
+) -> sa.ColumnElement[str]:
     remainder = sa.func.substr(column, len(prefix) + 1)
     return sa.literal(prefix) + _path_segment(remainder, dialect)
 
 
-def _direct_child_path(column: Any, parent_path: Any, dialect: str) -> Any:
+def _direct_child_path(
+    column: Mapped[str], parent_path: sa.ColumnElement[str], dialect: str
+) -> sa.ColumnElement[str]:
     remainder = sa.func.substr(column, sa.func.length(parent_path) + 2)
     return parent_path + "." + _path_segment(remainder, dialect)
 
 
-def _has_path_prefix(column: Any, parent_path: Any) -> Any:
+def _has_path_prefix(
+    column: Mapped[str], parent_path: sa.ColumnElement[str]
+) -> sa.ColumnElement[bool]:
     return (
         sa.func.substr(column, 1, sa.func.length(parent_path) + 1) == parent_path + "."
     )
@@ -53,7 +63,7 @@ def _parameter_children_statement(
     dialect: str,
     offset: int,
     limit: int,
-) -> Any:
+) -> sa.Select[Any]:
     prefix = f"{parent_path}." if parent_path else ""
     escaped_prefix = _escaped_like(prefix)
     node_name = col(ParameterNode.name)

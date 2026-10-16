@@ -7,7 +7,7 @@ import json
 import random
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, Self
 
 from policyengine_api.gcp_logging import logger
 
@@ -18,12 +18,26 @@ CACHE_KEY_ROOT = "policyengine"
 COMPLETED_RESULT_TTL_JITTER_FRACTION = 0.10
 
 
+class CachePipeline(Protocol):
+    """The queued commands that cache writers issue inside one pipeline."""
+
+    def __enter__(self) -> Self: ...
+    def __exit__(self, *args: object) -> object: ...
+    def set(self, key: str, value: str, **kwargs: object) -> object: ...
+    def delete(self, *keys: str) -> object: ...
+    def expire(self, key: str, seconds: int) -> object: ...
+    def zadd(self, key: str, mapping: dict[str, float]) -> object: ...
+    def zrem(self, key: str, *members: str) -> object: ...
+    def zremrangebyrank(self, key: str, start: int, end: int) -> object: ...
+    def execute(self) -> list[object]: ...
+
+
 class CacheBackend(Protocol):
-    def get(self, key: str) -> Any: ...
-    def set(self, key: str, value: str, **kwargs: Any) -> Any: ...
-    def delete(self, *keys: str) -> Any: ...
-    def pipeline(self, transaction: bool = True): ...
-    def eval(self, script: str, numkeys: int, *keys_and_args: str) -> Any: ...
+    def get(self, key: str) -> str | bytes | None: ...
+    def set(self, key: str, value: str, **kwargs: object) -> object: ...
+    def delete(self, *keys: str) -> object: ...
+    def pipeline(self, transaction: bool = True) -> CachePipeline: ...
+    def eval(self, script: str, numkeys: int, *keys_and_args: str) -> object: ...
 
 
 class CacheCoordinationError(RuntimeError):
@@ -66,7 +80,7 @@ class CacheNamespace:
 def encode_envelope(
     family: str,
     schema_version: int,
-    payload: Any,
+    payload: object,
 ) -> str:
     return json.dumps(
         {
@@ -85,7 +99,7 @@ def decode_envelope(
     *,
     family: str,
     schema_version: int,
-) -> Any | None:
+) -> object:
     if value is None:
         return None
     try:
@@ -171,7 +185,7 @@ class RecoverableJSONCache:
     def key(self, inputs: dict[str, Any]) -> str:
         return self.namespace.key(self.family, self.schema_version, inputs)
 
-    def get(self, inputs: dict[str, Any]) -> Any | None:
+    def get(self, inputs: dict[str, Any]) -> object:
         started_at = time.perf_counter()
         try:
             value = self.client.get(self.key(inputs))
@@ -195,7 +209,7 @@ class RecoverableJSONCache:
         )
         return payload
 
-    def set(self, inputs: dict[str, Any], payload: Any) -> bool:
+    def set(self, inputs: dict[str, Any], payload: object) -> bool:
         started_at = time.perf_counter()
         try:
             result = self.client.set(

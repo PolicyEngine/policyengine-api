@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from importlib.metadata import distribution, distributions
 from pathlib import Path
+from typing import Any
 
 from policyengine_api.dataset_display import (
     DEFAULT_DATASET_DISPLAY_LABEL,
@@ -47,7 +48,7 @@ def _resolve_distribution_version(
     return "0.0.0"
 
 
-def get_py_manifest():
+def get_py_manifest() -> Any:  # noqa: ANN401  # SimplePath, which open() rejects; a Path at runtime
     return distribution("policyengine").locate_file(
         "policyengine/data/bundle/manifest.json"
     )

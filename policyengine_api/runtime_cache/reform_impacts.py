@@ -85,7 +85,7 @@ def _datetime_to_wire(value: datetime | None) -> str | None:
     return value.astimezone(UTC).isoformat()
 
 
-def _datetime_from_wire(value: Any) -> datetime | None:
+def _datetime_from_wire(value: object) -> datetime | None:
     if value is None:
         return None
     if not isinstance(value, str):
@@ -103,7 +103,7 @@ def _impact_to_wire(impact: CachedReformImpact) -> dict[str, Any]:
     return values
 
 
-def _impact_from_wire(payload: Any) -> CachedReformImpact | None:
+def _impact_from_wire(payload: object) -> CachedReformImpact | None:
     if not isinstance(payload, dict):
         return None
     try:
@@ -532,7 +532,7 @@ class ReformImpactCache:
         execution_id: str,
         *,
         clear_execution_id: bool = False,
-        **changes: Any,
+        **changes: Any,  # noqa: ANN401  # forwarded unchanged to dataclasses.replace
     ) -> CachedReformImpact | None:
         impact = self.get_by_execution_id(execution_id)
         if impact is None:

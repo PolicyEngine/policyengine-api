@@ -159,7 +159,7 @@ class SimulationEntrypointClient:
     polling for their status/results via HTTP endpoints.
     """
 
-    def __init__(self, entrypoint: str | None = None):
+    def __init__(self, entrypoint: str | None = None) -> None:
         self.entrypoint = entrypoint or get_sim_entrypoint()
         self.base_url = resolve_simulation_entrypoint_url(self.entrypoint)
         self._token_provider = GatewayAuthTokenProvider()
@@ -349,7 +349,13 @@ class SimulationEntrypointClient:
             )
             raise
 
-    def get_spm_capability(self, country, version=None, *, policyengine_version=None):
+    def get_spm_capability(
+        self,
+        country: str,
+        version: str | None = None,
+        *,
+        policyengine_version: str | None = None,
+    ) -> object:
         from policyengine_api.spm import SPMValidationError
 
         try:

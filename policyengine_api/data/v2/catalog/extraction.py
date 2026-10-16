@@ -10,7 +10,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 from importlib import metadata as importlib_metadata
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -27,6 +27,9 @@ from policyengine_api.data.v2.catalog.records import (
     RegionRecord,
     VariableRecord,
 )
+
+if TYPE_CHECKING:
+    from policyengine_api.json_types import JSONValue
 
 SUPPORTED_COUNTRIES = ("us", "uk")
 REQUIRED_DEPENDENCIES = (
@@ -137,7 +140,7 @@ def _type_name(value: object) -> str | None:
     return name
 
 
-def normalize_json_value(value: object) -> Any:
+def normalize_json_value(value: object) -> JSONValue:
     """Convert supported public values into strict JSON-compatible values."""
 
     if value is None or isinstance(value, (str, bool, int)):
@@ -153,7 +156,7 @@ def normalize_json_value(value: object) -> Any:
     if isinstance(value, (date, datetime)):
         return value.isoformat()
     if isinstance(value, Mapping):
-        normalized: dict[str, Any] = {}
+        normalized: dict[str, JSONValue] = {}
         for key, nested in value.items():
             if not isinstance(key, str):
                 raise CatalogExtractionError("JSON object keys must be strings")

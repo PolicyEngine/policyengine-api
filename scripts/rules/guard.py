@@ -16,7 +16,7 @@ from scripts.rules.baseline import (
 )
 from scripts.rules.discover import discover_hidden
 from scripts.rules.load import load_registry
-from scripts.rules.model import Violation
+from scripts.rules.model import Registry, Violation
 from scripts.rules.render import (
     AGENTS_MD,
     RULES_MD,
@@ -42,7 +42,7 @@ class GuardResult:
     notes: list[str] = field(default_factory=list)
 
 
-def _stale_outputs(registry, root: Path) -> list[Violation]:
+def _stale_outputs(registry: Registry, root: Path) -> list[Violation]:
     violations = []
     rules_md = root / RULES_MD
     if not rules_md.exists():

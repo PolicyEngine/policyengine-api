@@ -11,7 +11,7 @@ import inspect
 from collections.abc import Mapping, Sequence
 from datetime import date
 from functools import lru_cache
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 from pydantic import (
     BaseModel,
@@ -23,12 +23,19 @@ from pydantic import (
     model_validator,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from policyengine_core.simulations import Simulation
+    from pydantic import SerializerFunctionWrapHandler
+    from spm_calculator.rolling_forecast import SPMForecast
+
 
 class SPMSelection(BaseModel):
     """Select a forecast scenario and an explicit household SPM geography."""
 
     @staticmethod
-    def _selection_schema(schema):
+    def _selection_schema(schema: dict[str, Any]) -> None:
         # Omitted fields inherit the certified bundle, which may select a
         # different geography. Generated clients must preserve that omission.
         for field in schema.get("properties", {}).values():
@@ -72,7 +79,10 @@ class SPMSelection(BaseModel):
     )
 
     @model_serializer(mode="wrap")
-    def serialize_selection(self, handler):
+    def serialize_selection(  # noqa: ANN201  # pydantic would build the output schema from it
+        self,
+        handler: SerializerFunctionWrapHandler,
+    ):
         """Keep omitted options distinct from explicit choices in nested JSON."""
         return {
             name: value
@@ -82,13 +92,13 @@ class SPMSelection(BaseModel):
 
     @field_validator("as_of")
     @classmethod
-    def validate_as_of(cls, value):
+    def validate_as_of(cls, value: str | None) -> str | None:
         if value is not None and date.fromisoformat(value).isoformat() != value:
             raise ValueError("as_of must be an ISO calendar date (YYYY-MM-DD)")
         return value
 
     @model_validator(mode="after")
-    def validate_location(self):
+    def validate_location(self) -> Self:
         if self.geography_kind == "metro":
             if not self.geography_id or not self.geography_id.strip():
                 raise ValueError("An SPM area selection requires geography_id")
@@ -314,7 +324,7 @@ def build_spm_comparison_provenance(
 class SPMValidationError(ValueError):
     """An SPM request/configuration error safe for the API's 4xx envelope."""
 
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str) -> None:
         self.code = code
         self.message = message
         super().__init__(message)
@@ -381,7 +391,7 @@ def spm_error_detail(error: BaseException) -> dict[str, str] | None:
     return None
 
 
-def simulation_supports_spm(simulation_type) -> bool:
+def simulation_supports_spm(simulation_type: Callable[..., object]) -> bool:
     """Old US constructors also accept **kwargs, so that alone is insufficient."""
     parameters = inspect.signature(simulation_type).parameters
     return "spm" in parameters or (
@@ -458,7 +468,7 @@ def _installed_country_implements_spm(country_id: str) -> bool:
 
 
 @lru_cache(maxsize=4)
-def _selected_forecast(expected_sha256: str):
+def _selected_forecast(expected_sha256: str) -> SPMForecast:
     from spm_calculator.rolling_forecast import load_forecast
 
     return load_forecast(expected_sha256=expected_sha256)
@@ -466,7 +476,7 @@ def _selected_forecast(expected_sha256: str):
 
 def normalize_spm_selection(
     country_id: str,
-    selection: SPMSelection | dict | None,
+    selection: object,
     *,
     stored: bool = False,
 ) -> dict | None:
@@ -574,7 +584,7 @@ def normalize_spm_selection(
     return resolved.model_dump(mode="json")
 
 
-def _validate_metro_selection(forecast, selection: SPMSelection) -> None:
+def _validate_metro_selection(forecast: SPMForecast, selection: SPMSelection) -> None:
     """A selected area must exist in the artifact, without guessing a year.
 
     Area definitions may change between years. Accept an area available in any
@@ -617,7 +627,7 @@ def spm_metadata(country_id: str) -> dict:
     }
 
 
-def calculation_spm_receipt(simulation) -> dict:
+def calculation_spm_receipt(simulation: Simulation) -> dict:
     """Reduce a country's existing receipt; never request calculations here."""
     if not hasattr(simulation, "spm_config"):
         return {}

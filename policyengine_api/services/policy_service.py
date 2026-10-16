@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from sqlalchemy.orm import Session, sessionmaker
+
+    from policyengine_api.json_types import JSONValue
 
 
 @dataclass(frozen=True)
@@ -83,7 +85,7 @@ class PolicyService:
         self,
         country_id: str,
         policy_id: int,
-    ) -> Any | None:
+    ) -> JSONValue:
         policy = self.get_policy(country_id, policy_id)
         return None if policy is None else policy.policy_json
 

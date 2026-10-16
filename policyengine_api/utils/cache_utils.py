@@ -3,11 +3,12 @@
 import hashlib
 import json
 import logging
+from typing import Any
 
 import flask
 
 
-def make_cache_key(*args, **kwargs):
+def make_cache_key(*args: object, **kwargs: object) -> str:
     # pylint: disable=unused-argument
     """make a hash to uniquely identify a cache entry.
     keep it fast, adding overhead to try to add some minor chance of a
@@ -18,7 +19,7 @@ def make_cache_key(*args, **kwargs):
     different across workers/restarts; that made same-input requests
     miss the cache in production.
     """
-    data = ""
+    data: Any = ""
     if flask.request.content_type == "application/json":
         data = flask.request.get_json()
     elif flask.request.content_type in [

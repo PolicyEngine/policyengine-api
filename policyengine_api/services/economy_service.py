@@ -8,6 +8,7 @@ from typing import Any, Literal
 import httpx
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
@@ -25,7 +26,11 @@ from policyengine_api.data.congressional_districts import (
 from policyengine_api.data.places import validate_place_code
 from policyengine_api.data.v1_models import ReformImpact
 from policyengine_api.gcp_logging import logger
+from policyengine_api.json_types import JSONValue
 from policyengine_api.libs.simulation_entrypoint import (
+    ModalBudgetWindowBatchExecution,
+    ModalSimulationExecution,
+    SimulationEntrypointClient,
     SimulationRunProgress,
     simulation_entrypoint,
 )
@@ -47,6 +52,10 @@ from policyengine_api.request_context import (
     start_observability_id,
 )
 from policyengine_api.runtime_cache.core import CacheCoordinationError
+from policyengine_api.runtime_cache.reform_impacts import (
+    CachedReformImpact,
+    ReformImpactStartClaim,
+)
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
@@ -270,11 +279,11 @@ class EconomyService:
     def __init__(
         self,
         *,
-        primary_session_factory=None,
+        primary_session_factory: sessionmaker[Session] | None = None,
         policy_service_: PolicyService | None = None,
         reform_impacts_service_: ReformImpactsService | None = None,
         budget_window_cache_: BudgetWindowCache | None = None,
-        simulation_entrypoint_=None,
+        simulation_entrypoint_: SimulationEntrypointClient | None = None,
     ) -> None:
         self._primary_session_factory = primary_session_factory
         self._injected_policy_service = policy_service_
@@ -299,7 +308,7 @@ class EconomyService:
         return self._injected_budget_window_cache or budget_window_cache
 
     @property
-    def _simulation_gateway(self):
+    def _simulation_gateway(self) -> SimulationEntrypointClient:
         return self._injected_simulation_entrypoint or simulation_entrypoint
 
     @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_LOAD_POLICIES))
@@ -323,7 +332,7 @@ class EconomyService:
         )
 
     @staticmethod
-    def _parse_json_object(value: dict[str, Any] | str) -> dict[str, Any]:
+    def _parse_json_object(value: JSONValue) -> dict[str, Any]:
         """Accept ORM-decoded objects and legacy JSON text at a read boundary."""
 
         parsed = json.loads(value) if isinstance(value, str) else value
@@ -681,7 +690,7 @@ class EconomyService:
         start_year: str,
         window_size: int,
         max_parallel: int,
-    ):
+    ) -> ModalBudgetWindowBatchExecution:
         sim_params = self._build_budget_window_batch_payload(
             setup_options=setup_options,
             start_year=start_year,
@@ -916,7 +925,7 @@ class EconomyService:
             severity="INFO",
         )
 
-        most_recent_impact: dict | None = self._get_most_recent_impact(
+        most_recent_impact: CachedReformImpact | None = self._get_most_recent_impact(
             setup_options=setup_options
         )
         if most_recent_impact and self._should_refresh_cached_impact(
@@ -1114,7 +1123,7 @@ class EconomyService:
     def _get_reform_impact_start_claim(
         self,
         setup_options: EconomicImpactSetupOptions,
-    ):
+    ) -> ReformImpactStartClaim | None:
         return self._reform_impacts.get_reform_impact_start_claim(
             **self._reform_impact_start_claim_scope_arguments(setup_options)
         )
@@ -1157,7 +1166,7 @@ class EconomyService:
         time_period: str,
         options_hash: str,
         api_version: str,
-    ):
+    ) -> list[CachedReformImpact]:
         """
         Fetch any previous simulation runs for the given policy reform.
         """
@@ -1177,7 +1186,7 @@ class EconomyService:
     def _get_most_recent_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
-    ) -> dict | None:
+    ) -> CachedReformImpact | None:
         """
         Get the first impact from the reform_impacts table based on the provided setup options.
         Returns the first impact if it exists, otherwise returns None.
@@ -1204,7 +1213,7 @@ class EconomyService:
 
     def _determine_impact_action(
         self,
-        most_recent_impact: ReformImpact | None,
+        most_recent_impact: CachedReformImpact | None,
     ) -> ImpactAction:
         if not most_recent_impact:
             return ImpactAction.CREATE
@@ -1226,7 +1235,7 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         execution_state: str,
         reform_impact: ReformImpact,
-        execution: Any | None = None,
+        execution: ModalSimulationExecution | None = None,
     ) -> EconomicImpactResult:
         """
         Handle the state of the execution and return the appropriate status and result.
@@ -1551,7 +1560,7 @@ class EconomyService:
             return f"{escaped_options_hash[:-1]}&%"
         return f"{escaped_options_hash}%"
 
-    def _extract_cached_result(self, most_recent_impact: ReformImpact) -> dict:
+    def _extract_cached_result(self, most_recent_impact: CachedReformImpact) -> dict:
         try:
             return self._parse_json_object(most_recent_impact.reform_impact_json)
         except (TypeError, ValueError):
@@ -1560,7 +1569,7 @@ class EconomyService:
     def _should_refresh_cached_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
-        most_recent_impact: ReformImpact,
+        most_recent_impact: CachedReformImpact,
     ) -> bool:
         if most_recent_impact.status == ImpactStatus.COMPUTING.value:
             return False
@@ -1598,9 +1607,9 @@ class EconomyService:
 
     def _with_policyengine_bundle(
         self,
-        result: dict,
+        result: dict | None,
         setup_options: EconomicImpactSetupOptions,
-        execution: Any | None = None,
+        execution: ModalSimulationExecution | None = None,
     ) -> dict:
         result = result if isinstance(result, dict) else {}
         cached_resolved_app_name = result.get("resolved_app_name")
@@ -1738,7 +1747,7 @@ class EconomyService:
         self,
         setup_options: EconomicImpactSetupOptions,
         execution_id: str,
-    ):
+    ) -> None:
         """
         In the reform_impact table, set the status of the impact to "computing".
         """
@@ -1776,7 +1785,7 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         reform_impact_json: dict[str, Any],
         execution_id: str,
-    ):
+    ) -> None:
         """
         In the reform_impact table, set the status of the impact to "ok" and store the reform impact JSON.
         """
@@ -1810,7 +1819,7 @@ class EconomyService:
         message: str,
         execution_id: str,
         error_code: str | None = None,
-    ):
+    ) -> None:
         """
         In the reform_impact table, set the status of the impact to "error" and store the error message.
         """

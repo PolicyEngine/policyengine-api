@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID, uuid4
 
 OBSERVABILITY_ID_HEADER = "X-PolicyEngine-Observability-Id"
@@ -14,7 +13,7 @@ def generate_observability_id() -> str:
     return str(uuid4())
 
 
-def normalize_observability_id(value: Any) -> str | None:
+def normalize_observability_id(value: object) -> str | None:
     """Return a canonical UUID string, or ``None`` for malformed input."""
 
     if not isinstance(value, str):

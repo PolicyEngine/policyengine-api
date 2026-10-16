@@ -1,6 +1,7 @@
-from functools import wraps
+from __future__ import annotations
 
-from flask import Response
+from functools import wraps
+from typing import TYPE_CHECKING, TypeVar
 
 from policyengine_api.country_validation import (
     InvalidCountryError,
@@ -8,8 +9,17 @@ from policyengine_api.country_validation import (
 )
 from policyengine_api.response_factory import _make_error_response
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
-def validate_country(func):
+    from flask import Response
+
+_ViewResult = TypeVar("_ViewResult")
+
+
+def validate_country(
+    func: Callable[..., _ViewResult],
+) -> Callable[..., _ViewResult | Response]:
     """Validate that a country ID is valid. If not, return a 400 response.
 
     Args:
@@ -20,7 +30,9 @@ def validate_country(func):
     """
 
     @wraps(func)
-    def validate_country_wrapper(country_id: str, *args, **kwargs) -> None | Response:
+    def validate_country_wrapper(
+        country_id: str, *args: object, **kwargs: object
+    ) -> _ViewResult | Response:
         print("Validating country")
         try:
             ensure_supported_country(country_id)

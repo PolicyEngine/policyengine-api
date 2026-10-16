@@ -21,16 +21,16 @@ REQUIRED_BUNDLE_PACKAGES = (
 class RegistryCapability:
     """Expose one registry document through the request validator interface."""
 
-    def __init__(self, registry: dict):
+    def __init__(self, registry: dict) -> None:
         self.registry = registry
 
     def get_spm_capability(
         self,
-        country,
-        model_version,
+        country: str,
+        model_version: str | None,
         *,
-        policyengine_version,
-    ):
+        policyengine_version: str | None,
+    ) -> object:
         capabilities = self.registry.get("spm_capabilities")
         if not isinstance(capabilities, dict):
             return None

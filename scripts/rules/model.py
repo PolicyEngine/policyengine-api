@@ -100,7 +100,11 @@ class Enforcer:
     kind: Kind
     fields: Mapping[str, Any] = field(default_factory=dict)
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(
+        self,
+        key: str,
+        default: object = None,
+    ) -> Any:  # noqa: ANN401  # a raw TOML value that callers read by its shape
         return self.fields.get(key, default)
 
     @property

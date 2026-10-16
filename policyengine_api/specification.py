@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import yaml
 
@@ -22,18 +22,22 @@ from policyengine_api.spm import (
 )
 
 if TYPE_CHECKING:
-    from policyengine_api.json_types import JSONObject
+    from pydantic import BaseModel
+
+    from policyengine_api.json_types import JSONObject, JSONValue
 
 DEFAULT_SPECIFICATION_PATH = Path(__file__).with_name("openapi_spec.yaml")
 
 
-def _openapi_30_schema(value):
+def _openapi_30_schema(value: JSONValue) -> JSONValue:
     """Convert Pydantic's optional JSON Schema fields to OpenAPI 3.0 nullable."""
     if isinstance(value, list):
         return [_openapi_30_schema(item) for item in value]
     if not isinstance(value, dict):
         return value
-    result = {key: _openapi_30_schema(item) for key, item in value.items()}
+    result: dict[str, Any] = {
+        key: _openapi_30_schema(item) for key, item in value.items()
+    }
     if "const" in result:
         result["enum"] = [result.pop("const")]
     variants = result.get("anyOf", [])
@@ -47,7 +51,7 @@ def _openapi_30_schema(value):
     return result
 
 
-def _economy_query_parameters(model):
+def _economy_query_parameters(model: type[BaseModel]) -> list[dict[str, object]]:
     """Publish the same complete scalar query contract used by Flask."""
     schema = model.model_json_schema()
     result = []
@@ -70,7 +74,9 @@ def _economy_query_parameters(model):
     return result
 
 
-def _component_schema(model):
+def _component_schema(
+    model: Any,  # noqa: ANN401  # mypy joins the model-class dict to ModelMetaclass
+) -> JSONValue:
     """Generate one OpenAPI component and publish nested models separately."""
     schema = model.model_json_schema(
         ref_template="#/components/schemas/{model}",

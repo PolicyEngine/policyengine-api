@@ -9,31 +9,31 @@ error_bp = Blueprint("error", __name__)
 
 
 @error_bp.app_errorhandler(404)
-def response_404(error) -> Response:
+def response_404(error: HTTPException) -> Response:
     """Specific handler for 404 Not Found errors"""
     return _make_error_response(error, 404, result=None)
 
 
 @error_bp.app_errorhandler(400)
-def response_400(error) -> Response:
+def response_400(error: HTTPException) -> Response:
     """Specific handler for 400 Bad Request errors"""
     return _make_error_response(error, 400, result=None)
 
 
 @error_bp.app_errorhandler(401)
-def response_401(error) -> Response:
+def response_401(error: HTTPException) -> Response:
     """Specific handler for 401 Unauthorized errors"""
     return _make_error_response(error, 401, result=None)
 
 
 @error_bp.app_errorhandler(403)
-def response_403(error) -> Response:
+def response_403(error: HTTPException) -> Response:
     """Specific handler for 403 Forbidden errors"""
     return _make_error_response(error, 403, result=None)
 
 
 @error_bp.app_errorhandler(500)
-def response_500(error) -> Response:
+def response_500(error: HTTPException) -> Response:
     """Specific handler for 500 Internal Server errors"""
     return _make_error_response(error, 500, result=None)
 

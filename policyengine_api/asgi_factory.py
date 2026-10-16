@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from a2wsgi import WSGIMiddleware
 from fastapi import FastAPI, Request
@@ -54,10 +54,11 @@ from policyengine_api.request_context import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 
     from policyengine_observability import ObservabilityRuntime
-    from starlette.types import ASGIApp
+    from starlette.routing import BaseRoute
+    from starlette.types import ASGIApp, Scope
 
 
 def _apply_request_id_header(
@@ -74,7 +75,7 @@ def _apply_observability_id_header(
     response.headers[OBSERVABILITY_ID_HEADER] = observability_id
 
 
-def _matched_route_template(routes, scope: dict) -> str | None:
+def _matched_route_template(routes: Iterable[BaseRoute], scope: Scope) -> str | None:
     for route in routes:
         match, _ = route.matches(scope)
         if match is Match.FULL:
@@ -96,14 +97,14 @@ def _matched_route_template(routes, scope: dict) -> str | None:
     return None
 
 
-def _native_route_template(app: FastAPI, scope: dict) -> str | None:
+def _native_route_template(app: FastAPI, scope: Scope) -> str | None:
     """Return the matched FastAPI route template, excluding the Flask mount."""
 
     return _matched_route_template(app.router.routes, scope)
 
 
 def create_asgi_app(
-    wsgi_app,
+    wsgi_app: Any,  # noqa: ANN401  # Flask's WSGI signature and a2wsgi's WSGIApp stubs disagree
     *,
     route_settings: RouteImplementationSettings | None = None,
     dependencies: NativeRouteDependencies | None = None,
@@ -119,7 +120,7 @@ def create_asgi_app(
     request_runtime = observability_runtime or get_runtime()
 
     @asynccontextmanager
-    async def lifespan(_app: FastAPI):
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         try:
             yield
         finally:
@@ -200,7 +201,10 @@ def create_asgi_app(
         return v2_error_response(503, str(error))
 
     @app.middleware("http")
-    async def add_request_context_and_migration_logging(request, call_next):
+    async def add_request_context_and_migration_logging(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
         started_at = time.time()
         request_id = request.headers.get(REQUEST_ID_HEADER) or generate_request_id()
         incoming_observability_id = normalize_observability_id(

@@ -43,7 +43,7 @@ MAXIMUM_USER_ID_LENGTH = 255
 SUPPORTED_COUNTRY_IDS = frozenset({"us", "uk"})
 
 
-def normalize_country_id(value: Any) -> Any:
+def normalize_country_id(value: object) -> object:
     """Lowercase a textual country ID before its supported-value check."""
 
     return value.lower() if isinstance(value, str) else value
@@ -126,7 +126,7 @@ def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def parse_spm_query_value(value: Any) -> Any:
+def parse_spm_query_value(value: object) -> dict[str, object] | SPMSelection:
     """Decode a single JSON object, preserving omissions and rejecting duplicates."""
     if isinstance(value, str):
         value = json.loads(value, object_pairs_hook=_unique_json_object)
@@ -135,7 +135,7 @@ def parse_spm_query_value(value: Any) -> Any:
     return value
 
 
-def parse_integer_query_value(value: Any) -> Any:
+def parse_integer_query_value(value: object) -> object:
     """Preserve integer-string parsing; decimal spellings such as 2.0 are invalid."""
     return int(value) if isinstance(value, str) else value
 

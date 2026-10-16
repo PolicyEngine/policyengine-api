@@ -88,7 +88,7 @@ def find_api_model_versions() -> dict[str, str]:
     }
 
 
-def find_api_model_versions_and_output_to_github():
+def find_api_model_versions_and_output_to_github() -> None:
     """
     Find the API model versions and output them to a file for GitHub.
     """

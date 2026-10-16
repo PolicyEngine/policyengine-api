@@ -156,7 +156,7 @@ def format_unrecognized_inputs_message(errors: list[UnrecognizedInput]) -> str:
     )
 
 
-def _find_unrecognized_axes(axes, variables: dict) -> list[UnrecognizedInput]:
+def _find_unrecognized_axes(axes: object, variables: dict) -> list[UnrecognizedInput]:
     if not isinstance(axes, list):
         return []
 
@@ -183,7 +183,7 @@ def _find_unrecognized_axes(axes, variables: dict) -> list[UnrecognizedInput]:
 
 
 def _find_unrecognized_axis(
-    axis,
+    axis: object,
     path: str,
     variables: dict,
 ) -> list[UnrecognizedInput]:

@@ -36,7 +36,11 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
 
 
-def household_storage_json(country_id: str, household_json: dict, spm=None) -> dict:
+def household_storage_json(
+    country_id: str,
+    household_json: dict,
+    spm: object = None,
+) -> dict:
     """Keep the measurement selection in the same atomic JSON/hash as inputs.
 
     Only a selection the caller actually sent is stored. Certification still runs
@@ -158,7 +162,7 @@ class HouseholdService:
         label: str | None,
         *,
         record_mirror_event: bool = False,
-        spm: dict | None = None,
+        spm: object = None,
     ) -> HouseholdCreateResult:
         # Validate before the persistence boundary so typed input failures remain 400.
         household_json = household_storage_json(country_id, household_json, spm)

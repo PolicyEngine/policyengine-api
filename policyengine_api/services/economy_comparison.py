@@ -293,7 +293,9 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
     )
 
 
-def compute_income_change(baseline_values, reform_values):
+def compute_income_change(
+    baseline_values: np.ndarray, reform_values: np.ndarray
+) -> np.ndarray:
     """Percentage income change with a floor of 1 on the baseline
     to avoid division by zero for zero/negative incomes."""
     absolute_change = reform_values - baseline_values
@@ -334,9 +336,9 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
     for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
         outcome_groups[label] = []
         for i in range(1, 11):
-            in_decile: bool = decile == i
-            in_group: bool = (income_change > lower) & (income_change <= upper)
-            in_both: bool = in_decile & in_group
+            in_decile: np.ndarray = decile == i
+            in_group: np.ndarray = (income_change > lower) & (income_change <= upper)
+            in_both: np.ndarray = in_decile & in_group
 
             people_in_both: np.float64 = people[in_both].sum()
             people_in_decile: np.float64 = people[in_decile].sum()
@@ -386,9 +388,9 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
         outcome_groups[label] = []
         for i in range(1, 11):
-            in_decile: bool = decile == i
-            in_group: bool = (income_change > lower) & (income_change <= upper)
-            in_both: bool = in_decile & in_group
+            in_decile: np.ndarray = decile == i
+            in_group: np.ndarray = (income_change > lower) & (income_change <= upper)
+            in_both: np.ndarray = in_decile & in_group
 
             people_in_both: np.float64 = people[in_both].sum()
             people_in_decile: np.float64 = people[in_decile].sum()

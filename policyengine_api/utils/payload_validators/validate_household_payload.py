@@ -1,4 +1,14 @@
-def validate_household_payload(payload):
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+
+def validate_household_payload(
+    payload: Mapping[str, object],
+) -> tuple[bool, str | None]:
     """
     Validate the payload for a POST request to set a household's input data.
 

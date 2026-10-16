@@ -20,6 +20,10 @@ DEPRECATED_VARIABLES: dict[str, str] = {
         "to `other_medical_expenses` and premium spending to "
         "`health_insurance_premiums`."
     ),
+    "uc_has_limited_capability_for_work": (
+        "Removed in policyengine-uk 2.129.0. Set "
+        "`uc_limited_capability_for_work` instead."
+    ),
 }
 
 
@@ -135,7 +139,7 @@ def _drop_deprecated_axes(
 
 
 def _is_deprecated_axis(
-    axis, location: str, warnings: list[DeprecatedVariableWarning]
+    axis: object, location: str, warnings: list[DeprecatedVariableWarning]
 ) -> bool:
     if not isinstance(axis, dict):
         return False

@@ -1,10 +1,18 @@
+from __future__ import annotations
+
 import base64
 import hashlib
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+if TYPE_CHECKING:
+    from policyengine_api.json_types import JSONValue
 
-def make_hashable(o):
+
+def make_hashable(
+    o: object,
+) -> Any:  # noqa: ANN401  # returns scalars unchanged, and callers sort them
     if isinstance(o, (tuple, list)):
         return tuple(make_hashable(e) for e in o)
 
@@ -17,13 +25,13 @@ def make_hashable(o):
     return o
 
 
-def hash_object(o):
+def hash_object(o: object) -> str:
     hasher = hashlib.sha256()
     hasher.update(repr(make_hashable(o)).encode())
     return base64.b64encode(hasher.digest()).decode()
 
 
-def get_safe_json(value):
+def get_safe_json(value: object) -> JSONValue:
     # This function is used when constructing metadata,
     # which will be consumed by JS, hence Infinity, not .inf
     if isinstance(value, (int, float)):
