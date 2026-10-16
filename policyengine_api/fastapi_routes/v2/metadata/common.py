@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from pydantic import BaseModel
@@ -100,7 +101,6 @@ def read_resource(
         return v2_error_response(500, "V2 metadata query failed")
     finally:
         if reader is not None:
-            try:  # noqa: SIM105  # kept as try/except: best-effort close must not replace the typed response
+            # Best-effort close must not replace the typed response.
+            with contextlib.suppress(Exception):
                 reader.close()
-            except Exception:  # noqa: BLE001, S110  # best-effort close must not replace the typed response
-                pass

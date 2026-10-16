@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from contextvars import ContextVar
 
@@ -60,10 +61,9 @@ def _bind_observability_id(observability_id: str) -> str:
         flask.g.observability_id = observability_id
     else:
         _asgi_observability_id.set(observability_id)
-    try:  # noqa: SIM105  # kept as try/except: telemetry must never fail the request
+    # Telemetry must never fail the request.
+    with contextlib.suppress(Exception):
         observability.get_runtime().set_context(observability_id=observability_id)
-    except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
-        pass
     return observability_id
 
 

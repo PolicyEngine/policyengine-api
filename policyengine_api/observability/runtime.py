@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 from dataclasses import replace
 from importlib.metadata import PackageNotFoundError, version
@@ -74,7 +75,6 @@ def get_runtime() -> ObservabilityRuntime:
 
 def set_runtime_context(**attributes: object) -> None:
     """Bind local telemetry attributes without affecting application behavior."""
-    try:  # noqa: SIM105  # kept as try/except: telemetry must never affect application behavior
+    # Telemetry must never affect application behavior.
+    with contextlib.suppress(Exception):
         runtime.set_context(**attributes)
-    except Exception:  # noqa: BLE001, S110  # telemetry must never affect application behavior
-        pass
