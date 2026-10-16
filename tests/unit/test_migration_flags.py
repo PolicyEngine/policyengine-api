@@ -1,6 +1,6 @@
 import pytest
 
-import policyengine_api.migration_flags as migration_flags
+from policyengine_api import migration_flags
 from policyengine_api.migration_flags import (
     get_migration_context,
     infer_route_group,

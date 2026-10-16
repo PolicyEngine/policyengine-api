@@ -1,6 +1,8 @@
+import copy
 import importlib
 import sys
 from contextlib import ExitStack
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -69,27 +71,16 @@ def _assert_no_stage12_private_fields(value: object) -> None:
             _assert_no_stage12_private_fields(child)
 
 
+@dataclass(kw_only=True)
 class _BudgetWindowEconomicImpactResult:
-    def __init__(
-        self,
-        *,
-        data: dict | None,
-        progress: int | None = None,
-        completed_years: list[str] | None = None,
-        computing_years: list[str] | None = None,
-        queued_years: list[str] | None = None,
-        message: str | None = None,
-        error: str | None = None,
-        cache_status: str | None = None,
-    ):
-        self.data = data
-        self.progress = progress
-        self.completed_years = completed_years or []
-        self.computing_years = computing_years or []
-        self.queued_years = queued_years or []
-        self.message = message
-        self.error = error
-        self.cache_status = cache_status
+    data: dict | None
+    progress: int | None = None
+    completed_years: list[str] = field(default_factory=list)
+    computing_years: list[str] = field(default_factory=list)
+    queued_years: list[str] = field(default_factory=list)
+    message: str | None = None
+    error: str | None = None
+    cache_status: str | None = None
 
     @classmethod
     def completed(cls, data: dict):
@@ -217,41 +208,58 @@ def _resolved_path(path: str) -> str:
     )
 
 
+# Request bodies by (path, method); a None method stands for any method.
+_JSON_PAYLOADS: dict[tuple[str, str | None], dict] = {
+    ("/us/policy", None): {
+        "label": "Utah reform",
+        "data": {"gov.example.parameter": 1},
+    },
+    ("/us/user-policy", "POST"): {
+        "reform_id": 22,
+        "reform_label": "Tax reform",
+        "baseline_id": 2,
+        "baseline_label": "Current law",
+        "user_id": "auth0|one",
+        "year": "2026",
+        "geography": "us",
+        "dataset": "enhanced_cps_2024",
+        "number_of_provisions": 3,
+        "api_version": "1",
+        "added_date": 1,
+        "updated_date": 2,
+    },
+    ("/us/user-policy", "PUT"): {"id": 10, "reform_label": "Updated tax reform"},
+    ("/us/household", None): {"label": "Empty household", "data": {}},
+    ("/us/household/{household_id}", None): {
+        "label": "Updated household",
+        "data": {"people": {"you": {}}},
+    },
+    ("/us/calculate", None): {"household": {"people": {"you": {}}}, "policy": {}},
+    ("/us/simulation", None): {
+        "population_id": "household-1",
+        "population_type": "household",
+        "policy_id": 22,
+    },
+    ("/us/report", None): {
+        "simulation_1_id": 11,
+        "simulation_2_id": None,
+        "year": "2026",
+    },
+}
+
+
+def _route_entry(
+    entries: dict[tuple[str, str | None], dict], contract: ContractRequest
+) -> dict | None:
+    """Return a fresh copy of the contract's entry, by path and method, or None."""
+    entry = entries.get(
+        (contract.path, contract.method), entries.get((contract.path, None))
+    )
+    return copy.deepcopy(entry)
+
+
 def _json_payload(contract: ContractRequest) -> dict | None:
-    if contract.path == "/us/policy":
-        return {"label": "Utah reform", "data": {"gov.example.parameter": 1}}
-    if contract.path == "/us/user-policy" and contract.method == "POST":
-        return {
-            "reform_id": 22,
-            "reform_label": "Tax reform",
-            "baseline_id": 2,
-            "baseline_label": "Current law",
-            "user_id": "auth0|one",
-            "year": "2026",
-            "geography": "us",
-            "dataset": "enhanced_cps_2024",
-            "number_of_provisions": 3,
-            "api_version": "1",
-            "added_date": 1,
-            "updated_date": 2,
-        }
-    if contract.path == "/us/user-policy" and contract.method == "PUT":
-        return {"id": 10, "reform_label": "Updated tax reform"}
-    if contract.path == "/us/household":
-        return {"label": "Empty household", "data": {}}
-    if contract.path == "/us/household/{household_id}":
-        return {"label": "Updated household", "data": {"people": {"you": {}}}}
-    if contract.path == "/us/calculate":
-        return {"household": {"people": {"you": {}}}, "policy": {}}
-    if contract.path == "/us/simulation":
-        return {
-            "population_id": "household-1",
-            "population_type": "household",
-            "policy_id": 22,
-        }
-    if contract.path == "/us/report":
-        return {"simulation_1_id": 11, "simulation_2_id": None, "year": "2026"}
-    return None
+    return _route_entry(_JSON_PAYLOADS, contract)
 
 
 def _fake_country():
@@ -482,95 +490,113 @@ def _patched_route_dependencies():
     return stack
 
 
+def _expected_metadata_subset(country_id: str) -> dict:
+    return {
+        "status": "ok",
+        "message": None,
+        "result": {
+            "current_law_id": 2 if country_id == "us" else 1,
+            "economy_options": {
+                "region": [{"name": country_id}],
+                "time_period": [{"name": 2026}],
+            },
+        },
+    }
+
+
+# Expected response subsets by (path, method); a None method stands for any method.
+_EXPECTED_SUBSETS: dict[tuple[str, str | None], dict] = {
+    ("/us/policy", None): {
+        "status": "ok",
+        "message": "Policy created successfully",
+        "result": {"policy_id": 123},
+    },
+    ("/us/policy/{policy_id}", None): {
+        "status": "ok",
+        "message": None,
+        "result": {"label": "Current law"},
+    },
+    ("/us/policies", None): {
+        "status": "ok",
+        "message": "Policies found",
+        "result": [{"id": 123, "label": "Tax reform"}],
+    },
+    ("/us/user-policy", "POST"): {
+        "status": "ok",
+        "message": "Record created successfully",
+        "result": {
+            "id": 10,
+            "reform_id": 22,
+            "reform_label": "Tax reform",
+            "baseline_id": 2,
+            "user_id": "auth0|one",
+        },
+    },
+    ("/us/user-policy/{user_id}", None): {
+        "status": "ok",
+        "message": None,
+        "result": [{"id": 10, "reform_label": "Tax reform"}],
+    },
+    ("/us/user-policy", "PUT"): {
+        "status": "ok",
+        "message": "Record updated successfully",
+        "result": {"id": 10},
+    },
+    ("/us/household", None): {
+        "status": "ok",
+        "message": None,
+        "result": {"household_id": 456},
+    },
+    ("/us/household/{household_id}", None): {
+        "status": "ok",
+        "result": {"id": 456, "label": "Empty household"},
+    },
+    ("/us/calculate", None): {
+        "status": "ok",
+        "message": None,
+        "result": {"people": {"you": {"age": {"2026": 40}}}},
+    },
+    ("/us/metadata", None): _expected_metadata_subset("us"),
+    ("/uk/metadata", None): _expected_metadata_subset("uk"),
+    ("/us/simulation", None): {
+        "status": "ok",
+        "message": "Simulation created successfully",
+        "result": {"id": 11, "status": "pending"},
+    },
+    ("/us/simulation/{simulation_id}", None): {
+        "status": "ok",
+        "message": None,
+        "result": {"id": 11},
+    },
+    ("/us/report", None): {
+        "status": "ok",
+        "message": "Report output created successfully",
+        "result": {"id": 33, "status": "pending"},
+    },
+    ("/us/report/{report_id}", None): {
+        "status": "ok",
+        "message": None,
+        "result": {"id": 33},
+    },
+}
+_EXPECTED_BUDGET_WINDOW_SUBSET: dict[str, object] = {
+    "status": "ok",
+    "message": None,
+    "result": {"kind": "budgetWindow", "windowSize": 1},
+    "progress": 100,
+    "completed_years": [],
+    "computing_years": [],
+    "queued_years": [],
+    "error": None,
+}
+
+
 def _expected_subset(contract: ContractRequest) -> dict:
-    if contract.path == "/us/policy":
-        return {
-            "status": "ok",
-            "message": "Policy created successfully",
-            "result": {"policy_id": 123},
-        }
-    if contract.path == "/us/policy/{policy_id}":
-        return {"status": "ok", "message": None, "result": {"label": "Current law"}}
-    if contract.path == "/us/policies":
-        return {
-            "status": "ok",
-            "message": "Policies found",
-            "result": [{"id": 123, "label": "Tax reform"}],
-        }
-    if contract.path == "/us/user-policy" and contract.method == "POST":
-        return {
-            "status": "ok",
-            "message": "Record created successfully",
-            "result": {
-                "id": 10,
-                "reform_id": 22,
-                "reform_label": "Tax reform",
-                "baseline_id": 2,
-                "user_id": "auth0|one",
-            },
-        }
-    if contract.path == "/us/user-policy/{user_id}":
-        return {
-            "status": "ok",
-            "message": None,
-            "result": [{"id": 10, "reform_label": "Tax reform"}],
-        }
-    if contract.path == "/us/user-policy" and contract.method == "PUT":
-        return {
-            "status": "ok",
-            "message": "Record updated successfully",
-            "result": {"id": 10},
-        }
-    if contract.path == "/us/household":
-        return {"status": "ok", "message": None, "result": {"household_id": 456}}
-    if contract.path == "/us/household/{household_id}":
-        return {"status": "ok", "result": {"id": 456, "label": "Empty household"}}
-    if contract.path == "/us/calculate":
-        return {
-            "status": "ok",
-            "message": None,
-            "result": {"people": {"you": {"age": {"2026": 40}}}},
-        }
-    if contract.path in {"/us/metadata", "/uk/metadata"}:
-        country_id = contract.path.strip("/").split("/")[0]
-        return {
-            "status": "ok",
-            "message": None,
-            "result": {
-                "current_law_id": 2 if country_id == "us" else 1,
-                "economy_options": {
-                    "region": [{"name": country_id}],
-                    "time_period": [{"name": 2026}],
-                },
-            },
-        }
-    if contract.path == "/us/simulation":
-        return {
-            "status": "ok",
-            "message": "Simulation created successfully",
-            "result": {"id": 11, "status": "pending"},
-        }
-    if contract.path == "/us/simulation/{simulation_id}":
-        return {"status": "ok", "message": None, "result": {"id": 11}}
-    if contract.path == "/us/report":
-        return {
-            "status": "ok",
-            "message": "Report output created successfully",
-            "result": {"id": 33, "status": "pending"},
-        }
-    if contract.path == "/us/report/{report_id}":
-        return {"status": "ok", "message": None, "result": {"id": 33}}
+    expected = _route_entry(_EXPECTED_SUBSETS, contract)
+    if expected is not None:
+        return expected
     if "budget-window" in contract.path:
-        return {
-            "status": "ok",
-            "message": None,
-            "result": {"kind": "budgetWindow", "windowSize": 1},
-            "progress": 100,
-            "completed_years": [],
-            "computing_years": [],
-            "queued_years": [],
-            "error": None,
-        }
+        return copy.deepcopy(_EXPECTED_BUDGET_WINDOW_SUBSET)
     msg = f"Missing expected subset for {contract}"
     raise AssertionError(msg)
 

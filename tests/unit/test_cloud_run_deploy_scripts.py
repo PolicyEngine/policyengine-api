@@ -1849,25 +1849,9 @@ def test_set_cloud_run_revision_dry_run_targets_service_override():
     )
 
 
-def test_push_workflow_runs_release_and_cloud_run_staging_tests_in_deploy_job():
-    workflow = _push_workflow()
-    cloud_run_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
-    parallel_live_tests = _workflow_job_block(
-        workflow,
-        "parallel-live-simulation-tests-staging-cloud-run",
-    )
-    cloud_run_promotion = _workflow_job_block(workflow, "promote-cloud-run-staging")
-    production_check = _workflow_job_block(
-        workflow,
-        "ensure-production-model-version-aligns-with-sim-api",
-    )
-    cloud_run_test_command = (
-        "python -m pytest tests/integration/test_cloud_run_candidate.py "
-        "tests/integration/test_live_v2_metadata.py "
-        "tests/integration/test_live_v2_policies.py -v"
-    )
-    live_test_script = (REPO / ".github/scripts/run_live_staging_tests.sh").read_text()
-
+def _assert_staging_deploy_runs_release_and_integration_tests(
+    cloud_run_deploy: str, cloud_run_test_command: str
+) -> None:
     assert "bash .github/scripts/run_release_tests.sh" in cloud_run_deploy
     assert cloud_run_deploy.index(
         "bash .github/scripts/run_release_tests.sh"
@@ -1882,6 +1866,11 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests_in_deploy_job():
     assert cloud_run_deploy.index(
         "Wait for Cloud Run staging health"
     ) < cloud_run_deploy.index("Run staging integration tests")
+
+
+def _assert_live_tests_run_in_parallel_after_readiness(
+    workflow: str, parallel_live_tests: str, live_test_script: str
+) -> None:
     assert "integration-tests-staging-cloud-run:" not in workflow
     assert "strategy:" not in parallel_live_tests
     assert "matrix:" not in parallel_live_tests
@@ -1912,6 +1901,11 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests_in_deploy_job():
     )
     assert "github.run_id" in parallel_live_tests
     assert "github.run_attempt" in parallel_live_tests
+
+
+def _assert_promotion_verifies_the_tested_candidate(
+    workflow: str, production_check: str, cloud_run_promotion: str
+) -> None:
     assert "needs: promote-cloud-run-staging" in production_check
     assert "- integration-tests-staging-cloud-run" not in production_check
     assert "- integration-tests-staging-cloud-run" not in cloud_run_promotion
@@ -1946,6 +1940,36 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests_in_deploy_job():
     assert (
         "CLOUD_RUN_EXPECTED_IMAGE: "
         "${{ needs.deploy-cloud-run-staging.outputs.image }}" in cloud_run_promotion
+    )
+
+
+def test_push_workflow_runs_release_and_cloud_run_staging_tests_in_deploy_job():
+    workflow = _push_workflow()
+    cloud_run_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    parallel_live_tests = _workflow_job_block(
+        workflow,
+        "parallel-live-simulation-tests-staging-cloud-run",
+    )
+    cloud_run_promotion = _workflow_job_block(workflow, "promote-cloud-run-staging")
+    production_check = _workflow_job_block(
+        workflow,
+        "ensure-production-model-version-aligns-with-sim-api",
+    )
+    cloud_run_test_command = (
+        "python -m pytest tests/integration/test_cloud_run_candidate.py "
+        "tests/integration/test_live_v2_metadata.py "
+        "tests/integration/test_live_v2_policies.py -v"
+    )
+    live_test_script = (REPO / ".github/scripts/run_live_staging_tests.sh").read_text()
+
+    _assert_staging_deploy_runs_release_and_integration_tests(
+        cloud_run_deploy, cloud_run_test_command
+    )
+    _assert_live_tests_run_in_parallel_after_readiness(
+        workflow, parallel_live_tests, live_test_script
+    )
+    _assert_promotion_verifies_the_tested_candidate(
+        workflow, production_check, cloud_run_promotion
     )
 
 

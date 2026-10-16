@@ -40,6 +40,7 @@ from tests.fixtures.services.economy_service import (
     MOCK_POLICYENGINE_VERSION,
     MOCK_RESOLVED_APP_NAME,
     MOCK_SUBMISSION_CLAIM_ID,
+    MockBatchProgress,
     create_mock_budget_window_batch_execution,
 )
 from tests.fixtures.spm import resolved_options
@@ -357,10 +358,12 @@ def test_budget_window_poll_reports_running_years(
         create_mock_budget_window_batch_execution(
             batch_job_id="batch-7",
             status="running",
-            progress=None,
-            completed_years=["2026"],
-            running_years=["2027", "2028", "2029"],
-            queued_years=[],
+            batch_progress=MockBatchProgress(
+                progress=None,
+                completed_years=["2026"],
+                running_years=["2027", "2028", "2029"],
+                queued_years=[],
+            ),
         )
     )
 

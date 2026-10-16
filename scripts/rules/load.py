@@ -230,23 +230,23 @@ def _ci_scripts(c: _Collector, raw: object) -> CiScripts | None:
     )
 
 
-def _rule(c: _Collector, raw: object, index: int) -> Rule | None:
-    if not isinstance(raw, dict):
-        c.add(None, f"rule #{index + 1} must be a table", "write [[rule]]")
-        return None
-    rule_id = raw.get("id") if isinstance(raw.get("id"), str) else None
-    label = rule_id or f"rule #{index + 1}"
-    c.unknown_keys(rule_id, raw, _RULE_KEYS, label)
-
+def _enforcer(
+    c: _Collector, rule_id: str | None, raw: dict[str, Any], label: str
+) -> Enforcer:
+    """Read ``[rule.enforcer]``; a missing table or unknown kind enforces nothing."""
     enforcer_raw = raw.get("enforcer")
-    enforcer = Enforcer(Kind.NONE)
-    if isinstance(enforcer_raw, dict):
-        kind = c.enum(rule_id, Kind, enforcer_raw.get("kind"), f"{label}.enforcer.kind")
-        fields = {k: v for k, v in enforcer_raw.items() if k != "kind"}
-        enforcer = Enforcer(kind or Kind.NONE, fields)
-    else:
+    if not isinstance(enforcer_raw, dict):
         c.add(rule_id, f"{label}.enforcer must be a table", "add [rule.enforcer]")
+        return Enforcer(Kind.NONE)
+    kind = c.enum(rule_id, Kind, enforcer_raw.get("kind"), f"{label}.enforcer.kind")
+    fields = {k: v for k, v in enforcer_raw.items() if k != "kind"}
+    return Enforcer(kind or Kind.NONE, fields)
 
+
+def _ci_refs(
+    c: _Collector, rule_id: str | None, raw: dict[str, Any], label: str
+) -> tuple[CiRef, ...]:
+    """Read the ``[[rule.ci]]`` entries, skipping any that are not tables."""
     ci_refs = []
     ci_raw = raw.get("ci", [])
     for entry in ci_raw if isinstance(ci_raw, list) else [ci_raw]:
@@ -261,29 +261,45 @@ def _rule(c: _Collector, raw: object, index: int) -> Rule | None:
                 c.string(rule_id, entry, "invocation", f"{label}.ci"),
             )
         )
+    return tuple(ci_refs)
 
-    proof = None
-    if "proof" in raw:
-        if isinstance(raw["proof"], dict):
-            proof = Proof(dict(raw["proof"]))
-        else:
-            c.add(rule_id, f"{label}.proof must be a table", "write [rule.proof]")
 
-    baseline = None
-    if "baseline" in raw:
-        braw = raw["baseline"]
-        if isinstance(braw, dict) and isinstance(braw.get("count"), int):
-            c.unknown_keys(rule_id, braw, {"file", "count"}, f"{label}.baseline")
-            baseline = Baseline(
-                c.string(rule_id, braw, "file", f"{label}.baseline"), braw["count"]
-            )
-        else:
-            c.add(
-                rule_id,
-                f"{label}.baseline needs 'file' and an integer 'count'",
-                "write [rule.baseline] with file and count",
-            )
+def _proof(
+    c: _Collector, rule_id: str | None, raw: dict[str, Any], label: str
+) -> Proof | None:
+    """Read ``[rule.proof]``, which is optional but must be a table when present."""
+    if "proof" not in raw:
+        return None
+    if isinstance(raw["proof"], dict):
+        return Proof(dict(raw["proof"]))
+    c.add(rule_id, f"{label}.proof must be a table", "write [rule.proof]")
+    return None
 
+
+def _baseline(
+    c: _Collector, rule_id: str | None, raw: dict[str, Any], label: str
+) -> Baseline | None:
+    """Read ``[rule.baseline]``, which needs a file and an integer count."""
+    if "baseline" not in raw:
+        return None
+    braw = raw["baseline"]
+    if isinstance(braw, dict) and isinstance(braw.get("count"), int):
+        c.unknown_keys(rule_id, braw, {"file", "count"}, f"{label}.baseline")
+        return Baseline(
+            c.string(rule_id, braw, "file", f"{label}.baseline"), braw["count"]
+        )
+    c.add(
+        rule_id,
+        f"{label}.baseline needs 'file' and an integer 'count'",
+        "write [rule.baseline] with file and count",
+    )
+    return None
+
+
+def _exceptions(
+    c: _Collector, rule_id: str | None, raw: dict[str, Any], label: str
+) -> tuple[RuleException, ...]:
+    """Read the ``[[rule.exception]]`` entries; one without a date never expires."""
     exceptions = []
     exc_raw = raw.get("exception", [])
     for entry in exc_raw if isinstance(exc_raw, list) else [exc_raw]:
@@ -305,24 +321,53 @@ def _rule(c: _Collector, raw: object, index: int) -> Rule | None:
                 expires or date.max,
             )
         )
+    return tuple(exceptions)
 
-    downgrade_reason = None
-    if "downgrade" in raw:
-        draw = raw["downgrade"]
-        if isinstance(draw, dict) and isinstance(draw.get("reason"), str):
-            downgrade_reason = draw["reason"]
-        else:
-            c.add(
-                rule_id,
-                f"{label}.downgrade needs a 'reason'",
-                'write [rule.downgrade] reason = "..."',
-            )
 
+def _downgrade_reason(
+    c: _Collector, rule_id: str | None, raw: dict[str, Any], label: str
+) -> str | None:
+    """Read the reason in ``[rule.downgrade]``, which is optional."""
+    if "downgrade" not in raw:
+        return None
+    draw = raw["downgrade"]
+    if isinstance(draw, dict) and isinstance(draw.get("reason"), str):
+        reason: str = draw["reason"]
+        return reason
+    c.add(
+        rule_id,
+        f"{label}.downgrade needs a 'reason'",
+        'write [rule.downgrade] reason = "..."',
+    )
+    return None
+
+
+def _autofix(
+    c: _Collector, rule_id: str | None, raw: dict[str, Any], label: str
+) -> bool:
+    """Read ``autofix``, which must be a boolean; anything else counts as false."""
     autofix = raw.get("autofix")
-    if not isinstance(autofix, bool):
-        c.add(rule_id, f"{label}.autofix must be true or false", "set autofix")
-        autofix = False
+    if isinstance(autofix, bool):
+        return autofix
+    c.add(rule_id, f"{label}.autofix must be true or false", "set autofix")
+    return False
 
+
+def _rule(c: _Collector, raw: object, index: int) -> Rule | None:
+    if not isinstance(raw, dict):
+        c.add(None, f"rule #{index + 1} must be a table", "write [[rule]]")
+        return None
+    rule_id = raw.get("id") if isinstance(raw.get("id"), str) else None
+    label = rule_id or f"rule #{index + 1}"
+    c.unknown_keys(rule_id, raw, _RULE_KEYS, label)
+
+    enforcer = _enforcer(c, rule_id, raw, label)
+    ci_refs = _ci_refs(c, rule_id, raw, label)
+    proof = _proof(c, rule_id, raw, label)
+    baseline = _baseline(c, rule_id, raw, label)
+    exceptions = _exceptions(c, rule_id, raw, label)
+    downgrade_reason = _downgrade_reason(c, rule_id, raw, label)
+    autofix = _autofix(c, rule_id, raw, label)
     review_by = None
     if "review_by" in raw:
         review_by = c.day(rule_id, raw["review_by"], f"{label}.review_by")
@@ -342,11 +387,11 @@ def _rule(c: _Collector, raw: object, index: int) -> Rule | None:
         status=status,
         autofix=autofix,
         enforcer=enforcer,
-        ci=tuple(ci_refs),
+        ci=ci_refs,
         review_by=review_by,
         proof=proof,
         baseline=baseline,
-        exceptions=tuple(exceptions),
+        exceptions=exceptions,
         downgrade_reason=downgrade_reason,
     )
 

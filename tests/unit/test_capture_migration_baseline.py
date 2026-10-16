@@ -1,6 +1,7 @@
 import json
 
 import httpx
+import pytest
 
 from scripts import capture_migration_baseline
 
@@ -159,3 +160,143 @@ def test_run_simulation_gateway_probe_records_completion(monkeypatch):
     ]
     assert summary["completion_count"] == 1
     assert summary["completion_failure_count"] == 0
+
+
+def _client_with_transport(
+    monkeypatch: pytest.MonkeyPatch, transport: httpx.MockTransport
+) -> None:
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        capture_migration_baseline.httpx,
+        "Client",
+        lambda **kwargs: real_client(
+            transport=transport,
+            base_url=kwargs["base_url"],
+            timeout=kwargs["timeout"],
+        ),
+    )
+
+
+def _without_latency(
+    result: capture_migration_baseline.ProbeResult,
+) -> dict[str, object]:
+    return {**result.__dict__, "latency_ms": None}
+
+
+def test_run_probes_records_transport_errors_as_failed_probes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
+        msg = "connection refused"
+        raise httpx.ConnectError(msg, request=request)
+
+    _client_with_transport(monkeypatch, httpx.MockTransport(refuse))
+
+    results = capture_migration_baseline.run_probes("https://api.test", 1)
+
+    assert [_without_latency(result) for result in results] == [
+        {
+            "name": probe.name,
+            "method": "GET",
+            "path": probe.path,
+            "status_code": 0,
+            "latency_ms": None,
+            "ok": False,
+            "error": "connection refused",
+            "completion_ms": None,
+            "completed": None,
+        }
+        for probe in capture_migration_baseline.DEFAULT_PROBES
+    ]
+    assert all(result.latency_ms >= 0 for result in results)
+
+
+def test_gateway_probe_sends_the_payload_and_records_each_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bodies: list[bytes] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(request.content)
+        if request.method == "POST":
+            return httpx.Response(202, json={"job_id": "job-1"})
+        return httpx.Response(200, json={"status": "failed", "error": "boom"})
+
+    _client_with_transport(monkeypatch, httpx.MockTransport(handler))
+
+    results = capture_migration_baseline.run_simulation_gateway_probe(
+        "https://simulation.test",
+        {"country": "us"},
+        poll_timeout_seconds=1,
+        poll_interval_seconds=0,
+    )
+
+    assert bodies == [b'{"country":"us"}', b""]
+    assert [
+        {**_without_latency(result), "completion_ms": None} for result in results
+    ] == [
+        {
+            "name": "simulation_gateway_submit",
+            "method": "POST",
+            "path": "/simulate/economy/comparison",
+            "status_code": 202,
+            "latency_ms": None,
+            "ok": True,
+            "error": None,
+            "completion_ms": None,
+            "completed": None,
+        },
+        {
+            "name": "simulation_gateway_poll",
+            "method": "GET",
+            "path": "/jobs/job-1",
+            "status_code": 200,
+            "latency_ms": None,
+            "ok": True,
+            "error": None,
+            "completion_ms": None,
+            "completed": None,
+        },
+        {
+            "name": "simulation_gateway_completion",
+            "method": "GET",
+            "path": "/jobs/job-1",
+            "status_code": 200,
+            "latency_ms": None,
+            "ok": False,
+            "error": "boom",
+            "completion_ms": None,
+            "completed": False,
+        },
+    ]
+    assert results[2].latency_ms == results[1].latency_ms
+
+
+def test_gateway_probe_stops_when_the_submission_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _client_with_transport(
+        monkeypatch,
+        httpx.MockTransport(lambda _request: httpx.Response(400, json={})),
+    )
+
+    results = capture_migration_baseline.run_simulation_gateway_probe(
+        "https://simulation.test",
+        {"country": "us"},
+        poll_timeout_seconds=1,
+        poll_interval_seconds=0,
+    )
+
+    assert [_without_latency(result) for result in results] == [
+        {
+            "name": "simulation_gateway_submit",
+            "method": "POST",
+            "path": "/simulate/economy/comparison",
+            "status_code": 400,
+            "latency_ms": None,
+            "ok": False,
+            "error": None,
+            "completion_ms": None,
+            "completed": None,
+        }
+    ]

@@ -1,5 +1,6 @@
 import json
 import math
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -77,22 +78,31 @@ def test_live_utah_macro_reform(api_client, integration_probe_id, poll_live_endp
     assert 0 <= lose_less_than_5 <= 1, result
 
 
+@dataclass(frozen=True)
+class MacroReformScenario:
+    """A saved reform to run through the live economy route for one region."""
+
+    country_id: str
+    reform_filename: str
+    region: str
+    probe_suffix: str
+
+
 def _assert_live_macro_reform(
     api_client,
     integration_probe_id,
     poll_live_endpoint,
-    *,
-    country_id: str,
-    reform_filename: str,
-    region: str,
-    probe_suffix: str,
+    scenario: MacroReformScenario,
 ) -> None:
+    country_id = scenario.country_id
     metadata_response = api_client.get(f"/{country_id}/metadata")
     metadata_response.raise_for_status()
     metadata = metadata_response.json()["result"]
 
-    reform_payload = _load_reform_payload(reform_filename)
-    reform_payload["label"] = f"Live economy {integration_probe_id}-{probe_suffix}"
+    reform_payload = _load_reform_payload(scenario.reform_filename)
+    reform_payload["label"] = (
+        f"Live economy {integration_probe_id}-{scenario.probe_suffix}"
+    )
     policy_response = api_client.post(
         f"/{country_id}/policy",
         json=reform_payload,
@@ -104,10 +114,10 @@ def _assert_live_macro_reform(
         api_client,
         f"/{country_id}/economy/{policy_id}/over/{metadata['current_law_id']}",
         {
-            "region": region,
+            "region": scenario.region,
             "time_period": _pick_time_period(metadata),
         },
-        route_name=f"{country_id}-{probe_suffix}-economy",
+        route_name=f"{country_id}-{scenario.probe_suffix}-economy",
     )
 
     assert payload["status"] == "ok", payload
@@ -127,8 +137,10 @@ def test_live_california_eitc_macro_reform(
         api_client,
         integration_probe_id,
         poll_live_endpoint,
-        country_id="us",
-        reform_filename="california_eitc_reform.json",
-        region="state/ca",
-        probe_suffix="california-eitc",
+        MacroReformScenario(
+            country_id="us",
+            reform_filename="california_eitc_reform.json",
+            region="state/ca",
+            probe_suffix="california-eitc",
+        ),
     )

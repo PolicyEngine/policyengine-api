@@ -8,6 +8,7 @@ import os
 import time
 import uuid
 from datetime import UTC, datetime
+from http import HTTPStatus
 from typing import NamedTuple
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode, urlparse
@@ -69,6 +70,14 @@ class VerificationProbe(NamedTuple):
     verification_id: str
     trace_id: str
     started_at: float
+
+
+class CloudReadback(NamedTuple):
+    """The Google Cloud project, metric location and token for reading telemetry."""
+
+    project_id: str
+    metric_location: str
+    access_token: str
 
 
 def _authority(endpoint: str) -> str:
@@ -207,7 +216,7 @@ def _get_json(url: str, access_token: str) -> dict[str, object] | None:
         with urlopen(request, timeout=15) as response:
             return json.load(response)
     except HTTPError as error:
-        if error.code == 404:
+        if error.code == HTTPStatus.NOT_FOUND:
             return None
         detail = error.read().decode("utf-8", errors="replace")
         msg = f"Google Cloud verification request failed ({error.code}): {detail}"
@@ -268,12 +277,8 @@ def _metric_available(
 
 def _wait_for_delivery(
     *,
-    project_id: str,
-    trace_id: str,
-    verification_id: str,
-    metric_location: str,
-    access_token: str,
-    started_at: float,
+    readback: CloudReadback,
+    probe: VerificationProbe,
     timeout_seconds: float,
     poll_seconds: float = 5.0,
 ) -> None:
@@ -282,14 +287,16 @@ def _wait_for_delivery(
     metric_found = False
     while True:
         if not trace_found:
-            trace_found = _trace_available(project_id, trace_id, access_token)
+            trace_found = _trace_available(
+                readback.project_id, probe.trace_id, readback.access_token
+            )
         if not metric_found:
             metric_found = _metric_available(
-                project_id,
-                verification_id,
-                metric_location,
-                access_token,
-                started_at,
+                readback.project_id,
+                probe.verification_id,
+                readback.metric_location,
+                readback.access_token,
+                probe.started_at,
             )
         if trace_found and metric_found:
             return
@@ -312,9 +319,7 @@ def verify(
     endpoint: str,
     token: str,
     *,
-    project_id: str,
-    metric_location: str,
-    access_token: str,
+    readback: CloudReadback,
     timeout_seconds: float = 15.0,
     delivery_timeout_seconds: float = 600.0,
 ) -> VerificationProbe:
@@ -361,16 +366,11 @@ def verify(
         else:
             msg = "collector unexpectedly accepted application logs"
             raise RuntimeError(msg)
+    probe = VerificationProbe(verification_id, trace_id, started_at)
     _wait_for_delivery(
-        project_id=project_id,
-        trace_id=trace_id,
-        verification_id=verification_id,
-        metric_location=metric_location,
-        access_token=access_token,
-        started_at=started_at,
-        timeout_seconds=delivery_timeout_seconds,
+        readback=readback, probe=probe, timeout_seconds=delivery_timeout_seconds
     )
-    return VerificationProbe(verification_id, trace_id, started_at)
+    return probe
 
 
 def main() -> None:
@@ -387,9 +387,11 @@ def main() -> None:
     probe = verify(
         args.endpoint,
         os.environ["COLLECTOR_ID_TOKEN"],
-        project_id=args.project_id,
-        metric_location=args.metric_location,
-        access_token=os.environ["GOOGLE_OAUTH_ACCESS_TOKEN"],
+        readback=CloudReadback(
+            project_id=args.project_id,
+            metric_location=args.metric_location,
+            access_token=os.environ["GOOGLE_OAUTH_ACCESS_TOKEN"],
+        ),
     )
     print(
         "Verified collector ingestion "

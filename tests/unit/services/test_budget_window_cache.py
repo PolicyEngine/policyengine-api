@@ -32,7 +32,6 @@ class RaisingRedis:
         if self.method == "get":
             msg = "redis unavailable"
             raise RuntimeError(msg)
-        return
 
     def set(self, key, value, *, nx=False, ex=None):
         if self.method == "set":

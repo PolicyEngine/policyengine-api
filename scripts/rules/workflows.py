@@ -15,10 +15,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 _KEY = re.compile(r"^(\s*)(-\s+)?([A-Za-z0-9_-]+):\s*(.*)$")
 _LIST_ITEM = re.compile(r"^(\s*)-\s+(.*)$")
 _UNSUPPORTED = re.compile(r"(<<:|:\s*[&*][A-Za-z0-9_-]+\s*$)")
+# A quoted scalar is at least its opening and closing quote.
+_QUOTE_PAIR_LENGTH = 2
 
 
 @dataclass(frozen=True)
@@ -77,7 +80,7 @@ def _strip_comment(line: str) -> str:
 
 def _unquote(value: str) -> str:
     value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+    if len(value) >= _QUOTE_PAIR_LENGTH and value[0] == value[-1] and value[0] in "'\"":
         return value[1:-1]
     return value
 
@@ -134,122 +137,216 @@ def _inline_list(value: str) -> tuple[str, ...]:
     return tuple(_unquote(item) for item in inner.split(",") if item.strip())
 
 
-def _parse_job(job_id: str, lines: list[str]) -> JobBlock:
-    name = ""
-    uses = ""
-    step_uses: list[str] = []
-    runs: list[str] = []
-    steps: list[str] = []
-    matrix: dict[str, tuple[str, ...]] = {}
-    body_indent = None
-    # Step tracking, so each run: block can be attributed to its step.
-    item_indent: int | None = None
-    in_steps = False
-    step_index = 0
-    step_key_column = -1
-    step_labels: dict[int, str] = {}
-    blocks: list[tuple[int, str, str]] = []
-    index = 0
-    while index < len(lines):
-        line = lines[index]
-        match = _KEY.match(line)
-        if not match:
-            item = _LIST_ITEM.match(line)
-            if (
-                in_steps
-                and item
-                and item_indent is not None
-                and len(item.group(1)) == item_indent
-            ):
-                step_index += 1
-            index += 1
-            continue
-        leading, dash, key, value = match.groups()
-        key_column = len(leading) + (len(dash) if dash else 0)
-        if body_indent is None and not dash:
-            body_indent = key_column
-        top_level = not dash and key_column == body_indent
-        if top_level:
-            in_steps = key == "steps" and not value
-            item_indent = None
-        elif in_steps and dash:
-            if item_indent is None:
-                item_indent = len(leading)
-            if len(leading) == item_indent:
-                step_index += 1
-                step_key_column = key_column
-        if in_steps and key == "name" and key_column == step_key_column:
-            step_labels[step_index] = _unquote(value)
+class _KeyLine(NamedTuple):
+    """One ``key: value`` line of a job, with the column its key starts at."""
 
-        if key == "name" and top_level:
-            name = _unquote(value)
-        elif key == "name":
-            steps.append(_unquote(value))
-        elif key == "uses" and top_level:
-            uses = _unquote(value)
-        elif key == "uses":
-            step_uses.append(_unquote(value))
-        elif key == "run":
-            if value.strip()[:1] in ("|", ">"):
-                block = []
-                index += 1
-                while index < len(lines) and (
-                    not lines[index].strip() or _indent(lines[index]) > key_column
-                ):
-                    block.append(lines[index].strip())
-                    index += 1
-                runs.append("\n".join(block))
-                blocks.append((step_index, "\n".join(block), value.strip()[:1]))
-                continue
-            runs.append(_unquote(value))
-            blocks.append((step_index, _unquote(value), "|"))
-        elif key == "matrix" and not value:
-            index += 1
-            while index < len(lines) and (
-                not lines[index].strip() or _indent(lines[index]) > key_column
-            ):
-                entry = _KEY.match(lines[index])
-                if entry and not entry.group(2):
-                    entry_key, entry_value = entry.group(3), entry.group(4)
-                    entry_column = len(entry.group(1))
-                    if entry_value.startswith("["):
-                        matrix[entry_key] = _inline_list(entry_value)
-                        index += 1
-                        continue
-                    items = []
-                    index += 1
-                    while index < len(lines) and (
-                        not lines[index].strip()
-                        or _indent(lines[index]) >= entry_column
-                    ):
-                        item = _LIST_ITEM.match(lines[index])
-                        if not item or _KEY.match(lines[index]):
-                            break
-                        items.append(_unquote(item.group(2)))
-                        index += 1
-                    matrix[entry_key] = tuple(items)
-                    continue
-                index += 1
-            continue
-        index += 1
-    return JobBlock(
-        id=job_id,
-        name=name or job_id,
-        run_text="\n".join(runs),
-        uses=uses,
-        step_uses=tuple(step_uses),
-        step_names=tuple(steps),
-        matrix=matrix,
-        run_blocks=tuple(
-            RunBlock(
-                step=step_labels.get(number) or f"step {number}",
-                code_lines=code_lines(text),
-                chained=chains_commands(text),
-                text=text,
-            )
-            for number, text, _style in blocks
-        ),
-    )
+    leading: str
+    dash: str | None
+    key: str
+    value: str
+    column: int
+    top_level: bool
+
+
+class _JobReader:
+    """Reads one job's lines, attributing each ``run:`` block to its step."""
+
+    def __init__(self, lines: list[str]) -> None:
+        self.lines = lines
+        self.index = 0
+        self.name = ""
+        self.uses = ""
+        self.step_uses: list[str] = []
+        self.runs: list[str] = []
+        self.steps: list[str] = []
+        self.matrix: dict[str, tuple[str, ...]] = {}
+        self.body_indent: int | None = None
+        # Step tracking, so each run: block can be attributed to its step.
+        self.item_indent: int | None = None
+        self.in_steps = False
+        self.step_index = 0
+        self.step_key_column = -1
+        self.step_labels: dict[int, str] = {}
+        self.blocks: list[tuple[int, str, str]] = []
+
+    def read(self) -> None:
+        """Read every line of the job."""
+        while self.index < len(self.lines):
+            match = _KEY.match(self.lines[self.index])
+            if match:
+                self._read_key(match)
+            else:
+                self._count_bare_step(self.lines[self.index])
+                self.index += 1
+
+    def job_block(self, job_id: str) -> JobBlock:
+        """Return what was read as a job named ``job_id`` unless it has a name."""
+        return JobBlock(
+            id=job_id,
+            name=self.name or job_id,
+            run_text="\n".join(self.runs),
+            uses=self.uses,
+            step_uses=tuple(self.step_uses),
+            step_names=tuple(self.steps),
+            matrix=self.matrix,
+            run_blocks=tuple(
+                RunBlock(
+                    step=self.step_labels.get(number) or f"step {number}",
+                    code_lines=code_lines(text),
+                    chained=chains_commands(text),
+                    text=text,
+                )
+                for number, text, _style in self.blocks
+            ),
+        )
+
+    def _still_inside(self, column: int) -> bool:
+        """Whether the current line is blank or indented past ``column``."""
+        return self.index < len(self.lines) and (
+            not self.lines[self.index].strip()
+            or _indent(self.lines[self.index]) > column
+        )
+
+    def _count_bare_step(self, line: str) -> None:
+        """Count a list item that is not a key (such as a quoted string) as a step."""
+        item = _LIST_ITEM.match(line)
+        if (
+            self.in_steps
+            and item
+            and self.item_indent is not None
+            and len(item.group(1)) == self.item_indent
+        ):
+            self.step_index += 1
+
+    def _read_key(self, match: re.Match[str]) -> None:
+        leading, dash, key, value = match.groups()
+        column = len(leading) + (len(dash) if dash else 0)
+        if self.body_indent is None and not dash:
+            self.body_indent = column
+        entry = _KeyLine(
+            leading=leading,
+            dash=dash,
+            key=key,
+            value=value,
+            column=column,
+            top_level=not dash and column == self.body_indent,
+        )
+        self._track_step(entry)
+        if entry.key == "run" and entry.value.strip()[:1] in ("|", ">"):
+            self._read_block_scalar(entry)
+        elif entry.key == "matrix" and not entry.value:
+            self._read_matrix(entry.column)
+        else:
+            self._record_scalar(entry)
+            self.index += 1
+
+    def _track_step(self, entry: _KeyLine) -> None:
+        """Note when a new step starts, and the name it gives itself."""
+        if entry.top_level:
+            self.in_steps = entry.key == "steps" and not entry.value
+            self.item_indent = None
+        elif self.in_steps and entry.dash:
+            if self.item_indent is None:
+                self.item_indent = len(entry.leading)
+            if len(entry.leading) == self.item_indent:
+                self.step_index += 1
+                self.step_key_column = entry.column
+        if (
+            self.in_steps
+            and entry.key == "name"
+            and entry.column == self.step_key_column
+        ):
+            self.step_labels[self.step_index] = _unquote(entry.value)
+
+    def _record_scalar(self, entry: _KeyLine) -> None:
+        """Record a one-line ``name:``, ``uses:`` or ``run:`` value."""
+        if entry.key == "name" and entry.top_level:
+            self.name = _unquote(entry.value)
+        elif entry.key == "name":
+            self.steps.append(_unquote(entry.value))
+        elif entry.key == "uses" and entry.top_level:
+            self.uses = _unquote(entry.value)
+        elif entry.key == "uses":
+            self.step_uses.append(_unquote(entry.value))
+        elif entry.key == "run":
+            self.runs.append(_unquote(entry.value))
+            self.blocks.append((self.step_index, _unquote(entry.value), "|"))
+
+    def _read_block_scalar(self, entry: _KeyLine) -> None:
+        """Read a ``|`` or ``>`` run: block, one stripped line per script line."""
+        block = []
+        self.index += 1
+        while self._still_inside(entry.column):
+            block.append(self.lines[self.index].strip())
+            self.index += 1
+        self.runs.append("\n".join(block))
+        self.blocks.append((self.step_index, "\n".join(block), entry.value.strip()[:1]))
+
+    def _read_matrix(self, column: int) -> None:
+        """Read the ``strategy.matrix`` entries nested under the key at ``column``."""
+        self.index += 1
+        while self._still_inside(column):
+            entry = _KEY.match(self.lines[self.index])
+            if entry and not entry.group(2):
+                self._read_matrix_entry(entry)
+            else:
+                self.index += 1
+
+    def _read_matrix_entry(self, entry: re.Match[str]) -> None:
+        """Read one matrix key's values, written inline or as a block list."""
+        key, value = entry.group(3), entry.group(4)
+        self.index += 1
+        if value.startswith("["):
+            self.matrix[key] = _inline_list(value)
+            return
+        # Block list items may sit at the key's own column.
+        list_column = len(entry.group(1)) - 1
+        items = []
+        while self._still_inside(list_column):
+            item = _LIST_ITEM.match(self.lines[self.index])
+            if not item or _KEY.match(self.lines[self.index]):
+                break
+            items.append(_unquote(item.group(2)))
+            self.index += 1
+        self.matrix[key] = tuple(items)
+
+
+def _parse_job(job_id: str, lines: list[str]) -> JobBlock:
+    reader = _JobReader(lines)
+    reader.read()
+    return reader.job_block(job_id)
+
+
+def _jobs_body(lines: list[str], start: int) -> list[str]:
+    """Return the lines after ``jobs:`` up to the next top-level key."""
+    body: list[str] = []
+    for line in lines[start + 1 :]:
+        if line.strip() and _indent(line) == 0:
+            break
+        body.append(line)
+    return body
+
+
+def _split_jobs(body: list[str]) -> tuple[dict[str, JobBlock], list[str]]:
+    """Parse each job under ``jobs:``, and describe any stray job-level line."""
+    job_indent = next((_indent(line) for line in body if line.strip()), 0)
+    jobs: dict[str, JobBlock] = {}
+    problems: list[str] = []
+    current: str | None = None
+    current_lines: list[str] = []
+    for line in body:
+        match = re.match(rf"^ {{{job_indent}}}([A-Za-z0-9_-]+):\s*$", line)
+        if match and _indent(line) == job_indent:
+            if current:
+                jobs[current] = _parse_job(current, current_lines)
+            current, current_lines = match.group(1), []
+        elif line.strip() and _indent(line) == job_indent:
+            problems.append(f"unexpected line at job level: {line.strip()!r}")
+        elif current:
+            current_lines.append(line)
+    if current:
+        jobs[current] = _parse_job(current, current_lines)
+    return jobs, problems
 
 
 def parse_jobs(text: str) -> tuple[dict[str, JobBlock], list[str]]:
@@ -269,26 +366,5 @@ def parse_jobs(text: str) -> tuple[dict[str, JobBlock], list[str]]:
             problems.append("flow-style 'jobs:' mapping is not supported")
         return {}, problems
 
-    body: list[str] = []
-    for line in lines[start + 1 :]:
-        if line.strip() and _indent(line) == 0:
-            break
-        body.append(line)
-
-    job_indent = next((_indent(line) for line in body if line.strip()), 0)
-    jobs: dict[str, JobBlock] = {}
-    current: str | None = None
-    current_lines: list[str] = []
-    for line in body:
-        match = re.match(rf"^ {{{job_indent}}}([A-Za-z0-9_-]+):\s*$", line)
-        if match and _indent(line) == job_indent:
-            if current:
-                jobs[current] = _parse_job(current, current_lines)
-            current, current_lines = match.group(1), []
-        elif line.strip() and _indent(line) == job_indent:
-            problems.append(f"unexpected line at job level: {line.strip()!r}")
-        elif current:
-            current_lines.append(line)
-    if current:
-        jobs[current] = _parse_job(current, current_lines)
-    return jobs, problems
+    jobs, job_problems = _split_jobs(_jobs_body(lines, start))
+    return jobs, problems + job_problems

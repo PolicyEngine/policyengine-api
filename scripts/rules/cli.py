@@ -28,6 +28,38 @@ def _print(violations: list, notes: list[str] | None = None) -> int:
     return 1 if violations else 0
 
 
+def _ci_scripts_command(root: Path, *, write_baselines: bool) -> int:
+    """Check the workflow scripts, or record today's findings as the baselines."""
+    if not write_baselines:
+        violations, notes = ci_scripts.run_check(root)
+        return _print(violations, notes)
+    registry, violations = load_registry(root)
+    if registry is None or registry.ci_scripts is None:
+        return _print(violations or ["no [ci_scripts] table"])
+    ci_scripts.write_baselines(
+        registry, ci_scripts.find(registry.ci_scripts, root), root
+    )
+    _report("wrote ci_scripts baselines; update the rules' baseline counts")
+    return 0
+
+
+def _registry_command(command: str, root: Path) -> int:
+    """Validate the registry and, for ``render``, write its views once it is valid."""
+    clear_caches()
+    registry, violations = load_registry(root)
+    if registry is None:
+        return _print(violations)
+    violations += validate(registry, root, date.today())
+    if command != "render":
+        return _print(violations)
+    if violations:
+        _report("render refused: fix the registry first")
+        return _print(violations)
+    for path in write_outputs(registry, root):
+        _report(f"wrote {path.relative_to(root)}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run one rules command and return 1 if it found violations.
 
@@ -56,32 +88,8 @@ def main(argv: list[str] | None = None) -> int:
     root = args.root.resolve()
 
     if args.command == "ci-scripts":
-        if args.write_baselines:
-            registry, violations = load_registry(root)
-            if registry is None or registry.ci_scripts is None:
-                return _print(violations or ["no [ci_scripts] table"])
-            ci_scripts.write_baselines(
-                registry, ci_scripts.find(registry.ci_scripts, root), root
-            )
-            _report("wrote ci_scripts baselines; update the rules' baseline counts")
-            return 0
-        violations, notes = ci_scripts.run_check(root)
-        return _print(violations, notes)
-
+        return _ci_scripts_command(root, write_baselines=args.write_baselines)
     if args.command == "guard":
         result = run_guard(root, base_ref=args.base_ref)
         return _print(result.violations, result.notes)
-
-    clear_caches()
-    registry, violations = load_registry(root)
-    if registry is None:
-        return _print(violations)
-    violations += validate(registry, root, date.today())
-    if args.command == "render":
-        if violations:
-            _report("render refused: fix the registry first")
-            return _print(violations)
-        for path in write_outputs(registry, root):
-            _report(f"wrote {path.relative_to(root)}")
-        return 0
-    return _print(violations)
+    return _registry_command(args.command, root)

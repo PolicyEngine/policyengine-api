@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 import re
 import tomllib
+from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Any
 
@@ -428,15 +429,13 @@ def resolve_ci(rule: Rule, root: Path) -> list[Violation]:
         job, problems = _job_for(rule.id, ref, root, "ci", "rule.ci")
         violations += problems
         if job is not None and rule.enforcer.kind is Kind.PYTEST:
-            violations += _test_coverage(
-                rule.id,
-                root_relative_nodes(rule),
-                rule.enforcer.get("project"),
-                ref.invocation,
-                job,
-                root,
-                "ci",
+            required = _RequiredTests(
+                rule_id=rule.id,
+                check="ci",
+                nodes=root_relative_nodes(rule),
+                project=rule.enforcer.get("project"),
             )
+            violations += _test_coverage(required, ref.invocation, job, root)
     return violations
 
 
@@ -476,22 +475,27 @@ def resolve_proof_ci(rule: Rule, root: Path) -> list[Violation]:
         job, problems = _job_for(rule.id, ref, root, "proof", "proof")
         violations += problems
         if job is not None:
-            violations += _test_coverage(
-                rule.id, [node], project, ref.invocation, job, root, "proof"
+            required = _RequiredTests(
+                rule_id=rule.id, check="proof", nodes=[node], project=project
             )
+            violations += _test_coverage(required, ref.invocation, job, root)
     return violations
 
 
+@dataclass(frozen=True)
+class _RequiredTests:
+    """Root-relative test nodes a CI job must collect, and how to report a miss."""
+
+    rule_id: str
+    check: str
+    nodes: list[str]
+    project: str | None
+
+
 def _test_coverage(
-    rule_id: str,
-    nodes: list[str],
-    project: str | None,
-    invocation: str,
-    job: JobBlock,
-    root: Path,
-    check: str,
+    required: _RequiredTests, invocation: str, job: JobBlock, root: Path
 ) -> list[Violation]:
-    """Check that the job's test command collects these root-relative test nodes.
+    """Check that the job's test command collects the required test nodes.
 
     Only ``make`` targets and ``unittest discover`` commands are inspected; any
     other command is trusted.
@@ -508,30 +512,30 @@ def _test_coverage(
         collected = [match.group(1)] if match else None
         described = f"'{invocation}'"
     if collected:
-        for node in nodes:
+        for node in required.nodes:
             path = split_node(node)[0]
             if not any(
                 path == p or path.startswith(p.rstrip("/") + "/") for p in collected
             ):
                 violations.append(
                     Violation(
-                        rule_id,
-                        check,
+                        required.rule_id,
+                        required.check,
                         f"{path} is not collected by {described} "
                         f"(collects {collected})",
                         "add it to what the job runs, or move the test",
                     )
                 )
     if (
-        project
+        required.project
         and job.matrix
-        and not any(project in values for values in job.matrix.values())
+        and not any(required.project in values for values in job.matrix.values())
     ):
         violations.append(
             Violation(
-                rule_id,
-                check,
-                f"project {project} is not in the matrix of job '{job.id}'",
+                required.rule_id,
+                required.check,
+                f"project {required.project} is not in the matrix of job '{job.id}'",
                 "add the project to the job matrix",
             )
         )
