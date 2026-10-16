@@ -117,7 +117,7 @@ select = [
     # Group 6: security, logging and debugging leftovers.
     "DTZ", "ERA", "EXE", "FIX", "G", "LOG", "S", "T20", "TD",
     # Group 7: structure and imports.
-    "A", "E", "FAST", "INP", "N", "PLC", "SLF",
+    "A", "E", "FAST", "INP", "N", "PLC", "SLF", "TID253",
 ]
 # Mutually exclusive pydocstyle pairs: keep D211 (no blank line before a class
 # docstring) and D212 (summary on the first line).
@@ -136,14 +136,16 @@ exclude = ["migrations/*/versions/*.py"]
 # named constants for magic numbers. They may also reach into private members,
 # live in directories that aren't packages, import inside a test (often after
 # patching the environment), and use fake credentials, naive datetimes,
-# subprocess calls to repository scripts, SQL built from strings and prints.
-# Every other rule applies to tests.
+# subprocess calls to repository scripts, SQL built from strings and prints,
+# and may import the lazily loaded packages at module level. Every other rule
+# applies to tests.
 "**/tests/**" = [
     "ANN", "D1", "DTZ001", "DTZ011", "INP001", "PLC0415", "PLR2004", "S101",
-    "S105", "S106", "S603", "S607", "S608", "SLF001", "T201",
+    "S105", "S106", "S603", "S607", "S608", "SLF001", "T201", "TID253",
 ]
-# CI/CD scripts print their results and fetch fixed URLs.
-".github/**" = ["S310", "T201"]
+# CI/CD scripts print their results, fetch fixed URLs and may import the
+# lazily loaded packages at module level.
+".github/**" = ["S310", "T201", "TID253"]
 # Command-line scripts print their output, run other programs, fetch fixed
 # URLs, stamp today's date and pick random samples.
 "scripts/**" = [
@@ -202,6 +204,31 @@ showcontent = true
 directory = "removed"
 name = "Removed"
 showcontent = true
+[tool.ruff.lint.flake8-tidy-imports]
+# Packages and modules that load only inside the function that needs them,
+# never at module level (TID253 enforces it; TYPE_CHECKING imports are fine):
+# policyengine and spm_calculator load country models, the v2 database module
+# registers an exit hook at import, the v2 database sessions open persistence
+# only when a default factory runs, and Auth0 Management loads the Google
+# client. Ruff's PLC0415 accepts in-function imports of these without a
+# suppression. A module belongs here only if no application module imports it
+# at module level.
+banned-module-level-imports = [
+    "policyengine",
+    "policyengine_api.data.v2.database",
+    "policyengine_api.libs.auth0_management",
+    "policyengine_api.services.v2.households.database_session",
+    "policyengine_api.services.v2.legacy_refs.database_session",
+    "policyengine_api.services.v2.metadata.database_session",
+    "policyengine_api.services.v2.policies.database_session",
+    "policyengine_api.services.v2.user_accounts.database_session",
+    "policyengine_api.services.v2.user_households.database_session",
+    "policyengine_api.services.v2.user_policies.database_session",
+    "policyengine_api.services.v2.user_reports.database_session",
+    "policyengine_api.services.v2.user_simulations.database_session",
+    "spm_calculator",
+]
+
 [tool.ruff.lint.flake8-type-checking]
 # Classes whose annotations Pydantic, SQLModel or SQLAlchemy evaluate at runtime, so their
 # imports must stay at runtime. Ruff checks direct bases only, so every

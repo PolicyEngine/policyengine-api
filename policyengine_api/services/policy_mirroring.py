@@ -46,10 +46,10 @@ class PolicyMirrorUnavailableError(RuntimeError):
 
 
 def _default_mirror_factory() -> LegacyPolicyMirror:
-    from policyengine_api.data.v2.database import (  # noqa: PLC0415  # registers an atexit hook at import; v2 persistence loads only when needed
+    from policyengine_api.data.v2.database import (
         get_v2_session_factory,
     )
-    from policyengine_api.services.v2.policies.database_session import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
+    from policyengine_api.services.v2.policies.database_session import (
         PolicyDatabaseSession,
     )
     from policyengine_api.services.v2.policies.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs

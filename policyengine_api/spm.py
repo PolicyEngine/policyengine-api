@@ -501,7 +501,7 @@ def _installed_country_implements_spm(country_id: str) -> bool:
 
 @lru_cache(maxsize=4)
 def _selected_forecast(expected_sha256: str) -> SPMForecast:
-    from spm_calculator.rolling_forecast import (  # noqa: PLC0415  # spm_calculator loads only when a forecast is selected
+    from spm_calculator.rolling_forecast import (
         load_forecast,
     )
 
