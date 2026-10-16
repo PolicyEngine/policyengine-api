@@ -773,7 +773,7 @@ autofix = true
 [rule.enforcer]
 kind = "ruff"
 mode = "lint"
-codes = ["A", "ANN", "BLE", "D", "DTZ", "E", "E4", "E7", "E9", "EM", "ERA", "EXE", "F", "FAST", "FIX", "FLY", "FURB", "G", "I", "INP", "LOG", "N", "PIE", "PLC", "PYI", "RET", "RSE", "S", "SLF", "T20", "TC", "TD", "TRY", "UP", "W"]
+codes = ["A", "ANN", "BLE", "D", "DTZ", "E", "E4", "E7", "E9", "EM", "ERA", "EXE", "F", "FAST", "FIX", "FLY", "FURB", "G", "I", "INP", "LOG", "N", "PIE", "PLC", "PYI", "RET", "RSE", "S", "SLF", "T20", "TC", "TD", "TID253", "TRY", "UP", "W"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "lint"
@@ -817,7 +817,7 @@ kind = "none"
 [[rule]]
 id = "api.quality.tests-ruff-exemptions"
 category = "quality"
-statement = "Test files may use pytest's bare assert, need no docstrings, annotations or named constants for magic numbers, and may reach into private members, live outside packages and import inside a test (S101, D1, ANN, PLR2004, SLF001, INP001, PLC0415). They may also use fake credentials, naive datetimes, subprocess calls to repository scripts, SQL built from strings and prints (S105, S106, DTZ001, DTZ011, S603, S607, S608, T201). Every other ruff rule applies to tests."
+statement = "Test files may use pytest's bare assert, need no docstrings, annotations or named constants for magic numbers, and may reach into private members, live outside packages and import inside a test (S101, D1, ANN, PLR2004, SLF001, INP001, PLC0415). They may also use fake credentials, naive datetimes, subprocess calls to repository scripts, SQL built from strings and prints (S105, S106, DTZ001, DTZ011, S603, S607, S608, T201), and may import the lazily loaded packages at module level (TID253). Every other ruff rule applies to tests."
 rationale = "docs/engineering/skills/rules-registry.md#file-level-exceptions"
 scope = ["tests/**/*.py", "scripts/rules/tests/**/*.py"]
 tier = "mechanical"
@@ -827,7 +827,7 @@ autofix = false
 kind = "ruff"
 mode = "per-file-ignore"
 pattern = "**/tests/**"
-codes = ["ANN", "D1", "DTZ001", "DTZ011", "INP001", "PLC0415", "PLR2004", "S101", "S105", "S106", "S603", "S607", "S608", "SLF001", "T201"]
+codes = ["ANN", "D1", "DTZ001", "DTZ011", "INP001", "PLC0415", "PLR2004", "S101", "S105", "S106", "S603", "S607", "S608", "SLF001", "T201", "TID253"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "lint"
@@ -836,7 +836,7 @@ invocation = "ruff check ."
 [[rule]]
 id = "api.quality.ci-cd-scripts-ruff-exemptions"
 category = "quality"
-statement = "CI/CD scripts under .github may print their results and fetch fixed URLs (T201, S310); every other ruff rule applies to them."
+statement = "CI/CD scripts under .github may print their results, fetch fixed URLs and import the lazily loaded packages at module level (T201, S310, TID253); every other ruff rule applies to them."
 rationale = "docs/engineering/skills/rules-registry.md#file-level-exceptions"
 scope = [".github/**/*.py"]
 tier = "mechanical"
@@ -846,7 +846,7 @@ autofix = false
 kind = "ruff"
 mode = "per-file-ignore"
 pattern = ".github/**"
-codes = ["S310", "T201"]
+codes = ["S310", "T201", "TID253"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "lint"

@@ -19,7 +19,7 @@ def validate_policy_runtime_configuration() -> None:
     from policyengine_api.data.v2.settings import (  # noqa: PLC0415  # keeps importing readiness cheap; only validation needs configuration
         load_v2_runtime_database_settings,
     )
-    from policyengine_api.libs.auth0_management import (  # noqa: PLC0415  # keeps importing readiness cheap; only validation needs configuration
+    from policyengine_api.libs.auth0_management import (
         load_auth0_management_settings,
     )
     from policyengine_api.libs.user_auth import (  # noqa: PLC0415  # keeps importing readiness cheap; only validation needs configuration
