@@ -39,6 +39,10 @@ from policyengine_api.services.v2.user_households.transformations import (
     user_household_page,
     user_household_read,
 )
+from policyengine_api.services.v2.user_households.types import (
+    UserHouseholdFilter,
+    UserHouseholdListing,
+)
 from policyengine_api.services.v2.user_households.validators import (
     require_user_household,
     resolve_association_household_id,
@@ -222,16 +226,18 @@ class V2UserHouseholdService:
         *,
         principal: AccountPrincipal,
         country_id: str,
-        household_id: UUID | None = None,
-        legacy_household_id: int | None = None,
+        household_filter: UserHouseholdFilter | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> UserHouseholdPage:
         """Return a page of the principal's associations in this country.
 
-        ``household_id`` and ``legacy_household_id`` narrow it to one household. A
-        signed-out browser that has not saved anything yet gets an empty page.
+        ``household_filter`` narrows it to one household. A signed-out browser
+        that has not saved anything yet gets an empty page.
         """
+        selected = (
+            household_filter if household_filter is not None else UserHouseholdFilter()
+        )
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
@@ -240,12 +246,14 @@ class V2UserHouseholdService:
                 return user_household_page([], offset=offset, limit=limit)
             rows = read_user_household_rows(
                 session,
-                country_id=country_id,
-                user_id=owner.user_id,
-                household_id=household_id,
-                legacy_household_id=legacy_household_id,
-                offset=offset,
-                limit=limit,
+                UserHouseholdListing(
+                    country_id=country_id,
+                    user_id=owner.user_id,
+                    household_id=selected.household_id,
+                    legacy_household_id=selected.legacy_household_id,
+                    offset=offset,
+                    limit=limit,
+                ),
             )
             return user_household_page(rows, offset=offset, limit=limit)
 

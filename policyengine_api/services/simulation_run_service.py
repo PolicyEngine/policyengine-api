@@ -1,6 +1,7 @@
 """Run history for v1 simulations, one numbered row per calculation attempt."""
 
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import func, select
@@ -17,6 +18,26 @@ SIMULATION_RUN_VERSION_FIELDS = (
 )
 
 
+@dataclass(frozen=True)
+class NewSimulationRun:
+    """The fields of a simulation run to append; omitted fields take these defaults.
+
+    ``version_manifest`` supplies the run's version fields, and ``run_id`` a fixed
+    ID instead of a new UUID.
+    """
+
+    report_output_run_id: str | None = None
+    input_position: int | None = None
+    status: str = "pending"
+    trigger_type: str = "initial"
+    output: dict[str, Any] | list[Any] | str | None = None
+    error_message: str | None = None
+    source_run_id: str | None = None
+    simulation_spec_snapshot: dict[str, Any] | str | None = None
+    version_manifest: dict[str, str | None] | None = None
+    run_id: str | None = None
+
+
 class SimulationRunService:
     """Simulation-run operations performed through a caller-owned ORM session."""
 
@@ -24,23 +45,17 @@ class SimulationRunService:
         self,
         session: Session,
         simulation_id: int,
-        report_output_run_id: str | None = None,
-        input_position: int | None = None,
-        status: str = "pending",
-        trigger_type: str = "initial",
-        output: dict[str, Any] | list[Any] | str | None = None,
-        error_message: str | None = None,
-        source_run_id: str | None = None,
-        simulation_spec_snapshot: dict[str, Any] | str | None = None,
-        version_manifest: dict[str, str | None] | None = None,
-        run_id: str | None = None,
+        new_run: NewSimulationRun | None = None,
     ) -> SimulationRun:
         """Append the next numbered run to a simulation and return it.
 
+        ``new_run`` gives the run's fields; without it the run takes the defaults.
         The parent row is locked while the sequence number is chosen; timestamps start
         unset. Raise ValueError if the simulation does not exist. The caller owns the
         transaction.
         """
+        if new_run is None:
+            new_run = NewSimulationRun()
         parent = session.scalar(
             select(Simulation).where(Simulation.id == simulation_id).with_for_update()
         )
@@ -56,26 +71,26 @@ class SimulationRunService:
             or 0
         ) + 1
         values = {
-            "report_output_run_id": report_output_run_id,
-            "input_position": input_position,
-            "status": status,
-            "output": output,
-            "error_message": error_message,
-            "trigger_type": trigger_type,
+            "report_output_run_id": new_run.report_output_run_id,
+            "input_position": new_run.input_position,
+            "status": new_run.status,
+            "output": new_run.output,
+            "error_message": new_run.error_message,
+            "trigger_type": new_run.trigger_type,
             "requested_at": None,
             "started_at": None,
             "finished_at": None,
-            "source_run_id": source_run_id,
-            "simulation_spec_snapshot_json": simulation_spec_snapshot,
+            "source_run_id": new_run.source_run_id,
+            "simulation_spec_snapshot_json": new_run.simulation_spec_snapshot,
         }
         values.update(
             {
-                field: (version_manifest or {}).get(field)
+                field: (new_run.version_manifest or {}).get(field)
                 for field in SIMULATION_RUN_VERSION_FIELDS
             }
         )
         run = SimulationRun(
-            id=run_id or str(uuid.uuid4()),
+            id=new_run.run_id or str(uuid.uuid4()),
             simulation_id=simulation_id,
             run_sequence=sequence,
             **values,

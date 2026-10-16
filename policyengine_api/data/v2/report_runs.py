@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import IntegrityError
@@ -36,6 +37,14 @@ class ReportTypeImmutableError(ValueError):
 
 class ReportRunStateError(ValueError):
     """Raised when a worker transition is invalid for the durable run."""
+
+
+@dataclass(frozen=True)
+class ReportRunPackageVersions:
+    """The country package and PolicyEngine.py versions one report run uses."""
+
+    country_package_version: str
+    policyengine_version: str
 
 
 def _locked_report(session: Session, report_id: UUID) -> Report:
@@ -77,8 +86,7 @@ def create_report_run(
     session: Session,
     *,
     report_id: UUID,
-    country_package_version: str,
-    policyengine_version: str,
+    versions: ReportRunPackageVersions,
     trigger: ReportRunTrigger,
     idempotency_key: UUID | None = None,
 ) -> ReportRun:
@@ -87,14 +95,14 @@ def create_report_run(
     if trigger is ReportRunTrigger.MANUAL and idempotency_key is None:
         msg = "manual report reruns require an idempotency key"
         raise ValueError(msg)
-    if not country_package_version or not policyengine_version:
+    if not versions.country_package_version or not versions.policyengine_version:
         msg = "report run package versions must be non-empty"
         raise ValueError(msg)
 
     run = ReportRun(
         report_id=report_id,
-        country_package_version=country_package_version,
-        policyengine_version=policyengine_version,
+        country_package_version=versions.country_package_version,
+        policyengine_version=versions.policyengine_version,
         trigger=trigger,
         idempotency_key=idempotency_key,
     )

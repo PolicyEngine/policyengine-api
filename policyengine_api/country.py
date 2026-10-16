@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from importlib.metadata import version as get_package_version
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import dpath
 import pandas as pd
@@ -87,21 +87,33 @@ def _serialize_axis_result(
     return entity_values
 
 
+class _HouseholdCell(NamedTuple):
+    """One requested household value: an entity's variable in one period."""
+
+    entity_plural: str
+    entity_id: str
+    variable_name: str
+    period: str
+
+
 def _record_calculation_failure(
     household: dict,
     calculation_warnings: list[str],
+    cell: _HouseholdCell,
     *,
-    has_axes: bool,
-    population: Population,
-    entity_plural: str,
-    entity_id: str,
-    variable_name: str,
-    period: str,
+    axis_population: Population | None,
     error: Exception,
 ) -> None:
-    if has_axes:
+    """Record a household value that could not be calculated.
+
+    ``axis_population`` is the cell's population when the household has axes:
+    the cell then holds one null per axis point and a warning is added.
+    Otherwise the cell is null and the failure is only logged.
+    """
+    entity_plural, entity_id, variable_name, period = cell
+    if axis_population is not None:
         count_entities = len(household[entity_plural])
-        axis_point_count = population.count // count_entities
+        axis_point_count = axis_population.count // count_entities
         household[entity_plural][entity_id][variable_name][period] = [
             None
         ] * axis_point_count
@@ -548,12 +560,8 @@ class PolicyEngineCountry:
                 _record_calculation_failure(
                     household,
                     calculation_warnings,
-                    has_axes=has_axes,
-                    population=population,
-                    entity_plural=entity_plural,
-                    entity_id=entity_id,
-                    variable_name=variable_name,
-                    period=period,
+                    _HouseholdCell(entity_plural, entity_id, variable_name, period),
+                    axis_population=population if has_axes else None,
                     error=error,
                 )
 

@@ -3,6 +3,7 @@
 import os
 import sys
 from dataclasses import dataclass, field
+from http import HTTPStatus
 from urllib.parse import urlparse
 
 import httpx
@@ -648,7 +649,7 @@ class SimulationEntrypointClient:
         except Exception:  # noqa: BLE001  # a health probe reports any failure as unhealthy
             return False
         else:
-            return response.status_code == 200
+            return response.status_code == HTTPStatus.OK
 
 
 # Compatibility aliases preserve existing imports and generated-client consumers.

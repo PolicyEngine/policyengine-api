@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
@@ -19,12 +20,25 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataParameterValueDetailResponse,
     MetadataParameterValuePageResponse,
 )
+from policyengine_api.services.v2.metadata.types import ParameterValueFilter
 
 if TYPE_CHECKING:
     from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 
 Offset = Annotated[int, Query(ge=0)]
 Limit = Annotated[int, Query(ge=1, le=500)]
+
+
+@dataclass(frozen=True)
+class ParameterValueListingQuery:
+    """The query parameters of the canonical parameter-value listing route."""
+
+    country_id: str
+    policyengine_version: str | None = None
+    parameter_id: UUID | None = None
+    current: bool = False
+    offset: Offset = 0
+    limit: Limit = 100
 
 
 def build_v2_metadata_parameter_router(
@@ -111,23 +125,20 @@ def build_v2_metadata_parameter_router(
         summary="List canonical values from a selected PolicyEngine.py catalog",
     )
     def list_parameter_values(
-        country_id: str,
-        policyengine_version: str | None = None,
-        parameter_id: UUID | None = None,
-        current: bool = False,  # noqa: FBT001, FBT002  # FastAPI query parameter
-        offset: Offset = 0,
-        limit: Limit = 100,
+        query: Annotated[ParameterValueListingQuery, Depends()],
     ) -> MetadataParameterValuePageResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataParameterValuePageResponse,
             lambda reader: reader.list_parameter_values(
-                country_id,
-                policyengine_version,
-                parameter_id=parameter_id,
-                current=current,
-                offset=offset,
-                limit=limit,
+                query.country_id,
+                query.policyengine_version,
+                value_filter=ParameterValueFilter(
+                    parameter_id=query.parameter_id,
+                    current=query.current,
+                ),
+                offset=query.offset,
+                limit=query.limit,
             ),
         )
 

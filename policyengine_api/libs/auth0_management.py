@@ -20,6 +20,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from functools import cache
+from http import HTTPStatus
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
@@ -189,7 +190,7 @@ class Auth0ManagementClient:
                     "audience": f"{self._base_url}/api/v2/",
                 },
             )
-            if response.status_code != 200:
+            if response.status_code != HTTPStatus.OK:
                 msg = (
                     f"Management API token request failed: HTTP {response.status_code}"
                 )
@@ -237,7 +238,7 @@ class Auth0ManagementClient:
         """
         token = self._access_token()
         response = self._delete_request(subject, token)
-        if response.status_code == 401:
+        if response.status_code == HTTPStatus.UNAUTHORIZED:
             self._discard_token(token)
             response = self._delete_request(subject, self._access_token())
         if response.status_code in {200, 202, 204, 404}:

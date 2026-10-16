@@ -1,7 +1,10 @@
 import pytest
 
 from policyengine_api.data.v1_models import SimulationRun
-from policyengine_api.services.simulation_run_service import SimulationRunService
+from policyengine_api.services.simulation_run_service import (
+    NewSimulationRun,
+    SimulationRunService,
+)
 from policyengine_api.services.simulation_service import SimulationService
 
 run_service = SimulationRunService()
@@ -20,13 +23,17 @@ def test_creates_mapped_runs_with_incrementing_sequence(orm_session):
     first = run_service.create_simulation_run(
         orm_session,
         simulation.id,
-        input_position=1,
-        trigger_type="rerun",
-        simulation_spec_snapshot={"population_id": "household-1"},
-        version_manifest={"simulation_cache_version": "s123"},
+        NewSimulationRun(
+            input_position=1,
+            trigger_type="rerun",
+            simulation_spec_snapshot={"population_id": "household-1"},
+            version_manifest={"simulation_cache_version": "s123"},
+        ),
     )
     second = run_service.create_simulation_run(
-        orm_session, simulation.id, input_position=1, trigger_type="rerun"
+        orm_session,
+        simulation.id,
+        NewSimulationRun(input_position=1, trigger_type="rerun"),
     )
 
     assert isinstance(first, SimulationRun)
@@ -57,10 +64,10 @@ def test_gets_and_lists_runs_as_models(orm_session):
 def test_display_run_prefers_active_run(orm_session):
     simulation = create_simulation(orm_session)
     successful = run_service.create_simulation_run(
-        orm_session, simulation.id, status="complete"
+        orm_session, simulation.id, NewSimulationRun(status="complete")
     )
     active = run_service.create_simulation_run(
-        orm_session, simulation.id, status="running"
+        orm_session, simulation.id, NewSimulationRun(status="running")
     )
     simulation.latest_successful_run_id = successful.id
     simulation.active_run_id = active.id
@@ -71,7 +78,7 @@ def test_display_run_prefers_active_run(orm_session):
 def test_display_run_falls_back_to_latest_successful_run(orm_session):
     simulation = create_simulation(orm_session)
     successful = run_service.create_simulation_run(
-        orm_session, simulation.id, status="complete"
+        orm_session, simulation.id, NewSimulationRun(status="complete")
     )
     run_service.create_simulation_run(orm_session, simulation.id)
     simulation.active_run_id = None

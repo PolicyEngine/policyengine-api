@@ -34,6 +34,7 @@ from policyengine_api.services.v2.metadata.database_session import (
     MetadataDatabaseSession,
 )
 from policyengine_api.services.v2.metadata.services import V2MetadataService
+from policyengine_api.services.v2.metadata.types import ParameterValueFilter
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
@@ -329,13 +330,15 @@ def test_parameter_values_are_separate_canonical_resources(
 
     all_values = _service(catalog_session).list_parameter_values(
         "us",
-        parameter_id=parameter.id,
+        value_filter=ParameterValueFilter(parameter_id=parameter.id),
     )
     current_value = _service(catalog_session).list_parameter_values(
         "us",
-        parameter_id=parameter.id,
-        current=True,
-        now=datetime(2026, 6, 1, tzinfo=UTC),
+        value_filter=ParameterValueFilter(
+            parameter_id=parameter.id,
+            current=True,
+            now=datetime(2026, 6, 1, tzinfo=UTC),
+        ),
     )
 
     assert [item.value for item in all_values.items] == [0.2, 0.1]
@@ -358,8 +361,7 @@ def test_current_parameter_value_uses_inclusive_effective_dates(
 ) -> None:
     result = _service(catalog_session).list_parameter_values(
         "us",
-        current=True,
-        now=selected_time,
+        value_filter=ParameterValueFilter(current=True, now=selected_time),
     )
 
     assert [item.value for item in result.items] == [expected_value]
@@ -440,7 +442,9 @@ def test_all_resource_families_support_collection_and_detail_reads(
     model_version = service.list_model_versions("us").items[0]
     variable = service.list_variables("us").items[0]
     parameter = service.list_parameters("us").items[0]
-    value = service.list_parameter_values("us", parameter_id=parameter.id).items[0]
+    value = service.list_parameter_values(
+        "us", value_filter=ParameterValueFilter(parameter_id=parameter.id)
+    ).items[0]
     dataset = service.list_datasets("us").items[0]
     region = service.list_regions("us").items[0]
 

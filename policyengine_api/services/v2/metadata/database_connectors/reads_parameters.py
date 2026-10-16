@@ -11,8 +11,9 @@ from policyengine_api.data.v2.models import Parameter, ParameterValue
 from policyengine_api.services.v2.metadata.database_connectors.reads import read_rows
 
 if TYPE_CHECKING:
-    from datetime import datetime
     from uuid import UUID
+
+    from policyengine_api.services.v2.metadata.types import ParameterValueSelection
 
 
 def _escape_like(value: str) -> str:
@@ -69,18 +70,20 @@ def read_parameter_values(
     session: Session,
     *,
     model_version_id: UUID,
-    parameter_id: UUID | None,
-    selected_day: datetime | None,
+    selection: ParameterValueSelection,
     offset: int,
     limit: int,
 ) -> list[ParameterValue]:
     """Return a page of a model version's current-law parameter values.
 
-    Values tied to a policy or dynamic are excluded. parameter_id keeps one
-    parameter's values and selected_day keeps those in effect on that day. Rows
-    are ordered by parameter name, then newest first, and limit + 1 are fetched
-    so the caller can tell whether another page exists.
+    Values tied to a policy or dynamic are excluded. The selection's
+    parameter_id keeps one parameter's values and its selected_day keeps those
+    in effect on that day. Rows are ordered by parameter name, then newest
+    first, and limit + 1 are fetched so the caller can tell whether another
+    page exists.
     """
+    parameter_id = selection.parameter_id
+    selected_day = selection.selected_day
     statement = (
         select(ParameterValue)
         .join(Parameter, col(Parameter.id) == col(ParameterValue.parameter_id))

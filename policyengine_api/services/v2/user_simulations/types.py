@@ -92,6 +92,17 @@ class UserSimulationRead:
 
 
 @dataclass(frozen=True)
+class UserSimulationListing:
+    """One page of a user's associations to read, optionally for one v1 simulation."""
+
+    country_id: str
+    user_id: UUID
+    legacy_simulation_id: int | None
+    offset: int
+    limit: int
+
+
+@dataclass(frozen=True)
 class UserSimulationPage:
     """One page of associations in creation order; ``has_more`` says if more follow."""
 

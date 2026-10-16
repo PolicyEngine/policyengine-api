@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
     from policyengine_api.services.v2.user_policies.types import (
+        LegacyUserPolicyRevision,
         LegacyUserPolicySnapshot,
         UserPolicyCreationInput,
     )
@@ -135,27 +136,27 @@ def validate_existing_legacy_user_policy_mapping(
     mapping: LegacyUserPolicyMapping,
     *,
     association: UserPolicy | None,
-    country_id: str,
-    fingerprint: str,
-    user_id: UUID,
-    policy_id: UUID,
-    source_revision: int,
+    revision: LegacyUserPolicyRevision,
+    projection: UserPolicyCreationInput,
     fingerprint_version: int,
 ) -> tuple[LegacyUserPolicyMappingAction, UserPolicy]:
     """Decide how to apply a v1 revision to an existing mapping.
 
-    Return the action with the mapped association. Raise
-    LegacyUserPolicyIntegrityError if the association is missing or its user,
-    policy or country changed, if the fingerprint version differs, if a replay
-    has a different fingerprint, or if a revision was skipped.
+    ``projection`` is the association the revision projects to, whose user and
+    policy the mapped association must keep. Return the action with the mapped
+    association. Raise LegacyUserPolicyIntegrityError if the association is
+    missing or its user, policy or country changed, if the fingerprint version
+    differs, if a replay has a different fingerprint, or if a revision was
+    skipped.
     """
+    source_revision = revision.source_revision
     if association is None:
         msg = "legacy user-policy mapping has no association"
         raise LegacyUserPolicyIntegrityError(msg)
     if (
-        association.policy_id != policy_id
-        or association.country_id != country_id
-        or association.user_id != user_id
+        association.policy_id != projection.policy_id
+        or association.country_id != revision.country_id
+        or association.user_id != projection.user_id
     ):
         msg = "legacy user-policy mapping conflicts with immutable association fields"
         raise LegacyUserPolicyIntegrityError(msg)
@@ -165,7 +166,7 @@ def validate_existing_legacy_user_policy_mapping(
     if source_revision < mapping.last_applied_source_revision:
         return LegacyUserPolicyMappingAction.STALE, association
     if source_revision == mapping.last_applied_source_revision:
-        if mapping.fingerprint_sha256 != fingerprint:
+        if mapping.fingerprint_sha256 != revision.fingerprint:
             msg = "legacy user-policy revision conflicts with its stored fingerprint"
             raise LegacyUserPolicyIntegrityError(msg)
         return LegacyUserPolicyMappingAction.REPLAY, association

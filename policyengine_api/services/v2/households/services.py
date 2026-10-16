@@ -188,10 +188,8 @@ def mirror_legacy_household_in_session(
         )
     mapping_id = create_legacy_household_mapping(
         session,
-        country_id=snapshot.country_id,
-        legacy_household_id=snapshot.legacy_household_id,
+        snapshot=snapshot,
         household_id=result.household_id,
-        source_api_version=snapshot.api_version,
         fingerprint_version=LEGACY_HOUSEHOLD_FINGERPRINT_VERSION,
         fingerprint_sha256=fingerprint,
     )

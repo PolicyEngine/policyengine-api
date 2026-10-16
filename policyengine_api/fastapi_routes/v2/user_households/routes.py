@@ -38,6 +38,7 @@ from policyengine_api.query_parameters import (
     UserHouseholdUpdateQuery,
 )
 from policyengine_api.services.v2.identity.types import AccountPrincipal
+from policyengine_api.services.v2.user_households.types import UserHouseholdFilter
 
 UserHouseholdCreateQueryDependency = Annotated[
     UserHouseholdCreateQuery, Depends(query_dependency(UserHouseholdCreateQuery))
@@ -63,6 +64,28 @@ def _service_factory(
     if dependencies.v2_user_household_service_factory is not None:
         return dependencies.v2_user_household_service_factory
     return _default_v2_user_household_service_factory
+
+
+def _create_user_household(
+    service_factory: Callable[[], V2UserHouseholdResourceService],
+    body: UserHouseholdCreateRequest,
+    query: UserHouseholdCreateQuery,
+    principal: AccountPrincipal,
+) -> UserHouseholdDetailResponse | JSONResponse:
+    """Create an association once the body and query agree on its country."""
+    if body.country_id != query.country_id:
+        return v2_error_response(400, "Body country_id must match query country_id")
+
+    def create() -> UserHouseholdDetailResponse:
+        item = service_factory().create_user_household(
+            principal=principal,
+            association_input=body,
+        )
+        return UserHouseholdDetailResponse(
+            result=UserHouseholdDetailResult(item=UserHouseholdItem.from_read(item))
+        )
+
+    return user_resource_operation(create)
 
 
 def build_v2_user_household_router(
@@ -101,19 +124,7 @@ def build_v2_user_household_router(
         query: UserHouseholdCreateQueryDependency,
         principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserHouseholdDetailResponse | JSONResponse:
-        if body.country_id != query.country_id:
-            return v2_error_response(400, "Body country_id must match query country_id")
-
-        def create() -> UserHouseholdDetailResponse:
-            item = service_factory().create_user_household(
-                principal=principal,
-                association_input=body,
-            )
-            return UserHouseholdDetailResponse(
-                result=UserHouseholdDetailResult(item=UserHouseholdItem.from_read(item))
-            )
-
-        return user_resource_operation(create)
+        return _create_user_household(service_factory, body, query, principal)
 
     @router.get(
         "/user-households/{association_id}",
@@ -150,8 +161,10 @@ def build_v2_user_household_router(
             page = service_factory().list_user_households(
                 principal=principal,
                 country_id=query.country_id,
-                household_id=query.household_id,
-                legacy_household_id=query.legacy_household_id,
+                household_filter=UserHouseholdFilter(
+                    household_id=query.household_id,
+                    legacy_household_id=query.legacy_household_id,
+                ),
                 offset=query.offset,
                 limit=query.limit,
             )

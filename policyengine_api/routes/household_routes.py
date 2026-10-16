@@ -6,6 +6,7 @@ import logging
 import time
 from collections.abc import Callable
 from functools import wraps
+from http import HTTPStatus
 from typing import TypeVar
 
 from flask import Blueprint, Response, g, request
@@ -114,7 +115,7 @@ def _household_persistence_failure(
         )
     message = (
         "Household database is temporarily unavailable; please try again later."
-        if status_code == 503
+        if status_code == HTTPStatus.SERVICE_UNAVAILABLE
         else "Internal database error; please try again later."
     )
     return _make_error_response(message, status_code)
@@ -143,6 +144,16 @@ def _spm_error_response(error: Exception) -> Response | None:
             detail["message"], 400, result=None, errors=[detail]
         )
     return None
+
+
+def _invalid_household_inputs_response(error: InvalidHouseholdInputsError) -> Response:
+    """Return the 400 that lists every unrecognized calculation input."""
+    return _make_error_response(
+        format_unrecognized_inputs_message(error.invalid_inputs),
+        400,
+        result=None,
+        errors=[invalid_input.to_dict() for invalid_input in error.invalid_inputs],
+    )
 
 
 def _calculation_response(calculation: HouseholdCalculationResult) -> dict:
@@ -229,15 +240,7 @@ def _validate_calculation_request(
                     )
                 )
             except InvalidHouseholdInputsError as error:
-                return _make_error_response(
-                    format_unrecognized_inputs_message(error.invalid_inputs),
-                    400,
-                    result=None,
-                    errors=[
-                        invalid_input.to_dict()
-                        for invalid_input in error.invalid_inputs
-                    ],
-                )
+                return _invalid_household_inputs_response(error)
             except ValueError as error:
                 response = _spm_error_response(error)
                 if response is not None:
@@ -245,7 +248,8 @@ def _validate_calculation_request(
                 raise
             result = func(country_id, *args, **kwargs)
             if not g.get("calculation_view_executed", False) and (
-                not isinstance(result, Response) or result.status_code < 400
+                not isinstance(result, Response)
+                or result.status_code < HTTPStatus.BAD_REQUEST
             ):
                 start_observability_id()
             return result
@@ -400,43 +404,75 @@ def get_household_under_policy(
             int(policy_id),
             on_accepted=start_observability_id,
         )
-    except HouseholdNotFoundError:
-        return _make_error_response(
-            f"Household #{household_id} not found.",
-            404,
-        )
-    except PolicyNotFoundError:
-        return _make_error_response(
-            f"Policy #{policy_id} not found.",
-            404,
-        )
-    except InvalidHouseholdInputsError as error:
-        return _make_error_response(
-            format_unrecognized_inputs_message(error.invalid_inputs),
-            400,
-            result=None,
-            errors=[invalid_input.to_dict() for invalid_input in error.invalid_inputs],
-        )
-    except Exception as error:
-        response = _spm_error_response(error)
-        if response is not None:
-            return response
-        module_logger.exception(
-            "Error calculating household #%s under policy #%s",
-            household_id,
-            policy_id,
-        )
-        return _make_error_response(
-            f"Error calculating household #{household_id} under policy "
-            f"#{policy_id}: {error}",
-            500,
+    except Exception as error:  # noqa: BLE001  # every failure maps to a typed error response
+        return _stored_calculation_error_response(
+            error,
+            household_id=household_id,
+            policy_id=policy_id,
         )
 
     return _calculation_response(calculation)
 
 
+def _stored_calculation_error_response(
+    error: Exception,
+    *,
+    household_id: str,
+    policy_id: str,
+) -> Response:
+    """Map a stored-household calculation failure to its error response.
+
+    Called while handling ``error``; an unexpected failure logs its traceback.
+    """
+    if isinstance(error, HouseholdNotFoundError):
+        return _make_error_response(
+            f"Household #{household_id} not found.",
+            404,
+        )
+    if isinstance(error, PolicyNotFoundError):
+        return _make_error_response(
+            f"Policy #{policy_id} not found.",
+            404,
+        )
+    if isinstance(error, InvalidHouseholdInputsError):
+        return _invalid_household_inputs_response(error)
+    response = _spm_error_response(error)
+    if response is not None:
+        return response
+    module_logger.exception(
+        "Error calculating household #%s under policy #%s",
+        household_id,
+        policy_id,
+    )
+    return _make_error_response(
+        f"Error calculating household #{household_id} under policy "
+        f"#{policy_id}: {error}",
+        500,
+    )
+
+
 def _calculate() -> dict | Response:
     g.calculation_view_executed = True
+    parse_failure = _parse_prepared_household_calculation()
+    if parse_failure is not None:
+        return parse_failure
+
+    try:
+        calculation = household_calculation_service.calculate_prepared_household(
+            g.prepared_household_calculation,
+        )
+    except Exception as error:  # noqa: BLE001  # every failure maps to a typed error response
+        return _calculation_error_response(error)
+
+    return _calculation_response(calculation)
+
+
+def _parse_prepared_household_calculation() -> Response | None:
+    """Parse the validated request's household, or return its error response.
+
+    An unexpected failure starts the request's observability ID and logs its
+    traceback.
+    """
     try:
         g.prepared_household_calculation = (
             household_calculation_service.parse_prepared_household(
@@ -460,38 +496,30 @@ def _calculate() -> dict | Response:
             f"Error calculating household under policy: {error}",
             500,
         )
+    return None
 
-    try:
-        calculation = household_calculation_service.calculate_prepared_household(
-            g.prepared_household_calculation,
-        )
-    except InvalidHouseholdInputsError as error:
-        return _make_error_response(
-            format_unrecognized_inputs_message(error.invalid_inputs),
-            400,
-            result=None,
-            errors=[invalid_input.to_dict() for invalid_input in error.invalid_inputs],
-        )
-    except SituationParsingError as error:
-        response = _spm_error_response(error)
-        if response is not None:
-            return response
+
+def _calculation_error_response(error: Exception) -> Response:
+    """Map a household calculation failure to its error response.
+
+    Called while handling ``error``; an unexpected failure logs its traceback.
+    """
+    if isinstance(error, InvalidHouseholdInputsError):
+        return _invalid_household_inputs_response(error)
+    response = _spm_error_response(error)
+    if response is not None:
+        return response
+    if isinstance(error, SituationParsingError):
         return _make_error_response(
             f"Invalid household payload: {error}",
             400,
             result=None,
         )
-    except Exception as error:
-        response = _spm_error_response(error)
-        if response is not None:
-            return response
-        module_logger.exception("Error calculating household under policy")
-        return _make_error_response(
-            f"Error calculating household under policy: {error}",
-            500,
-        )
-
-    return _calculation_response(calculation)
+    module_logger.exception("Error calculating household under policy")
+    return _make_error_response(
+        f"Error calculating household under policy: {error}",
+        500,
+    )
 
 
 @household_bp.route("/<country_id>/calculate", methods=["POST"])

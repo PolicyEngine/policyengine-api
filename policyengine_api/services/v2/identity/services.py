@@ -141,9 +141,7 @@ class StandardAccountProvisioning:
             created_user_id = create_user_identity(
                 session,
                 user_id=user.id,
-                issuer=principal.issuer,
-                subject=principal.subject,
-                email=principal.email,
+                principal=principal,
                 seen_at=seen_at,
             )
             if created_user_id is None:
@@ -339,9 +337,7 @@ def convert_unauthenticated_user_in_session(
         and create_user_identity(
             session,
             user_id=unauthenticated_user.id,
-            issuer=principal.issuer,
-            subject=principal.subject,
-            email=principal.email,
+            principal=principal,
             seen_at=seen_at,
         )
         is not None

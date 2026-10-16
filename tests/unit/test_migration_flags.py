@@ -155,8 +155,9 @@ def test_explicit_migration_context_rejects_invalid_database_sources(
     with pytest.raises(ValueError, match="invalid explicit database"):
         get_migration_context(
             "metadata",
-            use_configured_db_sources=False,
-            **explicit_sources,
+            explicit_db_sources=migration_flags.ExplicitDatabaseSources(
+                **explicit_sources
+            ),
         )
 
 

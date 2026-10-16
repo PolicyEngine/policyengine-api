@@ -19,7 +19,9 @@ from policyengine_api.fastapi_routes.dependencies import (
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import (
+    V2ErrorMapping,
     V2RequestTooLargeError,
+    run_v2_operation,
     v2_error_response,
 )
 from policyengine_api.fastapi_routes.v2.policies.request_models import (
@@ -94,24 +96,34 @@ def _service_factory(
 
 OperationT = TypeVar("OperationT")
 
+# Checked in order, so the collision is matched before its integrity base class.
+POLICY_ERROR_MAPPINGS = (
+    V2ErrorMapping((PolicyCatalogValidationError,), 400),
+    V2ErrorMapping((MetadataCatalogVersionNotFoundError, PolicyNotFoundError), 404),
+    V2ErrorMapping(
+        (PolicyContentHashCollisionError,),
+        409,
+        "Policy content hash conflicts with storage",
+    ),
+    V2ErrorMapping(
+        (PolicyCreationIntegrityError,), 500, "Stored policy integrity failed"
+    ),
+    V2ErrorMapping(
+        (V2ConfigurationError, MetadataCatalogUnavailableError, SQLAlchemyError),
+        503,
+        "V2 policy persistence is unavailable",
+    ),
+)
+
 
 def _policy_operation(
     operation: Callable[[], OperationT],
 ) -> OperationT | JSONResponse:
-    try:
-        return operation()
-    except PolicyCatalogValidationError as error:
-        return v2_error_response(400, str(error))
-    except (MetadataCatalogVersionNotFoundError, PolicyNotFoundError) as error:
-        return v2_error_response(404, str(error))
-    except PolicyContentHashCollisionError:
-        return v2_error_response(409, "Policy content hash conflicts with storage")
-    except PolicyCreationIntegrityError:
-        return v2_error_response(500, "Stored policy integrity failed")
-    except (V2ConfigurationError, MetadataCatalogUnavailableError, SQLAlchemyError):
-        return v2_error_response(503, "V2 policy persistence is unavailable")
-    except Exception:  # noqa: BLE001  # route must return a secret-safe typed error
-        return v2_error_response(500, "V2 policy operation failed")
+    return run_v2_operation(
+        operation,
+        POLICY_ERROR_MAPPINGS,
+        fallback_message="V2 policy operation failed",
+    )
 
 
 def build_v2_policy_router(

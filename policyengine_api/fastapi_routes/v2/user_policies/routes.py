@@ -35,6 +35,7 @@ from policyengine_api.query_parameters import (
     UserPolicyCollectionQuery,
 )
 from policyengine_api.services.v2.identity.types import AccountPrincipal
+from policyengine_api.services.v2.user_policies.types import UserPolicyFilter
 
 CountryQueryDependency = Annotated[
     CountryQuery, Depends(query_dependency(CountryQuery))
@@ -50,6 +51,31 @@ def _service_factory(
     if dependencies.v2_user_policy_service_factory is not None:
         return dependencies.v2_user_policy_service_factory
     return _default_v2_user_policy_service_factory
+
+
+def _create_user_policy(
+    service_factory: Callable[[], V2UserPolicyResourceService],
+    body: UserPolicyCreateRequest,
+    query: CountryQuery,
+    principal: AccountPrincipal,
+) -> UserPolicyDetailResponse | JSONResponse:
+    """Create an association once the body and query agree on its country."""
+    if body.country_id != query.country_id:
+        return v2_error_response(
+            400,
+            "Body country_id must match query country_id",
+        )
+
+    def create() -> UserPolicyDetailResponse:
+        item = service_factory().create_user_policy(
+            principal=principal,
+            association_input=body,
+        )
+        return UserPolicyDetailResponse(
+            result=UserPolicyDetailResult(item=UserPolicyItem.from_read(item))
+        )
+
+    return user_resource_operation(create)
 
 
 def build_v2_user_policy_router(
@@ -89,22 +115,7 @@ def build_v2_user_policy_router(
         query: CountryQueryDependency,
         principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserPolicyDetailResponse | JSONResponse:
-        if body.country_id != query.country_id:
-            return v2_error_response(
-                400,
-                "Body country_id must match query country_id",
-            )
-
-        def create() -> UserPolicyDetailResponse:
-            item = service_factory().create_user_policy(
-                principal=principal,
-                association_input=body,
-            )
-            return UserPolicyDetailResponse(
-                result=UserPolicyDetailResult(item=UserPolicyItem.from_read(item))
-            )
-
-        return user_resource_operation(create)
+        return _create_user_policy(service_factory, body, query, principal)
 
     @router.get(
         "/user-policies/{association_id}",
@@ -141,8 +152,10 @@ def build_v2_user_policy_router(
             page = service_factory().list_user_policies(
                 principal=principal,
                 country_id=query.country_id,
-                policy_id=query.policy_id,
-                legacy_policy_id=query.legacy_policy_id,
+                policy_filter=UserPolicyFilter(
+                    policy_id=query.policy_id,
+                    legacy_policy_id=query.legacy_policy_id,
+                ),
                 offset=query.offset,
                 limit=query.limit,
             )

@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from collections.abc import Collection
     from uuid import UUID
 
+    from policyengine_api.services.v2.user_policies.types import UserPolicyListing
+
 
 def read_user(session: Session, user_id: UUID) -> User | None:
     """Return the v2 user with this id, or None."""
@@ -94,33 +96,29 @@ def read_owned_user_policy_row(
 
 def read_user_policy_rows(
     session: Session,
-    *,
-    country_id: str,
-    user_id: UUID,
-    policy_id: UUID | None,
-    offset: int,
-    limit: int,
-    legacy_policy_id: int | None = None,
+    listing: UserPolicyListing,
 ) -> list[UserPolicy]:
     """Return up to ``limit + 1`` of a user's associations in creation order.
 
-    With ``policy_id`` or ``legacy_policy_id``, only associations to that policy
-    are returned. The extra row lets the caller report whether another page
-    exists.
+    With the listing's ``policy_id`` or ``legacy_policy_id``, only associations to
+    that policy are returned. The extra row lets the caller report whether
+    another page exists.
     """
     statement = select(UserPolicy).where(
-        UserPolicy.country_id == country_id,
-        UserPolicy.user_id == user_id,
+        UserPolicy.country_id == listing.country_id,
+        UserPolicy.user_id == listing.user_id,
     )
-    if policy_id is not None:
-        statement = statement.where(UserPolicy.policy_id == policy_id)
-    if legacy_policy_id is not None:
-        statement = statement.where(UserPolicy.legacy_policy_id == legacy_policy_id)
+    if listing.policy_id is not None:
+        statement = statement.where(UserPolicy.policy_id == listing.policy_id)
+    if listing.legacy_policy_id is not None:
+        statement = statement.where(
+            UserPolicy.legacy_policy_id == listing.legacy_policy_id
+        )
     return list(
         session.exec(
             statement.order_by(col(UserPolicy.created_at), col(UserPolicy.id))
-            .offset(offset)
-            .limit(limit + 1)
+            .offset(listing.offset)
+            .limit(listing.limit + 1)
         ).all()
     )
 

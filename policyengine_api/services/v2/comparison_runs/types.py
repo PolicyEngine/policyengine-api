@@ -75,6 +75,140 @@ class ResultComparisonStatus(StrEnum):
     FAILED = "failed"
 
 
+INCOMPLETE_COMPARISON_STATUSES = frozenset(
+    {
+        ResultComparisonStatus.NOT_REQUESTED,
+        ResultComparisonStatus.PENDING,
+        ResultComparisonStatus.RUNNING,
+    }
+)
+COMPLETED_COMPARISON_STATUSES = frozenset(
+    {
+        ResultComparisonStatus.MATCHED,
+        ResultComparisonStatus.DIFFERENT,
+    }
+)
+UNSUCCESSFUL_FINAL_REPORT_STATUSES = frozenset(
+    {
+        ComparisonRunLifecycleStatus.FAILED,
+        ComparisonRunLifecycleStatus.SKIPPED,
+    }
+)
+
+
+def _all_supplied(values: tuple[object, ...]) -> bool:
+    return all(value is not None for value in values)
+
+
+def _any_supplied(values: tuple[object, ...]) -> bool:
+    return any(value is not None for value in values)
+
+
+def _validate_report_lifecycle(record: ComparisonReportRecord) -> None:
+    """Require the aggregate output fields to fit the report's lifecycle status."""
+    output_fields = (
+        record.aggregate_output_uri,
+        record.aggregate_output_sha256,
+        record.aggregate_schema_version,
+    )
+    if _any_supplied(output_fields) and not _all_supplied(output_fields):
+        msg = "aggregate output fields must be supplied together"
+        raise ValueError(msg)
+    if record.status is ComparisonRunLifecycleStatus.SUCCEEDED:
+        _validate_successful_report(record, output_fields)
+    if (
+        record.status in UNSUCCESSFUL_FINAL_REPORT_STATUSES
+        and record.error_code is None
+    ):
+        msg = "a failed or skipped report requires an error_code"
+        raise ValueError(msg)
+
+
+def _validate_successful_report(
+    record: ComparisonReportRecord,
+    output_fields: tuple[object, ...],
+) -> None:
+    """Require successful aggregation, its output and completed_at."""
+    if record.aggregation_status is not ComparisonRunAggregationStatus.SUCCEEDED:
+        msg = "a successful report requires successful aggregation"
+        raise ValueError(msg)
+    if not _all_supplied(output_fields):
+        msg = "a successful report requires an aggregate output"
+        raise ValueError(msg)
+    if record.completed_at is None:
+        msg = "a successful report requires completed_at"
+        raise ValueError(msg)
+
+
+def _validate_comparison_state(record: ComparisonReportRecord) -> None:
+    """Require the result comparison's fields to fit its comparison_status."""
+    output_fields = (
+        record.comparison_output_uri,
+        record.comparison_output_sha256,
+        record.comparison_schema_version,
+    )
+    if record.comparison_status in INCOMPLETE_COMPARISON_STATUSES:
+        _validate_incomplete_comparison(record, output_fields)
+    elif record.comparison_status in COMPLETED_COMPARISON_STATUSES:
+        _validate_completed_comparison(record, output_fields)
+    else:
+        _validate_failed_comparison(record, output_fields)
+
+
+def _validate_incomplete_comparison(
+    record: ComparisonReportRecord,
+    output_fields: tuple[object, ...],
+) -> None:
+    """Reject any output, completion time or error on an unfinished comparison."""
+    if _any_supplied(output_fields):
+        msg = "an incomplete comparison cannot reference an output artifact"
+        raise ValueError(msg)
+    if record.comparison_completed_at is not None:
+        msg = "an incomplete comparison cannot have completed_at"
+        raise ValueError(msg)
+    if record.comparison_error_code is not None:
+        msg = "an incomplete comparison cannot have an error_code"
+        raise ValueError(msg)
+    if record.comparison_error_summary is not None:
+        msg = "an incomplete comparison cannot have an error_summary"
+        raise ValueError(msg)
+
+
+def _validate_completed_comparison(
+    record: ComparisonReportRecord,
+    output_fields: tuple[object, ...],
+) -> None:
+    """Require a matched or different comparison's output and completion time."""
+    if not _all_supplied(output_fields):
+        msg = "a completed comparison requires an output artifact"
+        raise ValueError(msg)
+    if record.comparison_completed_at is None:
+        msg = "a completed comparison requires completed_at"
+        raise ValueError(msg)
+    if record.comparison_error_code is not None:
+        msg = "a completed comparison cannot have an error_code"
+        raise ValueError(msg)
+    if record.comparison_error_summary is not None:
+        msg = "a completed comparison cannot have an error_summary"
+        raise ValueError(msg)
+
+
+def _validate_failed_comparison(
+    record: ComparisonReportRecord,
+    output_fields: tuple[object, ...],
+) -> None:
+    """Require a failed comparison's completion time and error, and no output."""
+    if _any_supplied(output_fields):
+        msg = "a failed comparison cannot reference an output artifact"
+        raise ValueError(msg)
+    if record.comparison_completed_at is None:
+        msg = "a failed comparison requires completed_at"
+        raise ValueError(msg)
+    if record.comparison_error_code is None:
+        msg = "a failed comparison requires an error_code"
+        raise ValueError(msg)
+
+
 class ComparisonReportRecord(StrictContractModel):
     """Complete producer/consumer contract for one temporary parent row."""
 
@@ -129,84 +263,8 @@ class ComparisonReportRecord(StrictContractModel):
         comparison_status. Retention must be timezone-aware and 1-30 days long.
         """
         _validate_retention(self.created_at, self.retention_expires_at)
-        output_fields = (
-            self.aggregate_output_uri,
-            self.aggregate_output_sha256,
-            self.aggregate_schema_version,
-        )
-        if any(value is not None for value in output_fields) and not all(
-            value is not None for value in output_fields
-        ):
-            msg = "aggregate output fields must be supplied together"
-            raise ValueError(msg)
-        if self.status is ComparisonRunLifecycleStatus.SUCCEEDED:
-            if self.aggregation_status is not ComparisonRunAggregationStatus.SUCCEEDED:
-                msg = "a successful report requires successful aggregation"
-                raise ValueError(msg)
-            if not all(value is not None for value in output_fields):
-                msg = "a successful report requires an aggregate output"
-                raise ValueError(msg)
-            if self.completed_at is None:
-                msg = "a successful report requires completed_at"
-                raise ValueError(msg)
-        if (
-            self.status
-            in {
-                ComparisonRunLifecycleStatus.FAILED,
-                ComparisonRunLifecycleStatus.SKIPPED,
-            }
-            and self.error_code is None
-        ):
-            msg = "a failed or skipped report requires an error_code"
-            raise ValueError(msg)
-        comparison_output_fields = (
-            self.comparison_output_uri,
-            self.comparison_output_sha256,
-            self.comparison_schema_version,
-        )
-        if self.comparison_status in {
-            ResultComparisonStatus.NOT_REQUESTED,
-            ResultComparisonStatus.PENDING,
-            ResultComparisonStatus.RUNNING,
-        }:
-            if any(value is not None for value in comparison_output_fields):
-                msg = "an incomplete comparison cannot reference an output artifact"
-                raise ValueError(msg)
-            if self.comparison_completed_at is not None:
-                msg = "an incomplete comparison cannot have completed_at"
-                raise ValueError(msg)
-            if self.comparison_error_code is not None:
-                msg = "an incomplete comparison cannot have an error_code"
-                raise ValueError(msg)
-            if self.comparison_error_summary is not None:
-                msg = "an incomplete comparison cannot have an error_summary"
-                raise ValueError(msg)
-        elif self.comparison_status in {
-            ResultComparisonStatus.MATCHED,
-            ResultComparisonStatus.DIFFERENT,
-        }:
-            if not all(value is not None for value in comparison_output_fields):
-                msg = "a completed comparison requires an output artifact"
-                raise ValueError(msg)
-            if self.comparison_completed_at is None:
-                msg = "a completed comparison requires completed_at"
-                raise ValueError(msg)
-            if self.comparison_error_code is not None:
-                msg = "a completed comparison cannot have an error_code"
-                raise ValueError(msg)
-            if self.comparison_error_summary is not None:
-                msg = "a completed comparison cannot have an error_summary"
-                raise ValueError(msg)
-        else:
-            if any(value is not None for value in comparison_output_fields):
-                msg = "a failed comparison cannot reference an output artifact"
-                raise ValueError(msg)
-            if self.comparison_completed_at is None:
-                msg = "a failed comparison requires completed_at"
-                raise ValueError(msg)
-            if self.comparison_error_code is None:
-                msg = "a failed comparison requires an error_code"
-                raise ValueError(msg)
+        _validate_report_lifecycle(self)
+        _validate_comparison_state(self)
         return self
 
 

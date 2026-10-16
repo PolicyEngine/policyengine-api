@@ -157,15 +157,14 @@ class SimulationService:
         return simulation
 
     @staticmethod
-    def _find_existing_simulation(
+    def _lock_existing_simulation(
         session: Session,
         country_id: str,
         population_id: str,
         population_type: str,
         policy_id: int,
-        *,
-        for_update: bool = False,
     ) -> Simulation | None:
+        """Return the simulation for this identity, locking it for update, or None."""
         exact_identity = Simulation.population_id == population_id
         statement = (
             select(Simulation)
@@ -181,9 +180,8 @@ class SimulationService:
                 Simulation.policy_id == policy_id,
             )
             .order_by(exact_identity.desc(), Simulation.id.desc())
+            .with_for_update()
         )
-        if for_update:
-            statement = statement.with_for_update()
         return session.scalar(statement)
 
     def _create_simulation(
@@ -238,13 +236,12 @@ class SimulationService:
         # locking read of `simulations` below, which is what they contend on;
         # the household row was never the exclusion for a non-numeric id.
         with self._sessions.begin() as session:
-            simulation = self._find_existing_simulation(
+            simulation = self._lock_existing_simulation(
                 session,
                 country_id,
                 population_id,
                 population_type,
                 policy_id,
-                for_update=True,
             )
             created = simulation is None
             if simulation is None:

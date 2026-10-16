@@ -13,6 +13,9 @@ if TYPE_CHECKING:
     from policyengine_api.data.v2.models import Dataset, Region
 
 
+MAXIMUM_METADATA_PAGE_LIMIT = 500
+
+
 class MetadataResourceNotFoundError(LookupError):
     """Raised when a selected catalog does not contain a requested resource."""
 
@@ -29,7 +32,7 @@ def validate_metadata_page(offset: int, limit: int) -> tuple[int, int]:
     if offset < 0:
         msg = "offset must be at least 0"
         raise InvalidMetadataPageError(msg)
-    if not 1 <= limit <= 500:
+    if not 1 <= limit <= MAXIMUM_METADATA_PAGE_LIMIT:
         msg = "limit must be between 1 and 500"
         raise InvalidMetadataPageError(msg)
     return offset, limit

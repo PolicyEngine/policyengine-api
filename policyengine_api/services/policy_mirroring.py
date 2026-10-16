@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -87,17 +88,25 @@ def _failure_category(error: Exception) -> str:
     return "unexpected"
 
 
+@dataclass(frozen=True)
+class _MirrorOutcome:
+    """How one immediate policy mirror ended, as its metric record reports it."""
+
+    outcome: str
+    actual_write_sources: list[str]
+    destination_policy_id: object | None = None
+    failure_category: str | None = None
+    policy_created: bool | None = None
+    mapping_created: bool | None = None
+
+
 def _log_mirror_event(
     *,
     snapshot: LegacyPolicySnapshot,
     started_at: float,
-    outcome: str,
-    actual_write_sources: list[str],
-    destination_policy_id: object | None = None,
-    failure_category: str | None = None,
-    policy_created: bool | None = None,
-    mapping_created: bool | None = None,
+    mirror_outcome: _MirrorOutcome,
 ) -> None:
+    destination_policy_id = mirror_outcome.destination_policy_id
     # Metric logging must not change the mirror outcome.
     with contextlib.suppress(Exception):
         logger.log_struct(
@@ -107,7 +116,7 @@ def _log_mirror_event(
                 "metric_value": 1,
                 "configured_write_source": "dual_write",
                 "attempted_write_sources": ["cloud_sql", "supabase"],
-                "actual_write_sources": actual_write_sources,
+                "actual_write_sources": mirror_outcome.actual_write_sources,
                 "country_id": snapshot.country_id,
                 "legacy_policy_id": snapshot.legacy_policy_id,
                 "destination_policy_id": (
@@ -115,13 +124,13 @@ def _log_mirror_event(
                     if destination_policy_id is not None
                     else None
                 ),
-                "outcome": outcome,
-                "failure_category": failure_category,
-                "policy_created": policy_created,
-                "mapping_created": mapping_created,
+                "outcome": mirror_outcome.outcome,
+                "failure_category": mirror_outcome.failure_category,
+                "policy_created": mirror_outcome.policy_created,
+                "mapping_created": mirror_outcome.mapping_created,
                 "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
             },
-            severity="INFO" if outcome == "ok" else "ERROR",
+            severity="INFO" if mirror_outcome.outcome == "ok" else "ERROR",
         )
 
 
@@ -140,9 +149,11 @@ def mirror_policy_after_commit(
         _log_mirror_event(
             snapshot=snapshot,
             started_at=started_at,
-            outcome="error",
-            actual_write_sources=["cloud_sql"],
-            failure_category=_failure_category(error),
+            mirror_outcome=_MirrorOutcome(
+                outcome="error",
+                actual_write_sources=["cloud_sql"],
+                failure_category=_failure_category(error),
+            ),
         )
         msg = "The committed v1 policy could not be mirrored to v2"
         raise PolicyMirrorUnavailableError(msg) from error
@@ -150,10 +161,12 @@ def mirror_policy_after_commit(
     _log_mirror_event(
         snapshot=snapshot,
         started_at=started_at,
-        outcome="ok",
-        actual_write_sources=["cloud_sql", "supabase"],
-        destination_policy_id=result.policy_id,
-        policy_created=result.policy_created,
-        mapping_created=result.mapping_created,
+        mirror_outcome=_MirrorOutcome(
+            outcome="ok",
+            actual_write_sources=["cloud_sql", "supabase"],
+            destination_policy_id=result.policy_id,
+            policy_created=result.policy_created,
+            mapping_created=result.mapping_created,
+        ),
     )
     return result

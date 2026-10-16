@@ -49,6 +49,7 @@ from policyengine_api.services.v2.user_reports.transformations import (
     user_report_read,
     user_report_update_values,
 )
+from policyengine_api.services.v2.user_reports.types import UserReportListing
 from policyengine_api.services.v2.user_reports.validators import (
     require_owned_user_policy,
     require_user_report,
@@ -273,11 +274,13 @@ class V2UserReportService:
                 return user_report_page([], offset=offset, limit=limit)
             rows = read_user_report_rows(
                 session,
-                country_id=country_id,
-                user_id=owner.user_id,
-                legacy_report_id=legacy_report_id,
-                offset=offset,
-                limit=limit,
+                UserReportListing(
+                    country_id=country_id,
+                    user_id=owner.user_id,
+                    legacy_report_id=legacy_report_id,
+                    offset=offset,
+                    limit=limit,
+                ),
             )
             return user_report_page(rows, offset=offset, limit=limit)
 

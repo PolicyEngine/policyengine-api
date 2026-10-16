@@ -232,26 +232,6 @@ class PolicyService:
         session.flush()
         return policy, "Policy created", False
 
-    def _create_new_policy(
-        self,
-        session: Session,
-        country_id: str,
-        policy_json: dict,
-        policy_hash: str,
-        label: str | None,
-        api_version: str,
-    ) -> Policy:
-        policy = Policy(
-            country_id=country_id,
-            label=label,
-            policy_json=policy_json,
-            policy_hash=policy_hash,
-            api_version=api_version,
-        )
-        session.add(policy)
-        session.flush()
-        return policy
-
     def _get_unique_policy_with_label(
         self,
         session: Session,
