@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 
 def delete_account_legacy_user_mappings(session: Session, *, user_id: UUID) -> None:
+    """Delete the v1 user mappings that would otherwise block deleting the user."""
     session.execute(
         delete(LegacyUserMapping).where(col(LegacyUserMapping.user_id) == user_id)
     )
@@ -25,5 +26,6 @@ def delete_account_legacy_user_mappings(session: Session, *, user_id: UUID) -> N
 
 
 def delete_account_user(session: Session, *, user_id: UUID) -> None:
+    """Delete the user; its identities and every association cascade with it."""
     session.execute(delete(User).where(col(User.id) == user_id))
     session.flush()

@@ -44,7 +44,6 @@ class SelectedCatalog:
 
 def validate_policyengine_version(value: str) -> str:
     """Return one bounded canonical PEP 440 version string."""
-
     if not isinstance(value, str) or not value or value != value.strip():
         raise InvalidPolicyEngineVersionError(
             "policyengine_version must be a non-empty canonical version"
@@ -74,7 +73,6 @@ def select_catalog(
     policyengine_version: str | None = None,
 ) -> SelectedCatalog:
     """Select one country catalog using the requested or running package version."""
-
     if country_id not in SUPPORTED_V2_COUNTRY_IDS:
         raise UnsupportedPreviewCountryError(country_id)
     explicit_version = policyengine_version is not None

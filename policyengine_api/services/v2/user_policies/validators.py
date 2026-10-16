@@ -52,6 +52,7 @@ class LegacyUserPolicyIntegrityError(RuntimeError):
 def require_user_policy(
     association: UserPolicy | None, *, association_id: UUID
 ) -> UserPolicy:
+    """Return the association, or raise UserPolicyNotFoundError if it is None."""
     if association is None:
         raise UserPolicyNotFoundError(
             f"user-policy association {association_id} was not found"
@@ -65,6 +66,10 @@ def validate_association_policy(
     policy_id: UUID,
     policy: Policy | None,
 ) -> None:
+    """Check that a referenced policy exists and is in the association's country.
+
+    Raise AssociationPolicyNotFoundError or AssociationCountryConflictError.
+    """
     if policy is None:
         raise AssociationPolicyNotFoundError(f"policy {policy_id} was not found")
     if policy.country_id != country_id:
@@ -79,7 +84,6 @@ def resolve_association_policy_id(
     mapped_policy_id: UUID | None,
 ) -> UUID | None:
     """Combine an explicit v2 reference with the v1 mapping, if both exist."""
-
     if (
         requested_policy_id is not None
         and mapped_policy_id is not None
@@ -94,6 +98,7 @@ def resolve_association_policy_id(
 def validate_existing_legacy_user_mapping(
     mapping: LegacyUserMapping, *, user: User | None
 ) -> UUID:
+    """Return the mapped v2 user id, or raise if that user no longer exists."""
     if user is None:
         raise LegacyUserPolicyIntegrityError(
             "legacy user mapping has no referenced v2 user"
@@ -104,6 +109,7 @@ def validate_existing_legacy_user_mapping(
 def validate_legacy_user_mapping_conflict(
     mapping: LegacyUserMapping | None, *, user: User | None
 ) -> UUID:
+    """Return the user id of the mapping that won the race, or raise if unusable."""
     if mapping is None or user is None:
         raise LegacyUserPolicyIntegrityError(
             "legacy user mapping conflict did not resolve to a v2 user"
@@ -117,6 +123,7 @@ def validate_legacy_user_policy_input(
     *,
     source_revision: int,
 ) -> None:
+    """Require a positive revision and a saved policy that uses the reform snapshot."""
     if source_revision <= 0:
         raise LegacyUserPolicyIntegrityError(
             "legacy user-policy source revision must be positive"
@@ -141,6 +148,13 @@ def validate_existing_legacy_user_policy_mapping(
     source_revision: int,
     fingerprint_version: int,
 ) -> tuple[LegacyUserPolicyMappingAction, UserPolicy]:
+    """Decide how to apply a v1 revision to an existing mapping.
+
+    Return the action with the mapped association. Raise
+    LegacyUserPolicyIntegrityError if the association is missing or its user,
+    policy or country changed, if the fingerprint version differs, if a replay
+    has a different fingerprint, or if a revision was skipped.
+    """
     if association is None:
         raise LegacyUserPolicyIntegrityError(
             "legacy user-policy mapping has no association"
@@ -173,8 +187,10 @@ def validate_existing_legacy_user_policy_mapping(
 
 
 def require_mirrored_policy_id(projection: UserPolicyCreationInput) -> UUID:
-    """The Stage 10 mirror always links a saved policy to its v2 policy."""
+    """Return the projection's v2 policy, which the Stage 10 mirror always sets.
 
+    Raise LegacyUserPolicyIntegrityError when it is missing.
+    """
     if projection.policy_id is None:
         raise LegacyUserPolicyIntegrityError(
             "mirrored saved policy has no v2 policy reference"

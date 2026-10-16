@@ -22,6 +22,12 @@ if TYPE_CHECKING:
 
 
 class Policy(TimestampedModel, table=True):
+    """Immutable policy content, stored once per canonicalization version and hash.
+
+    Its parameter values are deleted with it. Policies that saved links use
+    cannot be deleted.
+    """
+
     __tablename__ = "policies"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -90,6 +96,11 @@ class Policy(TimestampedModel, table=True):
 
 
 class Dynamic(TimestampedModel, table=True):
+    """Named parameter values, separate from any policy, that a simulation can apply.
+
+    Its parameter values are deleted with it.
+    """
+
     __tablename__ = "dynamics"
 
     name: str = Field(max_length=255)

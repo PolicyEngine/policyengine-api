@@ -28,16 +28,31 @@ EntityValues = Annotated[dict[str, JsonValue], Field(max_length=500)]
 
 
 class StrictHouseholdDocumentModel(BaseModel):
+    """Base for household document records; rejects unknown keys and NaN or infinity."""
+
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
 class HouseholdEntityRecord(StrictHouseholdDocumentModel):
+    """One group entity in a household, such as a tax unit or a benefit unit.
+
+    ``id`` is unique within its collection and is what people's ``memberships``
+    refer to. ``values`` maps variable names to values, and ``source_name``
+    optionally keeps the entity's original name, such as its key in a v1 household.
+    """
+
     id: DocumentIdentifier
     source_name: DocumentIdentifier | None = None
     values: EntityValues
 
 
 class HouseholdPersonRecord(HouseholdEntityRecord):
+    """One person in a household.
+
+    ``memberships`` maps each of the country's entity collections to the ``id``
+    of the group the person belongs to, and must name every collection.
+    """
+
     memberships: dict[str, DocumentIdentifier]
 
 
@@ -51,6 +66,12 @@ def _omit_spm_default(schema: dict[str, Any]) -> None:
 
 
 class USHouseholdDocument(StrictHouseholdDocumentModel):
+    """US household content: people and the US group entities they belong to.
+
+    ``spm`` optionally selects an SPM forecast scenario and geography; omit it
+    rather than sending null.
+    """
+
     people: PersonRecords
     household: EntityRecords
     family: EntityRecords
@@ -64,6 +85,7 @@ class USHouseholdDocument(StrictHouseholdDocumentModel):
     @field_validator("spm", mode="before")
     @classmethod
     def require_spm_object(cls, value: object) -> object:
+        """Reject an explicit null ``spm``; omit the field to make no selection."""
         if value is None:
             raise ValueError("spm must be an object when supplied")
         return value
@@ -72,6 +94,11 @@ class USHouseholdDocument(StrictHouseholdDocumentModel):
     def serialize_document(
         self, handler: SerializerFunctionWrapHandler
     ) -> dict[str, Any]:
+        """Serialize the document, leaving out ``spm`` when no selection was made.
+
+        Omitting the key keeps such documents identical to those stored before
+        ``spm`` existed.
+        """
         document: dict[str, Any] = handler(self)
         if self.spm is None:
             document.pop("spm", None)
@@ -79,6 +106,8 @@ class USHouseholdDocument(StrictHouseholdDocumentModel):
 
 
 class UKHouseholdDocument(StrictHouseholdDocumentModel):
+    """UK household content: people, households and benefit units."""
+
     people: PersonRecords
     household: EntityRecords
     benunit: EntityRecords

@@ -5,17 +5,20 @@ from policyengine_api.utils.payload_validators import validate_country
 
 @validate_country
 def foo(country_id, other):
-    """
-    A simple dummy test method for validation testing. Must be defined outside of the class (or within
-    the test functions themselves) due to complications with the `self` parameter for class methods.
+    """Return "bar"; a stand-in view for exercising the decorator.
+
+    It must be defined outside the class (or within the test functions themselves)
+    because the decorator treats the first argument as the country ID, and on a
+    method that would be `self`.
     """
     return "bar"
 
 
 class TestValidateCountry:
-    """
-    Test that the @validate_country decorator returns 404 if the country does not exist, otherwise
-    continues execution of the function.
+    """Tests for the @validate_country decorator.
+
+    The decorator returns a 400 response if the country does not exist, and
+    otherwise calls the wrapped function.
     """
 
     def test_valid_country(self):

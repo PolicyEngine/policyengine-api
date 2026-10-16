@@ -50,7 +50,6 @@ if TYPE_CHECKING:
 
 async def enforce_household_request_size(request: Request) -> None:
     """Reject declared or actual request bodies larger than 1 MiB."""
-
     content_length = request.headers.get("content-length")
     if content_length is not None:
         try:
@@ -103,7 +102,6 @@ def build_v2_household_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
     """Build native household routes without opening a database connection."""
-
     router = APIRouter(prefix="/v2", responses=HOUSEHOLD_ERROR_RESPONSES)
     create_query = query_dependency(HouseholdCreateQuery)
     detail_query = query_dependency(HouseholdDetailQuery)

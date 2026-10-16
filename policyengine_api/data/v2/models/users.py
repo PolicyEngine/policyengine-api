@@ -27,11 +27,20 @@ if TYPE_CHECKING:
 
 
 class UserType(StrEnum):
+    """Whether a user is backed by sign-in identities or by a signed-out browser."""
+
     UNAUTHENTICATED = "unauthenticated"
     STANDARD = "standard"
 
 
 class User(IdentifiedModel, table=True):
+    """A v2 user account, unique by email when one is given.
+
+    A ``standard`` user always has a primary country. Deleting a user deletes
+    their sign-in identities and saved associations; reports they own are kept
+    without an owner.
+    """
+
     __tablename__ = "users"
     __table_args__ = (
         sa.UniqueConstraint("email", name="uq_users_email"),

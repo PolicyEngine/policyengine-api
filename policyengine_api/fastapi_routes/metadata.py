@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 
 
 class MetadataSuccessPayload(TypedDict):
+    """The v1 ``{status, message, result}`` envelope around a metadata document."""
+
     status: Literal["ok"]
     message: None
     result: JSONObject

@@ -62,7 +62,6 @@ def _region(
 
 def bundle(*, policyengine_version: str = POLICYENGINE_VERSION) -> dict:
     """Return a minimal packaged-bundle manifest."""
-
     return {
         "bundle_version": policyengine_version,
         "policyengine_version": policyengine_version,
@@ -158,7 +157,6 @@ def source_models(
     policyengine_version: str = POLICYENGINE_VERSION,
 ) -> dict[str, SimpleNamespace]:
     """Return US and UK public-model fixtures."""
-
     us_default_uri = "hf://policyengine/us/populace_us_2024.h5@fixture"
     uk_default_uri = "hf://policyengine/uk/enhanced_frs_2024_25.h5@fixture"
     return {
@@ -218,7 +216,6 @@ def source_models(
 
 def installed_version(name: str) -> str:
     """Return fixture observed versions."""
-
     return DEPENDENCY_VERSIONS[name]
 
 
@@ -227,7 +224,6 @@ def normalized_catalog(
     policyengine_version: str = POLICYENGINE_VERSION,
 ) -> NormalizedCatalog:
     """Return the complete deterministic normalized fixture."""
-
     return extract_catalog(
         bundle=bundle(policyengine_version=policyengine_version),
         policyengine_version=policyengine_version,

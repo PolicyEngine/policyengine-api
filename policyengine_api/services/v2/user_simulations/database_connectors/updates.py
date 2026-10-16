@@ -20,6 +20,7 @@ def update_user_simulation(
     association: UserSimulationAssociation,
     association_input: UserSimulationUpdateInput,
 ) -> UserSimulationAssociation:
+    """Apply only the supplied fields, bump ``updated_at`` and return the row."""
     for field_name, value in association_input.model_dump(exclude_unset=True).items():
         setattr(association, field_name, value)
     association.updated_at = utc_now()

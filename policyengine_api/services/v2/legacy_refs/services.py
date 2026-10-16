@@ -31,6 +31,7 @@ class V1LegacyReferenceService:
     """Batched, read-only v1 existence checks."""
 
     def __init__(self, database_session: LegacyReferenceDatabaseSession) -> None:
+        """Open every v1 read through ``database_session``."""
         self._database_session = database_session
 
     def existing_ids(
@@ -40,7 +41,6 @@ class V1LegacyReferenceService:
         requested: Mapping[LegacyRecordKind, Collection[int]],
     ) -> dict[LegacyRecordKind, frozenset[int]]:
         """Return existing IDs per kind using one short v1 transaction."""
-
         selected = {kind: ids for kind, ids in requested.items() if ids}
         if not selected:
             return {kind: frozenset() for kind in requested}
@@ -63,7 +63,6 @@ class V1LegacyReferenceService:
         requested: Mapping[LegacyRecordKind, Collection[int]],
     ) -> None:
         """Raise ``LegacyReferenceNotFoundError`` for any missing reference."""
-
         existing = self.existing_ids(country_id=country_id, requested=requested)
         for kind, ids in requested.items():
             require_legacy_references(
@@ -82,6 +81,7 @@ class DeferredLegacyReferenceService:
     """
 
     def __init__(self, build: Callable[[], LegacyReferenceChecker]) -> None:
+        """Call ``build`` at the first check and reuse its service afterwards."""
         self._build = build
         self._service: LegacyReferenceChecker | None = None
 
@@ -96,6 +96,7 @@ class DeferredLegacyReferenceService:
         country_id: str,
         requested: Mapping[LegacyRecordKind, Collection[int]],
     ) -> dict[LegacyRecordKind, frozenset[int]]:
+        """Return the existing IDs per kind from the built v1 reference service."""
         return self._resolved().existing_ids(country_id=country_id, requested=requested)
 
     def require_existing(
@@ -104,4 +105,5 @@ class DeferredLegacyReferenceService:
         country_id: str,
         requested: Mapping[LegacyRecordKind, Collection[int]],
     ) -> None:
+        """Raise ``LegacyReferenceNotFoundError`` for any missing reference."""
         self._resolved().require_existing(country_id=country_id, requested=requested)

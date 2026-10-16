@@ -1,7 +1,5 @@
 # ruff: noqa: E402
-"""
-This is the main Flask app for the PolicyEngine API.
-"""
+"""The PolicyEngine API Flask application, with its blueprints and extensions."""
 
 import sys
 import time
@@ -10,6 +8,7 @@ start_time = time.time()
 
 
 def log_timing(message: str) -> None:
+    """Print a startup milestone to stderr with the seconds since import began."""
     elapsed = time.time() - start_time
     print(f"[{elapsed:.2f}s] {message}", file=sys.stderr, flush=True)
 

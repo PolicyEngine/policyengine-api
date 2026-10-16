@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 
 class StrictUserReportAPIModel(BaseModel):
+    """Base for user-report responses; rejects unknown fields."""
+
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
 
@@ -35,6 +37,8 @@ class StoredSnapshotItem(BaseModel):
 
 
 class ReportProvisionIntervalItem(StoredSnapshotItem):
+    """A provision's value for the dates from ``start_date`` to ``end_date``."""
+
     # The contract makes this key optional rather than nullable.
     parameter: str | None = Field(default=None, exclude_if=lambda value: value is None)
     start_date: str
@@ -43,6 +47,13 @@ class ReportProvisionIntervalItem(StoredSnapshotItem):
 
 
 class ReportProvisionItem(StoredSnapshotItem):
+    """One parameter the report's reform changes, with its baseline and reform values.
+
+    ``intervals`` gives the reform's dated values when they vary over time. The
+    ``growth`` keys, present only when set, say how a value set from one year on
+    moves in later years and how grown values round.
+    """
+
     path: str
     breadcrumb: str
     unit: str | None = None
@@ -66,6 +77,8 @@ class ReportProvisionItem(StoredSnapshotItem):
 
 
 class ReportCalibrationWorstItem(StoredSnapshotItem):
+    """The calibration target that one match fits worst, with its relative error."""
+
     name: str
     source: str
     geography: str
@@ -73,6 +86,8 @@ class ReportCalibrationWorstItem(StoredSnapshotItem):
 
 
 class ReportCalibrationMatchItem(StoredSnapshotItem):
+    """One variable's calibration match: its targets, mean error and worst target."""
+
     variable: str
     depth: int
     ring: str
@@ -82,6 +97,8 @@ class ReportCalibrationMatchItem(StoredSnapshotItem):
 
 
 class ReportCalibrationItem(StoredSnapshotItem):
+    """Calibration results saved with a report, for one geography and data release."""
+
     release_id: str | None = None
     geography: str
     reached_count: int
@@ -89,10 +106,18 @@ class ReportCalibrationItem(StoredSnapshotItem):
 
 
 class ReportScorecardItem(StoredSnapshotItem):
+    """The programs on the scorecard saved with a report's validation."""
+
     programs: list[str]
 
 
 class ReportValidationItem(StoredSnapshotItem):
+    """The validation snapshot saved with a report.
+
+    It records when the report was matched and with which map model version,
+    and optionally the calibration results and scorecard.
+    """
+
     matched_at: str
     map_model_version: str
     calibration: ReportCalibrationItem | None = None
@@ -100,6 +125,15 @@ class ReportValidationItem(StoredSnapshotItem):
 
 
 class UserReportItem(StrictUserReportAPIModel):
+    """A report saved by a user, with the user's name, notes and saved presentation.
+
+    ``legacy_report_id`` is the v1 report output it shows. ``user_policy_id`` is
+    the user's saved reform the report was run from, and
+    ``baseline_user_policy_id`` the saved reform it was compared with instead of
+    current law; each is null when not set or once that reform is deleted.
+    ``budget_window_years`` is null for a report without a budget window.
+    """
+
     id: UUID
     country_id: CountryId
     user_id: UUID
@@ -119,10 +153,13 @@ class UserReportItem(StrictUserReportAPIModel):
 
     @classmethod
     def from_read(cls, item: UserReportRead) -> UserReportItem:
+        """Build the response item by validating the service read record's fields."""
         return cls.model_validate(item)
 
 
 class SharedBaselineReformItem(StrictUserReportAPIModel):
+    """The saved reform a shared report was compared with, named but not linked."""
+
     name: str | None
 
 
@@ -144,18 +181,29 @@ class SharedUserReportItem(StrictUserReportAPIModel):
 
     @classmethod
     def from_read(cls, item: SharedUserReportRead) -> SharedUserReportItem:
+        """Build the shared item by validating the service read record's fields."""
         return cls.model_validate(item)
 
 
 class SharedUserReportDetailResult(StrictUserReportAPIModel):
+    """Result holding one shared report in ``item``."""
+
     item: SharedUserReportItem
 
 
 class UserReportDetailResult(StrictUserReportAPIModel):
+    """Result holding one user-report association in ``item``."""
+
     item: UserReportItem
 
 
 class UserReportPageResult(StrictUserReportAPIModel):
+    """One page of user-report associations, oldest first.
+
+    ``offset`` and ``limit`` echo the request; when ``has_more`` is true, ask
+    for the next page with ``offset + limit``.
+    """
+
     items: list[UserReportItem]
     offset: int
     limit: int
@@ -163,6 +211,7 @@ class UserReportPageResult(StrictUserReportAPIModel):
 
     @classmethod
     def from_page(cls, page: UserReportPage) -> UserReportPageResult:
+        """Build the response page from a service page, converting each item."""
         return cls(
             items=[UserReportItem.from_read(item) for item in page.items],
             offset=page.offset,
@@ -175,20 +224,22 @@ ResultT = TypeVar("ResultT")
 
 
 class UserReportSuccessResponse(StrictUserReportAPIModel, Generic[ResultT]):
+    """Success envelope: ``status`` "ok", a null ``message`` and the ``result``."""
+
     status: Literal["ok"] = "ok"
     message: None = None
     result: ResultT
 
 
 class UserReportDetailResponse(UserReportSuccessResponse[UserReportDetailResult]):
-    pass
+    """Success response holding one user-report association."""
 
 
 class UserReportPageResponse(UserReportSuccessResponse[UserReportPageResult]):
-    pass
+    """Success response holding one page of user-report associations."""
 
 
 class SharedUserReportDetailResponse(
     UserReportSuccessResponse[SharedUserReportDetailResult]
 ):
-    pass
+    """Success response holding one shared report."""

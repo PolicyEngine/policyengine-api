@@ -49,7 +49,6 @@ def user_route_client(
 
     Passing ``require_user=None`` keeps the fail-closed default authenticator.
     """
-
     flask_calls = {"count": 0}
     flask_app = Flask(__name__)
 

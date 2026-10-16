@@ -32,11 +32,14 @@ class RunBlock:
 
     @property
     def single_line(self) -> bool:
+        """Whether the block is at most one line of code with no chained commands."""
         return self.code_lines <= 1 and not self.chained
 
 
 @dataclass(frozen=True)
 class JobBlock:
+    """One workflow job: its run text, step names, ``uses:`` references and matrix."""
+
     id: str
     name: str
     run_text: str

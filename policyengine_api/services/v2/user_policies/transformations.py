@@ -23,6 +23,7 @@ USER_POLICY_FINGERPRINT_VERSION = 1
 
 
 def user_policy_read(association: UserPolicy) -> UserPolicyRead:
+    """Convert a stored association row to the service's read model."""
     return UserPolicyRead(
         id=association.id,
         country_id=association.country_id,
@@ -41,6 +42,10 @@ def user_policy_read(association: UserPolicy) -> UserPolicyRead:
 def user_policy_page(
     rows: list[UserPolicy], *, offset: int, limit: int
 ) -> UserPolicyPage:
+    """Build a page from up to ``limit + 1`` rows.
+
+    The extra row is not returned; it only sets ``has_more``.
+    """
     return UserPolicyPage(
         items=tuple(user_policy_read(row) for row in rows[:limit]),
         offset=offset,
@@ -51,7 +56,6 @@ def user_policy_page(
 
 def fingerprint_legacy_user_policy(snapshot: LegacyUserPolicySnapshot) -> str:
     """Hash every committed source field through deterministic JSON."""
-
     document = {
         "fingerprint_version": USER_POLICY_FINGERPRINT_VERSION,
         **snapshot.model_dump(mode="json"),
@@ -73,7 +77,6 @@ def project_legacy_user_policy(
     policy_id: UUID,
 ) -> UserPolicyCreationInput:
     """Map v1 presentation data onto an association, never core policy content."""
-
     return UserPolicyCreationInput(
         country_id=snapshot.country_id,
         user_id=user_id,
@@ -91,7 +94,6 @@ def owned_user_policy_input(
     policy_id: UUID | None,
 ) -> UserPolicyCreationInput:
     """Attach the session owner and the resolved v2 policy reference."""
-
     return UserPolicyCreationInput(
         **fields.model_dump(exclude={"policy_id"}),
         user_id=user_id,
@@ -105,4 +107,9 @@ def legacy_name_requires_update(
     reform_label: str | None,
     changed_fields: frozenset[str],
 ) -> bool:
+    """Return whether a v1 revision should rename the association.
+
+    Only a changed v1 reform label that differs from the current name renames it,
+    so a v2-side rename survives v1 revisions that leave the label alone.
+    """
     return "reform_label" in changed_fields and association.name != reform_label

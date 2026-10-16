@@ -70,6 +70,11 @@ def resolve_policy_creation_input(
     policyengine_version: str | None = None,
     running_policyengine_version: str = POLICYENGINE_VERSION,
 ) -> ResolvedPolicyCreationInput:
+    """Bind policy content to the selected catalog's model version.
+
+    Raise PolicyCatalogValidationError if the model or any parameter id is not
+    part of the selected catalog.
+    """
     selected = read_policy_catalog(
         session,
         policy_input.country_id,
@@ -99,6 +104,11 @@ def create_resolved_policy(
         [ResolvedPolicyCreationInput], CanonicalPolicyContent
     ] = canonicalize_policy,
 ) -> PolicyCreationResult:
+    """Store a resolved policy, or return the existing one with identical content.
+
+    Raise PolicyCreationIntegrityError if the hash conflict finds no usable row,
+    and PolicyContentHashCollisionError if the stored row's canonical bytes differ.
+    """
     content = canonicalizer(policy_input)
     created_policy_id = create_policy(
         session,
@@ -143,6 +153,7 @@ def create_resolved_policy(
 def read_complete_policy(
     session: Session, *, country_id: str, policy_id: UUID
 ) -> PolicyRead:
+    """Return one policy of this country, or raise PolicyNotFoundError."""
     policy = read_policy_row(session, country_id=country_id, policy_id=policy_id)
     if policy is None:
         raise PolicyNotFoundError(f"policy {policy_id} was not found")
@@ -160,6 +171,7 @@ def read_policy_page(
     offset: int,
     limit: int,
 ) -> PolicyPage:
+    """Return a page of policies with their values, optionally for one model."""
     rows = read_policy_rows(
         session,
         country_id=country_id,
@@ -182,6 +194,12 @@ def mirror_legacy_policy_in_session(
     running_policyengine_version: str = POLICYENGINE_VERSION,
     country_package_versions: Mapping[str, str] = COUNTRY_PACKAGE_VERSIONS,
 ) -> LegacyPolicyPersistenceResult:
+    """Copy one committed v1 policy into v2 and map its v1 id to the result.
+
+    The policy is translated against the running catalog. Replaying the same v1
+    policy is idempotent. Raise LegacyPolicyMappingIntegrityError if the v1 id is
+    already mapped with a different source hash or to a different v2 policy.
+    """
     existing = read_legacy_policy_mapping(
         session,
         country_id=snapshot.country_id,
@@ -268,12 +286,20 @@ class V2PolicyService:
         *,
         running_policyengine_version: str = POLICYENGINE_VERSION,
     ) -> None:
+        """Open sessions through ``database_session``.
+
+        ``running_policyengine_version`` selects the catalog when a request names none.
+        """
         self._database_session = database_session
         self._running_policyengine_version = running_policyengine_version
 
     def create_policy(
         self, policy_input: NativePolicyCreationInput
     ) -> NativePolicyCreation:
+        """Store native policy content, deduplicated by content hash.
+
+        Return the stored policy and whether this call created it.
+        """
         content = PolicyCreationInput.model_validate(
             policy_input.model_dump(exclude={"policyengine_version"})
         )
@@ -293,6 +319,7 @@ class V2PolicyService:
         return NativePolicyCreation(item=item, created=persisted.created)
 
     def get_policy(self, *, country_id: str, policy_id: UUID) -> PolicyRead:
+        """Return one policy of this country, or raise PolicyNotFoundError."""
         with self._database_session.read() as session:
             return read_complete_policy(
                 session, country_id=country_id, policy_id=policy_id
@@ -306,6 +333,7 @@ class V2PolicyService:
         offset: int = 0,
         limit: int = 100,
     ) -> PolicyPage:
+        """Return a page of policies, optionally for one tax-benefit model."""
         with self._database_session.read() as session:
             return read_policy_page(
                 session,
@@ -318,6 +346,7 @@ class V2PolicyService:
     def mirror_legacy_policy(
         self, snapshot: LegacyPolicySnapshot
     ) -> LegacyPolicyPersistenceResult:
+        """Copy one committed v1 policy into v2 in its own transaction."""
         with self._database_session.transaction() as session:
             return mirror_legacy_policy_in_session(
                 session,

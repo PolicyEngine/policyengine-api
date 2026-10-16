@@ -29,6 +29,11 @@ def create_comparison_report(
     session: Session,
     record: ComparisonReportRecord,
 ) -> UUID | None:
+    """Insert a report row unless a row with the same identity already exists.
+
+    Return the new evaluation_id, or None when uq_stage12_eval_reports_identity
+    already holds a row for this identity.
+    """
     statement = (
         insert(Stage12ComparisonReport)
         .values(**report_insert_values(record))
@@ -42,6 +47,11 @@ def create_comparison_simulation(
     session: Session,
     record: ComparisonSimulationRecord,
 ) -> UUID | None:
+    """Insert a simulation row unless a row with the same identity already exists.
+
+    Return the new simulation_execution_id, or None when
+    uq_stage12_eval_simulations_identity already holds a row for this identity.
+    """
     statement = (
         insert(Stage12ComparisonSimulation)
         .values(**simulation_insert_values(record))

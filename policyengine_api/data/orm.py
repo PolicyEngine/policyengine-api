@@ -29,6 +29,11 @@ _cloud_sql_connector: Connector | None = None
 
 
 def get_remote_database_config() -> dict[str, str]:
+    """Read the Cloud SQL instance, user and database name from the environment.
+
+    Raise KeyError when POLICYENGINE_DB_INSTANCE_CONNECTION_NAME is unset; the
+    user and database name default to ``policyengine``.
+    """
     return {
         "instance_connection_name": os.environ[
             "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME"
@@ -40,7 +45,6 @@ def get_remote_database_config() -> dict[str, str]:
 
 def build_session_factory(engine: Engine) -> sessionmaker[Session]:
     """Return SQLAlchemy's standard configurable Session factory."""
-
     return sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
 
 
@@ -77,7 +81,6 @@ def _build_remote_engine() -> Engine:
 
 def get_v1_engine() -> Engine:
     """Return the process-owned Cloud SQL engine; never select SQLite."""
-
     global _v1_engine
     if _v1_engine is None:
         _v1_engine = _build_remote_engine()
@@ -86,7 +89,6 @@ def get_v1_engine() -> Engine:
 
 def get_v1_session_factory() -> sessionmaker[Session]:
     """Return one configured Session factory for the Cloud SQL engine."""
-
     global _v1_session_factory
     if _v1_session_factory is None:
         _v1_session_factory = build_session_factory(get_v1_engine())
@@ -95,14 +97,12 @@ def get_v1_session_factory() -> sessionmaker[Session]:
 
 def clear_v1_session_factories() -> None:
     """Forget cached factories, primarily after replacing an Engine in tests."""
-
     global _v1_session_factory
     _v1_session_factory = None
 
 
 def close_v1_engines() -> None:
     """Release process-owned SQLAlchemy pools and Cloud SQL connectors."""
-
     global _cloud_sql_connector, _v1_engine
     clear_v1_session_factories()
     if _v1_engine is not None:

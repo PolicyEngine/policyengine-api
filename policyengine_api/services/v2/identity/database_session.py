@@ -19,7 +19,6 @@ def provisioning_savepoint(session: Session) -> Iterator[SessionTransaction]:
     The caller rolls the yielded savepoint back when another request created
     the identity first; otherwise it is released when the block exits.
     """
-
     savepoint = session.begin_nested()
     try:
         yield savepoint

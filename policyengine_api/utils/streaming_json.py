@@ -20,11 +20,13 @@ STREAMING_CHUNK_BYTES = 1024 * 1024
 
 
 def should_stream_body(body: bytes) -> bool:
+    """Return True when a body is large enough that it must be sent chunked."""
     return len(body) >= STREAMING_THRESHOLD_BYTES
 
 
 def iter_body_chunks(
     body: bytes, chunk_size: int = STREAMING_CHUNK_BYTES
 ) -> Iterator[bytes]:
+    """Yield a body in fixed-size slices for a chunked response."""
     for start in range(0, len(body), chunk_size):
         yield body[start : start + chunk_size]

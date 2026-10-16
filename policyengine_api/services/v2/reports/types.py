@@ -22,6 +22,8 @@ ContractVersion = Literal[1]
 
 
 class ReportAggregate(StrEnum):
+    """An aggregate result section a report can request."""
+
     BUDGET = "budget"
     POVERTY = "poverty"
     INEQUALITY = "inequality"
@@ -32,6 +34,12 @@ class ReportAggregate(StrEnum):
 
 
 class ReportExecutionInput(StrictContractModel):
+    """The complete input for one report run.
+
+    It pairs a baseline and a reform simulation that differ only in policy, and
+    lists the aggregates to compute from them.
+    """
+
     contract_version: ContractVersion = 1
     evaluation_id: UUID
     baseline: SimulationExecutionInput
@@ -43,6 +51,13 @@ class ReportExecutionInput(StrictContractModel):
 
     @model_validator(mode="after")
     def require_aligned_simulations(self) -> ReportExecutionInput:
+        """Reject a report whose two simulations cannot be compared.
+
+        Baseline and reform must carry their own roles and this report's
+        evaluation_id, have distinct execution ids, and share population, year,
+        geography, options, requested output and bundle. Requested aggregates
+        must be unique.
+        """
         if self.baseline.role is not SimulationRole.BASELINE:
             raise ValueError("baseline input must use the baseline role")
         if self.reform.role is not SimulationRole.REFORM:
@@ -72,6 +87,12 @@ class ReportExecutionInput(StrictContractModel):
 
 
 class AggregateReportArtifactDescriptor(StrictContractModel):
+    """The receipt for one stored aggregate report.
+
+    It names the artifact and the bundle, and records the digests of the
+    baseline and reform simulation artifacts it was computed from.
+    """
+
     contract_version: ContractVersion = 1
     evaluation_id: UUID
     artifact: ArtifactReference
@@ -100,6 +121,7 @@ class AggregateReportArtifactPayload(StrictContractModel):
         cls,
         value: tuple[ReportAggregate, ...],
     ) -> tuple[ReportAggregate, ...]:
+        """Reject a payload that lists any aggregate twice."""
         if len(value) != len(set(value)):
             raise ValueError("requested aggregates must be unique")
         return value
@@ -107,7 +129,6 @@ class AggregateReportArtifactPayload(StrictContractModel):
     @model_validator(mode="after")
     def validate_spm_provenance(self) -> AggregateReportArtifactPayload:
         """Reject duplicate or noncanonical SPM data in aggregate artifacts."""
-
         if "spm_config" in self.result:
             raise ValueError("aggregate result must not include legacy spm_config")
         if "spm_provenance" in self.result:

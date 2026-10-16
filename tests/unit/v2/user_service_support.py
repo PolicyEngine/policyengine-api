@@ -111,7 +111,6 @@ class V2Store:
 @contextmanager
 def v2_store() -> Iterator[V2Store]:
     """Create an isolated SQLite v2 schema with mirrored v1 records."""
-
     engine = create_engine("sqlite://")
 
     @sa.event.listens_for(engine, "connect")

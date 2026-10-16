@@ -21,7 +21,6 @@ def require_legacy_reference(
     legacy_id: int,
 ) -> None:
     """Check one v1 reference before the caller opens its v2 transaction."""
-
     require_legacy_reference_checker(legacy_references).require_existing(
         country_id=country_id,
         requested={kind: (legacy_id,)},

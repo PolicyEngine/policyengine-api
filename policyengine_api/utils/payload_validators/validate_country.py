@@ -1,3 +1,5 @@
+"""Flask view decorator that rejects unsupported country IDs."""
+
 from __future__ import annotations
 
 from functools import wraps
@@ -20,13 +22,19 @@ _ViewResult = TypeVar("_ViewResult")
 def validate_country(
     func: Callable[..., _ViewResult],
 ) -> Callable[..., _ViewResult | Response]:
-    """Validate that a country ID is valid. If not, return a 400 response.
+    """Wrap a Flask view so an unsupported ``country_id`` gets 400 before the view runs.
+
+    The 400 body is the shared JSON error payload, sent with the legacy v1
+    content type that native FastAPI routes must match.
 
     Args:
-        country_id (str): The country ID to validate.
+        func (Callable): The view to wrap; it takes ``country_id`` as its first
+            argument.
 
     Returns:
-        Response(400) if country is not valid, else continues
+        Callable: The wrapped view, which returns a 400 response for an
+        unsupported country and the view's own result otherwise.
+
     """
 
     @wraps(func)

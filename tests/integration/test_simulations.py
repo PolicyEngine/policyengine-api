@@ -14,7 +14,7 @@ class TestSimsWithAxes:
     def test__given_any_number_of_axes__sim_returns_valid_arrays(
         self,
     ):  # , patched_add_yearly_variables, patched_countries_get):
-        """Integration test with small axes for speed"""
+        """Calculate a household with small axes, which keeps the test fast."""
         base_household = create_base_household()
         small_axes_config = create_small_axes()
         household_with_axes = setup_small_axes_household(

@@ -148,8 +148,7 @@ def _principal(sessions, subject: str) -> UserPrincipal:
 
 
 def _browser(sessions) -> UnauthenticatedPrincipal:
-    """A fresh signed-out browser whose user the fixture removes afterwards."""
-
+    """Return a fresh signed-out browser whose user the fixture removes afterwards."""
     user_id = uuid4()
     sessions.kw["info"]["browser_user_ids"].append(user_id)
     return UnauthenticatedPrincipal(user_id=user_id)
@@ -425,7 +424,6 @@ def test_merge_moves_every_association_and_keeps_links_and_constraints(
 
 def _hold_a_conversion(sessions, *, browser, principal) -> Session:
     """Convert or merge ``browser`` in an open transaction holding its lock."""
-
     session = sessions()
     session.begin()
     convert_unauthenticated_user_in_session(

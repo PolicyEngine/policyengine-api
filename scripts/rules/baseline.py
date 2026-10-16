@@ -18,12 +18,16 @@ class BaseUnavailable(Exception):
 
 
 def default_base_ref() -> str | None:
+    """Return ``origin/<GITHUB_BASE_REF>`` on a pull-request run, otherwise None."""
     base = os.environ.get("GITHUB_BASE_REF")
     return f"origin/{base}" if base else None
 
 
 def load_base_registry(root: Path, ref: str) -> Registry | None:
-    """The registry as it is on ``ref``, or None if the base has no registry yet."""
+    """Return the registry as it is on ``ref``, or None if the base has none yet.
+
+    Raise BaseUnavailable when ``ref`` does not name a commit.
+    """
     verify = subprocess.run(
         ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
         cwd=root,

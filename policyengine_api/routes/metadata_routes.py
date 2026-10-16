@@ -1,3 +1,5 @@
+"""Flask route serving a country's model metadata document."""
+
 import json
 
 from flask import Blueprint, Response
@@ -20,8 +22,8 @@ def get_metadata(country_id: str) -> Response:
 
     Args:
         country_id (str): The country ID.
-    """
 
+    """
     # Retrieve country metadata and add status and message to the response
     country_metadata = metadata_service.get_metadata(country_id)
     body = json.dumps(

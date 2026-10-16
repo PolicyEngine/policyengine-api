@@ -46,12 +46,16 @@ class StrictContractModel(BaseModel):
 
 
 class SimulationRole(StrEnum):
+    """The part a simulation plays: one side of a comparison, or a standalone run."""
+
     BASELINE = "baseline"
     REFORM = "reform"
     STANDALONE = "standalone"
 
 
 class ArtifactMediaType(StrEnum):
+    """Media type of a worker output: JSON for reports, Parquet for simulations."""
+
     JSON = "application/json"
     PARQUET = "application/vnd.apache.parquet"
 
@@ -90,12 +94,16 @@ SIMULATION_PARQUET_PAYLOAD_CONTRACT = SimulationParquetPayloadContract()
 
 
 class DatasetArtifactMediaType(StrEnum):
+    """Media type of an input dataset artifact."""
+
     HDF5 = "application/x-hdf5"
     JSON = "application/json"
     PARQUET = "application/vnd.apache.parquet"
 
 
 class DatasetProvenance(StrictContractModel):
+    """The input dataset a simulation runs on, with its revision and data package."""
+
     identity: ContractText
     uri: Annotated[str, Field(min_length=1, max_length=2048)]
     artifact_revision: ContractText
@@ -104,6 +112,12 @@ class DatasetProvenance(StrictContractModel):
 
 
 class BundleProvenance(StrictContractModel):
+    """The PolicyEngine.py bundle a simulation runs against.
+
+    It pins the package versions, the input dataset and the bundle manifest
+    digest, so a result can be traced to an exact release.
+    """
+
     policyengine_version: ContractText
     country_package_name: ContractText
     country_package_version: ContractText
@@ -112,6 +126,8 @@ class BundleProvenance(StrictContractModel):
 
 
 class ArtifactReference(StrictContractModel):
+    """A private gs:// object, addressed by its SHA-256 digest and size."""
+
     uri: StorageUri
     media_type: ArtifactMediaType
     content_sha256: Sha256Digest
@@ -119,6 +135,11 @@ class ArtifactReference(StrictContractModel):
 
 
 class DatasetArtifactReference(StrictContractModel):
+    """An input dataset object in GCS or Hugging Face, addressed by its SHA-256 digest.
+
+    size_bytes is optional because a dataset's size may not be known.
+    """
+
     uri: DatasetArtifactUri
     media_type: DatasetArtifactMediaType
     content_sha256: Sha256Digest
@@ -126,11 +147,15 @@ class DatasetArtifactReference(StrictContractModel):
 
 
 class DatasetPopulationInput(StrictContractModel):
+    """A population supplied as an input dataset artifact."""
+
     kind: Literal["dataset"] = "dataset"
     artifact: DatasetArtifactReference
 
 
 class HouseholdPopulationInput(StrictContractModel):
+    """A population supplied as one household document."""
+
     kind: Literal["household"] = "household"
     document: dict[str, JsonValue]
 
@@ -142,6 +167,12 @@ PopulationInput = Annotated[
 
 
 class GeographySelection(StrictContractModel):
+    """The country and region to simulate.
+
+    filter_field and filter_value, set together, restrict the population to the
+    region; filter_strategy, if set, names how the filter is applied.
+    """
+
     country: CountryId
     region: ContractText
     filter_field: ContractText | None = None
@@ -150,6 +181,7 @@ class GeographySelection(StrictContractModel):
 
     @model_validator(mode="after")
     def require_complete_filter(self) -> GeographySelection:
+        """Require filter_field with filter_value, and both for filter_strategy."""
         if (self.filter_field is None) != (self.filter_value is None):
             raise ValueError("filter_field and filter_value must be supplied together")
         if self.filter_strategy is not None and self.filter_field is None:
@@ -158,18 +190,27 @@ class GeographySelection(StrictContractModel):
 
 
 class RequestedSimulationOutput(StrictContractModel):
+    """The variables the worker writes to a simulation's output, each named once."""
+
     schema_version: ContractVersion = 1
     variables: Annotated[tuple[ContractText, ...], Field(min_length=1)]
 
     @field_validator("variables")
     @classmethod
     def require_unique_variables(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        """Reject a variable list that names any variable twice."""
         if len(value) != len(set(value)):
             raise ValueError("requested variables must be unique")
         return value
 
 
 class SimulationExecutionInput(StrictContractModel):
+    """The complete input for one simulation in a comparison run.
+
+    It fixes the policy, population, year, geography, options, requested
+    outputs and the bundle to run against.
+    """
+
     contract_version: ContractVersion = 1
     evaluation_id: UUID
     simulation_execution_id: UUID
@@ -184,6 +225,8 @@ class SimulationExecutionInput(StrictContractModel):
 
 
 class RowIdentity(StrictContractModel):
+    """The identifier columns, row count and digest that fix the rows of an output."""
+
     schema_version: ContractVersion = 1
     identifier_columns: Annotated[tuple[ContractText, ...], Field(min_length=1)]
     row_count: Annotated[int, Field(ge=0)]
@@ -192,12 +235,19 @@ class RowIdentity(StrictContractModel):
     @field_validator("identifier_columns")
     @classmethod
     def require_unique_columns(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        """Reject identifier columns that name any column twice."""
         if len(value) != len(set(value)):
             raise ValueError("row identifier columns must be unique")
         return value
 
 
 class SimulationArtifactDescriptor(StrictContractModel):
+    """The receipt for one stored simulation output.
+
+    It names the artifact, its row identity and bundle, and any detached SPM
+    calculation receipt needed to reproduce an aggregate from it.
+    """
+
     contract_version: ContractVersion = 1
     evaluation_id: UUID
     simulation_execution_id: UUID

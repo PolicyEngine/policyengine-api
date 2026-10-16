@@ -11,10 +11,12 @@ if TYPE_CHECKING:
 
 
 def delete_user_policy(session: Session, association: UserPolicy) -> None:
+    """Delete an association row; the policy it points to is kept."""
     session.delete(association)
     session.flush()
 
 
 def delete_transition_user(session: Session, user: User) -> None:
+    """Delete a transition user that lost a race to map its v1 user id."""
     session.delete(user)
     session.flush()

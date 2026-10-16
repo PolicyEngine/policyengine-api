@@ -36,7 +36,9 @@ class LegacyHouseholdMirror(Protocol):
     def mirror_legacy_household(
         self,
         snapshot: LegacyHouseholdSnapshot,
-    ) -> LegacyHouseholdPersistenceResult: ...
+    ) -> LegacyHouseholdPersistenceResult:
+        """Copy one committed v1 household into v2 and map its v1 id to the result."""
+        ...
 
 
 class HouseholdMirrorUnavailableError(RuntimeError):
@@ -124,7 +126,6 @@ def process_household_event_after_commit(
     require_pending: bool = False,
 ) -> LegacyHouseholdPersistenceResult:
     """Copy one exact retained create event and then record its completion."""
-
     selected_event_service = event_service or HouseholdService()
     started_at = time.perf_counter()
     destination_result: LegacyHouseholdPersistenceResult | None = None

@@ -12,12 +12,16 @@ if TYPE_CHECKING:
 
 
 class Tier(StrEnum):
+    """How mechanically a rule can be checked; judgment-tier rules never block."""
+
     MECHANICAL = "mechanical"
     METRIC = "metric"
     JUDGMENT = "judgment"
 
 
 class Status(StrEnum):
+    """How a rule is enforced today; only enforced and ratcheted rules can block."""
+
     ENFORCED = "enforced"
     RATCHETED = "ratcheted"
     ADVISORY = "advisory"
@@ -25,6 +29,8 @@ class Status(StrEnum):
 
 
 class Kind(StrEnum):
+    """The checker behind a rule; it decides which ``[rule.enforcer]`` fields apply."""
+
     PYTEST = "pytest"
     QUALITY_GUARD = "quality-guard"
     RUFF = "ruff"
@@ -47,12 +53,15 @@ class Violation:
     fix: str
 
     def __str__(self) -> str:
+        """Format as ``[rule] check: message. Fix: fix.``; rule defaults to registry."""
         subject = self.rule_id or "registry"
         return f"[{subject}] {self.check}: {self.message}. Fix: {self.fix}."
 
 
 @dataclass(frozen=True)
 class Category:
+    """A ``[[category]]`` grouping rules, in declared order, in the rendered views."""
+
     id: str
     title: str
 
@@ -67,6 +76,8 @@ class Ignored:
 
 @dataclass(frozen=True)
 class Discovery:
+    """Where the guard looks for unregistered checks, and which ones it may skip."""
+
     workflows: tuple[str, ...] = (".github/workflows/pr.yml",)
     guard_test_globs: tuple[str, ...] = ()
     extra_guard_tests: tuple[str, ...] = ()
@@ -97,6 +108,8 @@ class CiScripts:
 
 @dataclass(frozen=True)
 class Enforcer:
+    """What checks a rule: its ``kind`` plus the raw ``[rule.enforcer]`` fields."""
+
     kind: Kind
     fields: Mapping[str, Any] = field(default_factory=dict)
 
@@ -105,6 +118,7 @@ class Enforcer:
         key: str,
         default: object = None,
     ) -> Any:  # noqa: ANN401  # a raw TOML value that callers read by its shape
+        """Return a raw enforcer field, or ``default`` when the registry omits it."""
         return self.fields.get(key, default)
 
     @property
@@ -153,6 +167,8 @@ class Enforcer:
 
 @dataclass(frozen=True)
 class CiRef:
+    """A ``[[rule.ci]]`` reference: a workflow job whose run text has ``invocation``."""
+
     workflow: str
     job: str
     invocation: str
@@ -160,17 +176,26 @@ class CiRef:
 
 @dataclass(frozen=True)
 class Proof:
+    """The raw ``[rule.proof]`` fields; which keys are required depends on the tier."""
+
     fields: Mapping[str, Any]
 
 
 @dataclass(frozen=True)
 class Baseline:
+    """A ratcheted rule's file of tolerated violations and the number it lists.
+
+    The count must match the file and may never grow relative to the base branch.
+    """
+
     file: str
     count: int
 
 
 @dataclass(frozen=True)
 class RuleException:
+    """A temporary carve-out of ``path`` from a rule; the guard fails once expired."""
+
     path: str
     reason: str
     expires: date
@@ -178,6 +203,8 @@ class RuleException:
 
 @dataclass(frozen=True)
 class Rule:
+    """One ``[[rule]]`` registry entry; rules-registry.md explains each field."""
+
     id: str
     category: str
     statement: str
@@ -205,6 +232,8 @@ class Rule:
 
 @dataclass(frozen=True)
 class Registry:
+    """The parsed contents of rules/registry.toml."""
+
     schema_version: int
     repo: str
     categories: tuple[Category, ...]
@@ -214,6 +243,7 @@ class Registry:
     ci_scripts: CiScripts | None = None
 
     def rule(self, rule_id: str) -> Rule | None:
+        """Return the rule with ``rule_id``, or None if the registry has none."""
         for rule in self.rules:
             if rule.id == rule_id:
                 return rule

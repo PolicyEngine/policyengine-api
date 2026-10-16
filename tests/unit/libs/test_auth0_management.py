@@ -163,7 +163,6 @@ def test_deleters_share_one_client_and_its_token(monkeypatch) -> None:
 
 def _tokens_then(delete_statuses: list[int]):
     """Issue numbered tokens and answer deletions with the given statuses."""
-
     issued_tokens: list[str] = []
     remaining_statuses = list(delete_statuses)
 

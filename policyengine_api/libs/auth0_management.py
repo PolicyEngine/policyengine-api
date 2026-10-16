@@ -57,6 +57,13 @@ class Auth0ManagementError(RuntimeError):
 
 @dataclass(frozen=True)
 class Auth0ManagementSettings:
+    """Validated Management API settings for one Auth0 tenant.
+
+    Exactly one of ``client_secret`` and ``client_secret_resource`` (a Secret
+    Manager version name) is set. The secret is kept out of ``repr``, and equal
+    settings share one client, so its token is reused.
+    """
+
     domain: str
     client_id: str
     client_secret: str = field(default="", repr=False)
@@ -67,7 +74,6 @@ def load_auth0_management_settings(
     environ: Mapping[str, str] | None = None,
 ) -> Auth0ManagementSettings | None:
     """Return complete Management API settings, or ``None`` when absent."""
-
     values = os.environ if environ is None else environ
     domain = values.get(AUTH0_MANAGEMENT_DOMAIN_ENV, "").strip()
     client_id = values.get(AUTH0_MANAGEMENT_CLIENT_ID_ENV, "").strip()
@@ -123,6 +129,12 @@ class Auth0ManagementClient:
         http_client: httpx.Client | None = None,
         secret_loader: Callable[[str], str] = _load_secret_from_secret_manager,
     ) -> None:
+        """Use ``settings`` for the tenant and client credentials.
+
+        ``http_client`` replaces the per-request client (tests pass a mock
+        transport), and ``secret_loader`` reads ``client_secret_resource`` when
+        no direct secret is set.
+        """
         self._settings = settings
         self._http_client = http_client
         self._secret_loader = secret_loader
@@ -194,7 +206,6 @@ class Auth0ManagementClient:
 
     def _discard_token(self, token: str) -> None:
         """Forget a rejected token unless another thread already replaced it."""
-
         with self._lock:
             if self._token == token:
                 self._token = None
@@ -206,7 +217,6 @@ class Auth0ManagementClient:
         Callers run this before deleting their own records, so a credential or
         Secret Manager failure stops the deletion with nothing removed.
         """
-
         self._access_token()
 
     def _delete_request(self, subject: str, token: str) -> httpx.Response:
@@ -222,7 +232,6 @@ class Auth0ManagementClient:
         A 401 means the cached token was revoked or rotated, so it is dropped
         and the request is retried once with a fresh token.
         """
-
         token = self._access_token()
         response = self._delete_request(subject, token)
         if response.status_code == 401:
@@ -241,7 +250,6 @@ _shared_clients_lock = threading.Lock()
 
 def _shared_client(settings: Auth0ManagementSettings) -> Auth0ManagementClient:
     """Return one process-wide client per settings so its token is reused."""
-
     with _shared_clients_lock:
         client = _shared_clients.get(settings)
         if client is None:
@@ -260,7 +268,6 @@ def build_auth0_user_deleter(
     expires. Settings are read on each call, so callers invoke this only when
     they are about to delete an account.
     """
-
     settings = load_auth0_management_settings(environ)
     if settings is None:
         return None

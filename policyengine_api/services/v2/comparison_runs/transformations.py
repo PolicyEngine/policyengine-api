@@ -19,6 +19,7 @@ from policyengine_api.services.v2.comparison_runs.types import (
 
 
 def report_insert_values(record: ComparisonReportRecord) -> dict[str, Any]:
+    """Return a report record's column values, with statuses as the table's enums."""
     values = record.model_dump(mode="python")
     values["status"] = Stage12RunStatus(record.status.value)
     values["aggregation_status"] = Stage12AggregationStatus(
@@ -31,6 +32,10 @@ def report_insert_values(record: ComparisonReportRecord) -> dict[str, Any]:
 
 
 def simulation_insert_values(record: ComparisonSimulationRecord) -> dict[str, Any]:
+    """Return a simulation record's column values in the table's types.
+
+    Status and role become the table's enums, and row_identity_columns a list.
+    """
     values = record.model_dump(mode="python")
     values["status"] = Stage12RunStatus(record.status.value)
     values["role"] = Stage12SimulationRole(record.role.value)
@@ -43,6 +48,10 @@ def simulation_insert_values(record: ComparisonSimulationRecord) -> dict[str, An
 
 
 def report_record(row: Stage12ComparisonReport) -> ComparisonReportRecord:
+    """Rebuild the validated contract record from a stored report row.
+
+    Raise pydantic.ValidationError if the row breaks the contract's state rules.
+    """
     return ComparisonReportRecord.model_validate(
         {
             field_name: getattr(row, field_name)
@@ -54,6 +63,10 @@ def report_record(row: Stage12ComparisonReport) -> ComparisonReportRecord:
 def simulation_record(
     row: Stage12ComparisonSimulation,
 ) -> ComparisonSimulationRecord:
+    """Rebuild the validated contract record from a stored simulation row.
+
+    Raise pydantic.ValidationError if the row breaks the contract's state rules.
+    """
     return ComparisonSimulationRecord.model_validate(
         {
             field_name: getattr(row, field_name)

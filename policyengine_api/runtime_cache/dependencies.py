@@ -13,6 +13,8 @@ from policyengine_api.runtime_cache.settings import load_runtime_cache_settings
 
 @dataclass(frozen=True)
 class RuntimeCacheContext:
+    """The process's cache backend and key namespace, built once from settings."""
+
     client: CacheBackend
     namespace: CacheNamespace
     enabled: bool
@@ -20,6 +22,10 @@ class RuntimeCacheContext:
 
 @lru_cache(maxsize=1)
 def get_runtime_cache_context() -> RuntimeCacheContext:
+    """Return the shared cache context, a no-storage backend when disabled.
+
+    Built on first use, not at import, and memoised for the process.
+    """
     settings = load_runtime_cache_settings()
     namespace = CacheNamespace(settings.environment, settings.service)
     client: CacheBackend = (
@@ -35,4 +41,5 @@ def get_runtime_cache_context() -> RuntimeCacheContext:
 
 
 def clear_runtime_cache_context() -> None:
+    """Forget the memoised context so the next call rereads the settings."""
     get_runtime_cache_context.cache_clear()

@@ -21,6 +21,11 @@ if TYPE_CHECKING:
 
 
 class RegionType(StrEnum):
+    """Kind of geography a region covers.
+
+    ``national`` is the whole model country; ``country`` is a UK nation.
+    """
+
     NATIONAL = "national"
     COUNTRY = "country"
     STATE = "state"
@@ -32,6 +37,11 @@ class RegionType(StrEnum):
 
 
 class TaxBenefitModel(TimestampedModel, table=True):
+    """A country's tax-benefit model, unique by name.
+
+    Its versions own the metadata catalog and are deleted with it.
+    """
+
     __tablename__ = "tax_benefit_models"
     __table_args__ = (sa.UniqueConstraint("name", name="uq_tax_benefit_models_name"),)
 
@@ -50,6 +60,13 @@ class TaxBenefitModel(TimestampedModel, table=True):
 
 
 class TaxBenefitModelVersion(IdentifiedModel, table=True):
+    """One published catalog version of a model, unique per model and version.
+
+    Owns its variables, parameters and parameter nodes, which are deleted with it,
+    and records the country's current-law policy id and the years its metadata
+    covers.
+    """
+
     __tablename__ = "tax_benefit_model_versions"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -91,6 +108,13 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
 
 
 class Region(TimestampedModel, table=True):
+    """A region in one model version, unique by code within that version.
+
+    Its default dataset must belong to the same version. Filtered regions
+    (``requires_filter``) also name the variable and value that select their
+    households.
+    """
+
     __tablename__ = "regions"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -142,6 +166,11 @@ class Region(TimestampedModel, table=True):
 
 
 class Dataset(TimestampedModel, table=True):
+    """A dataset of one model version, unique by name within that version.
+
+    Output datasets (``is_output_dataset``) must record a ``storage_path``.
+    """
+
     __tablename__ = "datasets"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -198,6 +227,8 @@ class Dataset(TimestampedModel, table=True):
 
 
 class DatasetVersion(IdentifiedModel, table=True):
+    """A named version of a dataset, unique per dataset and deleted with it."""
+
     __tablename__ = "dataset_versions"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -225,6 +256,8 @@ class DatasetVersion(IdentifiedModel, table=True):
 
 
 class Variable(IdentifiedModel, table=True):
+    """A model variable in one model version, unique by name and deleted with it."""
+
     __tablename__ = "variables"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -255,6 +288,11 @@ class Variable(IdentifiedModel, table=True):
 
 
 class ParameterNode(IdentifiedModel, table=True):
+    """A non-leaf node of a version's parameter tree, which groups parameters.
+
+    Unique by name within the version, and has no values of its own.
+    """
+
     __tablename__ = "parameter_nodes"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -279,6 +317,11 @@ class ParameterNode(IdentifiedModel, table=True):
 
 
 class Parameter(IdentifiedModel, table=True):
+    """A leaf parameter of a model version, unique by name within it.
+
+    Its values include current law and the values each policy or dynamic sets.
+    """
+
     __tablename__ = "parameters"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -309,6 +352,12 @@ class Parameter(IdentifiedModel, table=True):
 
 
 class ParameterValue(IdentifiedModel, table=True):
+    """A parameter's value from ``start_date`` until ``end_date``, or indefinitely.
+
+    A value owned by a policy or dynamic is deleted with its owner. A value with
+    neither is current law, and a parameter has at most one per start date.
+    """
+
     __tablename__ = "parameter_values"
     __table_args__ = (
         sa.CheckConstraint(

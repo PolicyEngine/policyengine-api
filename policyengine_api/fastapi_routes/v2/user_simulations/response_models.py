@@ -18,10 +18,18 @@ if TYPE_CHECKING:
 
 
 class StrictUserSimulationAPIModel(BaseModel):
+    """Base for user-simulation responses; rejects unknown fields."""
+
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
 
 class UserSimulationItem(StrictUserSimulationAPIModel):
+    """A simulation saved by a user, with the user's name and description for it.
+
+    ``legacy_simulation_id`` is the v1 simulation it saves. Associations can be
+    renamed, pointed at another v1 simulation of the same country, or deleted.
+    """
+
     id: UUID
     country_id: CountryId
     user_id: UUID
@@ -34,14 +42,23 @@ class UserSimulationItem(StrictUserSimulationAPIModel):
 
     @classmethod
     def from_read(cls, item: UserSimulationRead) -> UserSimulationItem:
+        """Build the response item by validating the service read record's fields."""
         return cls.model_validate(item)
 
 
 class UserSimulationDetailResult(StrictUserSimulationAPIModel):
+    """Result holding one user-simulation association in ``item``."""
+
     item: UserSimulationItem
 
 
 class UserSimulationPageResult(StrictUserSimulationAPIModel):
+    """One page of user-simulation associations, oldest first.
+
+    ``offset`` and ``limit`` echo the request; when ``has_more`` is true, ask
+    for the next page with ``offset + limit``.
+    """
+
     items: list[UserSimulationItem]
     offset: int
     limit: int
@@ -49,6 +66,7 @@ class UserSimulationPageResult(StrictUserSimulationAPIModel):
 
     @classmethod
     def from_page(cls, page: UserSimulationPage) -> UserSimulationPageResult:
+        """Build the response page from a service page, converting each item."""
         return cls(
             items=[UserSimulationItem.from_read(item) for item in page.items],
             offset=page.offset,
@@ -61,6 +79,8 @@ ResultT = TypeVar("ResultT")
 
 
 class UserSimulationSuccessResponse(StrictUserSimulationAPIModel, Generic[ResultT]):
+    """Success envelope: ``status`` "ok", a null ``message`` and the ``result``."""
+
     status: Literal["ok"] = "ok"
     message: None = None
     result: ResultT
@@ -69,10 +89,10 @@ class UserSimulationSuccessResponse(StrictUserSimulationAPIModel, Generic[Result
 class UserSimulationDetailResponse(
     UserSimulationSuccessResponse[UserSimulationDetailResult]
 ):
-    pass
+    """Success response holding one user-simulation association."""
 
 
 class UserSimulationPageResponse(
     UserSimulationSuccessResponse[UserSimulationPageResult]
 ):
-    pass
+    """Success response holding one page of user-simulation associations."""

@@ -36,6 +36,7 @@ def require_user_household(
     *,
     association_id: UUID,
 ) -> UserHouseholdAssociation:
+    """Return the association, or raise UserHouseholdNotFoundError if it is None."""
     if association is None:
         raise UserHouseholdNotFoundError(
             f"user-household association {association_id} was not found"
@@ -49,6 +50,10 @@ def validate_association_household(
     household_id: UUID,
     household: Household | None,
 ) -> None:
+    """Check that a referenced household exists and is in the association's country.
+
+    Raise AssociationHouseholdNotFoundError or AssociationCountryConflictError.
+    """
     if household is None:
         raise AssociationHouseholdNotFoundError(
             f"household {household_id} was not found"
@@ -65,7 +70,6 @@ def resolve_association_household_id(
     mapped_household_id: UUID | None,
 ) -> UUID | None:
     """Combine an explicit v2 reference with the v1 mapping, if both exist."""
-
     if (
         requested_household_id is not None
         and mapped_household_id is not None

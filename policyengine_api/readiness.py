@@ -16,7 +16,6 @@ _ready = True
 
 def validate_policy_runtime_configuration() -> None:
     """Validate v1 source selectors, v2 persistence, user auth and measurement."""
-
     from policyengine_api.data.v2.settings import (
         load_v2_runtime_database_settings,
     )

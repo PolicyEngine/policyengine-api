@@ -36,6 +36,11 @@ class V2MigrationTargetError(V2ConfigurationError):
 
 @dataclass(frozen=True)
 class ConfiguredSupabaseTarget:
+    """The persistent Supabase database v2 Alembic may migrate, and its required role.
+
+    The freshness audit fields gate the first migration of an unstamped database.
+    """
+
     environment: str
     project_ref: str
     database_name: str
@@ -46,6 +51,11 @@ class ConfiguredSupabaseTarget:
 
 @dataclass(frozen=True)
 class V2AlembicSettings:
+    """The URL v2 Alembic connects to, and whether it is the disposable test database.
+
+    ``target`` is None only in disposable test mode.
+    """
+
     url: URL
     disposable_test: bool
     target: ConfiguredSupabaseTarget | None
@@ -88,7 +98,6 @@ def load_v2_alembic_settings(
     environ: Mapping[str, str] | None = None,
 ) -> V2AlembicSettings:
     """Select either the configured persistent target or isolated test Postgres."""
-
     values = os.environ if environ is None else environ
     raw_url = _required(values, V2_MIGRATION_DATABASE_URL)
     url = _parse_url(raw_url)
@@ -134,7 +143,6 @@ def qualify_v2_connection(
     settings: V2AlembicSettings,
 ) -> None:
     """Verify live target identity and first-use state before Alembic runs."""
-
     if connection.dialect.name != "postgresql":
         raise V2MigrationTargetError("v2 Alembic requires a Postgres connection")
     if settings.disposable_test:
@@ -172,7 +180,6 @@ def qualify_v2_connection(
 
 def validate_v2_head_schema(connection: Connection, metadata: MetaData) -> None:
     """Require live application tables to match authoritative ORM metadata."""
-
     public_tables = set(inspect(connection).get_table_names(schema="public"))
     application_tables = public_tables - {"alembic_version"}
     metadata_tables = {table.name for table in metadata.tables.values()}

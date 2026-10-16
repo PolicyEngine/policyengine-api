@@ -16,6 +16,10 @@ if TYPE_CHECKING:
 def read_datasets(
     session: Session, *, model_version_id: UUID, offset: int, limit: int
 ) -> list[Dataset]:
+    """Return a page of a model version's logical input datasets in name order.
+
+    Fetch limit + 1 rows so the caller can tell whether another page exists.
+    """
     return read_rows(
         session,
         select(Dataset)
@@ -33,6 +37,7 @@ def read_datasets(
 def read_dataset(
     session: Session, *, model_version_id: UUID, dataset_id: UUID
 ) -> Dataset | None:
+    """Return the model version's logical input dataset with dataset_id, or None."""
     rows = read_rows(
         session,
         select(Dataset).where(

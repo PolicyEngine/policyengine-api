@@ -44,7 +44,6 @@ def build_v2_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
     """Build isolated resource routes without loading v2 configuration."""
-
     router = APIRouter()
     router.include_router(build_v2_me_router(dependencies))
     router.include_router(build_v2_user_report_router(dependencies))

@@ -18,6 +18,11 @@ class V2AuthenticationRequiredError(Exception):
     """Raised when a user route has no valid bearer access token (401)."""
 
     def __init__(self, message: str, *, invalid_token: bool = False) -> None:
+        """Choose the WWW-Authenticate challenge sent with the 401.
+
+        ``invalid_token`` marks a credential that was sent but rejected, which the
+        challenge reports as ``error="invalid_token"``.
+        """
         super().__init__(message)
         self.challenge = (
             INVALID_TOKEN_BEARER_CHALLENGE if invalid_token else BEARER_CHALLENGE
@@ -48,7 +53,6 @@ def v2_error_response(
     headers: Mapping[str, str] | None = None,
 ) -> JSONResponse:
     """Serialize one API v2 error without resource-path dispatch."""
-
     error = V2ErrorResponse(message=message)
     return JSONResponse(
         status_code=status_code,

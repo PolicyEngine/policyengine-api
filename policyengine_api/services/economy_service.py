@@ -1,3 +1,5 @@
+"""Economic impact service backed by cached reform impacts and simulation jobs."""
+
 import datetime
 import hashlib
 import json
@@ -72,9 +74,7 @@ budget_window_cache = BudgetWindowCache()
 
 
 class ImpactAction(Enum):
-    """
-    Enum for the action to take based on the status of an economic impact calculation.
-    """
+    """What to do with an economic impact request, given its stored calculation."""
 
     COMPLETED = "completed"
     FAILED = "failed"
@@ -83,9 +83,7 @@ class ImpactAction(Enum):
 
 
 class ImpactStatus(Enum):
-    """
-    Enum for the status of an economic impact calculation.
-    """
+    """Enum for the status of an economic impact calculation."""
 
     COMPUTING = "computing"
     OK = "ok"
@@ -103,6 +101,8 @@ REFORM_IMPACT_START_CLAIM_ATTEMPTS = 3
 
 
 class SimulationOptions(BaseModel):
+    """The job payload sent to the Simulation entrypoint for one economy simulation."""
+
     spm: SPMSelection | None = None
     country: str
     scope: Literal["macro", "household"] = "macro"
@@ -116,6 +116,12 @@ class SimulationOptions(BaseModel):
 
 
 class EconomicImpactSetupOptions(BaseModel):
+    """One resolved economic impact request.
+
+    It holds the request's cache identity, the runtime bundle versions and the
+    submission claim token that guards against duplicate simulation jobs.
+    """
+
     submission_claim_id: str
     observability_id: str | None = None
     country_id: str
@@ -135,9 +141,10 @@ class EconomicImpactSetupOptions(BaseModel):
 
 
 class EconomicImpactResult(BaseModel):
-    """
-    Model for the result of an economic impact calculation.
-    Contains the status and the reform impact JSON.
+    """The status of an economic impact calculation and, once complete, its result.
+
+    ``data`` holds the reform impact JSON when the status is ok, and ``message``
+    explains an error.
     """
 
     status: ImpactStatus
@@ -150,9 +157,7 @@ class EconomicImpactResult(BaseModel):
     model_config = {"frozen": True}  # Make model immutable
 
     def to_dict(self) -> dict[str, str | dict | None]:
-        """
-        Convert the EconomicImpactResult to a dictionary.
-        """
+        """Convert the EconomicImpactResult to a dictionary."""
         return {
             "status": self.status.value,
             "data": self.data,
@@ -161,33 +166,25 @@ class EconomicImpactResult(BaseModel):
 
     @classmethod
     def completed(cls, data: dict) -> "EconomicImpactResult":
-        """
-        Create an EconomicImpactResult for a completed impact calculation.
-        """
+        """Create an EconomicImpactResult for a completed impact calculation."""
         return cls(status=ImpactStatus.OK, data=data)
 
     @classmethod
     def computing(
         cls, run_progress: SimulationRunProgress | None = None
     ) -> "EconomicImpactResult":
-        """
-        Create an EconomicImpactResult for a computing impact calculation.
-        """
+        """Create an EconomicImpactResult for a computing impact calculation."""
         return cls(status=ImpactStatus.COMPUTING, data=None, run_progress=run_progress)
 
     @classmethod
     def error(cls, message: str) -> "EconomicImpactResult":
-        """
-        Create an EconomicImpactResult for an error in the impact calculation.
-        """
+        """Create an EconomicImpactResult for an error in the impact calculation."""
         logger.log_struct({"message": message}, severity="ERROR")
         return cls(status=ImpactStatus.ERROR, data=None, message=message)
 
 
 class BudgetWindowEconomicImpactResult(BaseModel):
-    """
-    Model for a batch budget-window economic impact response.
-    """
+    """Model for a batch budget-window economic impact response."""
 
     status: ImpactStatus
     data: dict | None = None
@@ -202,6 +199,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
     model_config = {"frozen": True}
 
     def to_dict(self) -> dict[str, Any]:
+        """Return the response body; ``cache_status`` is internal and is left out."""
         return {
             "status": self.status.value,
             "data": self.data,
@@ -217,6 +215,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
     def completed(
         cls, data: dict, *, cache_status: str | None = None
     ) -> "BudgetWindowEconomicImpactResult":
+        """Build a finished result with progress at 100."""
         return cls(
             status=ImpactStatus.OK,
             data=data,
@@ -235,6 +234,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
         message: str,
         cache_status: str | None = None,
     ) -> "BudgetWindowEconomicImpactResult":
+        """Build an in-progress result listing the done, running and queued years."""
         return cls(
             status=ImpactStatus.COMPUTING,
             data=None,
@@ -256,6 +256,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
         queued_years: list[str] | None = None,
         cache_status: str | None = None,
     ) -> "BudgetWindowEconomicImpactResult":
+        """Build an error result, copying the message into ``error`` and logging it."""
         logger.log_struct({"message": message}, severity="ERROR")
         return cls(
             status=ImpactStatus.ERROR,
@@ -270,10 +271,10 @@ class BudgetWindowEconomicImpactResult(BaseModel):
 
 
 class EconomyService:
-    """
-    Service for calculating economic impact of policy reforms; this is connected
-    to the /economy route, which does not have its own table; therefore, it connects
-    with other services to access their respective tables
+    """Service that calculates the economic impact of policy reforms.
+
+    It backs the /economy routes, which have no table of their own, so it reads
+    policies and cached reform impacts through the other services.
     """
 
     def __init__(
@@ -285,6 +286,7 @@ class EconomyService:
         budget_window_cache_: BudgetWindowCache | None = None,
         simulation_entrypoint_: SimulationEntrypointClient | None = None,
     ) -> None:
+        """Inject collaborators; omitted ones are built lazily or use the defaults."""
         self._primary_session_factory = primary_session_factory
         self._injected_policy_service = policy_service_
         self._injected_reform_impacts_service = reform_impacts_service_
@@ -334,7 +336,6 @@ class EconomyService:
     @staticmethod
     def _parse_json_object(value: JSONValue) -> dict[str, Any]:
         """Accept ORM-decoded objects and legacy JSON text at a read boundary."""
-
         parsed = json.loads(value) if isinstance(value, str) else value
         if not isinstance(parsed, dict):
             raise TypeError("Expected a JSON object")
@@ -353,15 +354,12 @@ class EconomyService:
         api_version: str,
         target: Literal["general", "cliff"] = "general",
     ) -> EconomicImpactResult:
-        """
-        Calculate the society-wide economic impact of a policy reform.
+        """Calculate the society-wide economic impact of a policy reform.
 
-        Returns a tuple of:
-        - status: "ok", "error", or "computing"
-        - reform_impact_json: The JSON object containing the economic impact data, or None if
-          the status is "computing" or "error".
+        Return a result whose status is "ok" with the impact JSON in ``data``,
+        "computing" while the calculation runs, or "error" with a ``message``.
+        Unexpected failures are logged and re-raised.
         """
-
         set_runtime_context(
             country_id=country_id,
             policy_id=policy_id,
@@ -429,6 +427,14 @@ class EconomyService:
         target: Literal["general", "cliff"] = "general",
         max_active_years: int = BUDGET_WINDOW_MAX_ACTIVE_YEARS,
     ) -> BudgetWindowEconomicImpactResult:
+        """Return the multi-year budget-window impact, submitting a batch job if needed.
+
+        The shared cache records each report's state (starting, submitted, completed or
+        failed) so concurrent requests share one batch job; later calls poll it and
+        report progress until it finishes. Raise CacheCoordinationError if the cache is
+        unavailable or submission ownership keeps changing, and SPMValidationError when
+        the SPM selection or a stored result cannot be certified.
+        """
         set_runtime_context(
             country_id=country_id,
             policy_id=policy_id,
@@ -1167,10 +1173,7 @@ class EconomyService:
         options_hash: str,
         api_version: str,
     ) -> list[CachedReformImpact]:
-        """
-        Fetch any previous simulation runs for the given policy reform.
-        """
-
+        """Fetch any previous simulation runs for the given policy reform."""
         return self._reform_impacts.get_all_reform_impacts_by_options_hash_prefix(
             country_id,
             policy_id,
@@ -1187,9 +1190,10 @@ class EconomyService:
         self,
         setup_options: EconomicImpactSetupOptions,
     ) -> CachedReformImpact | None:
-        """
-        Get the first impact from the reform_impacts table based on the provided setup options.
-        Returns the first impact if it exists, otherwise returns None.
+        """Return the newest cached impact for these options, or None if there is none.
+
+        An impact with exactly this options hash wins; otherwise the newest impact
+        whose hash extends this one (with extra bundle fields) is used.
         """
         previous_impacts = self._get_previous_impacts(
             country_id=setup_options.country_id,
@@ -1237,8 +1241,7 @@ class EconomyService:
         reform_impact: ReformImpact,
         execution: ModalSimulationExecution | None = None,
     ) -> EconomicImpactResult:
-        """
-        Handle the state of the execution and return the appropriate status and result.
+        """Map an execution's state to the impact status and result to return.
 
         Supports both GCP Workflow statuses (SUCCEEDED, FAILED, ACTIVE) and
         Modal statuses (complete, failed, running, submitted).
@@ -1509,10 +1512,7 @@ class EconomyService:
         policyengine_version: str | None = None,
         spm: dict | None = None,
     ) -> SimulationOptions:
-        """
-        Set up the simulation options for the simulation API job.
-        """
-
+        """Set up the simulation options for the simulation API job."""
         return SimulationOptions.model_validate(
             {
                 "country": country_id,
@@ -1655,13 +1655,11 @@ class EconomyService:
         return response
 
     def _setup_region(self, country_id: str, region: str) -> str:
-        """
-        Validate the region for the given country.
+        """Validate the region for the given country.
 
         Assumes region has already been normalized (e.g., "ca" -> "state/ca").
         Raises ValueError for invalid regions.
         """
-
         # For US regions, validate (skip validation for national "us")
         if country_id == "us" and region != "us":
             self._validate_us_region(region)
@@ -1669,8 +1667,7 @@ class EconomyService:
         return region
 
     def _validate_us_region(self, region: str) -> None:
-        """
-        Validate a prefixed US region string.
+        """Validate a prefixed US region string.
 
         Raises ValueError if the region is not valid.
         """
@@ -1748,9 +1745,7 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         execution_id: str,
     ) -> None:
-        """
-        In the reform_impact table, set the status of the impact to "computing".
-        """
+        """Record the impact as "computing" for this run; log and re-raise errors."""
         try:
             self._reform_impacts.set_reform_impact(
                 country_id=setup_options.country_id,
@@ -1786,9 +1781,7 @@ class EconomyService:
         reform_impact_json: dict[str, Any],
         execution_id: str,
     ) -> None:
-        """
-        In the reform_impact table, set the status of the impact to "ok" and store the reform impact JSON.
-        """
+        """Record the impact as "ok" with its result JSON; log and re-raise errors."""
         try:
             self._reform_impacts.set_complete_reform_impact(
                 country_id=setup_options.country_id,
@@ -1820,9 +1813,7 @@ class EconomyService:
         execution_id: str,
         error_code: str | None = None,
     ) -> None:
-        """
-        In the reform_impact table, set the status of the impact to "error" and store the error message.
-        """
+        """Record the impact as "error" with its message; log and re-raise errors."""
         try:
             self._reform_impacts.set_error_reform_impact(
                 country_id=setup_options.country_id,
@@ -1847,5 +1838,4 @@ class EconomyService:
 
     def _create_submission_claim_id(self) -> str:
         """Create an opaque token for one submission ownership claim."""
-
         return str(uuid.uuid4())

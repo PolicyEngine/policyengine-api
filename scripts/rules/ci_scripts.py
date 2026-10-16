@@ -36,6 +36,8 @@ RULE_NAMES = {
 
 @dataclass
 class Findings:
+    """What one ci-scripts run found, as baseline-style entries for each check."""
+
     multiline: set[str] = field(default_factory=set)
     untested: set[str] = field(default_factory=set)
     shellcheck: set[str] | None = None  # None when shellcheck could not run
@@ -43,8 +45,11 @@ class Findings:
 
 
 def multiline_runs(config: CiScripts, root: Path) -> set[str]:
-    """``workflow :: job :: step`` for every run: block with more than one line of
-    code, or with commands chained by ``&&``, ``||`` or ``;``."""
+    """Return ``workflow :: job :: step`` for each run: block that is not one command.
+
+    A block fails when it has more than one line of code, or chains commands with
+    ``&&``, ``||`` or ``;``.
+    """
     found = set()
     for workflow in sorted(root.glob(config.workflows)):
         relative = workflow.relative_to(root).as_posix()
@@ -66,7 +71,7 @@ def called_scripts(config: CiScripts, root: Path) -> set[str]:
 
 
 def untested_scripts(config: CiScripts, root: Path) -> set[str]:
-    """Called scripts whose file name appears in no test file."""
+    """Return the called scripts whose file name appears in no test file."""
     tests = [
         path.read_text(errors="replace")
         for pattern in config.test_globs
@@ -101,6 +106,7 @@ def shellcheck_failures(config: CiScripts, root: Path) -> set[str] | None:
 
 
 def find(config: CiScripts, root: Path) -> Findings:
+    """Run the three checks on freshly parsed workflows, noting a skipped shellcheck."""
     clear_caches()
     findings = Findings(
         multiline=multiline_runs(config, root),
@@ -138,6 +144,10 @@ def _rule_for(registry: Registry, baseline: str, check: str) -> str | None:
 
 
 def compare(registry: Registry, findings: Findings, root: Path) -> list[Violation]:
+    """Report findings missing from their baseline and baseline entries now fixed.
+
+    A check that could not run is skipped rather than reported.
+    """
     config = registry.ci_scripts
     assert config is not None
     checks = (
@@ -204,6 +214,10 @@ def write_baselines(registry: Registry, findings: Findings, root: Path) -> None:
 
 
 def run_check(root: Path = REPO_ROOT) -> tuple[list[Violation], list[str]]:
+    """Load the registry and return the ci-scripts violations and notes.
+
+    A missing shellcheck is a violation on GitHub Actions and only a note elsewhere.
+    """
     registry, violations = load_registry(root)
     if registry is None or registry.ci_scripts is None:
         return violations, [

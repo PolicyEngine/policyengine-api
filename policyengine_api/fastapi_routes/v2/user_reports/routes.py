@@ -84,7 +84,6 @@ def build_v2_user_report_router(
     Authentication is a router-level dependency, so a missing or invalid
     credential is rejected before query or body validation.
     """
-
     require_user = dependencies.require_user
     router = APIRouter(
         prefix="/v2",
@@ -226,7 +225,6 @@ def build_v2_shared_report_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
     """Build the credential-free read of a saved report by its link."""
-
     router = APIRouter(prefix="/v2", responses=SHARED_REPORT_ERROR_RESPONSES)
     country_query = query_dependency(CountryQuery)
     service_factory = _service_factory(dependencies)

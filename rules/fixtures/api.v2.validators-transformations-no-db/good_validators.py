@@ -4,6 +4,7 @@ from policyengine_api.data.v2.models import Policy
 
 
 def validate_policy_exists(policy: Policy | None, policy_id: int) -> Policy:
+    """Fail if the already-loaded policy is missing."""
     if policy is None:
         raise ValueError(policy_id)
     return policy

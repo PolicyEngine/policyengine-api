@@ -30,6 +30,10 @@ def read_policy_catalog(
     policyengine_version: str | None = None,
     running_policyengine_version: str = POLICYENGINE_VERSION,
 ) -> SelectedCatalog:
+    """Select the country's metadata catalog for the requested PolicyEngine version.
+
+    Without ``policyengine_version``, select the catalog of the running version.
+    """
     return select_catalog(
         session,
         country_id=country_id,
@@ -41,6 +45,7 @@ def read_policy_catalog(
 def read_version_parameter_ids(
     session: Session, *, model_version_id: UUID, requested_ids: set[UUID]
 ) -> set[UUID]:
+    """Return the requested parameter ids that exist in this model version."""
     if not requested_ids:
         return set()
     return set(
@@ -56,6 +61,7 @@ def read_version_parameter_ids(
 def read_parameters_by_name(
     session: Session, *, model_version_id: UUID, names: set[str]
 ) -> dict[str, Parameter]:
+    """Return this model version's parameters with the given names, keyed by name."""
     if not names:
         return {}
     parameters = session.exec(
@@ -70,6 +76,7 @@ def read_parameters_by_name(
 def read_policy_by_content_identity(
     session: Session, *, canonicalization_version: int, content_hash: str
 ) -> Policy | None:
+    """Return the policy with this canonical version and content hash, or None."""
     return session.exec(
         select(Policy).where(
             Policy.canonicalization_version == canonicalization_version,
@@ -81,10 +88,12 @@ def read_policy_by_content_identity(
 def read_model_version(
     session: Session, model_version_id: UUID
 ) -> TaxBenefitModelVersion | None:
+    """Return the model version with this id, or None."""
     return session.get(TaxBenefitModelVersion, model_version_id)
 
 
 def read_parameter_values(session: Session, policy_id: UUID) -> list[ParameterValue]:
+    """Return every parameter value stored for one policy, in no particular order."""
     return list(
         session.exec(
             select(ParameterValue).where(ParameterValue.policy_id == policy_id)
@@ -95,6 +104,11 @@ def read_parameter_values(session: Session, policy_id: UUID) -> list[ParameterVa
 def read_legacy_policy_mapping(
     session: Session, *, country_id: str, legacy_policy_id: int, lock: bool
 ) -> LegacyPolicyMapping | None:
+    """Return the v2 mapping for a v1 policy id, or None.
+
+    With ``lock``, the row is selected FOR UPDATE so concurrent copies of the same
+    v1 policy serialize on it.
+    """
     statement = select(LegacyPolicyMapping).where(
         LegacyPolicyMapping.country_id == country_id,
         LegacyPolicyMapping.legacy_policy_id == legacy_policy_id,
@@ -107,6 +121,7 @@ def read_legacy_policy_mapping(
 def read_policy_row(
     session: Session, *, country_id: str, policy_id: UUID
 ) -> Policy | None:
+    """Return the policy with this id in this country, or None."""
     return session.exec(
         select(Policy).where(Policy.id == policy_id, Policy.country_id == country_id)
     ).one_or_none()
@@ -120,6 +135,10 @@ def read_policy_rows(
     offset: int,
     limit: int,
 ) -> list[Policy]:
+    """Return up to ``limit + 1`` policies in creation order, starting at ``offset``.
+
+    The extra row lets the caller report whether another page exists.
+    """
     statement = select(Policy).where(Policy.country_id == country_id)
     if tax_benefit_model_id is not None:
         statement = statement.where(Policy.tax_benefit_model_id == tax_benefit_model_id)
@@ -135,6 +154,7 @@ def read_policy_rows(
 def read_parameter_values_with_names(
     session: Session, policy_ids: list[UUID]
 ) -> list[tuple[ParameterValue, str]]:
+    """Return the policies' values with parameter names, by name then start date."""
     if not policy_ids:
         return []
     return list(

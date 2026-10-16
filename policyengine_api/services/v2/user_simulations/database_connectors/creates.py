@@ -18,6 +18,7 @@ def create_user_simulation(
     session: Session,
     association_input: UserSimulationCreationInput,
 ) -> UserSimulationAssociation:
+    """Insert an association and return it with its database-generated fields loaded."""
     association = UserSimulationAssociation(**association_input.model_dump())
     session.add(association)
     session.flush()

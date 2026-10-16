@@ -23,16 +23,21 @@ PersonName = Annotated[str, StringConstraints(max_length=255)]
 
 
 class StrictAccountInput(BaseModel):
+    """Reject fields outside the reviewed account contract; inputs are immutable."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class AccountUpdateInput(StrictAccountInput):
+    """Account fields to change; only the supplied ones are updated."""
+
     first_name: PersonName | None = None
     last_name: PersonName | None = None
     primary_country: CountryId | None = None
 
     @model_validator(mode="after")
     def require_valid_supplied_field(self) -> AccountUpdateInput:
+        """Require a supplied field, and reject an explicit null primary_country."""
         supplied = self.model_fields_set.intersection(
             {"first_name", "last_name", "primary_country"}
         )
@@ -48,6 +53,8 @@ class AccountUpdateInput(StrictAccountInput):
 
 @dataclass(frozen=True)
 class AccountRead:
+    """A user's account as the service returns it to routes."""
+
     id: UUID
     user_type: str
     # Null only for an unauthenticated user.
@@ -60,6 +67,8 @@ class AccountRead:
 
 @dataclass(frozen=True)
 class AccountExport:
+    """A user's account and every association it owns, across countries."""
+
     # Null when an unauthenticated principal has not saved anything yet.
     user: AccountRead | None
     policies: tuple[UserPolicyRead, ...]
@@ -78,6 +87,8 @@ class AccountUpgrade:
 
 @dataclass(frozen=True)
 class AccountDeletion:
+    """The deleted user, if any, and the Auth0 subjects removed with it."""
+
     user_id: UUID | None
     auth0_subjects: tuple[str, ...]
 
@@ -88,4 +99,6 @@ class Auth0UserDeleter(Protocol):
     def prepare_deletion(self) -> None:
         """Obtain working credentials; raise before any data is deleted."""
 
-    def delete_user(self, subject: str) -> None: ...
+    def delete_user(self, subject: str) -> None:
+        """Delete one Auth0 user; an already-absent user counts as deleted."""
+        ...

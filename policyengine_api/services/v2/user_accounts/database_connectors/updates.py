@@ -17,6 +17,7 @@ def update_account_user(
     user: User,
     values: Mapping[str, Any],
 ) -> User:
+    """Set only the given fields on the user and return it reloaded."""
     for field_name, value in values.items():
         setattr(user, field_name, value)
     session.add(user)

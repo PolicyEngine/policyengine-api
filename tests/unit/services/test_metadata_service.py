@@ -65,14 +65,14 @@ class TestMetadataService:
     def test_verify_metadata_for_given_country(
         self, country_id, current_law_id, test_regions
     ):
-        """
-        Verifies metadata for a specific country contains expected values.
+        """Verifies metadata for a specific country contains expected values.
 
         Args:
             service: The MetadataService fixture
             country_id: Country identifier string
             current_law_id: Expected current law ID for this country
             test_regions: List of region codes that should be present for this country
+
         """
         # Get metadata for the country
         service = MetadataService()
@@ -158,10 +158,7 @@ class TestMetadataService:
         ],
     )
     def test_verify_region_types_for_given_country(self, country_id, expected_types):
-        """
-        Verifies that all regions for UK and US have a 'type' field
-        with valid values.
-        """
+        """Give every UK and US region a 'type' field with a valid value."""
         service = MetadataService()
         metadata = service.get_metadata(country_id)
 

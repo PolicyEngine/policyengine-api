@@ -70,7 +70,6 @@ def test_cloud_run_candidate_stage6_read_route_contracts(api_client):
 
 def test_cloud_run_candidate_user_routes_fail_closed_without_a_token(api_client):
     """User-owned routes must never become readable without a credential."""
-
     for path in ("/v2/me", "/v2/user-policies", "/v2/user-reports"):
         for headers in ({}, {"PolicyEngine-Unauthenticated-User": "not-a-uuid"}):
             response = api_client.get(

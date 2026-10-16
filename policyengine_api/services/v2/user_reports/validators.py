@@ -24,6 +24,7 @@ def require_user_report(
     *,
     association_id: UUID,
 ) -> UserReportAssociation:
+    """Return the association, or raise UserReportNotFoundError if it is None."""
     if association is None:
         raise UserReportNotFoundError(
             f"user-report association {association_id} was not found"
@@ -32,6 +33,11 @@ def require_user_report(
 
 
 def require_owned_user_policy(owned: bool, *, user_policy_id: UUID) -> None:
+    """Raise AssociationLinkNotFoundError unless a linked saved policy is ``owned``.
+
+    ``owned`` says whether the report's owner has that saved policy in the
+    report's country.
+    """
     if not owned:
         raise AssociationLinkNotFoundError(
             f"user-policy association {user_policy_id} was not found for this "

@@ -21,6 +21,11 @@ def create_household(
     canonicalization_version: int,
     content_hash: str,
 ) -> UUID | None:
+    """Insert a household unless one with the same canonical version and hash exists.
+
+    Return the new id, or None when the unique content-hash constraint made the
+    insert a no-op; the caller then reads the existing row.
+    """
     household_id = uuid4()
     statement = (
         insert(Household)
@@ -50,6 +55,11 @@ def create_legacy_household_mapping(
     fingerprint_version: int,
     fingerprint_sha256: str,
 ) -> UUID | None:
+    """Insert the mapping from a v1 household id to its v2 household.
+
+    Return the new mapping id, or None when a mapping for this country and v1 id
+    already exists (for example, a concurrent copy won the race).
+    """
     mapping_id = uuid4()
     statement = (
         insert(LegacyHouseholdMapping)

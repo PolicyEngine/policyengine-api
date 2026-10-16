@@ -9,5 +9,6 @@ def delete_user_household(
     session: Session,
     association: UserHouseholdAssociation,
 ) -> None:
+    """Delete an association row; the household it points to is kept."""
     session.delete(association)
     session.flush()

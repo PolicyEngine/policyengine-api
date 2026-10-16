@@ -77,7 +77,13 @@ if TYPE_CHECKING:
 
 
 class V2MetadataService:
-    """Sequence metadata reads through a request-scoped database session."""
+    """Sequence metadata reads through a request-scoped database session.
+
+    Each read selects the country's catalog for the requested PolicyEngine.py
+    version, or for the running version when none is given. List methods page
+    with offset and a limit of 1-500 and report has_more; get methods raise
+    MetadataResourceNotFoundError when the selected catalog lacks the item.
+    """
 
     def __init__(
         self,
@@ -85,12 +91,14 @@ class V2MetadataService:
         *,
         running_policyengine_version: str,
     ) -> None:
+        """Bind to a request's session and the running PolicyEngine.py version."""
         self._database_session = database_session
         self._running_policyengine_version = validate_policyengine_version(
             running_policyengine_version
         )
 
     def close(self) -> None:
+        """Close the request's database session."""
         self._database_session.close()
 
     def _select_catalog(
@@ -122,6 +130,7 @@ class V2MetadataService:
         offset: int = 0,
         limit: int = 100,
     ) -> MetadataPageResult[MetadataModel]:
+        """Return the catalog's only model on the first page; later pages are empty."""
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
         )
@@ -134,6 +143,7 @@ class V2MetadataService:
         model_id: UUID,
         policyengine_version: str | None = None,
     ) -> MetadataDetailResult[MetadataModel]:
+        """Return the selected catalog's model if its id is model_id."""
         selected = self._select_catalog(country_id, policyengine_version)
         item = require_metadata_resource(
             metadata_model(selected) if selected.model.id == model_id else None,
@@ -146,6 +156,7 @@ class V2MetadataService:
     def get_model_by_country(
         self, country_id: str, policyengine_version: str | None = None
     ) -> MetadataModelSelectionResult:
+        """Return the country's model together with the selected model version."""
         return metadata_model_selection(
             self._select_catalog(country_id, policyengine_version)
         )
@@ -158,6 +169,7 @@ class V2MetadataService:
         offset: int = 0,
         limit: int = 100,
     ) -> MetadataPageResult[MetadataModelVersionDetail]:
+        """Return the selected version on the first page; later pages are empty."""
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
         )
@@ -170,6 +182,7 @@ class V2MetadataService:
         version_id: UUID,
         policyengine_version: str | None = None,
     ) -> MetadataDetailResult[MetadataModelVersionDetail]:
+        """Return the selected model version if its id is version_id."""
         selected = self._select_catalog(country_id, policyengine_version)
         item = require_metadata_resource(
             (
@@ -192,6 +205,11 @@ class V2MetadataService:
         limit: int = 100,
         search: str | None = None,
     ) -> MetadataPageResult[MetadataVariable]:
+        """Return a page of the catalog's variables in name order.
+
+        search keeps variables whose name, label or description contains it,
+        ignoring case.
+        """
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
         )
@@ -215,6 +233,7 @@ class V2MetadataService:
         variable_id: UUID,
         policyengine_version: str | None = None,
     ) -> MetadataDetailResult[MetadataVariable]:
+        """Return the variable with variable_id if it is in the selected catalog."""
         selected = self._select_catalog(country_id, policyengine_version)
         row = require_metadata_resource(
             read_variable(
@@ -238,6 +257,11 @@ class V2MetadataService:
         limit: int = 100,
         search: str | None = None,
     ) -> MetadataPageResult[MetadataParameterSummary]:
+        """Return a page of the catalog's parameters in name order.
+
+        search keeps parameters whose name, label or description contains it,
+        ignoring case.
+        """
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
         )
@@ -261,6 +285,7 @@ class V2MetadataService:
         parameter_id: UUID,
         policyengine_version: str | None = None,
     ) -> MetadataDetailResult[MetadataParameterSummary]:
+        """Return the parameter with parameter_id if it is in the selected catalog."""
         selected = self._select_catalog(country_id, policyengine_version)
         row = require_metadata_resource(
             read_parameter(
@@ -284,6 +309,11 @@ class V2MetadataService:
         offset: int = 0,
         limit: int = 100,
     ) -> MetadataPageResult[MetadataParameterChild]:
+        """Return a page of the direct children of parent_path in the parameter tree.
+
+        An empty parent_path lists the top-level children. A child is a parameter
+        when it is a leaf with a parameter row, and a node otherwise.
+        """
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
         )
@@ -313,6 +343,12 @@ class V2MetadataService:
         limit: int = 100,
         now: datetime | None = None,
     ) -> MetadataPageResult[MetadataCanonicalParameterValue]:
+        """Return a page of current-law parameter values, newest first per parameter.
+
+        Values belonging to a reform or dynamic are never listed. parameter_id keeps
+        one parameter's values, and current=True keeps those in effect on the UTC
+        day of now (today by default).
+        """
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
         )
@@ -338,6 +374,10 @@ class V2MetadataService:
         value_id: UUID,
         policyengine_version: str | None = None,
     ) -> MetadataDetailResult[MetadataCanonicalParameterValue]:
+        """Return the current-law value with value_id if it is in the selected catalog.
+
+        Values belonging to a reform or dynamic are never returned.
+        """
         selected = self._select_catalog(country_id, policyengine_version)
         row = require_metadata_resource(
             read_parameter_value(
@@ -360,6 +400,10 @@ class V2MetadataService:
         offset: int = 0,
         limit: int = 100,
     ) -> MetadataPageResult[MetadataDataset]:
+        """Return a page of the catalog's logical input datasets in name order.
+
+        Output datasets and datasets with a storage path are never listed.
+        """
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
         )
@@ -382,6 +426,7 @@ class V2MetadataService:
         dataset_id: UUID,
         policyengine_version: str | None = None,
     ) -> MetadataDetailResult[MetadataDataset]:
+        """Return the logical input dataset with dataset_id in the selected catalog."""
         selected = self._select_catalog(country_id, policyengine_version)
         row = require_metadata_resource(
             read_dataset(
@@ -405,6 +450,7 @@ class V2MetadataService:
         offset: int = 0,
         limit: int = 100,
     ) -> MetadataPageResult[MetadataRegion]:
+        """Return a page of the catalog's regions by code, optionally of one type."""
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
         )
@@ -428,6 +474,7 @@ class V2MetadataService:
         region_id: UUID,
         policyengine_version: str | None = None,
     ) -> MetadataDetailResult[MetadataRegion]:
+        """Return the region with region_id from the selected catalog."""
         selected = self._select_catalog(country_id, policyengine_version)
         row = require_metadata_resource(
             read_region(
@@ -448,6 +495,7 @@ class V2MetadataService:
         region_code: str,
         policyengine_version: str | None = None,
     ) -> MetadataDetailResult[MetadataRegion]:
+        """Return the region with region_code from the selected catalog."""
         selected = self._select_catalog(country_id, policyengine_version)
         row = require_metadata_resource(
             read_region(
@@ -465,6 +513,11 @@ class V2MetadataService:
     def get_economy_options(
         self, country_id: str, policyengine_version: str | None = None
     ) -> MetadataEconomyOptionsResult:
+        """Return the region, year and dataset choices for an economy calculation.
+
+        Raise MetadataCatalogUnavailableError when the catalog lacks the national
+        region, its default input dataset, the current-law id or the years.
+        """
         selected = self._select_catalog(country_id, policyengine_version)
         regions = read_regions(
             self._database_session.session,

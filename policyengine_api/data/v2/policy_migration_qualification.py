@@ -46,9 +46,11 @@ class PolicyDataCounts:
 
     @property
     def total(self) -> int:
+        """The number of affected rows; anything but zero stops the migration."""
         return self.policies + self.policy_parameter_values + self.user_policies
 
     def as_dict(self) -> dict[str, int]:
+        """Return the counts keyed by the names used in evidence and errors."""
         return {
             "policies": self.policies,
             "policy_parameter_values": self.policy_parameter_values,
@@ -66,6 +68,10 @@ class PolicyMigrationQualification:
     required: bool = True
 
     def as_dict(self) -> dict[str, object]:
+        """Return the evidence as the JSON object the qualification command prints.
+
+        ``qualification`` is "not-required" when the revision was already applied.
+        """
         return {
             "outcome": "ok",
             "qualification": "performed" if self.required else "not-required",
@@ -79,6 +85,7 @@ class RetainedPolicyDataError(RuntimeError):
     """Raised when a target contains policy data requiring preservation."""
 
     def __init__(self, counts: PolicyDataCounts) -> None:
+        """Keep the counts and say in the message how to proceed safely."""
         self.counts = counts
         super().__init__(
             "the configured Supabase target contains retained v2 policy data "
@@ -125,14 +132,12 @@ def read_policy_data_counts(
 
 def require_no_retained_policy_data(counts: PolicyDataCounts) -> None:
     """Stop the migration when any predecessor policy row requires a decision."""
-
     if counts.total:
         raise RetainedPolicyDataError(counts)
 
 
 def build_qualification_engine(settings: V2DatabaseSettings) -> Engine:
     """Build an isolated connection pool for one qualification attempt."""
-
     return create_engine(settings.connection.url, poolclass=NullPool)
 
 
@@ -157,7 +162,6 @@ def _qualify_connection(connection: Connection) -> PolicyDataCounts:
 
 def policy_migration_is_pending(connection: Connection) -> bool:
     """Return whether the Phase 10 policy revision is in the upgrade path."""
-
     current_heads = MigrationContext.configure(connection).get_current_heads()
     revisions = ScriptDirectory.from_config(
         Config(V2_ALEMBIC_CONFIG)
@@ -173,7 +177,6 @@ def qualify_policy_migration_target(
     ),
 ) -> PolicyMigrationQualification:
     """Qualify the configured Supabase target without changing it."""
-
     settings = load_v2_migration_database_settings(environ)
     engine = engine_builder(settings)
     try:
@@ -197,7 +200,6 @@ def qualify_policy_migration_if_pending(
     pending_checker: Callable[[Connection], bool] = policy_migration_is_pending,
 ) -> PolicyMigrationQualification:
     """Qualify predecessor rows only while the Phase 10 revision is pending."""
-
     settings = load_v2_migration_database_settings(environ)
     engine = engine_builder(settings)
     try:
@@ -242,7 +244,6 @@ def _error_payload(error: Exception) -> dict[str, object]:
 
 def main() -> int:
     """Run qualification and return a shell-compatible status."""
-
     try:
         evidence = qualify_policy_migration_if_pending()
     except Exception as error:  # noqa: BLE001 - command must emit safe evidence

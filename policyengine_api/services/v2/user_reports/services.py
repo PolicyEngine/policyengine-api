@@ -82,7 +82,6 @@ def read_owned_user_report(
     association_id: UUID,
 ) -> UserReportAssociation:
     """``user_id`` is None for an unauthenticated user that owns nothing yet."""
-
     return require_user_report(
         None
         if user_id is None
@@ -103,6 +102,10 @@ def validate_linked_user_policy(
     country_id: str,
     user_policy_id: UUID | None,
 ) -> None:
+    """Check that a saved-reform link names the owner's saved policy in this country.
+
+    A None link passes; otherwise raise AssociationLinkNotFoundError.
+    """
     if user_policy_id is None:
         return
     require_owned_user_policy(
@@ -120,7 +123,6 @@ def read_all_user_reports(
     session: Session, *, user_id: UUID
 ) -> tuple[UserReportRead, ...]:
     """Return every report association owned by a user, across countries."""
-
     return tuple(
         user_report_read(row)
         for row in read_all_user_report_rows(session, user_id=user_id)
@@ -135,6 +137,12 @@ class V2UserReportService:
         database_session: UserReportDatabaseSession,
         legacy_references: LegacyReferenceChecker | None = None,
     ) -> None:
+        """Open sessions through ``database_session``.
+
+        ``legacy_references`` checks v1 report outputs before a write. Without
+        it, creating a saved report or repointing one raises
+        LegacyReferenceCheckUnavailableError.
+        """
         self._database_session = database_session
         self._legacy_references = legacy_references
 
@@ -152,6 +160,13 @@ class V2UserReportService:
         principal: AccountPrincipal,
         association_input: UserReportCreateFields,
     ) -> UserReportRead:
+        """Save a v1 report for the principal, provisioning its v2 user if needed.
+
+        The v1 report is checked first, in a read-only v1 transaction, and
+        LegacyReferenceNotFoundError is raised if it does not exist in the
+        country. Each saved-reform link must name the owner's saved policy in
+        the same country, or AssociationLinkNotFoundError is raised.
+        """
         self._require_legacy_report(
             country_id=association_input.country_id,
             legacy_report_id=association_input.legacy_report_id,
@@ -186,6 +201,11 @@ class V2UserReportService:
         country_id: str,
         association_id: UUID,
     ) -> UserReportRead:
+        """Return the principal's saved report, or raise UserReportNotFoundError.
+
+        The report must be in this country. A signed-out browser that has never
+        saved anything owns nothing, and is not provisioned by the read.
+        """
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
@@ -206,7 +226,6 @@ class V2UserReportService:
         association_id: UUID,
     ) -> SharedUserReportRead:
         """Read a saved report for anyone holding its link; no credential."""
-
         with self._database_session.transaction() as session:
             association = require_user_report(
                 read_user_report_row(
@@ -240,6 +259,12 @@ class V2UserReportService:
         offset: int = 0,
         limit: int = 100,
     ) -> UserReportPage:
+        """Return a page of the principal's saved reports in this country.
+
+        With ``legacy_report_id``, only saves of that v1 report output are listed.
+        A signed-out browser that has never saved anything gets an empty page and
+        is not provisioned.
+        """
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
@@ -264,6 +289,13 @@ class V2UserReportService:
         association_id: UUID,
         association_input: UserReportUpdateInput,
     ) -> UserReportRead:
+        """Update the supplied fields of one of the principal's saved reports.
+
+        A new ``legacy_report_id`` is checked in v1 first, as on create, and a
+        supplied saved-reform link must name the owner's saved policy in this
+        country. Raise UserReportNotFoundError if the principal has no such
+        report in this country.
+        """
         if association_input.legacy_report_id is not None:
             self._require_legacy_report(
                 country_id=country_id,
@@ -302,6 +334,10 @@ class V2UserReportService:
         country_id: str,
         association_id: UUID,
     ) -> None:
+        """Delete one of the principal's saved reports in this country.
+
+        Raise UserReportNotFoundError if the principal has no such report.
+        """
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
                 session, principal, country_id=country_id

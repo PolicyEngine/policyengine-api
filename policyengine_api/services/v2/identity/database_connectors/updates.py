@@ -36,6 +36,7 @@ def update_user_identity_activity(
     email: str | None,
     seen_at: datetime,
 ) -> UserIdentity:
+    """Record the identity's current email and the time it was last seen."""
     identity.email = email
     identity.last_seen_at = seen_at
     session.add(identity)
@@ -49,6 +50,7 @@ def update_user_to_standard(
     *,
     primary_country: str,
 ) -> User:
+    """Make an unauthenticated user standard, keeping its ID and associations."""
     user.user_type = UserType.STANDARD.value
     user.primary_country = primary_country
     session.add(user)
@@ -68,7 +70,6 @@ def reassign_user_associations(
     the moved rows (a report's ``user_policy_id`` and
     ``baseline_user_policy_id``) stay valid.
     """
-
     for table in USER_ASSOCIATION_TABLES:
         session.execute(
             update(table)

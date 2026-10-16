@@ -26,7 +26,7 @@ def client(app):
 
 
 def test_404_handler(app, client):
-    """Test 404 Not Found error handling"""
+    """Map NotFound to a 404 error envelope that keeps its message."""
 
     @app.route("/nonexistent")
     def nonexistent():
@@ -42,7 +42,7 @@ def test_404_handler(app, client):
 
 
 def test_400_handler(app, client):
-    """Test 400 Bad Request error handling"""
+    """Map BadRequest to a 400 error envelope that keeps its message."""
 
     @app.route("/bad-request")
     def bad_request():
@@ -58,7 +58,7 @@ def test_400_handler(app, client):
 
 
 def test_401_handler(app, client):
-    """Test 401 Unauthorized error handling"""
+    """Map Unauthorized to a 401 error envelope that keeps its message."""
 
     @app.route("/unauthorized")
     def unauthorized():
@@ -74,7 +74,7 @@ def test_401_handler(app, client):
 
 
 def test_403_handler(app, client):
-    """Test 403 Forbidden error handling"""
+    """Map Forbidden to a 403 error envelope that keeps its message."""
 
     @app.route("/forbidden")
     def forbidden():
@@ -90,7 +90,7 @@ def test_403_handler(app, client):
 
 
 def test_500_handler(app, client):
-    """Test 500 Internal Server Error handling"""
+    """Map InternalServerError to a 500 error envelope that keeps its message."""
 
     @app.route("/server-error")
     def server_error():
@@ -106,7 +106,7 @@ def test_500_handler(app, client):
 
 
 def test_generic_exception_handler(app, client):
-    """Test handling of generic exceptions"""
+    """Map any other exception to a 500 error envelope that keeps its message."""
 
     @app.route("/generic-error")
     def generic_error():

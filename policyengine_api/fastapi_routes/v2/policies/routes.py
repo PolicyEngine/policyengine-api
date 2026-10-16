@@ -55,7 +55,6 @@ if TYPE_CHECKING:
 
 async def enforce_policy_request_size(request: Request) -> None:
     """Bound both declared and actual request bytes before service creation."""
-
     content_length = request.headers.get("content-length")
     if content_length is not None:
         try:
@@ -108,7 +107,6 @@ def build_v2_policy_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
     """Build native policy routes without opening a database connection."""
-
     router = APIRouter(prefix="/v2", responses=POLICY_ERROR_RESPONSES)
     create_query = query_dependency(PolicyCreateQuery)
     detail_query = query_dependency(PolicyDetailQuery)

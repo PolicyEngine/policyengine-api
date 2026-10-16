@@ -44,6 +44,11 @@ def page_result(
     offset: int,
     limit: int,
 ) -> MetadataPageResult[ResourceT]:
+    """Wrap fetched rows as one page of the selected catalog.
+
+    rows holds up to limit + 1 items; an extra item only sets has_more and is
+    dropped from the page.
+    """
     return MetadataPageResult(
         policyengine_version=selected.policyengine_version,
         items=rows[:limit],
@@ -54,6 +59,7 @@ def page_result(
 
 
 def metadata_model(selected: SelectedCatalog) -> MetadataModel:
+    """Describe the catalog's model, using the selected version's description."""
     return MetadataModel(
         id=selected.model.id,
         name=selected.model.name,
@@ -62,6 +68,7 @@ def metadata_model(selected: SelectedCatalog) -> MetadataModel:
 
 
 def metadata_model_version(selected: SelectedCatalog) -> MetadataModelVersionDetail:
+    """Describe the selected model version, with its current-law id and years."""
     return MetadataModelVersionDetail(
         id=selected.model_version.id,
         model_id=selected.model.id,
@@ -73,6 +80,7 @@ def metadata_model_version(selected: SelectedCatalog) -> MetadataModelVersionDet
 
 
 def metadata_model_selection(selected: SelectedCatalog) -> MetadataModelSelectionResult:
+    """Pair the catalog's model with its selected version."""
     return MetadataModelSelectionResult(
         policyengine_version=selected.policyengine_version,
         model=metadata_model(selected),
@@ -81,6 +89,7 @@ def metadata_model_selection(selected: SelectedCatalog) -> MetadataModelSelectio
 
 
 def metadata_variable(variable: Variable) -> MetadataVariable:
+    """Return the API representation of a stored variable."""
     return MetadataVariable(
         id=variable.id,
         name=variable.name,
@@ -96,6 +105,7 @@ def metadata_variable(variable: Variable) -> MetadataVariable:
 
 
 def metadata_parameter(parameter: Parameter) -> MetadataParameterSummary:
+    """Return the API representation of a stored parameter."""
     return MetadataParameterSummary(
         id=parameter.id,
         name=parameter.name,
@@ -107,6 +117,7 @@ def metadata_parameter(parameter: Parameter) -> MetadataParameterSummary:
 
 
 def metadata_parameter_value(value: ParameterValue) -> MetadataCanonicalParameterValue:
+    """Return the API representation of a stored value, exposing value_json as value."""
     return MetadataCanonicalParameterValue(
         id=value.id,
         parameter_id=value.parameter_id,
@@ -117,6 +128,7 @@ def metadata_parameter_value(value: ParameterValue) -> MetadataCanonicalParamete
 
 
 def utc_day_start(selected_time: datetime) -> datetime:
+    """Return midnight UTC on the day of selected_time, treating a naive time as UTC."""
     if selected_time.tzinfo is None:
         selected_time = selected_time.replace(tzinfo=UTC)
     return selected_time.astimezone(UTC).replace(
@@ -125,6 +137,7 @@ def utc_day_start(selected_time: datetime) -> datetime:
 
 
 def metadata_dataset(dataset: Dataset) -> MetadataDataset:
+    """Return the API representation of a stored logical input dataset."""
     return MetadataDataset(
         id=dataset.id,
         name=dataset.name,
@@ -134,6 +147,7 @@ def metadata_dataset(dataset: Dataset) -> MetadataDataset:
 
 
 def metadata_region(region: Region) -> MetadataRegion:
+    """Return the API representation of a stored region."""
     return MetadataRegion(
         id=region.id,
         code=region.code,
@@ -151,6 +165,11 @@ def metadata_region(region: Region) -> MetadataRegion:
 
 
 def metadata_parameter_children(rows: list[Any]) -> list[MetadataParameterChild]:
+    """Build parameter-tree children from read_parameter_children rows.
+
+    Parameter leaves carry the parameter's summary, and a child with no label is
+    labelled with the last segment of its path.
+    """
     items = []
     for row in rows:
         parameter = None
@@ -178,6 +197,10 @@ def metadata_parameter_children(rows: list[Any]) -> list[MetadataParameterChild]
 def metadata_economy_options(
     selected: SelectedCatalog, *, regions: list[Region], national_dataset: Dataset
 ) -> MetadataEconomyOptionsResult:
+    """Build economy options from every region, each year and the national dataset.
+
+    The national dataset is the only dataset choice, and it is the default.
+    """
     return MetadataEconomyOptionsResult(
         policyengine_version=selected.policyengine_version,
         current_law_id=selected.model_version.current_law_id,

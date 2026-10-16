@@ -1,3 +1,5 @@
+"""Flask routes for society-wide economic impacts of a policy against a baseline."""
+
 import json
 from http import HTTPStatus
 
@@ -73,6 +75,13 @@ def _bad_request_response(error: str | ValueError) -> Response:
 def get_economic_impact(
     country_id: str, policy_id: int, baseline_policy_id: int
 ) -> Response:
+    """Return the single-year economic impact, starting it if none is cached.
+
+    A policy ID of 0 means current law. The result stays ``computing`` until the
+    simulation finishes, and while computing the body also carries the stage
+    fields the Simulation Entrypoint reports. Invalid query parameters give 400
+    and a failed calculation gives 502.
+    """
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
         baseline_policy_id or get_current_law_policy_id(country_id)
@@ -128,6 +137,13 @@ def get_economic_impact(
 def get_budget_window_economic_impact(
     country_id: str, policy_id: int, baseline_policy_id: int
 ) -> Response:
+    """Return a multi-year budget-window impact with per-year progress.
+
+    The body lists completed, computing and queued years, and the
+    ``X-PolicyEngine-Budget-Window-Cache`` header reports the cache outcome when
+    known. Invalid query parameters give 400; a failed calculation is reported
+    in the body with status 200.
+    """
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
         baseline_policy_id or get_current_law_policy_id(country_id)

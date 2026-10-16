@@ -456,7 +456,6 @@ def _row_values(
     ``head_table`` adds the columns head newly requires; only rows of the
     parent's read-only tables, which new code writes, may need them.
     """
-
     values = {
         column.name: _test_value(table, column, sequence)
         for column in table.columns
@@ -495,7 +494,6 @@ def _insert_and_read_back(
     Rows of the parent's read-only tables are inserted through head's table,
     as only new code writes them.
     """
-
     target = insert_table if insert_table is not None else table
     connection.execute(target.insert().values(values))
     # Selecting the reflected table reads every column the parent maps.
@@ -508,7 +506,6 @@ def _insert_and_read_back(
 
 def _rewrite_mapped_columns(connection, table: sa.Table, row: dict) -> None:
     """Update every non-key column the parent maps, as an ORM flush can."""
-
     key_columns = {column.name for column in table.primary_key.columns} | {
         element.parent.name
         for foreign_key in table.foreign_key_constraints
@@ -537,7 +534,6 @@ def _assert_user_deletion_cascades(
     sequence: Iterator[int],
 ) -> None:
     """Delete, through the parent's users table, a user who owns Stage 12A rows."""
-
     users = parent.tables["users"]
     owner = _insert_and_read_back(
         connection, users, _row_values(users, stored_rows, sequence)
@@ -589,7 +585,6 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
     cascades run. Head may not give any table the parent revision writes a
     new required column without a server default.
     """
-
     database_url = _disposable_url()
     config = _config()
     engine = create_engine(database_url)
@@ -889,7 +884,6 @@ def test_baseline_region_default_enforces_same_model_dataset() -> None:
 
 def test_stage_12a_reshape_refuses_retained_dormant_association_rows() -> None:
     """A retained pre-12A report association stops the reshape unchanged."""
-
     database_url = _disposable_url()
     config = _config()
     engine = create_engine(database_url)

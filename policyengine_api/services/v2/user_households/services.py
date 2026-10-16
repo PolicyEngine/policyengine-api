@@ -72,7 +72,6 @@ def read_owned_user_household(
     association_id: UUID,
 ) -> UserHouseholdAssociation:
     """``user_id`` is None for an unauthenticated user that owns nothing yet."""
-
     return require_user_household(
         None
         if user_id is None
@@ -94,7 +93,6 @@ def resolve_user_household_reference(
     legacy_household_id: int | None,
 ) -> UUID | None:
     """Validate an explicit v2 household and combine it with the v1 mapping."""
-
     if household_id is not None:
         validate_association_household(
             country_id=country_id,
@@ -120,7 +118,6 @@ def read_all_user_households(
     session: Session, *, user_id: UUID
 ) -> tuple[UserHouseholdRead, ...]:
     """Return every household association owned by a user, across countries."""
-
     return tuple(
         user_household_read(row)
         for row in read_all_user_household_rows(session, user_id=user_id)
@@ -135,6 +132,11 @@ class V2UserHouseholdService:
         database_session: UserHouseholdDatabaseSession,
         legacy_references: LegacyReferenceChecker | None = None,
     ) -> None:
+        """Open sessions through ``database_session`` and check v1 ids with the checker.
+
+        Without ``legacy_references``, an operation that names a v1 household
+        raises LegacyReferenceCheckUnavailableError.
+        """
         self._database_session = database_session
         self._legacy_references = legacy_references
 
@@ -154,6 +156,14 @@ class V2UserHouseholdService:
         principal: AccountPrincipal,
         association_input: UserHouseholdCreateFields,
     ) -> UserHouseholdRead:
+        """Save a household for the principal, provisioning their v2 user if needed.
+
+        A ``legacy_household_id`` must exist in v1 (LegacyReferenceNotFoundError)
+        and links the v2 copy of that household when Stage 11 made one. An explicit
+        ``household_id`` must exist in this country and match that copy
+        (AssociationHouseholdNotFoundError, AssociationCountryConflictError or
+        AssociationReferenceConflictError).
+        """
         if association_input.legacy_household_id is not None:
             self._require_legacy_household(
                 country_id=association_input.country_id,
@@ -189,6 +199,11 @@ class V2UserHouseholdService:
         country_id: str,
         association_id: UUID,
     ) -> UserHouseholdRead:
+        """Return the principal's association in this country.
+
+        Raise UserHouseholdNotFoundError when it is absent or another user's. A
+        signed-out browser that has not saved anything yet owns nothing.
+        """
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
@@ -212,6 +227,11 @@ class V2UserHouseholdService:
         offset: int = 0,
         limit: int = 100,
     ) -> UserHouseholdPage:
+        """Return a page of the principal's associations in this country.
+
+        ``household_id`` and ``legacy_household_id`` narrow it to one household. A
+        signed-out browser that has not saved anything yet gets an empty page.
+        """
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
@@ -237,6 +257,12 @@ class V2UserHouseholdService:
         association_id: UUID,
         association_input: UserHouseholdUpdateInput,
     ) -> UserHouseholdRead:
+        """Update the supplied fields of the principal's association in this country.
+
+        A new ``legacy_household_id`` must exist in v1 and repoints ``household_id``
+        to the v2 copy of that household, or to None when there is no copy. Raise
+        UserHouseholdNotFoundError when the association is not the principal's.
+        """
         repoint = "legacy_household_id" in association_input.model_fields_set
         if repoint:
             assert association_input.legacy_household_id is not None
@@ -280,6 +306,7 @@ class V2UserHouseholdService:
         country_id: str,
         association_id: UUID,
     ) -> None:
+        """Delete the principal's association, or raise UserHouseholdNotFoundError."""
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
                 session, principal, country_id=country_id

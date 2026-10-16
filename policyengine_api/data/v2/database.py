@@ -33,7 +33,6 @@ _session_factory: sessionmaker[Session] | None = None
 
 def _url_fingerprint(settings: V2DatabaseSettings) -> tuple[object, ...]:
     """Build a private comparison value that is never rendered or logged."""
-
     url = settings.connection.url
     return (
         url.drivername,
@@ -50,7 +49,6 @@ def _url_fingerprint(settings: V2DatabaseSettings) -> tuple[object, ...]:
 
 def build_v2_engine(settings: V2DatabaseSettings) -> Engine:
     """Construct an unconnected SQLModel engine for an explicit v2 target."""
-
     return create_engine(
         settings.connection.url,
         pool_pre_ping=True,
@@ -67,13 +65,11 @@ def build_v2_engine(settings: V2DatabaseSettings) -> Engine:
 
 def build_v2_session_factory(engine: Engine) -> sessionmaker[Session]:
     """Build a factory whose ordinary sessions are SQLModel Sessions."""
-
     return sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
 
 
 def _discard_inherited_state(current_pid: int) -> None:
     """Drop pool state inherited through a process fork without touching parent FDs."""
-
     global _engine, _engine_pid, _engine_url_fingerprint, _session_factory
 
     if _engine is not None:
@@ -86,7 +82,6 @@ def _discard_inherited_state(current_pid: int) -> None:
 
 def get_v2_engine(settings: V2DatabaseSettings | None = None) -> Engine:
     """Return the one lazy v2 runtime engine owned by this process."""
-
     global _engine, _engine_pid, _engine_url_fingerprint
 
     current_pid = os.getpid()
@@ -114,7 +109,6 @@ def get_v2_session_factory(
     settings: V2DatabaseSettings | None = None,
 ) -> sessionmaker[Session]:
     """Return the process-owned SQLModel Session factory without opening a session."""
-
     global _session_factory
 
     engine = get_v2_engine(settings)
@@ -126,7 +120,6 @@ def get_v2_session_factory(
 
 def close_v2_database() -> None:
     """Dispose this process's v2 pool and forget its lazy configuration."""
-
     global _engine, _engine_pid, _engine_url_fingerprint, _session_factory
 
     with _state_lock:

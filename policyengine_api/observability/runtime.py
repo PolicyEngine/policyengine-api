@@ -68,12 +68,12 @@ runtime = _build_runtime()
 
 
 def get_runtime() -> ObservabilityRuntime:
+    """Return the process-wide runtime that was configured when this module loaded."""
     return runtime
 
 
 def set_runtime_context(**attributes: object) -> None:
     """Bind local telemetry attributes without affecting application behavior."""
-
     try:
         runtime.set_context(**attributes)
     except Exception:

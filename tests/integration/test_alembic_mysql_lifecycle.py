@@ -43,7 +43,6 @@ PREVIOUS_REVISION = "3d6e8f553ca5"
 
 def _deployed_question_table() -> Table:
     """Describe the orphaned production table without adding it to ORM metadata."""
-
     metadata = MetaData()
     return Table(
         "question",

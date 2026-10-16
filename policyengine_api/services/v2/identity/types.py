@@ -81,6 +81,8 @@ class AccountProvisioningStrategy(Protocol):
 
 
 class AccountConversionOutcome(StrEnum):
+    """What signing in did with a browser's unauthenticated user."""
+
     # The unauthenticated user became the signed-in identity's user in place.
     CONVERTED = "converted"
     # Its records moved to the identity's existing user, and it was deleted.
@@ -91,5 +93,7 @@ class AccountConversionOutcome(StrEnum):
 
 @dataclass(frozen=True)
 class AccountConversion:
+    """The signed-in identity's user after sign-in, and how it was reached."""
+
     owner: ResolvedUser
     outcome: AccountConversionOutcome

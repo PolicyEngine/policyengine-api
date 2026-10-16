@@ -18,6 +18,10 @@ _client_lock = Lock()
 
 
 def build_runtime_cache_client(settings: RuntimeCacheSettings) -> redis.Redis:
+    """Build a Redis client with bounded timeouts and no retry on timeout.
+
+    Raise RuntimeError when the cache is disabled or TLS has no CA bundle.
+    """
     if not settings.enabled or settings.url is None:
         raise RuntimeError("the shared runtime cache is disabled")
     kwargs: dict[str, Any] = {
@@ -40,7 +44,6 @@ def get_runtime_cache_client(
     settings: RuntimeCacheSettings | None = None,
 ) -> redis.Redis:
     """Return one client per process without connecting during import."""
-
     process_id = os.getpid()
     if process_id not in _clients:
         with _client_lock:
@@ -52,6 +55,7 @@ def get_runtime_cache_client(
 
 
 def close_runtime_cache_clients() -> None:
+    """Close and forget every cached client; the ASGI app calls this at shutdown."""
     for client in _clients.values():
         client.close()
     _clients.clear()
