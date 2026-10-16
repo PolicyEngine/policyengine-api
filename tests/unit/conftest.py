@@ -40,7 +40,7 @@ def isolated_orm_database(test_engine, monkeypatch):
 
 
 @pytest.fixture
-def orm_session_factory(isolated_orm_database):  # noqa: ARG001  # requested for its side effect; usefixtures marks don't apply to fixtures
+def orm_session_factory(isolated_orm_database):
     return orm.get_v1_session_factory()
 
 

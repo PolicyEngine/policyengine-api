@@ -282,7 +282,7 @@ def test_creating_a_simulation_never_locks_a_household_row(
     engine = orm_session_factory.kw["bind"]
 
     @event.listens_for(engine, "before_cursor_execute")
-    def record(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001  # SQLAlchemy calls before_cursor_execute listeners with these arguments
+    def record(conn, cursor, statement, parameters, context, executemany):
         statements.append(" ".join(statement.split()).lower())
 
     try:

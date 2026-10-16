@@ -614,7 +614,7 @@ def _persistent_connection(
     monkeypatch.setattr(
         module,
         "inspect",
-        lambda _: SimpleNamespace(get_table_names=lambda schema: list(public_tables)),  # noqa: ARG005  # the migration target calls get_table_names(schema=...)
+        lambda _: SimpleNamespace(get_table_names=lambda schema: list(public_tables)),
     )
     return connection
 

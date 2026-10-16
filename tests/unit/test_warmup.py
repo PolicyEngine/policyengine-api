@@ -70,7 +70,7 @@ def test_run_startup_warmup_calculates_each_country(monkeypatch):
 
 def test_run_startup_warmup_swallows_calculate_errors(monkeypatch):
     class BoomCountry:
-        def calculate(self, household, reform):  # noqa: ARG002  # implements the country calculation interface the service calls
+        def calculate(self, household, reform):
             msg = "boom"
             raise RuntimeError(msg)
 
@@ -85,7 +85,7 @@ def test_run_startup_warmup_skips_unknown_country(monkeypatch):
     calls = []
 
     class FakeCountry:
-        def calculate(self, household, reform):  # noqa: ARG002  # implements the country calculation interface the service calls
+        def calculate(self, household, reform):
             calls.append(1)
 
     _inject_fake_countries(monkeypatch, {"us": FakeCountry()})
