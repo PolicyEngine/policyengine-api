@@ -710,20 +710,17 @@ def test_qualification_reads_counts_in_a_read_only_transaction(sessions) -> None
         V2_SUPABASE_PROJECT_REF: "abcdefghijklmnopqrst",
         V2_SUPABASE_ENVIRONMENT: "test",
     }
+    qualification = user_association_migration_qualification
     observed_read_only: list[object] = []
 
     def pending_checker(connection) -> bool:
         observed_read_only.append(connection.connection.dbapi_connection.read_only)
-        return user_association_migration_qualification.user_association_migration_is_pending(
-            connection
-        )
+        return qualification.user_association_migration_is_pending(connection)
 
-    evidence = (
-        user_association_migration_qualification.qualify_user_association_migration(
-            environ,
-            engine_builder=lambda _settings: create_engine(disposable_url),
-            pending_checker=pending_checker,
-        )
+    evidence = qualification.qualify_user_association_migration(
+        environ,
+        engine_builder=lambda _settings: create_engine(disposable_url),
+        pending_checker=pending_checker,
     )
 
     assert observed_read_only == [True]

@@ -61,7 +61,8 @@ def create_report_output(country_id: str) -> Response:
 
     Request body should contain:
         - simulation_1_id (int): The first simulation ID (required)
-        - simulation_2_id (int | None): The second simulation ID (optional, for comparisons)
+        - simulation_2_id (int | None): The second simulation ID (optional, for
+          comparisons)
         - year (str | None): The year for the report (optional)
 
     """

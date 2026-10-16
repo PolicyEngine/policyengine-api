@@ -73,7 +73,10 @@ assert len(V2_METADATA.tables) == 39
 assert "policyengine_api.data.v2.catalog.initialization" not in sys.modules
 assert "policyengine_api.data.v2.policy_migration_qualification" not in sys.modules
 assert "policyengine_api.data.v2.household_migration_qualification" not in sys.modules
-assert "policyengine_api.data.v2.user_association_migration_qualification" not in sys.modules
+assert (
+    "policyengine_api.data.v2.user_association_migration_qualification"
+    not in sys.modules
+)
 """
 
     result = subprocess.run(

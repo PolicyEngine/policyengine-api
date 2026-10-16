@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-class BaseUnavailable(Exception):
+class BaseUnavailableError(Exception):
     """The base ref could not be read."""
 
 
@@ -26,7 +26,7 @@ def default_base_ref() -> str | None:
 def load_base_registry(root: Path, ref: str) -> Registry | None:
     """Return the registry as it is on ``ref``, or None if the base has none yet.
 
-    Raise BaseUnavailable when ``ref`` does not name a commit.
+    Raise BaseUnavailableError when ``ref`` does not name a commit.
     """
     verify = subprocess.run(
         ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
@@ -35,7 +35,7 @@ def load_base_registry(root: Path, ref: str) -> Registry | None:
         text=True,
     )
     if verify.returncode != 0:
-        raise BaseUnavailable(ref)
+        raise BaseUnavailableError(ref)
     shown = subprocess.run(
         ["git", "show", f"{ref}:{REGISTRY_PATH.as_posix()}"],
         cwd=root,
@@ -81,7 +81,8 @@ def check_baselines(
                         new.id,
                         "baseline",
                         f"status weakened from {old.status} to {new.status}",
-                        'add [rule.downgrade] reason = "..." so the downgrade is explicit and reviewable',
+                        'add [rule.downgrade] reason = "..." so the downgrade is '
+                        "explicit and reviewable",
                     )
                 )
     for rule_id in sorted(current_ids - {rule.id for rule in base.rules}):

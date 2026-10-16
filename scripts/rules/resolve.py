@@ -467,7 +467,8 @@ def resolve_proof_ci(rule: Rule, root: Path) -> list[Violation]:
                 rule.id,
                 "proof",
                 "the proof test is not tied to a CI job",
-                "add proof.workflow, proof.job and proof.invocation naming the job that runs it",
+                "add proof.workflow, proof.job and proof.invocation naming the "
+                "job that runs it",
             )
         ]
     violations = []
@@ -516,7 +517,8 @@ def _test_coverage(
                     Violation(
                         rule_id,
                         check,
-                        f"{path} is not collected by {described} (collects {collected})",
+                        f"{path} is not collected by {described} "
+                        f"(collects {collected})",
                         "add it to what the job runs, or move the test",
                     )
                 )

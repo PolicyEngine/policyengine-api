@@ -38,7 +38,7 @@ def require_shellcheck(test: unittest.TestCase) -> None:
 
 
 class TestCiScriptsProof(unittest.TestCase):
-    """Proofs that each ci-scripts check rejects a bad example and accepts a good one."""
+    """Proofs: each ci-scripts check rejects a bad example and accepts a good one."""
 
     def test_rule_proof_multiline_run(self) -> None:
         self.assertEqual(
@@ -80,7 +80,10 @@ class CodeLinesTest(unittest.TestCase):
         self.assertEqual(code_lines("\nmake build\n\n"), 1)
 
     def test_folded_block_counts_each_line(self) -> None:
-        text = "jobs:\n  a:\n    steps:\n      - run: >-\n          pytest a\n          b\n"
+        text = (
+            "jobs:\n  a:\n    steps:\n      - run: >-\n          pytest a\n"
+            "          b\n"
+        )
         jobs, _ = parse_jobs(text)
         block = jobs["a"].run_blocks[0]
         self.assertEqual(block.code_lines, 2)
@@ -194,7 +197,8 @@ class CompareTest(unittest.TestCase):
             REGISTRY.replace("ex.ci.multiline", "ex.ci.workflow-scripts-tested")
             .replace('status = "ratcheted"', 'status = "enforced"')
             .replace(
-                '[rule.baseline]\nfile = "rules/baselines/ci-multiline-run.txt"\ncount = 1\n',
+                '[rule.baseline]\nfile = "rules/baselines/ci-multiline-run.txt"\n'
+                "count = 1\n",
                 "",
             )
         )

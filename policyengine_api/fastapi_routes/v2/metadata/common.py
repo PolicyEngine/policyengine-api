@@ -78,7 +78,7 @@ def read_resource(
     try:
         factory = dependencies.v2_metadata_reader_factory
         if factory is None:
-            from policyengine_api.fastapi_routes.dependencies import (
+            from policyengine_api.fastapi_routes.dependencies import (  # noqa: PLC0415  # looked up per request, so tests can replace the default factory
                 _default_v2_metadata_reader_factory,
             )
 

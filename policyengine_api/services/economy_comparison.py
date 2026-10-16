@@ -345,15 +345,17 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
 
     outcome_groups = {}
     all_outcomes = {}
-    BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
-    LABELS = [
+    income_change_bounds = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
+    outcome_labels = [
         "Lose more than 5%",
         "Lose less than 5%",
         "No change",
         "Gain less than 5%",
         "Gain more than 5%",
     ]
-    for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
+    for lower, upper, label in zip(
+        income_change_bounds[:-1], income_change_bounds[1:], outcome_labels
+    ):
         outcome_groups[label] = []
         for i in range(1, 11):
             in_decile: np.ndarray = decile == i
@@ -402,15 +404,17 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
 
     outcome_groups = {}
     all_outcomes = {}
-    BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
-    LABELS = [
+    income_change_bounds = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
+    outcome_labels = [
         "Lose more than 5%",
         "Lose less than 5%",
         "No change",
         "Gain less than 5%",
         "Gain more than 5%",
     ]
-    for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
+    for lower, upper, label in zip(
+        income_change_bounds[:-1], income_change_bounds[1:], outcome_labels
+    ):
         outcome_groups[label] = []
         for i in range(1, 11):
             in_decile: np.ndarray = decile == i
@@ -626,19 +630,17 @@ def uk_constituency_breakdown(
         repo_filename="parliamentary_constituency_weights.h5",
     )
     with h5py.File(constituency_weights_path, "r") as f:
-        weights = f[
-            "2025"
-        ][
-            ...
-        ]  # {2025: array(650, 100180) where cell i, j is the weight of household record i in constituency j}
+        # {2025: array(650, 100180) where cell i, j is the weight of household
+        # record i in constituency j}
+        weights = f["2025"][...]
 
     constituency_names_path = download_huggingface_dataset(
         repo="policyengine/policyengine-uk-data-public",
         repo_filename="constituencies_2024.csv",
     )
-    constituency_names = pd.read_csv(
-        constituency_names_path
-    )  # columns code (constituency code), name (constituency name), x, y (geographic position)
+    # Columns: code (constituency code), name (constituency name), x, y
+    # (geographic position).
+    constituency_names = pd.read_csv(constituency_names_path)
 
     for i in range(len(constituency_names)):
         name: str = constituency_names.iloc[i]["name"]
@@ -845,7 +847,8 @@ def compare_economic_outputs(
         reform (dict): The reform economy.
         country_id (str): The country identifier (e.g., "uk", "us").
         region (str | None): The region filter (e.g., "uk", "local_authority/Leicester",
-            "constituency/Aldershot", "country/scotland"). Used to filter breakdown results.
+            "constituency/Aldershot", "country/scotland"). Used to filter breakdown
+            results.
 
     Returns:
         dict: The comparison of the two economies.

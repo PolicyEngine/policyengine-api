@@ -165,7 +165,7 @@ class TestUKLocalAuthorityBreakdownFunction:
         assert "Isle of Anglesey" in result.by_local_authority
 
     def test__region_categorization_by_code_prefix(self):
-        """Test that region categorization logic correctly identifies UK nations by code prefix."""
+        """Test that region categorization identifies UK nations by code prefix."""
         # This is a unit test for the region categorization logic
         # We test the logic directly rather than through the full function
 
@@ -305,12 +305,12 @@ class TestUKLocalAuthorityBreakdownFunction:
         assert calls[1][1]["repo_filename"] == "local_authorities_2021.csv"
 
     def test__given_constituency_region__returns_none(self):
-        """When simulating a constituency, local authority breakdown should not be computed."""
+        """Skip the local authority breakdown when simulating a constituency."""
         result = uk_local_authority_breakdown({}, {}, "uk", "constituency/Aldershot")
         assert result is None
 
     def test__given_constituency_region_with_code__returns_none(self):
-        """When simulating a constituency by code, local authority breakdown should not be computed."""
+        """Skip the local authority breakdown for a constituency given by code."""
         result = uk_local_authority_breakdown({}, {}, "uk", "constituency/E12345678")
         assert result is None
 
@@ -320,7 +320,7 @@ class TestUKLocalAuthorityBreakdownFunction:
     def test__given_specific_la_region__returns_only_that_la(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
-        """When simulating a specific local authority, only that LA should be returned."""
+        """Return only that LA when simulating a specific local authority."""
         mock_download.side_effect = [
             "/path/to/weights.h5",
             "/path/to/names.csv",
@@ -361,7 +361,7 @@ class TestUKLocalAuthorityBreakdownFunction:
     def test__given_country_scotland_region__returns_only_scottish_las(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
-        """When simulating country/scotland, only Scottish local authorities should be returned."""
+        """Return only Scottish local authorities when simulating country/scotland."""
         mock_download.side_effect = [
             "/path/to/weights.h5",
             "/path/to/names.csv",
@@ -512,12 +512,12 @@ class TestUKConstituencyBreakdownFunction:
         assert result is None
 
     def test__given_local_authority_region__returns_none(self):
-        """When simulating a local authority, constituency breakdown should not be computed."""
+        """Skip the constituency breakdown when simulating a local authority."""
         result = uk_constituency_breakdown({}, {}, "uk", "local_authority/Leicester")
         assert result is None
 
     def test__given_local_authority_region_with_code__returns_none(self):
-        """When simulating a local authority by code, constituency breakdown should not be computed."""
+        """Skip the constituency breakdown for a local authority given by code."""
         result = uk_constituency_breakdown({}, {}, "uk", "local_authority/E06000016")
         assert result is None
 
@@ -527,7 +527,7 @@ class TestUKConstituencyBreakdownFunction:
     def test__given_specific_constituency_region__returns_only_that_constituency(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
-        """When simulating a specific constituency, only that constituency should be returned."""
+        """Return only that constituency when simulating a specific constituency."""
         mock_download.side_effect = [
             "/path/to/weights.h5",
             "/path/to/names.csv",
@@ -570,7 +570,7 @@ class TestUKConstituencyBreakdownFunction:
     def test__given_country_scotland_region__returns_only_scottish_constituencies(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
-        """When simulating country/scotland, only Scottish constituencies should be returned."""
+        """Return only Scottish constituencies when simulating country/scotland."""
         mock_download.side_effect = [
             "/path/to/weights.h5",
             "/path/to/names.csv",

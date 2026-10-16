@@ -71,7 +71,10 @@ class SPMSelection(BaseModel):
     county_vintage: str = Field(default="2020", pattern=r"^[0-9]{4}$")
     as_of: str | None = Field(
         default=None,
-        description="ISO calendar date (YYYY-MM-DD); must satisfy the selected artifact's information date",
+        description=(
+            "ISO calendar date (YYYY-MM-DD); must satisfy the selected artifact's "
+            "information date"
+        ),
         json_schema_extra={
             "format": "date",
             "pattern": r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
@@ -454,7 +457,9 @@ def validate_spm_calculation_provenance(
 
 
 def _current_bundle() -> dict:
-    from policyengine_api.constants import _policyengine_bundle
+    from policyengine_api.constants import (  # noqa: PLC0415  # constants reads the installed bundle manifest at import
+        _policyengine_bundle,
+    )
 
     return _policyengine_bundle
 
@@ -469,7 +474,10 @@ def _installed_country_implements_spm(country_id: str) -> bool:
     it computes SPM exactly as it always has, and a model with it still needs a
     certified configuration before this API will run it.
     """
-    from policyengine_api.constants import COUNTRIES, COUNTRY_PACKAGE_NAMES
+    from policyengine_api.constants import (  # noqa: PLC0415  # constants reads the installed bundle manifest at import
+        COUNTRIES,
+        COUNTRY_PACKAGE_NAMES,
+    )
 
     package_name = dict(zip(COUNTRIES, COUNTRY_PACKAGE_NAMES)).get(country_id)
     if package_name is None:
@@ -493,7 +501,9 @@ def _installed_country_implements_spm(country_id: str) -> bool:
 
 @lru_cache(maxsize=4)
 def _selected_forecast(expected_sha256: str) -> SPMForecast:
-    from spm_calculator.rolling_forecast import load_forecast
+    from spm_calculator.rolling_forecast import (
+        load_forecast,
+    )
 
     return load_forecast(expected_sha256=expected_sha256)
 

@@ -1,13 +1,17 @@
 """Native FastAPI routes for v2 user-household associations."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse, Response
 
+from policyengine_api.fastapi_routes.dependencies import (
+    NativeRouteDependencies,
+    V2UserHouseholdResourceService,
+    _default_v2_user_household_service_factory,
+)
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import v2_error_response
 from policyengine_api.fastapi_routes.v2.user_households.request_models import (
@@ -35,13 +39,22 @@ from policyengine_api.query_parameters import (
 )
 from policyengine_api.services.v2.identity.types import AccountPrincipal
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from policyengine_api.fastapi_routes.dependencies import (
-        NativeRouteDependencies,
-        V2UserHouseholdResourceService,
-    )
+UserHouseholdCreateQueryDependency = Annotated[
+    UserHouseholdCreateQuery, Depends(query_dependency(UserHouseholdCreateQuery))
+]
+UserHouseholdDetailQueryDependency = Annotated[
+    UserHouseholdDetailQuery, Depends(query_dependency(UserHouseholdDetailQuery))
+]
+UserHouseholdCollectionQueryDependency = Annotated[
+    UserHouseholdCollectionQuery,
+    Depends(query_dependency(UserHouseholdCollectionQuery)),
+]
+UserHouseholdUpdateQueryDependency = Annotated[
+    UserHouseholdUpdateQuery, Depends(query_dependency(UserHouseholdUpdateQuery))
+]
+UserHouseholdDeleteQueryDependency = Annotated[
+    UserHouseholdDeleteQuery, Depends(query_dependency(UserHouseholdDeleteQuery))
+]
 
 
 def _service_factory(
@@ -49,10 +62,6 @@ def _service_factory(
 ) -> Callable[[], V2UserHouseholdResourceService]:
     if dependencies.v2_user_household_service_factory is not None:
         return dependencies.v2_user_household_service_factory
-    from policyengine_api.fastapi_routes.dependencies import (
-        _default_v2_user_household_service_factory,
-    )
-
     return _default_v2_user_household_service_factory
 
 
@@ -73,11 +82,6 @@ def build_v2_user_household_router(
             Depends(enforce_user_write_request_size),
         ],
     )
-    create_query = query_dependency(UserHouseholdCreateQuery)
-    detail_query = query_dependency(UserHouseholdDetailQuery)
-    collection_query = query_dependency(UserHouseholdCollectionQuery)
-    update_query = query_dependency(UserHouseholdUpdateQuery)
-    delete_query = query_dependency(UserHouseholdDeleteQuery)
     service_factory = _service_factory(dependencies)
 
     @router.post(
@@ -94,8 +98,8 @@ def build_v2_user_household_router(
     )
     def create_user_household(
         body: UserHouseholdCreateRequest,
-        query: UserHouseholdCreateQuery = Depends(create_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: UserHouseholdCreateQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserHouseholdDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
             return v2_error_response(400, "Body country_id must match query country_id")
@@ -118,8 +122,8 @@ def build_v2_user_household_router(
     )
     def get_user_household(
         association_id: UUID,
-        query: UserHouseholdDetailQuery = Depends(detail_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: UserHouseholdDetailQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserHouseholdDetailResponse | JSONResponse:
         def read() -> UserHouseholdDetailResponse:
             item = service_factory().get_user_household(
@@ -139,8 +143,8 @@ def build_v2_user_household_router(
         summary="List the current user's saved households",
     )
     def get_user_households(
-        query: UserHouseholdCollectionQuery = Depends(collection_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: UserHouseholdCollectionQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserHouseholdPageResponse | JSONResponse:
         def read() -> UserHouseholdPageResponse:
             page = service_factory().list_user_households(
@@ -169,8 +173,8 @@ def build_v2_user_household_router(
     def patch_user_household_route(
         association_id: UUID,
         body: UserHouseholdPatchRequest,
-        query: UserHouseholdUpdateQuery = Depends(update_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: UserHouseholdUpdateQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserHouseholdDetailResponse | JSONResponse:
         def patch() -> UserHouseholdDetailResponse:
             item = service_factory().patch_user_household(
@@ -194,8 +198,8 @@ def build_v2_user_household_router(
     )
     def delete_user_household_route(
         association_id: UUID,
-        query: UserHouseholdDeleteQuery = Depends(delete_query),
-        principal: AccountPrincipal = Depends(require_user),
+        query: UserHouseholdDeleteQueryDependency,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> Response | JSONResponse:
         def delete() -> Response:
             service_factory().delete_user_household(

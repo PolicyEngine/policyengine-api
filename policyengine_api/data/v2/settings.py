@@ -92,7 +92,9 @@ def _required(environ: Mapping[str, str], name: str) -> str:
 @cache
 def _load_secret_from_secret_manager(resource_name: str) -> str:
     """Resolve a v2 runtime URL only when a preview request selects it."""
-    from google.cloud import secretmanager
+    from google.cloud import (  # noqa: PLC0415  # the Google client loads only when a secret resource is configured
+        secretmanager,
+    )
 
     client = secretmanager.SecretManagerServiceClient()
     response = client.access_secret_version(request={"name": resource_name})

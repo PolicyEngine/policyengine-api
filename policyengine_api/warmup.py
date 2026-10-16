@@ -46,7 +46,9 @@ def run_startup_warmup() -> None:
     from serving (the first real request would just be slow), and it must never
     leave the service permanently unready.
     """
-    from policyengine_api.country import COUNTRIES
+    from policyengine_api.country import (  # noqa: PLC0415  # country models load during warmup, not at import
+        COUNTRIES,
+    )
 
     for country_id in _requested_countries():
         household = WARMUP_HOUSEHOLDS.get(country_id)
