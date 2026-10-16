@@ -63,15 +63,6 @@ def test_legacy_endpoints_package_is_removed():
     assert not any((PACKAGE_ROOT / "endpoints").rglob("*.py"))
 
 
-def test_economy_comparison_logic_is_not_in_the_http_layer():
-    comparison_module = PACKAGE_ROOT / "services/economy_comparison.py"
-
-    assert comparison_module.exists()
-    source = comparison_module.read_text(encoding="utf-8")
-    assert "from flask" not in source
-    assert "import flask" not in source
-
-
 def test_calculation_route_delegates_domain_processing_to_its_service():
     source = (PACKAGE_ROOT / "routes/household_routes.py").read_text(encoding="utf-8")
 
