@@ -262,9 +262,8 @@ def create_mock_modal_execution(
     result=None,
     error=None,
     policyengine_bundle=None,
-    run_progress=None,
 ):
-    """Build a mock Modal simulation execution.
+    """Build a mock Modal simulation execution that reports no run progress.
 
     Parameters
     ----------
@@ -278,8 +277,6 @@ def create_mock_modal_execution(
         The error message if failed.
     policyengine_bundle : dict or None
         The runtime bundle the execution reports; defaults to MOCK_RUNTIME_BUNDLE.
-    run_progress : SimulationRunProgress or None
-        The stage fields the execution reports while it runs.
 
     Returns
     -------
@@ -295,7 +292,7 @@ def create_mock_modal_execution(
     mock_execution.error = error
     mock_execution.policyengine_bundle = policyengine_bundle or MOCK_RUNTIME_BUNDLE
     mock_execution.resolved_app_name = MOCK_RESOLVED_APP_NAME
-    mock_execution.run_progress = run_progress
+    mock_execution.run_progress = None
     return mock_execution
 
 
