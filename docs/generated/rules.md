@@ -33,7 +33,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Advisory (checked but not blocking)
 
-- `api.quality.alembic-revisions-unused-imports`: Alembic revision files are exempt from ruff lint rules, because they must stay exactly as Alembic generates them.
+- `api.quality.alembic-revisions-unused-imports`: Ruff doesn't lint Alembic revision files (lint.exclude in pyproject.toml), because they must stay exactly as Alembic generates them.
 
 ### Unproven (no proof that the checker rejects a bad example)
 
@@ -268,7 +268,7 @@ flowchart LR
 
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `api.quality.alembic-revisions-unused-imports` | Alembic revision files are exempt from ruff lint rules, because they must stay exactly as Alembic generates them. | mechanical | advisory | no | ruff per-file ignore of ALL for `migrations/*/versions/*.py` | — | — |
+| `api.quality.alembic-revisions-unused-imports` | Ruff doesn't lint Alembic revision files (lint.exclude in pyproject.toml), because they must stay exactly as Alembic generates them. | mechanical | advisory | no | nothing | — | — |
 | `api.quality.environment-variables-load` | Required environment variables and credentials load in a deployed-like environment. | mechanical | enforced | yes | CI job `test_env_vars` | `pr.yml:test_env_vars` | — |
 | `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, v2 routes and services, and the user sign-in and account-deletion libraries pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:typecheck-v2` | — |
 | `api.quality.ruff-format` | All Python files are formatted with ruff format. | mechanical | enforced | yes | ruff format | `pr.yml:lint` | — |
@@ -280,8 +280,7 @@ flowchart LR
 ```mermaid
 flowchart LR
   r_api_quality_alembic_revisions_unused_imports("api.quality.alembic-revisions-unused-imports (advisory)")
-  e_ruff_per_file_ignore_of_ALL_for_migrations___versions___py["ruff per-file ignore of ALL for migrations/*/versions/*.py"]
-  local_only>"not run in CI"]
+  gap_unenforced>"not enforced"]
   r_api_quality_environment_variables_load("api.quality.environment-variables-load (enforced)")
   e_CI_job_test_env_vars["CI job test_env_vars"]
   j_CI_pr_yml_test_env_vars["CI pr.yml:test_env_vars"]
@@ -300,8 +299,7 @@ flowchart LR
   e_CI_job_test["CI job test"]
   r_api_quality_tests_ruff_exemptions("api.quality.tests-ruff-exemptions (enforced)")
   e_ruff_per_file_ignore_of_ANN__D1__PLR2004__S101_for____tests___["ruff per-file ignore of ANN, D1, PLR2004, S101 for **/tests/**"]
-  r_api_quality_alembic_revisions_unused_imports --> e_ruff_per_file_ignore_of_ALL_for_migrations___versions___py
-  e_ruff_per_file_ignore_of_ALL_for_migrations___versions___py -.-> local_only
+  r_api_quality_alembic_revisions_unused_imports -.-> gap_unenforced
   r_api_quality_environment_variables_load --> e_CI_job_test_env_vars
   e_CI_job_test_env_vars --> j_CI_pr_yml_test_env_vars
   r_api_quality_mypy_v2 --> e_mypy

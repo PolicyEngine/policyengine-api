@@ -119,7 +119,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Code quality and types
 
-- `api.quality.alembic-revisions-unused-imports`: Alembic revision files are exempt from ruff lint rules, because they must stay exactly as Alembic generates them. (advisory: ruff per-file ignore of ALL for `migrations/*/versions/*.py`, not blocking)
+- `api.quality.alembic-revisions-unused-imports`: Ruff doesn't lint Alembic revision files (lint.exclude in pyproject.toml), because they must stay exactly as Alembic generates them. (advisory: nothing, not blocking)
 - `api.quality.environment-variables-load`: Required environment variables and credentials load in a deployed-like environment. (blocking: CI job `test_env_vars`)
 - `api.quality.mypy-v2`: Shared query models, FastAPI dependencies, v2 routes and services, and the user sign-in and account-deletion libraries pass mypy with untyped definitions disallowed. (blocking: mypy)
 - `api.quality.ruff-format`: All Python files are formatted with ruff format. (blocking: ruff format)
