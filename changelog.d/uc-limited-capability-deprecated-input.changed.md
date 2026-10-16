@@ -1,1 +1,0 @@
-Partners who still send the UK input `uc_has_limited_capability_for_work`, which policyengine-uk 2.129.0 removed, get a deprecation warning pointing to `uc_limited_capability_for_work` instead of a failed calculation.

@@ -1,1 +1,0 @@
-Enabled ruff's annotation rules (ANN) and annotated every function outside tests; test files are exempt from ANN, missing docstrings, magic numbers and bare-assert rules. The runtime-annotation guard now resolves each model's bases through its module's imports, as ruff does, so a base imported through a re-export is caught.

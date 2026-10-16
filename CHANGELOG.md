@@ -1,3 +1,11 @@
+## [5.5.3] - 2026-10-16
+
+### Changed
+
+- Enabled ruff's annotation rules (ANN) and annotated every function outside tests; test files are exempt from ANN, missing docstrings, magic numbers and bare-assert rules. The runtime-annotation guard now resolves each model's bases through its module's imports, as ruff does, so a base imported through a re-export is caught.
+- Partners who still send the UK input `uc_has_limited_capability_for_work`, which policyengine-uk 2.129.0 removed, get a deprecation warning pointing to `uc_limited_capability_for_work` instead of a failed calculation.
+
+
 ## [5.5.2] - 2026-10-16
 
 ### Changed
