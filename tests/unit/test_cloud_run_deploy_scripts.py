@@ -17,9 +17,9 @@ STAGING_CLOUD_RUN_SERVICE = "policyengine-api-staging"
 TEST_V2_PROJECT_REF = "abcdefghijklmnopqrst"
 TEST_V2_ENVIRONMENT = "test-foundation"
 TEST_V2_RUNTIME_SECRET_RESOURCE = (
-    "projects/test-project/secrets/v2-runtime-database-url/versions/latest"  # noqa: S105  # a Secret Manager resource path, not a secret
+    "projects/test-project/secrets/v2-runtime-database-url/versions/latest"
 )
-TEST_AUTH0_SECRET_RESOURCE = "projects/p/secrets/auth0-management/versions/latest"  # noqa: S105  # a Secret Manager resource path, not a secret
+TEST_AUTH0_SECRET_RESOURCE = "projects/p/secrets/auth0-management/versions/latest"
 TEST_OTEL_ENDPOINT = "https://collector.example.test"
 CLOUD_RUN_SERVICE_SCRIPTS = (
     "scripts/deploy_cloud_run_candidate.sh",
@@ -27,7 +27,7 @@ CLOUD_RUN_SERVICE_SCRIPTS = (
     "scripts/resolve_cloud_run_candidate_state.sh",
     "scripts/set_cloud_run_revision.sh",
 )
-PRODUCTION_DB_PASSWORD_SECRET = "policyengine-api-prod-db-password:latest"  # noqa: S105  # a Secret Manager secret name, not its value
+PRODUCTION_DB_PASSWORD_SECRET = "policyengine-api-prod-db-password:latest"
 DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT = (
     "policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com"
 )
@@ -142,8 +142,8 @@ def _run_bash(
     *arguments: str,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(  # noqa: S603  # runs this repository's shell scripts with test-chosen arguments
-        ["bash", *arguments],  # noqa: S607  # bash comes from the test environment's PATH
+    return subprocess.run(
+        ["bash", *arguments],
         cwd=REPO,
         env=env,
         text=True,
@@ -2014,7 +2014,7 @@ def test_workflows_do_not_store_simulation_selector_in_git():
 
 def test_workflows_scope_simulation_routing_config_to_github_environments():
     selector_env = "SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}"
-    secret_env = "SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}"  # noqa: S105  # a workflow line that references a secret by name
+    secret_env = "SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}"
     pr_workflow = _pr_workflow()
     push_workflow = _push_workflow()
 
@@ -2132,11 +2132,11 @@ def test_push_workflow_uses_dedicated_cloud_run_runtime_service_account():
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
 
     runtime_account_secret = (
-        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: "  # noqa: S105  # a workflow line that references a secret by name
+        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: "
         "${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}"
     )
     deploy_account_secret = (
-        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"  # noqa: S105  # a workflow line that references a secret by name
+        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
     )
 
     assert (
@@ -2239,7 +2239,7 @@ def test_push_workflow_syncs_environment_specific_secrets_before_deployment():
         assert staging_sync_step.count(raw_secret_env) == 1
         assert production_sync_step.count(raw_secret_env) == 1
     database_secret_env = (
-        "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}"  # noqa: S105  # a workflow line that references a secret by name
+        "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}"
     )
     assert database_secret_env not in staging_sync_step
     assert production_sync_step.count(database_secret_env) == 1
@@ -2372,9 +2372,9 @@ def test_sync_cloud_run_staging_batch_preserves_distinct_database_secret(tmp_pat
         CLOUD_RUN_PROJECT="policyengine-api",
         CLOUD_RUN_REGION="us-central1",
         CLOUD_RUN_SERVICE=STAGING_CLOUD_RUN_SERVICE,
-        POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN="microdata-value",  # noqa: S106  # a fake secret value for the sync script
+        POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN="microdata-value",
         OPENAI_API_KEY="openai-value",
-        PE_UK_PRIVATE_HF_READ_TOKEN="hf-value",  # noqa: S106  # a fake secret value for the sync script
+        PE_UK_PRIVATE_HF_READ_TOKEN="hf-value",
     )
 
     result = _run_script(
@@ -2449,7 +2449,7 @@ def reject_sqlalchemy(name, *args, **kwargs):
 builtins.__import__ = reject_sqlalchemy
 runpy.run_path("tests/integration/conftest.py", run_name="integration_conftest")
 """
-    result = subprocess.run(  # noqa: S603  # runs a fixed in-repository check with the current interpreter
+    result = subprocess.run(
         [sys.executable, "-c", script],
         cwd=REPO,
         text=True,

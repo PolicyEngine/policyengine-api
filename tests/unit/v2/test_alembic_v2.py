@@ -185,7 +185,7 @@ def test_persistent_mode_rejects_an_ambiguous_non_supabase_host() -> None:
 
 
 def test_target_errors_never_echo_url_passwords() -> None:
-    secret = "do-not-echo-this-password"  # noqa: S105  # a sentinel that must not be echoed in the error
+    secret = "do-not-echo-this-password"
     with pytest.raises(V2MigrationTargetError) as raised:
         load_v2_alembic_settings(
             {

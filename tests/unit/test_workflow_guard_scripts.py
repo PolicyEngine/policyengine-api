@@ -14,8 +14,8 @@ CLEANUP_IMAGES = ".github/scripts/cleanup_cloud_run_images.sh"
 def _run(
     script: str, env: dict[str, str], *args: str
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(  # noqa: S603  # runs this repository's script with test-chosen arguments
-        ["bash", script, *args],  # noqa: S607  # bash comes from the test environment's PATH
+    return subprocess.run(
+        ["bash", script, *args],
         cwd=REPO,
         env={"HOME": os.environ.get("HOME", ""), "PATH": os.environ["PATH"], **env},
         text=True,

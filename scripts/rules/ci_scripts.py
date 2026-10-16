@@ -96,7 +96,7 @@ def shellcheck_failures(config: CiScripts, root: Path) -> set[str] | None:
     )
     if not scripts:
         return set()
-    result = subprocess.run(  # noqa: S603  # runs the resolved shellcheck on this repository's scripts
+    result = subprocess.run(
         [shellcheck, "--format=gcc", *scripts],
         cwd=root,
         capture_output=True,
@@ -247,5 +247,5 @@ def check() -> list[str]:
     """Adapter for scripts/run_quality_guards.py."""
     violations, notes = run_check(REPO_ROOT)
     for note in notes:
-        print(f"note: {note}")  # noqa: T201  # the guard adapter prints its notes
+        print(f"note: {note}")
     return [str(violation) for violation in violations]

@@ -16,7 +16,7 @@ from scripts.rules.validate import validate
 
 def _report(message: str) -> None:
     """Print one line of the command's output."""
-    print(message)  # noqa: T201  # reporting the result is this command's job
+    print(message)
 
 
 def _print(violations: list, notes: list[str] | None = None) -> int:
@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     registry, violations = load_registry(root)
     if registry is None:
         return _print(violations)
-    violations += validate(registry, root, date.today())  # noqa: DTZ011  # review and expiry dates are calendar days, checked against the local date
+    violations += validate(registry, root, date.today())
     if args.command == "render":
         if violations:
             _report("render refused: fix the registry first")

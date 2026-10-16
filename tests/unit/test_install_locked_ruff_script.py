@@ -30,8 +30,8 @@ def _run(
     tmp_path: Path, *args: str, pip_exit: int = 0
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     bin_dir, calls = _fake_commands(tmp_path, pip_exit=pip_exit)
-    result = subprocess.run(  # noqa: S603  # runs this repository's script with test-chosen arguments
-        ["bash", str(SCRIPT), *args],  # noqa: S607  # bash comes from the test environment's PATH
+    result = subprocess.run(
+        ["bash", str(SCRIPT), *args],
         cwd=REPO,
         env={
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",

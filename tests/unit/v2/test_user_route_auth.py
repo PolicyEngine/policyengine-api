@@ -269,7 +269,7 @@ def _recorded_failure_logs(operation) -> tuple[object, list]:
     return response, handler.records
 
 
-SECRET_SUBJECT = "google-oauth2|secret-subject"  # noqa: S105  # a sentinel that must not leak into the logs
+SECRET_SUBJECT = "google-oauth2|secret-subject"
 
 
 def test_unexpected_failures_are_logged_without_their_message() -> None:

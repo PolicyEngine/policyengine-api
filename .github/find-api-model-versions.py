@@ -113,8 +113,8 @@ if __name__ == "__main__":
 
     if args.shell:
         for key, value in find_api_model_versions().items():
-            print(f"{key}={shlex.quote(value)}")  # noqa: T201  # the shell assignments are this command's output
+            print(f"{key}={shlex.quote(value)}")
     else:
         find_api_model_versions_and_output_to_github()
-        print("API model versions found and written to GitHub environment.")  # noqa: T201  # the command reports its result
+        print("API model versions found and written to GitHub environment.")
     sys.exit(0)

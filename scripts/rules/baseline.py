@@ -28,16 +28,16 @@ def load_base_registry(root: Path, ref: str) -> Registry | None:
 
     Raise BaseUnavailable when ``ref`` does not name a commit.
     """
-    verify = subprocess.run(  # noqa: S603  # runs git with a fixed command and no shell
-        ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],  # noqa: S607  # git comes from PATH, as in any checkout the tool runs in
+    verify = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
         cwd=root,
         capture_output=True,
         text=True,
     )
     if verify.returncode != 0:
         raise BaseUnavailable(ref)
-    shown = subprocess.run(  # noqa: S603  # runs git with a fixed command and no shell
-        ["git", "show", f"{ref}:{REGISTRY_PATH.as_posix()}"],  # noqa: S607  # git comes from PATH, as in any checkout the tool runs in
+    shown = subprocess.run(
+        ["git", "show", f"{ref}:{REGISTRY_PATH.as_posix()}"],
         cwd=root,
         capture_output=True,
         text=True,

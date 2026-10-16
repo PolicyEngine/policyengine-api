@@ -152,12 +152,12 @@ def main() -> int:
     """Print the guard's violations and return 1 if there are any."""
     violations = check()
     if not violations:
-        print("migration-contracts guard passed")  # noqa: T201  # the guard reports its result
+        print("migration-contracts guard passed")
         return 0
 
-    print("migration-contracts guard failed:")  # noqa: T201  # the guard reports its result
+    print("migration-contracts guard failed:")
     for violation in violations:
-        print(f"  - {violation}")  # noqa: T201  # the guard reports its result
+        print(f"  - {violation}")
     return 1
 
 

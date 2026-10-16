@@ -163,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         json_path=Path(args.json),
         markdown_path=Path(args.markdown),
     )
-    print(  # noqa: T201  # the command reports what it exported
+    print(
         "Exported "
         f"{payload['metadata']['workflow_count']} workflows and "
         f"{payload['metadata']['request_count']} requests to "

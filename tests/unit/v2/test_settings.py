@@ -33,7 +33,7 @@ DATA_WRITE_URL = (
     "supabase.co:5432/postgres?sslmode=verify-ca"
 )
 RUNTIME_SECRET_RESOURCE = (
-    "projects/test-project/secrets/v2-runtime-database-url/versions/latest"  # noqa: S105  # a Secret Manager resource path, not a secret
+    "projects/test-project/secrets/v2-runtime-database-url/versions/latest"
 )
 
 
@@ -250,7 +250,7 @@ def test_v1_and_debug_settings_never_supply_missing_v2_configuration() -> None:
 
 
 def test_configuration_errors_do_not_echo_secret_values() -> None:
-    secret_url = "postgresql+psycopg://user:do-not-echo@localhost/postgres"  # noqa: S105  # a fake URL whose password must not be echoed
+    secret_url = "postgresql+psycopg://user:do-not-echo@localhost/postgres"
 
     with pytest.raises(V2ConfigurationError) as raised:
         load_v2_runtime_database_settings(

@@ -66,8 +66,8 @@ if name == "uv" and args[:1] == ["run"]:
 
 def run_update(root, *arguments, **environment):
     log = root / "calls.jsonl"
-    result = subprocess.run(  # noqa: S603  # runs this repository's script with test-chosen arguments
-        ["bash", str(SCRIPT), *arguments],  # noqa: S607  # bash comes from the test environment's PATH
+    result = subprocess.run(
+        ["bash", str(SCRIPT), *arguments],
         cwd=root,
         env={
             **os.environ,

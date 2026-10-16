@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 def _report(message: str) -> None:
     """Print one line of the capture's output."""
-    print(message)  # noqa: T201  # reporting the baseline is this command's job
+    print(message)
 
 
 @dataclass(frozen=True)

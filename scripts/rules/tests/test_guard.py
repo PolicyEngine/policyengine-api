@@ -677,9 +677,9 @@ class BaselineTest(unittest.TestCase):
             repo.write("rules/baselines/ratcheted.txt", "pkg/routes.py\n")
             repo.render()
             git = ["git", "-c", "user.email=t@example.com", "-c", "user.name=t"]
-            subprocess.run(["git", "init", "-q"], cwd=repo.root, check=True)  # noqa: S607  # git comes from PATH in the temporary test repository
-            subprocess.run([*git, "add", "-A"], cwd=repo.root, check=True)  # noqa: S603  # a fixed git command in the temporary test repository
-            subprocess.run([*git, "commit", "-qm", "base"], cwd=repo.root, check=True)  # noqa: S603  # a fixed git command in the temporary test repository
+            subprocess.run(["git", "init", "-q"], cwd=repo.root, check=True)
+            subprocess.run([*git, "add", "-A"], cwd=repo.root, check=True)
+            subprocess.run([*git, "commit", "-qm", "base"], cwd=repo.root, check=True)
             repo.edit("rules/registry.toml", "count = 1", "count = 2")
             repo.write("rules/baselines/ratcheted.txt", "pkg/routes.py\npkg/other.py\n")
             repo.render()

@@ -89,7 +89,7 @@ def run_guard(
     if registry is None:
         return result
 
-    result.violations += validate(registry, root, today or date.today())  # noqa: DTZ011  # review and expiry dates are calendar days, checked against the local date
+    result.violations += validate(registry, root, today or date.today())
     for rule in registry.rules:
         result.violations += resolve_enforcer(rule, root)
         result.violations += resolve_ci(rule, root)

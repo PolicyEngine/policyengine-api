@@ -12,8 +12,8 @@ from policyengine_api.services.reform_impacts_service import (
 )
 
 # Claim tokens are opaque ids that tell competing workers apart.
-OWNER_CLAIM_TOKEN = "owner"  # noqa: S105  # an opaque claim id, not a secret
-CONTENDER_CLAIM_TOKEN = "contender"  # noqa: S105  # an opaque claim id, not a secret
+OWNER_CLAIM_TOKEN = "owner"
+CONTENDER_CLAIM_TOKEN = "contender"
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ def _create_impact(
         status="computing",
         api_version="1",
         reform_impact_json={},
-        start_time=datetime(2026, 1, day),  # noqa: DTZ001  # reform_impact start_time is a naive column
+        start_time=datetime(2026, 1, day),
         execution_id=execution_id,
     )
 

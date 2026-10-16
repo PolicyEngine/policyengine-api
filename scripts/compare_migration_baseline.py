@@ -173,8 +173,8 @@ def main(argv: list[str] | None = None) -> int:
         p95_ratio=args.p95_ratio,
     )
     for line in lines:
-        print(line)  # noqa: T201  # the comparison report is this command's output
-    print("RESULT: PASS" if passed else "RESULT: FAIL")  # noqa: T201  # the comparison report is this command's output
+        print(line)
+    print("RESULT: PASS" if passed else "RESULT: FAIL")
     return 0 if passed else 1
 
 

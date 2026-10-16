@@ -16,8 +16,8 @@ from scripts.v1_database_migration import (
 )
 
 # Fake credentials; the first holds characters that URLs must escape.
-FAKE_PASSWORD_WITH_URL_CHARACTERS = "p@ss:/word"  # noqa: S105  # a fake test password
-FAKE_PASSWORD = "p@ssword"  # noqa: S105  # a fake test password
+FAKE_PASSWORD_WITH_URL_CHARACTERS = "p@ss:/word"
+FAKE_PASSWORD = "p@ssword"
 
 
 def test_database_url_uses_sqlalchemy_url_without_stringifying_credentials():
@@ -161,7 +161,7 @@ def test_metadata_difference_descriptions_are_stable_and_do_not_include_data():
 
 
 def test_metadata_difference_rejects_unknown_shapes_without_repr_leakage():
-    secret = "do-not-print-this-value"  # noqa: S105  # a sentinel that must not leak into the error
+    secret = "do-not-print-this-value"
     difference = ("unknown", secret)
 
     with pytest.raises(ValueError, match="Unsupported metadata difference") as error:
