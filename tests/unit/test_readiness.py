@@ -147,7 +147,7 @@ def test_readiness_accepts_a_certified_measurement_configuration(monkeypatch):
     monkeypatch.setattr(
         spm,
         "_selected_forecast",
-        lambda _: SimpleNamespace(years=[2026], entry=lambda *a, **k: {}),
+        lambda _: SimpleNamespace(years=[2026], entry=lambda *_args, **_kwargs: {}),
     )
     bundle = {
         "measurements": {

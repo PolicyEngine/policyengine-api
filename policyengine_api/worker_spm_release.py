@@ -27,8 +27,8 @@ class RegistryCapability:
 
     def get_spm_capability(
         self,
-        country: str,
-        model_version: str | None,
+        country: str,  # noqa: ARG002  # implements SPMCapabilitySource.get_spm_capability
+        model_version: str | None,  # noqa: ARG002  # implements SPMCapabilitySource.get_spm_capability
         *,
         policyengine_version: str | None,
     ) -> object:
@@ -80,7 +80,7 @@ def validate_installed_worker(registry: dict, expected_bundle: str) -> dict | No
     if versions["policyengine"] != expected_bundle:
         msg = "The bundle manifest differs from the release requirement"
         raise ValueError(msg)
-    if constants.POLICYENGINE_VERSION != expected_bundle:
+    if expected_bundle != constants.POLICYENGINE_VERSION:
         msg = "The API runtime differs from the release requirement"
         raise ValueError(msg)
 

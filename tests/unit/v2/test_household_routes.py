@@ -361,9 +361,7 @@ def test_openapi_publishes_query_body_item_page_and_error_schemas() -> None:
     client, _flask_calls = _client(service)
     schema = client.get("/v2/openapi.json").json()
 
-    assert set(
-        path for path in schema["paths"] if path.startswith("/v2/households")
-    ) == {
+    assert {path for path in schema["paths"] if path.startswith("/v2/households")} == {
         "/v2/households",
         "/v2/households/{household_id}",
     }

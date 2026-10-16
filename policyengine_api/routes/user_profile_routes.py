@@ -54,11 +54,11 @@ def set_user_profile(country_id: str) -> Response:
     )
     result = _serialize_user_profile(profile, include_auth0_id=False)
 
-    response = dict(
-        status="ok",
-        message="Record created successfully" if created else "Record exists",
-        result=result,
-    )
+    response = {
+        "status": "ok",
+        "message": "Record created successfully" if created else "Record exists",
+        "result": result,
+    }
     return Response(
         json.dumps(response),
         status=201 if created else 200,
@@ -68,7 +68,7 @@ def set_user_profile(country_id: str) -> Response:
 
 @user_profile_bp.route("/<country_id>/user-profile", methods=["GET"])
 @validate_country
-def get_user_profile(country_id: str) -> Response:
+def get_user_profile(country_id: str) -> Response:  # noqa: ARG001  # Flask passes the <country_id> URL variable by keyword
     """Return a user profile looked up by ``auth0_id`` or, failing that, ``user_id``.
 
     The Auth0 ID is included only when the caller looked the profile up by it.
@@ -99,11 +99,11 @@ def get_user_profile(country_id: str) -> Response:
         msg = "No such user"
         raise NotFound(msg)
 
-    response_body = dict(
-        status="ok",
-        message=f"User #{readable_row['user_id']} found successfully",
-        result=readable_row,
-    )
+    response_body = {
+        "status": "ok",
+        "message": f"User #{readable_row['user_id']} found successfully",
+        "result": readable_row,
+    }
 
     return Response(
         json.dumps(response_body),
@@ -114,7 +114,7 @@ def get_user_profile(country_id: str) -> Response:
 
 @user_profile_bp.route("/<country_id>/user-profile", methods=["PUT"])
 @validate_country
-def update_user_profile(country_id: str) -> Response:
+def update_user_profile(country_id: str) -> Response:  # noqa: ARG001  # Flask passes the <country_id> URL variable by keyword
     """Update the username, primary country or start date of profile ``user_id``.
 
     The Auth0 ID cannot be changed: an ``auth0_id`` in the payload is ignored.
@@ -149,11 +149,11 @@ def update_user_profile(country_id: str) -> Response:
         msg = "No such user id"
         raise NotFound(msg)
 
-    response_body = dict(
-        status="ok",
-        message=f"User profile #{user_id} updated successfully",
-        result=dict(user_id=user_id),
-    )
+    response_body = {
+        "status": "ok",
+        "message": f"User profile #{user_id} updated successfully",
+        "result": {"user_id": user_id},
+    }
 
     return Response(
         json.dumps(response_body),

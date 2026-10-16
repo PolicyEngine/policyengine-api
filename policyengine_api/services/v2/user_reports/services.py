@@ -109,7 +109,7 @@ def validate_linked_user_policy(
     if user_policy_id is None:
         return
     require_owned_user_policy(
-        read_owned_user_policy_exists(
+        owned=read_owned_user_policy_exists(
             session,
             user_id=user_id,
             country_id=country_id,

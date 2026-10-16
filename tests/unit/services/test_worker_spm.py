@@ -14,12 +14,14 @@ from policyengine_api.worker_spm import validate_worker_result, validate_worker_
 
 @pytest.mark.parametrize("selection", [None, {"geography_kind": "national"}])
 def test_canonical_worker_selection_is_rejected_including_resolved_default(selection):
-    with patch(
-        "policyengine_api.worker_spm.normalize_spm_selection",
-        return_value={"geography_kind": "national"},
-    ) as normalize:
-        with pytest.raises(SPMValidationError) as error:
-            validate_worker_spm("us", selection)
+    with (
+        patch(
+            "policyengine_api.worker_spm.normalize_spm_selection",
+            return_value={"geography_kind": "national"},
+        ) as normalize,
+        pytest.raises(SPMValidationError) as error,
+    ):
+        validate_worker_spm("us", selection)
     normalize.assert_called_once_with("us", selection)
     assert error.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
 
@@ -36,27 +38,31 @@ def test_legacy_worker_selection_remains_usable(country_id):
 def test_actual_settings_validator_rejects_explicit_settings_on_legacy_worker(
     country_id,
 ):
-    with patch(
-        "policyengine_api.spm._current_bundle",
-        return_value={
-            "policyengine_version": "5.2.0",
-            "packages": {"policyengine-us": {"version": "1.764.6"}},
-        },
+    with (
+        patch(
+            "policyengine_api.spm._current_bundle",
+            return_value={
+                "policyengine_version": "5.2.0",
+                "packages": {"policyengine-us": {"version": "1.764.6"}},
+            },
+        ),
+        patch("policyengine_api.spm.simulation_supports_spm", return_value=False),
     ):
-        with patch("policyengine_api.spm.simulation_supports_spm", return_value=False):
-            assert validate_worker_spm(country_id) is None
-            with pytest.raises(SPMValidationError) as error:
-                validate_worker_spm(country_id, {"geography_kind": "national"})
+        assert validate_worker_spm(country_id) is None
+        with pytest.raises(SPMValidationError) as error:
+            validate_worker_spm(country_id, {"geography_kind": "national"})
     assert error.value.code == "SPM_SETTINGS_UNSUPPORTED"
 
 
 @pytest.mark.parametrize("country_id", ["us", "US"])
 def test_uncertified_canonical_bundle_cannot_default_to_legacy_worker(country_id):
     """A model that can run canonical SPM never reaches a worker uncertified."""
-    with patch("policyengine_api.spm._current_bundle", return_value={}):
-        with patch("policyengine_api.spm.simulation_supports_spm", return_value=True):
-            with pytest.raises(SPMValidationError) as error:
-                validate_worker_spm(country_id)
+    with (
+        patch("policyengine_api.spm._current_bundle", return_value={}),
+        patch("policyengine_api.spm.simulation_supports_spm", return_value=True),
+        pytest.raises(SPMValidationError) as error,
+    ):
+        validate_worker_spm(country_id)
     assert error.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
 
 
@@ -68,11 +74,13 @@ def test_unconfigured_bundle_keeps_the_legacy_worker_path(country_id):
     every economy request.
     """
     gateway = Mock()
-    with patch("policyengine_api.spm._current_bundle", return_value={}):
-        with patch("policyengine_api.spm.simulation_supports_spm", return_value=False):
-            assert validate_worker_spm(country_id, gateway=gateway) is None
-            with pytest.raises(SPMValidationError) as error:
-                validate_worker_spm(country_id, {"geography_kind": "national"})
+    with (
+        patch("policyengine_api.spm._current_bundle", return_value={}),
+        patch("policyengine_api.spm.simulation_supports_spm", return_value=False),
+    ):
+        assert validate_worker_spm(country_id, gateway=gateway) is None
+        with pytest.raises(SPMValidationError) as error:
+            validate_worker_spm(country_id, {"geography_kind": "national"})
     assert error.value.code == "SPM_SETTINGS_UNSUPPORTED"
     gateway.get_spm_capability.assert_not_called()
 
@@ -101,12 +109,14 @@ def test_canonical_economy_request_fails_before_cache_lookup(budget_window, opti
         call = service.get_economic_impact
         arguments["time_period"] = "2026"
 
-    with patch(
-        "policyengine_api.worker_spm.normalize_spm_selection",
-        return_value={"geography_kind": "county"},
+    with (
+        patch(
+            "policyengine_api.worker_spm.normalize_spm_selection",
+            return_value={"geography_kind": "county"},
+        ),
+        pytest.raises(SPMValidationError),
     ):
-        with pytest.raises(SPMValidationError):
-            call(**arguments)
+        call(**arguments)
 
     assert not service._injected_budget_window_cache.mock_calls
     assert not service._injected_reform_impacts_service.mock_calls
@@ -124,12 +134,14 @@ def test_canonical_direct_submission_fails_before_transport(method, selection):
     if selection is not None:
         payload["spm"] = selection
 
-    with patch(
-        "policyengine_api.worker_spm.normalize_spm_selection",
-        return_value={"geography_kind": "county"},
+    with (
+        patch(
+            "policyengine_api.worker_spm.normalize_spm_selection",
+            return_value={"geography_kind": "county"},
+        ),
+        pytest.raises(SPMValidationError),
     ):
-        with pytest.raises(SPMValidationError):
-            getattr(client, method)(payload)
+        getattr(client, method)(payload)
 
     client.client.post.assert_not_called()
 
@@ -145,14 +157,16 @@ def test_canonical_economy_errors_use_existing_validation_envelope(path):
     app = Flask(__name__)
     app.register_blueprint(economy_bp)
     app.config["TESTING"] = True
-    with patch(
-        "policyengine_api.worker_spm.normalize_spm_selection",
-        return_value={"geography_kind": "county"},
-    ):
-        with patch.object(
+    with (
+        patch(
+            "policyengine_api.worker_spm.normalize_spm_selection",
+            return_value={"geography_kind": "county"},
+        ),
+        patch.object(
             SimulationEntrypointClient, "get_spm_capability", return_value=None
-        ):
-            response = app.test_client().get(path)
+        ),
+    ):
+        response = app.test_client().get(path)
 
     assert response.status_code == 400
     payload = response.get_json()
@@ -259,15 +273,18 @@ def test_certified_worker_selection_enters_identity_and_submission():
 def test_uncertified_or_mismatching_worker_is_rejected(capability):
     gateway = Mock()
     gateway.get_spm_capability.return_value = capability
-    with patch(
-        "policyengine_api.worker_spm.normalize_spm_selection", return_value=SELECTION
+    with (
+        patch(
+            "policyengine_api.worker_spm.normalize_spm_selection",
+            return_value=SELECTION,
+        ),
+        pytest.raises(SPMValidationError),
     ):
-        with pytest.raises(SPMValidationError):
-            validate_worker_spm("us", gateway=gateway, policyengine_version="test-only")
+        validate_worker_spm("us", gateway=gateway, policyengine_version="test-only")
 
 
 @pytest.mark.parametrize(
-    "method,path",
+    ("method", "path"),
     [
         ("run", "/simulate/economy/comparison"),
         ("run_budget_window_batch", "/simulate/economy/budget-window"),
@@ -403,14 +420,16 @@ def test_canonical_direct_submission_forwards_the_validated_default_bundle(metho
 
 def test_canonical_submission_rejects_mutable_latest_bundle_alias():
     client = object.__new__(SimulationEntrypointClient)
-    with patch(
-        "policyengine_api.libs.simulation_entrypoint.validate_worker_spm",
-        return_value=SELECTION,
+    with (
+        patch(
+            "policyengine_api.libs.simulation_entrypoint.validate_worker_spm",
+            return_value=SELECTION,
+        ),
+        pytest.raises(SPMValidationError, match="exact PolicyEngine version"),
     ):
-        with pytest.raises(SPMValidationError, match="exact PolicyEngine version"):
-            client._normalize_submission_payload(
-                {"country": "us", "policyengine_version": "latest"}
-            )
+        client._normalize_submission_payload(
+            {"country": "us", "policyengine_version": "latest"}
+        )
 
 
 @pytest.mark.parametrize(
@@ -427,7 +446,7 @@ def test_typed_worker_poll_errors_reach_api_validation(code, method):
     client.base_url = "http://test"
     client.client = httpx.Client(
         transport=httpx.MockTransport(
-            lambda request: httpx.Response(
+            lambda _request: httpx.Response(
                 400,
                 json={
                     "status": "failed",
@@ -674,11 +693,14 @@ def test_a_worker_capability_failure_quotes_no_validator_internals(capability):
     """
     gateway = Mock()
     gateway.get_spm_capability.return_value = capability
-    with patch(
-        "policyengine_api.worker_spm.normalize_spm_selection", return_value=SELECTION
+    with (
+        patch(
+            "policyengine_api.worker_spm.normalize_spm_selection",
+            return_value=SELECTION,
+        ),
+        pytest.raises(SPMValidationError) as caught,
     ):
-        with pytest.raises(SPMValidationError) as caught:
-            validate_worker_spm("us", gateway=gateway, policyengine_version="test-only")
+        validate_worker_spm("us", gateway=gateway, policyengine_version="test-only")
     assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
     assert not any(part in caught.value.message for part in PYDANTIC_INTERNALS)
     assert caught.value.message

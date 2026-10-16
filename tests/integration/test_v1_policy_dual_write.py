@@ -110,7 +110,7 @@ def _create_v1(
     )
 
 
-@pytest.mark.parametrize("country_id", ("us", "uk"))
+@pytest.mark.parametrize("country_id", ["us", "uk"])
 def test_both_commits_and_interrupted_response_retry_resolve_one_mapping(
     country_id: str,
     disposable_v1_database_url: str,

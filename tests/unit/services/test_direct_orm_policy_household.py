@@ -11,7 +11,7 @@ def test_policy_service_reads_and_writes_mapped_models(
 ):
     monkeypatch.setattr(
         "policyengine_api.services.policy_service.hash_object",
-        lambda value: "policy-hash",
+        lambda _value: "policy-hash",
     )
     service = PolicyService(orm_session_factory)
 
@@ -34,7 +34,7 @@ def test_household_service_reads_and_writes_mapped_models(
 ):
     monkeypatch.setattr(
         "policyengine_api.services.household_service.hash_object",
-        lambda value: "household-hash",
+        lambda _value: "household-hash",
     )
     service = HouseholdService(orm_session_factory)
     payload = {"people": {"you": {"age": {"2026": 40}}}}

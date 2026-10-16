@@ -106,7 +106,7 @@ def mock_policyengine_version():
 def mock_policy_service():
     """Mock the ORM-facing PolicyService with decoded JSON objects."""
     mock_service = MagicMock()
-    mock_service.get_policy_json.side_effect = lambda country_id, policy_id: (
+    mock_service.get_policy_json.side_effect = lambda _country_id, policy_id: (
         json.loads(MOCK_REFORM_POLICY_JSON)
         if policy_id == MOCK_POLICY_ID
         else json.loads(MOCK_BASELINE_POLICY_JSON)

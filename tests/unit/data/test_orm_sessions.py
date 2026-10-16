@@ -36,11 +36,14 @@ def test_session_factory_begin_commits_and_rolls_back():
     with factory.begin() as session:
         session.execute(text("INSERT INTO item (id) VALUES (1)"))
 
-    with pytest.raises(RuntimeError, match="stop"):
+    def insert_then_fail() -> None:
         with factory.begin() as session:
             session.execute(text("INSERT INTO item (id) VALUES (2)"))
             msg = "stop"
             raise RuntimeError(msg)
+
+    with pytest.raises(RuntimeError, match="stop"):
+        insert_then_fail()
 
     with factory() as session:
         assert session.scalars(text("SELECT id FROM item ORDER BY id")).all() == [1]

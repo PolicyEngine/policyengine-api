@@ -224,7 +224,7 @@ def test_household_mirror_event_uses_mysql_json_representation(monkeypatch):
     # Keep bundle discovery outside this real MySQL JSON and event contract.
     monkeypatch.setattr(
         "policyengine_api.services.household_service.normalize_spm_selection",
-        lambda country_id, selection: dict(resolved_spm),
+        lambda _country_id, _selection: dict(resolved_spm),
     )
 
     try:

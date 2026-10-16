@@ -215,7 +215,7 @@ def test_report_routes_round_trip_v3_fields() -> None:
             "user_policy_id": str(USER_POLICY_ID),
             "baseline_user_policy_id": str(BASELINE_USER_POLICY_ID),
             "source_note": "from chat",
-            "provisions": PROVISIONS + [GROWING_PROVISION],
+            "provisions": [*PROVISIONS, GROWING_PROVISION],
             "validation": VALIDATION,
             "budget_window_years": 10,
             "last_run_at": "2026-02-01T12:00:00Z",

@@ -337,7 +337,8 @@ def test_concurrent_upgrades_of_one_browser_convert_exactly_once(sessions) -> No
         ).all()
         user = session.get(User, browser.user_id)
     assert [row.user_id for row in identities] == [browser.user_id]
-    assert user is not None and user.user_type == "standard"
+    assert user is not None
+    assert user.user_type == "standard"
 
 
 def test_concurrent_first_upgrades_from_two_browsers_share_one_account(
@@ -484,9 +485,12 @@ def test_a_browser_write_after_its_merge_starts_a_new_unauthenticated_user(
         merged_policy = session.get(UserPolicy, merged_policy_id)
         new_policy = session.get(UserPolicy, new_policy_id)
         browser_user = session.get(User, browser.user_id)
-    assert merged_policy is not None and merged_policy.user_id == alice_id
-    assert new_policy is not None and new_policy.user_id == browser.user_id
-    assert browser_user is not None and browser_user.user_type == "unauthenticated"
+    assert merged_policy is not None
+    assert merged_policy.user_id == alice_id
+    assert new_policy is not None
+    assert new_policy.user_id == browser.user_id
+    assert browser_user is not None
+    assert browser_user.user_type == "unauthenticated"
 
 
 def test_a_browser_account_deletion_never_deletes_its_converted_user(
@@ -509,8 +513,10 @@ def test_a_browser_account_deletion_never_deletes_its_converted_user(
     with sessions() as session:
         user = session.get(User, browser.user_id)
         policy = session.get(UserPolicy, policy_id)
-    assert user is not None and user.user_type == "standard"
-    assert policy is not None and policy.user_id == browser.user_id
+    assert user is not None
+    assert user.user_type == "standard"
+    assert policy is not None
+    assert policy.user_id == browser.user_id
 
 
 def test_upgrade_never_locks_a_standard_user_named_by_the_header(sessions) -> None:
@@ -566,9 +572,8 @@ def test_unauthenticated_users_are_written_only_with_their_id(sessions) -> None:
         user.last_name,
         user.email,
     ) == ("unauthenticated", None, None, None, None)
-    with pytest.raises(IntegrityError):
-        with sessions.begin() as session:
-            session.add(User(user_type="standard"))
+    with pytest.raises(IntegrityError), sessions.begin() as session:
+        session.add(User(user_type="standard"))
 
 
 def test_non_finite_numbers_never_reach_jsonb(sessions) -> None:
@@ -598,7 +603,8 @@ def test_non_finite_numbers_never_reach_jsonb(sessions) -> None:
 
     with sessions() as session:
         row = session.get(UserReportAssociation, stored.id)
-    assert row is not None and row.provisions == [provision]
+    assert row is not None
+    assert row.provisions == [provision]
 
 
 def test_report_budget_windows_persist_within_the_api_window_limit(sessions) -> None:
@@ -613,19 +619,19 @@ def test_report_budget_windows_persist_within_the_api_window_limit(sessions) -> 
     )
     with sessions() as session:
         row = session.get(UserReportAssociation, stored.id)
-    assert row is not None and row.budget_window_years == 10
+    assert row is not None
+    assert row.budget_window_years == 10
 
     for out_of_range_years in (1, 76):
-        with pytest.raises(IntegrityError):
-            with sessions.begin() as session:
-                session.add(
-                    UserReportAssociation(
-                        user_id=stored.user_id,
-                        country_id="us",
-                        legacy_report_id=615,
-                        budget_window_years=out_of_range_years,
-                    )
+        with pytest.raises(IntegrityError), sessions.begin() as session:
+            session.add(
+                UserReportAssociation(
+                    user_id=stored.user_id,
+                    country_id="us",
+                    legacy_report_id=615,
+                    budget_window_years=out_of_range_years,
                 )
+            )
 
 
 def test_reference_checks_and_match_simple_composite_keys(sessions) -> None:
@@ -651,9 +657,8 @@ def test_reference_checks_and_match_simple_composite_keys(sessions) -> None:
         UserPolicy(user_id=owner, country_id="ca", legacy_policy_id=1),
         UserPolicy(user_id=owner, country_id="us", policy_id=uuid4()),
     ):
-        with pytest.raises(IntegrityError):
-            with sessions.begin() as session:
-                session.add(invalid)
+        with pytest.raises(IntegrityError), sessions.begin() as session:
+            session.add(invalid)
 
 
 def test_account_deletion_cascades_after_removing_legacy_mappings(sessions) -> None:
@@ -698,7 +703,8 @@ def test_account_deletion_cascades_after_removing_legacy_mappings(sessions) -> N
             )
 
 
-def test_qualification_reads_counts_in_a_read_only_transaction(sessions) -> None:
+@pytest.mark.usefixtures("sessions")
+def test_qualification_reads_counts_in_a_read_only_transaction() -> None:
     disposable_url = _disposable_url()
     # The settings loader requires a persistent-looking target; the engine
     # builder substitutes the disposable database, which is all that is read.

@@ -39,7 +39,7 @@ class TestMetadataService:
             service.get_metadata(empty_country_id)
 
     @pytest.mark.parametrize(
-        "country_id, current_law_id, test_regions",
+        ("country_id", "current_law_id", "test_regions"),
         [
             (
                 "uk",
@@ -141,7 +141,7 @@ class TestMetadataService:
         assert datasets[0]["data_version"] == release["version"]
 
     @pytest.mark.parametrize(
-        "country_id, expected_label",
+        ("country_id", "expected_label"),
         [
             ("us", "Microcosm"),
             ("uk", "Enhanced FRS"),
@@ -157,7 +157,7 @@ class TestMetadataService:
         assert dataset["title"] == f"Certified {expected_label} dataset"
 
     @pytest.mark.parametrize(
-        "country_id, expected_types",
+        ("country_id", "expected_types"),
         [
             ("uk", ["national", "country", "constituency", "local_authority"]),
             ("us", ["national", "state", "place", "congressional_district"]),

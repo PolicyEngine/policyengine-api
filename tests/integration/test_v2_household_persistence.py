@@ -205,13 +205,16 @@ def test_hash_collision_rolls_back_without_changing_stored_content() -> None:
                 content_hash=original_identity.content_hash,
             )
 
-        with Session(engine) as session, session.begin():
-            with pytest.raises(HouseholdContentHashCollisionError):
-                create_normalized_household(
-                    session,
-                    changed,
-                    canonicalizer=simulated_collision,
-                )
+        with (
+            Session(engine) as session,
+            session.begin(),
+            pytest.raises(HouseholdContentHashCollisionError),
+        ):
+            create_normalized_household(
+                session,
+                changed,
+                canonicalizer=simulated_collision,
+            )
 
         with Session(engine) as session:
             stored = session.get(Household, first.household_id)
@@ -243,9 +246,12 @@ def test_legacy_mappings_are_many_to_one_and_conflicts_roll_back() -> None:
         assert retry.mapping_created is False
 
         conflicting = first.model_copy(update={"label": "Changed source label"})
-        with Session(engine) as session, session.begin():
-            with pytest.raises(LegacyHouseholdMappingIntegrityError):
-                mirror_legacy_household_in_session(session, conflicting)
+        with (
+            Session(engine) as session,
+            session.begin(),
+            pytest.raises(LegacyHouseholdMappingIntegrityError),
+        ):
+            mirror_legacy_household_in_session(session, conflicting)
 
         with Session(engine) as session:
             mappings = session.scalars(
@@ -335,11 +341,10 @@ def test_content_edit_creates_replacement_and_reassigns_named_association() -> N
             Household.__table__.columns.keys()
         )
 
-        with pytest.raises(IntegrityError):
-            with sessions.begin() as session:
-                session.execute(
-                    delete(Household).where(Household.id == original.household_id)
-                )
+        with pytest.raises(IntegrityError), sessions.begin() as session:
+            session.execute(
+                delete(Household).where(Household.id == original.household_id)
+            )
 
         for association_id in (first.id, duplicate.id):
             association_service.delete_user_household(

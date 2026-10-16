@@ -1,5 +1,6 @@
 """Economic impact service backed by cached reform impacts and simulation jobs."""
 
+import contextlib
 import datetime
 import hashlib
 import json
@@ -1402,15 +1403,15 @@ class EconomyService:
             return
         if most_recent_impact.options_hash != setup_options.options_hash:
             return
-        try:
+        # Best effort: the typed SPM error is the answer, and the failure is
+        # already logged.
+        with contextlib.suppress(Exception):
             self._set_reform_impact_error(
                 setup_options=setup_options,
                 message=error.message,
                 error_code=error.code,
                 execution_id=most_recent_impact.execution_id,
             )
-        except Exception:  # noqa: BLE001, S110  # best effort: the typed SPM error is the answer, and the failure is already logged
-            pass
 
     @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_FAILED))
     def _handle_failed_impact(
@@ -1556,6 +1557,7 @@ class EconomyService:
         region: str,
         time_period: str,
         scope: Literal["macro", "household"] = "macro",
+        *,
         include_cliffs: bool = False,
         model_version: str | None = None,
         policyengine_version: str | None = None,
@@ -1676,18 +1678,26 @@ class EconomyService:
             "dataset": setup_options.dataset,
         }
         if isinstance(result.get("policyengine_bundle"), dict):
-            for key, value in result["policyengine_bundle"].items():
-                if value is not None:
-                    bundle[key] = value
+            bundle.update(
+                {
+                    key: value
+                    for key, value in result["policyengine_bundle"].items()
+                    if value is not None
+                }
+            )
         execution_bundle = (
             getattr(execution, "policyengine_bundle", None)
             if execution is not None
             else None
         )
         if isinstance(execution_bundle, dict):
-            for key, value in execution_bundle.items():
-                if value is not None:
-                    bundle[key] = value
+            bundle.update(
+                {
+                    key: value
+                    for key, value in execution_bundle.items()
+                    if value is not None
+                }
+            )
         response = {
             **result,
             "policyengine_bundle": bundle,
@@ -1818,7 +1828,7 @@ class EconomyService:
         except Exception as e:
             logger.log_struct(
                 {
-                    "message": f"Error inserting computing record: {str(e)}",
+                    "message": f"Error inserting computing record: {e!s}",
                     **setup_options.model_dump(),
                 }
             )
@@ -1849,9 +1859,7 @@ class EconomyService:
         except Exception as e:
             logger.log_struct(
                 {
-                    "message": (
-                        f"Error setting completed reform impact record: {str(e)}"
-                    ),
+                    "message": (f"Error setting completed reform impact record: {e!s}"),
                     **setup_options.model_dump(),
                 }
             )
@@ -1884,7 +1892,7 @@ class EconomyService:
         except Exception as e:
             logger.log_struct(
                 {
-                    "message": f"Error setting error reform impact record: {str(e)}",
+                    "message": f"Error setting error reform impact record: {e!s}",
                     **setup_options.model_dump(),
                 }
             )

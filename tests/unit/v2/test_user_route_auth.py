@@ -46,7 +46,7 @@ def configured_auth(monkeypatch: pytest.MonkeyPatch):
 
     def install(claims: Mapping[str, Any] | Exception) -> FakeDecoder:
         decoder = FakeDecoder(claims)
-        monkeypatch.setattr(user_auth, "_decoder", lambda issuer, audience: decoder)
+        monkeypatch.setattr(user_auth, "_decoder", lambda _issuer, _audience: decoder)
         return decoder
 
     return install
@@ -312,9 +312,10 @@ def _without_auth_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
+@pytest.mark.usefixtures("configured_auth")
 @pytest.mark.parametrize("auth_configured", [False, True])
 def test_the_unauthenticated_user_header_authenticates_a_signed_out_browser(
-    monkeypatch: pytest.MonkeyPatch, configured_auth, auth_configured: bool
+    monkeypatch: pytest.MonkeyPatch, *, auth_configured: bool
 ) -> None:
     if not auth_configured:
         _without_auth_settings(monkeypatch)

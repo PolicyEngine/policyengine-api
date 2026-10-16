@@ -201,7 +201,7 @@ def _comparison_pairs(
         STAGE_CATALOG_DATASETS.c.name,
         STAGE_CATALOG_DATASETS.c.description,
         STAGE_CATALOG_DATASETS.c.year,
-        sa.literal(False),
+        sa.literal(value=False),
         sa.cast(sa.null(), DATASETS.c.storage_path.type),
     ).where(STAGE_CATALOG_DATASETS.c.country_id == country.country_id)
     actual_datasets = (
@@ -362,7 +362,7 @@ INSERT_DATASETS = sa.insert(DATASETS).from_select(
         STAGE_CATALOG_DATASETS.c.description,
         sa.cast(sa.null(), DATASETS.c.storage_path.type),
         STAGE_CATALOG_DATASETS.c.year,
-        sa.literal(False),
+        sa.literal(value=False),
         MODEL_VERSIONS.c.id,
     )
     .select_from(

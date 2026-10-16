@@ -125,16 +125,16 @@ def guard_names(root: Path, runner: str = DEFAULT_RUNNER) -> list[str] | None:
             and target.id == "GUARDS"
             and isinstance(value, ast.Tuple)
         ):
-            names = []
-            for element in value.elts:
+            return [
+                element.elts[0].value
+                for element in value.elts
                 if (
                     isinstance(element, ast.Tuple)
                     and element.elts
                     and isinstance(element.elts[0], ast.Constant)
                     and isinstance(element.elts[0].value, str)
-                ):
-                    names.append(element.elts[0].value)
-            return names
+                )
+            ]
     return []
 
 
@@ -372,7 +372,7 @@ RESOLVERS: dict[Kind, Callable[[Rule, Path], list[Violation]]] = {
     Kind.WORKFLOW_JOB: _resolve_workflow_job,
     Kind.DOCS_GUARD: _resolve_file_field("doc"),
     Kind.LLM_REVIEW: _resolve_file_field("prompt"),
-    Kind.NONE: lambda rule, root: [],
+    Kind.NONE: lambda _rule, _root: [],
 }
 
 
@@ -522,14 +522,17 @@ def _test_coverage(
                         "add it to what the job runs, or move the test",
                     )
                 )
-    if project and job.matrix:
-        if not any(project in values for values in job.matrix.values()):
-            violations.append(
-                Violation(
-                    rule_id,
-                    check,
-                    f"project {project} is not in the matrix of job '{job.id}'",
-                    "add the project to the job matrix",
-                )
+    if (
+        project
+        and job.matrix
+        and not any(project in values for values in job.matrix.values())
+    ):
+        violations.append(
+            Violation(
+                rule_id,
+                check,
+                f"project {project} is not in the matrix of job '{job.id}'",
+                "add the project to the job matrix",
             )
+        )
     return violations

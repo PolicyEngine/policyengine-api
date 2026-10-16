@@ -4,7 +4,7 @@ from policyengine_api.utils.payload_validators import validate_country
 
 
 @validate_country
-def foo(country_id, other):
+def foo(_country_id, _other):
     """Return "bar"; a stand-in view for exercising the decorator.
 
     It must be defined outside the class (or within the test functions themselves)

@@ -24,7 +24,8 @@ def service(orm_session_factory):
     return HouseholdService(orm_session_factory)
 
 
-def test_get_household_returns_mapped_entity(service, existing_household_record):
+@pytest.mark.usefixtures("existing_household_record")
+def test_get_household_returns_mapped_entity(service):
     household = service.get_household(
         valid_db_row["country_id"],
         valid_db_row["id"],
@@ -47,7 +48,7 @@ def test_get_household_rejects_invalid_id(service, household_id):
 def test_create_household_adds_mapped_entity(service, monkeypatch):
     monkeypatch.setattr(
         "policyengine_api.services.household_service.hash_object",
-        lambda value: "some-hash",
+        lambda _value: "some-hash",
     )
 
     result = service.create_household(
@@ -75,7 +76,7 @@ def test_selected_create_commits_household_and_one_complete_event(
 ) -> None:
     monkeypatch.setattr(
         "policyengine_api.services.household_service.hash_object",
-        lambda value: "source-hash",
+        lambda _value: "source-hash",
     )
 
     result = service.create_household(
@@ -106,7 +107,7 @@ def test_selected_create_builds_event_from_refreshed_database_row(
 ) -> None:
     monkeypatch.setattr(
         "policyengine_api.services.household_service.hash_object",
-        lambda value: "source-hash",
+        lambda _value: "source-hash",
     )
     original_refresh = orm_session_factory.class_.refresh
 

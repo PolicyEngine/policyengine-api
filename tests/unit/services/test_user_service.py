@@ -24,9 +24,9 @@ def test_get_profile_returns_none_for_unknown_auth0_id(service):
     assert service.get_profile(auth0_id="missing") is None
 
 
+@pytest.mark.usefixtures("existing_user_profile")
 def test_get_profile_returns_mapped_entity_by_either_identifier(
     service,
-    existing_user_profile,
 ):
     by_auth0 = service.get_profile(
         auth0_id=valid_user_record["auth0_id"],
@@ -64,9 +64,9 @@ def test_update_profile_returns_none_for_missing_entity(service):
     assert service.update_profile(999, "uk", "missing", 2) is None
 
 
+@pytest.mark.usefixtures("existing_user_profile")
 def test_update_profile_only_changes_non_null_fields(
     service,
-    existing_user_profile,
 ):
     profile = service.update_profile(
         valid_user_record["user_id"],

@@ -10,6 +10,7 @@ import os
 import shlex
 import sys
 from importlib.metadata import version as distribution_version
+from pathlib import Path
 
 from policyengine.bundle import get_current_bundle
 
@@ -98,7 +99,7 @@ def find_api_model_versions() -> dict[str, str]:
 def find_api_model_versions_and_output_to_github() -> None:
     """Find the API model versions and output them to a file for GitHub."""
     versions = find_api_model_versions()
-    with open(os.environ["GITHUB_ENV"], "a") as f:
+    with Path(os.environ["GITHUB_ENV"]).open("a") as f:
         for key, value in versions.items():
             f.write(f"{key}={value}\n")
 

@@ -89,7 +89,8 @@ def test_first_save_provisions_the_owner_and_stores_v3_fields(store) -> None:
         user = session.get(User, identity.user_id)
         assert (identity.issuer, identity.subject) == (ALICE.issuer, ALICE.subject)
         assert created.user_id == identity.user_id
-        assert user is not None and user.primary_country == "us"
+        assert user is not None
+        assert user.primary_country == "us"
     assert legacy_references.calls == [("us", {"policy": [1]})]
 
 
@@ -327,11 +328,13 @@ def test_stage_10_projection_records_the_v1_reform_id() -> None:
 
 
 def test_patch_input_requires_a_supported_field() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="At least one of legacy_policy_id"):
         UserPolicyUpdateInput()
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match=r"policy_id\n  Extra inputs are not permitted"
+    ):
         UserPolicyUpdateInput.model_validate(
             {"policy_id": "00000000-0000-0000-0000-000000000001"}
         )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="legacy_policy_id must not be null"):
         UserPolicyUpdateInput(legacy_policy_id=None)

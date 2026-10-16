@@ -356,7 +356,7 @@ class SimulationEntrypointClient:
         except httpx.RequestError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation entrypoint request error: {str(e)}",
+                    "message": f"Simulation entrypoint request error: {e!s}",
                     "observability_id": current_observability_id(),
                 },
                 severity="ERROR",
@@ -405,7 +405,7 @@ class SimulationEntrypointClient:
         except httpx.RequestError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation batch API request error: {str(e)}",
+                    "message": f"Simulation batch API request error: {e!s}",
                     "observability_id": current_observability_id(),
                 },
                 severity="ERROR",
@@ -545,7 +545,7 @@ class SimulationEntrypointClient:
                 {
                     "message": (
                         f"Simulation entrypoint request error polling job {job_id}: "
-                        f"{str(e)}"
+                        f"{e!s}"
                     ),
                 },
                 severity="ERROR",
@@ -595,7 +595,7 @@ class SimulationEntrypointClient:
                 {
                     "message": (
                         "Simulation batch API request error polling job "
-                        f"{batch_job_id}: {str(e)}"
+                        f"{batch_job_id}: {e!s}"
                     ),
                 },
                 severity="ERROR",

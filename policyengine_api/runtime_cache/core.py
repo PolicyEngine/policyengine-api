@@ -73,7 +73,7 @@ class CacheBackend(Protocol):
         """Delete every given key and return how many existed."""
         ...
 
-    def pipeline(self, transaction: bool = True) -> CachePipeline:
+    def pipeline(self, *, transaction: bool = True) -> CachePipeline:
         """Return a pipeline whose commands run together on ``execute``."""
         ...
 

@@ -28,9 +28,12 @@ def validate_household_payload(
         return False, f"Missing required keys: {missing_keys}"
 
     # Check that label is either string or None, if present
-    if "label" in payload:
-        if payload["label"] is not None and not isinstance(payload["label"], str):
-            return False, "Label must be a string or None"
+    if (
+        "label" in payload
+        and payload["label"] is not None
+        and not isinstance(payload["label"], str)
+    ):
+        return False, "Label must be a string or None"
 
     # Check that data is a dictionary
     if not isinstance(payload["data"], dict):

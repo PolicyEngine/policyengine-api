@@ -64,24 +64,22 @@ def main() -> int:
     On failure print the app's captured stdout and stderr; always stop the app.
     """
     port = find_free_port()
-    stdout_file = tempfile.NamedTemporaryFile(
+    with tempfile.NamedTemporaryFile(
         mode="w+",
         encoding="utf-8",
         delete=False,
         prefix="policyengine-api-boot-",
         suffix=".stdout.log",
-    )
-    stderr_file = tempfile.NamedTemporaryFile(
+    ) as stdout_file:
+        stdout_path = Path(stdout_file.name)
+    with tempfile.NamedTemporaryFile(
         mode="w+",
         encoding="utf-8",
         delete=False,
         prefix="policyengine-api-boot-",
         suffix=".stderr.log",
-    )
-    stdout_path = Path(stdout_file.name)
-    stderr_path = Path(stderr_file.name)
-    stdout_file.close()
-    stderr_file.close()
+    ) as stderr_file:
+        stderr_path = Path(stderr_file.name)
 
     env = os.environ.copy()
     env["FLASK_DEBUG"] = "1"

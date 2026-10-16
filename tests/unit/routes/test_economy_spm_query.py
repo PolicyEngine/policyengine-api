@@ -27,7 +27,7 @@ def economy_http(request, monkeypatch):
     monkeypatch.setattr(
         spm,
         "_selected_forecast",
-        lambda _: SimpleNamespace(years=[2026], entry=lambda *args, **kwargs: {}),
+        lambda _: SimpleNamespace(years=[2026], entry=lambda *_args, **_kwargs: {}),
     )
     gateway = Mock()
     gateway.get_spm_capability.return_value = {
@@ -80,7 +80,7 @@ def economy_http(request, monkeypatch):
 def test_json_spm_selection_reaches_real_worker_validation(economy_http):
     client, path, query, dispatch, gateway, setups = economy_http
     response = client.get(
-        path, query_string=query + [("spm", json.dumps({"geography_kind": "national"}))]
+        path, query_string=[*query, ("spm", json.dumps({"geography_kind": "national"}))]
     )
     assert response.status_code == 200, response.get_json()
     assert response.get_json()["status"] == "computing"
@@ -108,7 +108,7 @@ def test_json_spm_selection_reaches_real_worker_validation(economy_http):
 )
 def test_malformed_spm_query_never_dispatches(economy_http, value):
     client, path, query, dispatch, gateway, _ = economy_http
-    response = client.get(path, query_string=query + [("spm", value)])
+    response = client.get(path, query_string=[*query, ("spm", value)])
     assert response.status_code == 400
     assert response.get_json()["errors"][0]["code"] == "SPM_SETTINGS_INVALID"
     dispatch.assert_not_called()
@@ -119,7 +119,7 @@ def test_malformed_spm_query_never_dispatches(economy_http, value):
 def test_duplicate_scalar_economy_queries_never_dispatch(economy_http, field):
     client, path, query, dispatch, gateway, _ = economy_http
     query = [(key, value) for key, value in query if key != field]
-    response = client.get(path, query_string=query + [(field, "{}"), (field, "{}")])
+    response = client.get(path, query_string=[*query, (field, "{}"), (field, "{}")])
     assert response.status_code == 400
     assert "must not be repeated" in response.get_json()["message"]
     dispatch.assert_not_called()
@@ -137,7 +137,7 @@ def test_duplicate_scalar_economy_queries_never_dispatch(economy_http, field):
 )
 def test_undeclared_economy_query_never_dispatches(economy_http, extra):
     client, path, query, dispatch, gateway, setups = economy_http
-    response = client.get(path, query_string=query + [extra])
+    response = client.get(path, query_string=[*query, extra])
     assert response.status_code == 400
     assert extra[0] in response.get_json()["message"]
     dispatch.assert_not_called()
@@ -147,7 +147,7 @@ def test_undeclared_economy_query_never_dispatches(economy_http, extra):
 
 def test_dataset_query_is_rejected_before_dispatch(economy_http):
     client, path, query, dispatch, gateway, setups = economy_http
-    response = client.get(path, query_string=query + [("dataset", "other")])
+    response = client.get(path, query_string=[*query, ("dataset", "other")])
 
     assert response.status_code == 400
     assert "dataset" in response.get_json()["message"]
@@ -193,7 +193,7 @@ def test_invalid_numeric_query_values_never_dispatch(economy_http, value):
     client, path, query, dispatch, _, _ = economy_http
     field = "window_size" if path.endswith("/budget-window") else "time_period"
     query = [(key, item) for key, item in query if key != field]
-    response = client.get(path, query_string=query + [(field, value)])
+    response = client.get(path, query_string=[*query, (field, value)])
     assert response.status_code == 400
     dispatch.assert_not_called()
 
@@ -203,7 +203,7 @@ def test_malformed_economy_years_never_dispatch(economy_http, value):
     client, path, query, dispatch, _, _ = economy_http
     field = "start_year" if path.endswith("/budget-window") else "time_period"
     query = [(key, item) for key, item in query if key != field]
-    response = client.get(path, query_string=query + [(field, value)])
+    response = client.get(path, query_string=[*query, (field, value)])
     assert response.status_code == 400
     dispatch.assert_not_called()
 
@@ -232,7 +232,7 @@ def test_bundle_version_bump_without_measurements_still_dispatches(
 def test_canonical_model_without_certification_refuses_economy_requests(
     economy_http, monkeypatch
 ):
-    client, path, query, dispatch, gateway, _ = economy_http
+    client, path, query, _dispatch, gateway, _ = economy_http
     monkeypatch.setattr(
         spm,
         "_current_bundle",
@@ -269,7 +269,7 @@ def test_a_rejected_economy_selection_quotes_no_validator_internals(
     name the offending field and reason and nothing else.
     """
     client, path, query, dispatch, _, _ = economy_http
-    response = client.get(path, query_string=query + [("spm", json.dumps(selection))])
+    response = client.get(path, query_string=[*query, ("spm", json.dumps(selection))])
     assert response.status_code == 400, response.get_json()
     error = response.get_json()["errors"][0]
     assert error["code"] == "SPM_SETTINGS_INVALID"

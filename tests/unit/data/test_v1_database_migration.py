@@ -186,7 +186,7 @@ def test_upgrade_cli_commits_the_externally_supplied_connection(monkeypatch):
 
     calls = []
     monkeypatch.setattr(
-        migration, "create_engine", lambda *args, **kwargs: FakeEngine()
+        migration, "create_engine", lambda *_args, **_kwargs: FakeEngine()
     )
     monkeypatch.setattr(
         migration,
@@ -221,13 +221,13 @@ def test_upgrade_cli_commits_the_externally_supplied_connection(monkeypatch):
 @pytest.mark.parametrize("state", [DatabaseState.UNVERSIONED, DatabaseState.INVALID])
 def test_upgrade_refuses_databases_without_valid_revision_history(monkeypatch, state):
     class FakeConnection:
-        def scalar(self, *args, **kwargs):
+        def scalar(self, *_args, **_kwargs):
             return 1
 
         def execute(self, *args, **kwargs):
             pass
 
-    monkeypatch.setattr(migration, "database_state", lambda connection: state)
+    monkeypatch.setattr(migration, "database_state", lambda _connection: state)
 
     with pytest.raises(RuntimeError, match="no valid Alembic revision"):
         upgrade_database(FakeConnection(), backup_id="verified-backup")

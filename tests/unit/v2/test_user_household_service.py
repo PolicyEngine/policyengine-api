@@ -133,11 +133,13 @@ def test_ownership_repointing_and_deletion(store) -> None:
 
 
 def test_patch_input_rejects_reassignment_and_empty_changes() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="At least one of legacy_household_id"):
         UserHouseholdUpdateInput()
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match=r"household_id\n  Extra inputs are not permitted"
+    ):
         UserHouseholdUpdateInput.model_validate(
             {"household_id": "00000000-0000-0000-0000-000000000001"}
         )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="legacy_household_id must not be null"):
         UserHouseholdUpdateInput(legacy_household_id=None)

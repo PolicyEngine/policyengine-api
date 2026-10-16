@@ -699,7 +699,7 @@ def get_valid_state_codes() -> set[str]:
         Set of 51 lowercase state codes (50 states + DC)
 
     """
-    return {code.lower() for code in STATE_CODE_TO_NAME.keys()}
+    return {code.lower() for code in STATE_CODE_TO_NAME}
 
 
 def get_valid_congressional_districts() -> set[str]:

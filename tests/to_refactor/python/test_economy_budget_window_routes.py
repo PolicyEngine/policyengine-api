@@ -113,7 +113,7 @@ def test_budget_window_route_requires_integer_window_size(
 
     assert response.status_code == 400
     assert data["status"] == "error"
-    assert "window_size must be an integer" == data["message"]
+    assert data["message"] == "window_size must be an integer"
     mock_get_budget_window_economic_impact.assert_not_called()
 
 
@@ -140,7 +140,7 @@ def test_budget_window_route_rejects_end_year_after_2099(api_client):
 
     assert response.status_code == 400
     assert data["status"] == "error"
-    assert "budget-window end_year must be 2099 or earlier" == data["message"]
+    assert data["message"] == "budget-window end_year must be 2099 or earlier"
 
 
 @patch(

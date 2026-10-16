@@ -7,7 +7,7 @@ def _summary(rows):
     return capture_migration_baseline.summarize(rows)
 
 
-def _probe(name, latency_ms, ok=True, **kwargs):
+def _probe(name, latency_ms, *, ok=True, **kwargs):
     return capture_migration_baseline.ProbeResult(
         name=name,
         method="GET",
@@ -101,7 +101,7 @@ def test_compare_fails_on_probe_missing_from_candidate():
 
 
 def test_compare_gates_completion_rows_as_pseudo_probe():
-    def completion(ms, completed=True):
+    def completion(ms, *, completed=True):
         return _probe(
             "simulation_gateway_completion",
             5.0,

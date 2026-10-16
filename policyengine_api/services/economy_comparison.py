@@ -22,14 +22,14 @@ def budgetary_impact(baseline: dict, reform: dict) -> dict:
     state_tax_revenue_impact = reform["total_state_tax"] - baseline["total_state_tax"]
     benefit_spending_impact = reform["total_benefits"] - baseline["total_benefits"]
     budgetary_impact = tax_revenue_impact - benefit_spending_impact
-    return dict(
-        budgetary_impact=budgetary_impact,
-        tax_revenue_impact=tax_revenue_impact,
-        state_tax_revenue_impact=state_tax_revenue_impact,
-        benefit_spending_impact=benefit_spending_impact,
-        households=sum(baseline["household_weight"]),
-        baseline_net_income=baseline["total_net_income"],
-    )
+    return {
+        "budgetary_impact": budgetary_impact,
+        "tax_revenue_impact": tax_revenue_impact,
+        "state_tax_revenue_impact": state_tax_revenue_impact,
+        "benefit_spending_impact": benefit_spending_impact,
+        "households": sum(baseline["household_weight"]),
+        "baseline_net_income": baseline["total_net_income"],
+    }
 
 
 def labor_supply_response(baseline: dict, reform: dict) -> dict:
@@ -63,56 +63,58 @@ def labor_supply_response(baseline: dict, reform: dict) -> dict:
     substitution_lsr_hh = MicroSeries(substitution_lsr_hh, weights=household_weight)
     income_lsr_hh = MicroSeries(income_lsr_hh, weights=household_weight)
 
-    decile_avg = dict(
-        income=income_lsr_hh.groupby(decile).mean().to_dict(),
-        substitution=substitution_lsr_hh.groupby(decile).mean().to_dict(),
-    )
-    decile_rel = dict(
-        income=(
+    decile_avg = {
+        "income": income_lsr_hh.groupby(decile).mean().to_dict(),
+        "substitution": substitution_lsr_hh.groupby(decile).mean().to_dict(),
+    }
+    decile_rel = {
+        "income": (
             income_lsr_hh.groupby(decile).sum()
             / original_earnings.groupby(decile).sum()
         ).to_dict(),
-        substitution=(
+        "substitution": (
             substitution_lsr_hh.groupby(decile).sum()
             / original_earnings.groupby(decile).sum()
         ).to_dict(),
-    )
+    }
 
-    relative_lsr = dict(
-        income=(income_lsr_hh.sum() / original_earnings.sum()),
-        substitution=(substitution_lsr_hh.sum() / original_earnings.sum()),
-    )
+    relative_lsr = {
+        "income": (income_lsr_hh.sum() / original_earnings.sum()),
+        "substitution": (substitution_lsr_hh.sum() / original_earnings.sum()),
+    }
 
     decile_rel["income"] = {int(k): v for k, v in decile_rel["income"].items() if k > 0}
     decile_rel["substitution"] = {
         int(k): v for k, v in decile_rel["substitution"].items() if k > 0
     }
 
-    hours = dict(
-        baseline=baseline["weekly_hours"],
-        reform=reform["weekly_hours"],
-        change=reform["weekly_hours"] - baseline["weekly_hours"],
-        income_effect=reform["weekly_hours_income_effect"]
+    hours = {
+        "baseline": baseline["weekly_hours"],
+        "reform": reform["weekly_hours"],
+        "change": reform["weekly_hours"] - baseline["weekly_hours"],
+        "income_effect": reform["weekly_hours_income_effect"]
         - baseline["weekly_hours_income_effect"],
-        substitution_effect=reform["weekly_hours_substitution_effect"]
+        "substitution_effect": reform["weekly_hours_substitution_effect"]
         - baseline["weekly_hours_substitution_effect"],
-    )
+    }
 
-    return dict(
-        substitution_lsr=substitution_lsr,
-        income_lsr=income_lsr,
-        relative_lsr=relative_lsr,
-        total_change=total_change,
-        revenue_change=revenue_change,
-        decile=dict(
-            average=decile_avg,
-            relative=decile_rel,
-        ),
-        hours=hours,
-    )
+    return {
+        "substitution_lsr": substitution_lsr,
+        "income_lsr": income_lsr,
+        "relative_lsr": relative_lsr,
+        "total_change": total_change,
+        "revenue_change": revenue_change,
+        "decile": {
+            "average": decile_avg,
+            "relative": decile_rel,
+        },
+        "hours": hours,
+    }
 
 
-def detailed_budgetary_impact(baseline: dict, reform: dict, country_id: str) -> dict:
+def detailed_budgetary_impact(
+    baseline: dict, reform: dict, country_id: str | None
+) -> dict:
     """Return baseline, reform and difference for each UK programme's budget.
 
     Only the UK reports programme-level totals; other countries get an empty dict.
@@ -121,11 +123,12 @@ def detailed_budgetary_impact(baseline: dict, reform: dict, country_id: str) -> 
     if country_id == "uk":
         for program in baseline["programs"]:
             # baseline[programs][program] = total budgetary impact of program
-            result[program] = dict(
-                baseline=baseline["programs"][program],
-                reform=reform["programs"][program],
-                difference=reform["programs"][program] - baseline["programs"][program],
-            )
+            result[program] = {
+                "baseline": baseline["programs"][program],
+                "reform": reform["programs"][program],
+                "difference": reform["programs"][program]
+                - baseline["programs"][program],
+            }
     return result
 
 
@@ -164,10 +167,10 @@ def decile_impact(baseline: dict, reform: dict) -> dict:
     )
     rel_decile_dict = rel_income_change_by_decile.to_dict()
     avg_decile_dict = avg_income_change_by_decile.to_dict()
-    return dict(
-        relative={int(k): v for k, v in rel_decile_dict.items()},
-        average={int(k): v for k, v in avg_decile_dict.items()},
-    )
+    return {
+        "relative": {int(k): v for k, v in rel_decile_dict.items()},
+        "average": {int(k): v for k, v in avg_decile_dict.items()},
+    }
 
 
 def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
@@ -204,10 +207,10 @@ def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     )
     rel_decile_dict = rel_income_change_by_decile.to_dict()
     avg_decile_dict = avg_income_change_by_decile.to_dict()
-    return dict(
-        relative={int(k): v for k, v in rel_decile_dict.items()},
-        average={int(k): v for k, v in avg_decile_dict.items()},
-    )
+    return {
+        "relative": {int(k): v for k, v in rel_decile_dict.items()},
+        "average": {int(k): v for k, v in avg_decile_dict.items()},
+    }
 
 
 def inequality_impact(baseline: dict, reform: dict) -> dict:
@@ -221,20 +224,20 @@ def inequality_impact(baseline: dict, reform: dict) -> dict:
         dict: The impact of the reform on inequality.
 
     """
-    return dict(
-        gini=dict(
-            baseline=baseline["gini"],
-            reform=reform["gini"],
-        ),
-        top_10_pct_share=dict(
-            baseline=baseline["top_10_percent_share"],
-            reform=reform["top_10_percent_share"],
-        ),
-        top_1_pct_share=dict(
-            baseline=baseline["top_1_percent_share"],
-            reform=reform["top_1_percent_share"],
-        ),
-    )
+    return {
+        "gini": {
+            "baseline": baseline["gini"],
+            "reform": reform["gini"],
+        },
+        "top_10_pct_share": {
+            "baseline": baseline["top_10_percent_share"],
+            "reform": reform["top_10_percent_share"],
+        },
+        "top_1_pct_share": {
+            "baseline": baseline["top_1_percent_share"],
+            "reform": reform["top_1_percent_share"],
+        },
+    }
 
 
 def poverty_impact(baseline: dict, reform: dict) -> dict:
@@ -262,48 +265,48 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
     )
     age = MicroSeries(baseline["age"])
 
-    poverty = dict(
-        child=dict(
-            baseline=float(baseline_poverty[age < 18].mean()),
-            reform=float(reform_poverty[age < 18].mean()),
-        ),
-        adult=dict(
-            baseline=float(baseline_poverty[(age >= 18) & (age < 65)].mean()),
-            reform=float(reform_poverty[(age >= 18) & (age < 65)].mean()),
-        ),
-        senior=dict(
-            baseline=float(baseline_poverty[age >= 65].mean()),
-            reform=float(reform_poverty[age >= 65].mean()),
-        ),
-        all=dict(
-            baseline=float(baseline_poverty.mean()),
-            reform=float(reform_poverty.mean()),
-        ),
-    )
+    poverty = {
+        "child": {
+            "baseline": float(baseline_poverty[age < 18].mean()),
+            "reform": float(reform_poverty[age < 18].mean()),
+        },
+        "adult": {
+            "baseline": float(baseline_poverty[(age >= 18) & (age < 65)].mean()),
+            "reform": float(reform_poverty[(age >= 18) & (age < 65)].mean()),
+        },
+        "senior": {
+            "baseline": float(baseline_poverty[age >= 65].mean()),
+            "reform": float(reform_poverty[age >= 65].mean()),
+        },
+        "all": {
+            "baseline": float(baseline_poverty.mean()),
+            "reform": float(reform_poverty.mean()),
+        },
+    }
 
-    deep_poverty = dict(
-        child=dict(
-            baseline=float(baseline_deep_poverty[age < 18].mean()),
-            reform=float(reform_deep_poverty[age < 18].mean()),
-        ),
-        adult=dict(
-            baseline=float(baseline_deep_poverty[(age >= 18) & (age < 65)].mean()),
-            reform=float(reform_deep_poverty[(age >= 18) & (age < 65)].mean()),
-        ),
-        senior=dict(
-            baseline=float(baseline_deep_poverty[age >= 65].mean()),
-            reform=float(reform_deep_poverty[age >= 65].mean()),
-        ),
-        all=dict(
-            baseline=float(baseline_deep_poverty.mean()),
-            reform=float(reform_deep_poverty.mean()),
-        ),
-    )
+    deep_poverty = {
+        "child": {
+            "baseline": float(baseline_deep_poverty[age < 18].mean()),
+            "reform": float(reform_deep_poverty[age < 18].mean()),
+        },
+        "adult": {
+            "baseline": float(baseline_deep_poverty[(age >= 18) & (age < 65)].mean()),
+            "reform": float(reform_deep_poverty[(age >= 18) & (age < 65)].mean()),
+        },
+        "senior": {
+            "baseline": float(baseline_deep_poverty[age >= 65].mean()),
+            "reform": float(reform_deep_poverty[age >= 65].mean()),
+        },
+        "all": {
+            "baseline": float(baseline_deep_poverty.mean()),
+            "reform": float(reform_deep_poverty.mean()),
+        },
+    }
 
-    return dict(
-        poverty=poverty,
-        deep_poverty=deep_poverty,
-    )
+    return {
+        "poverty": poverty,
+        "deep_poverty": deep_poverty,
+    }
 
 
 def compute_income_change(
@@ -333,7 +336,7 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
     people = MicroSeries(
         baseline["household_count_people"], weights=baseline_income.weights
     )
-    decile = MicroSeries(baseline["household_income_decile"]).values
+    decile = MicroSeries(baseline["household_income_decile"]).values  # noqa: PD011  # MicroSeries overrides .values, and .to_numpy() emits a different warning
     income_change = compute_income_change(baseline_income.values, reform_income.values)
 
     # Within each decile, calculate the percentage of people who:
@@ -354,7 +357,7 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
         "Gain more than 5%",
     ]
     for lower, upper, label in zip(
-        income_change_bounds[:-1], income_change_bounds[1:], outcome_labels
+        income_change_bounds[:-1], income_change_bounds[1:], outcome_labels, strict=True
     ):
         outcome_groups[label] = []
         for i in range(1, 11):
@@ -374,7 +377,7 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
             outcome_groups[label].append(people_in_proportion)
 
         all_outcomes[label] = sum(outcome_groups[label]) / 10
-    return dict(deciles=outcome_groups, all=all_outcomes)
+    return {"deciles": outcome_groups, "all": all_outcomes}
 
 
 def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
@@ -392,7 +395,7 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     people = MicroSeries(
         baseline["household_count_people"], weights=baseline_income.weights
     )
-    decile = MicroSeries(baseline["household_wealth_decile"]).values
+    decile = MicroSeries(baseline["household_wealth_decile"]).values  # noqa: PD011  # MicroSeries overrides .values, and .to_numpy() emits a different warning
     income_change = compute_income_change(baseline_income.values, reform_income.values)
 
     # Within each decile, calculate the percentage of people who:
@@ -413,7 +416,7 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
         "Gain more than 5%",
     ]
     for lower, upper, label in zip(
-        income_change_bounds[:-1], income_change_bounds[1:], outcome_labels
+        income_change_bounds[:-1], income_change_bounds[1:], outcome_labels, strict=True
     ):
         outcome_groups[label] = []
         for i in range(1, 11):
@@ -433,7 +436,7 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
             outcome_groups[label].append(people_in_proportion)
 
         all_outcomes[label] = sum(outcome_groups[label]) / 10
-    return dict(deciles=outcome_groups, all=all_outcomes)
+    return {"deciles": outcome_groups, "all": all_outcomes}
 
 
 def poverty_gender_breakdown(baseline: dict, reform: dict) -> dict:
@@ -463,32 +466,32 @@ def poverty_gender_breakdown(baseline: dict, reform: dict) -> dict:
     )
     is_male = MicroSeries(baseline["is_male"])
 
-    poverty = dict(
-        male=dict(
-            baseline=float(baseline_poverty[is_male].mean()),
-            reform=float(reform_poverty[is_male].mean()),
-        ),
-        female=dict(
-            baseline=float(baseline_poverty[~is_male].mean()),
-            reform=float(reform_poverty[~is_male].mean()),
-        ),
-    )
+    poverty = {
+        "male": {
+            "baseline": float(baseline_poverty[is_male].mean()),
+            "reform": float(reform_poverty[is_male].mean()),
+        },
+        "female": {
+            "baseline": float(baseline_poverty[~is_male].mean()),
+            "reform": float(reform_poverty[~is_male].mean()),
+        },
+    }
 
-    deep_poverty = dict(
-        male=dict(
-            baseline=float(baseline_deep_poverty[is_male].mean()),
-            reform=float(reform_deep_poverty[is_male].mean()),
-        ),
-        female=dict(
-            baseline=float(baseline_deep_poverty[~is_male].mean()),
-            reform=float(reform_deep_poverty[~is_male].mean()),
-        ),
-    )
+    deep_poverty = {
+        "male": {
+            "baseline": float(baseline_deep_poverty[is_male].mean()),
+            "reform": float(reform_deep_poverty[is_male].mean()),
+        },
+        "female": {
+            "baseline": float(baseline_deep_poverty[~is_male].mean()),
+            "reform": float(reform_deep_poverty[~is_male].mean()),
+        },
+    }
 
-    return dict(
-        poverty=poverty,
-        deep_poverty=deep_poverty,
-    )
+    return {
+        "poverty": poverty,
+        "deep_poverty": deep_poverty,
+    }
 
 
 def poverty_racial_breakdown(baseline: dict, reform: dict) -> dict:
@@ -512,28 +515,28 @@ def poverty_racial_breakdown(baseline: dict, reform: dict) -> dict:
     )
     race = MicroSeries(baseline["race"])  # Can be WHITE, BLACK, HISPANIC, or OTHER.
 
-    poverty = dict(
-        white=dict(
-            baseline=float(baseline_poverty[race == "WHITE"].mean()),
-            reform=float(reform_poverty[race == "WHITE"].mean()),
-        ),
-        black=dict(
-            baseline=float(baseline_poverty[race == "BLACK"].mean()),
-            reform=float(reform_poverty[race == "BLACK"].mean()),
-        ),
-        hispanic=dict(
-            baseline=float(baseline_poverty[race == "HISPANIC"].mean()),
-            reform=float(reform_poverty[race == "HISPANIC"].mean()),
-        ),
-        other=dict(
-            baseline=float(baseline_poverty[race == "OTHER"].mean()),
-            reform=float(reform_poverty[race == "OTHER"].mean()),
-        ),
-    )
+    poverty = {
+        "white": {
+            "baseline": float(baseline_poverty[race == "WHITE"].mean()),
+            "reform": float(reform_poverty[race == "WHITE"].mean()),
+        },
+        "black": {
+            "baseline": float(baseline_poverty[race == "BLACK"].mean()),
+            "reform": float(reform_poverty[race == "BLACK"].mean()),
+        },
+        "hispanic": {
+            "baseline": float(baseline_poverty[race == "HISPANIC"].mean()),
+            "reform": float(reform_poverty[race == "HISPANIC"].mean()),
+        },
+        "other": {
+            "baseline": float(baseline_poverty[race == "OTHER"].mean()),
+            "reform": float(reform_poverty[race == "OTHER"].mean()),
+        },
+    }
 
-    return dict(
-        poverty=poverty,
-    )
+    return {
+        "poverty": poverty,
+    }
 
 
 class UKConstituencyBreakdownByConstituency(BaseModel):
@@ -577,7 +580,7 @@ class UKLocalAuthorityBreakdown(BaseModel):
 
 
 def uk_constituency_breakdown(
-    baseline: dict, reform: dict, country_id: str, region: str | None = None
+    baseline: dict, reform: dict, country_id: str | None, region: str | None = None
 ) -> UKConstituencyBreakdown | None:
     """Return each UK constituency's average and relative household income change.
 
@@ -647,9 +650,12 @@ def uk_constituency_breakdown(
         code: str = constituency_names.iloc[i]["code"]
 
         # Filter to specific constituency if requested
-        if selected_constituency is not None:
-            if name != selected_constituency and code != selected_constituency:
-                continue
+        if (
+            selected_constituency is not None
+            and name != selected_constituency
+            and code != selected_constituency
+        ):
+            continue
 
         # Filter to specific country if requested. Constituency codes
         # are prefixed with a single letter that identifies the
@@ -710,7 +716,7 @@ def uk_constituency_breakdown(
 
 
 def uk_local_authority_breakdown(
-    baseline: dict, reform: dict, country_id: str, region: str | None = None
+    baseline: dict, reform: dict, country_id: str | None, region: str | None = None
 ) -> UKLocalAuthorityBreakdown | None:
     """Return each UK local authority's average and relative household income change.
 
@@ -776,9 +782,8 @@ def uk_local_authority_breakdown(
         code: str = local_authority_names.iloc[i]["code"]
 
         # Filter to specific local authority if requested
-        if selected_la is not None:
-            if name != selected_la and code != selected_la:
-                continue
+        if selected_la is not None and name != selected_la and code != selected_la:
+            continue
 
         # Filter to specific country if requested
         if selected_country is not None:
@@ -837,7 +842,7 @@ def uk_local_authority_breakdown(
 def compare_economic_outputs(
     baseline: dict,
     reform: dict,
-    country_id: str = None,
+    country_id: str | None = None,
     region: str | None = None,
 ) -> dict:
     """Compare the economic outputs of two economies.
@@ -888,30 +893,30 @@ def compare_economic_outputs(
             wealth_decile_impact_data = {}
             intra_wealth_decile_impact_data = {}
 
-        return dict(
-            budget=budgetary_impact_data,
-            detailed_budget=detailed_budgetary_impact_data,
-            decile=decile_impact_data,
-            inequality=inequality_impact_data,
-            poverty=poverty_impact_data,
-            poverty_by_gender=poverty_by_gender_data,
-            poverty_by_race=poverty_by_race_data,
-            intra_decile=intra_decile_impact_data,
-            wealth_decile=wealth_decile_impact_data,
-            intra_wealth_decile=intra_wealth_decile_impact_data,
-            labor_supply_response=labor_supply_response_data,
-            constituency_impact=constituency_impact_data,
-            local_authority_impact=local_authority_impact_data,
-        )
+        return {
+            "budget": budgetary_impact_data,
+            "detailed_budget": detailed_budgetary_impact_data,
+            "decile": decile_impact_data,
+            "inequality": inequality_impact_data,
+            "poverty": poverty_impact_data,
+            "poverty_by_gender": poverty_by_gender_data,
+            "poverty_by_race": poverty_by_race_data,
+            "intra_decile": intra_decile_impact_data,
+            "wealth_decile": wealth_decile_impact_data,
+            "intra_wealth_decile": intra_wealth_decile_impact_data,
+            "labor_supply_response": labor_supply_response_data,
+            "constituency_impact": constituency_impact_data,
+            "local_authority_impact": local_authority_impact_data,
+        }
     if baseline.get("type") == "cliff":
-        return dict(
-            baseline=dict(
-                cliff_gap=baseline["cliff_gap"],
-                cliff_share=baseline["cliff_share"],
-            ),
-            reform=dict(
-                cliff_gap=reform["cliff_gap"],
-                cliff_share=reform["cliff_share"],
-            ),
-        )
+        return {
+            "baseline": {
+                "cliff_gap": baseline["cliff_gap"],
+                "cliff_share": baseline["cliff_share"],
+            },
+            "reform": {
+                "cliff_gap": reform["cliff_gap"],
+                "cliff_share": reform["cliff_share"],
+            },
+        }
     return None

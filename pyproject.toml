@@ -118,6 +118,8 @@ select = [
     "DTZ", "ERA", "EXE", "FIX", "G", "LOG", "S", "T20", "TD",
     # Group 7: structure and imports.
     "A", "E", "FAST", "INP", "N", "PLC", "SLF", "TID253",
+    # Group 8a: arguments, idioms and pytest style.
+    "ARG", "ASYNC", "B", "C4", "FBT", "PD", "PERF", "PGH", "PLW", "PT", "PTH", "RUF", "SIM",
 ]
 # Mutually exclusive pydocstyle pairs: keep D211 (no blank line before a class
 # docstring) and D212 (summary on the first line).
@@ -137,12 +139,16 @@ exclude = ["migrations/*/versions/*.py"]
 # live in directories that aren't packages, import inside a test (often after
 # patching the environment), and use fake credentials, naive datetimes,
 # subprocess calls to repository scripts, SQL built from strings and prints,
-# and may import the lazily loaded packages at module level. Every other rule
-# applies to tests.
+# may import the lazily loaded packages at module level, and may leave a
+# stand-in's arguments unused. Every other rule applies to tests.
 "**/tests/**" = [
-    "ANN", "D1", "DTZ001", "DTZ011", "INP001", "PLC0415", "PLR2004", "S101",
-    "S105", "S106", "S603", "S607", "S608", "SLF001", "T201", "TID253",
+    "ANN", "ARG001", "ARG002", "ARG005", "D1", "DTZ001", "DTZ011", "INP001",
+    "PLC0415", "PLR2004", "S101", "S105", "S106", "S603", "S607", "S608",
+    "SLF001", "T201", "TID253",
 ]
+# The shared rules tool needs only the standard library, so its tests use
+# unittest on purpose; pytest-style rules don't apply to them.
+"scripts/rules/tests/**" = ["PT"]
 # CI/CD scripts print their results, fetch fixed URLs and may import the
 # lazily loaded packages at module level.
 ".github/**" = ["S310", "T201", "TID253"]

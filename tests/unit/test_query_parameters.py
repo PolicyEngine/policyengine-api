@@ -108,7 +108,7 @@ def test_policyengine_version_must_be_canonical(version: str) -> None:
 def test_duplicate_scalar_is_rejected_and_explicit_list_is_preserved() -> None:
     with pytest.raises(
         DuplicateScalarQueryParameterError,
-        match="country_id.*must not be repeated",
+        match=r"country_id.*must not be repeated",
     ):
         parse_query_items(
             PolicyCollectionQuery,

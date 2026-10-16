@@ -89,7 +89,7 @@ def test_release_rejects_worker_without_matching_spm_capability(registry, mutati
 @pytest.mark.parametrize("route", ["policyengine", "us", "uk"])
 def test_release_rejects_missing_worker_route(registry, route):
     registry[route] = {}
-    with pytest.raises(ValueError, match="no .* application"):
+    with pytest.raises(ValueError, match=r"no .* application"):
         worker_spm_release.validate_installed_worker(registry, FIXTURE_BUNDLE_VERSION)
 
 

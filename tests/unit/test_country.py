@@ -47,18 +47,18 @@ class TestHouseholdCalculation:
                 return np.array([40])
 
             def get_population(self, entity_plural):
-                return SimpleNamespace(get_index=lambda entity_id: 0)
+                return SimpleNamespace(get_index=lambda _entity_id: 0)
 
         variable = SimpleNamespace(value_type=int)
         system = SimpleNamespace(
             variables={"age": variable},
-            get_variable=lambda variable_name: variable,
+            get_variable=lambda _variable_name: variable,
         )
         country = PolicyEngineCountry.__new__(PolicyEngineCountry)
         monkeypatch.setattr(
             country,
             "_create_simulation",
-            lambda household, reform, **kwargs: (SimulationWithoutTracing(), system),
+            lambda _household, _reform, **_kwargs: (SimulationWithoutTracing(), system),
         )
 
         result = country.calculate(
@@ -161,13 +161,13 @@ class TestAxisResults:
         variable = SimpleNamespace(value_type=float)
         system = SimpleNamespace(
             variables={"employment_income": variable},
-            get_variable=lambda variable_name: variable,
+            get_variable=lambda _variable_name: variable,
         )
         country = PolicyEngineCountry.__new__(PolicyEngineCountry)
         monkeypatch.setattr(
             country,
             "_create_simulation",
-            lambda household, reform, **kwargs: (BrokenSimulation(), system),
+            lambda _household, _reform, **_kwargs: (BrokenSimulation(), system),
         )
         household = {
             "people": {"you": {"employment_income": {"2025": None}}},
@@ -264,7 +264,7 @@ class TestUKCountryMetadata:
 
     def test__uk_has_all_region_types(self, uk_regions):
         """Verify all expected region types are present."""
-        types = set(r.get("type") for r in uk_regions)
+        types = {r.get("type") for r in uk_regions}
         assert "national" in types
         assert "country" in types
         assert "constituency" in types

@@ -272,7 +272,7 @@ def test_native_readiness_uses_shared_asgi_middleware():
 def test_native_route_preserves_request_id_in_context_log_and_response():
     observed_context_ids = []
 
-    def capture_request(**kwargs):
+    def capture_request(**_kwargs):
         observed_context_ids.append(current_request_id())
 
     with patch(
@@ -292,7 +292,7 @@ def test_native_route_preserves_request_id_in_context_log_and_response():
 def test_native_route_generates_one_request_id_for_context_log_and_response():
     observed_context_ids = []
 
-    def capture_request(**kwargs):
+    def capture_request(**_kwargs):
         observed_context_ids.append(current_request_id())
 
     with (

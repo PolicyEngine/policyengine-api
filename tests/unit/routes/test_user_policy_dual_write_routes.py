@@ -160,7 +160,7 @@ def test_cloud_sql_mode_preserves_create_without_association_mirror(
     get_reform.assert_not_called()
 
 
-@pytest.mark.parametrize("country_id", ("us", "uk"))
+@pytest.mark.parametrize("country_id", ["us", "uk"])
 def test_dual_write_mirrors_new_existing_and_unlabeled_saved_policies(
     monkeypatch,
     country_id,
@@ -203,7 +203,7 @@ def test_dual_write_mirrors_new_existing_and_unlabeled_saved_policies(
         assert mirror.call_args.kwargs["through_revision"] == 1
 
 
-@pytest.mark.parametrize("country_id", ("ca", "ng", "il"))
+@pytest.mark.parametrize("country_id", ["ca", "ng", "il"])
 def test_dual_write_preserves_v1_only_saved_policy_mutations_for_non_v2_countries(
     monkeypatch,
     country_id,
@@ -314,7 +314,7 @@ def test_saved_policy_mirror_failure_returns_503_and_retry_completes(
         "expected_category",
         "expected_operation",
     ),
-    (
+    [
         (
             "post",
             "create_or_get_user_policy",
@@ -377,7 +377,7 @@ def test_saved_policy_mirror_failure_returns_503_and_retry_completes(
             "unexpected",
             "update",
         ),
-    ),
+    ],
 )
 def test_saved_policy_persistence_failures_use_allowlisted_records(
     monkeypatch,

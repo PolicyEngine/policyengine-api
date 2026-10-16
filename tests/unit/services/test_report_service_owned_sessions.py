@@ -74,7 +74,7 @@ def test_create_rolls_back_all_rows_when_dual_write_fails(
     orm_session_factory,
     monkeypatch,
 ):
-    def fail_dual_write(*args, **kwargs):
+    def fail_dual_write(*_args, **_kwargs):
         msg = "report dual write failed"
         raise RuntimeError(msg)
 

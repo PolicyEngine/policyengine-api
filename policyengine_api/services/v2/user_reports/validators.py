@@ -31,7 +31,7 @@ def require_user_report(
     return association
 
 
-def require_owned_user_policy(owned: bool, *, user_policy_id: UUID) -> None:
+def require_owned_user_policy(*, owned: bool, user_policy_id: UUID) -> None:
     """Raise AssociationLinkNotFoundError unless a linked saved policy is ``owned``.
 
     ``owned`` says whether the report's owner has that saved policy in the

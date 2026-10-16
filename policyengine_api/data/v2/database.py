@@ -70,7 +70,7 @@ def build_v2_session_factory(engine: Engine) -> sessionmaker[Session]:
 
 def _discard_inherited_state(current_pid: int) -> None:
     """Drop pool state inherited through a process fork without touching parent FDs."""
-    global _engine, _engine_pid, _engine_url_fingerprint, _session_factory
+    global _engine, _engine_pid, _engine_url_fingerprint, _session_factory  # noqa: PLW0603  # process-owned v2 engine state, guarded by _state_lock and reset after a fork
 
     if _engine is not None:
         _engine.dispose(close=False)
@@ -82,7 +82,7 @@ def _discard_inherited_state(current_pid: int) -> None:
 
 def get_v2_engine(settings: V2DatabaseSettings | None = None) -> Engine:
     """Return the one lazy v2 runtime engine owned by this process."""
-    global _engine, _engine_pid, _engine_url_fingerprint
+    global _engine, _engine_pid, _engine_url_fingerprint  # noqa: PLW0603  # process-owned v2 engine state, guarded by _state_lock and reset after a fork
 
     current_pid = os.getpid()
     with _state_lock:
@@ -110,7 +110,7 @@ def get_v2_session_factory(
     settings: V2DatabaseSettings | None = None,
 ) -> sessionmaker[Session]:
     """Return the process-owned SQLModel Session factory without opening a session."""
-    global _session_factory
+    global _session_factory  # noqa: PLW0603  # process-owned v2 engine state, guarded by _state_lock and reset after a fork
 
     engine = get_v2_engine(settings)
     with _state_lock:
@@ -121,7 +121,7 @@ def get_v2_session_factory(
 
 def close_v2_database() -> None:
     """Dispose this process's v2 pool and forget its lazy configuration."""
-    global _engine, _engine_pid, _engine_url_fingerprint, _session_factory
+    global _engine, _engine_pid, _engine_url_fingerprint, _session_factory  # noqa: PLW0603  # process-owned v2 engine state, guarded by _state_lock and reset after a fork
 
     with _state_lock:
         if _engine is not None:

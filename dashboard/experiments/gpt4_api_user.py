@@ -66,7 +66,7 @@ embeddings_df["similarities"] = embeddings_df.parameter_embedding.apply(
     lambda x: cosine_similarity(x, embedding)
 )
 
-top5 = embeddings_df.sort_values("similarities", ascending=False).head(5)["json"].values
+top5 = embeddings_df.sort_values("similarities", ascending=False).head(5)["json"].values  # noqa: PD011  # a string column, which pandas 3 stores in an extension array that .to_numpy() would convert
 # display in streamlit
 
 

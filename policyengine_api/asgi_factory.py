@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
@@ -238,17 +239,17 @@ def create_asgi_app(
                     context_token = _asgi_request_id.set(request_id)
             except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
                 pass
-            try:
+            # Telemetry must never fail the request.
+            with contextlib.suppress(Exception):
                 request_runtime.set_context(
                     request_id=request_id,
                 )
-            except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
-                pass
 
         def log_native_route(status_code: int) -> None:
             if not native_request:
                 return
-            try:
+            # Migration logging must never fail the request.
+            with contextlib.suppress(Exception):
                 log_migration_request(
                     request_id=request_id,
                     method=request.method,
@@ -261,8 +262,6 @@ def create_asgi_app(
                     ),
                     route_impl=RouteImplementation.FASTAPI_NATIVE,
                 )
-            except Exception:  # noqa: BLE001, S110  # migration logging must never fail the request
-                pass
 
         def finish_native_route(
             status_code: int,
@@ -271,21 +270,18 @@ def create_asgi_app(
             if not native_request:
                 return
             resolved_route = getattr(request.scope.get("route"), "path", initial_route)
-            try:
+            # Telemetry must never fail the request.
+            with contextlib.suppress(Exception):
                 request_runtime.update_request_route(resolved_route)
-            except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
-                pass
-            try:
+            # Telemetry must never fail the request.
+            with contextlib.suppress(Exception):
                 request_runtime.update_request_status(status_code)
-            except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
-                pass
-            try:
+            # Telemetry must never fail the request.
+            with contextlib.suppress(Exception):
                 request_runtime.end_request(
                     status_code=status_code,
                     error=error,
                 )
-            except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
-                pass
 
         try:
             try:
@@ -301,15 +297,14 @@ def create_asgi_app(
                 )
             )
             if native_request and response_observability_id is not None:
-                try:
+                # Telemetry must never fail the request.
+                with contextlib.suppress(Exception):
                     # Route-level spans have completed at this point, so this
                     # call applies the selected calculation identifier to the
                     # still-current server request span.
                     request_runtime.set_context(
                         observability_id=response_observability_id
                     )
-                except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
-                    pass
             if native_request:
                 try:
                     for name, value in request_runtime.response_headers().items():

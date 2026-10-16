@@ -95,6 +95,7 @@ V2_METADATA = SQLModel.metadata
 validate_v2_metadata_table_names(V2_METADATA.tables)
 
 __all__ = [
+    "V2_METADATA",
     "AggregateOutput",
     "AggregateType",
     "BudgetSummary",
@@ -111,11 +112,11 @@ __all__ = [
     "HouseholdJobStatus",
     "Inequality",
     "IntraDecileImpact",
-    "LocalAuthorityImpact",
-    "LegacyPolicyMapping",
     "LegacyHouseholdMapping",
+    "LegacyPolicyMapping",
     "LegacyUserMapping",
     "LegacyUserPolicyMapping",
+    "LocalAuthorityImpact",
     "OutputStatus",
     "Parameter",
     "ParameterNode",
@@ -147,6 +148,5 @@ __all__ = [
     "UserReportAssociation",
     "UserSimulationAssociation",
     "UserType",
-    "V2_METADATA",
     "Variable",
 ]

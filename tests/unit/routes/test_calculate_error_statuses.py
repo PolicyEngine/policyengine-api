@@ -35,7 +35,7 @@ class CrashingCountry(DummyCountry):
         raise RuntimeError(msg)
 
 
-def make_client(monkeypatch, country, add_missing=False):
+def make_client(monkeypatch, country, *, add_missing=False):
     monkeypatch.setattr(
         household_routes,
         "household_calculation_service",
@@ -47,7 +47,7 @@ def make_client(monkeypatch, country, add_missing=False):
     if add_missing:
         monkeypatch.setattr(
             "policyengine_api.services.household_calculation_service.add_yearly_variables",
-            lambda household, country_id, countries=None: household,
+            lambda household, _country_id, _countries=None: household,
         )
     app.register_blueprint(household_routes.household_bp)
     return app.test_client()
