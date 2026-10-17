@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -2743,7 +2743,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "6.5.0"
+version = "6.7.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -2755,9 +2755,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/69/e2/b2aa2aa50efbd0d86a5cff69bd7772d539361dbfb4688fffbc3271915192/policyengine-6.5.0.tar.gz", hash = "sha256:13ead87dd7b1592d31cebb381799d082717713108aaa7569c09625e17ff1c59b", size = 1095330, upload-time = "2026-10-15T16:32:57.227Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/39/15/44755c9d9b7c14f96bd0a19cb4306c58e700ca40117d209345a88306aef0/policyengine-6.7.2.tar.gz", hash = "sha256:4852f1cb2769facd5cdb1c9366b18bfa15ca55b5616d8bd669c1d23f6c538ffc", size = 1397617, upload-time = "2026-10-17T14:35:20.418Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/16/1a/adb0fe94e1e8a63e15c322d208b838c0028fd260827cc1a1d2b0ea2cf87a/policyengine-6.5.0-py3-none-any.whl", hash = "sha256:312a04f7ceb7058aa803d012ed836a8fdd0ed4885dea46112f5c205a42193856", size = 406203, upload-time = "2026-10-15T16:32:54.945Z" },
+    { url = "https://files.pythonhosted.org/packages/04/f7/73487937d14b1053dbc1954ce611db12d27ff106650c480c1e0d198679d1/policyengine-6.7.2-py3-none-any.whl", hash = "sha256:e9efbf56c0a62b98b0e573e36c6cc9d14e59a67d18254f3ad0a269e0a11c1c3a", size = 493440, upload-time = "2026-10-17T14:35:18.714Z" },
 ]
 
 [package.optional-dependencies]
@@ -2845,7 +2845,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.15,<2" },
     { name = "openai" },
     { name = "packaging", specifier = ">=24,<27" },
-    { name = "policyengine", extras = ["models"], specifier = "==6.5.0" },
+    { name = "policyengine", extras = ["models"], specifier = "==6.7.2" },
     { name = "policyengine-canada", specifier = "==0.96.3" },
     { name = "policyengine-il", specifier = "==0.1.0" },
     { name = "policyengine-ng", specifier = "==0.5.1" },
