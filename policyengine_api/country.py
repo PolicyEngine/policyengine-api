@@ -279,6 +279,7 @@ class PolicyEngineCountry:
             # Add all 436 congressional districts (435 voting + DC)
             region.extend(build_congressional_district_metadata())
             time_period = [
+                dict(name=2036, label="2036"),
                 dict(name=2035, label="2035"),
                 dict(name=2034, label="2034"),
                 dict(name=2033, label="2033"),
