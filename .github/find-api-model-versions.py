@@ -1,4 +1,3 @@
-# noqa: N999  # update-policyengine-package.sh runs this script by its hyphenated path
 """CI helper that reads the versions pinned by the installed PolicyEngine bundle.
 
 It checks the package and data versions against the API's version constants,

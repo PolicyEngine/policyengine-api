@@ -136,15 +136,15 @@ exclude = ["migrations/*/versions/*.py"]
 # live in directories that aren't packages, import inside a test (often after
 # patching the environment), and use fake credentials, naive datetimes,
 # subprocess calls to repository scripts, SQL built from strings and prints,
-# and may import the lazily loaded packages at module level. Every other rule
-# applies to tests.
+# may import the lazily loaded packages at module level, and may name a fake's
+# methods after the interface it replaces. Every other rule applies to tests.
 "**/tests/**" = [
-    "ANN", "D1", "DTZ001", "DTZ011", "INP001", "PLC0415", "PLR2004", "S101",
-    "S105", "S106", "S603", "S607", "S608", "SLF001", "T201", "TID253",
+    "ANN", "D1", "DTZ001", "DTZ011", "INP001", "N802", "PLC0415", "PLR2004",
+    "S101", "S105", "S106", "S603", "S607", "S608", "SLF001", "T201", "TID253",
 ]
-# CI/CD scripts print their results, fetch fixed URLs and may import the
-# lazily loaded packages at module level.
-".github/**" = ["S310", "T201", "TID253"]
+# CI/CD scripts print their results, fetch fixed URLs, may have hyphenated
+# file names and may import the lazily loaded packages at module level.
+".github/**" = ["N999", "S310", "T201", "TID253"]
 # Command-line scripts print their output, run other programs, fetch fixed
 # URLs, stamp today's date and pick random samples.
 "scripts/**" = [
