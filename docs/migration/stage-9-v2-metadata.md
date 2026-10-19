@@ -227,9 +227,10 @@ workspace that load the whole model at start-up; the paged routes would need
 about 2,550 requests of 500 rows for the US catalog (100,276 `gov` parameters
 and 1,174,586 values). Each API instance builds the serialized document once
 per country and catalog version and keeps the four most recently used. Measured
-locally against the 6.7.5 catalog, the US document takes 5.8 seconds to build
-and is 60.7 MB (12.1 MB gzipped); the UK document takes 1.0 second and is
-1.3 MB. The response carries an ETag naming the country, catalog version and
+locally against the 6.7.5 catalog in format 2, the US document takes 6.8
+seconds to build and is 70.1 MB (12.5 MB gzipped), with the building process
+peaking at 544 MB resident; the UK document takes 1.0 second and is 1.7 MB.
+The v1 `GET /us/metadata` document for the same models is 74.7 MB. The response carries an ETag naming the country, catalog version and
 document format, and `Cache-Control: public, max-age=86400` when the request
 names `policyengine_version` (`max-age=300` otherwise, because the running
 version changes on deploy). The release workflow checks the UK document,
