@@ -228,7 +228,7 @@ print(
             lambda: manifest_path,
         )
 
-        with pytest.raises(RuntimeError, match="must be a JSON object"):
+        with pytest.raises(TypeError, match="must be a JSON object"):
             _load_policyengine_bundle()
 
     def test__uses_policyengine_bundle_versions_for_us_uk_and_core(self):

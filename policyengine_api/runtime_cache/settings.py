@@ -54,7 +54,8 @@ class RuntimeCacheSettings:
 def _required(values: Mapping[str, str], name: str) -> str:
     value = values.get(name)
     if value is None or not value.strip():
-        raise RuntimeCacheConfigurationError(f"{name} is required")
+        msg = f"{name} is required"
+        raise RuntimeCacheConfigurationError(msg)
     return value.strip()
 
 
@@ -64,7 +65,8 @@ def _is_deployed(values: Mapping[str, str]) -> bool:
 
 def _validate_name(value: str, setting: str) -> str:
     if NAME_PATTERN.fullmatch(value) is None:
-        raise RuntimeCacheConfigurationError(f"{setting} is invalid")
+        msg = f"{setting} is invalid"
+        raise RuntimeCacheConfigurationError(msg)
     return value
 
 
@@ -73,38 +75,30 @@ def _parse_url(raw_url: str, *, mode: str) -> SplitResult:
         parsed = urlsplit(raw_url)
         port = parsed.port
     except ValueError as error:
-        raise RuntimeCacheConfigurationError(
-            f"{RUNTIME_CACHE_URL} is invalid"
-        ) from error
+        msg = f"{RUNTIME_CACHE_URL} is invalid"
+        raise RuntimeCacheConfigurationError(msg) from error
     if parsed.scheme not in {"redis", "rediss"} or not parsed.hostname:
-        raise RuntimeCacheConfigurationError(
-            f"{RUNTIME_CACHE_URL} must use redis:// or rediss://"
-        )
+        msg = f"{RUNTIME_CACHE_URL} must use redis:// or rediss://"
+        raise RuntimeCacheConfigurationError(msg)
     if parsed.query or parsed.fragment or parsed.path not in {"", "/0"}:
-        raise RuntimeCacheConfigurationError(
-            f"{RUNTIME_CACHE_URL} must select database 0 without query or fragment"
-        )
+        msg = f"{RUNTIME_CACHE_URL} must select database 0 without query or fragment"
+        raise RuntimeCacheConfigurationError(msg)
     if port is None:
-        raise RuntimeCacheConfigurationError(
-            f"{RUNTIME_CACHE_URL} must include an explicit port"
-        )
+        msg = f"{RUNTIME_CACHE_URL} must include an explicit port"
+        raise RuntimeCacheConfigurationError(msg)
     if mode == "deployed":
         if parsed.scheme != "rediss":
-            raise RuntimeCacheConfigurationError(
-                f"{RUNTIME_CACHE_URL} must require TLS in deployed mode"
-            )
+            msg = f"{RUNTIME_CACHE_URL} must require TLS in deployed mode"
+            raise RuntimeCacheConfigurationError(msg)
         if parsed.hostname.lower() in LOCAL_HOSTS:
-            raise RuntimeCacheConfigurationError(
-                f"{RUNTIME_CACHE_URL} cannot use localhost in deployed mode"
-            )
+            msg = f"{RUNTIME_CACHE_URL} cannot use localhost in deployed mode"
+            raise RuntimeCacheConfigurationError(msg)
         if parsed.password is None:
-            raise RuntimeCacheConfigurationError(
-                f"{RUNTIME_CACHE_URL} requires authentication in deployed mode"
-            )
+            msg = f"{RUNTIME_CACHE_URL} requires authentication in deployed mode"
+            raise RuntimeCacheConfigurationError(msg)
     elif parsed.hostname.lower() not in LOCAL_HOSTS:
-        raise RuntimeCacheConfigurationError(
-            f"{RUNTIME_CACHE_URL} local mode requires an explicit local endpoint"
-        )
+        msg = f"{RUNTIME_CACHE_URL} local mode requires an explicit local endpoint"
+        raise RuntimeCacheConfigurationError(msg)
     return parsed
 
 
@@ -112,9 +106,8 @@ def _parse_ca_cert(values: Mapping[str, str], *, tls: bool) -> SecretStr | None:
     raw_ca_cert = values.get(RUNTIME_CACHE_CA_CERT, "")
     if not tls:
         if raw_ca_cert.strip():
-            raise RuntimeCacheConfigurationError(
-                f"{RUNTIME_CACHE_CA_CERT} requires a TLS cache URL"
-            )
+            msg = f"{RUNTIME_CACHE_CA_CERT} requires a TLS cache URL"
+            raise RuntimeCacheConfigurationError(msg)
         return None
     ca_cert = _required(values, RUNTIME_CACHE_CA_CERT)
     if (
@@ -122,9 +115,8 @@ def _parse_ca_cert(values: Mapping[str, str], *, tls: bool) -> SecretStr | None:
         or not ca_cert.endswith("-----END CERTIFICATE-----")
         or "\x00" in ca_cert
     ):
-        raise RuntimeCacheConfigurationError(
-            f"{RUNTIME_CACHE_CA_CERT} must contain a PEM certificate bundle"
-        )
+        msg = f"{RUNTIME_CACHE_CA_CERT} must contain a PEM certificate bundle"
+        raise RuntimeCacheConfigurationError(msg)
     return SecretStr(ca_cert)
 
 
@@ -137,20 +129,21 @@ def load_runtime_cache_settings(
     deployed_runtime = _is_deployed(values)
     mode = raw_mode or ("deployed" if deployed_runtime else "disabled")
     if mode not in CACHE_MODES:
-        raise RuntimeCacheConfigurationError(
-            f"{RUNTIME_CACHE_MODE} must be disabled, local, or deployed"
-        )
+        msg = f"{RUNTIME_CACHE_MODE} must be disabled, local, or deployed"
+        raise RuntimeCacheConfigurationError(msg)
     if deployed_runtime and mode != "deployed":
-        raise RuntimeCacheConfigurationError(
+        msg = (
             f"{RUNTIME_CACHE_MODE} must be deployed when K_SERVICE identifies "
             "a deployed runtime"
         )
+        raise RuntimeCacheConfigurationError(msg)
     if mode == "disabled":
         if values.get(RUNTIME_CACHE_URL) or values.get(RUNTIME_CACHE_CA_CERT):
-            raise RuntimeCacheConfigurationError(
+            msg = (
                 "runtime cache secret configuration requires an explicit "
                 "local or deployed mode"
             )
+            raise RuntimeCacheConfigurationError(msg)
         return RuntimeCacheSettings(
             mode=mode,
             environment="test",

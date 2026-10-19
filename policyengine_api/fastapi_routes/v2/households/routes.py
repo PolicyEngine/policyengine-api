@@ -55,13 +55,14 @@ async def enforce_household_request_size(request: Request) -> None:
         try:
             declared_length = int(content_length)
         except ValueError as error:
-            raise V2RequestTooLargeError(
-                "Household request Content-Length is invalid"
-            ) from error
+            msg = "Household request Content-Length is invalid"
+            raise V2RequestTooLargeError(msg) from error
         if declared_length > MAXIMUM_HOUSEHOLD_REQUEST_BYTES:
-            raise V2RequestTooLargeError("Household request body exceeds 1 MiB")
+            msg = "Household request body exceeds 1 MiB"
+            raise V2RequestTooLargeError(msg)
     if len(await request.body()) > MAXIMUM_HOUSEHOLD_REQUEST_BYTES:
-        raise V2RequestTooLargeError("Household request body exceeds 1 MiB")
+        msg = "Household request body exceeds 1 MiB"
+        raise V2RequestTooLargeError(msg)
 
 
 def _service_factory(
@@ -94,7 +95,7 @@ def _household_operation(
         return v2_error_response(500, "Stored household integrity failed")
     except (V2ConfigurationError, SQLAlchemyError):
         return v2_error_response(503, "V2 household persistence is unavailable")
-    except Exception:  # noqa: BLE001 - return a secret-safe typed error
+    except Exception:  # noqa: BLE001  # return a secret-safe typed error
         return v2_error_response(500, "V2 household operation failed")
 
 

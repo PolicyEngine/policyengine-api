@@ -118,8 +118,11 @@ def _poll_live_endpoint(
                 try:
                     response.raise_for_status()
                 except httpx.HTTPStatusError as error:
+                    msg = (
+                        f"{error}\n{route_name} response: {_response_summary(response)}"
+                    )
                     raise httpx.HTTPStatusError(
-                        f"{error}\n{route_name} response: {_response_summary(response)}",
+                        msg,
                         request=error.request,
                         response=error.response,
                     ) from error
@@ -131,10 +134,11 @@ def _poll_live_endpoint(
                 last_response = payload
 
         if time.monotonic() >= deadline:
-            raise AssertionError(
+            msg = (
                 f"Timed out polling the {route_name} route; "
                 f"last response was {last_response}"
             )
+            raise AssertionError(msg)
         time.sleep(INTEGRATION_POLL_INTERVAL_SECONDS)
 
 

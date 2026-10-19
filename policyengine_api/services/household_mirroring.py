@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 from typing import TYPE_CHECKING, Protocol
 
@@ -86,7 +87,8 @@ def _log_copy_operation(
     result: LegacyHouseholdPersistenceResult | None = None,
     failure_category: str | None = None,
 ) -> None:
-    try:
+    # Metric logging must not change the mirror outcome.
+    with contextlib.suppress(Exception):
         logger.log_struct(
             {
                 "message": "V1 household immediate copy completed",
@@ -113,8 +115,6 @@ def _log_copy_operation(
             },
             severity="INFO" if outcome == "ok" else "ERROR",
         )
-    except Exception:
-        pass
 
 
 def process_household_event_after_commit(
@@ -176,6 +176,5 @@ def process_household_event_after_commit(
             result=destination_result,
             failure_category=_failure_category(error),
         )
-        raise HouseholdMirrorUnavailableError(
-            "The committed v1 household event could not be copied to v2"
-        ) from error
+        msg = "The committed v1 household event could not be copied to v2"
+        raise HouseholdMirrorUnavailableError(msg) from error

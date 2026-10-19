@@ -47,7 +47,8 @@ def spm_receipt(*, years, selection: dict | None = None) -> dict:
     """Return one calculation receipt covering the supplied years."""
     resolved = INSTALLED_SPM_SELECTION if selection is None else selection
     if resolved is None:
-        raise ValueError("An SPM receipt requires a resolved selection")
+        msg = "An SPM receipt requires a resolved selection"
+        raise ValueError(msg)
     return {
         "schema_version": "canonical-spm-provenance-v2",
         "forecast_id": "test-only",

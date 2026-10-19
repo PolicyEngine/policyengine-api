@@ -66,13 +66,14 @@ def request_size_limit(
             try:
                 declared_length = int(content_length)
             except ValueError as error:
-                raise V2RequestTooLargeError(
-                    "Request Content-Length is invalid"
-                ) from error
+                msg = "Request Content-Length is invalid"
+                raise V2RequestTooLargeError(msg) from error
             if declared_length > maximum_bytes:
-                raise V2RequestTooLargeError(f"Request body exceeds {label}")
+                msg = f"Request body exceeds {label}"
+                raise V2RequestTooLargeError(msg)
         if len(await request.body()) > maximum_bytes:
-            raise V2RequestTooLargeError(f"Request body exceeds {label}")
+            msg = f"Request body exceeds {label}"
+            raise V2RequestTooLargeError(msg)
 
     return enforce
 
@@ -162,7 +163,7 @@ def _log_failure(event: str, error: Exception) -> None:
                 }
             },
         )
-    except Exception:  # noqa: BLE001 - observability must not alter the response
+    except Exception:  # noqa: BLE001  # observability must not alter the response
         pass
 
 
@@ -201,6 +202,6 @@ def user_resource_operation(
         # Schema drift and rejected data surface here too, so keep a record.
         _log_failure("v2_user_persistence_unavailable", error)
         return v2_error_response(503, "V2 user persistence is unavailable")
-    except Exception as error:  # noqa: BLE001 - return a secret-safe typed error
+    except Exception as error:  # noqa: BLE001  # return a secret-safe typed error
         _log_failure("v2_user_operation_failed", error)
         return v2_error_response(500, "V2 user operation failed")

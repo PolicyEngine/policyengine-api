@@ -45,7 +45,8 @@ def validate_v2_metadata_table_names(table_names: Iterable[str]) -> None:
     prohibited = sorted(actual & PROHIBITED_V2_TABLES)
     v1_only = sorted(actual & V1_ONLY_TABLES)
     if prohibited or v1_only:
-        raise V2MetadataValidationError(
+        msg = (
             "API v2-alpha metadata contains rejected tables: "
             f"prohibited={prohibited}, v1_only={v1_only}"
         )
+        raise V2MetadataValidationError(msg)

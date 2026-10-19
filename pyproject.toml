@@ -94,6 +94,8 @@ select = [
     "ANN",
     # Group 4: docstrings.
     "D",
+    # Group 5: exceptions and messages.
+    "BLE", "EM", "TRY",
 ]
 # Mutually exclusive pydocstyle pairs: keep D211 (no blank line before a class
 # docstring) and D212 (summary on the first line).

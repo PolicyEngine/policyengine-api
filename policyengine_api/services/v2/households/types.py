@@ -42,7 +42,8 @@ class HouseholdCreationInput(StrictHouseholdInput):
     def require_document(cls, value: object) -> object:
         """Reject household_data that is not a JSON object."""
         if type(value) is not dict:
-            raise ValueError("household_data must be an object")
+            msg = "household_data must be an object"
+            raise ValueError(msg)
         return value
 
 
@@ -67,7 +68,8 @@ class LegacyHouseholdSnapshot(StrictHouseholdInput):
     def require_legacy_document(cls, value: object) -> object:
         """Reject a v1 household_json that is not a JSON object."""
         if type(value) is not dict:
-            raise ValueError("legacy household_json must be an object")
+            msg = "legacy household_json must be an object"
+            raise ValueError(msg)
         return value
 
 

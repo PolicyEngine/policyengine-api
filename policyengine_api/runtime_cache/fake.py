@@ -30,7 +30,8 @@ class InMemoryCacheBackend:
         Raises RuntimeError when the fake follows an external clock instead.
         """
         if self._external_now is not None:
-            raise RuntimeError("cannot advance an externally clocked fake")
+            msg = "cannot advance an externally clocked fake"
+            raise RuntimeError(msg)
         self._time += seconds
 
     def _purge(self, key: str) -> None:
@@ -153,7 +154,8 @@ class InMemoryCacheBackend:
         expected token, and raise ValueError for any other key/argument shape.
         """
         if numkeys != 1 or len(keys_and_args) != 2:
-            raise ValueError("fake supports one-key compare-and-delete only")
+            msg = "fake supports one-key compare-and-delete only"
+            raise ValueError(msg)
         key, expected = keys_and_args
         with self._lock:
             if self.get(key) != expected:
@@ -248,4 +250,5 @@ class DisabledCacheBackend(InMemoryCacheBackend):
         *keys_and_args: str,
     ) -> int:
         """Raise RuntimeError, so claim operations fail closed when disabled."""
-        raise RuntimeError("the shared runtime cache is disabled")
+        msg = "the shared runtime cache is disabled"
+        raise RuntimeError(msg)

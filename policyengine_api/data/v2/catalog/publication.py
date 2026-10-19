@@ -61,16 +61,17 @@ __all__ = [
 
 def _verify_expected_revision(connection: Connection) -> None:
     if connection.dialect.name != "postgresql":
-        raise CatalogPublicationError("catalog publication requires PostgreSQL")
+        msg = "catalog publication requires PostgreSQL"
+        raise CatalogPublicationError(msg)
     if not sa.inspect(connection).has_table(ALEMBIC_VERSION.name):
-        raise CatalogPublicationError("the v2 Alembic revision table is absent")
+        msg = "the v2 Alembic revision table is absent"
+        raise CatalogPublicationError(msg)
     revisions = set(
         connection.execute(sa.select(ALEMBIC_VERSION.c.version_num)).scalars()
     )
     if revisions != {V2_ALEMBIC_HEAD_REVISION}:
-        raise CatalogPublicationError(
-            "the v2 database is not at the expected Alembic revision"
-        )
+        msg = "the v2 database is not at the expected Alembic revision"
+        raise CatalogPublicationError(msg)
 
 
 def _acquire_publication_lock(connection: Connection) -> None:
@@ -119,9 +120,8 @@ def publish_catalog(
             assert_country_matches(connection, country)
         assert_canonical_value_uniqueness(connection)
         if _protected_row_counts(connection) != before:
-            raise CatalogPublicationError(
-                "publication changed simulation, report, or dataset-version rows"
-            )
+            msg = "publication changed simulation, report, or dataset-version rows"
+            raise CatalogPublicationError(msg)
         if checkpoint is not None:
             checkpoint("after_validation", connection)
 

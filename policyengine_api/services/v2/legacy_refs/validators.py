@@ -25,6 +25,5 @@ def require_legacy_references(
     missing = sorted(set(requested) - set(existing))
     if missing:
         rendered = ", ".join(str(legacy_id) for legacy_id in missing)
-        raise LegacyReferenceNotFoundError(
-            f"v1 {kind.value} {rendered} was not found for country {country_id}"
-        )
+        msg = f"v1 {kind.value} {rendered} was not found for country {country_id}"
+        raise LegacyReferenceNotFoundError(msg)

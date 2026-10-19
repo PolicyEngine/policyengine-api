@@ -441,7 +441,8 @@ def _test_value(table: sa.Table, column: sa.Column, sequence: Iterator[int]):
         if length == 64:
             return uuid4().hex + uuid4().hex
         return f"value-{next(sequence)}"[:length]
-    raise AssertionError(f"no test value for {table.name}.{column.name}")
+    msg = f"no test value for {table.name}.{column.name}"
+    raise AssertionError(msg)
 
 
 def _row_values(

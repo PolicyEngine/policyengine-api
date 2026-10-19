@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -36,7 +37,8 @@ V1_PROXY_HOST = "127.0.0.1"
 def _required(environ: Mapping[str, str], name: str) -> str:
     value = environ.get(name, "").strip()
     if not value:
-        raise HouseholdEventCommandConfigurationError(f"{name} is required")
+        msg = f"{name} is required"
+        raise HouseholdEventCommandConfigurationError(msg)
     return value
 
 
@@ -48,13 +50,11 @@ def validate_command_environment(
     deployment_environment = _required(environ, "DEPLOYMENT_ENVIRONMENT")
     supabase_environment = _required(environ, "V2_SUPABASE_ENVIRONMENT")
     if deployment_environment != selected_environment:
-        raise HouseholdEventCommandConfigurationError(
-            "DEPLOYMENT_ENVIRONMENT does not match --environment"
-        )
+        msg = "DEPLOYMENT_ENVIRONMENT does not match --environment"
+        raise HouseholdEventCommandConfigurationError(msg)
     if supabase_environment != selected_environment:
-        raise HouseholdEventCommandConfigurationError(
-            "V2_SUPABASE_ENVIRONMENT does not match --environment"
-        )
+        msg = "V2_SUPABASE_ENVIRONMENT does not match --environment"
+        raise HouseholdEventCommandConfigurationError(msg)
 
     cloud_sql_instance = _required(
         environ,
@@ -71,22 +71,18 @@ def validate_command_environment(
     )
     if selected_environment == "staging":
         if cloud_sql_instance == production_cloud_sql_instance:
-            raise HouseholdEventCommandConfigurationError(
-                "staging Cloud SQL instance must differ from production"
-            )
+            msg = "staging Cloud SQL instance must differ from production"
+            raise HouseholdEventCommandConfigurationError(msg)
         if supabase_project == production_supabase_project:
-            raise HouseholdEventCommandConfigurationError(
-                "staging Supabase project must differ from production"
-            )
+            msg = "staging Supabase project must differ from production"
+            raise HouseholdEventCommandConfigurationError(msg)
     else:
         if cloud_sql_instance != production_cloud_sql_instance:
-            raise HouseholdEventCommandConfigurationError(
-                "production Cloud SQL instance does not match its declared identity"
-            )
+            msg = "production Cloud SQL instance does not match its declared identity"
+            raise HouseholdEventCommandConfigurationError(msg)
         if supabase_project != production_supabase_project:
-            raise HouseholdEventCommandConfigurationError(
-                "production Supabase project does not match its declared identity"
-            )
+            msg = "production Supabase project does not match its declared identity"
+            raise HouseholdEventCommandConfigurationError(msg)
 
     operator_identity = _required(environ, "HOUSEHOLD_MIRROR_OPERATOR_IDENTITY")
     allowed_operator_identity = _required(
@@ -94,9 +90,8 @@ def validate_command_environment(
         "ALLOWED_HOUSEHOLD_MIRROR_OPERATOR_IDENTITY",
     )
     if operator_identity != allowed_operator_identity:
-        raise HouseholdEventCommandConfigurationError(
-            "declared operator identity is not authorized for household event processing"
-        )
+        msg = "declared operator identity is not authorized for household event processing"
+        raise HouseholdEventCommandConfigurationError(msg)
     return {
         "environment": selected_environment,
         "cloud_sql_instance": cloud_sql_instance,
@@ -115,13 +110,11 @@ def _proxy_event_service(
     try:
         port = int(raw_port)
     except ValueError as error:
-        raise HouseholdEventCommandConfigurationError(
-            "POLICYENGINE_DB_PROXY_PORT must be an integer"
-        ) from error
+        msg = "POLICYENGINE_DB_PROXY_PORT must be an integer"
+        raise HouseholdEventCommandConfigurationError(msg) from error
     if not 1 <= port <= 65535:
-        raise HouseholdEventCommandConfigurationError(
-            "POLICYENGINE_DB_PROXY_PORT is outside the valid range"
-        )
+        msg = "POLICYENGINE_DB_PROXY_PORT is outside the valid range"
+        raise HouseholdEventCommandConfigurationError(msg)
 
     password = _required(environ, "POLICYENGINE_DB_PASSWORD")
     engine = create_engine(
@@ -221,8 +214,9 @@ def main(
                 event_service=event_service,
                 require_pending=True,
             )
-    except Exception as error:  # noqa: BLE001 - command emits a safe result
-        try:
+    except Exception as error:  # noqa: BLE001  # command emits a safe result
+        # Outcome logging must not change the command result.
+        with contextlib.suppress(Exception):
             _record_command_outcome(
                 identity=identity,
                 country_id=args.country_id,
@@ -230,8 +224,6 @@ def main(
                 outcome="error",
                 error_type=type(error).__name__,
             )
-        except Exception:
-            pass
         safe_types = (HouseholdEventCommandConfigurationError,)
         message = (
             str(error)
@@ -254,7 +246,8 @@ def main(
     finally:
         if v1_engine is not None:
             v1_engine.dispose()
-    try:
+    # Outcome logging must not change the command result.
+    with contextlib.suppress(Exception):
         _record_command_outcome(
             identity=identity,
             country_id=args.country_id,
@@ -262,8 +255,6 @@ def main(
             outcome="ok",
             destination_household_id=result.household_id,
         )
-    except Exception:
-        pass
     print(
         json.dumps(
             {

@@ -1,5 +1,6 @@
 """Economic impact service backed by cached reform impacts and simulation jobs."""
 
+import contextlib
 import datetime
 import hashlib
 import json
@@ -58,7 +59,10 @@ from policyengine_api.runtime_cache.reform_impacts import (
     CachedReformImpact,
     ReformImpactStartClaim,
 )
-from policyengine_api.services.budget_window_cache import BudgetWindowCache
+from policyengine_api.services.budget_window_cache import (
+    BudgetWindowCache,
+    BudgetWindowCacheState,
+)
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactHandoffError,
@@ -338,7 +342,8 @@ class EconomyService:
         """Accept ORM-decoded objects and legacy JSON text at a read boundary."""
         parsed = json.loads(value) if isinstance(value, str) else value
         if not isinstance(parsed, dict):
-            raise TypeError("Expected a JSON object")
+            msg = "Expected a JSON object"
+            raise TypeError(msg)
         return parsed
 
     @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_REQUEST))
@@ -474,19 +479,7 @@ class EconomyService:
                 )
 
             if cached_state is not None and cached_state.status == "failed":
-                if cached_state.failure_type == "spm_validation":
-                    cached_error = cached_state.error or {}
-                    raise SPMValidationError(
-                        code=str(cached_error.get("code", "SPM_VALIDATION_ERROR")),
-                        message=str(
-                            cached_error.get(
-                                "message", "Stored budget-window validation failed"
-                            )
-                        ),
-                    )
-                return BudgetWindowEconomicImpactResult.model_validate(
-                    cached_state.error
-                ).model_copy(update={"cache_status": "failure-hit"})
+                return self._replay_budget_window_failure(cached_state)
 
             if cached_state is not None and cached_state.status == "completed":
                 cached_result = cached_state.result or {}
@@ -540,30 +533,12 @@ class EconomyService:
             observability_id_candidate = resolve_observability_id(
                 incoming_observability_id()
             )
-            owns_claim = False
-            claimed_state = None
-            for _attempt in range(BUDGET_WINDOW_CLAIM_ATTEMPTS):
-                owns_claim = self._budget_window_cache.claim_batch_start(
-                    cache_key,
-                    claim_token,
-                    observability_id_candidate,
-                )
-                if owns_claim:
-                    setup_options.observability_id = start_observability_id(
-                        observability_id_candidate
-                    )
-                    break
-                claimed_state = self._budget_window_cache.get_state(cache_key)
-                if claimed_state is not None:
-                    self._restore_budget_window_observability_id(
-                        claimed_state.observability_id,
-                        setup_options=setup_options,
-                    )
-                    break
-            else:
-                raise CacheCoordinationError(
-                    "budget-window submission ownership changed repeatedly"
-                )
+            owns_claim = self._claim_budget_window_start(
+                cache_key,
+                claim_token,
+                observability_id_candidate,
+                setup_options=setup_options,
+            )
 
             if owns_claim:
                 cache_status = "miss"
@@ -625,6 +600,59 @@ class EconomyService:
                 severity="ERROR",
             )
             raise
+
+    @staticmethod
+    def _replay_budget_window_failure(
+        cached_state: BudgetWindowCacheState,
+    ) -> BudgetWindowEconomicImpactResult:
+        """Replay a stored failure: raise its typed SPM error or return its result."""
+        if cached_state.failure_type == "spm_validation":
+            cached_error = cached_state.error or {}
+            raise SPMValidationError(
+                code=str(cached_error.get("code", "SPM_VALIDATION_ERROR")),
+                message=str(
+                    cached_error.get(
+                        "message", "Stored budget-window validation failed"
+                    )
+                ),
+            )
+        return BudgetWindowEconomicImpactResult.model_validate(
+            cached_state.error
+        ).model_copy(update={"cache_status": "failure-hit"})
+
+    def _claim_budget_window_start(
+        self,
+        cache_key: str,
+        claim_token: str,
+        observability_id_candidate: str,
+        *,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> bool:
+        """Claim this report's batch submission, or adopt another request's state.
+
+        Return True when this request now owns the submission and False once another
+        request's stored state is found. Raise CacheCoordinationError if ownership
+        keeps changing.
+        """
+        for _attempt in range(BUDGET_WINDOW_CLAIM_ATTEMPTS):
+            if self._budget_window_cache.claim_batch_start(
+                cache_key,
+                claim_token,
+                observability_id_candidate,
+            ):
+                setup_options.observability_id = start_observability_id(
+                    observability_id_candidate
+                )
+                return True
+            claimed_state = self._budget_window_cache.get_state(cache_key)
+            if claimed_state is not None:
+                self._restore_budget_window_observability_id(
+                    claimed_state.observability_id,
+                    setup_options=setup_options,
+                )
+                return False
+        msg = "budget-window submission ownership changed repeatedly"
+        raise CacheCoordinationError(msg)
 
     def _build_budget_window_cache_key(
         self,
@@ -822,9 +850,10 @@ class EconomyService:
                 cache_status=cache_status,
             )
 
-        raise ValueError(
+        msg = (
             f"Unexpected budget-window batch execution state: {batch_execution.status}"
         )
+        raise ValueError(msg)
 
     def _build_budget_window_computing_result(
         self,
@@ -868,9 +897,8 @@ class EconomyService:
         target: Literal["general", "cliff"] = "general",
     ) -> EconomicImpactSetupOptions:
         if dataset != "default":
-            raise ValueError(
-                "Custom datasets are not supported for economy calculations"
-            )
+            msg = "Custom datasets are not supported for economy calculations"
+            raise ValueError(msg)
         resolved_spm = validate_worker_spm(
             country_id,
             options.get("spm"),
@@ -1013,9 +1041,8 @@ class EconomyService:
                     )
                     break
                 else:
-                    raise CacheCoordinationError(
-                        "reform-impact submission ownership changed repeatedly"
-                    )
+                    msg = "reform-impact submission ownership changed repeatedly"
+                    raise CacheCoordinationError(msg)
 
             # The identifier above was selected while the runtime-resolution
             # stage was current. Reapply it now so the containing cache-decision
@@ -1057,7 +1084,8 @@ class EconomyService:
             self._release_reform_impact_start(setup_options)
             return result
 
-        raise ValueError(f"Unexpected impact action: {impact_action}")
+        msg = f"Unexpected impact action: {impact_action}"
+        raise ValueError(msg)
 
     def _resolve_runtime_bundle_for_setup_options(
         self,
@@ -1087,7 +1115,8 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
     ) -> dict[str, Any]:
         if not setup_options.options_hash:
-            raise ValueError("resolved reform-impact options hash is required")
+            msg = "resolved reform-impact options hash is required"
+            raise ValueError(msg)
         return {
             "country_id": setup_options.country_id,
             "policy_id": setup_options.reform_policy_id,
@@ -1107,7 +1136,8 @@ class EconomyService:
     ) -> dict[str, Any]:
         resolved_observability_id = observability_id or setup_options.observability_id
         if resolved_observability_id is None:
-            raise ValueError("reform-impact observability identifier is required")
+            msg = "reform-impact observability identifier is required"
+            raise ValueError(msg)
         return {
             **self._reform_impact_start_claim_scope_arguments(setup_options),
             "claim_token": setup_options.submission_claim_id,
@@ -1229,7 +1259,8 @@ class EconomyService:
             return ImpactAction.FAILED
         if status == ImpactStatus.COMPUTING.value:
             return ImpactAction.COMPUTING
-        raise ValueError(f"Unknown impact status: {status}")
+        msg = f"Unknown impact status: {status}"
+        raise ValueError(msg)
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_HANDLE_EXECUTION_STATE)
@@ -1300,7 +1331,8 @@ class EconomyService:
                 run_progress=execution.run_progress if execution is not None else None
             )
 
-        raise ValueError(f"Unexpected sim API execution state: {execution_state}")
+        msg = f"Unexpected sim API execution state: {execution_state}"
+        raise ValueError(msg)
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_COMPLETED)
@@ -1354,15 +1386,15 @@ class EconomyService:
             return
         if most_recent_impact.options_hash != setup_options.options_hash:
             return
-        try:
+        # Best effort: the typed SPM error is the answer, and the failure is
+        # already logged.
+        with contextlib.suppress(Exception):
             self._set_reform_impact_error(
                 setup_options=setup_options,
                 message=error.message,
                 error_code=error.code,
                 execution_id=most_recent_impact.execution_id,
             )
-        except Exception:
-            pass
 
     @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_FAILED))
     def _handle_failed_impact(
@@ -1492,10 +1524,11 @@ class EconomyService:
         except ReformImpactHandoffError:
             raise
         except Exception as error:
-            raise ReformImpactHandoffError(
+            msg = (
                 "simulation was submitted but its execution state could not be "
                 "handed off"
-            ) from error
+            )
+            raise ReformImpactHandoffError(msg) from error
 
         return EconomicImpactResult.computing()
 
@@ -1584,7 +1617,7 @@ class EconomyService:
                     policyengine_version=setup_options.policyengine_version,
                 )
             )
-        except Exception:
+        except Exception:  # noqa: BLE001  # an unresolvable worker app keeps the cached impact
             return False
 
         setup_options.runtime_app_name = runtime_app_name
@@ -1674,16 +1707,19 @@ class EconomyService:
         if region.startswith("state/"):
             state_code = region[len("state/") :]
             if state_code.lower() not in get_valid_state_codes():
-                raise ValueError(f"Invalid US state: '{state_code}'")
+                msg = f"Invalid US state: '{state_code}'"
+                raise ValueError(msg)
         elif region.startswith("place/"):
             place_code = region[len("place/") :]
             validate_place_code(place_code)
         elif region.startswith("congressional_district/"):
             district_id = region[len("congressional_district/") :]
             if district_id.lower() not in get_valid_congressional_districts():
-                raise ValueError(f"Invalid congressional district: '{district_id}'")
+                msg = f"Invalid congressional district: '{district_id}'"
+                raise ValueError(msg)
         else:
-            raise ValueError(f"Invalid US region: '{region}'")
+            msg = f"Invalid US region: '{region}'"
+            raise ValueError(msg)
 
     def _build_simulation_telemetry(
         self,
@@ -1770,7 +1806,7 @@ class EconomyService:
                     **setup_options.model_dump(),
                 }
             )
-            raise e
+            raise
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_PERSIST_COMPLETED)
@@ -1801,7 +1837,7 @@ class EconomyService:
                     **setup_options.model_dump(),
                 }
             )
-            raise e
+            raise
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_PERSIST_FAILED)
@@ -1834,7 +1870,7 @@ class EconomyService:
                     **setup_options.model_dump(),
                 }
             )
-            raise e
+            raise
 
     def _create_submission_claim_id(self) -> str:
         """Create an opaque token for one submission ownership claim."""

@@ -22,18 +22,21 @@ if config.config_file_name is not None:
 provided_connection = config.attributes.get("connection")
 if provided_connection is not None:
     if provided_connection.dialect.name != "mysql":
-        raise RuntimeError("Alembic migrations must target a MySQL database")
+        msg = "Alembic migrations must target a MySQL database"
+        raise RuntimeError(msg)
 else:
     database_url = os.environ.get("ALEMBIC_DATABASE_URL") or config.get_main_option(
         "sqlalchemy.url"
     )
     if not database_url:
-        raise RuntimeError(
+        msg = (
             "ALEMBIC_DATABASE_URL is required; the local SQLite cache is not an "
             "Alembic migration target"
         )
+        raise RuntimeError(msg)
     if make_url(database_url).get_backend_name() != "mysql":
-        raise RuntimeError("Alembic migrations must target a MySQL database")
+        msg = "Alembic migrations must target a MySQL database"
+        raise RuntimeError(msg)
     config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 target_metadata = V1Base.metadata

@@ -75,7 +75,8 @@ class _MetadataReader:
 
 class _FailingMetadataReader:
     def get_metadata(self, country_id: str):
-        raise RuntimeError("private metadata failure")
+        msg = "private metadata failure"
+        raise RuntimeError(msg)
 
 
 def _dependencies():

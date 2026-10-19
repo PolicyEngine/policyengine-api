@@ -62,12 +62,14 @@ def _load_policyengine_bundle() -> dict | None:
         with open(get_py_manifest()) as manifest_file:
             manifest = json.load(manifest_file)
     except Exception as exc:
-        raise RuntimeError(
+        msg = (
             "Could not read PolicyEngine .py bundle manifest from the installed "
             "policyengine wheel."
-        ) from exc
+        )
+        raise RuntimeError(msg) from exc
     if not isinstance(manifest, dict):
-        raise RuntimeError("PolicyEngine .py bundle manifest must be a JSON object.")
+        msg = "PolicyEngine .py bundle manifest must be a JSON object."
+        raise TypeError(msg)
     return manifest
 
 
@@ -162,7 +164,7 @@ try:
         country: _resolve_distribution_version(_dist_versions, package_name)
         for country, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES)
     }
-except Exception:
+except Exception:  # noqa: BLE001  # unreadable package metadata falls back to 0.0.0; import must not fail
     _dist_versions = {}
     COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES}
 
@@ -204,9 +206,8 @@ def _build_runtime_cache_version(
     prefix = "e" if scope == "economy_impact" else "r"
     digest_length = 10 - len(prefix) - len(schema_version)
     if digest_length < 4:
-        raise ValueError(
-            f"Runtime cache version for {scope} does not fit in VARCHAR(10)"
-        )
+        msg = f"Runtime cache version for {scope} does not fit in VARCHAR(10)"
+        raise ValueError(msg)
 
     raw = "|".join(
         (

@@ -84,7 +84,8 @@ def _environment(environ: Mapping[str, str] | None) -> Mapping[str, str]:
 def _required(environ: Mapping[str, str], name: str) -> str:
     value = environ.get(name)
     if value is None or not value.strip():
-        raise V2ConfigurationError(f"{name} is required")
+        msg = f"{name} is required"
+        raise V2ConfigurationError(msg)
     return value.strip()
 
 
@@ -106,31 +107,30 @@ def _resolve_runtime_database_url(
     direct_value = environ.get(V2_RUNTIME_DATABASE_URL, "").strip()
     resource = environ.get(V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE, "").strip()
     if direct_value and resource:
-        raise V2ConfigurationError(
+        msg = (
             f"set exactly one of {V2_RUNTIME_DATABASE_URL} or "
             f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE}"
         )
+        raise V2ConfigurationError(msg)
     if direct_value:
         return direct_value
     if not resource:
-        raise V2ConfigurationError(
+        msg = (
             f"{V2_RUNTIME_DATABASE_URL} or "
             f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE} is required"
         )
+        raise V2ConfigurationError(msg)
     if SECRET_RESOURCE_PATTERN.fullmatch(resource) is None:
-        raise V2ConfigurationError(
-            f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE} is invalid"
-        )
+        msg = f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE} is invalid"
+        raise V2ConfigurationError(msg)
     try:
         resolved_value = secret_loader(resource).strip()
     except Exception as error:
-        raise V2ConfigurationError(
-            f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE} could not be resolved"
-        ) from error
+        msg = f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE} could not be resolved"
+        raise V2ConfigurationError(msg) from error
     if not resolved_value:
-        raise V2ConfigurationError(
-            f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE} is empty"
-        )
+        msg = f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE} is empty"
+        raise V2ConfigurationError(msg)
     return resolved_value
 
 
@@ -143,13 +143,11 @@ def load_supabase_target_settings(
     environment = _required(values, V2_SUPABASE_ENVIRONMENT)
 
     if PROJECT_REF_PATTERN.fullmatch(project_ref) is None:
-        raise V2ConfigurationError(
-            f"{V2_SUPABASE_PROJECT_REF} is not a valid project reference"
-        )
+        msg = f"{V2_SUPABASE_PROJECT_REF} is not a valid project reference"
+        raise V2ConfigurationError(msg)
     if ENVIRONMENT_PATTERN.fullmatch(environment) is None:
-        raise V2ConfigurationError(
-            f"{V2_SUPABASE_ENVIRONMENT} is not a valid environment name"
-        )
+        msg = f"{V2_SUPABASE_ENVIRONMENT} is not a valid environment name"
+        raise V2ConfigurationError(msg)
     return SupabaseTargetSettings(
         project_ref=project_ref,
         environment=environment,
@@ -165,27 +163,26 @@ def parse_persistent_postgres_url(
     try:
         url = make_url(raw_url)
     except ArgumentError as error:
-        raise V2ConfigurationError(f"{setting_name} is not a valid URL") from error
+        msg = f"{setting_name} is not a valid URL"
+        raise V2ConfigurationError(msg) from error
 
     if url.drivername != POSTGRES_DRIVER:
-        raise V2ConfigurationError(
-            f"{setting_name} must use the {POSTGRES_DRIVER} driver"
-        )
+        msg = f"{setting_name} must use the {POSTGRES_DRIVER} driver"
+        raise V2ConfigurationError(msg)
     if not url.host or url.host.lower() in LOCAL_HOSTS:
-        raise V2ConfigurationError(
-            f"{setting_name} must name a non-local Postgres host"
-        )
+        msg = f"{setting_name} must name a non-local Postgres host"
+        raise V2ConfigurationError(msg)
     if not url.database or not url.username or url.password is None:
-        raise V2ConfigurationError(
-            f"{setting_name} must include an explicit database and credentials"
-        )
+        msg = f"{setting_name} must include an explicit database and credentials"
+        raise V2ConfigurationError(msg)
 
     sslmode = url.query.get("sslmode")
     if not isinstance(sslmode, str) or sslmode not in PERSISTENT_SSL_MODES:
-        raise V2ConfigurationError(
+        msg = (
             f"{setting_name} must require TLS with sslmode="
             "require, verify-ca, or verify-full"
         )
+        raise V2ConfigurationError(msg)
     return PostgresConnectionSettings(url)
 
 
@@ -206,13 +203,11 @@ def validate_supabase_database_identity(
         and url.username.endswith(f".{target.project_ref}")
     )
     if not (is_direct or is_pooler):
-        raise V2ConfigurationError(
-            f"{setting_name} does not identify the configured Supabase project"
-        )
+        msg = f"{setting_name} does not identify the configured Supabase project"
+        raise V2ConfigurationError(msg)
     if url.database != SUPABASE_DATABASE_NAME:
-        raise V2ConfigurationError(
-            f"{setting_name} does not identify the configured Supabase database"
-        )
+        msg = f"{setting_name} does not identify the configured Supabase database"
+        raise V2ConfigurationError(msg)
 
 
 def _database_settings(
@@ -251,11 +246,12 @@ def load_v2_runtime_database_settings(
         environ=values,
     )
     if settings.connection.url.port == SUPABASE_TRANSACTION_POOLER_PORT:
-        raise V2ConfigurationError(
+        msg = (
             f"{V2_RUNTIME_DATABASE_URL} must use a direct connection or "
             "Supavisor session mode on port 5432 so the runtime statement "
             "timeout is applied"
         )
+        raise V2ConfigurationError(msg)
     return settings
 
 

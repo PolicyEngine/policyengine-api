@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 from typing import TYPE_CHECKING
 
@@ -92,7 +93,7 @@ def register_migration_request_logging(
         flask.g.request_started_at = time.time()
         try:
             captured = runtime.capture_context() if runtime is not None else {}
-        except Exception:
+        except Exception:  # noqa: BLE001  # telemetry must never fail the request
             captured = {}
         flask.g.request_id = captured.get("request_id") or (
             flask.request.headers.get(REQUEST_ID_HEADER) or generate_request_id()
@@ -102,10 +103,9 @@ def register_migration_request_logging(
         )
         flask.g.observability_id = None
         if runtime is not None:
-            try:
+            # Telemetry must never fail the request.
+            with contextlib.suppress(Exception):
                 runtime.set_context(request_id=flask.g.request_id)
-            except Exception:
-                pass
 
     @app.after_request
     def log_request_migration_context(response: flask.Response) -> flask.Response:
@@ -144,10 +144,9 @@ def register_migration_request_logging(
                     route_impl=RouteImplementation.FLASK_FALLBACK,
                 )
         except Exception:
-            try:
+            # A logging failure must not replace the response.
+            with contextlib.suppress(Exception):
                 app.logger.exception("Failed to log migration request context")
-            except Exception:
-                pass
         return response
 
 

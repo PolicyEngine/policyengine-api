@@ -202,7 +202,8 @@ def contract_client(request) -> ContractClient:
         return FlaskContractClient(app)
     if request.param == "fastapi_fallback":
         return ASGIContractClient(app)
-    raise AssertionError(f"Unknown contract client: {request.param}")
+    msg = f"Unknown contract client: {request.param}"
+    raise AssertionError(msg)
 
 
 def _resolved_path(path: str) -> str:
@@ -570,7 +571,8 @@ def _expected_subset(contract: ContractRequest) -> dict:
             "queued_years": [],
             "error": None,
         }
-    raise AssertionError(f"Missing expected subset for {contract}")
+    msg = f"Missing expected subset for {contract}"
+    raise AssertionError(msg)
 
 
 @pytest.mark.parametrize(

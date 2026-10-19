@@ -137,10 +137,11 @@ def _validate_issuer_url(value: str) -> None:
         or parsed.query
         or parsed.fragment
     ):
-        raise UserAuthConfigurationError(
+        msg = (
             f"{PUBLIC_API_AUTH_ISSUER_ENV} must be an absolute HTTPS URL without "
             "credentials, parameters, a query string, or a fragment"
         )
+        raise UserAuthConfigurationError(msg)
 
 
 def load_user_auth_settings(
@@ -150,22 +151,23 @@ def load_user_auth_settings(
     values = os.environ if environ is None else environ
     required_value = values.get(PUBLIC_API_AUTH_REQUIRED_ENV, "").strip()
     if required_value not in {"", "0", "1"}:
-        raise UserAuthConfigurationError(
-            f"{PUBLIC_API_AUTH_REQUIRED_ENV} must be 0 or 1"
-        )
+        msg = f"{PUBLIC_API_AUTH_REQUIRED_ENV} must be 0 or 1"
+        raise UserAuthConfigurationError(msg)
     required = required_value == "1"
     issuer = _normalized_issuer(values.get(PUBLIC_API_AUTH_ISSUER_ENV, "").strip())
     audience = values.get(PUBLIC_API_AUTH_AUDIENCE_ENV, "").strip()
     if bool(issuer) != bool(audience):
-        raise UserAuthConfigurationError(
+        msg = (
             f"Set both {PUBLIC_API_AUTH_ISSUER_ENV} and "
             f"{PUBLIC_API_AUTH_AUDIENCE_ENV}, or neither"
         )
+        raise UserAuthConfigurationError(msg)
     if required and not issuer:
-        raise UserAuthConfigurationError(
+        msg = (
             f"{PUBLIC_API_AUTH_REQUIRED_ENV}=1 requires "
             f"{PUBLIC_API_AUTH_ISSUER_ENV} and {PUBLIC_API_AUTH_AUDIENCE_ENV}"
         )
+        raise UserAuthConfigurationError(msg)
     if issuer:
         _validate_issuer_url(issuer)
     return UserAuthSettings(required=required, issuer=issuer, audience=audience)
@@ -224,20 +226,21 @@ def reset_decoder_cache() -> None:
 def bearer_token(authorization: str | None) -> str:
     """Return the credentials of an ``Authorization: Bearer`` header."""
     if not authorization:
-        raise MissingBearerTokenError("a bearer access token is required")
+        msg = "a bearer access token is required"
+        raise MissingBearerTokenError(msg)
     scheme, _, credentials = authorization.strip().partition(" ")
     credentials = credentials.strip()
     if scheme.lower() != "bearer" or not credentials:
-        raise MissingBearerTokenError("a bearer access token is required")
+        msg = "a bearer access token is required"
+        raise MissingBearerTokenError(msg)
     return credentials
 
 
 def unauthenticated_user_id(value: str) -> UUID:
     """Return the browser UUID carried by the unauthenticated-user header."""
     if re.fullmatch(CANONICAL_UUID_PATTERN, value) is None:
-        raise InvalidUnauthenticatedUserError(
-            f"{UNAUTHENTICATED_USER_HEADER} must be a canonical UUID"
-        )
+        msg = f"{UNAUTHENTICATED_USER_HEADER} must be a canonical UUID"
+        raise InvalidUnauthenticatedUserError(msg)
     return UUID(value)
 
 
@@ -256,9 +259,11 @@ def classify_principal(claims: Mapping[str, Any]) -> VerifiedPrincipal:
     subject = claims.get("sub")
     issuer = claims.get("iss")
     if not isinstance(subject, str) or not subject.strip():
-        raise InvalidBearerTokenError("the access token has no subject")
+        msg = "the access token has no subject"
+        raise InvalidBearerTokenError(msg)
     if not isinstance(issuer, str) or not issuer:
-        raise InvalidBearerTokenError("the access token has no issuer")
+        msg = "the access token has no issuer"
+        raise InvalidBearerTokenError(msg)
     is_client = (
         subject.endswith(CLIENT_SUBJECT_SUFFIX)
         or claims.get("gty") == CLIENT_CREDENTIALS_GRANT
@@ -280,7 +285,8 @@ def authenticate_bearer(
     """Validate one Authorization header and classify its principal."""
     token = bearer_token(authorization)
     if not settings.configured:
-        raise UserAuthUnavailableError("user authentication is not configured")
+        msg = "user authentication is not configured"
+        raise UserAuthUnavailableError(msg)
     selected_decoder = decoder or _decoder(settings.issuer, settings.audience)
     try:
         claims = selected_decoder.decode(token)
@@ -289,15 +295,16 @@ def authenticate_bearer(
             "public_api_user_auth_unavailable",
             extra={"policyengine_attributes": {"error_type": type(error).__name__}},
         )
-        raise UserAuthUnavailableError(
-            "the signing keys could not be retrieved"
-        ) from error
+        msg = "the signing keys could not be retrieved"
+        raise UserAuthUnavailableError(msg) from error
     except (jwt.PyJWTError, ValueError) as error:
         logger.info(
             "public_api_user_auth_rejected",
             extra={"policyengine_attributes": {"error_type": type(error).__name__}},
         )
-        raise InvalidBearerTokenError("the bearer access token is invalid") from error
+        msg = "the bearer access token is invalid"
+        raise InvalidBearerTokenError(msg) from error
     if claims.get("iss") != settings.issuer:
-        raise InvalidBearerTokenError("the bearer access token is invalid")
+        msg = "the bearer access token is invalid"
+        raise InvalidBearerTokenError(msg)
     return classify_principal(claims)

@@ -174,7 +174,8 @@ def test_upgrade_cli_commits_the_externally_supplied_connection(monkeypatch):
             return nullcontext(connection)
 
         def connect(self):
-            raise AssertionError("upgrade must use a committing transaction")
+            msg = "upgrade must use a committing transaction"
+            raise AssertionError(msg)
 
         def dispose(self):
             pass

@@ -28,14 +28,17 @@ def certified_bundle(monkeypatch):
 
     def entry(year, *, scenario, as_of):
         if scenario not in {"baseline", "alternative"}:
-            raise ValueError("Unknown forecast scenario")
+            msg = "Unknown forecast scenario"
+            raise ValueError(msg)
         if as_of is not None and date.fromisoformat(as_of) < date(2026, 1, 1):
-            raise ValueError("Forecast information date follows requested as_of")
+            msg = "Forecast information date follows requested as_of"
+            raise ValueError(msg)
         return {}
 
     def geography_factor(year, tenure, *, geoid, **kwargs):
         if geoid != "31080":
-            raise ValueError("Forecast geography unavailable")
+            msg = "Forecast geography unavailable"
+            raise ValueError(msg)
         return {}
 
     forecast = SimpleNamespace(
@@ -70,7 +73,8 @@ def test_public_settings_schema_forbids_extra_fields():
 @pytest.mark.parametrize("country_id", ["uk", "ca", "ng", "il"])
 def test_other_countries_omit_spm_without_reading_us_bundle(monkeypatch, country_id):
     def must_not_load():
-        raise AssertionError("Non-US request must not read SPM configuration")
+        msg = "Non-US request must not read SPM configuration"
+        raise AssertionError(msg)
 
     monkeypatch.setattr(spm, "_current_bundle", must_not_load)
     assert spm.normalize_spm_selection(country_id, None) is None
@@ -209,7 +213,8 @@ def test_mismatched_installed_artifact_cannot_enable_metadata(
 ):
     def mismatched_artifact(expected):
         assert expected == ARTIFACT_HASH
-        raise ValueError("Forecast content SHA256 mismatch")
+        msg = "Forecast content SHA256 mismatch"
+        raise ValueError(msg)
 
     monkeypatch.setattr(spm, "_selected_forecast", mismatched_artifact)
     with pytest.raises(spm.SPMValidationError) as caught:
@@ -243,7 +248,8 @@ def test_selected_area_must_exist_in_artifact(certified_bundle):
 def test_area_available_in_later_year_can_be_selected(certified_bundle, monkeypatch):
     def geography_factor(year, tenure, **kwargs):
         if year < 2025:
-            raise ValueError("Area unavailable before the boundary changed")
+            msg = "Area unavailable before the boundary changed"
+            raise ValueError(msg)
         return {}
 
     forecast = SimpleNamespace(
@@ -260,10 +266,15 @@ def test_area_available_in_later_year_can_be_selected(certified_bundle, monkeypa
     )
 
 
+def _raise_missing_forecast_year():
+    msg = "Forecast has no entry for 2036"
+    raise ValueError(msg)
+
+
 @pytest.mark.parametrize("wrapped", [False, True])
 def test_missing_forecast_year_message_alone_does_not_reclassify_errors(wrapped):
     try:
-        raise ValueError("Forecast has no entry for 2036")
+        _raise_missing_forecast_year()
     except ValueError as error:
         if wrapped:
             outer = RuntimeError("An unrelated dependency failed")

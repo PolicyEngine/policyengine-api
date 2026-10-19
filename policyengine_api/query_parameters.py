@@ -51,9 +51,8 @@ def normalize_country_id(value: object) -> object:
 def validate_legacy_user_id(value: str) -> str:
     """Reject an empty or whitespace-only legacy user identifier."""
     if not value.strip():
-        raise ValueError(
-            "legacy user_id must contain at least one non-whitespace character"
-        )
+        msg = "legacy user_id must contain at least one non-whitespace character"
+        raise ValueError(msg)
     return value
 
 
@@ -119,7 +118,8 @@ def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for name, value in pairs:
         if name in result:
-            raise ValueError(f"SPM field {name!r} must not be repeated")
+            msg = f"SPM field {name!r} must not be repeated"
+            raise ValueError(msg)
         result[name] = value
     return result
 
@@ -129,7 +129,8 @@ def parse_spm_query_value(value: object) -> dict[str, object] | SPMSelection:
     if isinstance(value, str):
         value = json.loads(value, object_pairs_hook=_unique_json_object)
     if not isinstance(value, (dict, SPMSelection)):
-        raise ValueError("spm must be a JSON object")
+        msg = "spm must be a JSON object"
+        raise ValueError(msg)  # noqa: TRY004  # Pydantic reports ValueError as a validation error; TypeError would escape as a 500
     return value
 
 
@@ -184,9 +185,8 @@ class BudgetWindowEconomyQuery(EconomyQuery):
     def validate_end_year(self) -> BudgetWindowEconomyQuery:
         """Reject a window whose last year falls after BUDGET_WINDOW_MAX_END_YEAR."""
         if int(self.start_year) + self.window_size - 1 > BUDGET_WINDOW_MAX_END_YEAR:
-            raise ValueError(
-                f"budget-window end_year must be {BUDGET_WINDOW_MAX_END_YEAR} or earlier"
-            )
+            msg = f"budget-window end_year must be {BUDGET_WINDOW_MAX_END_YEAR} or earlier"
+            raise ValueError(msg)
         return self
 
 
@@ -354,9 +354,11 @@ def parse_multidict_query(
     """Adapt a Flask/Werkzeug-style MultiDict to the canonical parser."""
     items_method = getattr(query_input, "items", None)
     if not callable(items_method):
-        raise TypeError("query input must provide an items method")
+        msg = "query input must provide an items method"
+        raise TypeError(msg)
     try:
         items = items_method(multi=True)
     except TypeError as error:
-        raise TypeError("query input must preserve repeated keys") from error
+        msg = "query input must preserve repeated keys"
+        raise TypeError(msg) from error
     return parse_query_items(model_type, items)

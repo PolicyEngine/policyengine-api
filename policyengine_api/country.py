@@ -635,7 +635,7 @@ class PolicyEngineCountry:
                     node_type = float
                 try:
                     value = float(value)
-                except Exception:
+                except (TypeError, ValueError, OverflowError):
                     pass
                 normalized_reform[parameter_name][time_period] = node_type(value)
         return normalized_reform

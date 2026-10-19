@@ -71,7 +71,8 @@ def test_run_startup_warmup_calculates_each_country(monkeypatch):
 def test_run_startup_warmup_swallows_calculate_errors(monkeypatch):
     class BoomCountry:
         def calculate(self, household, reform):
-            raise RuntimeError("boom")
+            msg = "boom"
+            raise RuntimeError(msg)
 
     _inject_fake_countries(monkeypatch, {"us": BoomCountry()})
     monkeypatch.setenv("POLICYENGINE_API_WARMUP_COUNTRIES", "us")

@@ -78,7 +78,7 @@ def main() -> int:
     """Run explicit initialization and return a shell-compatible status."""
     try:
         evidence = initialize_catalog()
-    except Exception as error:  # noqa: BLE001 - command must return safe evidence
+    except Exception as error:  # noqa: BLE001  # command must return safe evidence
         print(json.dumps(_error_payload(error), sort_keys=True), file=sys.stderr)
         return 1
     print(json.dumps(evidence.as_dict(), sort_keys=True))

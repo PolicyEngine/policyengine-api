@@ -95,7 +95,8 @@ class SPMSelection(BaseModel):
     def validate_as_of(cls, value: str | None) -> str | None:
         """Reject an ``as_of`` that is not an exact ISO date such as 2025-01-31."""
         if value is not None and date.fromisoformat(value).isoformat() != value:
-            raise ValueError("as_of must be an ISO calendar date (YYYY-MM-DD)")
+            msg = "as_of must be an ISO calendar date (YYYY-MM-DD)"
+            raise ValueError(msg)
         return value
 
     @model_validator(mode="after")
@@ -103,9 +104,11 @@ class SPMSelection(BaseModel):
         """Require a non-blank ``geography_id`` for a metro; forbid it otherwise."""
         if self.geography_kind == "metro":
             if not self.geography_id or not self.geography_id.strip():
-                raise ValueError("An SPM area selection requires geography_id")
+                msg = "An SPM area selection requires geography_id"
+                raise ValueError(msg)
         elif self.geography_id is not None:
-            raise ValueError("Only an SPM area selection accepts geography_id")
+            msg = "Only an SPM area selection accepts geography_id"
+            raise ValueError(msg)
         return self
 
 
@@ -125,7 +128,8 @@ class SPMResolvedConfiguration(BaseModel):
     def validate_as_of(cls, value: str | None) -> str | None:
         """Reject an ``as_of`` that is not an exact ISO date such as 2025-01-31."""
         if value is not None and date.fromisoformat(value).isoformat() != value:
-            raise ValueError("as_of must be an ISO calendar date (YYYY-MM-DD)")
+            msg = "as_of must be an ISO calendar date (YYYY-MM-DD)"
+            raise ValueError(msg)
         return value
 
     @model_validator(mode="after")
@@ -133,9 +137,11 @@ class SPMResolvedConfiguration(BaseModel):
         """Require a non-blank ``geography_id`` for a metro; forbid it otherwise."""
         if self.geography_kind == "metro":
             if self.geography_id is None or not self.geography_id.strip():
-                raise ValueError("An SPM area selection requires geography_id")
+                msg = "An SPM area selection requires geography_id"
+                raise ValueError(msg)
         elif self.geography_id is not None:
-            raise ValueError("Only an SPM area selection accepts geography_id")
+            msg = "Only an SPM area selection accepts geography_id"
+            raise ValueError(msg)
         return self
 
 
@@ -161,9 +167,11 @@ class SPMProvenance(BaseModel):
         if any(
             len(year) != 4 or not year.isascii() or not year.isdigit() for year in years
         ):
-            raise ValueError("years must contain four-digit calendar years")
+            msg = "years must contain four-digit calendar years"
+            raise ValueError(msg)
         if tuple(sorted(set(years))) != years:
-            raise ValueError("years must be sorted and unique")
+            msg = "years must be sorted and unique"
+            raise ValueError(msg)
         return years
 
     @model_validator(mode="after")
@@ -171,9 +179,11 @@ class SPMProvenance(BaseModel):
         """Require a non-blank ``geography_id`` on a metro receipt, else forbid it."""
         if self.geography_kind == "metro":
             if self.geography_id is None or not self.geography_id.strip():
-                raise ValueError("A metro SPM receipt requires geography_id")
+                msg = "A metro SPM receipt requires geography_id"
+                raise ValueError(msg)
         elif self.geography_id is not None:
-            raise ValueError("Only a metro SPM receipt accepts geography_id")
+            msg = "Only a metro SPM receipt accepts geography_id"
+            raise ValueError(msg)
         return self
 
 
@@ -210,7 +220,8 @@ class SPMComparisonProvenance(BaseModel):
     def validate_compatible_receipts(self) -> SPMComparisonProvenance:
         """Reject a comparison whose baseline and reform used different SPM receipts."""
         if self.baseline.receipt != self.reform.receipt:
-            raise ValueError("baseline and reform SPM receipts differ")
+            msg = "baseline and reform SPM receipts differ"
+            raise ValueError(msg)
         return self
 
 
@@ -224,9 +235,11 @@ def build_spm_provenance(
 ) -> SPMProvenance:
     """Build one compact receipt from typed calculation inputs."""
     if selection.forecast_content_sha256 != forecast_sha256:
-        raise ValueError("SPM receipt differs from the SPM configuration")
+        msg = "SPM receipt differs from the SPM configuration"
+        raise ValueError(msg)
     if selection.scenario is None:
-        raise ValueError("Resolved SPM configuration must include scenario")
+        msg = "Resolved SPM configuration must include scenario"
+        raise ValueError(msg)
     return SPMProvenance(
         schema_version="canonical-spm-provenance-v2",
         forecast_id=forecast_id,
@@ -244,7 +257,8 @@ def build_spm_provenance(
 def _required_string(source: Mapping[str, object], field: str) -> str:
     value = source.get(field)
     if not isinstance(value, str) or not value:
-        raise ValueError(f"Country SPM receipt requires {field}")
+        msg = f"Country SPM receipt requires {field}"
+        raise ValueError(msg)
     return value
 
 
@@ -261,20 +275,24 @@ def build_spm_calculation_provenance(
         or scenario != config.scenario
         or geography_kind != config.geography_kind
     ):
-        raise ValueError("Country SPM receipt differs from the SPM configuration")
+        msg = "Country SPM receipt differs from the SPM configuration"
+        raise ValueError(msg)
 
     source_years = receipt.get("years")
     if not isinstance(source_years, Mapping):
-        raise ValueError("Country SPM receipt requires a years mapping")
+        msg = "Country SPM receipt requires a years mapping"
+        raise ValueError(msg)  # noqa: TRY004  # calculation_spm_receipt maps only ValueError to SPM_CONFIGURATION_UNAVAILABLE
     years: list[str] = []
     for year in source_years:
         if not isinstance(year, str):
-            raise ValueError("Country SPM receipt years must be strings")
+            msg = "Country SPM receipt years must be strings"
+            raise ValueError(msg)  # noqa: TRY004  # calculation_spm_receipt maps only ValueError to SPM_CONFIGURATION_UNAVAILABLE
         years.append(year)
 
     source_versions = receipt.get("runtime_versions")
     if not isinstance(source_versions, Mapping):
-        raise ValueError("Country SPM receipt requires runtime_versions")
+        msg = "Country SPM receipt requires runtime_versions"
+        raise ValueError(msg)  # noqa: TRY004  # calculation_spm_receipt maps only ValueError to SPM_CONFIGURATION_UNAVAILABLE
     runtime_versions = SPMRuntimeVersions.model_validate(source_versions)
     return build_spm_provenance(
         forecast_id=_required_string(receipt, "forecast_id"),
@@ -304,10 +322,12 @@ def _collapse_execution_receipts(
     receipts: Sequence[SPMProvenance],
 ) -> SPMExecutionProvenance:
     if not receipts:
-        raise ValueError(f"{side} SPM receipts are empty")
+        msg = f"{side} SPM receipts are empty"
+        raise ValueError(msg)
     first = receipts[0]
     if any(receipt != first for receipt in receipts[1:]):
-        raise ValueError(f"{side} SPM receipts differ")
+        msg = f"{side} SPM receipts differ"
+        raise ValueError(msg)
     return SPMExecutionProvenance(receipt=first, execution_count=len(receipts))
 
 
@@ -478,6 +498,36 @@ def _selected_forecast(expected_sha256: str) -> SPMForecast:
     return load_forecast(expected_sha256=expected_sha256)
 
 
+def _certified_bundle_spm(configured: dict) -> tuple[SPMSelection, SPMForecast]:
+    """Return the bundle's pinned SPM defaults and the forecast artifact they name.
+
+    Raise ValueError when the bundle pins no artifact hash or scenario, or the
+    installed US model lacks the canonical constructor. Importing the model or
+    loading the forecast can also raise AttributeError, ImportError, TypeError
+    or OSError.
+    """
+    defaults = SPMSelection.model_validate(configured)
+    if defaults.forecast_content_sha256 is None or defaults.scenario is None:
+        msg = "The bundle must pin the SPM artifact hash and scenario"
+        raise ValueError(msg)
+    simulation_type = importlib.import_module("policyengine_us").Simulation
+    if not simulation_supports_spm(simulation_type):
+        msg = "The installed US model does not support canonical SPM"
+        raise ValueError(msg)
+    return defaults, _selected_forecast(defaults.forecast_content_sha256)
+
+
+def _validated_spm_selection(values: dict, forecast: SPMForecast) -> SPMSelection:
+    """Validate merged settings against the artifact; raise ValueError if invalid."""
+    resolved = SPMSelection.model_validate(values)
+    # The artifact validates scenario/information date without household input.
+    forecast.entry(forecast.years[0], scenario=resolved.scenario, as_of=resolved.as_of)
+    if resolved.county_vintage != "2020":
+        msg = "Unsupported county vintage: use 2020"
+        raise ValueError(msg)
+    return resolved
+
+
 def normalize_spm_selection(
     country_id: str,
     selection: object,
@@ -496,56 +546,52 @@ def normalize_spm_selection(
     """
     if country_id != "us":
         if selection is not None:
+            error_code = "SPM_SETTINGS_UNSUPPORTED"
             raise SPMValidationError(
-                "SPM_SETTINGS_UNSUPPORTED", "SPM settings are only available for the US"
+                error_code, "SPM settings are only available for the US"
             )
         return None
 
     try:
         chosen = SPMSelection.model_validate({} if selection is None else selection)
     except ValidationError as error:
+        error_code = "SPM_SETTINGS_INVALID"
         raise SPMValidationError(
-            "SPM_SETTINGS_INVALID", readable_validation_error(error)
+            error_code, readable_validation_error(error)
         ) from error
 
     bundle = _current_bundle()
     if not isinstance(bundle, dict):
-        raise SPMValidationError(
-            "SPM_CONFIGURATION_UNAVAILABLE", "The installed bundle manifest is invalid"
-        )
+        error_code = "SPM_CONFIGURATION_UNAVAILABLE"
+        raise SPMValidationError(error_code, "The installed bundle manifest is invalid")
     measurements = bundle.get("measurements")
     configured = measurements.get("spm") if isinstance(measurements, dict) else None
     if not isinstance(configured, dict):
         if _installed_country_implements_spm(country_id):
             # A model that can run canonical SPM must never run it uncertified,
             # whichever settings the caller did or did not send.
+            error_code = "SPM_CONFIGURATION_UNAVAILABLE"
             raise SPMValidationError(
-                "SPM_CONFIGURATION_UNAVAILABLE",
+                error_code,
                 "The installed bundle has no certified SPM measurement configuration",
             )
         if selection is None:
             return None
+        error_code = "SPM_SETTINGS_UNSUPPORTED"
         raise SPMValidationError(
-            "SPM_SETTINGS_UNSUPPORTED",
+            error_code,
             "This US model bundle does not support canonical SPM settings",
         )
 
     try:
-        defaults = SPMSelection.model_validate(configured)
-        if defaults.forecast_content_sha256 is None or defaults.scenario is None:
-            raise ValueError("The bundle must pin the SPM artifact hash and scenario")
-        simulation_type = importlib.import_module("policyengine_us").Simulation
-        if not simulation_supports_spm(simulation_type):
-            raise ValueError("The installed US model does not support canonical SPM")
-        forecast = _selected_forecast(defaults.forecast_content_sha256)
+        defaults, forecast = _certified_bundle_spm(configured)
     except (AttributeError, ImportError, ValueError, TypeError, OSError) as error:
         # A country package installed without its Simulation raises AttributeError
         # here. The capability probe already reads that as "no canonical model";
         # letting it escape instead would make /readiness-check raise rather than
         # report not-ready, and every US request a 500 rather than a typed 400.
-        raise SPMValidationError(
-            "SPM_CONFIGURATION_UNAVAILABLE", error_message(error)
-        ) from error
+        error_code = "SPM_CONFIGURATION_UNAVAILABLE"
+        raise SPMValidationError(error_code, error_message(error)) from error
 
     if chosen.forecast_content_sha256 not in (None, defaults.forecast_content_sha256):
         # A saved selection is identity, not a request. The caller sent nothing
@@ -553,13 +599,15 @@ def normalize_spm_selection(
         # was measured against, which is the same class of failure as an
         # uncertified bundle rather than a correctable caller mistake.
         if stored:
+            error_code = "SPM_CONFIGURATION_UNAVAILABLE"
             raise SPMValidationError(
-                "SPM_CONFIGURATION_UNAVAILABLE",
+                error_code,
                 "This deployment does not have the SPM artifact this household's "
                 "saved selection was measured against",
             )
+        error_code = "SPM_SETTINGS_INVALID"
         raise SPMValidationError(
-            "SPM_SETTINGS_INVALID",
+            error_code,
             "SPM selection does not match this bundle's artifact hash",
         )
     values = {name: getattr(defaults, name) for name in SPMSelection.model_fields}
@@ -572,17 +620,10 @@ def normalize_spm_selection(
     values["forecast_content_sha256"] = defaults.forecast_content_sha256
     values["scenario"] = chosen.scenario or defaults.scenario
     try:
-        resolved = SPMSelection.model_validate(values)
-        # The artifact validates scenario/information date without household input.
-        forecast.entry(
-            forecast.years[0], scenario=resolved.scenario, as_of=resolved.as_of
-        )
-        if resolved.county_vintage != "2020":
-            raise ValueError("Unsupported county vintage: use 2020")
+        resolved = _validated_spm_selection(values, forecast)
     except ValueError as error:
-        raise SPMValidationError(
-            "SPM_SETTINGS_INVALID", error_message(error)
-        ) from error
+        error_code = "SPM_SETTINGS_INVALID"
+        raise SPMValidationError(error_code, error_message(error)) from error
     if resolved.geography_kind == "metro":
         _validate_metro_selection(forecast, resolved)
     return resolved.model_dump(mode="json")
@@ -609,8 +650,9 @@ def _validate_metro_selection(forecast: SPMForecast, selection: SPMSelection) ->
         except ValueError:
             continue
         return
+    error_code = "SPM_GEOGRAPHY_UNAVAILABLE"
     raise SPMValidationError(
-        "SPM_GEOGRAPHY_UNAVAILABLE",
+        error_code,
         f"SPM area is unavailable in the selected artifact: {selection.geography_id}",
     )
 
@@ -637,20 +679,28 @@ def calculation_spm_receipt(simulation: Simulation) -> dict:
     if not hasattr(simulation, "spm_config"):
         return {}
     try:
-        resolved = resolved_spm_settings(simulation.spm_config)
-        if resolved is None:
-            raise ValueError("Country SPM configuration is incomplete")
-        source = simulation.spm_provenance()
-        if not isinstance(source, Mapping):
-            raise ValueError("Country SPM receipt must be an object")
-        calculation = build_spm_calculation_provenance(
-            SPMSelection.model_validate(resolved),
-            source,
-        )
-        return {"spm_provenance": calculation.model_dump(mode="json", by_alias=True)}
+        return _country_spm_receipt(simulation)
     except (ValidationError, ValueError) as error:
+        error_code = "SPM_CONFIGURATION_UNAVAILABLE"
         raise SPMValidationError(
-            "SPM_CONFIGURATION_UNAVAILABLE",
+            error_code,
             "The installed country model reported an SPM receipt this API cannot "
             f"certify: {error_message(error)}",
         ) from error
+
+
+def _country_spm_receipt(simulation: Simulation) -> dict:
+    """Reduce the country's receipt; raise ValueError if it cannot be certified."""
+    resolved = resolved_spm_settings(simulation.spm_config)
+    if resolved is None:
+        msg = "Country SPM configuration is incomplete"
+        raise ValueError(msg)
+    source = simulation.spm_provenance()
+    if not isinstance(source, Mapping):
+        msg = "Country SPM receipt must be an object"
+        raise ValueError(msg)  # noqa: TRY004  # calculation_spm_receipt maps only ValueError to SPM_CONFIGURATION_UNAVAILABLE
+    calculation = build_spm_calculation_provenance(
+        SPMSelection.model_validate(resolved),
+        source,
+    )
+    return {"spm_provenance": calculation.model_dump(mode="json", by_alias=True)}

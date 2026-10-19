@@ -27,12 +27,15 @@ MAX_COMPARISON_RUN_ARTIFACT_RETENTION = timedelta(days=30)
 
 def _validate_retention(created_at: datetime, retention_expires_at: datetime) -> None:
     if created_at.tzinfo is None or retention_expires_at.tzinfo is None:
-        raise ValueError("comparison retention timestamps must include a timezone")
+        msg = "comparison retention timestamps must include a timezone"
+        raise ValueError(msg)
     retention = retention_expires_at - created_at
     if retention <= timedelta(0):
-        raise ValueError("comparison retention must be greater than zero")
+        msg = "comparison retention must be greater than zero"
+        raise ValueError(msg)
     if retention > MAX_COMPARISON_RUN_ARTIFACT_RETENTION:
-        raise ValueError("comparison retention must not exceed 30 days")
+        msg = "comparison retention must not exceed 30 days"
+        raise ValueError(msg)
 
 
 class ComparisonRunLifecycleStatus(StrEnum):
@@ -134,14 +137,18 @@ class ComparisonReportRecord(StrictContractModel):
         if any(value is not None for value in output_fields) and not all(
             value is not None for value in output_fields
         ):
-            raise ValueError("aggregate output fields must be supplied together")
+            msg = "aggregate output fields must be supplied together"
+            raise ValueError(msg)
         if self.status is ComparisonRunLifecycleStatus.SUCCEEDED:
             if self.aggregation_status is not ComparisonRunAggregationStatus.SUCCEEDED:
-                raise ValueError("a successful report requires successful aggregation")
+                msg = "a successful report requires successful aggregation"
+                raise ValueError(msg)
             if not all(value is not None for value in output_fields):
-                raise ValueError("a successful report requires an aggregate output")
+                msg = "a successful report requires an aggregate output"
+                raise ValueError(msg)
             if self.completed_at is None:
-                raise ValueError("a successful report requires completed_at")
+                msg = "a successful report requires completed_at"
+                raise ValueError(msg)
         if (
             self.status
             in {
@@ -150,7 +157,8 @@ class ComparisonReportRecord(StrictContractModel):
             }
             and self.error_code is None
         ):
-            raise ValueError("a failed or skipped report requires an error_code")
+            msg = "a failed or skipped report requires an error_code"
+            raise ValueError(msg)
         comparison_output_fields = (
             self.comparison_output_uri,
             self.comparison_output_sha256,
@@ -162,38 +170,43 @@ class ComparisonReportRecord(StrictContractModel):
             ResultComparisonStatus.RUNNING,
         }:
             if any(value is not None for value in comparison_output_fields):
-                raise ValueError(
-                    "an incomplete comparison cannot reference an output artifact"
-                )
+                msg = "an incomplete comparison cannot reference an output artifact"
+                raise ValueError(msg)
             if self.comparison_completed_at is not None:
-                raise ValueError("an incomplete comparison cannot have completed_at")
+                msg = "an incomplete comparison cannot have completed_at"
+                raise ValueError(msg)
             if self.comparison_error_code is not None:
-                raise ValueError("an incomplete comparison cannot have an error_code")
+                msg = "an incomplete comparison cannot have an error_code"
+                raise ValueError(msg)
             if self.comparison_error_summary is not None:
-                raise ValueError(
-                    "an incomplete comparison cannot have an error_summary"
-                )
+                msg = "an incomplete comparison cannot have an error_summary"
+                raise ValueError(msg)
         elif self.comparison_status in {
             ResultComparisonStatus.MATCHED,
             ResultComparisonStatus.DIFFERENT,
         }:
             if not all(value is not None for value in comparison_output_fields):
-                raise ValueError("a completed comparison requires an output artifact")
+                msg = "a completed comparison requires an output artifact"
+                raise ValueError(msg)
             if self.comparison_completed_at is None:
-                raise ValueError("a completed comparison requires completed_at")
+                msg = "a completed comparison requires completed_at"
+                raise ValueError(msg)
             if self.comparison_error_code is not None:
-                raise ValueError("a completed comparison cannot have an error_code")
+                msg = "a completed comparison cannot have an error_code"
+                raise ValueError(msg)
             if self.comparison_error_summary is not None:
-                raise ValueError("a completed comparison cannot have an error_summary")
+                msg = "a completed comparison cannot have an error_summary"
+                raise ValueError(msg)
         else:
             if any(value is not None for value in comparison_output_fields):
-                raise ValueError(
-                    "a failed comparison cannot reference an output artifact"
-                )
+                msg = "a failed comparison cannot reference an output artifact"
+                raise ValueError(msg)
             if self.comparison_completed_at is None:
-                raise ValueError("a failed comparison requires completed_at")
+                msg = "a failed comparison requires completed_at"
+                raise ValueError(msg)
             if self.comparison_error_code is None:
-                raise ValueError("a failed comparison requires an error_code")
+                msg = "a failed comparison requires an error_code"
+                raise ValueError(msg)
         return self
 
 
@@ -246,17 +259,22 @@ class ComparisonSimulationRecord(StrictContractModel):
         if any(value is not None for value in output_fields) and not all(
             value is not None for value in output_fields
         ):
-            raise ValueError("simulation output fields must be supplied together")
+            msg = "simulation output fields must be supplied together"
+            raise ValueError(msg)
         if self.row_identity_columns is not None:
             if not self.row_identity_columns:
-                raise ValueError("row_identity_columns must not be empty")
+                msg = "row_identity_columns must not be empty"
+                raise ValueError(msg)
             if len(self.row_identity_columns) != len(set(self.row_identity_columns)):
-                raise ValueError("row_identity_columns must be unique")
+                msg = "row_identity_columns must be unique"
+                raise ValueError(msg)
         if self.status is ComparisonRunLifecycleStatus.SUCCEEDED:
             if not all(value is not None for value in output_fields):
-                raise ValueError("a successful simulation requires an output")
+                msg = "a successful simulation requires an output"
+                raise ValueError(msg)
             if self.completed_at is None:
-                raise ValueError("a successful simulation requires completed_at")
+                msg = "a successful simulation requires completed_at"
+                raise ValueError(msg)
         if (
             self.status
             in {
@@ -265,7 +283,8 @@ class ComparisonSimulationRecord(StrictContractModel):
             }
             and self.error_code is None
         ):
-            raise ValueError("a failed or skipped simulation requires an error_code")
+            msg = "a failed or skipped simulation requires an error_code"
+            raise ValueError(msg)
         return self
 
 

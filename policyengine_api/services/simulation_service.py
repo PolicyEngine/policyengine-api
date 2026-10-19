@@ -17,6 +17,10 @@ from policyengine_api.utils.population_identity import (
 )
 
 
+class InvalidSimulationIdError(Exception):
+    """Raised when a simulation ID is not a non-negative integer."""
+
+
 @dataclass(frozen=True)
 class SimulationCreateResult:
     """A simulation and whether this call created it."""
@@ -93,7 +97,8 @@ class SimulationService:
             for_update=True,
         )
         if simulation is None:
-            raise ValueError(f"Simulation #{simulation_id} not found")
+            msg = f"Simulation #{simulation_id} not found"
+            raise ValueError(msg)
 
         if self._has_stale_spm_output(simulation.output):
             simulation.status = "pending"
@@ -265,12 +270,11 @@ class SimulationService:
     ) -> Simulation | None:
         """Return the simulation in this country, or None.
 
-        Raise Exception if ``simulation_id`` is not a non-negative int.
+        Raise InvalidSimulationIdError if ``simulation_id`` is not a non-negative int.
         """
         if type(simulation_id) is not int or simulation_id < 0:
-            raise Exception(
-                f"Invalid simulation ID: {simulation_id}. Must be a positive integer."
-            )
+            msg = f"Invalid simulation ID: {simulation_id}. Must be a positive integer."
+            raise InvalidSimulationIdError(msg)
         with self._sessions() as session:
             return self._select_simulation(session, simulation_id, country_id)
 
@@ -303,9 +307,8 @@ class SimulationService:
             values["output"] = json.loads(values["output"])
         output_value = values.get("output")
         if isinstance(output_value, dict) and "spm_config" in output_value:
-            raise ValueError(
-                "Completed simulation output must not include legacy spm_config"
-            )
+            msg = "Completed simulation output must not include legacy spm_config"
+            raise ValueError(msg)
         if isinstance(output_value, dict) and "spm_provenance" in output_value:
             receipt = validate_spm_calculation_provenance(
                 output_value["spm_provenance"]
@@ -322,7 +325,8 @@ class SimulationService:
                 for_update=True,
             )
             if simulation is None:
-                raise LookupError(f"Simulation #{simulation_id} not found")
+                msg = f"Simulation #{simulation_id} not found"
+                raise LookupError(msg)
             for key, value in values.items():
                 setattr(simulation, key, value)
             simulation.api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)

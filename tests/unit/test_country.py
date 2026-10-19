@@ -152,7 +152,8 @@ class TestAxisResults:
             __slots__ = ()
 
             def calculate(self, variable_name, period):
-                raise RuntimeError("calculation failed")
+                msg = "calculation failed"
+                raise RuntimeError(msg)
 
             def get_population(self, entity_plural):
                 return SimpleNamespace(count=5)

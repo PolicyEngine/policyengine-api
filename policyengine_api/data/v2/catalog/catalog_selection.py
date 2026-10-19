@@ -45,23 +45,19 @@ class SelectedCatalog:
 def validate_policyengine_version(value: str) -> str:
     """Return one bounded canonical PEP 440 version string."""
     if not isinstance(value, str) or not value or value != value.strip():
-        raise InvalidPolicyEngineVersionError(
-            "policyengine_version must be a non-empty canonical version"
-        )
+        msg = "policyengine_version must be a non-empty canonical version"
+        raise InvalidPolicyEngineVersionError(msg)
     if len(value) > 128:
-        raise InvalidPolicyEngineVersionError(
-            "policyengine_version must be at most 128 characters"
-        )
+        msg = "policyengine_version must be at most 128 characters"
+        raise InvalidPolicyEngineVersionError(msg)
     try:
         parsed = Version(value)
     except InvalidVersion as error:
-        raise InvalidPolicyEngineVersionError(
-            "policyengine_version must be a canonical PEP 440 version"
-        ) from error
+        msg = "policyengine_version must be a canonical PEP 440 version"
+        raise InvalidPolicyEngineVersionError(msg) from error
     if str(parsed) != value or parsed == Version("0.0.0"):
-        raise InvalidPolicyEngineVersionError(
-            "policyengine_version must be a canonical non-placeholder version"
-        )
+        msg = "policyengine_version must be a canonical non-placeholder version"
+        raise InvalidPolicyEngineVersionError(msg)
     return value
 
 
@@ -94,19 +90,20 @@ def select_catalog(
             )
         ).one_or_none()
     except SQLAlchemyError as error:
-        raise MetadataCatalogUnavailableError(
-            "the v2 metadata catalog cannot be queried"
-        ) from error
+        msg = "the v2 metadata catalog cannot be queried"
+        raise MetadataCatalogUnavailableError(msg) from error
 
     if row is None:
         if explicit_version:
-            raise MetadataCatalogVersionNotFoundError(
+            msg = (
                 f"PolicyEngine.py {selected_version} is not published for {country_id}"
             )
-        raise MetadataCatalogUnavailableError(
+            raise MetadataCatalogVersionNotFoundError(msg)
+        msg = (
             f"the running PolicyEngine.py {selected_version} catalog "
             f"is absent for {country_id}"
         )
+        raise MetadataCatalogUnavailableError(msg)
     model, model_version = row
     return SelectedCatalog(
         country_id=country_id,

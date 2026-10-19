@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 from typing import TYPE_CHECKING, Protocol
 
@@ -93,7 +94,8 @@ def _log_mirror_event(
     policy_created: bool | None = None,
     mapping_created: bool | None = None,
 ) -> None:
-    try:
+    # Metric logging must not change the mirror outcome.
+    with contextlib.suppress(Exception):
         logger.log_struct(
             {
                 "message": "V1 policy immediate mirror completed",
@@ -117,8 +119,6 @@ def _log_mirror_event(
             },
             severity="INFO" if outcome == "ok" else "ERROR",
         )
-    except Exception:
-        pass
 
 
 def mirror_policy_after_commit(
@@ -140,9 +140,8 @@ def mirror_policy_after_commit(
             actual_write_sources=["cloud_sql"],
             failure_category=_failure_category(error),
         )
-        raise PolicyMirrorUnavailableError(
-            "The committed v1 policy could not be mirrored to v2"
-        ) from error
+        msg = "The committed v1 policy could not be mirrored to v2"
+        raise PolicyMirrorUnavailableError(msg) from error
 
     _log_mirror_event(
         snapshot=snapshot,

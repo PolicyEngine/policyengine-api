@@ -1,5 +1,6 @@
 """Flask routes for v1 policies and saved user policies, optionally mirrored to v2."""
 
+import contextlib
 import json
 import time
 
@@ -89,7 +90,8 @@ def _user_policy_persistence_failure(
 ) -> Response:
     """Return and record a failure without serializing exception details."""
     status_code = 503 if error.retryable else 500
-    try:
+    # A logging failure must not replace the persistence response.
+    with contextlib.suppress(Exception):
         logger.log_struct(
             {
                 "message": "V1 saved-policy persistence failed",
@@ -114,9 +116,6 @@ def _user_policy_persistence_failure(
             },
             severity="ERROR",
         )
-    except Exception:
-        # A logging failure must not replace the persistence response.
-        pass
 
     message = (
         "Policy database is temporarily unavailable; please try again later."
@@ -167,7 +166,8 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
     result = None if policy is None else _serialize_policy(policy)
 
     if result is None:
-        raise NotFound(f"Policy #{policy_id} not found.")
+        msg = f"Policy #{policy_id} not found."
+        raise NotFound(msg)
 
     return Response(
         json.dumps({"status": "ok", "message": None, "result": result}),
@@ -192,7 +192,8 @@ def set_policy(country_id: str) -> Response:
 
     is_payload_valid, message = validate_set_policy_payload(payload)
     if not is_payload_valid:
-        raise BadRequest(f"Invalid JSON data; details: {message}")
+        msg = f"Invalid JSON data; details: {message}"
+        raise BadRequest(msg)
 
     try:
         write_source = get_v1_policy_write_source()
@@ -276,7 +277,7 @@ def get_policy_search(country_id: str) -> Response:
             status=200,
             mimetype="application/json",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001  # any search failure returns the JSON 500 response
         return _make_error_response(
             "Internal server error; please try again later.",
             500,
@@ -358,7 +359,7 @@ def set_user_policy(country_id: str) -> Response:
             )
         except UserPolicyMirrorUnavailableError:
             return _user_policy_mirror_unavailable()
-        except Exception:
+        except Exception:  # noqa: BLE001  # the v1 write is committed; any mirror failure is mirror-unavailable
             return _user_policy_mirror_unavailable()
 
     if not creation.created:
@@ -485,7 +486,7 @@ def update_user_policy(country_id: str) -> Response:
             )
         except UserPolicyMirrorUnavailableError:
             return _user_policy_mirror_unavailable()
-        except Exception:
+        except Exception:  # noqa: BLE001  # the v1 write is committed; any mirror failure is mirror-unavailable
             return _user_policy_mirror_unavailable()
 
     return Response(
