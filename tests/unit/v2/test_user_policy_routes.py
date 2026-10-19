@@ -248,7 +248,7 @@ def test_patch_repoints_legacy_reference_and_rejects_invalid_changes() -> None:
             json=body,
         )
         for body in (
-            {"policy_id": str(POLICY_ID)},
+            {"policy_id": None},
             {"user_id": str(OWNER_ID)},
             {"client_ref": "rf-2"},
             {"legacy_policy_id": None},
@@ -262,6 +262,21 @@ def test_patch_repoints_legacy_reference_and_rejects_invalid_changes() -> None:
     assert association_input.model_fields_set == {"legacy_policy_id", "name"}
     assert [response.status_code for response in invalid] == [422] * 5
     assert [call[0] for call in service.calls] == ["patch_user_policy"]
+    assert flask_calls["count"] == 0
+
+
+def test_patch_repoints_to_a_v2_policy_reference() -> None:
+    client, service, flask_calls = _client()
+
+    repointed = client.patch(
+        f"/v2/user-policies/{ASSOCIATION_ID}?country_id=us",
+        json={"policy_id": str(POLICY_ID)},
+    )
+
+    assert repointed.status_code == 200
+    association_input = service.calls[0][1]["association_input"]
+    assert association_input.policy_id == POLICY_ID
+    assert association_input.model_fields_set == {"policy_id"}
     assert flask_calls["count"] == 0
 
 
@@ -381,6 +396,7 @@ def test_openapi_publishes_signed_in_association_contracts() -> None:
     patch_schema = schema["components"]["schemas"][patch_ref.rsplit("/", 1)[-1]]
     assert patch_schema["additionalProperties"] is False
     assert set(patch_schema["properties"]) == {
+        "policy_id",
         "legacy_policy_id",
         "name",
         "description",

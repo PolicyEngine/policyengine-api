@@ -249,6 +249,104 @@ def test_repointing_re_resolves_or_clears_the_v2_reference(store) -> None:
     assert legacy_references.calls[-1] == ("us", {"policy": [404]})
 
 
+def test_repointing_to_a_v2_policy_replaces_the_v1_reference(store) -> None:
+    service, selected, legacy_references = store
+    created = service.create_user_policy(principal=ALICE, association_input=_fields())
+    v1_checks_before_repoint = list(legacy_references.calls)
+
+    repointed = service.patch_user_policy(
+        principal=ALICE,
+        country_id="us",
+        association_id=created.id,
+        association_input=UserPolicyUpdateInput(policy_id=selected.policy_id),
+    )
+
+    assert (repointed.policy_id, repointed.legacy_policy_id) == (
+        selected.policy_id,
+        None,
+    )
+    assert repointed.name == "Saved reform"
+    assert legacy_references.calls == v1_checks_before_repoint
+    with selected.sessions() as session:
+        stored = session.get(UserPolicy, created.id)
+        assert stored is not None
+        assert (stored.policy_id, stored.legacy_policy_id) == (
+            selected.policy_id,
+            None,
+        )
+
+
+def test_repointing_to_both_references_keeps_both_when_they_agree(store) -> None:
+    service, selected, _legacy_references = store
+    created = service.create_user_policy(principal=ALICE, association_input=_fields())
+
+    repointed = service.patch_user_policy(
+        principal=ALICE,
+        country_id="us",
+        association_id=created.id,
+        association_input=UserPolicyUpdateInput(
+            policy_id=selected.policy_id,
+            legacy_policy_id=MAPPED_LEGACY_POLICY_ID,
+        ),
+    )
+
+    assert (repointed.policy_id, repointed.legacy_policy_id) == (
+        selected.policy_id,
+        MAPPED_LEGACY_POLICY_ID,
+    )
+
+
+def test_repointing_to_a_missing_foreign_or_conflicting_policy_changes_nothing(
+    store,
+) -> None:
+    service, selected, _legacy_references = store
+    created = service.create_user_policy(principal=ALICE, association_input=_fields())
+    missing_policy_id = UUID("00000000-0000-0000-0000-000000000099")
+
+    with pytest.raises(AssociationPolicyNotFoundError):
+        service.patch_user_policy(
+            principal=ALICE,
+            country_id="us",
+            association_id=created.id,
+            association_input=UserPolicyUpdateInput(policy_id=missing_policy_id),
+        )
+    with pytest.raises(AssociationCountryConflictError):
+        service.patch_user_policy(
+            principal=ALICE,
+            country_id="us",
+            association_id=created.id,
+            association_input=UserPolicyUpdateInput(policy_id=selected.uk_policy_id),
+        )
+    with selected.sessions.begin() as session:
+        mapped_policy = session.get(Policy, selected.policy_id)
+        assert mapped_policy is not None
+        other_us_policy = Policy(
+            country_id="us",
+            tax_benefit_model_id=mapped_policy.tax_benefit_model_id,
+            tax_benefit_model_version_id=mapped_policy.tax_benefit_model_version_id,
+            canonicalization_version=1,
+            content_hash="e" * 64,
+        )
+        session.add(other_us_policy)
+        session.flush()
+        other_us_policy_id = other_us_policy.id
+    with pytest.raises(AssociationReferenceConflictError):
+        service.patch_user_policy(
+            principal=ALICE,
+            country_id="us",
+            association_id=created.id,
+            association_input=UserPolicyUpdateInput(
+                policy_id=other_us_policy_id,
+                legacy_policy_id=MAPPED_LEGACY_POLICY_ID,
+            ),
+        )
+
+    unchanged = service.get_user_policy(
+        principal=ALICE, country_id="us", association_id=created.id
+    )
+    assert (unchanged.policy_id, unchanged.legacy_policy_id) == (None, 1)
+
+
 def test_rows_owned_by_the_stage_10_mirror_conflict(store) -> None:
     service, selected, _legacy_references = store
     created = service.create_user_policy(principal=ALICE, association_input=_fields())
@@ -331,7 +429,18 @@ def test_patch_input_requires_a_supported_field() -> None:
         UserPolicyUpdateInput()
     with pytest.raises(ValueError):
         UserPolicyUpdateInput.model_validate(
-            {"policy_id": "00000000-0000-0000-0000-000000000001"}
+            {"user_id": "00000000-0000-0000-0000-0000000000a1"}
         )
     with pytest.raises(ValueError):
         UserPolicyUpdateInput(legacy_policy_id=None)
+    with pytest.raises(ValueError):
+        UserPolicyUpdateInput(policy_id=None)
+
+
+def test_patch_input_accepts_a_v2_policy_reference() -> None:
+    repoint = UserPolicyUpdateInput.model_validate(
+        {"policy_id": "00000000-0000-0000-0000-000000000001"}
+    )
+
+    assert repoint.policy_id == UUID("00000000-0000-0000-0000-000000000001")
+    assert repoint.model_fields_set == {"policy_id"}

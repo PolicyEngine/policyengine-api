@@ -61,6 +61,7 @@ from policyengine_api.services.v2.user_policies.types import (
     UserPolicyCreationInput,
     UserPolicyPage,
     UserPolicyRead,
+    UserPolicyReferences,
     UserPolicyUpdateInput,
 )
 from policyengine_api.services.v2.user_policies.validators import (
@@ -533,12 +534,16 @@ class V2UserPolicyService:
         """Update the supplied fields of the principal's association in this country.
 
         A new ``legacy_policy_id`` must exist in v1 and repoints ``policy_id`` to the
-        v2 copy of that policy, or to None when there is no copy. Raise
-        UserPolicyNotFoundError when the association is not the principal's, and
-        MirrorOwnedAssociationError when the v1 saved-policy mirror maintains it.
+        v2 copy of that policy, or to None when there is no copy. A new
+        ``policy_id`` must exist in this country (AssociationPolicyNotFoundError or
+        AssociationCountryConflictError); without ``legacy_policy_id`` it clears the
+        v1 reference, and with it the two must name the same policy
+        (AssociationReferenceConflictError). Raise UserPolicyNotFoundError when the
+        association is not the principal's, and MirrorOwnedAssociationError when
+        the v1 saved-policy mirror maintains it.
         """
-        repoint = "legacy_policy_id" in association_input.model_fields_set
-        if repoint:
+        supplied = association_input.model_fields_set
+        if "legacy_policy_id" in supplied:
             if association_input.legacy_policy_id is None:
                 msg = "legacy_policy_id must not be null"
                 raise TypeError(msg)
@@ -560,13 +565,17 @@ class V2UserPolicyService:
                 read_user_policy_mirror_exists(session, association_id=association.id),
                 association_id=association.id,
             )
-            repointed_policy_id = (
-                read_mirrored_policy_ids(
-                    session,
-                    country_id=country_id,
-                    legacy_policy_ids=(association_input.legacy_policy_id,),
-                ).get(association_input.legacy_policy_id)
-                if repoint and association_input.legacy_policy_id is not None
+            references = (
+                UserPolicyReferences(
+                    policy_id=resolve_user_policy_reference(
+                        session,
+                        country_id=country_id,
+                        policy_id=association_input.policy_id,
+                        legacy_policy_id=association_input.legacy_policy_id,
+                    ),
+                    legacy_policy_id=association_input.legacy_policy_id,
+                )
+                if association_input.repoints
                 else None
             )
             return user_policy_read(
@@ -574,8 +583,7 @@ class V2UserPolicyService:
                     session,
                     association,
                     association_input,
-                    repointed_policy_id=repointed_policy_id,
-                    repoint=repoint,
+                    references=references,
                 )
             )
 

@@ -7,12 +7,15 @@ from typing import TYPE_CHECKING
 from policyengine_api.data.v2.models.base import utc_now
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from sqlmodel import Session
 
     from policyengine_api.data.v2.models import LegacyUserPolicyMapping, UserPolicy
-    from policyengine_api.services.v2.user_policies.types import UserPolicyUpdateInput
+    from policyengine_api.services.v2.user_policies.types import (
+        UserPolicyReferences,
+        UserPolicyUpdateInput,
+    )
+
+POLICY_REFERENCE_FIELDS = frozenset({"policy_id", "legacy_policy_id"})
 
 
 def update_user_policy(
@@ -20,17 +23,20 @@ def update_user_policy(
     association: UserPolicy,
     association_input: UserPolicyUpdateInput,
     *,
-    repointed_policy_id: UUID | None = None,
-    repoint: bool = False,
+    references: UserPolicyReferences | None = None,
 ) -> UserPolicy:
-    """Apply the supplied fields, bump ``updated_at`` and return the row.
+    """Apply the supplied presentation fields, bump ``updated_at`` and return the row.
 
-    With ``repoint``, also set ``policy_id`` to ``repointed_policy_id``.
+    With ``references``, also store both of its policy references; the service
+    resolves them, so the request's own reference fields are never copied.
     """
-    for field_name, value in association_input.model_dump(exclude_unset=True).items():
+    for field_name, value in association_input.model_dump(
+        exclude_unset=True, exclude=set(POLICY_REFERENCE_FIELDS)
+    ).items():
         setattr(association, field_name, value)
-    if repoint:
-        association.policy_id = repointed_policy_id
+    if references is not None:
+        association.policy_id = references.policy_id
+        association.legacy_policy_id = references.legacy_policy_id
     association.updated_at = utc_now()
     session.add(association)
     session.flush()

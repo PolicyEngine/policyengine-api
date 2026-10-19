@@ -1,0 +1,1 @@
+PATCH /v2/user-policies/{id} accepts policy_id, so a saved policy can be pointed at another v2 policy without changing its ID. Supplied alone, policy_id clears the v1 reference (legacy_policy_id); supplied with legacy_policy_id, both must name the same policy. Unknown, other-country and conflicting policies are refused as on creation.
