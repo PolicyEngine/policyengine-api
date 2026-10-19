@@ -1,3 +1,10 @@
+## [5.5.4] - 2026-10-19
+
+### Changed
+
+- Enabled ruff's docstring rules (D) and documented every module, class and function outside tests; published models and routes now carry these descriptions in their JSON schema and OpenAPI, with no structural schema change.
+
+
 ## [5.5.3] - 2026-10-16
 
 ### Changed

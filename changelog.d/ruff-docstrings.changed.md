@@ -1,1 +1,0 @@
-Enabled ruff's docstring rules (D) and documented every module, class and function outside tests; published models and routes now carry these descriptions in their JSON schema and OpenAPI, with no structural schema change.
