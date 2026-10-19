@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import traceback
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -148,7 +149,8 @@ def _log_failure(event: str, error: Exception) -> None:
     the type and the innermost frame locations are logged. Logging never
     changes the response.
     """
-    try:
+    # Observability must not alter the response.
+    with contextlib.suppress(Exception):
         frames = traceback.extract_tb(error.__traceback__)[-8:]
         logger.error(
             event,
@@ -163,8 +165,6 @@ def _log_failure(event: str, error: Exception) -> None:
                 }
             },
         )
-    except Exception:  # noqa: BLE001  # observability must not alter the response
-        pass
 
 
 def user_resource_operation(

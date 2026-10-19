@@ -222,7 +222,8 @@ def create_asgi_app(
         initial_route = native_route_template or request.url.path
 
         if native_request:
-            try:
+            # Telemetry must never fail the request.
+            with contextlib.suppress(Exception):
                 runtime_request_id = request_runtime.begin_request(
                     headers={
                         **dict(request.headers),
@@ -237,8 +238,6 @@ def create_asgi_app(
                     request.state.policyengine_request_id = request_id
                     _asgi_request_id.reset(context_token)
                     context_token = _asgi_request_id.set(request_id)
-            except Exception:  # noqa: BLE001  # telemetry must never fail the request
-                pass
             # Telemetry must never fail the request.
             with contextlib.suppress(Exception):
                 request_runtime.set_context(
@@ -306,11 +305,10 @@ def create_asgi_app(
                         observability_id=response_observability_id
                     )
             if native_request:
-                try:
+                # Telemetry must never fail the request.
+                with contextlib.suppress(Exception):
                     for name, value in request_runtime.response_headers().items():
                         response.headers[name] = value
-                except Exception:  # noqa: BLE001  # telemetry must never fail the request
-                    pass
             _apply_request_id_header(response, request_id)
             if response_observability_id is not None:
                 _apply_observability_id_header(response, response_observability_id)

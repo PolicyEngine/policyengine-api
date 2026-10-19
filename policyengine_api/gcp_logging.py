@@ -8,6 +8,7 @@ call the Cloud Logging API.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Mapping
 from typing import Any
 
@@ -25,7 +26,8 @@ class _RuntimeLogger:
         labels: Mapping[str, Any] | None = None,
     ) -> None:
         """Record an allowlisted structured message without affecting callers."""
-        try:
+        # Logging must never affect the caller.
+        with contextlib.suppress(Exception):
             message = str(info.get("message") or "API event")
             attributes = {
                 key: value
@@ -42,8 +44,6 @@ class _RuntimeLogger:
                 severity=severity,
                 attributes=attributes,
             )
-        except Exception:  # noqa: BLE001  # logging must never affect the caller
-            pass
 
 
 logger = _RuntimeLogger()

@@ -149,7 +149,9 @@ def compare(registry: Registry, findings: Findings, root: Path) -> list[Violatio
     A check that could not run is skipped rather than reported.
     """
     config = registry.ci_scripts
-    assert config is not None
+    if config is None:
+        msg = "the registry has no [ci_scripts] table"
+        raise TypeError(msg)
     checks = (
         (
             "multiline",
@@ -197,7 +199,9 @@ def compare(registry: Registry, findings: Findings, root: Path) -> list[Violatio
 def write_baselines(registry: Registry, findings: Findings, root: Path) -> None:
     """Record today's findings as the baselines (used once, when adopting the rule)."""
     config = registry.ci_scripts
-    assert config is not None
+    if config is None:
+        msg = "the registry has no [ci_scripts] table"
+        raise TypeError(msg)
     for found, path in (
         (findings.multiline, config.multiline_baseline),
         (findings.untested, config.untested_baseline),

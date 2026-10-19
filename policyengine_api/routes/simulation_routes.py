@@ -1,6 +1,7 @@
 """Flask routes for creating, reading and updating v1 simulation records."""
 
 import json
+import logging
 
 import jsonschema
 import pydantic
@@ -12,6 +13,8 @@ from policyengine_api.response_factory import _make_error_response
 from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.spm import SPMValidationError
 from policyengine_api.utils.payload_validators import validate_country
+
+logger = logging.getLogger(__name__)
 
 simulation_bp = Blueprint("simulation", __name__)
 simulation_service = SimulationService()
@@ -39,9 +42,10 @@ def _serialize_v1_simulation(simulation: Simulation) -> dict:
         if value is not None and not isinstance(value, str):
             response[field] = json.dumps(value)
 
-    # TODO: Remove this compatibility projection when the v1 contract is
-    # retired. New v2 response models should expose these fields as native JSON
-    # objects instead of carrying the historical JSON-in-a-string shape forward.
+    # This JSON-in-a-string projection exists only for the v1 contract and can
+    # go when that contract is retired. v2 response models should expose these
+    # fields as native JSON objects rather than carry the historical shape
+    # forward.
     return response
 
 
@@ -67,8 +71,6 @@ def create_simulation(country_id: str) -> Response:
         - policy_id (int): The policy ID
 
     """
-    print(f"Creating simulation for country {country_id}")
-
     payload = request.json
     if payload is None:
         msg = "Payload missing from request"
@@ -152,8 +154,6 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
         simulation_id (int): The simulation ID.
 
     """
-    print(f"Getting simulation {simulation_id} for country {country_id}")
-
     if not isinstance(simulation_id, int):
         msg = "simulation_id must be an integer"
         raise BadRequest(msg)
@@ -209,7 +209,7 @@ def update_simulation(country_id: str) -> Response:
     simulation_id = payload.get("id")
     output = payload.get("output")
     error_message = payload.get("error_message")
-    print(f"Updating simulation #{simulation_id} for country {country_id}")
+    logger.debug("Updating simulation #%s for country %s", simulation_id, country_id)
 
     # Validate status if provided
     if status is not None and status not in ["pending", "complete", "error"]:

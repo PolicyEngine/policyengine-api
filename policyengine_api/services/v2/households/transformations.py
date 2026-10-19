@@ -84,7 +84,9 @@ def canonical_household_document(household_input: HouseholdCreationInput) -> byt
             "people",
             *SUPPORTED_ENTITY_COLLECTIONS[household_input.country_id],
         }:
-            assert isinstance(records, list)
+            if not isinstance(records, list):
+                msg = f"household {collection} must be a list"
+                raise TypeError(msg)
             typed_records = cast("list[dict[str, Any]]", records)
             content[collection] = sorted(
                 typed_records,
@@ -198,7 +200,9 @@ def translate_legacy_household(
     translated exactly.
     """
     source = snapshot.household_json
-    assert isinstance(source, dict)
+    if not isinstance(source, dict):
+        msg = "legacy household_json must be an object"
+        raise TypeError(msg)
     collections = SUPPORTED_ENTITY_COLLECTIONS[snapshot.country_id]
     allowed_source = {
         "people",
@@ -244,7 +248,9 @@ def translate_legacy_household(
                     msg = f"legacy {source_name} members must reference named people"
                     raise LegacyHouseholdTranslationError(msg)
                 for raw_person_name in value:
-                    assert isinstance(raw_person_name, str)
+                    if not isinstance(raw_person_name, str):
+                        msg = f"legacy {source_name} member names must be strings"
+                        raise TypeError(msg)
                     person_name = raw_person_name
                     memberships = person_memberships[person_name]
                     previous = memberships.get(collection)

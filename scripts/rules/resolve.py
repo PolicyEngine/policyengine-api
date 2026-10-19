@@ -13,6 +13,11 @@ import tomllib
 from functools import cache
 from typing import TYPE_CHECKING, Any
 
+from scripts.rules.file_exceptions import (
+    linted_files,
+    matching_files,
+    out_of_scope_files,
+)
 from scripts.rules.model import CiRef, Kind, Rule, Violation
 from scripts.rules.workflows import JobBlock, parse_jobs
 
@@ -23,6 +28,8 @@ if TYPE_CHECKING:
 DEFAULT_RUNNER = "scripts/run_quality_guards.py"
 RUFF_DEFAULT_SELECT = ("E4", "E7", "E9", "F")
 PROOF_CI_FIELDS = ("workflow", "job", "invocation")
+# How many offending files a file-level exception violation names.
+SHOWN_OUT_OF_SCOPE_FILES = 3
 
 
 # --- shared readers -------------------------------------------------------
@@ -38,6 +45,7 @@ def clear_caches() -> None:
     _read.cache_clear()
     workflow_jobs.cache_clear()
     test_names.cache_clear()
+    linted_files.cache_clear()
 
 
 @cache
@@ -264,6 +272,45 @@ def _resolve_ruff(rule: Rule, root: Path) -> list[Violation]:
                     "match enforcer.pattern/codes to the ruff config",
                 )
             ]
+        return _file_level_exception_scope(rule, root, pattern)
+    return []
+
+
+def _file_level_exception_scope(
+    rule: Rule, root: Path, pattern: str
+) -> list[Violation]:
+    """Check a per-file ignore covers only tests, CI/CD and command-line scripts."""
+    out_of_scope = out_of_scope_files(root, pattern)
+    if out_of_scope is None:
+        return [
+            _v(
+                rule,
+                f"ruff per-file-ignores pattern {pattern!r} is negated",
+                "name the files the exception covers",
+            )
+        ]
+    if not matching_files(root, pattern):
+        return [
+            _v(
+                rule,
+                f"ruff per-file-ignores pattern {pattern!r} matches no files",
+                "fix the pattern, or remove the exception",
+            )
+        ]
+    if out_of_scope:
+        shown = ", ".join(out_of_scope[:SHOWN_OUT_OF_SCOPE_FILES])
+        hidden = len(out_of_scope) - SHOWN_OUT_OF_SCOPE_FILES
+        more = f" and {hidden} more" if hidden > 0 else ""
+        return [
+            _v(
+                rule,
+                f"ruff per-file-ignores {pattern!r} covers files that may not take "
+                f"file-level exceptions: {shown}{more}",
+                "file-level exceptions are only for tests, CI/CD scripts and "
+                "command-line scripts; narrow the pattern and suppress other "
+                "findings inline with a reason",
+            )
+        ]
     return []
 
 

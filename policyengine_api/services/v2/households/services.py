@@ -60,7 +60,9 @@ def normalize_creation_input(
 ) -> HouseholdCreationInput:
     """Return the input with its household document validated and normalized."""
     document = household_input.household_data
-    assert isinstance(document, dict)
+    if not isinstance(document, dict):
+        msg = "household_data must be an object"
+        raise TypeError(msg)
     return HouseholdCreationInput(
         country_id=household_input.country_id,
         default_year=household_input.default_year,

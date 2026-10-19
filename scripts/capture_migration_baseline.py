@@ -22,6 +22,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 
+def _report(message: str) -> None:
+    """Print one line of the capture's output."""
+    print(message)
+
+
 @dataclass(frozen=True)
 class RouteProbe:
     """One API request to time, and the status codes that count as success."""
@@ -289,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
 
     results: list[ProbeResult] = []
     if not args.base_url:
-        print("API_BASE_URL is not set; skipping API route baseline capture.")
+        _report("API_BASE_URL is not set; skipping API route baseline capture.")
     else:
         results.extend(run_probes(args.base_url, args.repetitions))
 
@@ -304,16 +309,16 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
     elif args.simulation_gateway_url or args.simulation_payload_file:
-        print(
+        _report(
             "SIMULATION_ENTRYPOINT_URL and SIMULATION_PAYLOAD_FILE are both required; "
             "skipping simulation gateway baseline capture."
         )
 
     if not results:
-        print("No baseline probes ran.")
+        _report("No baseline probes ran.")
         return 0
 
-    print(json.dumps(summarize(results), indent=2, sort_keys=True))
+    _report(json.dumps(summarize(results), indent=2, sort_keys=True))
     return 0
 
 

@@ -10,7 +10,7 @@ start_time = time.time()
 def log_timing(message: str) -> None:
     """Print a startup milestone to stderr with the seconds since import began."""
     elapsed = time.time() - start_time
-    print(f"[{elapsed:.2f}s] {message}", file=sys.stderr, flush=True)
+    print(f"[{elapsed:.2f}s] {message}", file=sys.stderr, flush=True)  # noqa: T201  # startup timings go straight to stderr while the app imports
 
 
 log_timing("Basic imports completed")
@@ -30,8 +30,6 @@ from policyengine_api.request_context import REQUEST_ID_HEADER
 from policyengine_api.runtime_cache.settings import load_runtime_cache_settings
 
 log_timing("Caching utilities import completed")
-
-# from werkzeug.middleware.profiler import ProfilerMiddleware
 
 # Endpoints
 from policyengine_api.routes.error_routes import error_bp

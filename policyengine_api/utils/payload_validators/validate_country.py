@@ -41,7 +41,6 @@ def validate_country(
     def validate_country_wrapper(
         country_id: str, *args: object, **kwargs: object
     ) -> _ViewResult | Response:
-        print("Validating country")
         try:
             ensure_supported_country(country_id)
         except InvalidCountryError as error:

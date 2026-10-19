@@ -69,7 +69,7 @@ gap is visible, rather than leaving it out.
 | --- | --- | --- |
 | `pytest` | `nodes` (`path::test` or `path::Class::test`), optional `project` (sub-project directory the paths are relative to) | Each test exists, and the CI job's command collects it |
 | `quality-guard` | `name`, optional `runner` | The name is in `GUARDS` in `scripts/run_quality_guards.py` |
-| `ruff` | `mode` = `format`, `lint` (with `codes`) or `per-file-ignore` (with `pattern`, `codes`) | Codes are selected / the ignore entry exists |
+| `ruff` | `mode` = `format`, `lint` (with `codes`) or `per-file-ignore` (with `pattern`, `codes`) | Codes are selected / the ignore entry exists and covers only [files allowed file-level exceptions](#file-level-exceptions) |
 | `mypy` | `paths` | Each path is in `[tool.mypy].files` |
 | `workflow-job` | optional `step` | The CI job exists (the job itself is the check) |
 | `pyright`, `import-linter` | `config` (+ `contract` for Import Linter) | The config file exists |
@@ -117,12 +117,63 @@ fail the guard yet.
 
 - **Ruff is never ratcheted.** Adopting a ruff rule family is one standalone PR
   that changes the select list and fixes every resulting violation. Don't use
-  `--add-noqa` or blanket per-file ignores.
+  `--add-noqa`. A finding that is kept gets an inline `# noqa: CODE  # reason`,
+  except in the files below.
 - Other enforcers (mypy, Pyright, Import Linter, custom guards) may start
   `ratcheted` with a baseline file of tolerated violations. Baselines may only
   shrink: the guard compares counts against the base branch.
 - Moving a rule from enforced/ratcheted to advisory/doc-only needs an explicit
   `[rule.downgrade] reason`.
+
+## File-level exceptions
+
+A ruff `per-file-ignores` entry switches rules off for whole files. It is
+allowed only where that's the norm rather than an exception to it:
+
+- **tests**: files under a `tests` or `authenticated_tests` directory;
+- **CI/CD scripts**: files under `.github`;
+- **command-line scripts**: files under a `scripts` directory, or modules that
+  run as a program through `if __name__ == "__main__":`.
+
+Everywhere else, fix the finding. An inline suppression is the last resort
+(see "Inline suppressions").
+
+Each entry needs a `per-file-ignore` rule (see below). The guard expands the
+entry's pattern like ruff does and fails when the pattern:
+
+- covers any other file;
+- is negated;
+- matches nothing.
+
+`scripts/rules/file_exceptions.py` holds these definitions.
+
+## Inline suppressions
+
+An inline suppression (`# noqa: <CODE>  # reason`) is the last resort for a
+ruff finding, not the usual way to clear one
+(`api.process.agents-suppress-as-last-resort`). Before adding one, try:
+
+1. **A code change** that removes the finding: narrow an `except` to the
+   errors the code expects, pass the missing argument, or route repeated code
+   through one helper so a boundary is handled once instead of at every call
+   site.
+2. **A ruff setting**, when several findings share a cause: for example,
+   list a lazily loaded package in `banned-module-level-imports` instead of
+   suppressing each deferred import of it.
+3. **A file-level exception**, only where the section above allows one.
+
+Keep a suppression only when each of these would change behaviour that
+callers rely on, or when the rule doesn't fit the code. Give the reason after
+the code, as every suppression does.
+
+For a deliberate best-effort call whose failure must be ignored, use
+`with contextlib.suppress(Exception):` with the reason in a comment above it,
+the form ruff's `SIM105` recommends, instead of `try`/`except Exception: pass`
+with suppressions. It still ignores every exception, so it needs the same
+justification as a suppression.
+
+A pull request that adds inline suppressions lists each one in its
+description, with the reason a code change or setting wasn't used.
 
 ## Hidden rules
 
