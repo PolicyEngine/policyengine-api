@@ -1,3 +1,10 @@
+## [5.5.5] - 2026-10-19
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.7.5. US state and congressional-district regions use the ACS-local Populace dataset again, on the PolicyEngine/microcosm#1263 rebuild (PolicyEngine/policyengine.py#649).
+
+
 ## [5.5.4] - 2026-10-19
 
 ### Changed
