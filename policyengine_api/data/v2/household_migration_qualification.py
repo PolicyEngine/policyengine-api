@@ -10,18 +10,12 @@ from typing import TYPE_CHECKING, Protocol
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import Connection, Engine, func, inspect, select
+from sqlalchemy import Connection, Engine, column, func, inspect, select, table
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.pool import NullPool
 from sqlmodel import create_engine
 
-from policyengine_api.data.v2.models import (
-    Household,
-    HouseholdJob,
-    Report,
-    Simulation,
-    UserHouseholdAssociation,
-)
+from policyengine_api.data.v2.models import Household, UserHouseholdAssociation
 from policyengine_api.data.v2.settings import (
     V2ConfigurationError,
     V2DatabaseSettings,
@@ -33,6 +27,12 @@ if TYPE_CHECKING:
 
 HOUSEHOLD_MIGRATION_REVISION = "724b1b11a33e"
 V2_ALEMBIC_CONFIG = "alembic-v2.ini"
+# A target before the household revision still has these tables. Revision
+# 81ecfa184cd5 later dropped them and their models, so the counts name them
+# directly; the existing-table check skips them on a target without them.
+SIMULATIONS = table("simulations", column("household_id"))
+REPORTS = table("reports", column("household_id"))
+HOUSEHOLD_JOBS = table("household_jobs")
 
 
 class ScalarExecutor(Protocol):
@@ -130,19 +130,19 @@ def read_household_data_counts(
         ),
         simulation_household_references=count(
             select(func.count())
-            .select_from(Simulation)
-            .where(Simulation.household_id.is_not(None)),
-            "simulations",
+            .select_from(SIMULATIONS)
+            .where(SIMULATIONS.c.household_id.is_not(None)),
+            SIMULATIONS.name,
         ),
         report_household_references=count(
             select(func.count())
-            .select_from(Report)
-            .where(Report.household_id.is_not(None)),
-            "reports",
+            .select_from(REPORTS)
+            .where(REPORTS.c.household_id.is_not(None)),
+            REPORTS.name,
         ),
         household_jobs=count(
-            select(func.count()).select_from(HouseholdJob),
-            "household_jobs",
+            select(func.count()).select_from(HOUSEHOLD_JOBS),
+            HOUSEHOLD_JOBS.name,
         ),
     )
 

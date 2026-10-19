@@ -34,19 +34,44 @@ PROHIBITED_V2_TABLES = frozenset(
     }
 )
 
+# The simulation service owns these tables in its own ``simulation`` schema.
+# Revision 81ecfa184cd5 dropped the Public API's dormant copies, and the
+# Public API's metadata must not declare them again.
+SIMULATION_SERVICE_TABLES = frozenset(
+    {
+        "aggregates",
+        "budget_summary",
+        "change_aggregates",
+        "congressional_district_impacts",
+        "constituency_impacts",
+        "decile_impacts",
+        "household_jobs",
+        "inequality",
+        "intra_decile_impacts",
+        "local_authority_impacts",
+        "poverty",
+        "program_statistics",
+        "report_runs",
+        "reports",
+        "simulations",
+    }
+)
+
 
 class V2MetadataValidationError(RuntimeError):
     """Raised when v2 metadata contains a specifically rejected table."""
 
 
 def validate_v2_metadata_table_names(table_names: Iterable[str]) -> None:
-    """Reject known v1-only and explicitly prohibited v2 table names."""
+    """Reject known v1-only, simulation-service and prohibited v2 table names."""
     actual = frozenset(table_names)
     prohibited = sorted(actual & PROHIBITED_V2_TABLES)
     v1_only = sorted(actual & V1_ONLY_TABLES)
-    if prohibited or v1_only:
+    simulation_service = sorted(actual & SIMULATION_SERVICE_TABLES)
+    if prohibited or v1_only or simulation_service:
         msg = (
             "API v2-alpha metadata contains rejected tables: "
-            f"prohibited={prohibited}, v1_only={v1_only}"
+            f"prohibited={prohibited}, v1_only={v1_only}, "
+            f"simulation_service={simulation_service}"
         )
         raise V2MetadataValidationError(msg)

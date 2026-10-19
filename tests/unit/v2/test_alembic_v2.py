@@ -16,6 +16,7 @@ from alembic.util import CommandError
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base
+from policyengine_api.data.v2.metadata_validation import SIMULATION_SERVICE_TABLES
 from policyengine_api.data.v2.migration_target import (
     DISPOSABLE_DATABASE_NAME,
     MIGRATION_ROLE,
@@ -47,6 +48,25 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
         "user_identities",
+    }
+)
+SIMULATION_TABLE_REMOVAL_REVISION = "81ecfa184cd5"
+RUN_OUTPUT_TABLES = SIMULATION_SERVICE_TABLES - {
+    "household_jobs",
+    "report_runs",
+    "reports",
+    "simulations",
+}
+SIMULATION_DOMAIN_ENUM_TYPES = frozenset(
+    {
+        "v2_aggregate_type",
+        "v2_decile_type",
+        "v2_household_job_status",
+        "v2_output_status",
+        "v2_report_run_status",
+        "v2_report_run_trigger",
+        "v2_simulation_status",
+        "v2_simulation_type",
     }
 )
 POOLER_URL = (
@@ -235,6 +255,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        "fbb7488ebe8a",
         "91af4fc8d8c1",
         "60d6518b6a98",
         "439303be14fe",
@@ -268,7 +289,9 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert "fk_regions_default_dataset_model_datasets" in baseline
     assert "uq_datasets_model_name" in baseline
     assert "ck_datasets_output_storage_path" in baseline
-    baseline_table_count = len(V2_TABLE_NAMES - POST_BASELINE_TABLE_NAMES)
+    baseline_table_count = len(
+        (V2_TABLE_NAMES | SIMULATION_SERVICE_TABLES) - POST_BASELINE_TABLE_NAMES
+    )
     assert baseline.count("op.create_table(") == baseline_table_count
     assert baseline.count("op.drop_table(") == baseline_table_count
 
@@ -495,7 +518,6 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
         / "migrations/v2/versions/fbb7488ebe8a_link_signed_in_users_to_v1_anchored_.py"
     ).read_text(encoding="utf-8")
 
-    assert V2_ALEMBIC_HEAD_REVISION == "fbb7488ebe8a"
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
@@ -737,3 +759,87 @@ def test_v2_environment_commits_after_persistent_target_qualification() -> None:
     assert "current_heads != previous_heads" in env_source
     assert "current_heads == script_heads" in env_source
     assert "validate_v2_head_schema(connection, target_metadata)" in env_source
+
+
+def _simulation_table_removal_revision() -> str:
+    (path,) = (REPO / "migrations/v2/versions").glob(
+        f"{SIMULATION_TABLE_REMOVAL_REVISION}_*.py"
+    )
+    return path.read_text(encoding="utf-8")
+
+
+def test_simulation_table_removal_revision_is_generated_with_enum_cleanup() -> None:
+    revision = _simulation_table_removal_revision()
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert V2_ALEMBIC_HEAD_REVISION == SIMULATION_TABLE_REMOVAL_REVISION
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "fbb7488ebe8a"' in revision
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision
+    # The upgrade drops exactly the simulation-domain tables and the two
+    # retired association columns; the downgrade recreates them.
+    assert set(re.findall(r'op\.drop_table\("([a-z0-9_]+)"\)', upgrade)) == (
+        SIMULATION_SERVICE_TABLES
+    )
+    assert "op.create_table(" not in upgrade
+    assert set(re.findall(r'op\.create_table\(\s*"([a-z0-9_]+)"', downgrade)) == (
+        SIMULATION_SERVICE_TABLES
+    )
+    assert "op.drop_table(" not in downgrade
+    retired_columns = {
+        (table_name, column_name)
+        for table_name in ("user_simulation_associations", "user_report_associations")
+        for column_name in ("country", "label")
+    }
+    assert (
+        set(re.findall(r'op\.drop_column\("([a-z_]+)", "([a-z_]+)"\)', upgrade))
+        == retired_columns
+    )
+    assert (
+        set(
+            re.findall(
+                r'op\.add_column\(\s*"([a-z_]+)",\s*sa\.Column\(\s*"([a-z_]+)"',
+                downgrade,
+            )
+        )
+        == retired_columns
+    )
+    # Post-generation corrections (docs/engineering/skills/alembic-migrations.md):
+    # Alembic emits removed tables in arbitrary order, it does not generate the
+    # removal of their native enum types, and reflection mangles one check.
+    assert revision.count("# Post-generation correction:") == 3
+    assert revision.count("# Post-generation reversibility correction:") == 1
+    corrected_enum_names = set(
+        re.findall(
+            r"sa\.Enum\(name=[\"']([^\"']+)[\"']\)\.drop\(op\.get_bind\(\)\)",
+            upgrade,
+        )
+    )
+    assert corrected_enum_names == SIMULATION_DOMAIN_ENUM_TYPES
+    assert "(filter_field IS NULL) = (filter_value IS NULL)" in downgrade
+
+    def position(section: str, operation: str, table_name: str) -> int:
+        match = re.search(rf'{re.escape(operation)}\(\s*"{table_name}"', section)
+        assert match, (operation, table_name)
+        return match.start()
+
+    for referencing, referenced in (
+        *((output, "report_runs") for output in RUN_OUTPUT_TABLES),
+        *((output, "simulations") for output in RUN_OUTPUT_TABLES),
+        ("report_runs", "reports"),
+        ("reports", "simulations"),
+    ):
+        assert position(upgrade, "op.drop_table", referencing) < position(
+            upgrade, "op.drop_table", referenced
+        )
+        assert position(downgrade, "op.create_table", referenced) < position(
+            downgrade, "op.create_table", referencing
+        )
+    assert ".drop(op.get_bind())" not in downgrade

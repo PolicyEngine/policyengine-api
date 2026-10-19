@@ -1,0 +1,1 @@
+Dropped the empty simulation-domain tables (household jobs, simulations, reports, report runs and their outputs), their enum types and the retired `country` and `label` association columns from the v2 schema, removed their models, and added a check that stops code importing those models again.

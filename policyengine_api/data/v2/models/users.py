@@ -36,8 +36,7 @@ class User(IdentifiedModel, table=True):
     """A v2 user account, unique by email when one is given.
 
     A ``standard`` user always has a primary country. Deleting a user deletes
-    their sign-in identities and saved associations; reports they own are kept
-    without an owner.
+    their sign-in identities and saved associations.
     """
 
     __tablename__ = "users"

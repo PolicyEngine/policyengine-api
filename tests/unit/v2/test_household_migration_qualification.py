@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from policyengine_api.data.v2 import household_migration_qualification as qualification
 from policyengine_api.data.v2.settings import (
@@ -16,6 +17,8 @@ from policyengine_api.data.v2.settings import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from sqlalchemy.sql import ClauseElement
 
 ENVIRONMENT = {
     V2_MIGRATION_DATABASE_URL: (
@@ -121,6 +124,49 @@ def test_pending_household_revision_runs_row_qualification() -> None:
     assert connection.statements == ["SET TRANSACTION READ ONLY"]
     assert connection.transaction.rolled_back
     assert engine.disposed
+
+
+class RecordingExecutor:
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    def scalar(self, statement: ClauseElement) -> int:
+        compiled = statement.compile(dialect=postgresql.dialect())
+        self.statements.append(" ".join(str(compiled).split()))
+        return 0
+
+
+def test_counts_query_every_table_the_household_revision_replaced() -> None:
+    # The simulation, report and household job tables have no models any more;
+    # the counts still name them for a target before revision 724b1b11a33e.
+    executor = RecordingExecutor()
+
+    counts = qualification.read_household_data_counts(executor)
+
+    assert counts == qualification.HouseholdDataCounts(0, 0, 0, 0, 0)
+    assert executor.statements == [
+        "SELECT count(*) AS count_1 FROM households",
+        "SELECT count(*) AS count_1 FROM user_household_associations",
+        "SELECT count(*) AS count_1 FROM simulations "
+        "WHERE simulations.household_id IS NOT NULL",
+        "SELECT count(*) AS count_1 FROM reports "
+        "WHERE reports.household_id IS NOT NULL",
+        "SELECT count(*) AS count_1 FROM household_jobs",
+    ]
+
+
+def test_counts_skip_tables_the_target_does_not_have() -> None:
+    executor = RecordingExecutor()
+
+    counts = qualification.read_household_data_counts(
+        executor, existing_tables={"households", "user_household_associations"}
+    )
+
+    assert counts == qualification.HouseholdDataCounts(0, 0, 0, 0, 0)
+    assert executor.statements == [
+        "SELECT count(*) AS count_1 FROM households",
+        "SELECT count(*) AS count_1 FROM user_household_associations",
+    ]
 
 
 @pytest.mark.parametrize(

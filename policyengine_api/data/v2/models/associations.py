@@ -3,13 +3,6 @@
 Every association names its target through a nullable v2 reference, a
 nullable country-scoped v1 (legacy) reference, or both; a database check
 requires at least one.
-
-The simulation and report associations still carry the pre-Stage 12A
-``country`` and ``label`` columns, which are nullable and unused. They stay in
-the table metadata, so the schema still matches it, but the mappers exclude
-them: this revision never selects, inserts or updates them. A later revision
-drops them, and must not deploy while a Public API revision that maps them can
-still serve traffic.
 """
 
 from datetime import datetime
@@ -32,8 +25,6 @@ if TYPE_CHECKING:
 
 
 USER_POLICY_BASELINES = ("current-law", "current-policy")
-# The retired columns; see the module docstring.
-RETIRED_ASSOCIATION_COLUMNS = ("country", "label")
 
 
 def _jsonb_type() -> sa.types.TypeEngine[Any]:
@@ -182,7 +173,6 @@ class UserSimulationAssociation(TimestampedModel, table=True):
     """
 
     __tablename__ = "user_simulation_associations"
-    __mapper_args__ = {"exclude_properties": RETIRED_ASSOCIATION_COLUMNS}
     __table_args__ = (
         sa.UniqueConstraint(
             "id",
@@ -221,9 +211,6 @@ class UserSimulationAssociation(TimestampedModel, table=True):
     country_id: str = Field(max_length=2)
     name: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, sa_type=sa.Text)
-    # Retired and not mapped; see the module docstring.
-    country: str | None = Field(default=None, max_length=16)
-    label: str | None = Field(default=None, max_length=255)
 
     user: User = Relationship(back_populates="simulation_associations")
 
@@ -237,7 +224,6 @@ class UserReportAssociation(TimestampedModel, table=True):
     """
 
     __tablename__ = "user_report_associations"
-    __mapper_args__ = {"exclude_properties": RETIRED_ASSOCIATION_COLUMNS}
     __table_args__ = (
         sa.UniqueConstraint(
             "id",
@@ -304,8 +290,5 @@ class UserReportAssociation(TimestampedModel, table=True):
         default=None,
         sa_type=sa.DateTime(timezone=True),
     )
-    # Retired and not mapped; see the module docstring.
-    country: str | None = Field(default=None, max_length=16)
-    label: str | None = Field(default=None, max_length=255)
 
     user: User = Relationship(back_populates="report_associations")

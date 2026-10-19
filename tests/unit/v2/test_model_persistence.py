@@ -41,9 +41,9 @@ def _relational_sqlite_engine():
     return engine
 
 
-# A later revision drops these tables and columns. The revision before it must
-# not read or write them, or it would fail between that migration and its own
-# replacement during a deploy.
+# Revision 81ecfa184cd5 dropped these tables and columns. The revision before
+# it already stopped reading and writing them, so it kept working between that
+# migration and its own replacement during a deploy; no statement names them.
 SIMULATION_DOMAIN_TABLE_REFERENCE = re.compile(
     r"\b(household_jobs|simulations|reports|report_runs|aggregates|"
     r"change_aggregates|budget_summary|decile_impacts|intra_decile_impacts|"
