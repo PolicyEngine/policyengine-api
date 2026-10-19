@@ -41,7 +41,6 @@ class V2MetadataValidationError(RuntimeError):
 
 def validate_v2_metadata_table_names(table_names: Iterable[str]) -> None:
     """Reject known v1-only and explicitly prohibited v2 table names."""
-
     actual = frozenset(table_names)
     prohibited = sorted(actual & PROHIBITED_V2_TABLES)
     v1_only = sorted(actual & V1_ONLY_TABLES)

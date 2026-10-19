@@ -1,5 +1,4 @@
-"""
-Test fixtures for SimulationAPIModal.
+"""Test fixtures for SimulationAPIModal.
 
 This module provides mock data, fixtures, and helper functions for testing
 the Modal simulation API client.
@@ -163,8 +162,7 @@ def create_mock_httpx_response(
     json_data: dict = None,
     headers: dict | None = None,
 ):
-    """
-    Helper function to create a mock httpx response.
+    """Build a mock httpx response for the Simulation Entrypoint client tests.
 
     Parameters
     ----------
@@ -172,11 +170,14 @@ def create_mock_httpx_response(
         HTTP status code for the response.
     json_data : dict
         JSON data to return from response.json().
+    headers : dict or None
+        Response headers; defaults to a mock observability-id header.
 
     Returns
     -------
     MagicMock
         A mock httpx response object.
+
     """
     mock_response = MagicMock()
     mock_response.status_code = status_code
@@ -211,8 +212,7 @@ def mock_modal_env_url():
 
 @pytest.fixture
 def mock_httpx_client():
-    """
-    Mock httpx.Client for testing SimulationAPIModal.
+    """Mock httpx.Client for testing SimulationAPIModal.
 
     Returns a mock client that can be configured for different responses.
     """

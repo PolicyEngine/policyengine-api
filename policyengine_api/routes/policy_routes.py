@@ -1,3 +1,5 @@
+"""Flask routes for v1 policies and saved user policies, optionally mirrored to v2."""
+
 import json
 import time
 
@@ -41,7 +43,6 @@ user_policy_service = UserPolicyService()
 
 def _should_mirror_to_v2(country_id: str, write_source: str) -> bool:
     """Select immediate mirroring only for countries supported by API v2."""
-
     return write_source == "dual_write" and country_id in SUPPORTED_V2_COUNTRY_IDS
 
 
@@ -87,7 +88,6 @@ def _user_policy_persistence_failure(
     legacy_user_policy_id: object | None = None,
 ) -> Response:
     """Return and record a failure without serializing exception details."""
-
     status_code = 503 if error.retryable else 500
     try:
         logger.log_struct(
@@ -144,18 +144,17 @@ def _serialize_policy(policy: Policy) -> dict:
 @policy_bp.route("/<country_id>/policy/<int:policy_id>", methods=["GET"])
 @validate_country
 def get_policy(country_id: str, policy_id: int | str) -> Response:
-    """
-    Get policy data for a given country and policy ID.
+    """Return one stored v1 policy.
 
     Args:
-        country_id (str)
-        policy_id (int | str)
+        country_id (str): Country whose policies are searched.
+        policy_id (int | str): ID of the stored policy; cast to int.
 
     Returns:
-        Response: A Flask response object containing the
-        policy data in JSON format
-    """
+        Response: The policy as JSON under ``result``. An unknown ID gives 404,
+        and an invalid policy read-source setting gives 503.
 
+    """
     try:
         get_v1_policy_read_source()
     except ValueError:
@@ -179,14 +178,16 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
 @policy_bp.route("/<country_id>/policy", methods=["POST"])
 @validate_country
 def set_policy(country_id: str) -> Response:
-    """
-    Set policy data for given country and policy. If policy already exists,
-    return existing policy and 200.
+    """Store a policy, or return the ID of an identical one already stored.
+
+    A policy is identical when its country, content hash and label all match;
+    that case returns 200, a new policy returns 201. An invalid payload gives
+    400, and an unavailable write configuration or v2 mirror gives 503.
 
     Args:
-        country_id (str)
-    """
+        country_id (str): Country to store the policy under.
 
+    """
     payload = request.json
 
     is_payload_valid, message = validate_set_policy_payload(payload)

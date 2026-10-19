@@ -31,6 +31,11 @@ COMPLETION_SUFFIX = " (completion)"
 
 @dataclass(frozen=True)
 class ProbeStats:
+    """Error rate and p95 of one probe, or of the simulation completion pseudo-probe.
+
+    For the completion pseudo-probe ``p95_latency_ms`` holds completion time.
+    """
+
     name: str
     request_count: int
     failure_count: int
@@ -138,6 +143,7 @@ def compare(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Print the per-probe gate report; return 1 if any baseline probe fails."""
     parser = argparse.ArgumentParser(
         description="Gate a candidate baseline JSON against a reference "
         "baseline JSON, per probe."

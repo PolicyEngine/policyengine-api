@@ -7,6 +7,12 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class RouteGroupConfig:
+    """A migratable route group and the URL path segments that identify its requests.
+
+    ``db_entity`` and ``sim_flow`` select which database-source and
+    simulation-compute flags apply to the group's requests.
+    """
+
     name: str
     path_segments: tuple[str, ...]
     db_entity: str | None = None

@@ -17,7 +17,6 @@ TRANSIENT_POLL_STATUS_CODES = {500, 502, 503, 504}
 @pytest.fixture(scope="session")
 def disposable_v1_database_url() -> str:
     """Return a validated local MySQL URL for destructive integration tests."""
-
     from sqlalchemy.engine import make_url
 
     database_url = os.environ.get("ALEMBIC_DATABASE_URL", "")
@@ -39,7 +38,6 @@ def disposable_v1_database_url() -> str:
 @pytest.fixture(scope="session")
 def disposable_v2_database_url() -> str:
     """Return a validated disposable PostgreSQL URL for integration tests."""
-
     from policyengine_api.data.v2.migration_target import (
         V2_ALEMBIC_DISPOSABLE_TEST,
         load_v2_alembic_settings,

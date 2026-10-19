@@ -99,6 +99,7 @@ def read_user_policy_page(
     limit: int,
     legacy_policy_id: int | None = None,
 ) -> UserPolicyPage:
+    """Return a page of a user's associations, optionally for one policy."""
     rows = read_user_policy_rows(
         session,
         country_id=country_id,
@@ -119,7 +120,6 @@ def read_owned_user_policy(
     association_id: UUID,
 ) -> UserPolicy:
     """``user_id`` is None for an unauthenticated user that owns nothing yet."""
-
     return require_user_policy(
         None
         if user_id is None
@@ -141,7 +141,6 @@ def resolve_user_policy_reference(
     legacy_policy_id: int | None,
 ) -> UUID | None:
     """Validate an explicit v2 policy and combine it with the v1 mapping."""
-
     if policy_id is not None:
         validate_association_policy(
             country_id=country_id,
@@ -167,7 +166,6 @@ def read_all_user_policies(
     session: Session, *, user_id: UUID
 ) -> tuple[UserPolicyRead, ...]:
     """Return every association owned by a user, across countries."""
-
     return tuple(
         user_policy_read(row)
         for row in read_all_user_policy_rows(session, user_id=user_id)
@@ -180,6 +178,11 @@ def resolve_legacy_user_id(
     legacy_user_id: str,
     primary_country: str,
 ) -> UUID:
+    """Return the v2 user id for a v1 user id, creating a transition user if needed.
+
+    If a concurrent transaction maps the v1 id first, the new user is deleted and
+    the winner's user is returned.
+    """
     existing = read_legacy_user_mapping(session, legacy_user_id, lock=True)
     if existing is not None:
         return validate_existing_legacy_user_mapping(
@@ -218,6 +221,12 @@ def apply_existing_legacy_user_policy_mapping(
     changed_fields: frozenset[str],
     source_revision: int,
 ) -> LegacyUserPolicyPersistenceResult:
+    """Apply one v1 revision to an already-mapped association.
+
+    Stale and replayed revisions change nothing. The next revision renames the
+    association only if the v1 reform label changed. Raise
+    LegacyUserPolicyIntegrityError on conflicting or skipped revisions.
+    """
     action, association = validate_existing_legacy_user_policy_mapping(
         mapping,
         association=read_mapped_user_policy(session, mapping),
@@ -274,6 +283,13 @@ def persist_legacy_user_policy_mapping(
     source_revision: int,
     changed_fields: frozenset[str],
 ) -> LegacyUserPolicyPersistenceResult:
+    """Create the association and mapping for a v1 saved policy, or apply a revision.
+
+    The mapping row is locked, so revisions of one v1 saved policy serialize. If
+    a concurrent transaction maps it first, the new association is deleted and
+    the revision is applied to the winner's. Raise LegacyUserPolicyIntegrityError
+    when the projection has no v2 policy or the conflict leaves no mapping.
+    """
     policy_id = require_mirrored_policy_id(projection)
     existing = read_legacy_user_policy_mapping(
         session,
@@ -345,6 +361,11 @@ def mirror_legacy_user_policy_in_session(
     source_revision: int,
     changed_fields: frozenset[str] = frozenset(),
 ) -> LegacyUserPolicyPersistenceResult:
+    """Copy one revision of a v1 saved policy into v2.
+
+    Copy its reform policy, resolve the v1 user to a v2 user, then create or
+    update the association. Only the v1 reform label is copied, as the name.
+    """
     validate_legacy_user_policy_input(
         snapshot,
         reform_snapshot,
@@ -388,6 +409,11 @@ class V2UserPolicyService:
         database_session: UserPolicyDatabaseSession,
         legacy_references: LegacyReferenceChecker | None = None,
     ) -> None:
+        """Open sessions through ``database_session`` and check v1 ids with the checker.
+
+        Without ``legacy_references``, an operation that names a v1 policy raises
+        LegacyReferenceCheckUnavailableError.
+        """
         self._database_session = database_session
         self._legacy_references = legacy_references
 
@@ -405,6 +431,14 @@ class V2UserPolicyService:
         principal: AccountPrincipal,
         association_input: UserPolicyCreateFields,
     ) -> UserPolicyRead:
+        """Save a policy for the principal, provisioning their v2 user if needed.
+
+        A ``legacy_policy_id`` must exist in v1 (LegacyReferenceNotFoundError) and
+        links the v2 copy of that policy when the Stage 10 mirror made one. An
+        explicit ``policy_id`` must exist in this country and match that copy
+        (AssociationPolicyNotFoundError, AssociationCountryConflictError or
+        AssociationReferenceConflictError).
+        """
         if association_input.legacy_policy_id is not None:
             self._require_legacy_policy(
                 country_id=association_input.country_id,
@@ -440,6 +474,11 @@ class V2UserPolicyService:
         country_id: str,
         association_id: UUID,
     ) -> UserPolicyRead:
+        """Return the principal's association in this country.
+
+        Raise UserPolicyNotFoundError when it is absent or another user's. A
+        signed-out browser that has not saved anything yet owns nothing.
+        """
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
@@ -463,6 +502,11 @@ class V2UserPolicyService:
         offset: int = 0,
         limit: int = 100,
     ) -> UserPolicyPage:
+        """Return a page of the principal's associations in this country.
+
+        ``policy_id`` and ``legacy_policy_id`` narrow it to one policy. A signed-out
+        browser that has not saved anything yet gets an empty page.
+        """
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
@@ -487,6 +531,13 @@ class V2UserPolicyService:
         association_id: UUID,
         association_input: UserPolicyUpdateInput,
     ) -> UserPolicyRead:
+        """Update the supplied fields of the principal's association in this country.
+
+        A new ``legacy_policy_id`` must exist in v1 and repoints ``policy_id`` to the
+        v2 copy of that policy, or to None when there is no copy. Raise
+        UserPolicyNotFoundError when the association is not the principal's, and
+        MirrorOwnedAssociationError when the v1 saved-policy mirror maintains it.
+        """
         repoint = "legacy_policy_id" in association_input.model_fields_set
         if repoint:
             assert association_input.legacy_policy_id is not None
@@ -534,6 +585,11 @@ class V2UserPolicyService:
         country_id: str,
         association_id: UUID,
     ) -> None:
+        """Delete the principal's association in this country.
+
+        Raise UserPolicyNotFoundError when it is not the principal's, and
+        MirrorOwnedAssociationError when the v1 saved-policy mirror maintains it.
+        """
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
                 session, principal, country_id=country_id
@@ -558,6 +614,7 @@ class V2UserPolicyService:
         source_revision: int,
         changed_fields: frozenset[str],
     ) -> LegacyUserPolicyPersistenceResult:
+        """Copy one v1 saved-policy revision into v2 in its own transaction."""
         with self._database_session.transaction() as session:
             return mirror_legacy_user_policy_in_session(
                 session,

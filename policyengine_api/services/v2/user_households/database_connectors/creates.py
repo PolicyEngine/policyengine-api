@@ -18,6 +18,7 @@ def create_user_household(
     session: Session,
     association_input: UserHouseholdCreationInput,
 ) -> UserHouseholdAssociation:
+    """Insert an association and return it with its database-generated fields loaded."""
     association = UserHouseholdAssociation(**association_input.model_dump())
     session.add(association)
     session.flush()

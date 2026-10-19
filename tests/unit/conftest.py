@@ -26,7 +26,6 @@ def test_engine():
 @pytest.fixture(autouse=True)
 def isolated_orm_database(test_engine, monkeypatch):
     """Bind runtime factories to a clean in-memory ORM database per test."""
-
     monkeypatch.setattr(orm, "get_v1_engine", lambda: test_engine)
     orm.clear_v1_session_factories()
     factory = orm.get_v1_session_factory()

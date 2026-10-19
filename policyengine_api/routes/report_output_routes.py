@@ -1,3 +1,5 @@
+"""Flask routes for creating, reading and updating v1 report outputs."""
+
 import json
 
 import jsonschema
@@ -19,7 +21,6 @@ report_output_service = ReportOutputService()
 
 def _serialize_v1_report_output(view: ReportOutputView) -> dict:
     """Project mapped report state onto the historical v1 response shape."""
-
     report_output = view.report_output
     result = {
         column.name: getattr(report_output, column.name)
@@ -40,8 +41,7 @@ def _serialize_v1_report_output(view: ReportOutputView) -> dict:
 @report_output_bp.route("/<country_id>/report", methods=["POST"])
 @validate_country
 def create_report_output(country_id: str) -> Response:
-    """
-    Create a new report output record with pending status.
+    """Create a new report output record with pending status.
 
     Args:
         country_id (str): The country ID.
@@ -50,6 +50,7 @@ def create_report_output(country_id: str) -> Response:
         - simulation_1_id (int): The first simulation ID (required)
         - simulation_2_id (int | None): The second simulation ID (optional, for comparisons)
         - year (str | None): The year for the report (optional)
+
     """
     print(f"Creating report output for country {country_id}")
     payload = request.json
@@ -117,8 +118,7 @@ def create_report_output(country_id: str) -> Response:
 @report_output_bp.route("/<country_id>/report/<int:report_id>", methods=["GET"])
 @validate_country
 def get_report_output(country_id: str, report_id: int) -> Response:
-    """
-    Get a report output record by ID.
+    """Get a report output record by ID.
 
     The response result may include requested_at, started_at, and finished_at
     values projected from the selected report_output_runs row. Those fields are
@@ -128,6 +128,7 @@ def get_report_output(country_id: str, report_id: int) -> Response:
     Args:
         country_id (str): The country ID.
         report_id (int): The report output ID.
+
     """
     print(f"Getting report output {report_id} for country {country_id}")
 
@@ -152,8 +153,7 @@ def get_report_output(country_id: str, report_id: int) -> Response:
 @report_output_bp.route("/<country_id>/report", methods=["PATCH"])
 @validate_country
 def update_report_output(country_id: str) -> Response:
-    """
-    Update a report output record with results or error.
+    """Update a report output record with results or error.
 
     Args:
         country_id (str): The country ID.
@@ -164,8 +164,8 @@ def update_report_output(country_id: str) -> Response:
         - output (dict): The result output (for complete status)
         - api_version (str): The API version of the report
         - error_message (str): The error message (for error status)
-    """
 
+    """
     payload = request.json
     if payload is None:
         raise BadRequest("Payload missing from request")

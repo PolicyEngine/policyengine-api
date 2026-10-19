@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
 
 class SimulationStatus(StrEnum):
+    """Lifecycle state of a v2 simulation."""
+
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -29,11 +31,19 @@ class SimulationStatus(StrEnum):
 
 
 class SimulationType(StrEnum):
+    """Whether a simulation runs on one household or on a population dataset."""
+
     HOUSEHOLD = "household"
     ECONOMY = "economy"
 
 
 class Simulation(TimestampedModel, table=True):
+    """A simulation of exactly one household or one dataset, matching its type.
+
+    Deleting its policy, dynamic, region or output dataset clears that reference;
+    its household and input dataset cannot be deleted while it exists.
+    """
+
     __tablename__ = "simulations"
     __table_args__ = (
         sa.CheckConstraint(

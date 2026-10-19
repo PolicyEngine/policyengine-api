@@ -40,6 +40,7 @@ class HouseholdCreationInput(StrictHouseholdInput):
     @field_validator("household_data")
     @classmethod
     def require_document(cls, value: object) -> object:
+        """Reject household_data that is not a JSON object."""
         if type(value) is not dict:
             raise ValueError("household_data must be an object")
         return value
@@ -64,6 +65,7 @@ class LegacyHouseholdSnapshot(StrictHouseholdInput):
     @field_validator("household_json")
     @classmethod
     def require_legacy_document(cls, value: object) -> object:
+        """Reject a v1 household_json that is not a JSON object."""
         if type(value) is not dict:
             raise ValueError("legacy household_json must be an object")
         return value
@@ -71,6 +73,12 @@ class LegacyHouseholdSnapshot(StrictHouseholdInput):
 
 @dataclass(frozen=True)
 class CanonicalHouseholdContent:
+    """Canonical bytes of one household and the SHA-256 digest that deduplicates it.
+
+    ``version`` is the canonicalization version; the same content hashed under
+    a different version is a different stored household.
+    """
+
     version: int
     document: bytes
     content_hash: str
@@ -78,12 +86,20 @@ class CanonicalHouseholdContent:
 
 @dataclass(frozen=True)
 class HouseholdCreationResult:
+    """The stored household id, and whether this call inserted it or found it."""
+
     household_id: UUID
     created: bool
 
 
 @dataclass(frozen=True)
 class LegacyHouseholdPersistenceResult:
+    """Outcome of copying one v1 household into v2.
+
+    ``household_id`` is the v2 household the v1 id maps to; the flags say whether
+    this call created the household and the v1-to-v2 mapping or found them.
+    """
+
     household_id: UUID
     household_created: bool
     mapping_created: bool
@@ -91,6 +107,8 @@ class LegacyHouseholdPersistenceResult:
 
 @dataclass(frozen=True)
 class HouseholdRead:
+    """A stored v2 household as the service returns it to routes."""
+
     id: UUID
     country_id: str
     default_year: int | None
@@ -101,6 +119,8 @@ class HouseholdRead:
 
 @dataclass(frozen=True)
 class HouseholdPage:
+    """One page of households in creation order; ``has_more`` says if more follow."""
+
     items: tuple[HouseholdRead, ...]
     offset: int
     limit: int
@@ -109,5 +129,7 @@ class HouseholdPage:
 
 @dataclass(frozen=True)
 class NativeHouseholdCreation:
+    """A created-or-found household, with ``created`` choosing 201 or 200."""
+
     item: HouseholdRead
     created: bool

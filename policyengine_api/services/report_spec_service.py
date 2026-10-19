@@ -1,3 +1,5 @@
+"""Explicit specifications of what each v1 report output calculates."""
+
 import json
 from typing import Any, Literal
 
@@ -14,12 +16,16 @@ ECONOMY_REPORT_KINDS = {"economy_single", "economy_comparison"}
 
 
 class ReportSimulationInput(BaseModel):
+    """The population and policy of one simulation in a household report."""
+
     population_type: Literal["household", "geography"]
     population_id: str
     policy_id: int
 
 
 class HouseholdReportSpec(BaseModel):
+    """A household report: one household under one policy, or under two to compare."""
+
     country_id: str
     report_kind: Literal["household_single", "household_comparison"]
     time_period: str
@@ -28,6 +34,11 @@ class HouseholdReportSpec(BaseModel):
 
 
 class EconomyReportSpec(BaseModel):
+    """An economy report: one region under a baseline and a reform policy.
+
+    A single-policy report uses the same policy for both.
+    """
+
     country_id: str
     report_kind: Literal["economy_single", "economy_comparison"]
     time_period: str
@@ -43,6 +54,8 @@ ReportSpec = HouseholdReportSpec | EconomyReportSpec
 
 
 class ReportSpecService:
+    """Service that builds, checks and stores report specs for v1 report outputs."""
+
     @staticmethod
     def _validate_schema_version(schema_version: int | None) -> None:
         if schema_version != REPORT_SPEC_SCHEMA_VERSION:
@@ -120,6 +133,10 @@ class ReportSpecService:
     def infer_report_kind(
         simulation_1: Simulation, simulation_2: Simulation | None = None
     ) -> str:
+        """Return the report kind implied by the simulations' population type and count.
+
+        Raise ValueError if the two simulations' population types differ or are unknown.
+        """
         population_type = simulation_1.population_type
         if simulation_2 is not None and simulation_2.population_type != population_type:
             raise ValueError(
@@ -140,6 +157,11 @@ class ReportSpecService:
         target: Literal["general", "cliff"] = "general",
         options: dict[str, Any] | None = None,
     ) -> ReportSpec:
+        """Build the spec implied by a report output and its linked simulations.
+
+        Raise ValueError if the simulations do not match the report's simulation IDs or
+        country, or if a comparison's simulations cover different households or regions.
+        """
         self._validate_report_simulation_linkage(
             report_output, simulation_1, simulation_2
         )
@@ -243,6 +265,11 @@ class ReportSpecService:
     def get_report_spec(
         self, session: Session, report_output_id: int
     ) -> ReportSpec | None:
+        """Return the stored spec for a report output, or None if it has none.
+
+        Raise ValueError if the stored spec has an unsupported schema version or no
+        longer matches the report's linked simulations.
+        """
         report_output = session.get(ReportOutput, report_output_id)
         if report_output is None or report_output.report_spec_json is None:
             return None
@@ -264,6 +291,11 @@ class ReportSpecService:
         report_spec_status: Literal["explicit", "backfilled_assumed"],
         schema_version: int = REPORT_SPEC_SCHEMA_VERSION,
     ) -> bool:
+        """Store a report spec after checking it matches the linked simulations.
+
+        Raise ValueError for an unknown status or schema version, a missing report, or a
+        mismatched spec. Always return True; the caller owns the transaction.
+        """
         if report_spec_status not in REPORT_SPEC_STATUSES:
             raise ValueError(f"Unsupported report spec status: {report_spec_status}")
         self._validate_schema_version(schema_version)

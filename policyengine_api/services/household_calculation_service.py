@@ -1,3 +1,5 @@
+"""Calculations for stored and request-supplied households, with result caching."""
+
 from __future__ import annotations
 
 import time
@@ -39,6 +41,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class CalculationResult:
+    """One country-package calculation: the household, warnings and SPM receipt."""
+
     household: dict
     warnings: tuple[str, ...] = ()
     spm_provenance: dict | None = None
@@ -46,6 +50,8 @@ class CalculationResult:
 
 @dataclass(frozen=True)
 class HouseholdCalculationResult:
+    """A household calculation as returned to the route, and whether it was cached."""
+
     household: dict
     warnings: tuple[str, ...] = ()
     cached: bool = False
@@ -66,15 +72,18 @@ class PreparedHouseholdCalculation:
 
 
 class HouseholdNotFoundError(LookupError):
-    pass
+    """Raised when the stored household does not exist in the requested country."""
 
 
 class PolicyNotFoundError(LookupError):
-    pass
+    """Raised when the stored policy does not exist in the requested country."""
 
 
 class InvalidHouseholdInputsError(ValueError):
+    """Raised when a household or policy has inputs the country model does not know."""
+
     def __init__(self, invalid_inputs: list[Any]) -> None:
+        """Keep the unrecognised inputs so the route can report them."""
         self.invalid_inputs = invalid_inputs
         super().__init__("Household or policy contains unrecognized inputs")
 
@@ -95,6 +104,10 @@ def _validated_spm_provenance(
 
 
 def get_household_year(household: dict) -> int | str:
+    """Return the year of the first age entered for ``you``, or the current year.
+
+    This is the period used when filling in missing yearly variables.
+    """
     household_year: int | str = date.today().year
     household_age_list = list(
         household.get("people", {}).get("you", {}).get("age", {}).keys()
@@ -109,6 +122,12 @@ def add_yearly_variables(
     country_id: str,
     countries: dict | None = None,
 ) -> dict:
+    """Add every yearly, monthly and eternal variable the household's entities lack.
+
+    Input variables get their default value and computed variables get None, which
+    asks the model to calculate them, for the household's year. The household is
+    changed in place and returned.
+    """
     if countries is None:
         from policyengine_api.country import COUNTRIES
 
@@ -143,6 +162,7 @@ class HouseholdCalculationService:
         cache: HouseholdCalculationCache | None = None,
         country_provider: Callable[[], dict] | None = None,
     ) -> None:
+        """Inject the session factory, cache and country source, or use the defaults."""
         self._injected_primary_session_factory = primary_session_factory
         if cache is None:
             context = get_runtime_cache_context()
@@ -225,6 +245,13 @@ class HouseholdCalculationService:
         *,
         on_accepted: Callable[[], object] | None = None,
     ) -> HouseholdCalculationResult:
+        """Calculate a saved household under a saved policy, reusing a cached result.
+
+        Raise HouseholdNotFoundError or PolicyNotFoundError if either is missing in this
+        country, and InvalidHouseholdInputsError for unrecognised inputs.
+        ``on_accepted`` runs once the inputs have loaded, before the cache lookup and
+        calculation.
+        """
         api_version = COUNTRY_PACKAGE_VERSIONS[country_id]
         with observability_runtime.span(
             HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_LOAD_INPUTS)
@@ -362,7 +389,6 @@ class HouseholdCalculationService:
         spm_requested: bool = False,
     ) -> PreparedHouseholdCalculation:
         """Validate request inputs before accepting a calculation."""
-
         countries = self._countries()
         country = countries.get(country_id)
         spm = normalize_spm_selection(country_id, spm)
@@ -398,7 +424,6 @@ class HouseholdCalculationService:
         prepared: PreparedHouseholdCalculation,
     ) -> HouseholdCalculationResult:
         """Calculate inputs already accepted by ``prepare_household_calculation``."""
-
         with observability_runtime.span(
             HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_CALCULATION)
         ):
@@ -443,7 +468,6 @@ class HouseholdCalculationService:
         on_accepted: Callable[[], object] | None = None,
     ) -> PreparedHouseholdCalculation:
         """Parse a prepared situation without performing requested calculations."""
-
         prepare_calculation = getattr(prepared.country, "prepare_calculation", None)
         country_calculation = prepared.country_calculation
         if callable(prepare_calculation):
@@ -476,7 +500,6 @@ class HouseholdCalculationService:
         spm_requested: bool = False,
     ) -> HouseholdCalculationResult:
         """Validate and calculate request-provided household and policy data."""
-
         prepared = self.prepare_household_calculation(
             country_id,
             household_json,

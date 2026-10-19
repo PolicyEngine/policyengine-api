@@ -16,6 +16,7 @@ def create_user_report(
     session: Session,
     association_input: UserReportCreationInput,
 ) -> UserReportAssociation:
+    """Insert an association and return it with its database-generated fields loaded."""
     association = UserReportAssociation(**association_input.model_dump())
     session.add(association)
     session.flush()

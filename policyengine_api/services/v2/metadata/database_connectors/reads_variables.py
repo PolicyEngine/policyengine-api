@@ -26,6 +26,12 @@ def read_variables(
     limit: int,
     search: str | None,
 ) -> list[Variable]:
+    """Return a page of a model version's variables in name order.
+
+    search matches name, label or description as a literal, case-insensitive
+    substring. Fetch limit + 1 rows so the caller can tell whether another page
+    exists.
+    """
     statement = select(Variable).where(
         col(Variable.tax_benefit_model_version_id) == model_version_id
     )
@@ -47,6 +53,7 @@ def read_variables(
 def read_variable(
     session: Session, *, model_version_id: UUID, variable_id: UUID
 ) -> Variable | None:
+    """Return the model version's variable with variable_id, or None."""
     rows = read_rows(
         session,
         select(Variable).where(

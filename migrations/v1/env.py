@@ -40,6 +40,7 @@ target_metadata = V1Base.metadata
 
 
 def run_migrations_offline() -> None:
+    """Emit the migration SQL for the configured MySQL URL without connecting."""
     context.configure(
         url=config.get_main_option("sqlalchemy.url"),
         target_metadata=target_metadata,
@@ -52,6 +53,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    """Migrate the connection the caller supplied, or else a new configured engine."""
     if provided_connection is not None:
         _run_migrations_with_connection(provided_connection)
         return

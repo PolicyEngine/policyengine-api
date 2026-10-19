@@ -31,10 +31,18 @@ if TYPE_CHECKING:
 
 
 class StrictAccountAPIModel(BaseModel):
+    """Base for account responses; rejects unknown fields."""
+
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
 
 class MeItem(StrictAccountAPIModel):
+    """The current user: a signed-in account or a browser's unauthenticated user.
+
+    ``user_type`` says which. An unauthenticated user has no primary country, and
+    only a signed-in user can set its names or primary country.
+    """
+
     id: UUID
     user_type: Literal["unauthenticated", "standard"]
     # Null only for an unauthenticated user.
@@ -46,14 +54,22 @@ class MeItem(StrictAccountAPIModel):
 
     @classmethod
     def from_read(cls, item: AccountRead) -> MeItem:
+        """Build the response item by validating the service read record's fields."""
         return cls.model_validate(item)
 
 
 class MeDetailResult(StrictAccountAPIModel):
+    """Result holding the current user in ``item``."""
+
     item: MeItem
 
 
 class MeExportResult(StrictAccountAPIModel):
+    """The current user and every policy, household, simulation and report it saved.
+
+    The export covers every country, not only the requested one.
+    """
+
     # Null when an unauthenticated user has not saved anything yet.
     user: MeItem | None
     policies: list[UserPolicyItem]
@@ -63,6 +79,7 @@ class MeExportResult(StrictAccountAPIModel):
 
     @classmethod
     def from_export(cls, export: AccountExport) -> MeExportResult:
+        """Build the export result from the service export, converting each record."""
         return cls(
             user=None if export.user is None else MeItem.from_read(export.user),
             policies=[UserPolicyItem.from_read(item) for item in export.policies],
@@ -77,11 +94,19 @@ class MeExportResult(StrictAccountAPIModel):
 
 
 class MeUpgradeResult(StrictAccountAPIModel):
+    """The signed-in account after a browser's unauthenticated user moved into it.
+
+    ``outcome`` is ``converted`` when the unauthenticated user became the account
+    in place, ``merged`` when its records moved to an existing account, and
+    ``none`` when there was no unauthenticated user to move.
+    """
+
     item: MeItem
     outcome: Literal["converted", "merged", "none"]
 
     @classmethod
     def from_upgrade(cls, upgrade: AccountUpgrade) -> MeUpgradeResult:
+        """Build the upgrade result from the service's account and outcome."""
         return cls(
             item=MeItem.from_read(upgrade.account),
             outcome=upgrade.outcome.value,
@@ -92,18 +117,20 @@ ResultT = TypeVar("ResultT")
 
 
 class AccountSuccessResponse(StrictAccountAPIModel, Generic[ResultT]):
+    """Success envelope: ``status`` "ok", a null ``message`` and the ``result``."""
+
     status: Literal["ok"] = "ok"
     message: None = None
     result: ResultT
 
 
 class MeDetailResponse(AccountSuccessResponse[MeDetailResult]):
-    pass
+    """Success response holding the current user."""
 
 
 class MeExportResponse(AccountSuccessResponse[MeExportResult]):
-    pass
+    """Success response holding the current user's export."""
 
 
 class MeUpgradeResponse(AccountSuccessResponse[MeUpgradeResult]):
-    pass
+    """Success response holding the signed-in account after an upgrade."""

@@ -19,7 +19,6 @@ def delete_unauthenticated_user(session: Session, *, user_id: UUID) -> None:
     The statement matches only an unauthenticated row, so it never deletes a
     standard user, including one converted by a concurrent transaction.
     """
-
     session.execute(
         delete(User).where(
             col(User.id) == user_id,

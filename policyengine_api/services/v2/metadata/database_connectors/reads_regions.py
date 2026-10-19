@@ -21,6 +21,11 @@ def read_regions(
     offset: int | None = None,
     limit: int | None = None,
 ) -> list[Region]:
+    """Return a model version's regions in code order, optionally of one type.
+
+    Without a limit every region is returned; with one, limit + 1 rows are
+    fetched so the caller can tell whether another page exists.
+    """
     statement = select(Region).where(
         col(Region.tax_benefit_model_version_id) == model_version_id
     )
@@ -41,6 +46,7 @@ def read_region(
     region_id: UUID | None = None,
     region_code: str | None = None,
 ) -> Region | None:
+    """Return the model version's region matching the given id and code, or None."""
     statement = select(Region).where(
         col(Region.tax_benefit_model_version_id) == model_version_id
     )
@@ -55,6 +61,10 @@ def read_region(
 def read_input_dataset(
     session: Session, *, model_version_id: UUID, dataset_id: UUID
 ) -> Dataset | None:
+    """Return the model version's logical input dataset with dataset_id, or None.
+
+    Used to load a region's default dataset for the economy options.
+    """
     rows = read_rows(
         session,
         select(Dataset).where(

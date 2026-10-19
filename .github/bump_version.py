@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 def get_current_version(pyproject_path: Path) -> str:
+    """Return the version in pyproject.toml, exiting with status 1 if it is absent."""
     text = pyproject_path.read_text()
     match = re.search(r'^version\s*=\s*"(\d+\.\d+\.\d+)"', text, re.MULTILINE)
     if not match:
@@ -18,6 +19,11 @@ def get_current_version(pyproject_path: Path) -> str:
 
 
 def infer_bump(changelog_dir: Path) -> str:
+    """Return "major", "minor" or "patch" from the pending changelog fragment types.
+
+    Any breaking fragment makes a major bump and any added or removed fragment a
+    minor one; exit with status 1 when there are no fragments.
+    """
     fragments = [
         f for f in changelog_dir.iterdir() if f.is_file() and f.name != ".gitkeep"
     ]
@@ -39,6 +45,7 @@ def infer_bump(changelog_dir: Path) -> str:
 
 
 def bump_version(version: str, bump: str) -> str:
+    """Return ``version`` raised by one ``bump`` level, resetting the lower parts."""
     major, minor, patch = (int(x) for x in version.split("."))
     if bump == "major":
         return f"{major + 1}.0.0"
@@ -48,6 +55,7 @@ def bump_version(version: str, bump: str) -> str:
 
 
 def update_file(path: Path, old_version: str, new_version: str) -> None:
+    """Rewrite the ``version = "..."`` line in ``path``; leave other files untouched."""
     text = path.read_text()
     updated = text.replace(
         f'version = "{old_version}"',
@@ -59,6 +67,7 @@ def update_file(path: Path, old_version: str, new_version: str) -> None:
 
 
 def main() -> None:
+    """Bump the version in pyproject.toml according to the changelog.d fragments."""
     root = Path(__file__).resolve().parent.parent
     pyproject = root / "pyproject.toml"
     changelog_dir = root / "changelog.d"

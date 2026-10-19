@@ -18,6 +18,10 @@ class StandardUserRequiresSignInError(PermissionError):
 
 
 def require_concurrent_identity(identity: UserIdentity | None) -> UserIdentity:
+    """Return the identity a concurrent request stored, or raise if it is absent.
+
+    Raise IdentityProvisioningError when a lost provisioning race finds no row.
+    """
     if identity is None:
         raise IdentityProvisioningError(
             "user identity provisioning conflict did not resolve to a stored row"
@@ -26,12 +30,12 @@ def require_concurrent_identity(identity: UserIdentity | None) -> UserIdentity:
 
 
 def is_unauthenticated_user(user: User) -> bool:
+    """Whether the user belongs to a signed-out browser rather than an identity."""
     return user.user_type == UserType.UNAUTHENTICATED
 
 
 def require_unauthenticated_user(user: User | None) -> User | None:
     """Pass through an absent or unauthenticated user; refuse a standard one."""
-
     if user is not None and not is_unauthenticated_user(user):
         raise StandardUserRequiresSignInError(
             "This browser's saved work now belongs to a signed-in account; "
@@ -41,6 +45,7 @@ def require_unauthenticated_user(user: User | None) -> User | None:
 
 
 def require_provisioned_user(user: User | None) -> User:
+    """Return the provisioned user, or raise IdentityProvisioningError if None."""
     if user is None:
         raise IdentityProvisioningError(
             "unauthenticated user provisioning did not resolve to a stored row"

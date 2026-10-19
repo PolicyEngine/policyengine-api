@@ -27,6 +27,12 @@ def read_parameters(
     limit: int,
     search: str | None,
 ) -> list[Parameter]:
+    """Return a page of a model version's parameters in name order.
+
+    search matches name, label or description as a literal, case-insensitive
+    substring. Fetch limit + 1 rows so the caller can tell whether another page
+    exists.
+    """
     statement = select(Parameter).where(
         col(Parameter.tax_benefit_model_version_id) == model_version_id
     )
@@ -48,6 +54,7 @@ def read_parameters(
 def read_parameter(
     session: Session, *, model_version_id: UUID, parameter_id: UUID
 ) -> Parameter | None:
+    """Return the model version's parameter with parameter_id, or None."""
     rows = read_rows(
         session,
         select(Parameter).where(
@@ -67,6 +74,13 @@ def read_parameter_values(
     offset: int,
     limit: int,
 ) -> list[ParameterValue]:
+    """Return a page of a model version's current-law parameter values.
+
+    Values tied to a policy or dynamic are excluded. parameter_id keeps one
+    parameter's values and selected_day keeps those in effect on that day. Rows
+    are ordered by parameter name, then newest first, and limit + 1 are fetched
+    so the caller can tell whether another page exists.
+    """
     statement = (
         select(ParameterValue)
         .join(Parameter, col(Parameter.id) == col(ParameterValue.parameter_id))
@@ -101,6 +115,7 @@ def read_parameter_values(
 def read_parameter_value(
     session: Session, *, model_version_id: UUID, value_id: UUID
 ) -> ParameterValue | None:
+    """Return the model version's current-law value with value_id, or None."""
     rows = read_rows(
         session,
         select(ParameterValue)

@@ -32,7 +32,6 @@ if TYPE_CHECKING:
 
 def build_data_write_engine(settings: V2DatabaseSettings) -> Engine:
     """Build an isolated, unpooled engine for one initialization attempt."""
-
     return create_engine(settings.connection.url, poolclass=NullPool)
 
 
@@ -46,7 +45,6 @@ def initialize_catalog(
     ),
 ) -> PublicationEvidence:
     """Load only row-write settings, extract fully, then publish explicitly."""
-
     settings = load_v2_data_write_database_settings(environ)
     catalog = extractor()
     engine = engine_builder(settings)
@@ -78,7 +76,6 @@ def _error_payload(error: Exception) -> dict[str, object]:
 
 def main() -> int:
     """Run explicit initialization and return a shell-compatible status."""
-
     try:
         evidence = initialize_catalog()
     except Exception as error:  # noqa: BLE001 - command must return safe evidence

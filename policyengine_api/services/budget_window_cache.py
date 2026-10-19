@@ -50,10 +50,12 @@ class BudgetWindowCacheState(BaseModel):
     error: dict[str, Any] | None = None
 
     def to_payload(self) -> dict[str, Any]:
+        """Return the state as the cache JSON payload, omitting unset fields."""
         return self.model_dump(exclude_none=True)
 
     @model_validator(mode="after")
     def require_fields_for_status(self) -> BudgetWindowCacheState:
+        """Raise ValueError unless every field this status depends on is set."""
         missing = [
             field
             for field in self._required_fields[self.status]
@@ -65,6 +67,7 @@ class BudgetWindowCacheState(BaseModel):
 
     @classmethod
     def from_payload(cls, payload: object) -> BudgetWindowCacheState | None:
+        """Parse a decoded cache payload, or return None if it is not a valid state."""
         try:
             return cls.model_validate(payload)
         except ValidationError:
@@ -79,6 +82,7 @@ class BudgetWindowCache:
         client: CacheBackend | None = None,
         namespace: CacheNamespace | None = None,
     ) -> None:
+        """Bind to a cache client and namespace, defaulting to the runtime cache."""
         if client is None or namespace is None:
             context = get_runtime_cache_context()
             client = client or context.client
@@ -102,6 +106,11 @@ class BudgetWindowCache:
         options_hash: str | None,
         api_version: str,
     ) -> str:
+        """Return the cache key for one budget-window report request.
+
+        Every argument is part of the key, so a change to any of them (including the
+        API version or the options hash) starts a separate report.
+        """
         return self.namespace.key(
             BUDGET_WINDOW_CACHE_FAMILY,
             BUDGET_WINDOW_CACHE_SCHEMA_VERSION,
@@ -146,7 +155,6 @@ class BudgetWindowCache:
 
     def get_state(self, cache_key: str) -> BudgetWindowCacheState | None:
         """Read the complete report state or fail closed on cache outage."""
-
         started_at = time.perf_counter()
         state_key = self._state_key(cache_key)
         try:
@@ -203,6 +211,12 @@ class BudgetWindowCache:
         claim_token: str,
         observability_id: str | None,
     ) -> bool:
+        """Atomically claim the right to submit this report's batch job.
+
+        Return True only if no state existed for the key, in which case a short-lived
+        "starting" state now holds the claim. Raise CacheCoordinationError if the cache
+        is unreachable, so callers never submit duplicate work blindly.
+        """
         state = BudgetWindowCacheState(
             status="starting",
             observability_id=observability_id,
@@ -220,6 +234,11 @@ class BudgetWindowCache:
         claim_token: str,
         observability_id: str | None,
     ) -> None:
+        """Release this caller's "starting" claim so another request can submit.
+
+        The claim is deleted only if it still holds this token; cache errors are
+        swallowed because the claim expires on its own.
+        """
         state = BudgetWindowCacheState(
             status="starting",
             observability_id=observability_id,
@@ -239,6 +258,11 @@ class BudgetWindowCache:
         batch_job_id: str,
         observability_id: str | None,
     ) -> None:
+        """Replace the starting claim with the submitted batch job ID.
+
+        Raise CacheCoordinationError if the state cannot be written, since later polls
+        would otherwise lose track of the running batch.
+        """
         state = BudgetWindowCacheState(
             status="submitted",
             observability_id=observability_id,
@@ -282,6 +306,7 @@ class BudgetWindowCache:
         result: dict[str, Any],
         observability_id: str | None,
     ) -> bool:
+        """Store the completed report result; return False if the cache write failed."""
         return self._set_recoverable_state(
             cache_key,
             BudgetWindowCacheState(
@@ -298,6 +323,10 @@ class BudgetWindowCache:
         error: dict[str, str],
         observability_id: str | None,
     ) -> bool:
+        """Store an SPM validation failure so later requests replay it, not resubmit.
+
+        Return False if the cache write failed.
+        """
         return self._set_recoverable_state(
             cache_key,
             BudgetWindowCacheState(
@@ -315,6 +344,10 @@ class BudgetWindowCache:
         result: dict[str, Any],
         observability_id: str | None,
     ) -> bool:
+        """Store a failed batch result so later requests return it without resubmitting.
+
+        Return False if the cache write failed.
+        """
         return self._set_recoverable_state(
             cache_key,
             BudgetWindowCacheState(

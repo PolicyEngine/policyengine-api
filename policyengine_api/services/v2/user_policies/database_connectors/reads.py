@@ -21,16 +21,19 @@ if TYPE_CHECKING:
 
 
 def read_user(session: Session, user_id: UUID) -> User | None:
+    """Return the v2 user with this id, or None."""
     return session.get(User, user_id)
 
 
 def read_policy_for_association(session: Session, policy_id: UUID) -> Policy | None:
+    """Return the policy with this id in any country, or None."""
     return session.exec(select(Policy).where(Policy.id == policy_id)).one_or_none()
 
 
 def read_legacy_user_mapping(
     session: Session, legacy_user_id: str, *, lock: bool
 ) -> LegacyUserMapping | None:
+    """Return the mapping for a v1 user id, or None; ``lock`` selects it FOR UPDATE."""
     statement = select(LegacyUserMapping).where(
         LegacyUserMapping.legacy_user_id == legacy_user_id
     )
@@ -46,6 +49,11 @@ def read_legacy_user_policy_mapping(
     legacy_user_policy_id: int,
     lock: bool,
 ) -> LegacyUserPolicyMapping | None:
+    """Return the mapping for a v1 saved policy in this country, or None.
+
+    With ``lock``, the row is selected FOR UPDATE so concurrent revisions of the
+    same v1 saved policy serialize on it.
+    """
     statement = select(LegacyUserPolicyMapping).where(
         LegacyUserPolicyMapping.country_id == country_id,
         LegacyUserPolicyMapping.legacy_user_policy_id == legacy_user_policy_id,
@@ -58,6 +66,7 @@ def read_legacy_user_policy_mapping(
 def read_mapped_user_policy(
     session: Session, mapping: LegacyUserPolicyMapping
 ) -> UserPolicy | None:
+    """Return the association a mapping points to, in the mapping's country, or None."""
     return session.exec(
         select(UserPolicy).where(
             UserPolicy.id == mapping.user_policy_id,
@@ -73,6 +82,7 @@ def read_owned_user_policy_row(
     country_id: str,
     association_id: UUID,
 ) -> UserPolicy | None:
+    """Return the user's association with this id in this country, or None."""
     return session.exec(
         select(UserPolicy).where(
             UserPolicy.id == association_id,
@@ -92,6 +102,12 @@ def read_user_policy_rows(
     limit: int,
     legacy_policy_id: int | None = None,
 ) -> list[UserPolicy]:
+    """Return up to ``limit + 1`` of a user's associations in creation order.
+
+    With ``policy_id`` or ``legacy_policy_id``, only associations to that policy
+    are returned. The extra row lets the caller report whether another page
+    exists.
+    """
     statement = select(UserPolicy).where(
         UserPolicy.country_id == country_id,
         UserPolicy.user_id == user_id,
@@ -110,6 +126,7 @@ def read_user_policy_rows(
 
 
 def read_all_user_policy_rows(session: Session, *, user_id: UUID) -> list[UserPolicy]:
+    """Return every association the user owns, in any country, in creation order."""
     return list(
         session.exec(
             select(UserPolicy)
@@ -120,6 +137,7 @@ def read_all_user_policy_rows(session: Session, *, user_id: UUID) -> list[UserPo
 
 
 def read_user_policy_mirror_exists(session: Session, *, association_id: UUID) -> bool:
+    """Return whether the Stage 10 v1 saved-policy mirror maintains the association."""
     return (
         session.exec(
             select(LegacyUserPolicyMapping.id).where(
@@ -137,7 +155,6 @@ def read_mirrored_policy_ids(
     legacy_policy_ids: Collection[int],
 ) -> dict[int, UUID]:
     """Return v2 policy UUIDs for v1 policies that the Stage 10 mirror copied."""
-
     if not legacy_policy_ids:
         return {}
     rows = session.exec(

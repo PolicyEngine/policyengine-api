@@ -147,7 +147,6 @@ def _log_failure(event: str, error: Exception) -> None:
     the type and the innermost frame locations are logged. Logging never
     changes the response.
     """
-
     try:
         frames = traceback.extract_tb(error.__traceback__)[-8:]
         logger.error(
@@ -171,7 +170,6 @@ def user_resource_operation(
     operation: Callable[[], OperationT],
 ) -> OperationT | JSONResponse:
     """Run one service call and map typed failures to secret-safe errors."""
-
     try:
         return operation()
     except StandardUserRequiresSignInError as error:

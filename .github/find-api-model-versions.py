@@ -1,3 +1,9 @@
+"""CI helper that reads the versions pinned by the installed PolicyEngine bundle.
+
+It checks the package and data versions against the API's version constants,
+then writes them to GITHUB_ENV or, with --shell, prints shell assignments.
+"""
+
 import argparse
 import os
 import shlex
@@ -48,9 +54,7 @@ def _data_release_version(bundle: dict, country_id: str) -> str:
 
 
 def find_api_model_versions() -> dict[str, str]:
-    """
-    Find and validate the package and data versions in the installed bundle.
-    """
+    """Find and validate the package and data versions in the installed bundle."""
     bundle = get_current_bundle()
     if not isinstance(bundle, dict):
         raise RuntimeError("Installed PolicyEngine bundle manifest is not an object.")
@@ -89,9 +93,7 @@ def find_api_model_versions() -> dict[str, str]:
 
 
 def find_api_model_versions_and_output_to_github() -> None:
-    """
-    Find the API model versions and output them to a file for GitHub.
-    """
+    """Find the API model versions and output them to a file for GitHub."""
     versions = find_api_model_versions()
     with open(os.environ["GITHUB_ENV"], "a") as f:
         for key, value in versions.items():

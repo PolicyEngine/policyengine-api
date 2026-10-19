@@ -1,5 +1,4 @@
-"""
-US Congressional District Metadata
+"""Metadata for every US congressional district and helpers that use it.
 
 This module defines the metadata for all 435 US Congressional districts
 based on the 2020 Census apportionment, effective for the 118th Congress
@@ -68,8 +67,7 @@ STATE_CODE_TO_NAME = {
 
 
 class CongressionalDistrictMetadataItem(BaseModel):
-    """
-    Metadata for a single US Congressional district.
+    """Metadata for a single US Congressional district.
 
     Uses Pydantic BaseModel for:
     - Runtime validation of data integrity
@@ -588,8 +586,7 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
 
 
 def _get_ordinal_suffix(number: int) -> str:
-    """
-    Get the ordinal suffix for a number (st, nd, rd, th).
+    """Get the ordinal suffix for a number (st, nd, rd, th).
 
     Examples:
         1 -> "st"
@@ -599,6 +596,7 @@ def _get_ordinal_suffix(number: int) -> str:
         11 -> "th"
         21 -> "st"
         22 -> "nd"
+
     """
     if 10 <= number % 100 <= 20:
         # Special case for 11th, 12th, 13th, etc.
@@ -609,34 +607,35 @@ def _get_ordinal_suffix(number: int) -> str:
 
 
 def _format_district_number(number: int) -> str:
-    """
-    Format district number with leading zero for single digits.
+    """Format district number with leading zero for single digits.
 
     Examples:
         1 -> "01"
         9 -> "09"
         10 -> "10"
         38 -> "38"
+
     """
     return f"{number:02d}"
 
 
 def _build_district_name(state_code: str, number: int) -> str:
-    """
-    Build the district name in the format: congressional_district/<STATE_CODE>-<DISTRICT_NUMBER>
+    """Build a district's region name, ``congressional_district/<STATE>-<NN>``.
 
     Examples:
         ("CA", 5) -> "congressional_district/CA-05"
         ("TX", 38) -> "congressional_district/TX-38"
         ("DC", 1) -> "congressional_district/DC-01"
+
     """
     return f"congressional_district/{state_code}-{_format_district_number(number)}"
 
 
 def _build_district_label(state_code: str, number: int) -> str:
-    """
-    Build the district label in the format: <STATE>'s <DISTRICT_NUMBER>th congressional district
-    For at-large districts (states with only 1 district), use: <STATE>'s at-large congressional district
+    """Build a district's display label, such as "Texas's 3rd congressional district".
+
+    At-large districts (states with only one district) are labelled
+    "<STATE>'s at-large congressional district" instead of numbered.
 
     Examples:
         ("CA", 1) -> "California's 1st congressional district"
@@ -645,6 +644,7 @@ def _build_district_label(state_code: str, number: int) -> str:
         ("FL", 21) -> "Florida's 21st congressional district"
         ("AK", 1) -> "Alaska's at-large congressional district"
         ("WY", 1) -> "Wyoming's at-large congressional district"
+
     """
     state_name = STATE_CODE_TO_NAME[state_code]
     if state_code in AT_LARGE_STATES:
@@ -654,8 +654,7 @@ def _build_district_label(state_code: str, number: int) -> str:
 
 
 def build_congressional_district_metadata() -> list[dict]:
-    """
-    Build the complete congressional district metadata structure for use in country.py.
+    """Build the congressional district region entries that country.py publishes.
 
     Returns a list of dictionaries with 'name', 'label', 'type', 'state_abbreviation',
     and 'state_name' keys, formatted as:
@@ -679,6 +678,7 @@ def build_congressional_district_metadata() -> list[dict]:
 
     Returns:
         List of 436 dictionaries (435 voting districts + DC)
+
     """
     return [
         {
@@ -693,23 +693,23 @@ def build_congressional_district_metadata() -> list[dict]:
 
 
 def get_valid_state_codes() -> set[str]:
-    """
-    Get the set of valid US state codes (lowercase for case-insensitive matching).
+    """Get the set of valid US state codes (lowercase for case-insensitive matching).
 
     Returns:
         Set of 51 lowercase state codes (50 states + DC)
+
     """
     return {code.lower() for code in STATE_CODE_TO_NAME.keys()}
 
 
 def get_valid_congressional_districts() -> set[str]:
-    """
-    Get the set of valid congressional district identifiers (lowercase for case-insensitive matching).
+    """Return every valid district identifier, lowercased for case-insensitive matching.
 
     Format: "<state_code>-<district_number>" (e.g., "ca-37", "tx-01")
 
     Returns:
         Set of 436 lowercase district identifiers
+
     """
     return {
         f"{district.state_code.lower()}-{_format_district_number(district.number)}"
@@ -718,8 +718,7 @@ def get_valid_congressional_districts() -> set[str]:
 
 
 def normalize_us_region(region: str) -> str:
-    """
-    Normalize a US region string to the standard prefixed format.
+    """Normalize a US region string to the standard prefixed format.
 
     This function handles legacy region formats (bare state codes like "ca")
     and converts them to the standard format ("state/ca"). It should be called
@@ -739,6 +738,7 @@ def normalize_us_region(region: str) -> str:
     Note:
         This function does NOT validate that the region is valid - it only
         normalizes the format. Use _validate_us_region for validation.
+
     """
     # Already has a valid prefix - return as-is
     if region.startswith(("state/", "place/", "congressional_district/")):

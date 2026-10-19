@@ -1,6 +1,4 @@
-"""
-Test fixtures and constants for axes calculation tests
-"""
+"""Households, axes configurations and builders for the axes calculation tests."""
 
 from policyengine_api.services.household_calculation_service import (
     add_yearly_variables,
@@ -45,21 +43,21 @@ SMALL_AXES_CONFIG = [
 
 # Pytest fixtures
 def create_base_household():
-    """Returns a copy of the base household configuration"""
+    """Return a deep copy of BASE_HOUSEHOLD that a test may mutate freely."""
     import copy
 
     return copy.deepcopy(BASE_HOUSEHOLD)
 
 
 def create_small_axes():
-    """Returns the small axes configuration for faster tests"""
+    """Return a deep copy of the small axes configuration, which keeps tests fast."""
     import copy
 
     return copy.deepcopy(SMALL_AXES_CONFIG)
 
 
 def create_household_with_axes(base_household, axes_config):
-    """Helper function to add axes to a household"""
+    """Return a deep copy of ``base_household`` with ``axes_config`` as its axes."""
     import copy
 
     household = copy.deepcopy(base_household)
@@ -68,6 +66,6 @@ def create_household_with_axes(base_household, axes_config):
 
 
 def setup_small_axes_household(base_household, small_axes_config):
-    """Fixture to setup a household with small axes for testing"""
+    """Add the axes and the test country's yearly variables to a base household."""
     household_with_axes = create_household_with_axes(base_household, small_axes_config)
     return add_yearly_variables(household_with_axes, TEST_COUNTRY_ID)

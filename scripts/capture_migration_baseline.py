@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class RouteProbe:
+    """One API request to time, and the status codes that count as success."""
+
     name: str
     method: str
     path: str
@@ -32,6 +34,8 @@ class RouteProbe:
 
 @dataclass(frozen=True)
 class ProbeResult:
+    """One timed request, or, when ``completed`` is set, one whole simulation run."""
+
     name: str
     method: str
     path: str
@@ -105,6 +109,7 @@ def _request_probe(
 
 
 def run_probes(base_url: str, repetitions: int) -> list[ProbeResult]:
+    """Time each default probe ``repetitions`` times; transport errors are failures."""
     results: list[ProbeResult] = []
     with httpx.Client(base_url=base_url.rstrip("/"), timeout=90.0) as client:
         for _ in range(repetitions):
@@ -127,6 +132,12 @@ def run_simulation_gateway_probe(
     poll_timeout_seconds: float,
     poll_interval_seconds: float,
 ) -> list[ProbeResult]:
+    """Submit one economy comparison to the gateway and poll it until it finishes.
+
+    Return each submit and poll request followed by one completion row, whose
+    ``completed`` flag is False on failure or when the timeout (counted from
+    submission) expires.
+    """
     results: list[ProbeResult] = []
     started_at = time.perf_counter()
 
@@ -220,6 +231,11 @@ def run_simulation_gateway_probe(
 
 
 def summarize(results: Iterable[ProbeResult]) -> dict:
+    """Summarise request latency, error rate and simulation completion times.
+
+    Completion rows are counted apart from request rows, and latency
+    percentiles use successful requests only.
+    """
     rows = list(results)
     request_rows = [row for row in rows if row.completed is None]
     latencies = [row.latency_ms for row in request_rows if row.ok]
@@ -255,6 +271,7 @@ def summarize(results: Iterable[ProbeResult]) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Print a JSON baseline summary; return 0 even when probes fail or are skipped."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default=os.environ.get("API_BASE_URL"))
     parser.add_argument(

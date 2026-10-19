@@ -32,7 +32,6 @@ def _seed_current_law_policies(engine: Engine) -> None:
 @pytest.fixture(scope="session", autouse=True)
 def isolated_legacy_v1_database() -> Iterator[None]:
     """Bind legacy tests to explicit in-memory persistence, never Cloud SQL."""
-
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},

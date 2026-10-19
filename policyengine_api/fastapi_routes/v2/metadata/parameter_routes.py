@@ -30,6 +30,11 @@ Limit = Annotated[int, Query(ge=1, le=500)]
 def build_v2_metadata_parameter_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
+    """Build the v2 parameter, parameter-tree and parameter-value routes.
+
+    Each request opens and closes its own metadata reader, so building the
+    router touches no database.
+    """
     router = APIRouter(prefix="/v2", responses=ERROR_RESPONSES)
 
     @router.get(

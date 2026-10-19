@@ -8,6 +8,8 @@ from policyengine_api.constants import COUNTRIES
 
 
 class CountryErrorPayload(TypedDict):
+    """The JSON error body returned for an unsupported country ID."""
+
     status: Literal["error"]
     message: str
 
@@ -20,6 +22,7 @@ class InvalidCountryError(ValueError):
         country_id: str,
         available_country_ids: tuple[str, ...] = COUNTRIES,
     ) -> None:
+        """Record the rejected ID and the supported IDs listed in the message."""
         self.country_id = country_id
         self.available_country_ids = available_country_ids
         super().__init__(
@@ -28,6 +31,7 @@ class InvalidCountryError(ValueError):
         )
 
     def to_payload(self) -> CountryErrorPayload:
+        """Return the ``{"status": "error", "message": ...}`` response body."""
         return {"status": "error", "message": str(self)}
 
 

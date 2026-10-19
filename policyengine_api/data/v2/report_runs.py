@@ -55,7 +55,6 @@ def set_report_type(
     report_type: str | None,
 ) -> Report:
     """Set a report's optional type only while it has no execution history."""
-
     report = _locked_report(session, report_id)
     if report.type == report_type:
         return report
@@ -84,7 +83,6 @@ def create_report_run(
     idempotency_key: UUID | None = None,
 ) -> ReportRun:
     """Create one run, or return the run for a retried idempotent request."""
-
     _locked_report(session, report_id)
     if trigger is ReportRunTrigger.MANUAL and idempotency_key is None:
         raise ValueError("manual report reruns require an idempotency key")
@@ -130,7 +128,6 @@ def begin_report_run(
     started_at: datetime | None = None,
 ) -> ReportRun:
     """Start or resume the same pending/running durable run after worker retry."""
-
     run = session.exec(
         select(ReportRun).where(ReportRun.id == report_run_id).with_for_update()
     ).one_or_none()
@@ -154,7 +151,6 @@ def complete_report_run(
     markdown: str | None = None,
 ) -> ReportRun:
     """Mark the selected durable run successful without replacing history."""
-
     run = begin_report_run(session, report_run_id=report_run_id)
     run.status = ReportRunStatus.SUCCEEDED
     run.completed_at = completed_at or utc_now()
@@ -173,7 +169,6 @@ def fail_report_run(
     completed_at: datetime | None = None,
 ) -> ReportRun:
     """Mark the selected durable run failed without deleting older success."""
-
     run = begin_report_run(session, report_run_id=report_run_id)
     run.status = ReportRunStatus.FAILED
     run.completed_at = completed_at or utc_now()
@@ -191,7 +186,6 @@ def select_current_report_run(
     policyengine_version: str = POLICYENGINE_VERSION,
 ) -> ReportRun | None:
     """Select the deterministic current successful run for deployed versions."""
-
     report = session.get(Report, report_id)
     if report is None:
         raise ReportNotFoundError(f"report {report_id} does not exist")

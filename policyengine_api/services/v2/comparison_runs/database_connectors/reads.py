@@ -26,6 +26,10 @@ def read_comparison_report(
     *,
     lock: bool,
 ) -> Stage12ComparisonReport | None:
+    """Return the report row for evaluation_id, or None.
+
+    With lock=True the row is read FOR UPDATE until the transaction ends.
+    """
     statement = select(Stage12ComparisonReport).where(
         Stage12ComparisonReport.evaluation_id == evaluation_id
     )
@@ -38,6 +42,11 @@ def read_comparison_report_by_identity(
     session: Session,
     record: ComparisonReportRecord,
 ) -> Stage12ComparisonReport | None:
+    """Return the report row with the record's identity, or None.
+
+    The identity is the environment, calculation flow, production identity,
+    worker version and version-manifest digest.
+    """
     return session.exec(
         select(Stage12ComparisonReport).where(
             Stage12ComparisonReport.environment == record.environment,
@@ -56,6 +65,10 @@ def read_comparison_simulation(
     *,
     lock: bool,
 ) -> Stage12ComparisonSimulation | None:
+    """Return the simulation row for simulation_execution_id, or None.
+
+    With lock=True the row is read FOR UPDATE until the transaction ends.
+    """
     statement = select(Stage12ComparisonSimulation).where(
         Stage12ComparisonSimulation.simulation_execution_id == simulation_execution_id
     )
@@ -68,6 +81,11 @@ def read_comparison_simulation_by_identity(
     session: Session,
     record: ComparisonSimulationRecord,
 ) -> Stage12ComparisonSimulation | None:
+    """Return the simulation row with the record's identity, or None.
+
+    The identity is the parent evaluation, role, input digest, worker version
+    and version-manifest digest.
+    """
     return session.exec(
         select(Stage12ComparisonSimulation).where(
             Stage12ComparisonSimulation.evaluation_id == record.evaluation_id,

@@ -69,7 +69,6 @@ def _services() -> tuple[dict[str, RecordingService], dict[str, Any]]:
 
 def _user_operations() -> list[tuple[str, str]]:
     """Every signed-in operation, read from the built application's OpenAPI."""
-
     _services_by_name, factories = _services()
     client, _flask_calls = user_route_client(require_user=None, **factories)
     paths = client.get("/v2/openapi.json").json()["paths"]

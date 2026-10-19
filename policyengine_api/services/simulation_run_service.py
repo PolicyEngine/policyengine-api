@@ -1,3 +1,5 @@
+"""Run history for v1 simulations, one numbered row per calculation attempt."""
+
 import uuid
 from typing import Any
 
@@ -16,6 +18,8 @@ SIMULATION_RUN_VERSION_FIELDS = (
 
 
 class SimulationRunService:
+    """Simulation-run operations performed through a caller-owned ORM session."""
+
     def create_simulation_run(
         self,
         session: Session,
@@ -31,6 +35,12 @@ class SimulationRunService:
         version_manifest: dict[str, str | None] | None = None,
         run_id: str | None = None,
     ) -> SimulationRun:
+        """Append the next numbered run to a simulation and return it.
+
+        The parent row is locked while the sequence number is chosen; timestamps start
+        unset. Raise ValueError if the simulation does not exist. The caller owns the
+        transaction.
+        """
         parent = session.scalar(
             select(Simulation).where(Simulation.id == simulation_id).with_for_update()
         )
@@ -78,6 +88,7 @@ class SimulationRunService:
         session: Session,
         run_id: str,
     ) -> SimulationRun | None:
+        """Return the run with this ID, or None."""
         return session.get(SimulationRun, run_id)
 
     def list_simulation_runs(
@@ -85,6 +96,7 @@ class SimulationRunService:
         session: Session,
         simulation_id: int,
     ) -> list[SimulationRun]:
+        """Return all runs of a simulation, oldest first."""
         return list(
             session.scalars(
                 select(SimulationRun)
@@ -98,6 +110,7 @@ class SimulationRunService:
         session: Session,
         simulation_id: int,
     ) -> SimulationRun | None:
+        """Return the simulation's highest-numbered run, or None if it has none."""
         return session.scalar(
             select(SimulationRun)
             .where(SimulationRun.simulation_id == simulation_id)
@@ -109,6 +122,10 @@ class SimulationRunService:
         session: Session,
         simulation: Simulation,
     ) -> SimulationRun | None:
+        """Return the run whose result the simulation should display, or None.
+
+        Prefer the active run, then the latest successful run, then the newest run.
+        """
         if simulation.active_run_id:
             active_run = self.get_simulation_run(session, simulation.active_run_id)
             if active_run is not None:

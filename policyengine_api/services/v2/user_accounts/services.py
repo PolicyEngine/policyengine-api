@@ -97,6 +97,11 @@ class V2AccountService:
         *,
         auth0_user_deleter_factory: Callable[[], Auth0UserDeleter | None] | None = None,
     ) -> None:
+        """Open every session through ``database_session``.
+
+        ``auth0_user_deleter_factory`` is called only when a standard account is
+        deleted; without it, or when it returns None, the Auth0 user is kept.
+        """
         self._database_session = database_session
         self._auth0_user_deleter_factory = auth0_user_deleter_factory
 
@@ -106,7 +111,6 @@ class V2AccountService:
         Only account deletion needs the Management API, so its settings are
         read here rather than for every /v2/me request.
         """
-
         if self._auth0_user_deleter_factory is None:
             return None
         try:
@@ -126,6 +130,11 @@ class V2AccountService:
     def get_account(
         self, *, principal: AccountPrincipal, country_id: str
     ) -> AccountRead:
+        """Return the caller's account, provisioning a signed-in caller's user.
+
+        Raise AccountNotFoundError for a signed-out browser that has not saved
+        anything yet.
+        """
         with self._database_session.transaction() as session:
             owner = require_resolved_account(
                 resolve_principal_user_for_read_in_session(
@@ -142,6 +151,10 @@ class V2AccountService:
         country_id: str,
         account_input: AccountUpdateInput,
     ) -> AccountRead:
+        """Change only the supplied account fields and return the account.
+
+        Raise AccountEditRequiresSignInError for a signed-out browser.
+        """
         signed_in = require_editable_account(principal)
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
@@ -158,6 +171,10 @@ class V2AccountService:
     def export_account(
         self, *, principal: AccountPrincipal, country_id: str
     ) -> AccountExport:
+        """Return the caller's account and every association it owns, in all countries.
+
+        A signed-out browser with no saved work gets an empty export with no user.
+        """
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
@@ -186,6 +203,11 @@ class V2AccountService:
         unauthenticated_user_id: UUID,
         country_id: str,
     ) -> AccountUpgrade:
+        """Move a browser's unauthenticated user into the signed-in account.
+
+        The browser's user becomes the account, merges into an existing one, or
+        is absent (outcome ``none``); see convert_unauthenticated_user_in_session.
+        """
         with self._database_session.transaction() as session:
             conversion = convert_unauthenticated_user_in_session(
                 session,
@@ -206,6 +228,13 @@ class V2AccountService:
         return upgrade
 
     def delete_account(self, *, principal: AccountPrincipal) -> AccountDeletion:
+        """Delete the caller's user, its associations and, if configured, Auth0 users.
+
+        Deleting an absent account succeeds with no user ID. Raise
+        AccountDeletionUnavailableError, before anything is deleted, when the
+        Auth0 deleter cannot authenticate, and AccountIdentityDeletionError when
+        the data was deleted but an Auth0 user was not.
+        """
         if isinstance(principal, UnauthenticatedPrincipal):
             return self._delete_unauthenticated_account(principal)
         return self._delete_standard_account(principal)
@@ -214,7 +243,6 @@ class V2AccountService:
         self, principal: UnauthenticatedPrincipal
     ) -> AccountDeletion:
         """Delete a browser's unauthenticated user; there is no Auth0 user."""
-
         with self._database_session.transaction() as session:
             owner = find_principal_user_in_session(session, principal)
             if owner is not None:

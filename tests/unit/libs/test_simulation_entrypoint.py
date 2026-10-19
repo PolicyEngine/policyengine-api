@@ -1,5 +1,4 @@
-"""
-Unit tests for SimulationAPIModal class.
+"""Unit tests for SimulationAPIModal class.
 
 Tests the selectable simulation API HTTP client functionality including
 job submission, status polling, and error handling.

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 
 def account_read(user: User, *, email: str | None) -> AccountRead:
+    """Convert a user row to the account read model, preferring the identity's email."""
     return AccountRead(
         id=user.id,
         user_type=user.user_type,
@@ -26,4 +27,5 @@ def account_read(user: User, *, email: str | None) -> AccountRead:
 
 
 def account_update_values(account_input: AccountUpdateInput) -> dict[str, Any]:
+    """Return only the fields the caller supplied, including explicit nulls."""
     return account_input.model_dump(exclude_unset=True)

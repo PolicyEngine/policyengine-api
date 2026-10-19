@@ -150,6 +150,13 @@ def read_parameter_children(
     offset: int,
     limit: int,
 ) -> list[Any]:
+    """Return a page of the direct children of parent_path in a model version's tree.
+
+    Each row has the child's path, label, type (node or parameter), child count
+    and, for parameters, the parameter's summary columns. dialect selects SQLite
+    or PostgreSQL string functions; limit + 1 rows are fetched so the caller can
+    tell whether another page exists.
+    """
     return read_rows(
         session,
         _parameter_children_statement(

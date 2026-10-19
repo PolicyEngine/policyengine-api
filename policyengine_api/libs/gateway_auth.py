@@ -49,7 +49,10 @@ class GatewayAuthError(RuntimeError):
 
 
 def gateway_auth_required() -> bool:
-    """True iff this runtime requires gateway auth to be configured."""
+    """Return whether ``GATEWAY_AUTH_REQUIRED`` makes missing gateway auth an error.
+
+    Only ``1``, ``true``, ``yes`` and ``on`` (any case) enable it.
+    """
     return os.environ.get(GATEWAY_AUTH_REQUIRED_ENV, "").lower() in (
         "1",
         "true",
@@ -120,6 +123,7 @@ class GatewayAuthTokenProvider:
         *,
         http_timeout: float = 10.0,
     ) -> None:
+        """Read each Auth0 setting from its argument, else its environment variable."""
         self._issuer = (
             issuer
             if issuer is not None
@@ -256,11 +260,13 @@ class GatewayBearerAuth(httpx.Auth):
     """Attach a bearer token and retry once on a 401."""
 
     def __init__(self, token_provider: GatewayAuthTokenProvider) -> None:
+        """Authenticate requests with tokens from ``token_provider``."""
         self._token_provider = token_provider
 
     def auth_flow(
         self, request: httpx.Request
     ) -> Generator[httpx.Request, httpx.Response, None]:
+        """Add a bearer token; on a 401, refetch the token and resend once."""
         request.headers["Authorization"] = f"Bearer {self._token_provider.get_token()}"
         response = yield request
 

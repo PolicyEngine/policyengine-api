@@ -19,16 +19,24 @@ return 0
 
 
 class ExpiringClaimStore:
+    """Token-owned keys that let one worker claim shared work until a TTL lapses."""
+
     def __init__(
         self,
         client: CacheBackend,
         *,
         family: str = "coordination",
     ) -> None:
+        """Store claims in ``client``, reporting events under the ``family`` label."""
         self.client = client
         self.family = family
 
     def acquire(self, key: str, token: str, *, ttl_seconds: int) -> bool:
+        """Claim ``key`` for ``token`` if it is free, returning whether it succeeded.
+
+        Raise CacheCoordinationError when the backend fails, so callers never
+        proceed as if they owned the work.
+        """
         if not token or ttl_seconds <= 0:
             raise ValueError("claim token and positive TTL are required")
         started_at = time.perf_counter()
@@ -54,6 +62,11 @@ class ExpiringClaimStore:
         return acquired
 
     def release(self, key: str, token: str) -> bool:
+        """Delete the claim only if ``token`` still owns it; return whether it did.
+
+        A claim that expired or passed to another owner is left alone. Raise
+        CacheCoordinationError when the backend fails.
+        """
         started_at = time.perf_counter()
         try:
             released = bool(self.client.eval(COMPARE_AND_DELETE, 1, key, token))

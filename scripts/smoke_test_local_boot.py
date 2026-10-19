@@ -26,18 +26,21 @@ HTTP_TIMEOUT_SECONDS = 2
 
 
 def find_free_port() -> int:
+    """Return a localhost TCP port that was free when checked (nothing reserves it)."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
 
 
 def read_text(path: Path) -> str:
+    """Return the file's text with undecodable bytes replaced, or "" if missing."""
     if not path.exists():
         return ""
     return path.read_text(encoding="utf-8", errors="replace")
 
 
 def fetch(url: str) -> tuple[int, str]:
+    """Return the status and body of a GET; error statuses raise urllib's HTTPError."""
     request = urllib.request.Request(url, method="GET")
     with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
         body = response.read().decode("utf-8", errors="replace")
@@ -45,11 +48,16 @@ def fetch(url: str) -> tuple[int, str]:
 
 
 def print_section(title: str, body: str) -> None:
+    """Print a titled block of captured output, or "(empty)" when there is none."""
     print(f"\n=== {title} ===")
     print(body.rstrip() if body else "(empty)")
 
 
 def main() -> int:
+    """Boot the Flask app on a free port and return 1 unless both health checks pass.
+
+    On failure print the app's captured stdout and stderr; always stop the app.
+    """
     port = find_free_port()
     stdout_file = tempfile.NamedTemporaryFile(
         mode="w+",

@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 
 def create_provisioned_user(session: Session, *, primary_country: str) -> User:
+    """Insert a standard user for a new sign-in identity and return it with its ID."""
     user = User(primary_country=primary_country, user_type=UserType.STANDARD.value)
     session.add(user)
     session.flush()
@@ -26,7 +27,6 @@ def create_unauthenticated_user(session: Session, *, user_id: UUID) -> bool:
 
     Returns whether this call inserted the row.
     """
-
     return (
         session.execute(
             insert(User)
@@ -48,7 +48,6 @@ def create_user_identity(
     seen_at: datetime,
 ) -> UUID | None:
     """Insert one identity, returning its user unless another request won."""
-
     return session.execute(
         insert(UserIdentity)
         .values(

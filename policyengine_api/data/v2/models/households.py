@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 
 
 class HouseholdJobStatus(StrEnum):
+    """Lifecycle state of a queued household calculation job."""
+
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -32,6 +34,13 @@ class HouseholdJobStatus(StrEnum):
 
 
 class Household(TimestampedModel, table=True):
+    """Immutable household input, stored once per canonicalization version and hash.
+
+    ``content_hash`` is the SHA-256 of the canonical document, so saving the same
+    household again finds the existing row. Households that simulations, reports
+    or saved links use cannot be deleted.
+    """
+
     __tablename__ = "households"
     __table_args__ = (
         sa.UniqueConstraint(
@@ -88,6 +97,11 @@ class Household(TimestampedModel, table=True):
 
 
 class HouseholdJob(IdentifiedModel, table=True):
+    """A queued household calculation request, with its status and result or error.
+
+    Deleting the job's policy or dynamic keeps the job but clears the reference.
+    """
+
     __tablename__ = "household_jobs"
     __table_args__ = (
         sa.Index("ix_household_jobs_status_created_at", "status", "created_at"),

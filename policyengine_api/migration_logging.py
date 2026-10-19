@@ -162,7 +162,6 @@ def log_migration_request(
     route_impl: RouteImplementation | None = None,
 ) -> None:
     """Log a migration-aware API request in the shared structured format."""
-
     elapsed_ms = None
     if started_at is not None:
         elapsed_ms = round((time.time() - started_at) * 1000, 2)

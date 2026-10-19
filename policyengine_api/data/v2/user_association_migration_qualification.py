@@ -66,9 +66,11 @@ class UserAssociationCounts:
 
     @property
     def dormant_total(self) -> int:
+        """Rows in the two reshaped tables, which must be empty before the reshape."""
         return self.user_simulation_associations + self.user_report_associations
 
     def as_dict(self) -> dict[str, int]:
+        """Return the counts keyed by table name, for the evidence and errors."""
         return {
             "user_policies": self.user_policies,
             "user_household_associations": self.user_household_associations,
@@ -87,6 +89,7 @@ class UserAssociationQualification:
     migration_pending: bool
 
     def as_dict(self) -> dict[str, object]:
+        """Return the evidence as the JSON object the qualification command prints."""
         return {
             "outcome": "ok",
             "revision": USER_ASSOCIATION_MIGRATION_REVISION,
@@ -102,6 +105,7 @@ class RetainedDormantAssociationError(RuntimeError):
     """Raised when a dormant association table holds rows before the reshape."""
 
     def __init__(self, counts: UserAssociationCounts) -> None:
+        """Keep the counts and say in the message how to proceed safely."""
         self.counts = counts
         super().__init__(
             "the configured Supabase target contains user_simulation_associations="
@@ -142,13 +146,13 @@ def require_empty_dormant_associations(
     *,
     migration_pending: bool,
 ) -> None:
+    """Raise RetainedDormantAssociationError if a pending reshape would affect rows."""
     if migration_pending and counts.dormant_total:
         raise RetainedDormantAssociationError(counts)
 
 
 def user_association_migration_is_pending(connection: Connection) -> bool:
     """Return whether the Stage 12A revision is in the upgrade path."""
-
     current_heads = MigrationContext.configure(connection).get_current_heads()
     revisions = ScriptDirectory.from_config(
         Config(V2_ALEMBIC_CONFIG)
@@ -160,7 +164,6 @@ def user_association_migration_is_pending(connection: Connection) -> bool:
 
 def build_qualification_engine(settings: V2DatabaseSettings) -> Engine:
     """Build an isolated connection pool for one qualification attempt."""
-
     return create_engine(settings.connection.url, poolclass=NullPool)
 
 
@@ -182,7 +185,6 @@ def qualify_user_association_migration(
     ),
 ) -> UserAssociationQualification:
     """Report counts and stop when a pending reshape would affect rows."""
-
     settings = load_v2_migration_database_settings(environ)
     engine = engine_builder(settings)
     try:
@@ -226,7 +228,6 @@ def _error_payload(error: Exception) -> dict[str, object]:
 
 def main() -> int:
     """Run qualification and return a shell-compatible status."""
-
     try:
         evidence = qualify_user_association_migration()
     except Exception as error:  # noqa: BLE001 - command must emit safe evidence

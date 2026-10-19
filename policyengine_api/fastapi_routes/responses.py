@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 def render_legacy_json(content: JSONValue) -> bytes:
     """Serialize once with the same JSON encoder used by legacy metadata."""
-
     return json.dumps(content).encode("utf-8")
 
 
@@ -23,4 +22,5 @@ class LegacyJSONResponse(Response):
     media_type = "application/json"
 
     def render(self, content: JSONValue) -> bytes:
+        """Encode ``content`` byte-for-byte as the Flask metadata route does."""
         return render_legacy_json(content)

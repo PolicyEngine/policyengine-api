@@ -1,3 +1,10 @@
+"""Streamlit experiment that answers a UK policy question with GPT-4 and the API.
+
+It finds related parameters by embedding similarity, asks GPT-4 to write the
+reform as JSON, runs it on the public PolicyEngine API, and asks GPT-4 to answer
+from the resulting economic impact.
+"""
+
 import json
 import os
 import time
@@ -14,6 +21,7 @@ openai.api_key = os.environ["OPENAI_API_KEY"]
 
 @st.cache_data
 def get_embeddings_df() -> pd.DataFrame:
+    """Load parameter_embeddings.csv.gz, evaluating each embedding string to a list."""
     embeddings_df = pd.read_csv("parameter_embeddings.csv.gz", compression="gzip")
     embeddings_df.parameter_embedding = embeddings_df.parameter_embedding.apply(
         lambda x: eval(x)
@@ -23,6 +31,7 @@ def get_embeddings_df() -> pd.DataFrame:
 
 @st.cache_data
 def embed(prompt: str, engine: str = "text-embedding-ada-002") -> list[float]:
+    """Return the OpenAI embedding of ``prompt``, cached across Streamlit reruns."""
     return get_embedding(prompt, engine=engine)
 
 
@@ -59,6 +68,7 @@ top5 = embeddings_df.sort_values("similarities", ascending=False).head(5)["json"
 
 
 def write_prompt(question: str, relevant_parameters: object) -> str:
+    """Build the GPT-4 prompt that rewrites ``question`` as a reform JSON object."""
     return f"""Question: {question}
     Here's some metadata about the parameters that are relevant to your question:
     Relevant parameters: {relevant_parameters}
@@ -79,6 +89,7 @@ reform_generation_prompt = write_prompt(question, top5)
 
 @st.cache_data
 def get_gpt4_response(prompt: str) -> str:
+    """Return GPT-4's reply to ``prompt`` as one user message, cached across reruns."""
     return openai.ChatCompletion.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}],
@@ -94,6 +105,10 @@ reform = json.loads(response)
 
 @st.cache_data
 def get_policyengine_impact(reform: object) -> object:
+    """Create ``reform`` on the public UK API and return its 2023 UK economic impact.
+
+    Poll every five seconds, with no time limit, while the impact is computing.
+    """
     payload = {"data": reform}
     url = "https://api.policyengine.org/uk/policy"
 

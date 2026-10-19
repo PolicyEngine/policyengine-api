@@ -47,7 +47,6 @@ from policyengine_api.services.v2.identity.types import (
 
 def authenticate_user_request(authorization: str | None) -> UserPrincipal:
     """Return the signed-in user principal or raise a typed HTTP failure."""
-
     try:
         settings = load_user_auth_settings()
     except UserAuthConfigurationError as error:
@@ -88,7 +87,6 @@ def authenticate_account_request(
     unauthenticated-user header is then ignored. Without one, the header
     selects the browser's unauthenticated user.
     """
-
     if authorization is None and unauthenticated_user is not None:
         try:
             return UnauthenticatedPrincipal(
@@ -103,7 +101,6 @@ def authenticate_account_request(
 
 def require_signed_in_principal(principal: AccountPrincipal) -> UserPrincipal:
     """Refuse an unauthenticated principal where only a signed-in user may act."""
-
     if isinstance(principal, UserPrincipal):
         return principal
     raise V2AuthenticationRequiredError("Sign in with a bearer access token")

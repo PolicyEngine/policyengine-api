@@ -13,10 +13,14 @@ if TYPE_CHECKING:
 
 
 class HealthResponse(BaseModel):
+    """Health-check result showing that the API is up and serving requests."""
+
     status: Literal["healthy"]
 
 
 class SimulationGatewayHealthResponse(BaseModel):
+    """Health-check result showing that the API and its simulation gateway are up."""
+
     status: Literal["healthy"]
     simulation_gateway: Literal["healthy"]
 

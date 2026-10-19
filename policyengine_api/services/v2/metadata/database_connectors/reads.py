@@ -23,6 +23,11 @@ def read_metadata_catalog(
     running_policyengine_version: str,
     policyengine_version: str | None,
 ) -> SelectedCatalog:
+    """Return the country's catalog for policyengine_version, else the running version.
+
+    Raise the catalog_selection errors for an unsupported country, an
+    unpublished version or an unreachable database.
+    """
     return select_catalog(
         session,
         country_id=country_id,
@@ -35,6 +40,10 @@ def read_rows(
     session: Session,
     statement: Any,  # noqa: ANN401  # Session.exec overloads omit core SQLAlchemy selects
 ) -> list[Any]:
+    """Execute statement and return every row.
+
+    Raise MetadataCatalogUnavailableError when the database query fails.
+    """
     try:
         return list(session.exec(statement).all())
     except SQLAlchemyError as error:

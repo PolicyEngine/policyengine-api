@@ -5,6 +5,11 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class UnrecognizedInput:
+    """One payload name the country model does not recognise, and where it appears.
+
+    The entity plurals are set only for a variable placed on the wrong entity.
+    """
+
     input_type: str
     name: str
     path: str
@@ -13,6 +18,7 @@ class UnrecognizedInput:
 
     @property
     def message(self) -> str:
+        """A one-sentence, user-facing description of the problem and where it is."""
         if self.input_type == "household_entity":
             return (
                 f"Unrecognized household entity group `{self.name}` at `{self.path}`."
@@ -32,6 +38,7 @@ class UnrecognizedInput:
         return f"Unrecognized household variable `{self.name}` at `{self.path}`."
 
     def to_dict(self) -> dict:
+        """Return the JSON error entry, omitting entity plurals that are not set."""
         data = {
             "type": self.input_type,
             "name": self.name,
@@ -51,7 +58,6 @@ def find_unrecognized_inputs(
     metadata: dict,
 ) -> list[UnrecognizedInput]:
     """Return calculate payload names that the country package cannot resolve."""
-
     return [
         *find_unrecognized_household_inputs(household, metadata),
         *find_unrecognized_policy_inputs(policy, metadata),
@@ -62,6 +68,12 @@ def find_unrecognized_household_inputs(
     household: dict,
     metadata: dict,
 ) -> list[UnrecognizedInput]:
+    """Find unknown entity groups, variables and axis variables in a household.
+
+    Also reports a known variable placed on the wrong entity. Role membership
+    keys (such as ``members``) are not variables and are skipped, as are
+    sections that are not objects.
+    """
     if not isinstance(household, dict):
         return []
 
@@ -135,6 +147,7 @@ def find_unrecognized_policy_inputs(
     policy: dict,
     metadata: dict,
 ) -> list[UnrecognizedInput]:
+    """Find policy keys that are not parameters in the country metadata."""
     if not isinstance(policy, dict):
         return []
 
@@ -151,6 +164,7 @@ def find_unrecognized_policy_inputs(
 
 
 def format_unrecognized_inputs_message(errors: list[UnrecognizedInput]) -> str:
+    """Join the problems' messages into one error message for the response."""
     return "Unrecognized calculate input(s): " + "; ".join(
         error.message for error in errors
     )

@@ -28,7 +28,9 @@ class SPMCapabilitySource(Protocol):
         /,
         *,
         policyengine_version: str | None,
-    ) -> object: ...
+    ) -> object:
+        """Return the worker's SPM capability document, or None if it has none."""
+        ...
 
 
 def validate_worker_spm(
@@ -39,6 +41,13 @@ def validate_worker_spm(
     policyengine_version: str | None = None,
     model_version: str | None = None,
 ) -> dict | None:
+    """Resolve an SPM selection and confirm the selected worker can execute it.
+
+    Return the resolved selection, or None for a country without SPM support.
+    Raise SPMValidationError (SPM_CONFIGURATION_UNAVAILABLE)
+    when the worker advertises no canonical SPM capability, a different
+    contract, or a different forecast artifact from the API's.
+    """
     country_id = country_id.lower() if isinstance(country_id, str) else country_id
     resolved = normalize_spm_selection(country_id, selection)
     if resolved is None:
@@ -79,6 +88,14 @@ def validate_worker_result(
     expected_year: str | int | None = None,
     expected_years: list[str] | None = None,
 ) -> None:
+    """Check that a worker's economy result carries SPM receipts matching the request.
+
+    An annual result must hold a comparison receipt whose baseline and reform
+    resolve to ``selection`` and cover ``expected_year``; a budget-window result
+    must have one valid annual result per requested year. Raise
+    SPMValidationError (SPM_CONFIGURATION_UNAVAILABLE) on any mismatch. Do nothing
+    when no selection was requested.
+    """
     if selection is None:
         return
     try:

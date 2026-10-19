@@ -135,6 +135,7 @@ def require_report_identity(
     existing: ComparisonReportRecord,
     candidate: ComparisonReportRecord,
 ) -> None:
+    """Raise ComparisonRunIdentityError if an update changes an immutable field."""
     _require_equal_fields(existing, candidate, REPORT_IMMUTABLE_FIELDS)
 
 
@@ -142,6 +143,11 @@ def require_report_conflict_matches(
     existing: ComparisonReportRecord,
     candidate: ComparisonReportRecord,
 ) -> None:
+    """Raise ComparisonRunIdentityError if a duplicate insert names a different release.
+
+    The stored report and the retried record must agree on every release,
+    package and dataset field.
+    """
     _require_equal_fields(existing, candidate, REPORT_CONFLICT_FIELDS)
 
 
@@ -149,6 +155,7 @@ def require_simulation_identity(
     existing: ComparisonSimulationRecord,
     candidate: ComparisonSimulationRecord,
 ) -> None:
+    """Raise ComparisonRunIdentityError if an update changes an immutable field."""
     _require_equal_fields(existing, candidate, SIMULATION_IMMUTABLE_FIELDS)
 
 
@@ -156,6 +163,11 @@ def require_simulation_conflict_matches(
     existing: ComparisonSimulationRecord,
     candidate: ComparisonSimulationRecord,
 ) -> None:
+    """Raise ComparisonRunIdentityError if a duplicate insert names a different worker.
+
+    The stored simulation and the retried record must agree on their parent,
+    role, input digest and worker release.
+    """
     _require_equal_fields(existing, candidate, SIMULATION_CONFLICT_FIELDS)
 
 
@@ -164,7 +176,6 @@ def require_simulation_parent_matches(
     child: ComparisonSimulationRecord,
 ) -> None:
     """Require a child to retain the parent's release and retention identity."""
-
     if child.evaluation_id != parent.evaluation_id:
         raise ComparisonRunIdentityError(
             "comparison child names a different parent evaluation_id"
@@ -188,7 +199,6 @@ def require_successful_report_replay(
     candidate: ComparisonReportRecord,
 ) -> None:
     """Reject attempts to alter an already successful report receipt."""
-
     _require_equal_fields(existing, candidate, REPORT_SUCCEEDED_REPLAY_FIELDS)
 
 
@@ -197,7 +207,6 @@ def require_successful_simulation_replay(
     candidate: ComparisonSimulationRecord,
 ) -> None:
     """Reject attempts to alter an already successful simulation receipt."""
-
     _require_equal_fields(existing, candidate, SIMULATION_SUCCEEDED_REPLAY_FIELDS)
 
 
@@ -205,6 +214,10 @@ def require_comparison_update_only(
     existing: ComparisonReportRecord,
     candidate: ComparisonReportRecord,
 ) -> None:
+    """Raise ComparisonRunIdentityError if anything but the comparison fields changes.
+
+    updated_at may also differ; every other report field must match the stored row.
+    """
     fields = tuple(
         field_name
         for field_name in ComparisonReportRecord.model_fields
@@ -218,6 +231,7 @@ def require_result_comparison_unchanged(
     existing: ComparisonReportRecord,
     candidate: ComparisonReportRecord,
 ) -> None:
+    """Raise ComparisonRunIdentityError if the result-comparison fields differ."""
     _require_equal_fields(existing, candidate, REPORT_RESULT_COMPARISON_FIELDS)
 
 
@@ -319,6 +333,11 @@ def require_lifecycle_transition(
     current: ComparisonRunLifecycleStatus,
     candidate: ComparisonRunLifecycleStatus,
 ) -> None:
+    """Raise ComparisonRunStateTransitionError if lifecycle cannot move to candidate.
+
+    Every status may repeat; succeeded and skipped are final, and failed or
+    incomplete runs may return to running.
+    """
     if candidate not in ALLOWED_TRANSITIONS[current]:
         raise ComparisonRunStateTransitionError(
             f"comparison-run lifecycle cannot move from {current.value} to {candidate.value}"
@@ -329,6 +348,10 @@ def require_aggregation_transition(
     current: ComparisonRunAggregationStatus,
     candidate: ComparisonRunAggregationStatus,
 ) -> None:
+    """Raise ComparisonRunStateTransitionError if aggregation cannot move to candidate.
+
+    Every status may repeat; succeeded is final and failed may return to running.
+    """
     if candidate not in ALLOWED_AGGREGATION_TRANSITIONS[current]:
         raise ComparisonRunStateTransitionError(
             "comparison-run aggregation cannot move "
@@ -340,6 +363,10 @@ def require_result_comparison_transition(
     current: ResultComparisonStatus,
     candidate: ResultComparisonStatus,
 ) -> None:
+    """Raise ComparisonRunStateTransitionError if comparison cannot move to candidate.
+
+    Not-requested, matched, different and failed are all final.
+    """
     if candidate not in ALLOWED_RESULT_COMPARISON_TRANSITIONS[current]:
         raise ComparisonRunStateTransitionError(
             f"result comparison cannot move from {current.value} to {candidate.value}"

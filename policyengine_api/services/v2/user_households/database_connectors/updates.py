@@ -25,6 +25,10 @@ def update_user_household(
     repointed_household_id: UUID | None = None,
     repoint: bool = False,
 ) -> UserHouseholdAssociation:
+    """Apply the supplied fields, bump ``updated_at`` and return the row.
+
+    With ``repoint``, also set ``household_id`` to ``repointed_household_id``.
+    """
     for field_name, value in association_input.model_dump(exclude_unset=True).items():
         setattr(association, field_name, value)
     if repoint:

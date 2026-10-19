@@ -68,6 +68,12 @@ def read_resource(
     response_type: type[ResponseT],
     operation: Callable[[V2MetadataResourceReader], object],
 ) -> ResponseT | JSONResponse:
+    """Run one metadata read and wrap its result in ``response_type``.
+
+    Version, pagination and catalog failures become typed v2 error responses
+    (400, 404 or 503, and 500 for anything unexpected), and the reader is
+    closed whatever happens.
+    """
     reader = None
     try:
         factory = dependencies.v2_metadata_reader_factory

@@ -38,7 +38,6 @@ def _include_application_object(
     _compare_to: SchemaItem | None,
 ) -> bool:
     """Keep Alembic's own version table outside application drift."""
-
     return not (type_ == "table" and name == "alembic_version")
 
 
@@ -65,6 +64,7 @@ def _configure(connection: Connection) -> None:
 
 
 def run_migrations_offline() -> None:
+    """Raise, because v2 migrations need a live connection to qualify the target."""
     raise RuntimeError(
         "v2 migrations require an online connection so target identity and "
         "generated application-data before/after states can be verified"
@@ -72,6 +72,11 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    """Migrate the caller's connection, or else a new engine in one transaction.
+
+    The new engine's transaction commits, so the target qualification's reads
+    cannot leave the completed migration to be rolled back.
+    """
     provided_connection = config.attributes.get("connection")
     if provided_connection is not None:
         _configure(provided_connection)

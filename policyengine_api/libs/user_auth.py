@@ -81,6 +81,11 @@ class InvalidUnauthenticatedUserError(UserAuthError):
 
 
 class PrincipalKind(StrEnum):
+    """Whether a token was issued to a person or to a machine-to-machine client.
+
+    User routes refuse client principals.
+    """
+
     USER = "user"
     CLIENT = "client"
 
@@ -95,6 +100,7 @@ class UserAuthSettings:
 
     @property
     def configured(self) -> bool:
+        """Whether an issuer and audience are set, so bearer tokens can be checked."""
         return bool(self.issuer and self.audience)
 
 
@@ -109,7 +115,11 @@ class VerifiedPrincipal:
 
 
 class TokenDecoder(Protocol):
-    def decode(self, token: str) -> Mapping[str, Any]: ...
+    """Verify an access token and return its claims; tests inject a fake."""
+
+    def decode(self, token: str) -> Mapping[str, Any]:
+        """Return the claims of a valid token, or raise a PyJWT error."""
+        ...
 
 
 def _normalized_issuer(value: str) -> str:
@@ -137,7 +147,6 @@ def load_user_auth_settings(
     environ: Mapping[str, str] | None = None,
 ) -> UserAuthSettings:
     """Load and validate the inbound user-authentication configuration."""
-
     values = os.environ if environ is None else environ
     required_value = values.get(PUBLIC_API_AUTH_REQUIRED_ENV, "").strip()
     if required_value not in {"", "0", "1"}:
@@ -172,6 +181,11 @@ class JWTDecoder:
         *,
         jwks_client: jwt.PyJWKClient | None = None,
     ) -> None:
+        """Accept tokens from ``issuer`` for ``audience``.
+
+        Without ``jwks_client``, signing keys are fetched from the issuer's
+        ``.well-known/jwks.json`` and cached by key ID.
+        """
         self.issuer = issuer
         self.audience = audience
         self.jwks_client = jwks_client or jwt.PyJWKClient(
@@ -181,6 +195,11 @@ class JWTDecoder:
         )
 
     def decode(self, token: str) -> Mapping[str, Any]:
+        """Verify the signature, issuer, audience and required claims; return claims.
+
+        Raise ``jwt.PyJWKClientConnectionError`` when the signing keys cannot be
+        fetched, and another ``jwt.PyJWTError`` when the token is invalid.
+        """
         signing_key = self.jwks_client.get_signing_key_from_jwt(token).key
         return jwt.decode(
             token,
@@ -199,13 +218,11 @@ def _decoder(issuer: str, audience: str) -> JWTDecoder:
 
 def reset_decoder_cache() -> None:
     """Clear cached decoders for tests and signing-key or tenant rotations."""
-
     _decoder.cache_clear()
 
 
 def bearer_token(authorization: str | None) -> str:
     """Return the credentials of an ``Authorization: Bearer`` header."""
-
     if not authorization:
         raise MissingBearerTokenError("a bearer access token is required")
     scheme, _, credentials = authorization.strip().partition(" ")
@@ -217,7 +234,6 @@ def bearer_token(authorization: str | None) -> str:
 
 def unauthenticated_user_id(value: str) -> UUID:
     """Return the browser UUID carried by the unauthenticated-user header."""
-
     if re.fullmatch(CANONICAL_UUID_PATTERN, value) is None:
         raise InvalidUnauthenticatedUserError(
             f"{UNAUTHENTICATED_USER_HEADER} must be a canonical UUID"
@@ -237,7 +253,6 @@ def _verified_email(claims: Mapping[str, Any]) -> str | None:
 
 def classify_principal(claims: Mapping[str, Any]) -> VerifiedPrincipal:
     """Build a principal from already-validated token claims."""
-
     subject = claims.get("sub")
     issuer = claims.get("iss")
     if not isinstance(subject, str) or not subject.strip():
@@ -263,7 +278,6 @@ def authenticate_bearer(
     decoder: TokenDecoder | None = None,
 ) -> VerifiedPrincipal:
     """Validate one Authorization header and classify its principal."""
-
     token = bearer_token(authorization)
     if not settings.configured:
         raise UserAuthUnavailableError("user authentication is not configured")

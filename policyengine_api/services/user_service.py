@@ -1,3 +1,5 @@
+"""v1 user profiles, keyed by internal user ID and by Auth0 ID."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -18,6 +20,7 @@ class UserService:
         self,
         session_factory: sessionmaker[Session] | None = None,
     ) -> None:
+        """Use this session factory, or the application's v1 one if omitted."""
         self._injected_session_factory = session_factory
 
     @property
@@ -31,6 +34,10 @@ class UserService:
         username: str | None,
         user_since: int,
     ) -> tuple[bool, UserProfile]:
+        """Create a profile for this Auth0 ID, or return the one that already exists.
+
+        Return ``(created, profile)``.
+        """
         with self._sessions.begin() as session:
             return self._create_profile(
                 session,
@@ -67,6 +74,10 @@ class UserService:
         auth0_id: str | None = None,
         user_id: int | str | None = None,
     ) -> UserProfile | None:
+        """Return the profile with this user ID, or else this Auth0 ID, or None.
+
+        ``user_id`` wins when both are given. Raise ValueError if neither is given.
+        """
         if auth0_id is None and user_id is None:
             raise ValueError("you must specify either auth0_id or user_id")
         with self._sessions() as session:
@@ -92,6 +103,10 @@ class UserService:
         username: str | None,
         user_since: int | None,
     ) -> UserProfile | None:
+        """Set the given non-None fields on a profile; return None if it does not exist.
+
+        Raise ValueError if ``user_id`` is None.
+        """
         if user_id is None:
             raise ValueError("you must specify either auth0_id or user_id")
         with self._sessions.begin() as session:

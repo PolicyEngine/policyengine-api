@@ -62,11 +62,15 @@ class LegacyReferenceChecker(Protocol):
         *,
         country_id: str,
         requested: Mapping[LegacyRecordKind, Collection[int]],
-    ) -> dict[LegacyRecordKind, frozenset[int]]: ...
+    ) -> dict[LegacyRecordKind, frozenset[int]]:
+        """Return, for every requested kind, the IDs that exist in this country."""
+        ...
 
     def require_existing(
         self,
         *,
         country_id: str,
         requested: Mapping[LegacyRecordKind, Collection[int]],
-    ) -> None: ...
+    ) -> None:
+        """Raise ``LegacyReferenceNotFoundError`` if any requested ID is missing."""
+        ...

@@ -42,7 +42,6 @@ def read_existing_legacy_ids(
     legacy_ids: Collection[int],
 ) -> frozenset[int]:
     """Return the requested IDs that exist for the country, in bounded batches."""
-
     id_column, country_column = _identity_columns(kind)
     requested = sorted(set(legacy_ids))
     existing: set[int] = set()

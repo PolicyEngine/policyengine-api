@@ -24,6 +24,8 @@ ResourceT = TypeVar("ResourceT")
 
 
 class MetadataResourceSuccessResponse(StrictResponseModel, Generic[ResourceT]):
+    """Success envelope: ``status`` "ok", a null ``message`` and the ``result``."""
+
     status: Literal["ok"] = "ok"
     message: None = None
     result: ResourceT
@@ -32,67 +34,73 @@ class MetadataResourceSuccessResponse(StrictResponseModel, Generic[ResourceT]):
 class MetadataModelPageResponse(
     MetadataResourceSuccessResponse[MetadataPageResult[MetadataModel]]
 ):
-    pass
+    """Success response holding a page of the selected catalog's tax-benefit models.
+
+    A catalog has one model per country, so only the first page has an item.
+    """
 
 
 class MetadataModelDetailResponse(
     MetadataResourceSuccessResponse[MetadataDetailResult[MetadataModel]]
 ):
-    pass
+    """Success response holding one tax-benefit model."""
 
 
 class MetadataModelSelectionResponse(
     MetadataResourceSuccessResponse[MetadataModelSelectionResult]
 ):
-    pass
+    """Success response holding a country's model and its selected model version."""
 
 
 class MetadataModelVersionPageResponse(
     MetadataResourceSuccessResponse[MetadataPageResult[MetadataModelVersionDetail]]
 ):
-    pass
+    """Success response holding a page of the selected catalog's model versions.
+
+    A catalog has one model version, so only the first page has an item.
+    """
 
 
 class MetadataModelVersionDetailResponse(
     MetadataResourceSuccessResponse[MetadataDetailResult[MetadataModelVersionDetail]]
 ):
-    pass
+    """Success response holding one model version."""
 
 
 class MetadataVariablePageResponse(
     MetadataResourceSuccessResponse[MetadataPageResult[MetadataVariable]]
 ):
-    pass
+    """Success response holding one page of variables."""
 
 
 class MetadataVariableDetailResponse(
     MetadataResourceSuccessResponse[MetadataDetailResult[MetadataVariable]]
 ):
-    pass
+    """Success response holding one variable."""
 
 
 class MetadataParameterPageResponse(
     MetadataResourceSuccessResponse[MetadataPageResult[MetadataParameterSummary]]
 ):
-    pass
+    """Success response holding one page of parameters."""
 
 
 class MetadataParameterDetailResponse(
     MetadataResourceSuccessResponse[MetadataDetailResult[MetadataParameterSummary]]
 ):
-    pass
+    """Success response holding one parameter."""
 
 
 class MetadataParameterChildPageResponse(
     MetadataResourceSuccessResponse[MetadataPageResult[MetadataParameterChild]]
 ):
-    pass
+    """Success response holding one page of a parameter path's direct children."""
 
 
 class MetadataParameterValuePageResponse(
     MetadataResourceSuccessResponse[MetadataPageResult[MetadataCanonicalParameterValue]]
 ):
-    pass
+    """Success response holding one page of parameter values."""
 
 
 class MetadataParameterValueDetailResponse(
@@ -100,34 +108,34 @@ class MetadataParameterValueDetailResponse(
         MetadataDetailResult[MetadataCanonicalParameterValue]
     ]
 ):
-    pass
+    """Success response holding one parameter value."""
 
 
 class MetadataDatasetPageResponse(
     MetadataResourceSuccessResponse[MetadataPageResult[MetadataDataset]]
 ):
-    pass
+    """Success response holding one page of datasets."""
 
 
 class MetadataDatasetDetailResponse(
     MetadataResourceSuccessResponse[MetadataDetailResult[MetadataDataset]]
 ):
-    pass
+    """Success response holding one dataset."""
 
 
 class MetadataRegionPageResponse(
     MetadataResourceSuccessResponse[MetadataPageResult[MetadataRegion]]
 ):
-    pass
+    """Success response holding one page of regions."""
 
 
 class MetadataRegionDetailResponse(
     MetadataResourceSuccessResponse[MetadataDetailResult[MetadataRegion]]
 ):
-    pass
+    """Success response holding one region."""
 
 
 class MetadataEconomyOptionsResponse(
     MetadataResourceSuccessResponse[MetadataEconomyOptionsResult]
 ):
-    pass
+    """Success response holding the options for configuring an economy comparison."""

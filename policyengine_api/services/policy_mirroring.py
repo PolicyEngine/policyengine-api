@@ -36,7 +36,9 @@ class LegacyPolicyMirror(Protocol):
     def mirror_legacy_policy(
         self,
         snapshot: LegacyPolicySnapshot,
-    ) -> LegacyPolicyPersistenceResult: ...
+    ) -> LegacyPolicyPersistenceResult:
+        """Copy one committed v1 policy into v2 and map its v1 id to the result."""
+        ...
 
 
 class PolicyMirrorUnavailableError(RuntimeError):
@@ -125,7 +127,6 @@ def mirror_policy_after_commit(
     mirror_factory: Callable[[], LegacyPolicyMirror] | None = None,
 ) -> LegacyPolicyPersistenceResult:
     """Require the Supabase policy and mapping transaction before v1 success."""
-
     started_at = time.perf_counter()
     try:
         result = (mirror_factory or _default_mirror_factory)().mirror_legacy_policy(

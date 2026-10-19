@@ -21,6 +21,8 @@ LegacyRecordId = Annotated[
 
 
 class LegacyRecordKind(StrEnum):
+    """Kind of v1 artifact that a v2 user association can reference by ID."""
+
     POLICY = "policy"
     HOUSEHOLD = "household"
     SIMULATION = "simulation"

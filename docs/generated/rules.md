@@ -272,7 +272,7 @@ flowchart LR
 | `api.quality.environment-variables-load` | Required environment variables and credentials load in a deployed-like environment. | mechanical | enforced | yes | CI job `test_env_vars` | `pr.yml:test_env_vars` | — |
 | `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, v2 routes and services, and the user sign-in and account-deletion libraries pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:typecheck-v2` | — |
 | `api.quality.ruff-format` | All Python files are formatted with ruff format. | mechanical | enforced | yes | ruff format | `pr.yml:lint` | — |
-| `api.quality.ruff-lint` | All Python code passes ruff check with every rule family selected in pyproject.toml, with no ratchet; families are added one themed group at a time until the selection is ALL. | mechanical | enforced | yes | ruff check (ANN, E4, E7, E9, F, FLY, FURB, I, PIE, PYI, RET, RSE, TC, UP, W) | `pr.yml:lint` | — |
+| `api.quality.ruff-lint` | All Python code passes ruff check with every rule family selected in pyproject.toml, with no ratchet; families are added one themed group at a time until the selection is ALL. | mechanical | enforced | yes | ruff check (ANN, D, E4, E7, E9, F, FLY, FURB, I, PIE, PYI, RET, RSE, TC, UP, W) | `pr.yml:lint` | — |
 | `api.quality.runtime-evaluated-models-resolve` | Every package model is one ruff treats as runtime-evaluated (a base resolves, through the import in its own module, to a name in runtime-evaluated-base-classes, or is a same-module class that does), and every Pydantic model and SQLAlchemy mapper resolves its annotations once the package is imported. | mechanical | enforced | yes | pytest `tests/unit/test_runtime_evaluated_annotations.py` | `pr.yml:test` | **unproven** |
 | `api.quality.tests-pass` | The unit, contract and to-refactor test suites pass. | mechanical | enforced | yes | CI job `test` | `pr.yml:test` | — |
 | `api.quality.tests-ruff-exemptions` | Test files may use pytest's bare assert and need no docstrings, annotations or named constants for magic numbers (S101, D1, ANN, PLR2004); every other ruff rule applies to tests. | mechanical | enforced | yes | ruff per-file ignore of ANN, D1, PLR2004, S101 for `**/tests/**` | `pr.yml:lint` | — |
@@ -292,7 +292,7 @@ flowchart LR
   e_ruff_format["ruff format"]
   j_CI_pr_yml_lint["CI pr.yml:lint"]
   r_api_quality_ruff_lint("api.quality.ruff-lint (enforced)")
-  e_ruff_check__ANN__E4__E7__E9__F__FLY__FURB__I__PIE__PYI__RET__RSE__TC__UP__W_["ruff check (ANN, E4, E7, E9, F, FLY, FURB, I, PIE, PYI, RET, RSE, TC, UP, W)"]
+  e_ruff_check__ANN__D__E4__E7__E9__F__FLY__FURB__I__PIE__PYI__RET__RSE__TC__UP__W_["ruff check (ANN, D, E4, E7, E9, F, FLY, FURB, I, PIE, PYI, RET, RSE, TC, UP, W)"]
   r_api_quality_runtime_evaluated_models_resolve("api.quality.runtime-evaluated-models-resolve (enforced)")
   e_pytest_tests_unit_test_runtime_evaluated_annotations_py["pytest tests/unit/test_runtime_evaluated_annotations.py"]
   j_CI_pr_yml_test["CI pr.yml:test"]
@@ -308,8 +308,8 @@ flowchart LR
   e_mypy --> j_CI_pr_yml_typecheck_v2
   r_api_quality_ruff_format --> e_ruff_format
   e_ruff_format --> j_CI_pr_yml_lint
-  r_api_quality_ruff_lint --> e_ruff_check__ANN__E4__E7__E9__F__FLY__FURB__I__PIE__PYI__RET__RSE__TC__UP__W_
-  e_ruff_check__ANN__E4__E7__E9__F__FLY__FURB__I__PIE__PYI__RET__RSE__TC__UP__W_ --> j_CI_pr_yml_lint
+  r_api_quality_ruff_lint --> e_ruff_check__ANN__D__E4__E7__E9__F__FLY__FURB__I__PIE__PYI__RET__RSE__TC__UP__W_
+  e_ruff_check__ANN__D__E4__E7__E9__F__FLY__FURB__I__PIE__PYI__RET__RSE__TC__UP__W_ --> j_CI_pr_yml_lint
   r_api_quality_runtime_evaluated_models_resolve --> e_pytest_tests_unit_test_runtime_evaluated_annotations_py
   e_pytest_tests_unit_test_runtime_evaluated_annotations_py --> j_CI_pr_yml_test
   r_api_quality_tests_pass --> e_CI_job_test

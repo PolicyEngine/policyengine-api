@@ -142,7 +142,6 @@ def _type_name(value: object) -> str | None:
 
 def normalize_json_value(value: object) -> JSONValue:
     """Convert supported public values into strict JSON-compatible values."""
-
     if value is None or isinstance(value, (str, bool, int)):
         return value
     if isinstance(value, float):
@@ -718,7 +717,6 @@ def extract_catalog(
     installed_version: Callable[[str], str] = importlib_metadata.version,
 ) -> NormalizedCatalog:
     """Validate and normalize supplied PolicyEngine.py public objects."""
-
     dependencies = _verify_bundle(
         bundle=bundle,
         policyengine_version=policyengine_version,
@@ -751,7 +749,6 @@ def extract_catalog(
 
 def extract_installed_catalog() -> NormalizedCatalog:
     """Load and normalize the installed PolicyEngine.py certified catalog."""
-
     import policyengine
     from policyengine.bundle import get_current_bundle
 

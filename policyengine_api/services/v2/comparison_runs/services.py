@@ -61,6 +61,11 @@ def create_or_resolve_report(
     session: Session,
     record: ComparisonReportRecord,
 ) -> ComparisonReportPersistenceResult:
+    """Insert a report row, or resolve the existing row with the same identity.
+
+    Raise ComparisonRunIdentityError when an existing row disagrees with the
+    record on its release or data identity, so a retry cannot reinterpret it.
+    """
     created_id = create_comparison_report(session, record)
     if created_id is not None:
         row = read_comparison_report(session, created_id, lock=False)
@@ -86,6 +91,12 @@ def create_or_resolve_simulation(
     session: Session,
     record: ComparisonSimulationRecord,
 ) -> ComparisonSimulationPersistenceResult:
+    """Insert a simulation row under its report, or resolve the existing row.
+
+    Raise ComparisonRunNotFoundError when the parent report is missing, and
+    ComparisonRunIdentityError when the record disagrees with its parent's
+    release and retention fields or with an existing row of the same identity.
+    """
     parent_row = read_comparison_report(session, record.evaluation_id, lock=False)
     if parent_row is None:
         raise ComparisonRunNotFoundError(
@@ -117,6 +128,12 @@ def replace_report_lifecycle(
     session: Session,
     record: ComparisonReportRecord,
 ) -> ComparisonReportRecord:
+    """Write a report's new lifecycle, aggregation and output fields under a row lock.
+
+    Identity and result-comparison fields must be unchanged and both status moves
+    allowed. A replay against a succeeded report must match it exactly, and then
+    returns the stored record without writing.
+    """
     row = read_comparison_report(session, record.evaluation_id, lock=True)
     if row is None:
         raise ComparisonRunNotFoundError(
@@ -140,6 +157,12 @@ def replace_report_result_comparison(
     session: Session,
     record: ComparisonReportRecord,
 ) -> ComparisonReportRecord:
+    """Write a report's result-comparison outcome under a row lock.
+
+    Only the comparison fields and updated_at may differ from the stored row. Once
+    the comparison is matched or different, an identical replay returns the
+    stored record without writing and any change raises.
+    """
     row = read_comparison_report(session, record.evaluation_id, lock=True)
     if row is None:
         raise ComparisonRunNotFoundError(
@@ -164,6 +187,12 @@ def replace_simulation_lifecycle(
     session: Session,
     record: ComparisonSimulationRecord,
 ) -> ComparisonSimulationRecord:
+    """Write a simulation's new lifecycle and output fields under a row lock.
+
+    Identity fields must be unchanged and the status move allowed. A replay
+    against a succeeded simulation must match it exactly, and then returns the
+    stored record without writing.
+    """
     row = read_comparison_simulation(
         session,
         record.simulation_execution_id,
@@ -183,13 +212,17 @@ def replace_simulation_lifecycle(
 
 
 class V2ComparisonRunService:
+    """Comparison-run operations, each run in its own database transaction."""
+
     def __init__(self, database_session: ComparisonRunDatabaseSession) -> None:
+        """Open a new session from database_session for every call."""
         self._database_session = database_session
 
     def create_or_resolve_report(
         self,
         record: ComparisonReportRecord,
     ) -> ComparisonReportPersistenceResult:
+        """Insert a report row or resolve its existing identity, in one transaction."""
         with self._database_session.transaction() as session:
             return create_or_resolve_report(session, record)
 
@@ -197,6 +230,7 @@ class V2ComparisonRunService:
         self,
         record: ComparisonSimulationRecord,
     ) -> ComparisonSimulationPersistenceResult:
+        """Insert a simulation row or resolve its identity, in one transaction."""
         with self._database_session.transaction() as session:
             return create_or_resolve_simulation(session, record)
 
@@ -204,6 +238,7 @@ class V2ComparisonRunService:
         self,
         record: ComparisonReportRecord,
     ) -> ComparisonReportRecord:
+        """Write a report's lifecycle update in one transaction, under a row lock."""
         with self._database_session.transaction() as session:
             return replace_report_lifecycle(session, record)
 
@@ -211,6 +246,7 @@ class V2ComparisonRunService:
         self,
         record: ComparisonSimulationRecord,
     ) -> ComparisonSimulationRecord:
+        """Write a simulation lifecycle update in one transaction, under a row lock."""
         with self._database_session.transaction() as session:
             return replace_simulation_lifecycle(session, record)
 
@@ -218,10 +254,12 @@ class V2ComparisonRunService:
         self,
         record: ComparisonReportRecord,
     ) -> ComparisonReportRecord:
+        """Write a report's result-comparison outcome in one transaction."""
         with self._database_session.transaction() as session:
             return replace_report_result_comparison(session, record)
 
     def get_report(self, evaluation_id: UUID) -> ComparisonReportRecord:
+        """Return the stored report, or raise ComparisonRunNotFoundError."""
         with self._database_session.read() as session:
             row = read_comparison_report(session, evaluation_id, lock=False)
             if row is None:

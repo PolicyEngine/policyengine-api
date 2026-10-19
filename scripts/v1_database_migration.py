@@ -28,6 +28,12 @@ PROXY_PORT = 3307
 
 
 class DatabaseState(StrEnum):
+    """Where a v1 database stands against the Alembic revision scripts.
+
+    UNVERSIONED has no version table and INVALID has an empty one; neither is
+    ever stamped or upgraded automatically.
+    """
+
     UNVERSIONED = "unversioned"
     INVALID = "invalid"
     PENDING = "pending"
@@ -43,7 +49,6 @@ def build_database_url(
     database: str,
 ) -> URL:
     """Build a SQLAlchemy URL without stringifying its credentials."""
-
     return URL.create(
         drivername="mysql+pymysql",
         username=username,
@@ -60,6 +65,10 @@ def classify_database_state(
     current_heads: set[str],
     script_heads: set[str] | None = None,
 ) -> DatabaseState:
+    """Classify a database by its version table and heads.
+
+    Without ``script_heads`` a versioned database is reported as pending, never head.
+    """
     if not version_table_exists:
         return DatabaseState.UNVERSIONED
     if not current_heads:
@@ -71,7 +80,6 @@ def classify_database_state(
 
 def describe_metadata_difference(difference: object) -> str:
     """Return a stable, data-free description of an Alembic metadata diff."""
-
     item = difference
     if isinstance(item, list) and len(item) == 1:
         item = item[0]
@@ -104,6 +112,7 @@ def _script_heads(config: Config) -> set[str]:
 
 
 def database_state(connection: Connection) -> DatabaseState:
+    """Return the database's Alembic state against the repository's revision heads."""
     inspector = inspect(connection)
     version_table_exists = "alembic_version" in inspector.get_table_names()
     context = MigrationContext.configure(connection)
@@ -116,6 +125,10 @@ def database_state(connection: Connection) -> DatabaseState:
 
 
 def metadata_differences(connection: Connection) -> set[str]:
+    """Describe every difference between the live schema and the v1 models.
+
+    Raise ValueError for a kind of difference that has no data-free description.
+    """
     context = MigrationContext.configure(
         connection,
         opts={"compare_type": True, "compare_server_default": True},
@@ -127,6 +140,7 @@ def metadata_differences(connection: Connection) -> set[str]:
 
 
 def verify_head_schema(connection: Connection) -> None:
+    """Raise RuntimeError unless the database is at the head with no schema drift."""
     state = database_state(connection)
     if state is not DatabaseState.HEAD:
         raise RuntimeError(f"Database is not at the Alembic head; found {state}")
@@ -152,6 +166,11 @@ def _release_lock(connection: Connection) -> None:
 
 
 def upgrade_database(connection: Connection, *, backup_id: str) -> None:
+    """Upgrade a versioned database to head under a MySQL named lock, then verify it.
+
+    A database already at head is only verified, so ``backup_id`` is required
+    only when an upgrade will actually run.
+    """
     _acquire_lock(connection)
     try:
         state = database_state(connection)
@@ -211,6 +230,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run one --mode against the v1 database: state, verify-head or upgrade.
+
+    Unless a database URL is set, the read-only modes connect through the proxy
+    as the schema reader and upgrade as the migrator, in one transaction.
+    """
     args = _parse_args(argv)
     engine = create_engine(_database_target(args.mode), poolclass=NullPool)
     try:

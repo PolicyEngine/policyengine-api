@@ -94,9 +94,12 @@ def test_cached_household_calculation_is_shared_between_connections(
 
 
 def test_cached_calculation_receipts_survive_a_real_round_trip(redis_pair) -> None:
-    """The selection is part of cache identity and its receipts travel with the
+    """Key cached calculations by SPM selection and keep their receipts.
+
+    The selection is part of cache identity and its receipts travel with the
     result, so a replay under the same measurement reads back a complete receipt
-    and a replay under a different one misses."""
+    and a replay under a different one misses.
+    """
     first, second, namespace = redis_pair
     selection = {
         "forecast_content_sha256": "c" * 64,

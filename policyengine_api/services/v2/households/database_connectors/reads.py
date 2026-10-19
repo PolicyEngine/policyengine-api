@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 def read_household_by_content_identity(
     session: Session, *, canonicalization_version: int, content_hash: str
 ) -> Household | None:
+    """Return the household with this canonical version and content hash, or None."""
     return session.exec(
         select(Household).where(
             Household.canonicalization_version == canonicalization_version,
@@ -26,6 +27,7 @@ def read_household_by_content_identity(
 def read_household_row(
     session: Session, *, country_id: str, household_id: UUID
 ) -> Household | None:
+    """Return the household with this id in this country, or None."""
     return session.exec(
         select(Household).where(
             Household.id == household_id,
@@ -42,6 +44,10 @@ def read_household_rows(
     offset: int,
     limit: int,
 ) -> list[Household]:
+    """Return up to ``limit + 1`` households in creation order, starting at ``offset``.
+
+    The extra row lets the caller report whether another page exists.
+    """
     statement = select(Household).where(Household.country_id == country_id)
     if default_year is not None:
         statement = statement.where(Household.default_year == default_year)
@@ -61,6 +67,11 @@ def read_legacy_household_mapping(
     legacy_household_id: int,
     lock: bool,
 ) -> LegacyHouseholdMapping | None:
+    """Return the v2 mapping for a v1 household id, or None.
+
+    With ``lock``, the row is selected FOR UPDATE so concurrent copies of the same
+    v1 household serialize on it.
+    """
     statement = select(LegacyHouseholdMapping).where(
         LegacyHouseholdMapping.country_id == country_id,
         LegacyHouseholdMapping.legacy_household_id == legacy_household_id,

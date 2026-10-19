@@ -34,6 +34,7 @@ class ReformImpactStartClaim:
     observability_id: str
 
     def to_payload(self) -> dict[str, str]:
+        """Return the JSON object stored as the claim's value."""
         return {
             "submission_claim_id": self.submission_claim_id,
             "observability_id": self.observability_id,
@@ -41,6 +42,7 @@ class ReformImpactStartClaim:
 
     @classmethod
     def from_payload(cls, payload: object) -> "ReformImpactStartClaim | None":
+        """Rebuild a claim, or return None if a field is missing or invalid."""
         if not isinstance(payload, dict):
             return None
         submission_claim_id = payload.get("submission_claim_id")
@@ -57,6 +59,11 @@ class ReformImpactStartClaim:
 
 @dataclass(frozen=True)
 class CachedReformImpact:
+    """An economy-impact job and its result, shaped like a legacy reform_impact row.
+
+    ``status`` is ``computing``, ``ok`` or ``error``; naive datetimes are UTC.
+    """
+
     reform_impact_id: int
     baseline_policy_id: int
     reform_policy_id: int
@@ -162,6 +169,7 @@ class ReformImpactCache:
     family = "reform-impact"
 
     def __init__(self, client: CacheBackend, namespace: CacheNamespace) -> None:
+        """Keep values, indexes and start claims in ``client`` under ``namespace``."""
         self.client = client
         self.namespace = namespace
         self._start_claims = ExpiringClaimStore(client, family=self.family)
@@ -219,7 +227,6 @@ class ReformImpactCache:
         observability_id: str,
     ) -> bool:
         """Atomically claim ownership of one reform-impact submission."""
-
         claim = ReformImpactStartClaim.from_payload(
             {
                 "submission_claim_id": claim_token,
@@ -260,7 +267,6 @@ class ReformImpactCache:
         target: str,
     ) -> ReformImpactStartClaim | None:
         """Read the current submission owner and its diagnostic identifier."""
-
         started_at = time.perf_counter()
         key = self._start_claim_key(
             country_id=country_id,
@@ -329,7 +335,6 @@ class ReformImpactCache:
         observability_id: str,
     ) -> bool:
         """Release a start claim only when its complete state still matches."""
-
         claim = ReformImpactStartClaim.from_payload(
             {
                 "submission_claim_id": claim_token,
@@ -400,6 +405,11 @@ class ReformImpactCache:
         *,
         record_execution_id: str | None = None,
     ) -> bool:
+        """Store an impact and index it by scope and recency in one transaction.
+
+        Each index keeps only the newest 1,000 entries. Return False if the
+        write failed; raise ValueError when there is no record identifier.
+        """
         # Terminal errors clear the worker handle in the payload while keeping
         # the original record key and lookup indexes stable.
         record_execution_id = record_execution_id or impact.execution_id
@@ -439,6 +449,7 @@ class ReformImpactCache:
         return True
 
     def get_by_execution_id(self, execution_id: str) -> CachedReformImpact | None:
+        """Return the job's impact, or None if absent, unreadable or unreachable."""
         try:
             value = self.client.get(self._record_key(execution_id))
         except Exception:
@@ -470,6 +481,7 @@ class ReformImpactCache:
         return [impact for impact in impacts if impact is not None]
 
     def recent(self, limit: int) -> list[CachedReformImpact]:
+        """Return up to ``limit`` impacts, most recently started first."""
         return self._from_index(self._recent_index(), limit)
 
     def matching(
@@ -485,6 +497,12 @@ class ReformImpactCache:
         options_hash: str,
         options_hash_pattern: str | None = None,
     ) -> list[CachedReformImpact]:
+        """Return the cached impacts for one policy pair and scope, best match first.
+
+        Exact ``options_hash`` matches sort before those matching
+        ``options_hash_pattern``, a SQL ``LIKE`` pattern; ties go to the most
+        recently started. Only the scope index's newest 1,000 entries are read.
+        """
         probe = CachedReformImpact(
             reform_impact_id=0,
             baseline_policy_id=baseline_policy_id,
@@ -534,6 +552,11 @@ class ReformImpactCache:
         clear_execution_id: bool = False,
         **changes: Any,  # noqa: ANN401  # forwarded unchanged to dataclasses.replace
     ) -> CachedReformImpact | None:
+        """Apply field changes to a cached impact and rewrite it under the same key.
+
+        ``clear_execution_id`` drops the worker handle without moving the record.
+        Return the updated impact, or None if it is missing or the write failed.
+        """
         impact = self.get_by_execution_id(execution_id)
         if impact is None:
             return None
@@ -553,6 +576,10 @@ class ReformImpactCache:
         time_period: str,
         options_hash: str,
     ) -> None:
+        """Remove in-flight (``computing``) impacts for this scope and options.
+
+        Cache failures are ignored, so a stale entry may survive until it expires.
+        """
         # Deletion historically omits api_version, so search the bounded recent
         # index and remove only matching in-flight values.
         impacts = self.recent(REFORM_IMPACT_INDEX_LIMIT)
@@ -584,6 +611,5 @@ class ReformImpactCache:
 
 def reform_impact_id(execution_id: str) -> int:
     """Stable positive cache-local identifier for the historical response field."""
-
     digest = hashlib.sha256(execution_id.encode("utf-8")).hexdigest()[:15]
     return int(digest, 16)

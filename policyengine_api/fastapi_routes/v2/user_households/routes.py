@@ -64,7 +64,6 @@ def build_v2_user_household_router(
     Authentication is a router-level dependency, so a missing or invalid
     credential is rejected before query or body validation.
     """
-
     require_user = dependencies.require_user
     router = APIRouter(
         prefix="/v2",

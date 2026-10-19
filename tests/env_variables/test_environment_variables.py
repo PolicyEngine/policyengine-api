@@ -27,7 +27,6 @@ class TestEnvironmentVariables:
     )
     def test_hugging_face_token(self):
         """Test if HUGGING_FACE_TOKEN is valid by querying Hugging Face API."""
-
         token = os.getenv("HUGGING_FACE_TOKEN")
         assert token is not None, "HUGGING_FACE_TOKEN is not set"
 
@@ -89,7 +88,6 @@ class TestEnvironmentVariables:
     )
     def test_github_microdata_auth_token(self):
         """Test if POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is valid by querying GitHub user API."""
-
         token = os.getenv("POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN")
         assert token is not None, "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is not set"
 

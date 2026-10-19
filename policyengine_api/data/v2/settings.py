@@ -49,16 +49,15 @@ class PostgresConnectionSettings:
     @property
     def url(self) -> URL:
         """Return SQLAlchemy's immutable URL for engine construction."""
-
         return self._url
 
     @property
     def redacted_url(self) -> str:
         """Return a log-safe URL with the password hidden."""
-
         return self._url.render_as_string(hide_password=True)
 
     def __str__(self) -> str:
+        """Return the URL with its password hidden, so printing never leaks it."""
         return self.redacted_url
 
 
@@ -92,7 +91,6 @@ def _required(environ: Mapping[str, str], name: str) -> str:
 @cache
 def _load_secret_from_secret_manager(resource_name: str) -> str:
     """Resolve a v2 runtime URL only when a preview request selects it."""
-
     from google.cloud import secretmanager
 
     client = secretmanager.SecretManagerServiceClient()
@@ -140,7 +138,6 @@ def load_supabase_target_settings(
     environ: Mapping[str, str] | None = None,
 ) -> SupabaseTargetSettings:
     """Load the externally configured non-secret Supabase target identity."""
-
     values = _environment(environ)
     project_ref = _required(values, V2_SUPABASE_PROJECT_REF)
     environment = _required(values, V2_SUPABASE_ENVIRONMENT)
@@ -165,7 +162,6 @@ def parse_persistent_postgres_url(
     setting_name: str,
 ) -> PostgresConnectionSettings:
     """Validate an explicit persistent Postgres URL without echoing it."""
-
     try:
         url = make_url(raw_url)
     except ArgumentError as error:
@@ -200,7 +196,6 @@ def validate_supabase_database_identity(
     setting_name: str,
 ) -> None:
     """Require a persistent URL to identify the configured Supabase project."""
-
     url = connection.url
     direct_host = f"db.{target.project_ref}.supabase.co"
     is_direct = url.host == direct_host
@@ -245,7 +240,6 @@ def load_v2_runtime_database_settings(
     secret_loader: Callable[[str], str] | None = None,
 ) -> V2DatabaseSettings:
     """Load the future ordinary-runtime Postgres identity explicitly."""
-
     values = _environment(environ)
     raw_url = _resolve_runtime_database_url(
         values,
@@ -269,7 +263,6 @@ def load_v2_migration_database_settings(
     environ: Mapping[str, str] | None = None,
 ) -> V2DatabaseSettings:
     """Load the schema-migration Postgres identity explicitly."""
-
     values = _environment(environ)
     return _database_settings(
         _required(values, V2_MIGRATION_DATABASE_URL),
@@ -282,7 +275,6 @@ def load_v2_data_write_database_settings(
     environ: Mapping[str, str] | None = None,
 ) -> V2DatabaseSettings:
     """Load the one-time catalog row-write Postgres identity explicitly."""
-
     values = _environment(environ)
     return _database_settings(
         _required(values, V2_DATA_WRITE_DATABASE_URL),

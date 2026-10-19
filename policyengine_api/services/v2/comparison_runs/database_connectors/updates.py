@@ -60,6 +60,10 @@ def update_comparison_report(
     row: Stage12ComparisonReport,
     record: ComparisonReportRecord,
 ) -> Stage12ComparisonReport:
+    """Copy the record's statuses and mutable output fields onto the report row.
+
+    The row is flushed and refreshed; committing is left to the caller.
+    """
     row.status = Stage12RunStatus(record.status.value)
     row.aggregation_status = Stage12AggregationStatus(record.aggregation_status.value)
     for field_name in REPORT_MUTABLE_FIELDS:
@@ -75,6 +79,10 @@ def update_comparison_simulation(
     row: Stage12ComparisonSimulation,
     record: ComparisonSimulationRecord,
 ) -> Stage12ComparisonSimulation:
+    """Copy the record's status, row identity and mutable output fields onto the row.
+
+    The row is flushed and refreshed; committing is left to the caller.
+    """
     row.status = Stage12RunStatus(record.status.value)
     row.row_identity_columns = (
         list(record.row_identity_columns)
@@ -94,6 +102,10 @@ def update_report_result_comparison(
     row: Stage12ComparisonReport,
     record: ComparisonReportRecord,
 ) -> Stage12ComparisonReport:
+    """Copy the record's result-comparison status and fields onto the report row.
+
+    The row is flushed and refreshed; committing is left to the caller.
+    """
     row.comparison_status = Stage12ResultComparisonStatus(
         record.comparison_status.value
     )

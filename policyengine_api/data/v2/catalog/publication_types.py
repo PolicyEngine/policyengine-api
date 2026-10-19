@@ -20,6 +20,7 @@ class PublicationEvidence:
     elapsed_seconds: float
 
     def as_dict(self) -> dict[str, object]:
+        """Return the evidence as the JSON object printed after a publication."""
         return {
             "outcome": "ok",
             "policyengine_version": self.policyengine_version,

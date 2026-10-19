@@ -99,7 +99,6 @@ def _matched_route_template(routes: Iterable[BaseRoute], scope: Scope) -> str | 
 
 def _native_route_template(app: FastAPI, scope: Scope) -> str | None:
     """Return the matched FastAPI route template, excluding the Flask mount."""
-
     return _matched_route_template(app.router.routes, scope)
 
 
@@ -112,7 +111,6 @@ def create_asgi_app(
     observability_runtime: ObservabilityRuntime | None = None,
 ) -> ASGIApp:
     """Create the Stage 2 FastAPI shell around the existing Flask app."""
-
     if route_settings is None:
         route_settings = RouteImplementationSettings.from_environment()
     if dependencies is None:

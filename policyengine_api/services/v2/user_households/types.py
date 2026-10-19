@@ -35,6 +35,7 @@ class UserHouseholdCreateFields(StrictUserHouseholdInput):
 
     @model_validator(mode="after")
     def require_household_reference(self) -> UserHouseholdCreateFields:
+        """Require a v2 household_id, a v1 legacy_household_id, or both."""
         if self.household_id is None and self.legacy_household_id is None:
             raise ValueError(
                 "At least one of legacy_household_id or household_id is required"
@@ -54,6 +55,7 @@ class UserHouseholdCreationInput(StrictUserHouseholdInput):
 
     @model_validator(mode="after")
     def require_household_reference(self) -> UserHouseholdCreationInput:
+        """Require a v2 household_id, a v1 legacy_household_id, or both."""
         if self.household_id is None and self.legacy_household_id is None:
             raise ValueError(
                 "At least one of legacy_household_id or household_id is required"
@@ -62,12 +64,19 @@ class UserHouseholdCreationInput(StrictUserHouseholdInput):
 
 
 class UserHouseholdUpdateInput(StrictUserHouseholdInput):
+    """A partial update of a saved household; only supplied fields are changed.
+
+    At least one field must be supplied. ``legacy_household_id`` may point the
+    association at another v1 household but cannot be cleared.
+    """
+
     legacy_household_id: LegacyRecordId | None = None
     name: AssociationName | None = None
     description: AssociationDescription | None = None
 
     @model_validator(mode="after")
     def require_valid_supplied_field(self) -> UserHouseholdUpdateInput:
+        """Require a supplied field, and reject an explicit null legacy_household_id."""
         mutable_fields = {"legacy_household_id", "name", "description"}
         supplied = self.model_fields_set.intersection(mutable_fields)
         if not supplied:
@@ -82,6 +91,8 @@ class UserHouseholdUpdateInput(StrictUserHouseholdInput):
 
 @dataclass(frozen=True)
 class UserHouseholdRead:
+    """A stored user-household association as the service returns it to routes."""
+
     id: UUID
     country_id: str
     user_id: UUID
@@ -95,6 +106,8 @@ class UserHouseholdRead:
 
 @dataclass(frozen=True)
 class UserHouseholdPage:
+    """One page of associations in creation order; ``has_more`` says if more follow."""
+
     items: tuple[UserHouseholdRead, ...]
     offset: int
     limit: int
