@@ -1,7 +1,7 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 89,
+    "request_count": 90,
     "route_group_count": 9,
     "sim_flow_count": 3,
     "workflow_count": 16
@@ -33,6 +33,7 @@
         "metadata",
         "datasets",
         "economy-options",
+        "model-catalog",
         "parameter-values",
         "parameters",
         "regions",
@@ -1597,6 +1598,21 @@
             "result.policyengine_version",
             "result.model",
             "result.model_version"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/model-catalog?country_id=us",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.policyengine_version",
+            "result.parameter_nodes",
+            "result.parameters",
+            "result.variables"
           ]
         },
         {

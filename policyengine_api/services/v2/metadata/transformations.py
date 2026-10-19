@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from policyengine_api.dataset_display import get_dataset_display_label
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogDocument,
     MetadataDataset,
     MetadataDatasetOption,
     MetadataEconomyOptionsResult,
@@ -25,13 +27,20 @@ from policyengine_api.services.v2.metadata.types import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+    from uuid import UUID
+
     from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
     from policyengine_api.data.v2.models import (
         Dataset,
         Parameter,
+        ParameterNode,
         ParameterValue,
         Region,
         Variable,
+    )
+    from policyengine_api.services.v2.metadata.types import (
+        MetadataCatalogParameterRow,
     )
 
 ResourceT = TypeVar("ResourceT")
@@ -222,4 +231,99 @@ def metadata_economy_options(
                 label=get_dataset_display_label(national_dataset.name),
             )
         ],
+    )
+
+
+def _catalog_json(value: object) -> bytes:
+    return json.dumps(
+        value, ensure_ascii=False, allow_nan=False, separators=(",", ":")
+    ).encode("utf-8")
+
+
+def catalog_value_date(start_date: datetime) -> str:
+    """Return a value's UTC start day as YYYY-MM-DD, treating a naive time as UTC."""
+    if start_date.tzinfo is not None:
+        start_date = start_date.astimezone(UTC)
+    return start_date.date().isoformat()
+
+
+def _catalog_parameter(
+    parameter: MetadataCatalogParameterRow, values: dict[str, Any]
+) -> bytes:
+    return _catalog_json(
+        {
+            "id": str(parameter.id),
+            "name": parameter.name,
+            "label": parameter.label,
+            "description": parameter.description,
+            "data_type": parameter.data_type,
+            "unit": parameter.unit,
+            "values": values,
+        }
+    )
+
+
+def metadata_catalog_document(
+    selected: SelectedCatalog,
+    *,
+    parameter_nodes: list[ParameterNode],
+    parameters: list[MetadataCatalogParameterRow],
+    values: Iterable[tuple[UUID, datetime, Any]],
+    variables: list[Variable],
+) -> MetadataCatalogDocument:
+    """Serialize a catalog version as the model-catalog success envelope.
+
+    values holds (parameter_id, start_date, value) with each parameter's values
+    consecutive and oldest first; it is consumed once, as it is read, and each
+    parameter is serialized as soon as its values are complete. Parameters,
+    nodes and variables appear in the order given (name order).
+    """
+    parameters_by_id = {parameter.id: parameter for parameter in parameters}
+    serialized_by_id: dict[UUID, bytes] = {}
+    current_parameter_id: UUID | None = None
+    current_values: dict[str, Any] = {}
+    for parameter_id, start_date, value in values:
+        if parameter_id != current_parameter_id:
+            if current_parameter_id in parameters_by_id:
+                serialized_by_id[current_parameter_id] = _catalog_parameter(
+                    parameters_by_id[current_parameter_id], current_values
+                )
+            current_parameter_id = parameter_id
+            current_values = {}
+        current_values[catalog_value_date(start_date)] = value
+    if current_parameter_id in parameters_by_id:
+        serialized_by_id[current_parameter_id] = _catalog_parameter(
+            parameters_by_id[current_parameter_id], current_values
+        )
+
+    serialized_parameters = b",".join(
+        serialized_by_id.get(parameter.id) or _catalog_parameter(parameter, {})
+        for parameter in parameters
+    )
+    serialized_nodes = _catalog_json(
+        [
+            {"name": node.name, "label": node.label, "description": node.description}
+            for node in parameter_nodes
+        ]
+    )
+    serialized_variables = _catalog_json(
+        [metadata_variable(variable).model_dump(mode="json") for variable in variables]
+    )
+    body = b"".join(
+        (
+            b'{"status":"ok","message":null,"result":{"policyengine_version":',
+            _catalog_json(selected.policyengine_version),
+            b',"parameter_nodes":',
+            serialized_nodes,
+            b',"parameters":[',
+            serialized_parameters,
+            b'],"variables":',
+            serialized_variables,
+            b"}}",
+        )
+    )
+    return MetadataCatalogDocument(
+        country_id=selected.country_id,
+        policyengine_version=selected.policyengine_version,
+        body=body,
     )

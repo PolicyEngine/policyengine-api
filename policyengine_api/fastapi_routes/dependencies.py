@@ -31,8 +31,12 @@ if TYPE_CHECKING:
         AccountPrincipal,
         UserPrincipal,
     )
+    from policyengine_api.services.v2.metadata.catalog_cache import (
+        MetadataCatalogCache,
+    )
     from policyengine_api.services.v2.metadata.types import (
         MetadataCanonicalParameterValue,
+        MetadataCatalogDocument,
         MetadataDataset,
         MetadataDetailResult,
         MetadataEconomyOptionsResult,
@@ -306,6 +310,18 @@ class V2MetadataResourceReader(Protocol):
 
         Raise ``MetadataCatalogUnavailableError`` when the national region, its
         dataset or the model version's options are missing from the catalog.
+        """
+        ...
+
+    def get_model_catalog(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> MetadataCatalogDocument:
+        """Return the selected catalog's parameter nodes, parameters and variables.
+
+        Parameters carry their current-law values. The result is the serialized
+        success envelope, built once per country and catalog version.
         """
         ...
 
@@ -723,6 +739,16 @@ def _running_policyengine_version() -> str:
     return importlib_metadata.version("policyengine")
 
 
+@lru_cache(maxsize=1)
+def _metadata_catalog_cache() -> MetadataCatalogCache:
+    """Return the catalog documents this process keeps for every request."""
+    from policyengine_api.services.v2.metadata.catalog_cache import (
+        MetadataCatalogCache,
+    )
+
+    return MetadataCatalogCache()
+
+
 def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     from policyengine_api.data.v2.database import get_v2_session_factory
     from policyengine_api.services.v2.metadata.database_session import (
@@ -733,6 +759,7 @@ def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     return V2MetadataService(
         MetadataDatabaseSession(get_v2_session_factory()()),
         running_policyengine_version=_running_policyengine_version(),
+        catalog_cache=_metadata_catalog_cache(),
     )
 
 

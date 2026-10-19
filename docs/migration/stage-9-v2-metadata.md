@@ -198,6 +198,21 @@ Request `GET /v2/openapi.json` and confirm that the public document contains
 every documented resource path and explicit component schema references for
 success and error responses.
 
+`GET /v2/model-catalog` returns a whole catalog version in one response: every
+parameter node, every parameter with its current-law values (keyed by start
+date), and every variable. It exists for clients such as the app's v3
+workspace that load the whole model at start-up; the paged routes would need
+about 2,550 requests of 500 rows for the US catalog (100,276 `gov` parameters
+and 1,174,586 values). Each API instance builds the serialized document once
+per country and catalog version and keeps the four most recently used. Measured
+locally against the 6.7.5 catalog, the US document takes 5.8 seconds to build
+and is 60.7 MB (12.1 MB gzipped); the UK document takes 1.0 second and is
+1.3 MB. The response carries an ETag naming the country, catalog version and
+document format, and `Cache-Control: public, max-age=86400` when the request
+names `policyengine_version` (`max-age=300` otherwise, because the running
+version changes on deploy). The release workflow checks the UK document,
+including a conditional request that must return 304.
+
 Also request the unprefixed US and UK metadata endpoints and confirm their
 responses still come from v1. Do not modify route selectors, internal callers,
 or traffic rules to use `/v2` during Stage 9.

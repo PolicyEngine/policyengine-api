@@ -1,0 +1,1 @@
+GET /v2/model-catalog returns every parameter node, parameter (with its current-law values keyed by start date) and variable of a catalog version in one response, for clients that load the whole model at once. Each instance builds the document once per country and catalog version, and the response supports ETag revalidation.

@@ -656,6 +656,20 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
             ),
             ContractRequest(
                 method="GET",
+                path="/v2/model-catalog?country_id=us",
+                expected_status=200,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result.policyengine_version",
+                    "result.parameter_nodes",
+                    "result.parameters",
+                    "result.variables",
+                ),
+                route_group="metadata",
+            ),
+            ContractRequest(
+                method="GET",
                 path="/v2/economy-options?country_id=us",
                 expected_status=200,
                 stable_response_fields=(

@@ -360,3 +360,37 @@ def test_postgres_parameter_collection_remains_available_without_values(
     assert parameters.status_code == values.status_code == 200
     assert parameters.json()["result"]["items"]
     assert values.json()["result"]["items"] == []
+
+
+@pytest.mark.parametrize("country_id", ["us", "uk"])
+def test_postgres_model_catalog_holds_the_published_catalog(
+    published_engine: Engine,
+    country_id: str,
+) -> None:
+    client = _client(published_engine)
+    before = _catalog_counts(published_engine)
+
+    catalog = client.get("/v2/model-catalog", params={"country_id": country_id})
+    paged_parameters = client.get("/v2/parameters", params={"country_id": country_id})
+    revalidated = client.get(
+        "/v2/model-catalog",
+        params={"country_id": country_id},
+        headers={"If-None-Match": catalog.headers["etag"]},
+    )
+
+    assert catalog.status_code == 200
+    result = catalog.json()["result"]
+    assert result["policyengine_version"] == POLICYENGINE_VERSION
+    assert [node["name"] for node in result["parameter_nodes"]] == ["gov.example"]
+    assert [parameter["id"] for parameter in result["parameters"]] == [
+        item["id"] for item in paged_parameters.json()["result"]["items"]
+    ]
+    assert result["parameters"][0]["values"] == {
+        "2025-01-01": 0.1,
+        "2026-01-01": 0.2,
+    }
+    assert [variable["name"] for variable in result["variables"]] == [
+        "employment_income"
+    ]
+    assert revalidated.status_code == 304
+    assert _catalog_counts(published_engine) == before

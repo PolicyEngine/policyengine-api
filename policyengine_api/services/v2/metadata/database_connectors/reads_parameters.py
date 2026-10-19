@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import sqlalchemy as sa
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, col, select
 
+from policyengine_api.data.v2.catalog.catalog_selection import (
+    MetadataCatalogUnavailableError,
+)
 from policyengine_api.data.v2.models import Parameter, ParameterValue
 from policyengine_api.services.v2.metadata.database_connectors.reads import read_rows
+from policyengine_api.services.v2.metadata.types import MetadataCatalogParameterRow
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from datetime import datetime
     from uuid import UUID
+
+CATALOG_VALUE_BATCH_SIZE = 10_000
 
 
 def _escape_like(value: str) -> str:
@@ -128,3 +136,65 @@ def read_parameter_value(
         ),
     )
     return rows[0] if rows else None
+
+
+def read_all_parameter_rows(
+    session: Session, *, model_version_id: UUID
+) -> list[MetadataCatalogParameterRow]:
+    """Return every parameter of a model version, without values, in name order."""
+    rows = read_rows(
+        session,
+        sa.select(
+            col(Parameter.id),
+            col(Parameter.name),
+            col(Parameter.label),
+            col(Parameter.description),
+            col(Parameter.data_type),
+            col(Parameter.unit),
+        )
+        .where(col(Parameter.tax_benefit_model_version_id) == model_version_id)
+        .order_by(col(Parameter.name)),
+    )
+    return [
+        MetadataCatalogParameterRow(
+            id=parameter_id,
+            name=name,
+            label=label,
+            description=description,
+            data_type=data_type,
+            unit=unit,
+        )
+        for parameter_id, name, label, description, data_type, unit in rows
+    ]
+
+
+def iter_canonical_parameter_values(
+    session: Session, *, model_version_id: UUID
+) -> Iterator[tuple[UUID, datetime, Any]]:
+    """Yield every current-law value of a model version as it is read.
+
+    Each item is (parameter_id, start_date, value). A parameter's values are
+    consecutive and oldest first. Rows are fetched in batches, so the whole
+    set is never held at once. Raise MetadataCatalogUnavailableError when the
+    database query fails.
+    """
+    statement = (
+        select(
+            ParameterValue.parameter_id,
+            ParameterValue.start_date,
+            ParameterValue.value_json,
+        )
+        .join(Parameter, col(Parameter.id) == col(ParameterValue.parameter_id))
+        .where(
+            col(Parameter.tax_benefit_model_version_id) == model_version_id,
+            col(ParameterValue.policy_id).is_(None),
+            col(ParameterValue.dynamic_id).is_(None),
+        )
+        .order_by(col(ParameterValue.parameter_id), col(ParameterValue.start_date))
+        .execution_options(yield_per=CATALOG_VALUE_BATCH_SIZE)
+    )
+    try:
+        yield from session.exec(statement)
+    except SQLAlchemyError as error:
+        msg = "the v2 metadata catalog cannot be queried"
+        raise MetadataCatalogUnavailableError(msg) from error

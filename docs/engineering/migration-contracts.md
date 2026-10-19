@@ -8,7 +8,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | ---: |
 | route group count | 9 |
 | workflow count | 16 |
-| request count | 89 |
+| request count | 90 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -18,7 +18,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | --- | --- | --- |
 | `health` | `health`, `simulation-gateway-check`, `liveness-check`, `readiness-check` | `none` | `none` |
 | `specification` | `specification` | `none` | `none` |
-| `metadata` | `metadata`, `datasets`, `economy-options`, `parameter-values`, `parameters`, `regions`, `tax-benefit-model-versions`, `tax-benefit-models`, `variables` | `metadata` | `none` |
+| `metadata` | `metadata`, `datasets`, `economy-options`, `model-catalog`, `parameter-values`, `parameters`, `regions`, `tax-benefit-model-versions`, `tax-benefit-models`, `variables` | `metadata` | `none` |
 | `policy` | `policy`, `policies`, `user-policy`, `user-policies` | `policy` | `none` |
 | `household` | `household`, `households`, `user-household`, `user-households`, `calculate`, `calculate-full` | `household` | `household` |
 | `economy` | `economy` | `simulation` | `economy` |
@@ -214,6 +214,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `GET` | `/v2/regions/{region_id}?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.item` |
 | `GET` | `/v2/regions/by-code/state/ca?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.item` |
 | `GET` | `/v2/tax-benefit-models/by-country/us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.model`, `result.model_version` |
+| `GET` | `/v2/model-catalog?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.parameter_nodes`, `result.parameters`, `result.variables` |
 | `GET` | `/v2/economy-options?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.current_law_id`, `result.region`, `result.time_period`, `result.datasets` |
 
 ### `simulation_submit_poll`

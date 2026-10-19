@@ -9,6 +9,7 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     SelectedCatalog,
     validate_policyengine_version,
 )
+from policyengine_api.services.v2.metadata.catalog_cache import MetadataCatalogCache
 from policyengine_api.services.v2.metadata.database_connectors.reads import (
     read_metadata_catalog,
 )
@@ -17,9 +18,12 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_datasets im
     read_datasets,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_tree import (
+    read_all_parameter_nodes,
     read_parameter_children,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameters import (
+    iter_canonical_parameter_values,
+    read_all_parameter_rows,
     read_parameter,
     read_parameter_value,
     read_parameter_values,
@@ -31,10 +35,12 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_regions imp
     read_regions,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_variables import (
+    read_all_variables,
     read_variable,
     read_variables,
 )
 from policyengine_api.services.v2.metadata.transformations import (
+    metadata_catalog_document,
     metadata_dataset,
     metadata_economy_options,
     metadata_model,
@@ -50,6 +56,7 @@ from policyengine_api.services.v2.metadata.transformations import (
 )
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogDocument,
     MetadataDataset,
     MetadataDetailResult,
     MetadataEconomyOptionsResult,
@@ -90,12 +97,18 @@ class V2MetadataService:
         database_session: MetadataDatabaseSession,
         *,
         running_policyengine_version: str,
+        catalog_cache: MetadataCatalogCache | None = None,
     ) -> None:
-        """Bind to a request's session and the running PolicyEngine.py version."""
+        """Bind to a request's session and the running PolicyEngine.py version.
+
+        catalog_cache keeps built catalog documents across requests; without
+        one, this service keeps its own for its lifetime.
+        """
         self._database_session = database_session
         self._running_policyengine_version = validate_policyengine_version(
             running_policyengine_version
         )
+        self._catalog_cache = catalog_cache or MetadataCatalogCache()
 
     def close(self) -> None:
         """Close the request's database session."""
@@ -508,6 +521,42 @@ class V2MetadataService:
         return MetadataDetailResult(
             policyengine_version=selected.policyengine_version,
             item=metadata_region(row),
+        )
+
+    def get_model_catalog(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> MetadataCatalogDocument:
+        """Return every parameter node, parameter and variable of the selected catalog.
+
+        Parameters carry their current-law values. The serialized document is
+        built once per country and catalog version and then served from the
+        catalog cache, because a published catalog version never changes.
+        """
+        selected = self._select_catalog(country_id, policyengine_version)
+        session = self._database_session.session
+        model_version_id = selected.model_version.id
+
+        def build() -> MetadataCatalogDocument:
+            return metadata_catalog_document(
+                selected,
+                parameter_nodes=read_all_parameter_nodes(
+                    session, model_version_id=model_version_id
+                ),
+                parameters=read_all_parameter_rows(
+                    session, model_version_id=model_version_id
+                ),
+                values=iter_canonical_parameter_values(
+                    session, model_version_id=model_version_id
+                ),
+                variables=read_all_variables(
+                    session, model_version_id=model_version_id
+                ),
+            )
+
+        return self._catalog_cache.get_or_build(
+            (selected.country_id, selected.policyengine_version), build
         )
 
     def get_economy_options(

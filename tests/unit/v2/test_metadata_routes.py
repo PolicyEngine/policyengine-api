@@ -26,6 +26,7 @@ from policyengine_api.migration_flags import (
 )
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogDocument,
     MetadataDataset,
     MetadataDatasetOption,
     MetadataDetailResult,
@@ -443,9 +444,12 @@ def test_default_reader_uses_the_installed_policyengine_version(
     captured = {}
     reader = object()
 
-    def query_service(candidate_session, *, running_policyengine_version):
+    def query_service(
+        candidate_session, *, running_policyengine_version, catalog_cache
+    ):
         captured["session"] = candidate_session.session
         captured["version"] = running_policyengine_version
+        captured.setdefault("catalog_caches", []).append(catalog_cache)
         return reader
 
     monkeypatch.setattr(database, "get_v2_session_factory", lambda: lambda: session)
@@ -458,10 +462,15 @@ def test_default_reader_uses_the_installed_policyengine_version(
     route_dependencies._running_policyengine_version.cache_clear()
     try:
         result = route_dependencies._default_v2_metadata_reader_factory()
+        repeated = route_dependencies._default_v2_metadata_reader_factory()
     finally:
         route_dependencies._running_policyengine_version.cache_clear()
 
     assert result is reader
+    assert repeated is reader
+    first_cache, second_cache = captured.pop("catalog_caches")
+    assert first_cache is second_cache
+    assert first_cache is route_dependencies._metadata_catalog_cache()
     assert captured == {"session": session, "version": "5.2.0"}
 
 
@@ -521,6 +530,7 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/datasets",
         "/v2/datasets/{dataset_id}",
         "/v2/economy-options",
+        "/v2/model-catalog",
         "/v2/parameters",
         "/v2/parameters/children",
         "/v2/parameters/{parameter_id}",
@@ -583,3 +593,106 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
                 "application/json"
             ]["schema"]
             assert error_schema["$ref"] == "#/components/schemas/V2ErrorResponse"
+
+
+CATALOG_VERSION = "4.20.3"
+CATALOG_BODY = (
+    b'{"status":"ok","message":null,"result":{"policyengine_version":"4.20.3",'
+    b'"parameter_nodes":[],"parameters":[],"variables":[]}}'
+)
+
+
+def _catalog_reader(**reader_options) -> ResourceReader:
+    return ResourceReader(
+        {
+            "get_model_catalog": MetadataCatalogDocument(
+                country_id="us",
+                policyengine_version=CATALOG_VERSION,
+                body=CATALOG_BODY,
+            )
+        },
+        **reader_options,
+    )
+
+
+def test_model_catalog_returns_the_document_with_validators() -> None:
+    reader = _catalog_reader()
+    client = _client(lambda: reader)
+
+    running = client.get("/v2/model-catalog?country_id=us")
+    pinned = client.get(
+        f"/v2/model-catalog?country_id=us&policyengine_version={CATALOG_VERSION}"
+    )
+
+    assert running.status_code == 200
+    assert running.content == CATALOG_BODY
+    assert running.headers["content-type"] == "application/json"
+    assert running.headers["etag"] == pinned.headers["etag"]
+    assert CATALOG_VERSION in running.headers["etag"]
+    assert running.headers["cache-control"] == "public, max-age=300"
+    assert pinned.headers["cache-control"] == "public, max-age=86400"
+    assert reader.calls == [
+        ("get_model_catalog", ("us", None), {}),
+        ("get_model_catalog", ("us", CATALOG_VERSION), {}),
+    ]
+    assert reader.closed is True
+
+
+def test_model_catalog_answers_a_matching_etag_with_not_modified() -> None:
+    client = _client(_catalog_reader)
+    etag = client.get("/v2/model-catalog?country_id=us").headers["etag"]
+
+    unchanged = client.get(
+        "/v2/model-catalog?country_id=us", headers={"If-None-Match": etag}
+    )
+    changed = client.get(
+        "/v2/model-catalog?country_id=us",
+        headers={"If-None-Match": '"us:0.0.1:1"'},
+    )
+
+    assert unchanged.status_code == 304
+    assert unchanged.content == b""
+    assert unchanged.headers["etag"] == etag
+    assert changed.status_code == 200
+    assert changed.content == CATALOG_BODY
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code"),
+    [
+        (UnsupportedPreviewCountryError("ca"), 400),
+        (InvalidPolicyEngineVersionError("bad"), 400),
+        (MetadataCatalogVersionNotFoundError("absent"), 404),
+        (MetadataCatalogUnavailableError("down"), 503),
+        (RuntimeError("secret detail"), 500),
+    ],
+)
+def test_model_catalog_failures_use_documented_error_statuses(
+    error: Exception, status_code: int
+) -> None:
+    reader = _catalog_reader(error=error)
+    response = _client(lambda: reader).get("/v2/model-catalog?country_id=us")
+
+    assert response.status_code == status_code
+    assert response.json()["status"] == "error"
+    assert "secret detail" not in response.text
+    assert reader.closed is True
+
+
+def test_openapi_publishes_the_model_catalog_schema() -> None:
+    schema = _client(_catalog_reader).get("/v2/openapi.json").json()
+
+    operation = schema["paths"]["/v2/model-catalog"]["get"]
+    success_schema = operation["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]
+    assert success_schema["$ref"] == "#/components/schemas/MetadataCatalogResponse"
+    result_schema = schema["components"]["schemas"]["MetadataCatalogResult"]
+    assert set(result_schema["properties"]) == {
+        "policyengine_version",
+        "parameter_nodes",
+        "parameters",
+        "variables",
+    }
+    parameter_schema = schema["components"]["schemas"]["MetadataCatalogParameter"]
+    assert "values" in parameter_schema["required"]

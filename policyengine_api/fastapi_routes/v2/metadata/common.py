@@ -62,6 +62,7 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 
 
 ResponseT = TypeVar("ResponseT", bound=BaseModel)
+ReadT = TypeVar("ReadT")
 
 
 def read_resource(
@@ -75,6 +76,20 @@ def read_resource(
     (400, 404 or 503, and 500 for anything unexpected), and the reader is
     closed whatever happens.
     """
+    return run_metadata_read(
+        dependencies, lambda reader: response_type(result=operation(reader))
+    )
+
+
+def run_metadata_read(
+    dependencies: NativeRouteDependencies,
+    operation: Callable[[V2MetadataResourceReader], ReadT],
+) -> ReadT | JSONResponse:
+    """Run one metadata read and return its result unchanged.
+
+    Failures become the typed v2 error responses described by read_resource,
+    and the reader is closed whatever happens.
+    """
     reader = None
     try:
         factory = dependencies.v2_metadata_reader_factory
@@ -85,7 +100,7 @@ def read_resource(
 
             factory = _default_v2_metadata_reader_factory
         reader = factory()
-        return response_type(result=operation(reader))
+        return operation(reader)
     except (InvalidMetadataPageError, InvalidPolicyEngineVersionError) as error:
         return v2_error_response(400, str(error))
     except UnsupportedPreviewCountryError as error:

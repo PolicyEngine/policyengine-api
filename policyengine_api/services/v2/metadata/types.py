@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Generic, Literal, TypeVar
@@ -170,6 +171,61 @@ class MetadataParameterChild(StrictResponseModel):
     type: Literal["node", "parameter"]
     child_count: int | None = None
     parameter: MetadataParameterSummary | None = None
+
+
+class MetadataParameterNode(StrictResponseModel):
+    """A node of the parameter tree: a path that groups parameters and has no values."""
+
+    name: str
+    label: str | None
+    description: str | None
+
+
+class MetadataCatalogParameter(MetadataParameterSummary):
+    """A policy parameter with every current-law value it has held.
+
+    values maps each start date (YYYY-MM-DD) to the value in effect from that
+    date until the day before the next start date; the latest value has no end.
+    """
+
+    values: dict[str, JsonValue]
+
+
+class MetadataCatalogResult(StrictResponseModel):
+    """Every parameter node, parameter and variable of one catalog version.
+
+    Parameters carry their current-law values. Each list is in name order.
+    """
+
+    policyengine_version: str
+    parameter_nodes: list[MetadataParameterNode]
+    parameters: list[MetadataCatalogParameter]
+    variables: list[MetadataVariable]
+
+
+@dataclass(frozen=True)
+class MetadataCatalogDocument:
+    """The serialized catalog response body for one country and catalog version.
+
+    body is the complete JSON success envelope; a published catalog version
+    never changes, so the same body can be served for as long as it is kept.
+    """
+
+    country_id: str
+    policyengine_version: str
+    body: bytes
+
+
+@dataclass(frozen=True)
+class MetadataCatalogParameterRow:
+    """The descriptive columns of one stored parameter, read without its values."""
+
+    id: UUID
+    name: str
+    label: str | None
+    description: str | None
+    data_type: str | None
+    unit: str | None
 
 
 ResourceT = TypeVar("ResourceT")

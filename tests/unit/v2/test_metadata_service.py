@@ -620,6 +620,7 @@ def test_resource_entrypoints_are_defined_in_the_service_module() -> None:
         "get_region",
         "get_region_by_code",
         "get_economy_options",
+        "get_model_catalog",
     }
 
     for method_name in method_names:

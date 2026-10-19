@@ -44,7 +44,9 @@ def test_live_v2_openapi_describes_every_preview_resource(api_client) -> None:
     assert response.status_code == 200, response.text[:500]
     document = response.json()
     expected_paths = {f"/v2/{resource}" for resource in PAGED_RESOURCES}
-    expected_paths.update({"/v2/parameters/children", "/v2/economy-options"})
+    expected_paths.update(
+        {"/v2/parameters/children", "/v2/economy-options", "/v2/model-catalog"}
+    )
     assert expected_paths <= document["paths"].keys()
     assert all("get" in document["paths"][path] for path in expected_paths)
     assert "V2ErrorResponse" in document["components"]["schemas"]
@@ -104,3 +106,22 @@ def test_live_v2_invalid_version_returns_a_typed_error(api_client) -> None:
     assert payload["status"] == "error"
     assert payload["message"]
     assert "result" not in payload or payload["result"] is None
+
+
+def test_live_v2_model_catalog_serves_the_deployed_uk_catalog(api_client) -> None:
+    expected_version = _installed_policyengine_version()
+    query = {"country_id": "uk", "policyengine_version": expected_version}
+
+    response = api_client.get("/v2/model-catalog", params=query)
+    revalidated = api_client.get(
+        "/v2/model-catalog",
+        params=query,
+        headers={"If-None-Match": response.headers.get("etag", "")},
+    )
+
+    result = _assert_ok(response, expected_version)
+    assert result["parameters"]
+    assert result["parameter_nodes"]
+    assert result["variables"]
+    assert all(isinstance(item["values"], dict) for item in result["parameters"])
+    assert revalidated.status_code == 304

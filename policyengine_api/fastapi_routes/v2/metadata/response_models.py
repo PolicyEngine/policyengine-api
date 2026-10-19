@@ -6,6 +6,7 @@ from typing import Generic, Literal, TypeVar
 
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogResult,
     MetadataDataset,
     MetadataDetailResult,
     MetadataEconomyOptionsResult,
@@ -139,3 +140,7 @@ class MetadataEconomyOptionsResponse(
     MetadataResourceSuccessResponse[MetadataEconomyOptionsResult]
 ):
     """Success response holding the options for configuring an economy comparison."""
+
+
+class MetadataCatalogResponse(MetadataResourceSuccessResponse[MetadataCatalogResult]):
+    """Success response holding a whole catalog version's parameters and variables."""

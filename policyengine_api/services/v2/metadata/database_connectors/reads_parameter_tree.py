@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import sqlalchemy as sa
-from sqlmodel import Session, col
+from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import Parameter, ParameterNode
 from policyengine_api.services.v2.metadata.database_connectors.reads import read_rows
@@ -166,4 +166,16 @@ def read_parameter_children(
             offset=offset,
             limit=limit,
         ),
+    )
+
+
+def read_all_parameter_nodes(
+    session: Session, *, model_version_id: UUID
+) -> list[ParameterNode]:
+    """Return every parameter node of a model version in name order."""
+    return read_rows(
+        session,
+        select(ParameterNode)
+        .where(col(ParameterNode.tax_benefit_model_version_id) == model_version_id)
+        .order_by(col(ParameterNode.name)),
     )
