@@ -1334,3 +1334,14 @@ class TestSimulationAPIModal:
 
             # Then
             assert is_healthy is False
+
+        def test__given_non_http_error__then_raises_it(
+            self, mock_httpx_client, mock_modal_logger
+        ):
+            # Given
+            mock_httpx_client.get.side_effect = RuntimeError("client defect")
+            api = SimulationAPIModal()
+
+            # When / Then
+            with pytest.raises(RuntimeError, match="client defect"):
+                api.health_check()

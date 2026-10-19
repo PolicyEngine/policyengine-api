@@ -632,7 +632,7 @@ class SimulationEntrypointClient:
         """
         try:
             response = self.client.get(f"{self.base_url}/health")
-        except Exception:  # noqa: BLE001  # a health probe reports any failure as unhealthy
+        except httpx.HTTPError:
             return False
         else:
             return response.status_code == 200
