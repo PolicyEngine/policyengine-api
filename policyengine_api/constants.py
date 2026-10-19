@@ -93,6 +93,11 @@ def _resolve_bundle_package_versions(bundle: dict | None) -> dict[str, str]:
     return package_versions
 
 
+def get_bundle_manifest() -> dict | None:
+    """Return the installed bundle manifest read at import, or None if it is missing."""
+    return _policyengine_bundle
+
+
 def get_bundle_data_release(country_id: str) -> dict:
     """Return the bundle's data release entry for a country, or {} if it has none."""
     if not isinstance(_policyengine_bundle, dict):

@@ -44,7 +44,7 @@ class RegistryCapability:
 
 
 def _bundle_package_versions() -> dict[str, str]:
-    bundle = constants._policyengine_bundle  # noqa: SLF001  # constants has no public accessor for the manifest; read at call time so tests can patch it
+    bundle = constants.get_bundle_manifest()
     packages = bundle.get("packages") if isinstance(bundle, dict) else None
     if not isinstance(packages, dict):
         msg = "The installed PolicyEngine bundle manifest has no packages"

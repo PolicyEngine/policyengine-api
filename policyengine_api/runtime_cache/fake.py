@@ -21,6 +21,11 @@ class InMemoryCacheBackend:
         self._sorted_sets: dict[str, dict[str, float]] = {}
         self._lock = RLock()
 
+    @property
+    def operation_lock(self) -> RLock:
+        """The lock every operation holds; transactional pipelines replay under it."""
+        return self._lock
+
     def _now(self) -> float:
         return self._external_now() if self._external_now else self._time
 
@@ -191,7 +196,7 @@ class InMemoryPipeline:
         With ``transaction`` the replay holds the backend lock, as MULTI/EXEC
         would; without it, other callers' commands may interleave.
         """
-        lock = self.backend._lock if self.transaction else RLock()  # noqa: SLF001  # a transactional replay holds the backend lock, as MULTI/EXEC would
+        lock = self.backend.operation_lock if self.transaction else RLock()
         with lock:
             results = [
                 getattr(self.backend, name)(*args, **kwargs)
