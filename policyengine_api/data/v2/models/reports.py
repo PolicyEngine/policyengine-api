@@ -13,15 +13,7 @@ from policyengine_api.data.v2.models.base import (
     TimestampedModel,
     enum_type,
 )
-from policyengine_api.data.v2.models.households import Household
-from policyengine_api.data.v2.models.metadata import (
-    Dataset,
-    Region,
-    TaxBenefitModel,
-)
-from policyengine_api.data.v2.models.policies import Policy
 from policyengine_api.data.v2.models.simulations import Simulation
-from policyengine_api.data.v2.models.users import User
 
 
 class ReportRunStatus(StrEnum):
@@ -124,9 +116,6 @@ class Report(TimestampedModel, table=True):
     year: int | None = None
     inputs: dict[str, Any] = Field(default_factory=dict, sa_type=sa.JSON)
 
-    user: User | None = Relationship(back_populates="reports")
-    tax_benefit_model: TaxBenefitModel = Relationship(back_populates="reports")
-    policy: Policy | None = Relationship(back_populates="reports")
     baseline_simulation: Simulation | None = Relationship(
         back_populates="baseline_reports",
         sa_relationship_kwargs={"foreign_keys": "Report.baseline_simulation_id"},
@@ -135,9 +124,6 @@ class Report(TimestampedModel, table=True):
         back_populates="reform_reports",
         sa_relationship_kwargs={"foreign_keys": "Report.reform_simulation_id"},
     )
-    household: Household | None = Relationship(back_populates="reports")
-    dataset: Dataset | None = Relationship(back_populates="reports")
-    region: Region | None = Relationship(back_populates="reports")
     runs: list["ReportRun"] = Relationship(
         back_populates="report",
         cascade_delete=True,

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from sqlmodel import Field, Relationship
 
 from policyengine_api.data.v2.models.base import (
@@ -13,15 +14,12 @@ from policyengine_api.data.v2.models.base import (
     TimestampedModel,
     enum_type,
 )
-from policyengine_api.data.v2.models.policies import Dynamic, Policy
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import UserHouseholdAssociation
     from policyengine_api.data.v2.models.household_mappings import (
         LegacyHouseholdMapping,
     )
-    from policyengine_api.data.v2.models.reports import Report
-    from policyengine_api.data.v2.models.simulations import Simulation
 
 
 class HouseholdJobStatus(StrEnum):
@@ -81,13 +79,11 @@ class Household(TimestampedModel, table=True):
     country_id: str = Field(max_length=2)
     default_year: int | None = None
     household_data: dict[str, Any] = Field(
-        sa_type=sa.JSON().with_variant(sa.dialects.postgresql.JSONB(), "postgresql")
+        sa_type=sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
     )
     canonicalization_version: int
     content_hash: str = Field(max_length=64)
 
-    simulations: list["Simulation"] = Relationship(back_populates="household")
-    reports: list["Report"] = Relationship(back_populates="household")
     user_associations: list["UserHouseholdAssociation"] = Relationship(
         back_populates="household",
     )
@@ -133,6 +129,3 @@ class HouseholdJob(IdentifiedModel, table=True):
         default=None,
         sa_type=sa.DateTime(timezone=True),
     )
-
-    policy: Policy | None = Relationship(back_populates="household_jobs")
-    dynamic: Dynamic | None = Relationship(back_populates="household_jobs")

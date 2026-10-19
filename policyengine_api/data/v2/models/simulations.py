@@ -9,13 +9,6 @@ import sqlalchemy as sa
 from sqlmodel import Field, Relationship
 
 from policyengine_api.data.v2.models.base import TimestampedModel, enum_type
-from policyengine_api.data.v2.models.households import Household
-from policyengine_api.data.v2.models.metadata import (
-    Dataset,
-    Region,
-    TaxBenefitModelVersion,
-)
-from policyengine_api.data.v2.models.policies import Dynamic, Policy
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.reports import Report
@@ -122,21 +115,6 @@ class Simulation(TimestampedModel, table=True):
     )
     household_result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
 
-    dataset: Dataset | None = Relationship(
-        back_populates="input_simulations",
-        sa_relationship_kwargs={"foreign_keys": "Simulation.dataset_id"},
-    )
-    output_dataset: Dataset | None = Relationship(
-        back_populates="output_simulations",
-        sa_relationship_kwargs={"foreign_keys": "Simulation.output_dataset_id"},
-    )
-    household: Household | None = Relationship(back_populates="simulations")
-    policy: Policy | None = Relationship(back_populates="simulations")
-    dynamic: Dynamic | None = Relationship(back_populates="simulations")
-    tax_benefit_model_version: TaxBenefitModelVersion = Relationship(
-        back_populates="simulations"
-    )
-    region: Region | None = Relationship(back_populates="simulations")
     baseline_reports: list["Report"] = Relationship(
         back_populates="baseline_simulation",
         sa_relationship_kwargs={"foreign_keys": "Report.baseline_simulation_id"},

@@ -55,11 +55,13 @@ def engine():
 
 def _create_report(session: Session, *, report_type: str | None = None) -> Report:
     model = TaxBenefitModel(name=f"model-{uuid4()}")
+    session.add(model)
+    session.flush()
     report = Report(
         label="Distributional report",
         country="us",
         type=report_type,
-        tax_benefit_model=model,
+        tax_benefit_model_id=model.id,
         inputs={"reform": {"gov.example": 1}},
     )
     session.add(report)
@@ -242,7 +244,7 @@ def test_worker_retry_resumes_the_same_run_and_terminal_runs_stay_terminal(
 def test_outputs_from_repeated_runs_are_preserved(engine) -> None:
     with Session(engine) as session:
         report = _create_report(session)
-        model = report.tax_benefit_model
+        model = session.get(TaxBenefitModel, report.tax_benefit_model_id)
         version = TaxBenefitModelVersion(
             model=model,
             version="1.2.3",
@@ -255,10 +257,12 @@ def test_outputs_from_repeated_runs_are_preserved(engine) -> None:
             year=2026,
             tax_benefit_model_version=version,
         )
+        session.add(dataset)
+        session.flush()
         simulation = Simulation(
             simulation_type=SimulationType.ECONOMY,
-            dataset=dataset,
-            tax_benefit_model_version=version,
+            dataset_id=dataset.id,
+            tax_benefit_model_version_id=version.id,
         )
         session.add(simulation)
         session.flush()

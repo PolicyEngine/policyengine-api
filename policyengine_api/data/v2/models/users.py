@@ -23,7 +23,6 @@ if TYPE_CHECKING:
         UserReportAssociation,
         UserSimulationAssociation,
     )
-    from policyengine_api.data.v2.models.reports import Report
 
 
 class UserType(StrEnum):
@@ -70,7 +69,6 @@ class User(IdentifiedModel, table=True):
         sa_column_kwargs={"server_default": UserType.STANDARD.value},
     )
 
-    reports: list["Report"] = Relationship(back_populates="user")
     identities: list["UserIdentity"] = Relationship(
         back_populates="user",
         cascade_delete=True,

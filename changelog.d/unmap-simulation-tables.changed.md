@@ -1,0 +1,1 @@
+Removed the v2 ORM relationships to the dormant simulation-domain tables and stopped mapping the retired `country` and `label` columns of the simulation and report associations, so a later revision can drop them without breaking this one during a deploy.

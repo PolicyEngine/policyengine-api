@@ -45,6 +45,14 @@ RUN_OUTPUT_TABLES = frozenset(
     }
 )
 
+# Owned by the simulation service, which recreates what it needs in its own
+# schema. The Public API keeps these tables only until a later revision drops
+# them, and nothing it runs reads or writes them.
+SIMULATION_DOMAIN_TABLES = frozenset(
+    {"household_jobs", "simulations", "reports", "report_runs", *RUN_OUTPUT_TABLES}
+)
+RETIRED_ASSOCIATION_COLUMNS = frozenset({"country", "label"})
+
 
 def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
     expected_modules = {
@@ -635,3 +643,31 @@ def test_user_policy_records_v3_reform_fields() -> None:
     assert "current-policy" in str(baseline_check.sqltext)
     postgres_type = policies.c.provenance.type.dialect_impl(postgresql.dialect())
     assert isinstance(postgres_type, postgresql.JSONB)
+
+
+def test_kept_models_have_no_relationship_to_a_simulation_domain_table() -> None:
+    configure_mappers()
+
+    for mapper in _v2_mappers():
+        if mapper.local_table.name in SIMULATION_DOMAIN_TABLES:
+            continue
+        related_tables = {
+            relationship.key: relationship.mapper.local_table.name
+            for relationship in mapper.relationships
+        }
+        simulation_domain_relationships = {
+            key: table_name
+            for key, table_name in related_tables.items()
+            if table_name in SIMULATION_DOMAIN_TABLES
+        }
+        assert not simulation_domain_relationships, (
+            f"{mapper.class_.__name__} can load simulation-domain tables "
+            f"through {simulation_domain_relationships}"
+        )
+
+
+def test_retired_association_columns_stay_in_the_table_but_are_not_mapped() -> None:
+    for model in (UserSimulationAssociation, UserReportAssociation):
+        table = V2_METADATA.tables[model.__tablename__]
+        assert RETIRED_ASSOCIATION_COLUMNS <= set(table.c.keys())
+        assert RETIRED_ASSOCIATION_COLUMNS.isdisjoint(sa.inspect(model).columns.keys())
