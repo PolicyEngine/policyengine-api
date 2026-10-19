@@ -152,7 +152,7 @@ def test_dual_write_preserves_v1_only_policy_writes_for_non_v2_countries(
     mirror.assert_not_called()
 
 
-def test_mirror_failure_returns_503_and_identical_retry_completes(
+def test_mirror_failure_returns_the_committed_policy_and_a_retry_copies_it(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
@@ -173,16 +173,75 @@ def test_mirror_failure_returns_503_and_identical_retry_completes(
         first = _client().post("/us/policy", json=_body())
         retry = _client().post("/us/policy", json=_body())
 
-    assert first.status_code == 503
+    assert first.status_code == 200
     assert first.json == {
-        "status": "error",
-        "message": "V2 policy mirroring is unavailable; retry the same request.",
+        "status": "ok",
+        "message": "Policy already exists",
+        "result": {"policy_id": 42},
     }
     assert "secret" not in first.text
     assert retry.status_code == 200
-    assert retry.json["result"] == {"policy_id": 42}
+    assert retry.json == first.json
     assert set_policy.call_count == 2
     assert mirror.call_count == 2
+
+
+def test_mirror_failure_for_a_new_policy_still_returns_201(monkeypatch) -> None:
+    monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
+    with (
+        patch(
+            "policyengine_api.routes.policy_routes.policy_service.set_policy",
+            return_value=_creation(existing=False),
+        ),
+        patch(
+            "policyengine_api.routes.policy_routes.mirror_policy_after_commit",
+            side_effect=PolicyMirrorUnavailableError("database credential secret"),
+        ) as mirror,
+    ):
+        response = _client().post("/us/policy", json=_body())
+
+    assert response.status_code == 201
+    assert response.json == {
+        "status": "ok",
+        "message": "Policy created",
+        "result": {"policy_id": 42},
+    }
+    assert "secret" not in response.text
+    mirror.assert_called_once()
+
+
+def test_policy_without_a_mirror_snapshot_is_returned_and_logged(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
+    creation_without_snapshot = PolicySetResult(
+        policy_id=42,
+        message="Policy created",
+        is_existing_policy=False,
+        snapshot=None,
+    )
+    with (
+        patch(
+            "policyengine_api.routes.policy_routes.policy_service.set_policy",
+            return_value=creation_without_snapshot,
+        ),
+        patch(
+            "policyengine_api.routes.policy_routes.mirror_policy_after_commit"
+        ) as mirror,
+        patch("policyengine_api.routes.policy_routes.logger") as route_logger,
+    ):
+        response = _client().post("/us/policy", json=_body())
+
+    assert response.status_code == 201
+    assert response.json["result"] == {"policy_id": 42}
+    mirror.assert_not_called()
+    logged_record = route_logger.log_struct.call_args.args[0]
+    assert logged_record["metric_name"] == "v1_policy_mirror_operations"
+    assert logged_record["outcome"] == "error"
+    assert logged_record["failure_category"] == "missing_mirror_snapshot"
+    assert logged_record["country_id"] == "us"
+    assert logged_record["legacy_policy_id"] == 42
+    assert route_logger.log_struct.call_args.kwargs["severity"] == "ERROR"
 
 
 def test_supabase_only_v1_write_selection_is_rejected_before_cloud_sql(

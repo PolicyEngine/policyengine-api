@@ -32,6 +32,7 @@ from policyengine_api.services.user_policy_service import (
     UserPolicyPersistenceError,
     UserPolicyService,
 )
+from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.utils.payload_validators import (
     validate_country,
     validate_set_policy_payload,
@@ -54,19 +55,101 @@ def _policy_configuration_unavailable() -> Response:
     )
 
 
-def _policy_mirror_unavailable() -> Response:
-    return _make_error_response(
-        "V2 policy mirroring is unavailable; retry the same request.",
-        503,
-    )
+def _log_uncopied_v1_write(
+    *,
+    metric_name: str,
+    legacy_id_field: str,
+    legacy_id: object,
+    country_id: str,
+    failure_category: str,
+) -> None:
+    """Record a committed v1 write that has no v2 copy, without failing the request.
+
+    The mirroring services log their own failures. This covers the cases they
+    never see: no copy could be prepared, or an error outside the service.
+    """
+    # A logging failure must not replace the committed v1 response.
+    with contextlib.suppress(Exception):
+        logger.log_struct(
+            {
+                "message": "V1 write committed without a v2 copy",
+                "metric_name": metric_name,
+                "metric_value": 1,
+                "configured_write_source": "dual_write",
+                "attempted_write_sources": ["cloud_sql", "supabase"],
+                "actual_write_sources": ["cloud_sql"],
+                "country_id": country_id,
+                legacy_id_field: _safe_legacy_user_policy_id(legacy_id),
+                "request_id": current_request_id(),
+                "outcome": "error",
+                "failure_category": failure_category,
+            },
+            severity="ERROR",
+        )
 
 
-def _user_policy_mirror_unavailable() -> Response:
-    return _make_error_response(
-        "V2 saved-policy mirroring is unavailable; retry the same request.",
-        503,
-        include_status=False,
-    )
+def _copy_policy_to_v2(
+    country_id: str,
+    policy_id: int,
+    snapshot: LegacyPolicySnapshot | None,
+) -> None:
+    """Copy a committed v1 policy into v2 without changing the v1 response.
+
+    A failed copy is logged, and the next request that writes the same policy
+    copies it again.
+    """
+    if snapshot is None:
+        _log_uncopied_v1_write(
+            metric_name="v1_policy_mirror_operations",
+            legacy_id_field="legacy_policy_id",
+            legacy_id=policy_id,
+            country_id=country_id,
+            failure_category="missing_mirror_snapshot",
+        )
+        return
+    # mirror_policy_after_commit has already logged the failure and its category.
+    with contextlib.suppress(PolicyMirrorUnavailableError):
+        mirror_policy_after_commit(snapshot)
+
+
+def _copy_saved_policy_events_to_v2(
+    country_id: str,
+    legacy_user_policy_id: int,
+    mirror_revision: int | None,
+) -> None:
+    """Copy a committed saved policy's pending events into v2 without failing the request.
+
+    A failed copy leaves its events pending, and the next change to the same
+    saved policy replays them in order.
+    """
+    if mirror_revision is None:
+        _log_uncopied_v1_write(
+            metric_name="v1_user_policy_mirror_operations",
+            legacy_id_field="legacy_user_policy_id",
+            legacy_id=legacy_user_policy_id,
+            country_id=country_id,
+            failure_category="missing_mirror_revision",
+        )
+        return
+    try:
+        mirror_pending_user_policy_events_after_commit(
+            country_id,
+            legacy_user_policy_id,
+            through_revision=mirror_revision,
+            event_service=user_policy_service,
+            reform_snapshot_loader=policy_service.get_policy_snapshot,
+        )
+    except UserPolicyMirrorUnavailableError:
+        # The mirroring service has already logged the failure and its category.
+        return
+    except Exception:  # noqa: BLE001  # the v1 write is committed; an unexpected mirror failure is logged instead of failing the request
+        _log_uncopied_v1_write(
+            metric_name="v1_user_policy_mirror_operations",
+            legacy_id_field="legacy_user_policy_id",
+            legacy_id=legacy_user_policy_id,
+            country_id=country_id,
+            failure_category="unexpected",
+        )
 
 
 def _safe_legacy_user_policy_id(value: object) -> int | None:
@@ -182,7 +265,8 @@ def set_policy(country_id: str) -> Response:
 
     A policy is identical when its country, content hash and label all match;
     that case returns 200, a new policy returns 201. An invalid payload gives
-    400, and an unavailable write configuration or v2 mirror gives 503.
+    400, and an unavailable write configuration gives 503. Under dual-write, a
+    failed v2 copy is logged and does not change the response.
 
     Args:
         country_id (str): Country to store the policy under.
@@ -213,13 +297,7 @@ def set_policy(country_id: str) -> Response:
     policy_id, message, is_existing_policy = creation
 
     if mirror_to_v2:
-        snapshot = getattr(creation, "snapshot", None)
-        if snapshot is None:
-            return _policy_mirror_unavailable()
-        try:
-            mirror_policy_after_commit(snapshot)
-        except PolicyMirrorUnavailableError:
-            return _policy_mirror_unavailable()
+        _copy_policy_to_v2(country_id, policy_id, getattr(creation, "snapshot", None))
 
     response_body = dict(
         status="ok",
@@ -347,20 +425,11 @@ def set_user_policy(country_id: str) -> Response:
         )
 
     if mirror_to_v2:
-        if creation.mirror_revision is None:
-            return _user_policy_mirror_unavailable()
-        try:
-            mirror_pending_user_policy_events_after_commit(
-                country_id,
-                creation.user_policy.id,
-                through_revision=creation.mirror_revision,
-                event_service=user_policy_service,
-                reform_snapshot_loader=policy_service.get_policy_snapshot,
-            )
-        except UserPolicyMirrorUnavailableError:
-            return _user_policy_mirror_unavailable()
-        except Exception:  # noqa: BLE001  # the v1 write is committed; any mirror failure is mirror-unavailable
-            return _user_policy_mirror_unavailable()
+        _copy_saved_policy_events_to_v2(
+            country_id,
+            creation.user_policy.id,
+            creation.mirror_revision,
+        )
 
     if not creation.created:
         return Response(
@@ -474,20 +543,11 @@ def update_user_policy(country_id: str) -> Response:
         )
 
     if mirror_to_v2:
-        if update.mirror_revision is None:
-            return _user_policy_mirror_unavailable()
-        try:
-            mirror_pending_user_policy_events_after_commit(
-                country_id,
-                update.user_policy.id,
-                through_revision=update.mirror_revision,
-                event_service=user_policy_service,
-                reform_snapshot_loader=policy_service.get_policy_snapshot,
-            )
-        except UserPolicyMirrorUnavailableError:
-            return _user_policy_mirror_unavailable()
-        except Exception:  # noqa: BLE001  # the v1 write is committed; any mirror failure is mirror-unavailable
-            return _user_policy_mirror_unavailable()
+        _copy_saved_policy_events_to_v2(
+            country_id,
+            update.user_policy.id,
+            update.mirror_revision,
+        )
 
     return Response(
         json.dumps(

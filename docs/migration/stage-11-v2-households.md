@@ -125,10 +125,10 @@ v2 household plus its legacy mapping in one Supabase transaction. The source
 event receives `processed_at` only after the Supabase transaction commits.
 
 If translation or Supabase persistence fails, the v1 source row and event
-remain committed, the event remains pending, and the response is HTTP 503. A
-repeated POST creates another v1 household row and does not process the first
-row's pending event. No background process scans events. Use the exact-event
-workflow described below for recovery.
+remain committed, the event remains pending, the failure is logged with its
+`failure_category`, and the response is the normal HTTP 201 with the v1
+household ID. No background process scans events. Use the exact-event workflow
+described below to copy a pending event.
 
 Monitor structured records with `metric_name=v1_household_mirror_operations`.
 Alert on `outcome=error`, grouped by `failure_category` and `country_id`, and

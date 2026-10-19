@@ -38,6 +38,7 @@ from policyengine_api.services.household_mirroring import (
     process_household_event_after_commit,
 )
 from policyengine_api.services.household_service import (
+    HouseholdCreateResult,
     HouseholdPersistenceError,
     HouseholdService,
 )
@@ -75,12 +76,43 @@ def _household_configuration_unavailable() -> Response:
     )
 
 
-def _household_copy_unavailable() -> Response:
-    return _make_error_response(
-        "The v1 household was committed, but its retained create event has not "
-        "been copied to v2.",
-        503,
-    )
+def _copy_household_to_v2(
+    country_id: str,
+    household_id: int,
+    creation: HouseholdCreateResult,
+) -> None:
+    """Copy a committed v1 household into v2 without changing the v1 response.
+
+    A failed copy leaves the create event pending for the event-processing
+    workflow (`process-v1-household-mirror-event.yml`).
+    """
+    if creation.mirror_event_id is None or creation.snapshot is None:
+        # A logging failure must not replace the committed v1 response.
+        with contextlib.suppress(Exception):
+            logger.log_struct(
+                {
+                    "message": "V1 household committed without a v2 copy",
+                    "metric_name": "v1_household_mirror_operations",
+                    "metric_value": 1,
+                    "configured_write_source": "dual_write",
+                    "attempted_write_sources": ["cloud_sql", "supabase"],
+                    "actual_write_sources": ["cloud_sql"],
+                    "country_id": country_id,
+                    "legacy_household_id": household_id,
+                    "outcome": "error",
+                    "failure_category": "missing_mirror_event",
+                },
+                severity="ERROR",
+            )
+        return
+    # process_household_event_after_commit has already logged the failure and
+    # its category, and the create event stays pending.
+    with contextlib.suppress(HouseholdMirrorUnavailableError):
+        process_household_event_after_commit(
+            country_id,
+            household_id,
+            event_service=household_service,
+        )
 
 
 def _household_persistence_failure(
@@ -349,16 +381,7 @@ def post_household(country_id: str) -> Response:
     household_id = creation.household.id
 
     if copy_to_v2:
-        if creation.mirror_event_id is None or creation.snapshot is None:
-            return _household_copy_unavailable()
-        try:
-            process_household_event_after_commit(
-                country_id,
-                household_id,
-                event_service=household_service,
-            )
-        except HouseholdMirrorUnavailableError:
-            return _household_copy_unavailable()
+        _copy_household_to_v2(country_id, household_id, creation)
 
     return Response(
         json.dumps(
