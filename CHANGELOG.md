@@ -1,3 +1,10 @@
+## [5.5.6] - 2026-10-19
+
+### Changed
+
+- Enabled ruff's exception rules (TRY, EM, BLE): exception messages are built before the raise, raises inside try blocks moved into helpers, the v1 services raise typed exceptions, best-effort telemetry and logging calls use a commented contextlib.suppress block, and every other deliberate catch-all carries a reasoned suppression. Period parsing and the simulation health probe now catch only the errors they expect, and a non-object .py bundle manifest raises TypeError. Error responses and message text are unchanged, except that a non-HTTP failure in the simulation health probe now gets the route's existing 503 for a client failure.
+
+
 ## [5.5.5] - 2026-10-19
 
 ### Changed
