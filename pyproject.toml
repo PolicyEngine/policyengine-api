@@ -86,12 +86,11 @@ allow-direct-references = true
 # - policyengine_api is a namespace package, which mypy reads with
 #   explicit_package_bases. This also covers its routes and libs directories,
 #   which have no __init__.py either.
-# - .github (with .github/scripts), dashboard/experiments and migrations/v1 and
-#   v2 hold standalone scripts and Alembic environments, run but never imported.
+# - .github (with .github/scripts) and migrations/v1 and v2 hold standalone
+#   scripts and Alembic environments, run but never imported.
 # - rules/fixtures holds rule proof fixtures, which tests read as source.
 namespace-packages = [
     ".github",
-    "dashboard/experiments",
     "migrations/v1",
     "migrations/v2",
     "policyengine_api",
