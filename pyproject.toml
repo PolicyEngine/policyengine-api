@@ -207,20 +207,25 @@ showcontent = true
 # Packages and modules that load only inside the function that needs them,
 # never at module level (TID253 enforces it; TYPE_CHECKING imports are fine):
 # policyengine and spm_calculator load country models, the v2 database module
-# registers an exit hook at import, the v2 database sessions open persistence
-# only when a default factory runs, and Auth0 Management loads the Google
-# client. Ruff's PLC0415 accepts in-function imports of these without a
-# suppression. A module belongs here only if no application module imports it
-# at module level.
+# registers an exit hook at import, the v2 database sessions and services load
+# persistence only when a default factory runs, and Auth0 Management and the
+# Google Secret Manager client load only when a secret is read. Ruff's PLC0415
+# accepts in-function imports of these without a suppression. A module belongs
+# here only if no application module imports it at module level.
 banned-module-level-imports = [
+    "google.cloud.secretmanager",
     "policyengine",
     "policyengine_api.data.v2.database",
     "policyengine_api.libs.auth0_management",
     "policyengine_api.services.v2.households.database_session",
+    "policyengine_api.services.v2.households.services",
     "policyengine_api.services.v2.legacy_refs.database_session",
+    "policyengine_api.services.v2.legacy_refs.services",
     "policyengine_api.services.v2.metadata.database_session",
+    "policyengine_api.services.v2.metadata.services",
     "policyengine_api.services.v2.policies.database_session",
     "policyengine_api.services.v2.user_accounts.database_session",
+    "policyengine_api.services.v2.user_accounts.services",
     "policyengine_api.services.v2.user_households.database_session",
     "policyengine_api.services.v2.user_policies.database_session",
     "policyengine_api.services.v2.user_reports.database_session",

@@ -736,9 +736,7 @@ def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     from policyengine_api.services.v2.metadata.database_session import (
         MetadataDatabaseSession,
     )
-    from policyengine_api.services.v2.metadata.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
-        V2MetadataService,
-    )
+    from policyengine_api.services.v2.metadata.services import V2MetadataService
 
     return V2MetadataService(
         MetadataDatabaseSession(get_v2_session_factory()()),
@@ -770,9 +768,7 @@ def _default_v2_household_service_factory() -> V2HouseholdResourceService:
     from policyengine_api.services.v2.households.database_session import (
         HouseholdDatabaseSession,
     )
-    from policyengine_api.services.v2.households.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
-        V2HouseholdService,
-    )
+    from policyengine_api.services.v2.households.services import V2HouseholdService
 
     return V2HouseholdService(
         HouseholdDatabaseSession(get_v2_session_factory()),
@@ -814,7 +810,7 @@ def _build_v1_legacy_reference_service() -> LegacyReferenceChecker:
     from policyengine_api.services.v2.legacy_refs.database_session import (
         LegacyReferenceDatabaseSession,
     )
-    from policyengine_api.services.v2.legacy_refs.services import (  # noqa: PLC0415  # v1 reference checks load only when a request checks one
+    from policyengine_api.services.v2.legacy_refs.services import (
         V1LegacyReferenceService,
     )
 
@@ -825,7 +821,7 @@ def _build_v1_legacy_reference_service() -> LegacyReferenceChecker:
 
 def _default_legacy_reference_checker() -> LegacyReferenceChecker:
     """Defer the v1 session factory until a request checks a v1 reference."""
-    from policyengine_api.services.v2.legacy_refs.services import (  # noqa: PLC0415  # v1 reference checks load only when a default factory runs
+    from policyengine_api.services.v2.legacy_refs.services import (
         DeferredLegacyReferenceService,
     )
 
@@ -910,9 +906,7 @@ def _default_v2_account_service_factory() -> V2AccountResourceService:
     from policyengine_api.services.v2.user_accounts.database_session import (
         AccountDatabaseSession,
     )
-    from policyengine_api.services.v2.user_accounts.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
-        V2AccountService,
-    )
+    from policyengine_api.services.v2.user_accounts.services import V2AccountService
 
     return V2AccountService(
         AccountDatabaseSession(get_v2_session_factory()),

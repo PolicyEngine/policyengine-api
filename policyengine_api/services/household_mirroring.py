@@ -53,9 +53,7 @@ def _default_mirror_factory() -> LegacyHouseholdMirror:
     from policyengine_api.services.v2.households.database_session import (
         HouseholdDatabaseSession,
     )
-    from policyengine_api.services.v2.households.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
-        V2HouseholdService,
-    )
+    from policyengine_api.services.v2.households.services import V2HouseholdService
 
     return V2HouseholdService(HouseholdDatabaseSession(get_v2_session_factory()))
 
