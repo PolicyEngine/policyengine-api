@@ -8,6 +8,7 @@ from sqlalchemy.schema import CreateTable
 from policyengine_api.data.v1_models import V1Base
 from policyengine_api.data.v2.models import (
     V2_METADATA,
+    Country,
     DatasetVersion,
     Dynamic,
     Household,
@@ -29,6 +30,18 @@ from policyengine_api.data.v2.models import (
     UserType,
 )
 
+# Every column that names a country a record belongs to. Each references the
+# countries table, so listing a new country needs a row, not a schema change.
+COUNTRY_REFERENCE_COLUMNS = (
+    ("users", "primary_country"),
+    ("households", "country_id"),
+    ("policies", "country_id"),
+    ("user_household_associations", "country_id"),
+    ("user_policies", "country_id"),
+    ("user_simulation_associations", "country_id"),
+    ("user_report_associations", "country_id"),
+)
+
 RUN_OUTPUT_TABLES = frozenset(
     {
         "aggregates",
@@ -48,6 +61,7 @@ RUN_OUTPUT_TABLES = frozenset(
 
 def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
     expected_modules = {
+        Country: "countries",
         User: "users",
         UserIdentity: "users",
         Policy: "policies",
@@ -354,8 +368,8 @@ def test_standard_users_require_a_supported_primary_country() -> None:
         for constraint in users.constraints
         if isinstance(constraint, sa.CheckConstraint)
     }
+    # The countries table, not a check, lists the countries a user may choose.
     assert checks == {
-        "ck_users_primary_country": "primary_country IN ('us', 'uk')",
         "ck_users_user_type": "user_type IN ('unauthenticated', 'standard')",
         "ck_users_standard_primary_country": (
             "user_type = 'unauthenticated' OR primary_country IS NOT NULL"
@@ -474,7 +488,8 @@ def test_named_checks_and_required_indexes_cover_core_invariants() -> None:
     assert {
         "ck_regions_required_filter_values",
         "ck_simulations_type_input",
-        "ck_users_primary_country",
+        "ck_users_standard_primary_country",
+        "ck_countries_society_wide_requires_household",
         "ck_report_runs_terminal_completion",
         "ck_parameter_values_single_owner",
     }.issubset(constraint_names)
@@ -607,10 +622,11 @@ def test_simulation_and_report_associations_have_no_cross_service_keys() -> None
         assert table.c.label.nullable
     assert {
         foreign_key.target_fullname for foreign_key in simulations.foreign_keys
-    } == {"users.id"}
+    } == {"users.id", "countries.id"}
     assert {foreign_key.target_fullname for foreign_key in reports.foreign_keys} == {
         "users.id",
         "user_policies.id",
+        "countries.id",
     }
     user_policy_key = next(iter(reports.c.user_policy_id.foreign_keys))
     assert user_policy_key.ondelete == "SET NULL"
@@ -635,3 +651,71 @@ def test_user_policy_records_v3_reform_fields() -> None:
     assert "current-policy" in str(baseline_check.sqltext)
     postgres_type = policies.c.provenance.type.dialect_impl(postgresql.dialect())
     assert isinstance(postgres_type, postgresql.JSONB)
+
+
+def test_countries_record_household_and_society_wide_capability() -> None:
+    countries = V2_METADATA.tables["countries"]
+
+    assert countries.primary_key.columns.keys() == ["id"]
+    assert countries.primary_key.name == "pk_countries"
+    assert countries.c.id.type.length == 2
+    assert not countries.c.name.nullable
+    assert countries.c.name.type.length == 128
+    for flag_name in ("household_enabled", "society_wide_enabled"):
+        assert isinstance(countries.c[flag_name].type, sa.Boolean)
+        assert not countries.c[flag_name].nullable
+        assert countries.c[flag_name].server_default is None
+    checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in countries.constraints
+        if isinstance(constraint, sa.CheckConstraint)
+    }
+    # Society-wide reports need household calculations, so a society-wide
+    # country is always household capable too.
+    assert checks == {
+        "ck_countries_society_wide_requires_household": (
+            "household_enabled OR NOT society_wide_enabled"
+        ),
+    }
+
+
+def test_country_columns_reference_the_countries_table_instead_of_a_fixed_list() -> (
+    None
+):
+    for table_name, column_name in COUNTRY_REFERENCE_COLUMNS:
+        table = V2_METADATA.tables[table_name]
+        country_keys = [
+            foreign_key
+            for foreign_key in table.c[column_name].foreign_keys
+            if foreign_key.column.table.name == "countries"
+        ]
+        assert len(country_keys) == 1, table_name
+        assert country_keys[0].target_fullname == "countries.id"
+        assert country_keys[0].ondelete == "RESTRICT"
+        assert country_keys[0].constraint.name == (
+            f"fk_{table_name}_{column_name}_countries"
+        )
+        fixed_country_checks = [
+            constraint.name
+            for constraint in table.constraints
+            if isinstance(constraint, sa.CheckConstraint)
+            and "'us', 'uk'" in str(constraint.sqltext)
+        ]
+        assert fixed_country_checks == [], table_name
+
+
+def test_v1_copy_mappings_keep_their_us_and_uk_checks() -> None:
+    # The Public API's v1 routes copy only US and UK records, and these
+    # mapping tables are deleted with dual-write, so they keep fixed checks.
+    for table_name in (
+        "legacy_household_mappings",
+        "legacy_policy_mappings",
+        "legacy_user_policy_mappings",
+    ):
+        table = V2_METADATA.tables[table_name]
+        assert f"ck_{table_name}_country" in {
+            constraint.name for constraint in table.constraints
+        }
+        assert "countries.id" not in {
+            foreign_key.target_fullname for foreign_key in table.foreign_keys
+        }

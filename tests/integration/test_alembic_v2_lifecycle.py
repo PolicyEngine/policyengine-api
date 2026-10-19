@@ -30,6 +30,7 @@ STAGE_11_PREVIOUS_REVISION = "af34023a728f"
 STAGE_12_PREVIOUS_REVISION = "724b1b11a33e"
 STAGE_12_COMPARISON_PREVIOUS_REVISION = "439303be14fe"
 STAGE_12A_PREVIOUS_REVISION = "91af4fc8d8c1"
+COUNTRIES_PREVIOUS_REVISION = "fbb7488ebe8a"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 
 
@@ -187,10 +188,79 @@ def _assert_stage_12a_association_shape(engine) -> None:
         for constraint in inspect(engine).get_check_constraints("users")
     }
     assert {
-        "ck_users_primary_country",
         "ck_users_user_type",
         "ck_users_standard_primary_country",
     } <= user_checks
+
+
+# Every column that names a record's country, with the check it replaced.
+COUNTRY_REFERENCE_COLUMNS = {
+    ("users", "primary_country"): "ck_users_primary_country",
+    ("households", "country_id"): "ck_households_country",
+    ("policies", "country_id"): "ck_policies_country",
+    ("user_household_associations", "country_id"): (
+        "ck_user_household_associations_country"
+    ),
+    ("user_policies", "country_id"): "ck_user_policies_country",
+    ("user_simulation_associations", "country_id"): (
+        "ck_user_simulation_associations_country"
+    ),
+    ("user_report_associations", "country_id"): ("ck_user_report_associations_country"),
+}
+LISTED_COUNTRIES = [
+    ("uk", "United Kingdom", True, True),
+    ("us", "United States", True, True),
+]
+
+
+def _country_foreign_keys(engine, table_name: str) -> list[dict]:
+    return [
+        foreign_key
+        for foreign_key in inspect(engine).get_foreign_keys(table_name)
+        if foreign_key["referred_table"] == "countries"
+    ]
+
+
+def _check_names(engine, table_name: str) -> set[str]:
+    return {
+        constraint["name"]
+        for constraint in inspect(engine).get_check_constraints(table_name)
+    }
+
+
+def _listed_countries(engine) -> list[tuple]:
+    with engine.connect() as connection:
+        return [
+            tuple(row)
+            for row in connection.execute(
+                text(
+                    "SELECT id, name, household_enabled, society_wide_enabled "
+                    "FROM countries ORDER BY id"
+                )
+            )
+        ]
+
+
+def _assert_countries_shape(engine) -> None:
+    assert _listed_countries(engine) == LISTED_COUNTRIES
+    assert "ck_countries_society_wide_requires_household" in _check_names(
+        engine, "countries"
+    )
+    for (table_name, column_name), check_name in COUNTRY_REFERENCE_COLUMNS.items():
+        country_keys = _country_foreign_keys(engine, table_name)
+        assert len(country_keys) == 1, table_name
+        assert country_keys[0]["name"] == f"fk_{table_name}_{column_name}_countries"
+        assert country_keys[0]["constrained_columns"] == [column_name]
+        assert country_keys[0]["referred_columns"] == ["id"]
+        assert country_keys[0]["options"]["ondelete"] == "RESTRICT"
+        assert check_name not in _check_names(engine, table_name)
+
+
+def _assert_pre_countries_shape(engine) -> None:
+    assert "countries" not in inspect(engine).get_table_names(schema="public")
+    for (table_name, _column_name), check_name in COUNTRY_REFERENCE_COLUMNS.items():
+        assert _country_foreign_keys(engine, table_name) == []
+        assert check_name in _check_names(engine, table_name)
 
 
 def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
@@ -207,6 +277,18 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         command.upgrade(config, "head")
         command.check(config)
         _assert_head(engine)
+        _assert_countries_shape(engine)
+
+        command.downgrade(config, COUNTRIES_PREVIOUS_REVISION)
+        with engine.connect() as connection:
+            context = MigrationContext.configure(connection)
+            assert context.get_current_revision() == COUNTRIES_PREVIOUS_REVISION
+        _assert_pre_countries_shape(engine)
+
+        command.upgrade(config, "head")
+        command.check(config)
+        _assert_head(engine)
+        _assert_countries_shape(engine)
 
         command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
         with engine.connect() as connection:
@@ -383,10 +465,10 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         engine.dispose()
 
 
-# Dormant at the parent revision: its models map these tables, and deleting a
-# user cascades through them, but no parent-revision code inserts into them.
-# They are the only tables Stage 12A may give a new required column.
-PARENT_REVISION_READ_ONLY_TABLES = frozenset(
+# Dormant at the Stage 12A parent revision: its models map these tables, and
+# deleting a user cascades through them, but no parent-revision code inserts
+# into them. They are the only tables Stage 12A may give a new required column.
+STAGE_12A_PARENT_READ_ONLY_TABLES = frozenset(
     {"user_simulation_associations", "user_report_associations"}
 )
 USER_ASSOCIATION_TABLES = (
@@ -396,8 +478,18 @@ USER_ASSOCIATION_TABLES = (
     "user_report_associations",
 )
 COUNTRY_COLUMN_NAMES = frozenset({"country", "country_id", "primary_country"})
-# Nullable references that a parent-revision check constraint requires.
-REFERENCES_REQUIRED_BY_CHECKS = frozenset({("simulations", "household_id")})
+# Nullable references that a parent-revision check constraint requires: a
+# standard user's country, and one of each association's two references.
+REFERENCES_REQUIRED_BY_CHECKS = frozenset(
+    {
+        ("simulations", "household_id"),
+        ("users", "primary_country"),
+        ("user_policies", "policy_id"),
+        ("user_household_associations", "household_id"),
+        ("user_simulation_associations", "simulation_id"),
+        ("user_report_associations", "report_id"),
+    }
+)
 # Required values that a parent-revision check constraint restricts.
 CHECKED_VALUES = {("datasets", "year"): 2026}
 
@@ -533,6 +625,7 @@ def _assert_user_deletion_cascades(
     head: sa.MetaData,
     stored_rows: dict[str, dict],
     sequence: Iterator[int],
+    read_only_tables: frozenset[str],
 ) -> None:
     """Delete, through the parent's users table, a user who owns Stage 12A rows."""
     users = parent.tables["users"]
@@ -542,11 +635,7 @@ def _assert_user_deletion_cascades(
     owner_rows = {**stored_rows, "users": owner}
     for table_name in USER_ASSOCIATION_TABLES:
         table = parent.tables[table_name]
-        head_table = (
-            head.tables[table_name]
-            if table_name in PARENT_REVISION_READ_ONLY_TABLES
-            else None
-        )
+        head_table = head.tables[table_name] if table_name in read_only_tables else None
         _insert_and_read_back(
             connection,
             table,
@@ -576,22 +665,26 @@ def _assert_user_deletion_cascades(
         assert remaining == 0, table_name
 
 
-def test_stage_12a_schema_serves_the_previous_revision() -> None:
-    """Run the previous Public API revision's table usage against head.
+def _assert_head_serves_previous_revision(
+    previous_revision: str,
+    read_only_tables: frozenset[str],
+) -> None:
+    """Run a previous Public API revision's table usage against head.
 
     The parent revision's schema is reflected and then used, after upgrading,
     to insert a row into every table it maps (supplying only what it
     requires), read the row back with every mapped column, rewrite those
-    columns, delete it, and delete a user who owns Stage 12A rows so the
+    columns, delete it, and delete a user who owns association rows so the
     cascades run. Head may not give any table the parent revision writes a
-    new required column without a server default.
+    new required column without a server default; ``read_only_tables`` are the
+    parent's tables that only new code writes.
     """
     database_url = _disposable_url()
     config = _config()
     engine = create_engine(database_url)
 
     try:
-        command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
+        command.downgrade(config, previous_revision)
         parent = sa.MetaData()
         parent.reflect(engine)
         command.upgrade(config, "head")
@@ -614,9 +707,9 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
             for table in parent_tables
             if _new_required_columns(table, head.tables[table.name])
         }
-        assert set(tables_with_new_required_columns) <= (
-            PARENT_REVISION_READ_ONLY_TABLES
-        ), tables_with_new_required_columns
+        assert set(tables_with_new_required_columns) <= read_only_tables, (
+            tables_with_new_required_columns
+        )
 
         sequence = itertools.count()
         with engine.connect() as connection:
@@ -626,7 +719,7 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
                 for table in parent_tables:
                     head_table = (
                         head.tables[table.name]
-                        if table.name in PARENT_REVISION_READ_ONLY_TABLES
+                        if table.name in read_only_tables
                         else None
                     )
                     stored_rows[table.name] = _insert_and_read_back(
@@ -640,7 +733,12 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
                     _rewrite_mapped_columns(connection, table, stored_rows[table.name])
 
                 _assert_user_deletion_cascades(
-                    connection, parent, head, stored_rows, sequence
+                    connection,
+                    parent,
+                    head,
+                    stored_rows,
+                    sequence,
+                    read_only_tables,
                 )
 
                 for table in reversed(parent_tables):
@@ -655,6 +753,21 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
     finally:
         command.upgrade(config, "head")
         engine.dispose()
+
+
+def test_stage_12a_schema_serves_the_previous_revision() -> None:
+    _assert_head_serves_previous_revision(
+        STAGE_12A_PREVIOUS_REVISION,
+        STAGE_12A_PARENT_READ_ONLY_TABLES,
+    )
+
+
+def test_countries_schema_serves_the_previous_revision() -> None:
+    """The revision before the countries table keeps working during a deploy."""
+    _assert_head_serves_previous_revision(
+        COUNTRIES_PREVIOUS_REVISION,
+        frozenset(),
+    )
 
 
 def test_upgrade_to_head_validates_the_resulting_schema_against_metadata() -> None:
@@ -938,4 +1051,139 @@ def test_stage_12a_reshape_refuses_retained_dormant_association_rows() -> None:
                 table = reflected(table_name)
                 connection.execute(sa.delete(table).where(table.c.id == row_id))
         command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_countries_revision_keeps_existing_rows_and_rejects_unlisted_countries() -> (
+    None
+):
+    """Rows saved before the revision survive it, and only listed countries pass."""
+    database_url = _disposable_url()
+    config = _config()
+    engine = create_engine(database_url)
+    user_id = uuid4()
+
+    def reflected(name: str) -> sa.Table:
+        return sa.Table(name, sa.MetaData(), autoload_with=engine)
+
+    try:
+        command.downgrade(config, COUNTRIES_PREVIOUS_REVISION)
+        with engine.begin() as connection:
+            connection.execute(
+                sa.insert(reflected("users")).values(id=user_id, primary_country="uk")
+            )
+            connection.execute(
+                sa.insert(reflected("user_report_associations")).values(
+                    id=uuid4(),
+                    user_id=user_id,
+                    country_id="uk",
+                    legacy_report_id=7,
+                )
+            )
+
+        command.upgrade(config, "head")
+        command.check(config)
+        _assert_countries_shape(engine)
+
+        with engine.connect() as connection:
+            stored_countries = connection.execute(
+                text(
+                    "SELECT users.primary_country, "
+                    "user_report_associations.country_id FROM users "
+                    "JOIN user_report_associations "
+                    "ON user_report_associations.user_id = users.id "
+                    "WHERE users.id = :user_id"
+                ),
+                {"user_id": user_id},
+            ).one()
+        assert tuple(stored_countries) == ("uk", "uk")
+
+        with engine.connect() as connection, pytest.raises(sa.exc.IntegrityError):
+            connection.execute(
+                sa.insert(reflected("user_report_associations")).values(
+                    id=uuid4(),
+                    user_id=user_id,
+                    country_id="ca",
+                    legacy_report_id=8,
+                )
+            )
+
+        with engine.connect() as connection, pytest.raises(sa.exc.IntegrityError):
+            connection.execute(text("DELETE FROM countries WHERE id = 'uk'"))
+    finally:
+        with engine.begin() as connection:
+            users = reflected("users")
+            connection.execute(sa.delete(users).where(users.c.id == user_id))
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_a_countries_row_is_the_only_schema_change_a_new_country_needs() -> None:
+    """A household-only country's records save once its row exists."""
+    database_url = _disposable_url()
+    config = _config()
+    engine = create_engine(database_url)
+    user_id = uuid4()
+    household_id = uuid4()
+
+    try:
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            transaction = connection.begin()
+            try:
+                with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
+                    connection.execute(
+                        text(
+                            "INSERT INTO users (id, primary_country) "
+                            "VALUES (:user_id, 'be')"
+                        ),
+                        {"user_id": user_id},
+                    )
+
+                connection.execute(
+                    text(
+                        "INSERT INTO countries "
+                        "(id, name, household_enabled, society_wide_enabled) "
+                        "VALUES ('be', 'Belgium', true, false)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO users (id, primary_country) "
+                        "VALUES (:user_id, 'be')"
+                    ),
+                    {"user_id": user_id},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO households (id, country_id, household_data, "
+                        "canonicalization_version, content_hash) VALUES "
+                        "(:household_id, 'be', '{}'::jsonb, 1, :content_hash)"
+                    ),
+                    {"household_id": household_id, "content_hash": "c" * 64},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO user_household_associations "
+                        "(id, user_id, household_id, country_id) VALUES "
+                        "(:association_id, :user_id, :household_id, 'be')"
+                    ),
+                    {
+                        "association_id": uuid4(),
+                        "user_id": user_id,
+                        "household_id": household_id,
+                    },
+                )
+
+                with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
+                    connection.execute(
+                        text(
+                            "INSERT INTO countries "
+                            "(id, name, household_enabled, society_wide_enabled) "
+                            "VALUES ('xx', 'Society-wide only', false, true)"
+                        )
+                    )
+            finally:
+                transaction.rollback()
+    finally:
         engine.dispose()
