@@ -38,6 +38,9 @@ STAGE_CATALOG_MODELS = Table(
     sa.Column("version_description", sa.Text),
     sa.Column("current_law_id", sa.Integer, nullable=False),
     sa.Column("metadata_time_periods", JSONB, nullable=False),
+    sa.Column("catalog_format", sa.Integer, nullable=False),
+    sa.Column("entities", JSONB, nullable=False),
+    sa.Column("basic_inputs", JSONB, nullable=False),
     prefixes=["TEMPORARY"],
     postgresql_on_commit="DROP",
 )
@@ -56,6 +59,13 @@ STAGE_CATALOG_VARIABLES = Table(
     sa.Column("default_value", JSONB, nullable=False),
     sa.Column("adds", JSONB),
     sa.Column("subtracts", JSONB),
+    sa.Column("value_type", sa.Text),
+    sa.Column("definition_period", sa.Text),
+    sa.Column("unit", sa.Text),
+    sa.Column("module_name", sa.Text),
+    sa.Column("is_input_variable", sa.Boolean),
+    sa.Column("hidden_input", sa.Boolean),
+    sa.Column("possible_value_labels", JSONB),
     prefixes=["TEMPORARY"],
     postgresql_on_commit="DROP",
 )
@@ -68,6 +78,7 @@ STAGE_CATALOG_PARAMETER_NODES = Table(
     sa.Column("name", sa.Text, primary_key=True),
     sa.Column("label", sa.Text),
     sa.Column("description", sa.Text),
+    sa.Column("is_scale", sa.Boolean, nullable=False),
     prefixes=["TEMPORARY"],
     postgresql_on_commit="DROP",
 )
@@ -82,6 +93,10 @@ STAGE_CATALOG_PARAMETERS = Table(
     sa.Column("description", sa.Text),
     sa.Column("data_type", sa.Text),
     sa.Column("unit", sa.Text),
+    sa.Column("metadata_label", sa.Text),
+    sa.Column("period", sa.Text),
+    sa.Column("economy", sa.Boolean),
+    sa.Column("household", sa.Boolean),
     prefixes=["TEMPORARY"],
     postgresql_on_commit="DROP",
 )
@@ -166,6 +181,9 @@ def _catalog_rows(
             country.model_version.description,
             country.model_version.current_law_id,
             Jsonb(country.model_version.metadata_time_periods),
+            country.model_version.catalog_format,
+            Jsonb(list(country.model_version.entities)),
+            Jsonb(list(country.model_version.basic_inputs)),
         )
 
     def variable_rows() -> Iterator[tuple[object, ...]]:
@@ -183,6 +201,13 @@ def _catalog_rows(
                     Jsonb(record.default_value),
                     _optional_json(record.adds),
                     _optional_json(record.subtracts),
+                    record.value_type,
+                    record.definition_period,
+                    record.unit,
+                    record.module_name,
+                    record.is_input_variable,
+                    record.hidden_input,
+                    _optional_json(record.possible_value_labels),
                 )
 
     def parameter_node_rows() -> Iterator[tuple[object, ...]]:
@@ -197,6 +222,7 @@ def _catalog_rows(
                     record.name,
                     record.label,
                     record.description,
+                    record.is_scale,
                 )
 
     def parameter_rows() -> Iterator[tuple[object, ...]]:
@@ -210,6 +236,10 @@ def _catalog_rows(
                     record.description,
                     record.data_type,
                     record.unit,
+                    record.metadata_label,
+                    record.period,
+                    record.economy,
+                    record.household,
                 )
 
     def parameter_value_rows() -> Iterator[tuple[object, ...]]:

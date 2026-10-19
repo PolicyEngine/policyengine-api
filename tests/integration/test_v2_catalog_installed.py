@@ -38,11 +38,13 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
     )
     # Counts for the 6.7.5 bundle's models: US 2.2.1 and UK 2.130.1. Keep
     # this exact assertion so later package changes require explicit review.
+    # Parameter nodes include the 907 bracket schedules (866 US, 41 UK) that
+    # catalog format 2 adds beside PolicyEngine.py's 29,306 public nodes.
     assert catalog.entity_counts() == {
         "models": 2,
         "model_versions": 2,
         "variables": 7_330,
-        "parameter_nodes": 29_306,
+        "parameter_nodes": 30_213,
         "parameters": 104_171,
         "parameter_values": 1_194_357,
         "datasets": 3,

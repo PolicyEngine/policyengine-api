@@ -113,6 +113,10 @@ def test_catalog_holds_every_node_parameter_value_and_variable(
             "description": "An example rate",
             "data_type": "float",
             "unit": "/1",
+            "metadata_label": "Rate",
+            "period": "year",
+            "economy": True,
+            "household": False,
             "values": {"2025-01-01": 0.1, "2026-01-01": 0.2},
         }
     ]
@@ -121,6 +125,9 @@ def test_catalog_holds_every_node_parameter_value_and_variable(
     ]
     assert result["variables"][0]["entity"] == "person"
     assert result["variables"][0]["label"] == "Employment income"
+    assert result["variables"][0]["value_type"] == "float"
+    assert result["variables"][0]["is_input_variable"] is True
+    assert result["variables"][0]["module_name"] == "household.income"
 
 
 def test_catalog_body_matches_the_published_response_schema(

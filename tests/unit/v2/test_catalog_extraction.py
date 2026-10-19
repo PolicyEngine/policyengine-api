@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 from datetime import UTC, datetime
+from enum import Enum
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,9 +17,11 @@ from policyengine_api.data.v2.catalog.extraction import (
     extract_catalog,
     normalize_json_value,
 )
+from policyengine_api.data.v2.catalog.records import CATALOG_FORMAT
 from tests.fixtures.v2_catalog import (
     DEPENDENCY_VERSIONS,
     POLICYENGINE_VERSION,
+    ParameterScale,
     bundle,
     installed_version,
     normalized_catalog,
@@ -474,3 +477,155 @@ def test_extractor_has_no_direct_core_country_or_v1_metadata_imports() -> None:
         )
         for module in imported_modules
     )
+
+
+def test_extracts_presentation_metadata_through_the_country_system() -> None:
+    us = normalized_catalog().country("us")
+    variable = us.variables[0]
+    parameter = us.parameters[0]
+
+    assert us.model_version.catalog_format == CATALOG_FORMAT
+    assert us.model_version.basic_inputs == ("employment_income",)
+    assert us.model_version.entities == (
+        {
+            "key": "person",
+            "plural": "people",
+            "label": "Person",
+            "description": "An individual.",
+            "is_person": True,
+            "roles": [],
+        },
+        {
+            "key": "household",
+            "plural": "households",
+            "label": "Household",
+            "description": "A household.",
+            "is_person": False,
+            "roles": [
+                {
+                    "key": "member",
+                    "plural": "members",
+                    "label": "Member",
+                    "description": None,
+                }
+            ],
+        },
+    )
+    assert (
+        variable.value_type,
+        variable.definition_period,
+        variable.unit,
+        variable.module_name,
+        variable.is_input_variable,
+        variable.hidden_input,
+        variable.possible_value_labels,
+    ) == ("float", "year", "currency-USD", "household.income", True, False, None)
+    assert (
+        parameter.metadata_label,
+        parameter.period,
+        parameter.economy,
+        parameter.household,
+    ) == ("Rate", "year", True, False)
+
+
+def test_parameters_without_flags_default_to_economy_and_household() -> None:
+    models = source_models()
+    core_parameter = models["uk"]._load_system().parameters.get_descendants()[1]
+    core_parameter.metadata = {}
+
+    catalog = extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    )
+    parameter = catalog.country("uk").parameters[0]
+
+    assert (parameter.metadata_label, parameter.period) == (None, None)
+    assert (parameter.economy, parameter.household) == (True, True)
+
+
+def test_enum_variables_keep_each_value_label() -> None:
+    models = source_models()
+
+    class Region(Enum):
+        NORTH_EAST = "North East"
+        LONDON = "London"
+
+    public_variable = models["uk"].variables_by_name["employment_income"]
+    public_variable.value_type = type("Enum", (), {})
+    public_variable.possible_values = ["NORTH_EAST", "LONDON"]
+    core_variable = models["uk"]._load_system().variables["employment_income"]
+    core_variable.possible_values = Region
+
+    catalog = extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    )
+    variable = catalog.country("uk").variables[0]
+
+    assert variable.value_type == "Enum"
+    assert variable.possible_values == ["NORTH_EAST", "LONDON"]
+    assert variable.possible_value_labels == {
+        "NORTH_EAST": "North East",
+        "LONDON": "London",
+    }
+
+
+def test_adds_labelled_bracket_schedules_the_public_model_omits() -> None:
+    models = source_models()
+    system = models["us"]._load_system()
+    descendants = system.parameters.get_descendants()
+    schedule = ParameterScale(
+        name="gov.example.schedule",
+        metadata={"label": "Example schedule"},
+        description="Rates by income band",
+    )
+    system.parameters.get_descendants = lambda: [*descendants, schedule]
+
+    catalog = extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    )
+    nodes = {node.name: node for node in catalog.country("us").parameter_nodes}
+
+    assert nodes["gov.example"].is_scale is False
+    assert nodes["gov.example.schedule"].is_scale is True
+    assert nodes["gov.example.schedule"].label == "Example schedule"
+    assert nodes["gov.example.schedule"].description == "Rates by income band"
+    assert catalog.country("us").entity_counts()["parameter_nodes"] == 2
+
+
+def test_rejects_a_public_model_without_its_country_system() -> None:
+    models = source_models()
+    del models["us"]._load_system
+
+    with pytest.raises(CatalogExtractionError, match="country system"):
+        extract_catalog(
+            bundle=bundle(),
+            policyengine_version=POLICYENGINE_VERSION,
+            models=models,
+            installed_version=installed_version,
+        )
+
+
+@pytest.mark.parametrize("record_kind", ["variables", "parameters"])
+def test_rejects_records_missing_from_the_country_system(record_kind: str) -> None:
+    models = source_models()
+    system = models["us"]._load_system()
+    if record_kind == "variables":
+        system.variables.clear()
+    else:
+        system.parameters.get_descendants = list
+
+    with pytest.raises(CatalogExtractionError, match="absent from the country system"):
+        extract_catalog(
+            bundle=bundle(),
+            policyengine_version=POLICYENGINE_VERSION,
+            models=models,
+            installed_version=installed_version,
+        )

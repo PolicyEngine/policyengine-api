@@ -235,6 +235,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        "fbb7488ebe8a",
         "91af4fc8d8c1",
         "60d6518b6a98",
         "439303be14fe",
@@ -495,7 +496,7 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
         / "migrations/v2/versions/fbb7488ebe8a_link_signed_in_users_to_v1_anchored_.py"
     ).read_text(encoding="utf-8")
 
-    assert V2_ALEMBIC_HEAD_REVISION == "fbb7488ebe8a"
+    assert 'revision: str = "fbb7488ebe8a"' in revision
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
@@ -563,6 +564,43 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
     assert (
         '"users", "primary_country", existing_type=sa.VARCHAR(length=2), nullable=True'
     ) in upgrade
+
+
+def test_catalog_presentation_revision_is_generated_and_reversible() -> None:
+    revision = (
+        REPO
+        / "migrations/v2/versions/72fab86fa97d_store_catalog_presentation_metadata.py"
+    ).read_text(encoding="utf-8")
+
+    assert V2_ALEMBIC_HEAD_REVISION == "72fab86fa97d"
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "fbb7488ebe8a"' in revision
+    added_columns = {
+        ("parameters", "metadata_label"),
+        ("parameters", "period"),
+        ("parameters", "economy"),
+        ("parameters", "household"),
+        ("tax_benefit_model_versions", "catalog_format"),
+        ("tax_benefit_model_versions", "entities"),
+        ("tax_benefit_model_versions", "basic_inputs"),
+        ("variables", "value_type"),
+        ("variables", "definition_period"),
+        ("variables", "unit"),
+        ("variables", "module_name"),
+        ("variables", "is_input_variable"),
+        ("variables", "hidden_input"),
+        ("variables", "possible_value_labels"),
+    }
+    for table_name, column_name in added_columns:
+        assert f'"{column_name}"' in revision
+        assert f'op.drop_column("{table_name}", "{column_name}")' in revision
+    assert revision.count("op.add_column(") == len(added_columns)
+    assert revision.count("nullable=True") == len(added_columns)
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision
 
 
 def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -> None:

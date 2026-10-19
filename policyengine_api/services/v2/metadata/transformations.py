@@ -13,6 +13,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataDataset,
     MetadataDatasetOption,
     MetadataEconomyOptionsResult,
+    MetadataEntity,
     MetadataModel,
     MetadataModelSelectionResult,
     MetadataModelVersionDetail,
@@ -85,6 +86,16 @@ def metadata_model_version(selected: SelectedCatalog) -> MetadataModelVersionDet
         description=selected.model_version.description,
         current_law_id=selected.model_version.current_law_id,
         metadata_time_periods=selected.model_version.metadata_time_periods,
+        catalog_format=selected.model_version.catalog_format,
+        entities=(
+            None
+            if selected.model_version.entities is None
+            else [
+                MetadataEntity.model_validate(entity)
+                for entity in selected.model_version.entities
+            ]
+        ),
+        basic_inputs=selected.model_version.basic_inputs,
     )
 
 
@@ -110,6 +121,13 @@ def metadata_variable(variable: Variable) -> MetadataVariable:
         default_value=variable.default_value,
         adds=variable.adds,
         subtracts=variable.subtracts,
+        value_type=variable.value_type,
+        definition_period=variable.definition_period,
+        unit=variable.unit,
+        module_name=variable.module_name,
+        is_input_variable=variable.is_input_variable,
+        hidden_input=variable.hidden_input,
+        possible_value_labels=variable.possible_value_labels,
     )
 
 
@@ -122,6 +140,10 @@ def metadata_parameter(parameter: Parameter) -> MetadataParameterSummary:
         description=parameter.description,
         data_type=parameter.data_type,
         unit=parameter.unit,
+        metadata_label=parameter.metadata_label,
+        period=parameter.period,
+        economy=parameter.economy,
+        household=parameter.household,
     )
 
 
@@ -190,6 +212,10 @@ def metadata_parameter_children(rows: list[Any]) -> list[MetadataParameterChild]
                 description=row.parameter_description,
                 data_type=row.parameter_data_type,
                 unit=row.parameter_unit,
+                metadata_label=row.parameter_metadata_label,
+                period=row.parameter_period,
+                economy=row.parameter_economy,
+                household=row.parameter_household,
             )
         items.append(
             MetadataParameterChild(
@@ -258,6 +284,10 @@ def _catalog_parameter(
             "description": parameter.description,
             "data_type": parameter.data_type,
             "unit": parameter.unit,
+            "metadata_label": parameter.metadata_label,
+            "period": parameter.period,
+            "economy": parameter.economy,
+            "household": parameter.household,
             "values": values,
         }
     )

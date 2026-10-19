@@ -119,6 +119,10 @@ def _parameter_children_statement(
             col(Parameter.description).label("parameter_description"),
             col(Parameter.data_type).label("parameter_data_type"),
             col(Parameter.unit).label("parameter_unit"),
+            col(Parameter.metadata_label).label("parameter_metadata_label"),
+            col(Parameter.period).label("parameter_period"),
+            col(Parameter.economy).label("parameter_economy"),
+            col(Parameter.household).label("parameter_household"),
         )
         .select_from(
             paths.outerjoin(

@@ -11,6 +11,17 @@ if TYPE_CHECKING:
     from uuid import UUID
 
 
+CATALOG_FORMAT = 2
+"""The catalog content version this extractor publishes.
+
+Format 2 adds the presentation metadata read through the country system:
+entities, basic inputs, variable value types, periods, units, modules, input
+flags and enum labels, parameter metadata labels, periods and economy and
+household flags, and bracket-schedule nodes. Versions published before it
+store null for those fields.
+"""
+
+
 @dataclass(frozen=True, slots=True)
 class ModelRecord:
     """One country's tax-benefit model as named in the catalog."""
@@ -35,6 +46,9 @@ class ModelVersionRecord:
     description: str | None
     current_law_id: int
     metadata_time_periods: tuple[int, ...]
+    catalog_format: int = CATALOG_FORMAT
+    entities: tuple[dict[str, Any], ...] = ()
+    basic_inputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,17 +66,28 @@ class VariableRecord:
     default_value: Any
     adds: list[str] | None
     subtracts: list[str] | None
+    value_type: str | None = None
+    definition_period: str | None = None
+    unit: str | None = None
+    module_name: str | None = None
+    is_input_variable: bool | None = None
+    hidden_input: bool | None = None
+    possible_value_labels: dict[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ParameterNodeRecord:
-    """A non-leaf node of the parameter tree; it groups parameters and has no values."""
+    """A non-leaf node of the parameter tree; it groups parameters and has no values.
+
+    is_scale marks a bracket schedule, which only catalog format 2 publishes.
+    """
 
     id: UUID
     model_version_id: UUID
     name: str
     label: str | None
     description: str | None
+    is_scale: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +113,10 @@ class ParameterRecord:
     data_type: str | None
     unit: str | None
     values: tuple[ParameterValueRecord, ...]
+    metadata_label: str | None = None
+    period: str | None = None
+    economy: bool | None = None
+    household: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)

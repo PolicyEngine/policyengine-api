@@ -85,6 +85,10 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
     description: str | None = None
     current_law_id: int
     metadata_time_periods: list[int] = Field(sa_type=sa.JSON)
+    # Versions published before catalog format 2 leave these null.
+    catalog_format: int | None = None
+    entities: list[dict[str, Any]] | None = Field(default=None, sa_type=sa.JSON)
+    basic_inputs: list[str] | None = Field(default=None, sa_type=sa.JSON)
 
     model: TaxBenefitModel = Relationship(back_populates="versions")
     variables: list["Variable"] = Relationship(
@@ -276,6 +280,14 @@ class Variable(IdentifiedModel, table=True):
     default_value: Any = Field(default=None, sa_type=sa.JSON)
     adds: list[str] | None = Field(default=None, sa_type=sa.JSON)
     subtracts: list[str] | None = Field(default=None, sa_type=sa.JSON)
+    # Catalog format 2 fields; null in versions published before it.
+    value_type: str | None = Field(default=None, max_length=64)
+    definition_period: str | None = Field(default=None, max_length=32)
+    unit: str | None = Field(default=None, max_length=128)
+    module_name: str | None = Field(default=None, max_length=512)
+    is_input_variable: bool | None = None
+    hidden_input: bool | None = None
+    possible_value_labels: dict[str, str] | None = Field(default=None, sa_type=sa.JSON)
     tax_benefit_model_version_id: UUID = Field(
         foreign_key="tax_benefit_model_versions.id",
         ondelete="CASCADE",
@@ -336,6 +348,11 @@ class Parameter(IdentifiedModel, table=True):
     description: str | None = None
     data_type: str | None = Field(default=None, max_length=128)
     unit: str | None = Field(default=None, max_length=128)
+    # Catalog format 2 fields; null in versions published before it.
+    metadata_label: str | None = Field(default=None, max_length=512)
+    period: str | None = Field(default=None, max_length=32)
+    economy: bool | None = None
+    household: bool | None = None
     tax_benefit_model_version_id: UUID = Field(
         foreign_key="tax_benefit_model_versions.id",
         ondelete="CASCADE",

@@ -73,6 +73,9 @@ def _insert_country(
                 if time_periods is None
                 else time_periods
             ),
+            catalog_format=country.model_version.catalog_format,
+            entities=list(country.model_version.entities),
+            basic_inputs=list(country.model_version.basic_inputs),
         )
     )
     session.add_all(
@@ -88,6 +91,13 @@ def _insert_country(
             default_value=record.default_value,
             adds=record.adds,
             subtracts=record.subtracts,
+            value_type=record.value_type,
+            definition_period=record.definition_period,
+            unit=record.unit,
+            module_name=record.module_name,
+            is_input_variable=record.is_input_variable,
+            hidden_input=record.hidden_input,
+            possible_value_labels=record.possible_value_labels,
         )
         for record in country.variables
     )
@@ -110,6 +120,10 @@ def _insert_country(
             description=record.description,
             data_type=record.data_type,
             unit=record.unit,
+            metadata_label=record.metadata_label,
+            period=record.period,
+            economy=record.economy,
+            household=record.household,
         )
         for record in country.parameters
     )
@@ -626,3 +640,62 @@ def test_resource_entrypoints_are_defined_in_the_service_module() -> None:
     for method_name in method_names:
         method = getattr(V2MetadataService, method_name)
         assert method.__module__.endswith(".services")
+
+
+def test_resources_publish_catalog_format_two_presentation_metadata(
+    catalog_session: Session,
+) -> None:
+    service = _service(catalog_session)
+
+    variable = service.list_variables("us").items[0]
+    parameter = service.list_parameters("us").items[0]
+    child = service.list_parameter_children("us", parent_path="gov.example").items[0]
+    selection = service.get_model_by_country("us")
+
+    assert (
+        variable.value_type,
+        variable.definition_period,
+        variable.unit,
+        variable.module_name,
+        variable.is_input_variable,
+        variable.hidden_input,
+        variable.possible_value_labels,
+    ) == ("float", "year", "currency-USD", "household.income", True, False, None)
+    assert (
+        parameter.metadata_label,
+        parameter.period,
+        parameter.economy,
+        parameter.household,
+    ) == ("Rate", "year", True, False)
+    assert child.parameter == parameter
+    assert selection.model_version.catalog_format == 2
+    assert selection.model_version.basic_inputs == ["employment_income"]
+    assert [entity.key for entity in selection.model_version.entities] == [
+        "person",
+        "household",
+    ]
+    household = selection.model_version.entities[1]
+    assert (household.plural, household.is_person) == ("households", False)
+    assert [role.key for role in household.roles] == ["member"]
+
+
+def test_versions_published_before_format_two_read_as_null_metadata(
+    catalog_session: Session,
+) -> None:
+    model_version = _us_model_version(catalog_session)
+    model_version.catalog_format = None
+    model_version.entities = None
+    model_version.basic_inputs = None
+    for variable in catalog_session.exec(select(Variable)).all():
+        variable.value_type = None
+        variable.is_input_variable = None
+    catalog_session.commit()
+
+    service = _service(catalog_session)
+    selection = service.get_model_by_country("us")
+    variable = service.list_variables("us").items[0]
+
+    assert selection.model_version.catalog_format is None
+    assert selection.model_version.entities is None
+    assert selection.model_version.basic_inputs is None
+    assert (variable.value_type, variable.is_input_variable) == (None, None)

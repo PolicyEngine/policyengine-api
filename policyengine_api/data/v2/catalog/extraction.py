@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from policyengine_api.data.v2.catalog.records import (
+    CATALOG_FORMAT,
     CountryCatalog,
     DatasetRecord,
     FallbackSummary,
@@ -268,10 +269,156 @@ def _verify_bundle(
     return tuple(observed_dependencies)
 
 
+def _country_system(source: object, *, country_id: str) -> object:
+    """Return the PolicyEngine Core system the public model was built from.
+
+    PolicyEngine.py's public records omit presentation metadata the app shows:
+    entities, basic inputs, variable modules, input and hidden flags, enum
+    labels, parameter metadata (label, period, economy and household flags)
+    and bracket schedules. The model version keeps its country system behind
+    its ``_load_system`` hook, so the extractor reads that metadata through
+    PolicyEngine.py, by attribute, without importing Core or a country package.
+    """
+    load_system = getattr(source, "_load_system", None)
+    if not callable(load_system):
+        msg = f"{country_id} public model does not expose its country system"
+        raise CatalogExtractionError(msg)
+    return load_system()
+
+
+def _is_bracket_schedule(core_node: object) -> bool:
+    return any(
+        ancestor.__name__ == "ParameterScale" for ancestor in type(core_node).__mro__
+    )
+
+
+def _core_parameter_records(system: object) -> dict[str, object]:
+    parameters = getattr(system, "parameters", None)
+    get_descendants = getattr(parameters, "get_descendants", None)
+    if not callable(get_descendants):
+        msg = "the country system has no parameter tree"
+        raise CatalogExtractionError(msg)
+    return {
+        name: record
+        for record in get_descendants()
+        if isinstance(name := getattr(record, "name", None), str)
+    }
+
+
+def _core_record(records: Mapping[str, object], name: str, *, kind: str) -> object:
+    record = records.get(name)
+    if record is None:
+        msg = f"{kind} {name!r} is absent from the country system"
+        raise CatalogExtractionError(msg)
+    return record
+
+
+def _core_metadata(core_record: object) -> Mapping[str, Any]:
+    metadata = getattr(core_record, "metadata", None)
+    return metadata if isinstance(metadata, Mapping) else {}
+
+
+def _optional_flag(value: object, *, field_name: str, default: bool) -> bool:
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        msg = f"{field_name} must be a boolean"
+        raise CatalogExtractionError(msg)
+    return value
+
+
+def _possible_value_labels(
+    core_variable: object, *, name: str, possible_values: list[str] | None
+) -> dict[str, str] | None:
+    enum_type = getattr(core_variable, "possible_values", None)
+    if possible_values is None or enum_type is None:
+        return None
+    labels = {
+        _required_text(
+            getattr(member, "name", None),
+            field_name=f"variable {name} possible value",
+            maximum=255,
+        ): _required_text(
+            str(getattr(member, "value", "")),
+            field_name=f"variable {name} possible value label",
+            maximum=512,
+        )
+        for member in enum_type
+    }
+    if set(labels) != set(possible_values):
+        msg = f"variable {name!r} enum labels do not match its possible values"
+        raise CatalogExtractionError(msg)
+    return {value: labels[value] for value in possible_values}
+
+
+def _normalize_entities(system: object) -> tuple[dict[str, Any], ...]:
+    def description(record: object, field_name: str) -> str | None:
+        text = _optional_text(getattr(record, "doc", None), field_name=field_name)
+        return text.strip() or None if text is not None else None
+
+    entities: list[dict[str, Any]] = []
+    for entity in getattr(system, "entities", None) or ():
+        key = _required_text(
+            getattr(entity, "key", None), field_name="entity key", maximum=128
+        )
+        entities.append(
+            {
+                "key": key,
+                "plural": _optional_text(
+                    getattr(entity, "plural", None),
+                    field_name=f"entity {key} plural",
+                    maximum=128,
+                ),
+                "label": _optional_text(
+                    getattr(entity, "label", None),
+                    field_name=f"entity {key} label",
+                    maximum=255,
+                ),
+                "description": description(entity, f"entity {key} description"),
+                "is_person": bool(getattr(entity, "is_person", False)),
+                "roles": [
+                    {
+                        "key": _required_text(
+                            getattr(role, "key", None),
+                            field_name=f"entity {key} role key",
+                            maximum=128,
+                        ),
+                        "plural": _optional_text(
+                            getattr(role, "plural", None),
+                            field_name=f"entity {key} role plural",
+                            maximum=128,
+                        ),
+                        "label": _optional_text(
+                            getattr(role, "label", None),
+                            field_name=f"entity {key} role label",
+                            maximum=255,
+                        ),
+                        "description": description(
+                            role, f"entity {key} role description"
+                        ),
+                    }
+                    for role in getattr(entity, "roles", None) or ()
+                ],
+            }
+        )
+    if not entities:
+        msg = "the country system has no entities"
+        raise CatalogExtractionError(msg)
+    return tuple(entities)
+
+
+def _normalize_basic_inputs(system: object) -> tuple[str, ...]:
+    return tuple(
+        _required_text(name, field_name="basic input", maximum=512)
+        for name in getattr(system, "basic_inputs", None) or ()
+    )
+
+
 def _normalize_variable(
     source: object,
     *,
     model_version_id: UUID,
+    core_variable: object,
 ) -> VariableRecord:
     name = _required_text(
         getattr(source, "name", None), field_name="variable name", maximum=512
@@ -331,13 +478,48 @@ def _normalize_variable(
         default_value=normalize_json_value(getattr(source, "default_value", None)),
         adds=optional_names("adds"),
         subtracts=optional_names("subtracts"),
+        value_type=_type_name(getattr(source, "value_type", None)),
+        definition_period=_optional_text(
+            getattr(source, "definition_period", None),
+            field_name=f"variable {name} definition_period",
+            maximum=32,
+        ),
+        unit=_optional_text(
+            getattr(source, "unit", None),
+            field_name=f"variable {name} unit",
+            maximum=128,
+        ),
+        module_name=_optional_text(
+            getattr(core_variable, "module_name", None),
+            field_name=f"variable {name} module_name",
+            maximum=512,
+        ),
+        is_input_variable=_optional_flag(
+            _call_flag(core_variable, "is_input_variable"),
+            field_name=f"variable {name} is_input_variable",
+            default=False,
+        ),
+        hidden_input=_optional_flag(
+            getattr(core_variable, "hidden_input", None),
+            field_name=f"variable {name} hidden_input",
+            default=False,
+        ),
+        possible_value_labels=_possible_value_labels(
+            core_variable, name=name, possible_values=normalized_possible_values
+        ),
     )
+
+
+def _call_flag(record: object, method_name: str) -> object:
+    method = getattr(record, method_name, None)
+    return method() if callable(method) else None
 
 
 def _normalize_parameter(
     source: object,
     *,
     model_version_id: UUID,
+    core_parameter: object,
 ) -> ParameterRecord:
     name = _required_text(
         getattr(source, "name", None),
@@ -345,6 +527,7 @@ def _normalize_parameter(
         maximum=512,
     )
     parameter_id = _identifier("parameter", model_version_id, name)
+    metadata = _core_metadata(core_parameter)
     source_values: list[tuple[datetime, datetime | None, Any]] = []
     values_by_start: dict[datetime, tuple[datetime | None, Any]] = {}
     previous_start: datetime | None = None
@@ -424,6 +607,26 @@ def _normalize_parameter(
             maximum=128,
         ),
         values=tuple(normalized_values),
+        metadata_label=_optional_text(
+            metadata.get("label"),
+            field_name=f"parameter {name} metadata label",
+            maximum=512,
+        ),
+        period=_optional_text(
+            metadata.get("period"),
+            field_name=f"parameter {name} period",
+            maximum=32,
+        ),
+        economy=_optional_flag(
+            metadata.get("economy"),
+            field_name=f"parameter {name} economy",
+            default=True,
+        ),
+        household=_optional_flag(
+            metadata.get("household"),
+            field_name=f"parameter {name} household",
+            default=True,
+        ),
     )
 
 
@@ -491,8 +694,20 @@ def _normalize_country(
         )
         raise CatalogExtractionError(msg)
 
+    system = _country_system(source, country_id=country_id)
+    core_variables = getattr(system, "variables", None)
+    if not isinstance(core_variables, Mapping):
+        msg = f"{country_id} country system has no variable mapping"
+        raise CatalogExtractionError(msg)
+    core_parameters = _core_parameter_records(system)
     variables = tuple(
-        _normalize_variable(variable, model_version_id=model_version_id)
+        _normalize_variable(
+            variable,
+            model_version_id=model_version_id,
+            core_variable=_core_record(
+                core_variables, str(getattr(variable, "name", "")), kind="variable"
+            ),
+        )
         for variable in _public_named_records(
             source,
             attribute="variables_by_name",
@@ -531,15 +746,47 @@ def _normalize_country(
                 ),
             )
         )
-    parameter_nodes = tuple(normalized_nodes)
     parameters = tuple(
-        _normalize_parameter(parameter, model_version_id=model_version_id)
+        _normalize_parameter(
+            parameter,
+            model_version_id=model_version_id,
+            core_parameter=_core_record(
+                core_parameters, str(getattr(parameter, "name", "")), kind="parameter"
+            ),
+        )
         for parameter in _public_named_records(
             source,
             attribute="parameters_by_name",
             entity_name="parameter",
         )
     )
+    # PolicyEngine.py omits bracket schedules (Core ParameterScale nodes),
+    # whose labels name the schedules the app shows.
+    public_node_names = {node.name for node in normalized_nodes}
+    for schedule_name, core_node in sorted(core_parameters.items()):
+        if schedule_name in public_node_names or not _is_bracket_schedule(core_node):
+            continue
+        schedule_name = _required_text(
+            schedule_name, field_name="bracket schedule name", maximum=512
+        )
+        normalized_nodes.append(
+            ParameterNodeRecord(
+                id=_identifier("parameter-node", model_version_id, schedule_name),
+                model_version_id=model_version_id,
+                name=schedule_name,
+                label=_optional_text(
+                    _core_metadata(core_node).get("label"),
+                    field_name="bracket schedule label",
+                    maximum=512,
+                ),
+                description=_optional_text(
+                    getattr(core_node, "description", None),
+                    field_name="bracket schedule description",
+                ),
+                is_scale=True,
+            )
+        )
+    parameter_nodes = tuple(normalized_nodes)
 
     reviewed_default = REVIEWED_DEFAULT_DATASETS[country_id]
     manifest_default = getattr(release_manifest, "default_dataset", None)
@@ -693,6 +940,9 @@ def _normalize_country(
             ),
             current_law_id=CURRENT_LAW_IDS[country_id],
             metadata_time_periods=METADATA_TIME_PERIODS[country_id],
+            catalog_format=CATALOG_FORMAT,
+            entities=_normalize_entities(system),
+            basic_inputs=_normalize_basic_inputs(system),
         ),
         variables=variables,
         parameter_nodes=parameter_nodes,

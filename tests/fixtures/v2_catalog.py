@@ -19,6 +19,64 @@ DEPENDENCY_VERSIONS = {
 }
 
 
+class ParameterScale(SimpleNamespace):
+    """A Core bracket schedule; the extractor recognizes it by class name."""
+
+
+def _core_system(country_id: str) -> SimpleNamespace:
+    """Return a stand-in Core system holding the metadata the extractor reads."""
+    core_variable = SimpleNamespace(
+        name="employment_income",
+        module_name="household.income",
+        hidden_input=False,
+        is_input_variable=lambda: True,
+        possible_values=None,
+    )
+    core_node = SimpleNamespace(
+        name="gov.example",
+        metadata={"label": "Example policy"},
+        description="Example policy parameters",
+    )
+    core_parameter = SimpleNamespace(
+        name="gov.example.rate",
+        metadata={
+            "label": "Rate",
+            "period": "year",
+            "economy": True,
+            "household": False,
+        },
+        description="An example rate",
+    )
+    descendants = [core_node, core_parameter]
+    return SimpleNamespace(
+        variables={core_variable.name: core_variable},
+        parameters=SimpleNamespace(get_descendants=lambda: descendants),
+        entities=[
+            SimpleNamespace(
+                key="person",
+                plural="people",
+                label="Person",
+                doc="An individual.",
+                is_person=True,
+            ),
+            SimpleNamespace(
+                key="household",
+                plural="households",
+                label="Household",
+                doc="\nA household.\n",
+                is_person=False,
+                roles=[
+                    SimpleNamespace(
+                        key="member", plural="members", label="Member", doc=None
+                    )
+                ],
+            ),
+        ],
+        basic_inputs=["employment_income"],
+        country_id=country_id,
+    )
+
+
 class RegionRegistry(list):
     """Small iterable with the public registry's country identifier."""
 
@@ -102,6 +160,9 @@ def _model_source(
         default_value=0.0,
         adds=None,
         subtracts=None,
+        value_type=float,
+        definition_period="year",
+        unit={"us": "currency-USD", "uk": "currency-GBP"}[country_id],
     )
     parameter_node = SimpleNamespace(
         name="gov.example",
@@ -149,6 +210,8 @@ def _model_source(
     version_holder.variables_by_name = {variable.name: variable}
     version_holder.parameter_nodes_by_name = {parameter_node.name: parameter_node}
     version_holder.parameters_by_name = {parameter.name: parameter}
+    core_system = _core_system(country_id)
+    version_holder._load_system = lambda: core_system
     return version_holder
 
 

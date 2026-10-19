@@ -15,10 +15,12 @@ from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session, select
 
+from policyengine_api.data.v2.catalog.extraction import extract_catalog
 from policyengine_api.data.v2.catalog.publication import (
     CatalogPublicationError,
     publish_catalog,
 )
+from policyengine_api.data.v2.catalog.records import CATALOG_FORMAT
 from policyengine_api.data.v2.models import (
     Dataset,
     DatasetVersion,
@@ -30,7 +32,14 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
-from tests.fixtures.v2_catalog import normalized_catalog
+from tests.fixtures.v2_catalog import (
+    POLICYENGINE_VERSION,
+    ParameterScale,
+    bundle,
+    installed_version,
+    normalized_catalog,
+    source_models,
+)
 
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
@@ -340,3 +349,119 @@ def test_new_version_is_additive_and_concurrent_retries_serialize(
         "reports": 0,
         "report_runs": 0,
     }
+
+
+def _catalog_with_bracket_schedule():
+    models = source_models()
+    system = models["us"]._load_system()
+    descendants = system.parameters.get_descendants()
+    schedule = ParameterScale(
+        name="gov.example.schedule",
+        metadata={"label": "Example schedule"},
+        description="Rates by income band",
+    )
+    system.parameters.get_descendants = lambda: [*descendants, schedule]
+    return extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    )
+
+
+def _presentation_rows(engine: Engine) -> dict[str, object]:
+    with engine.connect() as connection:
+        return {
+            "model_versions": connection.execute(
+                text(
+                    "SELECT catalog_format, entities::text, basic_inputs::text "
+                    "FROM tax_benefit_model_versions ORDER BY id"
+                )
+            ).all(),
+            "variables": connection.execute(
+                text(
+                    "SELECT value_type, definition_period, unit, module_name, "
+                    "is_input_variable, hidden_input FROM variables ORDER BY id"
+                )
+            ).all(),
+            "parameters": connection.execute(
+                text(
+                    "SELECT metadata_label, period, economy, household "
+                    "FROM parameters ORDER BY id"
+                )
+            ).all(),
+            "nodes": connection.execute(
+                text("SELECT name FROM parameter_nodes ORDER BY name")
+            )
+            .scalars()
+            .all(),
+        }
+
+
+def test_new_versions_store_presentation_metadata_and_bracket_schedules(
+    publication_engine: Engine,
+) -> None:
+    catalog = _catalog_with_bracket_schedule()
+
+    publish_catalog(publication_engine, catalog)
+    publish_catalog(publication_engine, catalog)
+
+    rows = _presentation_rows(publication_engine)
+    assert {row[0] for row in rows["model_versions"]} == {CATALOG_FORMAT}
+    assert all('"person"' in row[1] for row in rows["model_versions"])
+    assert set(rows["variables"]) == {
+        ("float", "year", "currency-USD", "household.income", True, False),
+        ("float", "year", "currency-GBP", "household.income", True, False),
+    }
+    assert set(rows["parameters"]) == {("Rate", "year", True, False)}
+    assert rows["nodes"] == ["gov.example", "gov.example", "gov.example.schedule"]
+
+
+def test_versions_published_before_format_two_are_compared_and_never_rewritten(
+    publication_engine: Engine,
+) -> None:
+    catalog = _catalog_with_bracket_schedule()
+    publish_catalog(publication_engine, catalog)
+    with publication_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE tax_benefit_model_versions "
+                "SET catalog_format = NULL, entities = NULL, basic_inputs = NULL"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE variables SET value_type = NULL, definition_period = NULL, "
+                "unit = NULL, module_name = NULL, is_input_variable = NULL, "
+                "hidden_input = NULL, possible_value_labels = NULL"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE parameters SET metadata_label = NULL, period = NULL, "
+                "economy = NULL, household = NULL"
+            )
+        )
+        connection.execute(
+            text("DELETE FROM parameter_nodes WHERE name = 'gov.example.schedule'")
+        )
+    before = _presentation_rows(publication_engine)
+    before_counts = _counts(publication_engine)
+
+    publish_catalog(publication_engine, catalog)
+
+    assert _presentation_rows(publication_engine) == before
+    assert _counts(publication_engine) == before_counts
+    assert {row[0] for row in before["model_versions"]} == {None}
+
+
+def test_format_two_versions_compare_presentation_metadata(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+    publish_catalog(publication_engine, catalog)
+    with publication_engine.begin() as connection:
+        connection.execute(text("UPDATE parameters SET economy = false"))
+
+    with pytest.raises(CatalogPublicationError, match="differs"):
+        publish_catalog(publication_engine, catalog)

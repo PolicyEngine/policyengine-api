@@ -64,12 +64,26 @@ class MetadataVariable(StrictResponseModel):
     default_value: JsonValue
     adds: list[str] | None
     subtracts: list[str] | None
+    value_type: str | None = None
+    """The model's value type: float, int, bool, str, date or Enum."""
+    definition_period: str | None = None
+    unit: str | None = None
+    module_name: str | None = None
+    is_input_variable: bool | None = None
+    """Whether the variable is an input rather than calculated by a formula."""
+    hidden_input: bool | None = None
+    """Whether input forms should leave the variable out."""
+    possible_value_labels: dict[str, str] | None = None
+    """For an Enum variable, each possible value's display label."""
 
 
 class MetadataParameterSummary(StrictResponseModel):
     """A policy parameter, described without its values.
 
-    Its current-law values are listed by GET /v2/parameter-values.
+    Its current-law values are listed by GET /v2/parameter-values. label is
+    PolicyEngine.py's descriptive label; metadata_label is the label written in
+    the parameter's own metadata, if any. economy and household say whether
+    the parameter applies to economy and household calculations.
     """
 
     id: UUID
@@ -78,6 +92,10 @@ class MetadataParameterSummary(StrictResponseModel):
     description: str | None
     data_type: str | None
     unit: str | None
+    metadata_label: str | None = None
+    period: str | None = None
+    economy: bool | None = None
+    household: bool | None = None
 
 
 class MetadataCanonicalParameterValue(StrictResponseModel):
@@ -153,11 +171,40 @@ class MetadataDatasetOption(StrictResponseModel):
     default: Literal[True] = True
 
 
+class MetadataEntityRole(StrictResponseModel):
+    """A role a member can hold in a group entity, such as a household member."""
+
+    key: str
+    plural: str | None
+    label: str | None
+    description: str | None
+
+
+class MetadataEntity(StrictResponseModel):
+    """An entity of the model, such as a person, household or tax unit."""
+
+    key: str
+    plural: str | None
+    label: str | None
+    description: str | None
+    is_person: bool
+    roles: list[MetadataEntityRole]
+
+
 class MetadataModelVersionDetail(MetadataModelVersion):
-    """A model version, with its current-law policy id and the years offered."""
+    """A model version, with its current-law policy id and the years offered.
+
+    catalog_format is null for versions published before catalog format 2,
+    which also leave entities, basic_inputs and the format 2 fields of
+    variables and parameters null. basic_inputs names the variables a
+    household form asks for first.
+    """
 
     current_law_id: int
     metadata_time_periods: list[int]
+    catalog_format: int | None = None
+    entities: list[MetadataEntity] | None = None
+    basic_inputs: list[str] | None = None
 
 
 class MetadataParameterChild(StrictResponseModel):
@@ -226,6 +273,10 @@ class MetadataCatalogParameterRow:
     description: str | None
     data_type: str | None
     unit: str | None
+    metadata_label: str | None
+    period: str | None
+    economy: bool | None
+    household: bool | None
 
 
 ResourceT = TypeVar("ResourceT")

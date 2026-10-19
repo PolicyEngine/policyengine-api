@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.metadata.types import MetadataCatalogDocument
 
-METADATA_CATALOG_FORMAT = 1
+METADATA_CATALOG_FORMAT = 2
 """Changes whenever the document's shape changes, so validators never match old bodies."""
 
 RUNNING_CATALOG_MAX_AGE_SECONDS = 300

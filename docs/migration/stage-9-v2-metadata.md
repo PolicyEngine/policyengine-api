@@ -95,6 +95,26 @@ metadata time-period options are stored on the model-version snapshot.
 PolicyEngine Core and country-package versions are derived diagnostic evidence
 and are not separately persisted.
 
+Catalog format 2 adds the presentation metadata the app's v3 workspace shows,
+which PolicyEngine.py's public records omit: model entities (key, plural,
+label, description, whether it is a person, and roles) and basic inputs on the
+model version; each variable's value type, definition period, unit, module,
+input and hidden-input flags and enum value labels; each parameter's own
+metadata label, period, and economy and household flags; and the bracket
+schedules (Core `ParameterScale` nodes) as parameter nodes. The extractor reads
+them from the country system that PolicyEngine.py built its model from,
+through the model version's `_load_system` hook, by attribute and without
+importing PolicyEngine Core or a country package. That hook is not part of
+PolicyEngine.py's public interface, so a release that removes it stops
+extraction with an error; publishing these fields in PolicyEngine.py's public
+records would remove the dependency.
+
+Publication never rewrites a stored version. A version published before
+format 2 has `catalog_format` null and null format 2 fields, and later
+publications of the same version compare only the fields it was published
+with. The first PolicyEngine.py version published after format 2 deploys
+carries the new fields; until then the routes return them as null.
+
 Parameter extraction requires the PolicyEngine.py public history contract from
 5.0.4 and later: values are ordered from oldest to newest, bounded `end_date`
 values are inclusive and fall one day before the following `start_date`, and

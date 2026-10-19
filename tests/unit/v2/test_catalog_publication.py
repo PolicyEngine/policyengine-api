@@ -19,6 +19,7 @@ from policyengine_api.data.v2.catalog import (
     publication_reconciliation,
     publication_staging,
 )
+from policyengine_api.data.v2.catalog.records import CATALOG_FORMAT
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
 from policyengine_api.data.v2.models import (
     Dataset,
@@ -209,12 +210,20 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
     assert all("VALUES" not in statement for statement in compiled_inserts)
 
     catalog = normalized_catalog()
-    comparisons = publication_reconciliation._comparison_pairs(catalog.country("us"))
-    assert all(
-        isinstance(statement, sa.sql.Select) and not isinstance(statement, TextClause)
-        for pair in comparisons
-        for statement in pair
-    )
+    for stored_format in (None, CATALOG_FORMAT):
+        comparisons = publication_reconciliation._comparison_pairs(
+            catalog.country("us"), stored_format=stored_format
+        )
+        assert all(
+            isinstance(statement, sa.sql.Select)
+            and not isinstance(statement, TextClause)
+            for pair in comparisons
+            for statement in pair
+        )
+        assert all(
+            len(staged.selected_columns) == len(stored.selected_columns)
+            for staged, stored in comparisons
+        )
 
     class Result:
         def scalar_one(self):
