@@ -1,5 +1,6 @@
 """Flask routes for v1 households and calculations, with optional copying to API v2."""
 
+import contextlib
 import json
 import logging
 import time
@@ -86,7 +87,8 @@ def _household_persistence_failure(
     started_at: float,
 ) -> Response:
     status_code = 503 if error.retryable else 500
-    try:
+    # Metric logging must not replace the error response.
+    with contextlib.suppress(Exception):
         logger.log_struct(
             {
                 "message": "V1 household persistence failed",
@@ -105,8 +107,6 @@ def _household_persistence_failure(
             },
             severity="ERROR",
         )
-    except Exception:  # noqa: BLE001  # metric logging must not replace the error response
-        pass
     message = (
         "Household database is temporarily unavailable; please try again later."
         if status_code == 503

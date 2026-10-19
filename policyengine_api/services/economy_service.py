@@ -1,5 +1,6 @@
 """Economic impact service backed by cached reform impacts and simulation jobs."""
 
+import contextlib
 import datetime
 import hashlib
 import json
@@ -1385,15 +1386,15 @@ class EconomyService:
             return
         if most_recent_impact.options_hash != setup_options.options_hash:
             return
-        try:
+        # Best effort: the typed SPM error is the answer, and the failure is
+        # already logged.
+        with contextlib.suppress(Exception):
             self._set_reform_impact_error(
                 setup_options=setup_options,
                 message=error.message,
                 error_code=error.code,
                 execution_id=most_recent_impact.execution_id,
             )
-        except Exception:  # noqa: BLE001  # best effort: the typed SPM error is the answer, and the failure is already logged
-            pass
 
     @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_FAILED))
     def _handle_failed_impact(

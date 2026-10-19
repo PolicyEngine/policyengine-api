@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 from typing import TYPE_CHECKING, Protocol
 
@@ -110,7 +111,8 @@ def _log_mirror_operation(
     result: LegacyUserPolicyPersistenceResult | None = None,
     failure_category: str | None = None,
 ) -> None:
-    try:
+    # Metric logging must not change the mirror outcome.
+    with contextlib.suppress(Exception):
         logger.log_struct(
             {
                 "message": "V1 saved-policy immediate mirror completed",
@@ -144,8 +146,6 @@ def _log_mirror_operation(
             },
             severity="INFO" if outcome == "ok" else "ERROR",
         )
-    except Exception:  # noqa: BLE001  # metric logging must not change the mirror outcome
-        pass
 
 
 def _run_user_policy_mirror(

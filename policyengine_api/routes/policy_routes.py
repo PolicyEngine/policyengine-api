@@ -1,5 +1,6 @@
 """Flask routes for v1 policies and saved user policies, optionally mirrored to v2."""
 
+import contextlib
 import json
 import time
 
@@ -89,7 +90,8 @@ def _user_policy_persistence_failure(
 ) -> Response:
     """Return and record a failure without serializing exception details."""
     status_code = 503 if error.retryable else 500
-    try:
+    # A logging failure must not replace the persistence response.
+    with contextlib.suppress(Exception):
         logger.log_struct(
             {
                 "message": "V1 saved-policy persistence failed",
@@ -114,8 +116,6 @@ def _user_policy_persistence_failure(
             },
             severity="ERROR",
         )
-    except Exception:  # noqa: BLE001  # a logging failure must not replace the persistence response
-        pass
 
     message = (
         "Policy database is temporarily unavailable; please try again later."

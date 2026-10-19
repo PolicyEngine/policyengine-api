@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -214,7 +215,8 @@ def main(
                 require_pending=True,
             )
     except Exception as error:  # noqa: BLE001  # command emits a safe result
-        try:
+        # Outcome logging must not change the command result.
+        with contextlib.suppress(Exception):
             _record_command_outcome(
                 identity=identity,
                 country_id=args.country_id,
@@ -222,8 +224,6 @@ def main(
                 outcome="error",
                 error_type=type(error).__name__,
             )
-        except Exception:  # noqa: BLE001  # outcome logging must not change the command result
-            pass
         safe_types = (HouseholdEventCommandConfigurationError,)
         message = (
             str(error)
@@ -246,7 +246,8 @@ def main(
     finally:
         if v1_engine is not None:
             v1_engine.dispose()
-    try:
+    # Outcome logging must not change the command result.
+    with contextlib.suppress(Exception):
         _record_command_outcome(
             identity=identity,
             country_id=args.country_id,
@@ -254,8 +255,6 @@ def main(
             outcome="ok",
             destination_household_id=result.household_id,
         )
-    except Exception:  # noqa: BLE001  # outcome logging must not change the command result
-        pass
     print(
         json.dumps(
             {
