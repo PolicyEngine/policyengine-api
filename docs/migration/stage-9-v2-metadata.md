@@ -12,8 +12,10 @@ read-only, resource-specific routes from the Cloud Run ASGI application under
 `/v2`. The routes separately serve tax-benefit models, model versions,
 variables, parameters, direct parameter-tree children, canonical parameter
 values, logical input datasets, regions, and compact economy-selection
-options. Collection routes require `country_id`, use bounded `offset` and
-`limit` pagination, and never assemble the complete catalog into one response.
+options. Collection routes require `country_id` and use bounded `offset` and
+`limit` pagination. One later addition, `GET /v2/model-catalog`, does assemble
+a whole catalog version into one cached response for clients that load the
+complete model at start-up (see Preview verification).
 The generated OpenAPI document is available at `GET /v2/openapi.json`.
 
 The unprefixed Flask/API v1 routes remain mounted within the Cloud Run ASGI
