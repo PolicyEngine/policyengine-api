@@ -1082,6 +1082,18 @@ autofix = false
 kind = "none"
 
 [[rule]]
+id = "api.process.agents-suppress-as-last-resort"
+category = "process"
+statement = "Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason."
+rationale = "docs/engineering/skills/rules-registry.md#inline-suppressions"
+scope = ["**/*.py"]
+tier = "judgment"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
 id = "api.process.stacked-prs-full-ci-at-bottom"
 category = "process"
 statement = "In a stack of pull requests, only the lowest unmerged one runs the full PR workflow. Every pr.yml job is needed by the CI complete gate, which fails on the pull requests above it and otherwise passes only when every job passed, so a stack merges bottom-up and nothing merges untested."

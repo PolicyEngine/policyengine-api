@@ -10,9 +10,9 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 | --- | ---: | ---: | ---: | ---: | ---: |
 | mechanical | 47 | 0 | 1 | 12 | 60 |
 | metric | 0 | 0 | 0 | 0 | 0 |
-| judgment | 0 | 0 | 0 | 0 | 0 |
+| judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 47 of 60 rules.
+**Blocking:** 47 of 61 rules.
 
 ## Gaps
 
@@ -22,6 +22,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 - `api.observability.id-is-diagnostic-only`: observability_id is used only to query diagnostic records, never for idempotency, cache ownership, authorization, database identity, routing or calculation behavior.
 - `api.observability.registered-stages-only`: Span names come from the stage plans in policyengine_api.observability.stages; route and service code never adds span-name string literals.
 - `api.process.agents-never-bypass`: Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human.
+- `api.process.agents-suppress-as-last-resort`: Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason.
 - `api.process.makefile-phony`: Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed.
 - `api.process.pr-tracking-issue`: Every PR has a tracking issue in this repository, and the first line of its description is Fixes #ISSUE_NUMBER.
 - `api.process.rule-machinery-code-owned`: Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author.
@@ -374,6 +375,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `api.agents.adapters-point-to-agents-md` | CLAUDE.md and .github/copilot-instructions.md only point to AGENTS.md; skills and rules are listed in AGENTS.md alone. | mechanical | enforced | yes | quality guard `rules-registry` | `pr.yml:quality-guards` | yes |
 | `api.process.agents-never-bypass` | Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human. | mechanical | doc-only | no | nothing | — | — |
+| `api.process.agents-suppress-as-last-resort` | Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason. | judgment | doc-only | no | nothing | — | — |
 | `api.process.changelog-fragment` | Every PR adds a changelog.d fragment. | mechanical | enforced | yes | CI job `check-changelog` | `pr.yml:check-changelog` | — |
 | `api.process.cloud-run-image-builds` | The Cloud Run container image builds. | mechanical | enforced | yes | CI job `test_cloud_run_container_builds` | `pr.yml:test_cloud_run_container_builds` | — |
 | `api.process.docker-image-builds` | The API Docker image builds. | mechanical | enforced | yes | CI job `test_container_builds` | `pr.yml:test_container_builds` | — |
@@ -390,6 +392,7 @@ flowchart LR
   j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
   r_api_process_agents_never_bypass("api.process.agents-never-bypass (doc-only)")
   gap_unenforced>"not enforced"]
+  r_api_process_agents_suppress_as_last_resort("api.process.agents-suppress-as-last-resort (doc-only)")
   r_api_process_changelog_fragment("api.process.changelog-fragment (enforced)")
   e_CI_job_check_changelog["CI job check-changelog"]
   j_CI_pr_yml_check_changelog["CI pr.yml:check-changelog"]
@@ -410,6 +413,7 @@ flowchart LR
   r_api_agents_adapters_point_to_agents_md --> e_quality_guard_rules_registry
   e_quality_guard_rules_registry --> j_CI_pr_yml_quality_guards
   r_api_process_agents_never_bypass -.-> gap_unenforced
+  r_api_process_agents_suppress_as_last_resort -.-> gap_unenforced
   r_api_process_changelog_fragment --> e_CI_job_check_changelog
   e_CI_job_check_changelog --> j_CI_pr_yml_check_changelog
   r_api_process_cloud_run_image_builds --> e_CI_job_test_cloud_run_container_builds

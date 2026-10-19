@@ -61,6 +61,10 @@ For migration work, identify:
   or Modal migration;
 - which user-visible API contract changes are intentionally introduced.
 
+For any PR that adds inline ruff suppressions (`# noqa`), list each one with
+the reason a code change or ruff setting couldn't remove the finding
+(`api.process.agents-suppress-as-last-resort`).
+
 ## Commit Hygiene
 
 AI agents must run formatting and lint checks before committing their own code
