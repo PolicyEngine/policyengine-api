@@ -721,12 +721,6 @@ def _default_metadata_reader_factory() -> MetadataReader:
     return MetadataService()
 
 
-def _default_specification_provider() -> JSONObject:
-    from policyengine_api.specification import OPENAPI_SPECIFICATION
-
-    return OPENAPI_SPECIFICATION
-
-
 @lru_cache(maxsize=1)
 def _running_policyengine_version() -> str:
     return importlib_metadata.version("policyengine")
@@ -918,7 +912,6 @@ class NativeRouteDependencies:
     readiness_probe: Callable[[], bool]
     gateway_client_factory: Callable[[], SimulationGatewayProbe]
     metadata_reader_factory: Callable[[], MetadataReader]
-    specification_provider: Callable[[], JSONObject]
     v2_metadata_reader_factory: Callable[[], V2MetadataResourceReader] | None = None
     v2_country_service_factory: Callable[[], V2CountryResourceService] | None = None
     v2_policy_service_factory: Callable[[], V2PolicyResourceService] | None = None
@@ -949,7 +942,6 @@ class NativeRouteDependencies:
             readiness_probe=_default_readiness_probe,
             gateway_client_factory=_default_gateway_client_factory,
             metadata_reader_factory=_default_metadata_reader_factory,
-            specification_provider=_default_specification_provider,
             v2_metadata_reader_factory=_default_v2_metadata_reader_factory,
             v2_country_service_factory=_default_v2_country_service_factory,
             v2_policy_service_factory=_default_v2_policy_service_factory,

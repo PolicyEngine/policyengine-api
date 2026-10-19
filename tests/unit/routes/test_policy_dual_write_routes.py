@@ -235,21 +235,3 @@ def test_v1_policy_reads_require_cloud_sql_and_never_invoke_v2(
 
     assert invalid.status_code == 503
     invalid_get.assert_not_called()
-
-
-def test_policy_search_failure_does_not_expose_exception_details(
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("DB_READ_POLICY", "cloud_sql")
-    with patch(
-        "policyengine_api.routes.policy_routes.policy_service.search_policies",
-        side_effect=RuntimeError("database-credential-secret"),
-    ):
-        response = _client().get("/us/policies?query=example")
-
-    assert response.status_code == 500
-    assert response.json == {
-        "status": "error",
-        "message": "Internal server error; please try again later.",
-    }
-    assert "database-credential-secret" not in response.text

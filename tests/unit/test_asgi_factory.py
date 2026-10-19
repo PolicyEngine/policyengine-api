@@ -1,5 +1,4 @@
 import importlib
-import json
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -67,10 +66,6 @@ def create_test_wsgi_app() -> Flask:
     def liveness_check():
         return Response("OK", status=200, mimetype="text/plain")
 
-    @app.get("/specification")
-    def specification():
-        return jsonify({"openapi": "3.0.0", "info": {"title": "fallback"}})
-
     return app
 
 
@@ -92,20 +87,11 @@ def _stage6_settings(
     )
 
 
-def _stage6_dependencies(
-    *,
-    ready: bool = True,
-    specification: dict | None = None,
-):
-    document = specification or {
-        "openapi": "3.1.0",
-        "info": {"title": "native specification"},
-    }
+def _stage6_dependencies(*, ready: bool = True):
     return asgi_factory.NativeRouteDependencies(
         readiness_probe=lambda: ready,
         gateway_client_factory=_HealthySimulationGateway,
         metadata_reader_factory=lambda: None,
-        specification_provider=lambda: document,
     )
 
 
@@ -179,49 +165,27 @@ def test_health_fallback_ignores_native_readiness_dependency():
     assert readiness.content == b"OK"
 
 
-def test_native_specification_returns_the_shared_document():
-    document = {
-        "openapi": "3.0.0",
-        "info": {"title": "PolicyEngine API", "version": "test-version"},
-        "paths": {"/us/metadata": {"get": {"summary": "Metadata"}}},
-    }
+@pytest.mark.parametrize(
+    "specification_implementation",
+    [
+        RouteImplementation.FLASK_FALLBACK,
+        RouteImplementation.FASTAPI_NATIVE,
+    ],
+)
+def test_legacy_specification_and_home_routes_are_not_served(
+    specification_implementation,
+):
     client = TestClient(
         create_asgi_app(
             create_test_wsgi_app(),
-            route_settings=_stage6_settings(
-                specification=RouteImplementation.FASTAPI_NATIVE
-            ),
-            dependencies=_stage6_dependencies(specification=document),
+            route_settings=_stage6_settings(specification=specification_implementation),
+            dependencies=_stage6_dependencies(),
         )
     )
 
-    response = client.get("/specification")
-
-    assert response.status_code == 200
-    assert response.json() == document
-    assert response.headers["content-type"].startswith("application/json")
-
-
-def test_specification_falls_through_to_flask_independently():
-    client = TestClient(
-        create_asgi_app(
-            create_test_wsgi_app(),
-            route_settings=_stage6_settings(
-                health=RouteImplementation.FASTAPI_NATIVE,
-                specification=RouteImplementation.FLASK_FALLBACK,
-            ),
-            dependencies=_stage6_dependencies(ready=False),
-        )
-    )
-
-    readiness = client.get("/readiness-check")
-    specification = client.get("/specification")
-
-    assert readiness.status_code == 503
-    assert specification.json() == {
-        "openapi": "3.0.0",
-        "info": {"title": "fallback"},
-    }
+    assert client.get("/specification").status_code == 404
+    assert client.get("/").status_code == 404
+    assert client.get("/v2/openapi.json").status_code == 200
 
 
 @pytest.mark.parametrize(
@@ -829,12 +793,11 @@ def test_public_simulation_gateway_health_probe_reports_failure():
     assert response.status_code == 503
 
 
-def test_existing_health_and_specification_paths_fall_back_to_flask():
+def test_existing_health_paths_fall_back_to_flask():
     client = TestClient(create_asgi_app(create_test_wsgi_app()))
 
     readiness = client.get("/readiness-check")
     liveness = client.get("/liveness-check")
-    specification = client.get("/specification")
 
     assert readiness.status_code == 200
     assert readiness.content == b"OK"
@@ -842,8 +805,3 @@ def test_existing_health_and_specification_paths_fall_back_to_flask():
     assert liveness.status_code == 200
     assert liveness.content == b"OK"
     assert liveness.headers["content-type"].startswith("text/plain")
-    assert specification.status_code == 200
-    assert json.loads(specification.content) == {
-        "openapi": "3.0.0",
-        "info": {"title": "fallback"},
-    }

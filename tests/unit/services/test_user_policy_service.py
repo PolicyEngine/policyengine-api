@@ -138,14 +138,13 @@ def test_saved_policy_event_processing_has_only_request_path_callers():
         for path, source in sources.items()
         if ".process_pending_mirror_events(" in source
     } == {"services/user_policy_mirroring.py"}
+    # The v1 saved-policy routes were the only request path; with them removed,
+    # nothing outside the copying module processes saved-policy events.
     assert {
         path
         for path, source in sources.items()
         if "mirror_pending_user_policy_events_after_commit(" in source
-    } == {
-        "routes/policy_routes.py",
-        "services/user_policy_mirroring.py",
-    }
+    } == {"services/user_policy_mirroring.py"}
 
 
 def test_create_reuse_list_and_update_user_policy(orm_session_factory):

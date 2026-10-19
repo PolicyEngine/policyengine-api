@@ -84,7 +84,6 @@ def _dependencies():
         readiness_probe=lambda: True,
         gateway_client_factory=_HealthySimulationGateway,
         metadata_reader_factory=_MetadataReader,
-        specification_provider=lambda: {"openapi": "3.0.0"},
     )
 
 
@@ -565,7 +564,6 @@ def test_native_route_failure_logs_country_and_actual_implementation():
         readiness_probe=lambda: True,
         gateway_client_factory=_HealthySimulationGateway,
         metadata_reader_factory=_FailingMetadataReader,
-        specification_provider=lambda: {"openapi": "3.0.0"},
     )
 
     with patch("policyengine_api.migration_logging.logger") as mock_logger:
