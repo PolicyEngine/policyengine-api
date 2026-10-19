@@ -36,7 +36,7 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         importlib_metadata.version(name) == expected
         for name, expected in expected_dependencies
     )
-    # Counts for the 6.5.0 bundle's models: US 2.2.1 and UK 2.130.1. Keep
+    # Counts for the 6.7.5 bundle's models: US 2.2.1 and UK 2.130.1. Keep
     # this exact assertion so later package changes require explicit review.
     assert catalog.entity_counts() == {
         "models": 2,
@@ -45,7 +45,7 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "parameter_nodes": 29_306,
         "parameters": 104_171,
         "parameter_values": 1_194_357,
-        "datasets": 2,
+        "datasets": 3,
         "regions": 826,
     }
 
@@ -70,7 +70,8 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         assert total_values == country.entity_counts()["parameter_values"]
 
     assert {dataset.name for dataset in catalog.country("us").datasets} == {
-        "populace_us_2024"
+        "populace_us_2024",
+        "populace_us_2024_acs_local",
     }
     assert {dataset.name for dataset in catalog.country("uk").datasets} == {
         "enhanced_frs_2024_25"
@@ -95,15 +96,23 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "SOUTH_WEST",
     ]
 
-    # Since 6.3.4, the bundle points US state and congressional-district
-    # regions at the national dataset by explicit path
-    # (PolicyEngine/policyengine.py#604), so every US region uses it and only
-    # places still fall back to it.
+    # Since 6.7.5, US state and congressional-district regions use the
+    # ACS-local dataset again, on the PolicyEngine/microcosm#1263 rebuild
+    # (PolicyEngine/policyengine.py#649, ending #604's national-file filter).
+    # The national region uses the national dataset, and places fall back to it.
     us_catalog = catalog.country("us")
     us_dataset_names = {dataset.id: dataset.name for dataset in us_catalog.datasets}
-    assert {
-        us_dataset_names[region.default_dataset_id] for region in us_catalog.regions
-    } == {"populace_us_2024"}
+    region_type_datasets: dict[str, set[str]] = {}
+    for region in us_catalog.regions:
+        region_type_datasets.setdefault(region.region_type, set()).add(
+            us_dataset_names[region.default_dataset_id]
+        )
+    assert region_type_datasets == {
+        "national": {"populace_us_2024"},
+        "state": {"populace_us_2024_acs_local"},
+        "congressional_district": {"populace_us_2024_acs_local"},
+        "place": {"populace_us_2024"},
+    }
     assert [
         (summary.region_type, summary.count)
         for summary in us_catalog.fallback_summaries
