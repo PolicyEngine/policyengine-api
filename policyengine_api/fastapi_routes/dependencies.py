@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.associations.types import (
         LegacyReferenceChecker,
     )
+    from policyengine_api.services.v2.countries.types import CountryRead
     from policyengine_api.services.v2.households.types import (
         HouseholdPage,
         HouseholdRead,
@@ -307,6 +308,14 @@ class V2MetadataResourceReader(Protocol):
         Raise ``MetadataCatalogUnavailableError`` when the national region, its
         dataset or the model version's options are missing from the catalog.
         """
+        ...
+
+
+class V2CountryResourceService(Protocol):
+    """Route-independent countries list read for one request."""
+
+    def list_countries(self) -> list[CountryRead]:
+        """Return every listed country and its capability, ordered by ID."""
         ...
 
 
@@ -736,6 +745,16 @@ def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     )
 
 
+def _default_v2_country_service_factory() -> V2CountryResourceService:
+    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.services.v2.countries.database_session import (
+        CountryDatabaseSession,
+    )
+    from policyengine_api.services.v2.countries.services import V2CountryService
+
+    return V2CountryService(CountryDatabaseSession(get_v2_session_factory()))
+
+
 def _default_v2_policy_service_factory() -> V2PolicyResourceService:
     from policyengine_api.data.v2.database import get_v2_session_factory
     from policyengine_api.services.v2.policies.database_session import (
@@ -901,6 +920,7 @@ class NativeRouteDependencies:
     metadata_reader_factory: Callable[[], MetadataReader]
     specification_provider: Callable[[], JSONObject]
     v2_metadata_reader_factory: Callable[[], V2MetadataResourceReader] | None = None
+    v2_country_service_factory: Callable[[], V2CountryResourceService] | None = None
     v2_policy_service_factory: Callable[[], V2PolicyResourceService] | None = None
     v2_household_service_factory: Callable[[], V2HouseholdResourceService] | None = None
     v2_user_policy_service_factory: Callable[[], V2UserPolicyResourceService] | None = (
@@ -931,6 +951,7 @@ class NativeRouteDependencies:
             metadata_reader_factory=_default_metadata_reader_factory,
             specification_provider=_default_specification_provider,
             v2_metadata_reader_factory=_default_v2_metadata_reader_factory,
+            v2_country_service_factory=_default_v2_country_service_factory,
             v2_policy_service_factory=_default_v2_policy_service_factory,
             v2_household_service_factory=_default_v2_household_service_factory,
             v2_user_policy_service_factory=(_default_v2_user_policy_service_factory),
