@@ -15,9 +15,6 @@ from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_in_session,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
-from policyengine_api.services.v2.policies.services import (
-    mirror_legacy_policy_in_session,
-)
 from policyengine_api.services.v2.user_policies.database_connectors.creates import (
     create_legacy_user_mapping,
     create_legacy_user_policy_mapping,
@@ -365,6 +362,10 @@ def mirror_legacy_user_policy_in_session(
     Copy its reform policy, resolve the v1 user to a v2 user, then create or
     update the association. Only the v1 reform label is copied, as the name.
     """
+    from policyengine_api.services.v2.policies.services import (
+        mirror_legacy_policy_in_session,
+    )
+
     validate_legacy_user_policy_input(
         snapshot,
         reform_snapshot,

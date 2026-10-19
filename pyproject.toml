@@ -224,12 +224,17 @@ banned-module-level-imports = [
     "policyengine_api.services.v2.metadata.database_session",
     "policyengine_api.services.v2.metadata.services",
     "policyengine_api.services.v2.policies.database_session",
+    "policyengine_api.services.v2.policies.services",
     "policyengine_api.services.v2.user_accounts.database_session",
     "policyengine_api.services.v2.user_accounts.services",
     "policyengine_api.services.v2.user_households.database_session",
+    "policyengine_api.services.v2.user_households.services",
     "policyengine_api.services.v2.user_policies.database_session",
+    "policyengine_api.services.v2.user_policies.services",
     "policyengine_api.services.v2.user_reports.database_session",
+    "policyengine_api.services.v2.user_reports.services",
     "policyengine_api.services.v2.user_simulations.database_session",
+    "policyengine_api.services.v2.user_simulations.services",
     "spm_calculator",
 ]
 

@@ -64,18 +64,6 @@ from policyengine_api.services.v2.user_accounts.validators import (
     require_editable_account,
     require_resolved_account,
 )
-from policyengine_api.services.v2.user_households.services import (
-    read_all_user_households,
-)
-from policyengine_api.services.v2.user_policies.services import (
-    read_all_user_policies,
-)
-from policyengine_api.services.v2.user_reports.services import (
-    read_all_user_reports,
-)
-from policyengine_api.services.v2.user_simulations.services import (
-    read_all_user_simulations,
-)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -174,6 +162,19 @@ class V2AccountService:
 
         A signed-out browser with no saved work gets an empty export with no user.
         """
+        from policyengine_api.services.v2.user_households.services import (
+            read_all_user_households,
+        )
+        from policyengine_api.services.v2.user_policies.services import (
+            read_all_user_policies,
+        )
+        from policyengine_api.services.v2.user_reports.services import (
+            read_all_user_reports,
+        )
+        from policyengine_api.services.v2.user_simulations.services import (
+            read_all_user_simulations,
+        )
+
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id

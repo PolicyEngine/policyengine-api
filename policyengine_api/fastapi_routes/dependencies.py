@@ -751,9 +751,7 @@ def _default_v2_policy_service_factory() -> V2PolicyResourceService:
     from policyengine_api.services.v2.policies.database_session import (
         PolicyDatabaseSession,
     )
-    from policyengine_api.services.v2.policies.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
-        V2PolicyService,
-    )
+    from policyengine_api.services.v2.policies.services import V2PolicyService
 
     return V2PolicyService(
         PolicyDatabaseSession(get_v2_session_factory()),
@@ -835,9 +833,7 @@ def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
     from policyengine_api.services.v2.user_policies.database_session import (
         UserPolicyDatabaseSession,
     )
-    from policyengine_api.services.v2.user_policies.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
-        V2UserPolicyService,
-    )
+    from policyengine_api.services.v2.user_policies.services import V2UserPolicyService
 
     return V2UserPolicyService(
         UserPolicyDatabaseSession(get_v2_session_factory()),
@@ -852,7 +848,7 @@ def _default_v2_user_household_service_factory() -> V2UserHouseholdResourceServi
     from policyengine_api.services.v2.user_households.database_session import (
         UserHouseholdDatabaseSession,
     )
-    from policyengine_api.services.v2.user_households.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
+    from policyengine_api.services.v2.user_households.services import (
         V2UserHouseholdService,
     )
 
@@ -869,7 +865,7 @@ def _default_v2_user_simulation_service_factory() -> V2UserSimulationResourceSer
     from policyengine_api.services.v2.user_simulations.database_session import (
         UserSimulationDatabaseSession,
     )
-    from policyengine_api.services.v2.user_simulations.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
+    from policyengine_api.services.v2.user_simulations.services import (
         V2UserSimulationService,
     )
 
@@ -886,9 +882,7 @@ def _default_v2_user_report_service_factory() -> V2UserReportResourceService:
     from policyengine_api.services.v2.user_reports.database_session import (
         UserReportDatabaseSession,
     )
-    from policyengine_api.services.v2.user_reports.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
-        V2UserReportService,
-    )
+    from policyengine_api.services.v2.user_reports.services import V2UserReportService
 
     return V2UserReportService(
         UserReportDatabaseSession(get_v2_session_factory()),
