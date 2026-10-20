@@ -227,6 +227,8 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert "test_v2_user_policy_mirroring.py" in workflow
     assert "test_v1_user_policy_dual_write.py" in workflow
     assert "test_v2_user_identity_persistence.py" in workflow
+    assert "test_v2_stage12_comparison_persistence.py" in workflow
+    assert "test_v2_privilege_reconciliation.py" in workflow
     assert "test_v2_household_persistence.py" in workflow
     assert "test_v1_household_dual_write.py" in workflow
     assert "test_mysql_household_spm_dual_write.py" in workflow
@@ -235,10 +237,24 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert "test_runtime_cache_redis.py" in workflow
     assert "uv sync --frozen" in workflow
     assert workflow.count("coverage run --branch") == 1
-    assert workflow.count("coverage run -a --branch") == 6
+    assert workflow.count("coverage run -a --branch") == 7
     assert "coverage xml -i -o coverage-v2.xml" in workflow
     assert "codecov/codecov-action@v5" in workflow
     assert "files: coverage-v2.xml" in workflow
+
+
+def test_v2_integration_check_grants_and_verifies_privileges_before_tests():
+    workflow = _workflow("v2-integration-check.yml")
+
+    schema_upgrade = workflow.index("alembic -c alembic-v2.ini upgrade head")
+    grant = workflow.index(
+        "scripts/reconcile_v2_privileges.py apply --create-missing-roles"
+    )
+    verify = workflow.index("scripts/reconcile_v2_privileges.py verify")
+    first_test = workflow.index("pytest")
+
+    assert "      DEPLOYMENT_ENVIRONMENT: test\n" in workflow
+    assert schema_upgrade < grant < verify < first_test
 
 
 def test_release_migration_fails_closed_before_tests_and_cloud_run_deploy():

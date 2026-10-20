@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+from dataclasses import dataclass
 
 import httpx
 import pytest
@@ -59,6 +60,85 @@ def disposable_v2_database_url() -> str:
     if not settings.disposable_test:
         pytest.fail("integration tests require disposable PostgreSQL mode")
     return settings.url.render_as_string(hide_password=False)
+
+
+@dataclass(frozen=True)
+class ManagedV2Roles:
+    """The managed v2 roles in the disposable database, by what runs as them."""
+
+    deployment_environment: str
+    runtime: str
+    stage12: str
+
+
+@pytest.fixture(scope="session")
+def managed_v2_roles(disposable_v2_database_url: str) -> ManagedV2Roles:
+    """Create the managed v2 roles if missing and grant their declared privileges.
+
+    The cross-database integration job does the same first with
+    ``reconcile_v2_privileges.py apply --create-missing-roles``. Repeating it
+    here grants nothing more there, and lets the tests run locally on their own.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import NullPool
+
+    from policyengine_api.data.v2.privilege_reconciliation import (
+        apply_declared_privileges,
+        create_missing_roles,
+    )
+    from policyengine_api.data.v2.privileges import (
+        RUNTIME_ROLE,
+        declared_privileges,
+        stage12_role,
+    )
+
+    deployment_environment = (
+        os.environ.get("DEPLOYMENT_ENVIRONMENT", "").strip() or "test"
+    )
+    declared = declared_privileges(deployment_environment)
+    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
+    try:
+        with engine.begin() as connection:
+            create_missing_roles(connection, declared)
+            plan, _default_privileges = apply_declared_privileges(connection, declared)
+    finally:
+        engine.dispose()
+    if not plan.can_apply:
+        pytest.fail(
+            "the disposable v2 database lacks declared roles or tables: "
+            f"{plan.missing_roles} {plan.missing_tables}"
+        )
+    return ManagedV2Roles(
+        deployment_environment=deployment_environment,
+        runtime=RUNTIME_ROLE,
+        stage12=stage12_role(deployment_environment),
+    )
+
+
+@pytest.fixture(scope="session")
+def v2_engine_as_role(disposable_v2_database_url: str, managed_v2_roles):
+    """Return a builder of engines whose connections act as one managed role.
+
+    Each new connection runs ``SET ROLE`` and commits it, so every statement on
+    it is checked against that role's privileges, as in staging and production,
+    instead of the disposable database's superuser.
+    """
+    from psycopg import sql
+    from sqlalchemy import create_engine, event
+
+    def build(role: str, **engine_options):
+        set_role = sql.SQL("SET ROLE {}").format(sql.Identifier(role))
+        engine = create_engine(disposable_v2_database_url, **engine_options)
+
+        @event.listens_for(engine, "connect")
+        def act_as_role(dbapi_connection, _connection_record) -> None:
+            with dbapi_connection.cursor() as cursor:
+                cursor.execute(set_role)
+            dbapi_connection.commit()
+
+        return engine
+
+    return build
 
 
 @pytest.fixture

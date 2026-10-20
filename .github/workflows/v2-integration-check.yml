@@ -51,6 +51,8 @@ jobs:
       ALEMBIC_DATABASE_URL: mysql+pymysql://root:policyengine_test@127.0.0.1:3306/policyengine_alembic_test
       V2_MIGRATION_DATABASE_URL: postgresql+psycopg://postgres:policyengine_v2_test@127.0.0.1:5432/policyengine_v2_alembic_test
       V2_ALEMBIC_DISPOSABLE_TEST: "1"
+      # Names the Stage 12 role in the disposable database: policyengine_stage12_test.
+      DEPLOYMENT_ENVIRONMENT: test
       RUNTIME_CACHE_TEST_URL: redis://127.0.0.1:6379/0
     steps:
       - name: Checkout repo
@@ -67,6 +69,10 @@ jobs:
         run: uv run alembic -c alembic-v1.ini upgrade head
       - name: Prepare the disposable v2 schema
         run: uv run alembic -c alembic-v2.ini upgrade head
+      - name: Create the managed v2 roles and grant their declared privileges
+        run: uv run python scripts/reconcile_v2_privileges.py apply --create-missing-roles
+      - name: Verify the managed v2 roles hold their declared privileges
+        run: uv run python scripts/reconcile_v2_privileges.py verify
       - name: Verify the installed PolicyEngine.py catalog interface
         run: uv run coverage run --branch -m pytest -q tests/integration/test_v2_catalog_installed.py
         env:
@@ -77,6 +83,8 @@ jobs:
         run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_policy_persistence.py tests/integration/test_v1_policy_dual_write.py tests/integration/test_mysql_policy_dual_write.py tests/integration/test_v2_user_policy_mirroring.py tests/integration/test_v1_user_policy_dual_write.py
       - name: Test signed-in identity provisioning and user associations
         run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_user_identity_persistence.py
+      - name: Test comparison-run persistence and privilege reconciliation as the managed roles
+        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_stage12_comparison_persistence.py tests/integration/test_v2_privilege_reconciliation.py
       - name: Test v2 household persistence and immediate v1 copying
         run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_household_persistence.py tests/integration/test_v1_household_dual_write.py tests/integration/test_mysql_household_spm_dual_write.py
       - name: Qualify production-scale v2 metadata publication

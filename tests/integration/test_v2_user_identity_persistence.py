@@ -119,15 +119,24 @@ def _disposable_url() -> str:
 
 
 @pytest.fixture
-def sessions() -> Iterator[sessionmaker[Session]]:
-    engine = create_engine(_disposable_url(), pool_size=10, max_overflow=10)
-    factory = sessionmaker(engine, class_=Session, expire_on_commit=False)
+def sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[sessionmaker[Session]]:
+    """Open sessions as the Public API's runtime role; clean up as the superuser.
+
+    Running the services as ``policyengine_v2_runtime`` proves its declared
+    privileges cover them (rule
+    ``api.v2.runtime-privileges-tested-as-runtime-role``).
+    """
+    runtime_engine = v2_engine_as_role(
+        managed_v2_roles.runtime, pool_size=10, max_overflow=10
+    )
+    cleanup_engine = create_engine(_disposable_url())
+    factory = sessionmaker(runtime_engine, class_=Session, expire_on_commit=False)
     issuer = f"https://stage12a-{uuid4().hex[:12]}.example.test/"
     factory.kw["info"] = {"issuer": issuer, "browser_user_ids": []}
     try:
         yield factory
     finally:
-        with engine.begin() as connection:
+        with cleanup_engine.begin() as connection:
             owned = select(UserIdentity.user_id).where(UserIdentity.issuer == issuer)
             user_ids = [
                 *connection.execute(owned).scalars(),
@@ -140,7 +149,8 @@ def sessions() -> Iterator[sessionmaker[Session]]:
                     )
                 )
                 connection.execute(delete(User).where(User.id.in_(user_ids)))
-        engine.dispose()
+        runtime_engine.dispose()
+        cleanup_engine.dispose()
 
 
 def _principal(sessions, subject: str) -> UserPrincipal:
@@ -232,6 +242,13 @@ def _save_policy(services: Services, principal) -> UUID:
         principal=principal,
         association_input=UserPolicyCreateFields(country_id="us", legacy_policy_id=1),
     ).id
+
+
+def test_sessions_act_as_the_runtime_role(sessions, managed_v2_roles) -> None:
+    with sessions() as session:
+        current_role = session.execute(select(func.current_user())).scalar_one()
+
+    assert current_role == managed_v2_roles.runtime
 
 
 def test_concurrent_first_requests_provision_exactly_one_user(sessions) -> None:

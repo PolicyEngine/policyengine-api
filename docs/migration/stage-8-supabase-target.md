@@ -88,9 +88,14 @@ repository records access classes and intended use only:
 | Generated v2 Alembic chain | Dedicated migration credential | Database connect and reviewed schema creation; no platform administration |
 | Future ordinary v2 persistence | Dedicated runtime credential | Ordinary application data access; no schema migration or platform administration |
 
-The migration role owns the default privileges for objects it later creates;
-ordinary table read/write and sequence use are granted to the runtime role.
-Those grants do not create an application object or row.
+Each project also has default privileges: tables the migration role creates
+give the runtime role read/write access, and its sequences give sequence use.
+They don't cover tables created before they were set, which is how the
+production runtime role came to lack `legacy_policy_mappings` (issue #3977).
+`policyengine_api/data/v2/privileges.py` is now the source of truth for every
+managed role's table privileges, and each deploy grants and checks them
+([Table privileges](../engineering/skills/alembic-migrations.md#table-privileges)).
+None of these grants creates an application object or row.
 
 Runtime service accounts must not hold project-wide secret-access rights. Give
 each identity per-secret access only to the runtime values it needs, and grant
