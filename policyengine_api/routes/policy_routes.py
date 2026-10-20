@@ -117,7 +117,7 @@ def _copy_saved_policy_events_to_v2(
     legacy_user_policy_id: int,
     mirror_revision: int | None,
 ) -> None:
-    """Copy a committed saved policy's pending events into v2 without failing the request.
+    """Copy a committed saved policy's pending events to v2, never failing the request.
 
     A failed copy leaves its events pending, and the next change to the same
     saved policy replays them in order.
