@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import threading
 
-_lock = threading.Lock()
-_ready = True
+# Set while the service is warmed up. It starts set, because the default is ready.
+_warmed_up = threading.Event()
+_warmed_up.set()
 
 
 def validate_policy_runtime_configuration() -> None:
@@ -52,23 +53,17 @@ def validate_policy_runtime_configuration() -> None:
 
 def mark_not_ready() -> None:
     """Report not-ready — call before running the startup warmup."""
-    global _ready  # noqa: PLW0603  # process-wide readiness flag, guarded by _lock
-    with _lock:
-        _ready = False
+    _warmed_up.clear()
 
 
 def mark_ready() -> None:
     """Report ready — call once the startup warmup has completed."""
-    global _ready  # noqa: PLW0603  # process-wide readiness flag, guarded by _lock
-    with _lock:
-        _ready = True
+    _warmed_up.set()
 
 
 def is_ready() -> bool:
     """Whether the service is warmed up and can serve a real request quickly."""
-    with _lock:
-        warmed_up = _ready
-    if not warmed_up:
+    if not _warmed_up.is_set():
         return False
     try:
         validate_policy_runtime_configuration()
