@@ -16,14 +16,17 @@ import argparse
 import hashlib
 import hmac
 import json
+import os
 import re
+import sys
 import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as time_of_day
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any, NamedTuple
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
@@ -31,6 +34,9 @@ from zoneinfo import ZoneInfo
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
+    from typing import TextIO
+
+StageResult = TypeVar("StageResult")
 
 REPORTING_TIME_ZONE = ZoneInfo("America/New_York")
 MIDNIGHT = time_of_day(0, 0)
@@ -145,6 +151,13 @@ MAX_RATE_LIMIT_RETRIES = 3
 DEFAULT_RATE_LIMIT_WAIT_SECONDS = 60
 MAX_RATE_LIMIT_WAIT_SECONDS = 300
 RATE_LIMIT_STATUSES = frozenset({HTTPStatus.FORBIDDEN, HTTPStatus.TOO_MANY_REQUESTS})
+REQUIRED_ENVIRONMENT_VARIABLES = (
+    "GOOGLE_OAUTH_ACCESS_TOKEN",
+    "GITHUB_TOKEN",
+    "GITHUB_REPOSITORY",
+    "TELEMETRY_ERROR_FINGERPRINT_KEY",
+)
+REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 HEALTH_CHECK_ROUTES = (
     "/health",
     "/simulation-gateway-check",
@@ -834,6 +847,10 @@ class BigQueryError(ApiError):
     service = "BigQuery"
 
 
+class BigQueryTimeoutError(BigQueryError):
+    """A BigQuery query job didn't complete within the polling limit."""
+
+
 def _error_reason(response: HttpResponse) -> str:
     """Return a Google API error's reason code, else the HTTP reason phrase."""
     try:
@@ -932,7 +949,7 @@ class BigQueryClient:
             response = self._results(job, page_token=None)
         else:
             msg = "BigQuery query did not complete in time"
-            raise BigQueryError(msg)
+            raise BigQueryTimeoutError(msg)
         rows = _convert_rows(response)
         while response.get("pageToken"):
             response = self._results(job, page_token=response["pageToken"])
@@ -1168,6 +1185,13 @@ def _eastern_time(moment: datetime | None) -> str:
     return moment.astimezone(REPORTING_TIME_ZONE).strftime("%Y-%m-%d %H:%M %Z")
 
 
+def _window_text(window: ReportingWindow) -> str:
+    return (
+        f"{_eastern_time(window.start)} to {_eastern_time(window.end)} "
+        f"({window.hours:.0f} hours)"
+    )
+
+
 def _error_rate(measures: EnvironmentMeasures) -> str:
     if measures.error_rate is None:
         return NOT_AVAILABLE
@@ -1244,16 +1268,12 @@ def parse_state(body: str) -> dict[str, Any] | None:
 def issue_section(group: ErrorGroup, window: ReportingWindow, project_id: str) -> str:
     """Return the marked section of the issue body, which each run replaces."""
     related = ", ".join(map(_code, group.related_fingerprints))
-    window_text = (
-        f"{_eastern_time(window.start)} to {_eastern_time(window.end)} "
-        f"({window.hours:.0f} hours)"
-    )
     lines = [
         SECTION_START,
         f"### Error group {_code(group.fingerprint)}",
         "",
         *_group_details(group),
-        f"- Window: {window_text}",
+        f"- Window: {_window_text(window)}",
         "",
         *_measures_table(group),
         "",
@@ -1289,6 +1309,10 @@ class GitHubError(ApiError):
     """A GitHub request failed."""
 
     service = "GitHub"
+
+
+class GitHubLabelError(GitHubError):
+    """GitHub didn't apply the labels the job asked for."""
 
 
 def _rate_limit_wait(response: HttpResponse) -> int | None:
@@ -1598,7 +1622,7 @@ class IssueSynchronizer:
         missing = [label for label in labels if label not in applied]
         if missing and not set(missing) <= self._github.add_labels(number, missing):
             msg = f"GitHub did not apply the labels to issue #{number}"
-            raise GitHubError(msg)
+            raise GitHubLabelError(msg)
         return number
 
     def _reopen_since(self, issue: Mapping[str, Any]) -> datetime | None:
@@ -1692,9 +1716,188 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run one report and return the process exit code."""
-    parse_arguments(argv)
+class ConfigurationError(Exception):
+    """The run's settings are missing or invalid. The text names only settings."""
+
+
+class StageFailedError(Exception):
+    """A stage of the run failed.
+
+    The text holds only the stage, the exception class, and for an API error
+    the HTTP status and reason, so it can be printed in a public log.
+    """
+
+
+def _current_time() -> datetime:
+    return datetime.now(UTC)
+
+
+@dataclass(frozen=True)
+class Runtime:
+    """What a run reads from outside the process, so tests can replace it."""
+
+    environ: Mapping[str, str]
+    stdout: TextIO
+    stderr: TextIO
+    bigquery_transport: Callable[[HttpRequest], HttpResponse] = urllib_transport
+    github_transport: Callable[[HttpRequest], HttpResponse] = urllib_transport
+    now: Callable[[], datetime] = _current_time
+    sleep: Callable[[float], None] = time.sleep
+    clock: Callable[[], float] = time.monotonic
+
+    @classmethod
+    def from_process(cls) -> Runtime:
+        """Use the process environment, standard streams and the network."""
+        return cls(environ=os.environ, stdout=sys.stdout, stderr=sys.stderr)
+
+
+class Settings(NamedTuple):
+    """Settings read from the environment; none of them is ever printed."""
+
+    google_access_token: str
+    github_credential: str
+    repository: str
+    fingerprint_key: bytes
+    summary_path: str | None
+
+
+def read_settings(environ: Mapping[str, str]) -> Settings:
+    """Read and check the environment variables the run needs."""
+    missing = [name for name in REQUIRED_ENVIRONMENT_VARIABLES if not environ.get(name)]
+    if missing:
+        msg = f"missing environment variables: {', '.join(missing)}"
+        raise ConfigurationError(msg)
+    if not REPOSITORY_PATTERN.match(environ["GITHUB_REPOSITORY"]):
+        msg = "GITHUB_REPOSITORY must be owner/name"
+        raise ConfigurationError(msg)
+    try:
+        key = fingerprint_key(environ["TELEMETRY_ERROR_FINGERPRINT_KEY"])
+    except ValueError as error:
+        raise ConfigurationError(str(error)) from None
+    return Settings(
+        google_access_token=environ["GOOGLE_OAUTH_ACCESS_TOKEN"],
+        github_credential=environ["GITHUB_TOKEN"],
+        repository=environ["GITHUB_REPOSITORY"],
+        fingerprint_key=key,
+        summary_path=environ.get("GITHUB_STEP_SUMMARY") or None,
+    )
+
+
+def _report_window(report_date: date | None, now: datetime) -> ReportingWindow:
+    window = reporting_window(report_date or default_report_date(now))
+    if window.end > now:
+        msg = f"{window.start.date().isoformat()} has not ended in US Eastern time"
+        raise ConfigurationError(msg)
+    return window
+
+
+def _failure_description(stage: str, error: Exception) -> str:
+    detail = ""
+    if isinstance(error, ConfigurationError):
+        detail = f" ({error})"
+    elif isinstance(error, ApiError) and error.status is not None:
+        detail = f" (HTTP {error.status} {error.reason})"
+    return f"{stage} failed: {type(error).__name__}{detail}"
+
+
+def _stage(name: str, operation: Callable[[], StageResult]) -> StageResult:
+    """Run one stage, replacing any failure with a description safe to print."""
+    try:
+        return operation()
+    except Exception as error:
+        raise StageFailedError(_failure_description(name, error)) from error
+
+
+def render_summary(
+    result: SyncResult, window: ReportingWindow, *, dry_run: bool
+) -> str:
+    """Return the job summary: fingerprints, counts, issue numbers and actions."""
+    lines = [
+        f"## Telemetry error issues for {window.start.date().isoformat()}",
+        "",
+        f"Window: {_window_text(window)}.",
+    ]
+    if dry_run:
+        lines.append("Dry run: no issues were changed.")
+    if not result.actions:
+        lines += ["", "No error groups had failures in the window."]
+        return "\n".join(lines)
+    totals = Counter(action.action for action in result.actions)
+    described = ", ".join(f"{count} {name}" for name, count in sorted(totals.items()))
+    lines += [
+        "",
+        f"{len(result.actions)} error groups: {described}.",
+        "",
+        "| Fingerprint | Kind | Service | Production | Staging | Issue | Action |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for action in result.actions:
+        issue = MISSING if action.issue_number is None else f"#{action.issue_number}"
+        lines.append(
+            f"| {_code(action.fingerprint)} | {action.kind} | {_code(action.family)} "
+            f"| {action.production_occurrences:,} | {action.staging_occurrences:,} "
+            f"| {issue} | {action.action} |"
+        )
+    return "\n".join(lines)
+
+
+def _append_summary(path: str, summary: str) -> None:
+    with Path(path).open("a", encoding="utf-8") as summary_file:
+        summary_file.write(f"{summary}\n")
+
+
+def _report(arguments: argparse.Namespace, runtime: Runtime) -> str:
+    settings = _stage("configuration", lambda: read_settings(runtime.environ))
+    window = _stage(
+        "configuration", lambda: _report_window(arguments.report_date, runtime.now())
+    )
+    bigquery = BigQueryClient(
+        arguments.project_id, settings.google_access_token, runtime.bigquery_transport
+    )
+    records = _stage(
+        "query error records", lambda: fetch_error_records(bigquery, window)
+    )
+    request_counts = _stage(
+        "query request counts", lambda: fetch_request_counts(bigquery, window)
+    )
+    groups = _stage(
+        "group errors",
+        lambda: build_groups(records, request_counts, window, settings.fingerprint_key),
+    )
+    github = GitHubClient(
+        settings.repository,
+        settings.github_credential,
+        runtime.github_transport,
+        sleep=runtime.sleep,
+        clock=runtime.clock,
+    )
+    result = _stage(
+        "sync issues",
+        lambda: sync_issues(
+            groups, window, arguments.project_id, github, dry_run=arguments.dry_run
+        ),
+    )
+    summary = render_summary(result, window, dry_run=arguments.dry_run)
+    summary_path = settings.summary_path
+    if summary_path:
+        _stage("write job summary", lambda: _append_summary(summary_path, summary))
+    return summary
+
+
+def main(argv: list[str] | None = None, runtime: Runtime | None = None) -> int:
+    """Run one report and return the process exit code.
+
+    A failed stage prints one line naming the stage and exception class, never
+    the exception's message, and returns 1.
+    """
+    arguments = parse_arguments(argv)
+    runtime = runtime or Runtime.from_process()
+    try:
+        summary = _report(arguments, runtime)
+    except StageFailedError as failure:
+        print(failure, file=runtime.stderr)
+        return 1
+    print(summary, file=runtime.stdout)
     return 0
 
 
