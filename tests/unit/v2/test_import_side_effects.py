@@ -118,8 +118,8 @@ from pathlib import Path
 import sys
 from policyengine_api.api import app
 
-response = app.test_client().get('/liveness-check')
-assert response.status_code == 200
+response = app.test_client().get('/an-unknown-path')
+assert response.status_code == 404
 assert "policyengine_api.data.v2.catalog.initialization" not in sys.modules
 assert not Path('policyengine.db').exists()
 assert not list(Path.cwd().glob('*.db'))

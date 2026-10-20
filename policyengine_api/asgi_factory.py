@@ -19,10 +19,7 @@ from starlette.routing import Match, Mount
 
 from policyengine_api.constants import VERSION
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-from policyengine_api.fastapi_routes.health import (
-    build_core_health_router,
-    build_readiness_router,
-)
+from policyengine_api.fastapi_routes.health import build_core_health_router
 from policyengine_api.fastapi_routes.metadata import build_metadata_router
 from policyengine_api.fastapi_routes.v2.errors import (
     V2AuthenticationRequiredError,
@@ -321,8 +318,6 @@ def create_asgi_app(
 
     app.include_router(build_core_health_router(dependencies))
     app.include_router(build_v2_router(dependencies))
-    if route_settings.health is RouteImplementation.FASTAPI_NATIVE:
-        app.include_router(build_readiness_router(dependencies))
     if route_settings.metadata is RouteImplementation.FASTAPI_NATIVE:
         app.include_router(build_metadata_router(dependencies))
 

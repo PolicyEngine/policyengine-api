@@ -49,7 +49,6 @@ from policyengine_api.routes.metadata_routes import metadata_bp
 log_timing("Metadata routes import completed")
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
-from policyengine_api.routes.system_routes import system_bp
 
 log_timing("Initialising API...")
 
@@ -122,8 +121,6 @@ log_timing("Economy routes registered")
 app.register_blueprint(simulation_bp)
 
 app.register_blueprint(report_output_bp)
-app.register_blueprint(system_bp)
-log_timing("System routes registered")
 
 
 log_timing("API initialised.")

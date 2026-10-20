@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-from flask import Flask, Response
+from flask import Flask
 
 from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.data.v1_models import (
@@ -177,14 +177,6 @@ def create_contract_flask_app() -> Flask:
     app.register_blueprint(_load_contract_economy_blueprint())
     app.register_blueprint(simulation_bp)
     app.register_blueprint(report_output_bp)
-
-    @app.route("/liveness-check")
-    def liveness_check():
-        return Response("OK", status=200, mimetype="text/plain")
-
-    @app.route("/readiness-check")
-    def readiness_check():
-        return Response("OK", status=200, mimetype="text/plain")
 
     return app
 
@@ -459,18 +451,6 @@ def test_app_v2_api_v1_route_contract(
     for field_path in contract.stable_response_fields:
         assert_field_path_exists(payload, field_path)
     _assert_no_stage12_private_fields(payload)
-
-
-def test_health_routes_contract(contract_client: ContractClient):
-    liveness = contract_client.open("/liveness-check", method="GET")
-    readiness = contract_client.open("/readiness-check", method="GET")
-
-    assert liveness.status_code == 200
-    assert liveness.data == b"OK"
-    assert "text/plain" in liveness.content_type
-    assert readiness.status_code == 200
-    assert readiness.data == b"OK"
-    assert "text/plain" in readiness.content_type
 
 
 def test_invalid_country_contract(contract_client: ContractClient):

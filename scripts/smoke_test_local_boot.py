@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Boot smoke test for the local PolicyEngine API app.
 
-Starts the real Flask app in debug/local-db mode, waits for it to come up,
-hits health endpoints, then shuts it down. If startup fails, prints captured
-stdout/stderr to make the failure actionable.
+Starts the real ASGI app (the FastAPI routes with the mounted Flask app) in
+debug mode, waits until ``/health`` reports ready, then shuts it down. Ready
+needs a valid runtime configuration, as on Cloud Run. If startup fails,
+prints captured stdout/stderr to make the failure actionable.
 """
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-HEALTH_PATHS = ("/liveness-check", "/readiness-check")
+HEALTH_PATH = "/health"
+READY_BODY = '{"status":"healthy"}'
 BOOT_TIMEOUT_SECONDS = 600
 HTTP_TIMEOUT_SECONDS = 2
 
@@ -59,7 +61,7 @@ def print_section(title: str, body: str) -> None:
 
 
 def main() -> int:
-    """Boot the Flask app on a free port and return 1 unless both health checks pass.
+    """Boot the ASGI app on a free port and return 1 unless /health reports ready.
 
     On failure print the app's captured stdout and stderr; always stop the app.
     """
@@ -107,12 +109,10 @@ def main() -> int:
             [
                 sys.executable,
                 "-m",
-                "flask",
-                "--app",
-                "policyengine_api.api",
-                "run",
-                "--without-threads",
-                "--no-reload",
+                "uvicorn",
+                "policyengine_api.asgi:app",
+                "--host",
+                "127.0.0.1",
                 "--port",
                 str(port),
             ],
@@ -126,18 +126,22 @@ def main() -> int:
     try:
         deadline = time.time() + BOOT_TIMEOUT_SECONDS
         ready = False
+        last_health = "no response"
         while time.time() < deadline:
             if process.poll() is not None:
                 break
 
             try:
-                status, body = fetch(f"http://127.0.0.1:{port}/liveness-check")
-                if status == 200 and body.strip() == "OK":
+                status, body = fetch(f"http://127.0.0.1:{port}{HEALTH_PATH}")
+                last_health = f"{status} {body.strip()}"
+                if status == 200 and body.strip() == READY_BODY:
                     ready = True
                     break
+            except urllib.error.HTTPError as error:
+                # 503 means the app is up but not ready yet.
+                last_health = f"{error.code}"
             except (urllib.error.URLError, TimeoutError, ConnectionError):
-                time.sleep(0.5)
-                continue
+                pass
 
             time.sleep(0.5)
 
@@ -147,21 +151,15 @@ def main() -> int:
             ) if process.poll() is not None else process.terminate()
             if process.poll() is None:
                 process.wait(timeout=5)
-            _report("\nBoot smoke test failed: app did not become ready.")
+            _report(
+                "\nBoot smoke test failed: app did not report ready "
+                f"(last {HEALTH_PATH} result: {last_health})."
+            )
             print_section("stdout", read_text(stdout_path))
             print_section("stderr", read_text(stderr_path))
             return 1
 
-        _report("\nBoot smoke test reached a live app. Probing health endpoints:")
-        for path in HEALTH_PATHS:
-            status, body = fetch(f"http://127.0.0.1:{port}{path}")
-            _report(f"{path}: {status} {body.strip()}")
-            if status != 200 or body.strip() != "OK":
-                _report("\nHealth endpoint probe failed.")
-                print_section("stdout", read_text(stdout_path))
-                print_section("stderr", read_text(stderr_path))
-                return 1
-
+        _report(f"\n{HEALTH_PATH}: {last_health}")
         _report("\nBoot smoke test passed.")
         return 0
     finally:

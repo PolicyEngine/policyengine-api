@@ -58,15 +58,13 @@ def create_test_wsgi_app() -> Flask:
         )
         return response
 
-    @app.get("/readiness-check")
-    def readiness_check():
-        return Response("OK", status=200, mimetype="text/plain")
-
-    @app.get("/liveness-check")
-    def liveness_check():
-        return Response("OK", status=200, mimetype="text/plain")
-
     return app
+
+
+@pytest.fixture(autouse=True)
+def default_readiness_probe_reports_ready(monkeypatch):
+    """Report ready from the default probe, which needs deployed configuration."""
+    monkeypatch.setattr("policyengine_api.readiness.is_ready", lambda: True)
 
 
 class _HealthySimulationGateway:
@@ -112,57 +110,49 @@ def test_asgi_app_rejects_an_invalid_stage6_route_selector(monkeypatch):
         create_asgi_app(create_test_wsgi_app())
 
 
-def test_native_liveness_and_ready_readiness_preserve_legacy_contract():
+def test_health_returns_503_until_the_readiness_probe_passes():
     client = TestClient(
         create_asgi_app(
             create_test_wsgi_app(),
             route_settings=_stage6_settings(health=RouteImplementation.FASTAPI_NATIVE),
+            dependencies=_stage6_dependencies(ready=False),
+        )
+    )
+
+    response = client.get("/health")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "not_ready"}
+    assert response.headers["content-type"].startswith("application/json")
+
+
+def test_default_health_probe_reports_warmup_and_configuration_readiness(
+    monkeypatch,
+):
+    monkeypatch.setattr("policyengine_api.readiness.is_ready", lambda: False)
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    assert client.get("/health").status_code == 503
+
+
+@pytest.mark.parametrize(
+    "health_implementation",
+    [
+        RouteImplementation.FLASK_FALLBACK,
+        RouteImplementation.FASTAPI_NATIVE,
+    ],
+)
+def test_liveness_and_readiness_checks_are_removed(health_implementation):
+    client = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            route_settings=_stage6_settings(health=health_implementation),
             dependencies=_stage6_dependencies(ready=True),
         )
     )
 
-    liveness = client.get("/liveness-check")
-    readiness = client.get("/readiness-check")
-
-    assert liveness.status_code == 200
-    assert liveness.content == b"OK"
-    assert liveness.headers["content-type"].startswith("text/plain")
-    assert readiness.status_code == 200
-    assert readiness.content == b"OK"
-    assert readiness.headers["content-type"].startswith("text/plain")
-
-
-def test_native_readiness_is_gated_while_liveness_remains_healthy():
-    client = TestClient(
-        create_asgi_app(
-            create_test_wsgi_app(),
-            route_settings=_stage6_settings(health=RouteImplementation.FASTAPI_NATIVE),
-            dependencies=_stage6_dependencies(ready=False),
-        )
-    )
-
-    liveness = client.get("/liveness-check")
-    readiness = client.get("/readiness-check")
-
-    assert liveness.status_code == 200
-    assert liveness.content == b"OK"
-    assert readiness.status_code == 503
-    assert readiness.content == b"NOT READY"
-
-
-def test_health_fallback_ignores_native_readiness_dependency():
-    client = TestClient(
-        create_asgi_app(
-            create_test_wsgi_app(),
-            route_settings=_stage6_settings(),
-            dependencies=_stage6_dependencies(ready=False),
-        )
-    )
-
-    assert client.get("/liveness-check").content == b"OK"
-    readiness = client.get("/readiness-check")
-    assert readiness.status_code == 200
-    assert readiness.content == b"OK"
+    assert client.get("/liveness-check").status_code == 404
+    assert client.get("/readiness-check").status_code == 404
 
 
 @pytest.mark.parametrize(
@@ -210,7 +200,7 @@ def test_preexisting_core_health_route_remains_native(health_implementation):
     assert response.json() == {"status": "healthy"}
 
 
-def test_native_readiness_uses_shared_asgi_middleware():
+def test_health_uses_shared_asgi_middleware():
     client = TestClient(
         create_asgi_app(
             create_test_wsgi_app(),
@@ -220,7 +210,7 @@ def test_native_readiness_uses_shared_asgi_middleware():
     )
 
     response = client.get(
-        "/readiness-check",
+        "/health",
         headers={
             REQUEST_ID_HEADER: "stage6-request",
             "Origin": "https://app.policyengine.org",
@@ -490,7 +480,7 @@ def test_lifespan_closes_runtime_resources_on_shutdown():
             shutdown_callback=close_runtime_resources,
         )
     ) as client:
-        assert client.get("/liveness-check").status_code == 200
+        assert client.get("/health").status_code == 200
         close_runtime_resources.assert_not_called()
     close_runtime_resources.assert_called_once_with()
 
@@ -742,7 +732,7 @@ def test_cors_headers_are_present_on_unhandled_native_errors():
         raise_server_exceptions=False,
     )
     response = client.get(
-        "/readiness-check",
+        "/health",
         headers={
             "Origin": "https://app.policyengine.org",
             REQUEST_ID_HEADER: "failed-request-id",
@@ -791,17 +781,3 @@ def test_public_simulation_gateway_health_probe_reports_failure():
         response = client.get("/simulation-gateway-check")
 
     assert response.status_code == 503
-
-
-def test_existing_health_paths_fall_back_to_flask():
-    client = TestClient(create_asgi_app(create_test_wsgi_app()))
-
-    readiness = client.get("/readiness-check")
-    liveness = client.get("/liveness-check")
-
-    assert readiness.status_code == 200
-    assert readiness.content == b"OK"
-    assert readiness.headers["content-type"].startswith("text/plain")
-    assert liveness.status_code == 200
-    assert liveness.content == b"OK"
-    assert liveness.headers["content-type"].startswith("text/plain")

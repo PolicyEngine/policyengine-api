@@ -131,9 +131,11 @@ def get_route_impl(route_group: str) -> RouteImplementation:
 class RouteImplementationSettings:
     """Startup route selections for the read groups migrated in Stage 6.
 
-    ``specification`` no longer selects a route: ``GET /specification`` is
-    removed. It is still read because the deployment pipeline requires and
-    verifies ``ROUTE_IMPL_SPECIFICATION``; both go when the Flask fallback is
+    ``health`` and ``specification`` no longer select a route: the liveness
+    and readiness checks and ``GET /specification`` are removed, and
+    ``/health`` is always native. They are still read because the deployment
+    pipeline requires and verifies ``ROUTE_IMPL_HEALTH`` and
+    ``ROUTE_IMPL_SPECIFICATION``; all of them go when the Flask fallback is
     removed.
     """
 
