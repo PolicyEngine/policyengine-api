@@ -187,8 +187,13 @@ The disposable and route-level tests verify that:
 
 ## Application Rollback
 
-Set `DB_WRITE_POLICY=cloud_sql` or route traffic to the prior application
-revision. This immediately removes the Supabase requirement from v1 mutations.
+Set `DB_WRITE_POLICY=cloud_sql`, or route traffic to a prior application
+revision whose environment selects it, to stop copying. v1 mutations then open
+no Supabase connection and record no saved-policy events. A failed copy does
+not fail a v1 mutation under `dual_write`, so copy failures on their own are
+handled from the `outcome=error` records, not by rolling back. Application
+revisions built before that change return HTTP 503 for a failed copy; do not
+route traffic to one whose environment selects `DB_WRITE_POLICY=dual_write`.
 Keep `DB_READ_POLICY=cloud_sql`. Do not delete policies, associations, or
 mappings already committed in Supabase; they remain valid for later retries.
 

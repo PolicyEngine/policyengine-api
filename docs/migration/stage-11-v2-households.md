@@ -240,7 +240,12 @@ DB_WRITE_HOUSEHOLD=cloud_sql
 ```
 
 Confirm that a new v1 household create succeeds without Supabase and creates no
-mirror event. Leave `DB_READ_HOUSEHOLD=cloud_sql` and
+mirror event. A failed copy does not fail a create under `dual_write`, so copy
+failures on their own are handled from the `outcome=error` records and the
+exact-event workflow, not by rolling back. Application revisions built before
+that change return HTTP 503 for a failed copy; do not route traffic to one
+whose environment selects `DB_WRITE_HOUSEHOLD=dual_write`. Leave
+`DB_READ_HOUSEHOLD=cloud_sql` and
 `ROUTE_IMPL_HOUSEHOLD=flask_fallback`. Do not delete previously committed v2
 households, mappings, associations, or source events. Application rollback
 does not automatically downgrade either schema; any schema downgrade requires

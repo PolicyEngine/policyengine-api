@@ -126,7 +126,11 @@ def mirror_policy_after_commit(
     *,
     mirror_factory: Callable[[], LegacyPolicyMirror] | None = None,
 ) -> LegacyPolicyPersistenceResult:
-    """Require the Supabase policy and mapping transaction before v1 success."""
+    """Copy a committed v1 policy and its mapping into v2 in one Supabase transaction.
+
+    Log the outcome. On failure, raise PolicyMirrorUnavailableError after
+    logging it; the v1 route still returns its normal response.
+    """
     started_at = time.perf_counter()
     try:
         result = (mirror_factory or _default_mirror_factory)().mirror_legacy_policy(
