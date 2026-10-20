@@ -29,7 +29,7 @@ cloud_run_set_defaults() {
   CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-6}"
   CLOUD_RUN_WEB_CONCURRENCY="${CLOUD_RUN_WEB_CONCURRENCY:-2}"
   CLOUD_RUN_PORT="${CLOUD_RUN_PORT:-8080}"
-  # Readiness gate: /health stays 503 until the worker has built the
+  # Startup readiness: /health stays 503 until the worker has built the
   # tax-benefit systems AND run the startup warmup calculate, and while the
   # runtime configuration is invalid, so boot-to-ready is
   # now the ~371s p90 import plus the warmup. Window sized to the platform maximum
