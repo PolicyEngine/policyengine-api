@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import importlib.util
 import re
+import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -28,6 +29,8 @@ def _load_script() -> ModuleType:
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    # Dataclasses resolve their annotations through sys.modules.
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -146,14 +149,14 @@ def test_cli_rejects_missing_project_or_invalid_date_with_exit_code_2(
 
 STANDARD_STACK = """\
 Traceback (most recent call last):
-  File "/opt/venv/lib/python3.12/site-packages/flask/app.py", line 880, in full_dispatch_request
+  File "/venv/lib/python3.12/site-packages/flask/app.py", line 880, in dispatch_request
     rv = self.dispatch_request()
          ^^^^^^^^^^^^^^^^^^^^^^^
   File "/app/policyengine_api/routes/report_routes.py", line 41, in create_report
     return service.create(payload)
   File "/app/policyengine_api/services/report_service.py", line 88, in create
     session.flush()
-  File "/opt/venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 4331, in flush
+  File "/venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 43, in flush
     self._flush(objects)
 sqlalchemy.orm.exc.StaleDataError: SENTINEL message about 'reports'
 """
@@ -238,7 +241,7 @@ def test_frames_pattern_extracts_frame_headers_without_source_or_message(
     frames = _extract_frames(sync_script, STANDARD_STACK)
 
     assert [sync_script.frame_key(frame) for frame in frames] == [
-        "flask/app.py:full_dispatch_request",
+        "flask/app.py:dispatch_request",
         "policyengine_api/routes/report_routes.py:create_report",
         "policyengine_api/services/report_service.py:create",
         "sqlalchemy/orm/session.py:flush",
@@ -276,7 +279,7 @@ def test_frames_pattern_skips_a_frame_header_cut_off_by_truncation(
     frames = _extract_frames(sync_script, STANDARD_STACK[:cut_at])
 
     assert [sync_script.frame_key(frame) for frame in frames] == [
-        "flask/app.py:full_dispatch_request",
+        "flask/app.py:dispatch_request",
     ]
 
 
@@ -324,7 +327,7 @@ def test_frames_choose_the_three_innermost_application_frames(
         '/app/policyengine_api/services/c.py", line 3, in inner',
         '/opt/venv/lib/python3.12/site-packages/sqlalchemy/orm/d.py", line 4, in lib',
         '/app/policyengine_api/services/e.py", line 5, in callback',
-        '/opt/venv/lib/python3.12/site-packages/sqlalchemy/orm/f.py", line 6, in raises',
+        '/venv/lib/python3.12/site-packages/sqlalchemy/orm/f.py", line 6, in raises',
     ]
 
     assert sync_script.fingerprint_frames(frames) == (
@@ -463,3 +466,304 @@ def test_public_status_allows_only_http_status_codes(
     sync_script: ModuleType, value: object, expected: int | None
 ) -> None:
     assert sync_script.public_status(value) == expected
+
+
+# Primary record per failure and fingerprints
+
+FINGERPRINT_KEY = b"k" * 32
+APPLICATION_FRAMES = (
+    '/app/policyengine_api/routes/report_routes.py", line 41, in create_report',
+    '/app/policyengine_api/services/report_service.py", line 88, in create',
+    '/venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 43, in flush',
+)
+
+
+def _record(sync_script: ModuleType, **overrides: object) -> object:
+    fields: dict[str, object] = {
+        "timestamp": datetime(2026, 10, 20, 16, 0, tzinfo=UTC),
+        "service_name": "policyengine-api",
+        "environment_name": "production",
+        "event_name": None,
+        "error_type": None,
+        "error_handled": None,
+        "frames": (),
+        "stack_truncated": False,
+        "message_template": None,
+        "attribute_error_type": None,
+        "failure_category": None,
+        "route": "/<country_id>/report",
+        "status_code": None,
+        "operation_name": None,
+        "request_key": "request-1",
+        "observability_key": None,
+        "trace_key": "trace-1",
+    }
+    fields.update(overrides)
+    return sync_script.ErrorRecord(**fields)
+
+
+def _exception_record(sync_script: ModuleType, **overrides: object) -> object:
+    fields: dict[str, object] = {
+        "event_name": "exception.recorded",
+        "error_type": "StaleDataError",
+        "error_handled": False,
+        "frames": APPLICATION_FRAMES,
+        "status_code": 500,
+    }
+    fields.update(overrides)
+    return _record(sync_script, **fields)
+
+
+def _message_record(sync_script: ModuleType, **overrides: object) -> object:
+    fields: dict[str, object] = {"message_template": "failed to save"}
+    fields.update(overrides)
+    return _record(sync_script, **fields)
+
+
+def _failed_request_record(sync_script: ModuleType, **overrides: object) -> object:
+    fields: dict[str, object] = {"event_name": "request.completed", "status_code": 500}
+    fields.update(overrides)
+    return _record(sync_script, **fields)
+
+
+def test_primary_prefers_the_exception_record_of_a_failed_request(
+    sync_script: ModuleType,
+) -> None:
+    exception = _exception_record(sync_script)
+    records = [
+        _message_record(sync_script),
+        exception,
+        _failed_request_record(sync_script),
+    ]
+
+    assert sync_script.primary_records(records) == [exception]
+
+
+def test_primary_falls_back_to_the_message_record(sync_script: ModuleType) -> None:
+    message = _message_record(sync_script)
+
+    primary = sync_script.primary_records(
+        [_failed_request_record(sync_script), message]
+    )
+
+    assert primary == [message]
+    assert primary[0].kind == "message"
+
+
+def test_primary_falls_back_to_the_failed_request_record(
+    sync_script: ModuleType,
+) -> None:
+    failed_request = _failed_request_record(sync_script)
+
+    primary = sync_script.primary_records([failed_request])
+
+    assert primary == [failed_request]
+    assert primary[0].kind == "failed_request"
+
+
+def test_primary_prefers_an_unhandled_exception_over_a_handled_one(
+    sync_script: ModuleType,
+) -> None:
+    handled = _exception_record(sync_script, error_type="KeyError", error_handled=True)
+    unhandled = _exception_record(
+        sync_script,
+        timestamp=datetime(2026, 10, 20, 16, 0, 1, tzinfo=UTC),
+        error_type="LookupError",
+    )
+
+    assert sync_script.primary_records([handled, unhandled]) == [unhandled]
+
+
+def test_primary_treats_a_request_completed_record_with_error_fields_as_an_exception(
+    sync_script: ModuleType,
+) -> None:
+    completed = _failed_request_record(
+        sync_script, error_type="StaleDataError", frames=APPLICATION_FRAMES
+    )
+
+    assert completed.kind == "exception"
+    assert sync_script.primary_records([completed]) == [completed]
+
+
+def test_primary_correlates_by_trace_when_the_request_id_is_missing(
+    sync_script: ModuleType,
+) -> None:
+    exception = _exception_record(sync_script, request_key=None)
+    message = _message_record(sync_script, request_key=None)
+
+    assert sync_script.primary_records([message, exception]) == [exception]
+
+
+def test_primary_records_without_request_or_trace_stand_alone(
+    sync_script: ModuleType,
+) -> None:
+    first = _message_record(sync_script, request_key=None, trace_key=None)
+    second = _message_record(
+        sync_script,
+        request_key=None,
+        trace_key=None,
+        timestamp=datetime(2026, 10, 20, 17, 0, tzinfo=UTC),
+    )
+
+    assert sync_script.primary_records([second, first]) == [first, second]
+
+
+def test_primary_keeps_failures_of_different_services_separate(
+    sync_script: ModuleType,
+) -> None:
+    api_failure = _failed_request_record(sync_script)
+    simulation_failure = _exception_record(
+        sync_script,
+        service_name="policyengine-simulation-entry",
+        frames=(),
+    )
+
+    primary = sync_script.primary_records([api_failure, simulation_failure])
+
+    assert primary == [api_failure, simulation_failure]
+
+
+def test_fingerprint_exception_ignores_lines_path_prefixes_and_routes(
+    sync_script: ModuleType,
+) -> None:
+    moved_frames = tuple(
+        frame.replace("/app/", "/srv/checkout/").replace("line 4", "line 9")
+        for frame in APPLICATION_FRAMES
+    )
+    first = _exception_record(sync_script)
+    second = _exception_record(
+        sync_script,
+        frames=moved_frames,
+        route="/<country_id>/economy/<int:policy_id>/over/<int:baseline_policy_id>",
+    )
+
+    assert sync_script.fingerprint(first, FINGERPRINT_KEY) == sync_script.fingerprint(
+        second, FINGERPRINT_KEY
+    )
+
+
+def test_fingerprint_exception_merges_simulation_service_versions(
+    sync_script: ModuleType,
+) -> None:
+    first = _exception_record(
+        sync_script, service_name="policyengine-simulation-py1-2-3"
+    )
+    second = _exception_record(
+        sync_script, service_name="policyengine-simulation-py1-2-4"
+    )
+
+    assert sync_script.fingerprint(first, FINGERPRINT_KEY) == sync_script.fingerprint(
+        second, FINGERPRINT_KEY
+    )
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"error_type": "ValueError"},
+        {"frames": APPLICATION_FRAMES[:1]},
+        {"service_name": "policyengine-simulation-entry"},
+    ],
+)
+def test_fingerprint_exception_differs_by_type_frames_and_service(
+    sync_script: ModuleType, change: dict[str, object]
+) -> None:
+    original = _exception_record(sync_script)
+    changed = _exception_record(sync_script, **change)
+
+    assert sync_script.fingerprint(
+        original, FINGERPRINT_KEY
+    ) != sync_script.fingerprint(changed, FINGERPRINT_KEY)
+
+
+def test_fingerprint_depends_on_the_key(sync_script: ModuleType) -> None:
+    record = _exception_record(sync_script)
+
+    assert sync_script.fingerprint(record, FINGERPRINT_KEY) != sync_script.fingerprint(
+        record, b"j" * 32
+    )
+
+
+def test_fingerprint_is_16_hex_characters(sync_script: ModuleType) -> None:
+    value = sync_script.fingerprint(_exception_record(sync_script), FINGERPRINT_KEY)
+
+    assert re.fullmatch(r"[0-9a-f]{16}", value)
+
+
+def test_fingerprint_key_parts_for_each_kind(sync_script: ModuleType) -> None:
+    exception = _exception_record(sync_script)
+    message = _message_record(
+        sync_script,
+        attribute_error_type="TimeoutError",
+        failure_category="upstream",
+    )
+    operation_message = _message_record(
+        sync_script, route=None, operation_name="simulation.dispatch"
+    )
+    failed_request = _failed_request_record(sync_script, status_code=502)
+
+    assert sync_script.fingerprint_parts(exception) == (
+        "exception",
+        "policyengine-api",
+        "StaleDataError",
+        "policyengine_api/routes/report_routes.py:create_report",
+        "policyengine_api/services/report_service.py:create",
+    )
+    assert sync_script.fingerprint_parts(message) == (
+        "message",
+        "policyengine-api",
+        "/<country_id>/report",
+        "failed to save",
+        "TimeoutError",
+        "upstream",
+    )
+    assert sync_script.fingerprint_parts(operation_message)[2] == "simulation.dispatch"
+    assert sync_script.fingerprint_parts(failed_request) == (
+        "failed_request",
+        "policyengine-api",
+        "/<country_id>/report",
+        "502",
+    )
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"message_template": "failed to load"},
+        {"route": "/<country_id>/calculate"},
+        {"attribute_error_type": "ValueError"},
+        {"failure_category": "validation"},
+    ],
+)
+def test_fingerprint_message_differs_by_each_key_part(
+    sync_script: ModuleType, change: dict[str, object]
+) -> None:
+    original = _message_record(sync_script)
+    changed = _message_record(sync_script, **change)
+
+    assert sync_script.fingerprint(
+        original, FINGERPRINT_KEY
+    ) != sync_script.fingerprint(changed, FINGERPRINT_KEY)
+
+
+def test_fingerprint_failed_request_differs_by_status(sync_script: ModuleType) -> None:
+    first = _failed_request_record(sync_script, status_code=500)
+    second = _failed_request_record(sync_script, status_code=504)
+
+    assert sync_script.fingerprint(first, FINGERPRINT_KEY) != sync_script.fingerprint(
+        second, FINGERPRINT_KEY
+    )
+
+
+@pytest.mark.parametrize("value", ["", "too-short", "x" * 31])
+def test_fingerprint_key_rejects_a_secret_shorter_than_32_characters(
+    sync_script: ModuleType, value: str
+) -> None:
+    with pytest.raises(ValueError, match="at least 32 characters"):
+        sync_script.fingerprint_key(value)
+
+
+def test_fingerprint_key_accepts_a_64_character_hex_secret(
+    sync_script: ModuleType,
+) -> None:
+    assert sync_script.fingerprint_key("ab" * 32) == ("ab" * 32).encode()
