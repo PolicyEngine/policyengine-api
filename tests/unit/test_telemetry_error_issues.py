@@ -199,8 +199,36 @@ EXCEPTION_GROUP_STACK = """\
 
 
 def _extract_frames(sync_script: ModuleType, stack: str) -> list[str]:
-    """Apply the pattern the way BigQuery's REGEXP_EXTRACT_ALL does."""
-    return re.findall(sync_script.FRAME_PATTERN, stack)
+    """Extract frames as the query does: REGEXP_REPLACE, then REGEXP_EXTRACT_ALL."""
+    first_traceback = re.sub(sync_script.CHAINED_EXCEPTION_PATTERN, "", stack)
+    return re.findall(sync_script.FRAME_PATTERN, first_traceback)
+
+
+def _chained_stack(recursion_depth: int) -> str:
+    """Return a chained traceback whose cause recursed ``recursion_depth`` times."""
+    library_frame = (
+        '  File "/venv/lib/python3.12/site-packages/policyengine_core/simulation.py", '
+        "line 500, in calculate\n    return self._calculate(variable_name, period)\n"
+    )
+    cause = (
+        "Traceback (most recent call last):\n"
+        '  File "/app/policyengine_api/services/household.py", line 40, in calculate\n'
+        "    simulation.calculate(name)\n"
+        f"{library_frame * recursion_depth}"
+        "ValueError: SENTINEL cause\n"
+    )
+    final = (
+        "Traceback (most recent call last):\n"
+        '  File "/app/policyengine_api/routes/household_routes.py", line 12, in get\n'
+        "    return service.calculate()\n"
+        '  File "/app/policyengine_api/services/household.py", line 44, in calculate\n'
+        "    raise CalculationError(name) from error\n"
+        "CalculationError: SENTINEL final\n"
+    )
+    separator = (
+        "\nThe above exception was the direct cause of the following exception:\n\n"
+    )
+    return f"{cause}{separator}{final}"
 
 
 @pytest.mark.parametrize(
@@ -256,15 +284,25 @@ def test_frames_pattern_extracts_frame_headers_without_source_or_message(
     assert not any("SENTINEL" in frame or "\n" in frame for frame in frames)
 
 
-def test_frames_pattern_reads_every_block_of_a_chained_traceback(
+def test_frames_chained_traceback_contributes_only_its_first_traceback(
     sync_script: ModuleType,
 ) -> None:
     frames = _extract_frames(sync_script, CHAINED_STACK)
 
     assert [sync_script.frame_key(frame) for frame in frames] == [
         "policyengine_api/services/cache.py:read",
-        "policyengine_api/routes/policy_routes.py:get_policy",
-        "policyengine_api/services/policy_service.py:get",
+    ]
+
+
+def test_frames_explicitly_chained_traceback_contributes_only_its_cause(
+    sync_script: ModuleType,
+) -> None:
+    frames = _extract_frames(sync_script, _chained_stack(recursion_depth=2))
+
+    assert [sync_script.frame_key(frame) for frame in frames] == [
+        "policyengine_api/services/household.py:calculate",
+        "policyengine_core/simulation.py:calculate",
+        "policyengine_core/simulation.py:calculate",
     ]
 
 
@@ -681,6 +719,32 @@ def test_fingerprint_exception_differs_by_type_frames_and_service(
     assert sync_script.fingerprint(
         original, FINGERPRINT_KEY
     ) != sync_script.fingerprint(changed, FINGERPRINT_KEY)
+
+
+def test_fingerprint_is_the_same_when_truncation_drops_the_final_traceback(
+    sync_script: ModuleType,
+) -> None:
+    # The logging library keeps only the first 16,384 characters of a stack.
+    short_stack = _chained_stack(recursion_depth=20)
+    long_stack = _chained_stack(recursion_depth=120)[:16_384]
+    assert "CalculationError" in short_stack
+    assert "CalculationError" not in long_stack
+
+    short = _exception_record(
+        sync_script,
+        error_type="CalculationError",
+        frames=tuple(_extract_frames(sync_script, short_stack)),
+    )
+    long = _exception_record(
+        sync_script,
+        error_type="CalculationError",
+        frames=tuple(_extract_frames(sync_script, long_stack)),
+        stack_truncated=True,
+    )
+
+    assert sync_script.fingerprint(short, FINGERPRINT_KEY) == sync_script.fingerprint(
+        long, FINGERPRINT_KEY
+    )
 
 
 def test_fingerprint_depends_on_the_key(sync_script: ModuleType) -> None:
@@ -1314,6 +1378,9 @@ def test_bigquery_error_query_request_limits_cost_and_names_its_parameters(
     assert parameters["frame_pattern"]["parameterValue"]["value"] == (
         sync_script.FRAME_PATTERN
     )
+    assert parameters["chained_exception_pattern"]["parameterValue"]["value"] == (
+        sync_script.CHAINED_EXCEPTION_PATTERN
+    )
     assert [
         item["value"]
         for item in parameters["excluded_routes"]["parameterValue"]["arrayValues"]
@@ -1347,7 +1414,14 @@ def test_bigquery_error_query_reads_stacks_and_messages_only_through_expressions
     stack = "JSON_VALUE(json_payload, '$.\"error.stack\"')"
 
     assert sql.count("error.stack") == 2
-    assert f"REGEXP_EXTRACT_ALL({stack}, @frame_pattern)" in sql
+    assert (
+        "  REGEXP_EXTRACT_ALL(\n"
+        "    REGEXP_REPLACE(\n"
+        f"      {stack}, @chained_exception_pattern, ''\n"
+        "    ),\n"
+        "    @frame_pattern\n"
+        "  ) AS frames"
+    ) in sql
     assert f"LENGTH({stack}) >= 16384" in sql
     assert sql.count("$.message") == 1
     assert "REGEXP_REPLACE(JSON_VALUE(json_payload, '$.message')" in sql

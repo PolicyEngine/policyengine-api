@@ -150,6 +150,10 @@ which lasts 23 or 25 hours on the days the clocks change. The script it runs,
 3. Groups failures by a 16-character HMAC-SHA256 fingerprint of the service
    family and either the exception type and innermost application stack
    frames, the route and message template, or the route and HTTP status.
+   Frames come from the first traceback of the stack, which for a chained
+   exception is its first cause. The logging library keeps only the first
+   16,384 characters of a stack, so a long cause can drop the final
+   traceback, but the first one is always kept.
 4. Creates or updates one issue per group in this repository, labelled
    `telemetry-error` and `service: <service family>`. A group opens an issue
    only after 3 production failures in at least 2 requests in one day, and at
