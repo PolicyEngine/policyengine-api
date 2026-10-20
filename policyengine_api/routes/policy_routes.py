@@ -59,7 +59,7 @@ def _log_uncopied_v1_write(
     *,
     metric_name: str,
     legacy_id_field: str,
-    legacy_id: object,
+    legacy_id: int,
     country_id: str,
     failure_category: str,
 ) -> None:
@@ -79,7 +79,7 @@ def _log_uncopied_v1_write(
                 "attempted_write_sources": ["cloud_sql", "supabase"],
                 "actual_write_sources": ["cloud_sql"],
                 "country_id": country_id,
-                legacy_id_field: _safe_legacy_user_policy_id(legacy_id),
+                legacy_id_field: _safe_legacy_integer_id(legacy_id),
                 "request_id": current_request_id(),
                 "outcome": "error",
                 "failure_category": failure_category,
@@ -152,7 +152,8 @@ def _copy_saved_policy_events_to_v2(
         )
 
 
-def _safe_legacy_user_policy_id(value: object) -> int | None:
+def _safe_legacy_integer_id(value: object) -> int | None:
+    """Return a v1 policy or saved-policy ID for a log record, or None if invalid."""
     if (
         isinstance(value, int)
         and not isinstance(value, bool)
@@ -185,9 +186,7 @@ def _user_policy_persistence_failure(
                 "database_source": "cloud_sql",
                 "configured_write_source": configured_write_source,
                 "country_id": country_id,
-                "legacy_user_policy_id": _safe_legacy_user_policy_id(
-                    legacy_user_policy_id
-                ),
+                "legacy_user_policy_id": _safe_legacy_integer_id(legacy_user_policy_id),
                 "request_id": current_request_id(),
                 "outcome": "error",
                 "failure_category": error.category.value,
