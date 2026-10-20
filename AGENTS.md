@@ -18,8 +18,8 @@ cutover plans, generated migration docs, or migration guard scripts, read
 When adding, moving, or reviewing tests, read
 `docs/engineering/skills/testing.md`.
 
-When changing SQLAlchemy models, Alembic configuration, database schemas, or
-migration revisions, read
+When changing SQLAlchemy models, Alembic configuration, database schemas,
+migration revisions, or code that connects to a database, read
 `docs/engineering/skills/alembic-migrations.md`.
 
 When adding or moving API v2 route, service, or database-access modules, read
@@ -83,7 +83,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Runtime persistence and route boundaries
 
-- Checked: `api.data.runtime-sql-confined`, `api.legacy.removed-layers-stay-removed`, `api.routes.flask-blueprints-own-urls`, `api.routes.no-domain-logic-in-http`, `api.routes.no-inline-json-errors`, `api.services.no-direct-queries`, `api.services.session-ownership`
+- Checked: `api.data.runtime-sql-confined`, `api.data.sqlalchemy-and-alembic-only`, `api.legacy.removed-layers-stay-removed`, `api.routes.flask-blueprints-own-urls`, `api.routes.no-domain-logic-in-http`, `api.routes.no-inline-json-errors`, `api.services.no-direct-queries`, `api.services.session-ownership`
 
 ### Import and startup side effects
 
