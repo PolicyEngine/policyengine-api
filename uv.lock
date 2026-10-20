@@ -2849,7 +2849,7 @@ requires-dist = [
     { name = "policyengine-canada", specifier = "==0.96.3" },
     { name = "policyengine-il", specifier = "==0.1.0" },
     { name = "policyengine-ng", specifier = "==0.5.1" },
-    { name = "policyengine-observability", extras = ["flask", "google", "httpx", "otlp-grpc"], specifier = ">=3.0.2,<4" },
+    { name = "policyengine-observability", extras = ["flask", "google", "httpx", "otlp-grpc"], specifier = ">=3.0.3,<4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
     { name = "pydantic" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10,<3" },
@@ -2953,11 +2953,11 @@ wheels = [
 
 [[package]]
 name = "policyengine-observability"
-version = "3.0.2"
+version = "3.0.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/74/2a/0c261c8ca693bb3a13d7fe837d3f89f7fdda245496d4b3e92eefed3c972e/policyengine_observability-3.0.2.tar.gz", hash = "sha256:554f907e43d8eeb274c1298fbe990b1626ac45f194c49995ddde091ddcdc2a64", size = 125718, upload-time = "2026-09-30T21:36:02.028Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f1/12/9d49270e9c16cc4e94729c0fb2ce25e2cb7d61d4f10458c1c2fe8ab12ca1/policyengine_observability-3.0.3.tar.gz", hash = "sha256:9af61040feb9c8dc4480445dd6fee8915b2262390beec8b0a7f3bb14d52c13a0", size = 127402, upload-time = "2026-10-20T19:39:23.199Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a5/9c/b48fb64c1bebf83bd5fdeebe914188806c3513cf2de0fc95ee1d95082fc4/policyengine_observability-3.0.2-py3-none-any.whl", hash = "sha256:d84c7564922f6a3294268e89549065924edde932c31adf8b7c714558e107cb31", size = 42029, upload-time = "2026-09-30T21:36:00.841Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/f7/d060f939b3d80f870e084d79799dbee1674fbeae533702ba31ba3bcb8ffa/policyengine_observability-3.0.3-py3-none-any.whl", hash = "sha256:2b3276472081454095e08b8ce3c508fdeaf9a51ef9208dc3044f74076c9822ca", size = 42186, upload-time = "2026-10-20T19:39:21.775Z" },
 ]
 
 [package.optional-dependencies]

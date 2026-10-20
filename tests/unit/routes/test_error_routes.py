@@ -123,6 +123,21 @@ def test_unhandled_exception_adds_one_exception_record_to_its_request(
     assert exception_record["request.id"] == completed_records[0]["request.id"]
 
 
+def test_unhandled_exception_is_on_its_request_completion_record(
+    collecting_runtime, collected_records
+):
+    _make_client(collecting_runtime).get("/explode")
+
+    completed_record = collected_records.with_event_name("request.completed")[0]
+    assert completed_record["outcome"] == "error"
+    assert completed_record["http.response.status_code"] == 500
+    assert completed_record.get("error.type") == "RuntimeError"
+    assert completed_record.get("error.message") == ENGINE_FAILURE
+    assert "raise RuntimeError(ENGINE_FAILURE)" in completed_record.get(
+        "error.stack", ""
+    )
+
+
 def test_not_found_is_not_recorded_as_unhandled_exception(monkeypatch):
     recorded_calls = []
     monkeypatch.setattr(

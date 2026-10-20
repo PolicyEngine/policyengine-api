@@ -1,1 +1,1 @@
-Unhandled exceptions in Flask routes are now recorded in telemetry with their exception type and stack, so error reports can group them.
+Unhandled exceptions in Flask routes are now recorded in telemetry with their exception type and stack, on an exception record and on the request's completion record, so error reports can group them. This requires policyengine-observability 3.0.3.
