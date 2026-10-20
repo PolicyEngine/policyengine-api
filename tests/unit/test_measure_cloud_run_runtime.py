@@ -172,7 +172,8 @@ def _run_load_cell(
             transport=httpx.MockTransport(handler), **kwargs
         ),
     )
-    summary = asyncio.run(load_generator._run(args))
+    base_payload = json.loads(Path(args.calculate_payload).read_text())
+    summary = asyncio.run(load_generator._run(args, base_payload))
     return summary, requests
 
 
