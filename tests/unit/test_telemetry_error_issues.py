@@ -767,3 +767,426 @@ def test_fingerprint_key_accepts_a_64_character_hex_secret(
     sync_script: ModuleType,
 ) -> None:
     assert sync_script.fingerprint_key("ab" * 32) == ("ab" * 32).encode()
+
+
+# Measures per group
+
+REPORT_DATE = date(2026, 10, 20)
+# Noon Eastern on the report date: 12 hours after the window starts, and 180
+# hours after the seven days before it start.
+WINDOW_NOON = datetime(2026, 10, 20, 16, 0, tzinfo=UTC)
+
+
+def _at(hours_after_window_noon: float) -> datetime:
+    return WINDOW_NOON + timedelta(hours=hours_after_window_noon)
+
+
+def _request_count(
+    sync_script: ModuleType,
+    route: str,
+    requests: int,
+    *,
+    service_name: str = "policyengine-api",
+    environment_name: str = "production",
+) -> object:
+    return sync_script.RequestCount(service_name, environment_name, route, requests)
+
+
+def _only_group(sync_script: ModuleType, records: list, request_counts=()) -> object:
+    groups = sync_script.build_groups(
+        records,
+        list(request_counts),
+        sync_script.reporting_window(REPORT_DATE),
+        FINGERPRINT_KEY,
+    )
+    assert len(groups) == 1
+    return groups[0]
+
+
+def test_measures_count_occurrences_requests_and_observability_ids(
+    sync_script: ModuleType,
+) -> None:
+    records = [
+        _exception_record(sync_script, request_key="r1", observability_key="o1"),
+        _exception_record(
+            sync_script, request_key="r2", observability_key="o1", timestamp=_at(1)
+        ),
+        _exception_record(
+            sync_script, request_key="r3", observability_key="o2", timestamp=_at(2)
+        ),
+        _exception_record(
+            sync_script, request_key="s1", environment_name="staging", timestamp=_at(3)
+        ),
+    ]
+
+    group = _only_group(sync_script, records)
+
+    assert group.production.occurrences == 3
+    assert group.production.affected_requests == 3
+    assert group.production.observability_ids == 2
+    assert group.staging.occurrences == 1
+    assert group.staging.affected_requests == 1
+    assert group.staging.observability_ids == 0
+
+
+def test_measures_affected_requests_fall_back_to_observability_id_then_trace(
+    sync_script: ModuleType,
+) -> None:
+    records = [
+        _exception_record(
+            sync_script, request_key=None, trace_key=None, observability_key="o1"
+        ),
+        _exception_record(
+            sync_script,
+            request_key=None,
+            trace_key=None,
+            observability_key="o1",
+            timestamp=_at(1),
+        ),
+        _exception_record(sync_script, request_key=None, trace_key="t1"),
+        _exception_record(sync_script, request_key=None, trace_key=None),
+        _exception_record(
+            sync_script, request_key=None, trace_key=None, timestamp=_at(2)
+        ),
+    ]
+
+    group = _only_group(sync_script, records)
+
+    assert group.production.occurrences == 5
+    # o1 once, t1 once, and each record without any identifier on its own.
+    assert group.production.affected_requests == 4
+
+
+def test_measures_error_rate_uses_requests_to_the_affected_routes(
+    sync_script: ModuleType,
+) -> None:
+    records = [
+        _exception_record(sync_script, request_key="r1", route="/<country_id>/report"),
+        _exception_record(
+            sync_script,
+            request_key="r2",
+            route="/<country_id>/calculate",
+            timestamp=_at(1),
+        ),
+        _exception_record(
+            sync_script,
+            request_key="r3",
+            route="/<country_id>/calculate",
+            timestamp=_at(2),
+        ),
+    ]
+    request_counts = [
+        _request_count(sync_script, "/<country_id>/report", 200),
+        _request_count(sync_script, "/<country_id>/calculate", 100),
+        _request_count(sync_script, "/<country_id>/metadata", 5000),
+        _request_count(
+            sync_script, "/<country_id>/report", 10, environment_name="staging"
+        ),
+        _request_count(
+            sync_script,
+            "/<country_id>/report",
+            7000,
+            service_name="policyengine-simulation-entry",
+        ),
+    ]
+
+    group = _only_group(sync_script, records, request_counts)
+
+    assert group.production.route_requests == 300
+    assert group.production.error_rate == pytest.approx(0.01)
+    assert group.staging.error_rate is None
+
+
+def test_measures_error_rate_counts_every_simulation_service_version(
+    sync_script: ModuleType,
+) -> None:
+    records = [
+        _failed_request_record(
+            sync_script,
+            service_name="policyengine-simulation-py1-2-3",
+            route="/jobs/{job_id}",
+        )
+    ]
+    request_counts = [
+        _request_count(
+            sync_script,
+            "/jobs/{job_id}",
+            30,
+            service_name="policyengine-simulation-py1-2-3",
+        ),
+        _request_count(
+            sync_script,
+            "/jobs/{job_id}",
+            70,
+            service_name="policyengine-simulation-py1-2-4",
+        ),
+    ]
+
+    group = _only_group(sync_script, records, request_counts)
+
+    assert group.production.route_requests == 100
+    assert group.production.error_rate == pytest.approx(0.01)
+
+
+def test_measures_error_rate_is_unknown_without_route_requests(
+    sync_script: ModuleType,
+) -> None:
+    group = _only_group(
+        sync_script, [_message_record(sync_script, route=None, operation_name="sync")]
+    )
+
+    assert group.production.route_requests == 0
+    assert group.production.error_rate is None
+
+
+def test_measures_hourly_rates_for_the_window_and_the_previous_seven_days(
+    sync_script: ModuleType,
+) -> None:
+    window_records = [
+        _message_record(sync_script, request_key=f"w{index}", timestamp=_at(index))
+        for index in range(6)
+    ]
+    previous_records = [
+        _message_record(
+            sync_script, request_key=f"p{index}", timestamp=_at(-13 - 4 * index)
+        )
+        for index in range(42)
+    ]
+
+    group = _only_group(sync_script, window_records + previous_records)
+
+    assert group.production.occurrences == 6
+    assert group.production.hourly_rate == pytest.approx(6 / 24)
+    assert group.production.previous_hourly_rate == pytest.approx(42 / 168)
+
+
+def test_measures_hourly_rate_uses_the_25_hour_fall_back_day(
+    sync_script: ModuleType,
+) -> None:
+    fall_back_noon = datetime(2026, 11, 1, 17, 0, tzinfo=UTC)
+    records = [
+        _message_record(
+            sync_script,
+            request_key=f"w{index}",
+            timestamp=fall_back_noon + timedelta(hours=index),
+        )
+        for index in range(5)
+    ]
+
+    groups = sync_script.build_groups(
+        records, [], sync_script.reporting_window(date(2026, 11, 1)), FINGERPRINT_KEY
+    )
+
+    assert groups[0].production.hourly_rate == pytest.approx(5 / 25)
+
+
+def test_measures_first_and_last_seen_cover_the_queried_eight_days(
+    sync_script: ModuleType,
+) -> None:
+    records = [
+        _message_record(sync_script, request_key="early", timestamp=_at(-24 * 6)),
+        _message_record(sync_script, request_key="latest", timestamp=_at(5)),
+        _message_record(sync_script, request_key="middle", timestamp=_at(1)),
+    ]
+
+    group = _only_group(sync_script, records)
+
+    assert group.production.first_seen == _at(-24 * 6)
+    assert group.production.last_seen == _at(5)
+    assert group.staging.first_seen is None
+    assert group.staging.last_seen is None
+
+
+def test_measures_ignore_records_outside_the_queried_days(
+    sync_script: ModuleType,
+) -> None:
+    records = [
+        _message_record(sync_script, request_key="in-window"),
+        _message_record(sync_script, request_key="too-old", timestamp=_at(-24 * 9)),
+        _message_record(sync_script, request_key="too-new", timestamp=_at(24)),
+    ]
+
+    group = _only_group(sync_script, records)
+
+    assert group.production.occurrences == 1
+    assert group.production.first_seen == WINDOW_NOON
+
+
+def test_measures_report_only_groups_seen_in_the_window(
+    sync_script: ModuleType,
+) -> None:
+    records = [
+        _message_record(sync_script, request_key="today"),
+        _message_record(
+            sync_script,
+            request_key="last-week",
+            message_template="something else",
+            timestamp=_at(-48),
+        ),
+    ]
+
+    groups = sync_script.build_groups(
+        records, [], sync_script.reporting_window(REPORT_DATE), FINGERPRINT_KEY
+    )
+
+    assert [group.fingerprint for group in groups] == [
+        sync_script.fingerprint(records[0], FINGERPRINT_KEY)
+    ]
+
+
+def test_measures_ignore_environments_other_than_production_and_staging(
+    sync_script: ModuleType,
+) -> None:
+    records = [
+        _message_record(sync_script, environment_name="local"),
+        _message_record(sync_script, environment_name=None, request_key="r2"),
+    ]
+
+    groups = sync_script.build_groups(
+        records, [], sync_script.reporting_window(REPORT_DATE), FINGERPRINT_KEY
+    )
+
+    assert groups == []
+
+
+def test_measures_describe_the_group_with_its_most_frequent_production_route(
+    sync_script: ModuleType,
+) -> None:
+    records = [
+        _exception_record(sync_script, request_key="r1", route="/<country_id>/report"),
+        _exception_record(
+            sync_script, request_key="r2", route="/<country_id>/calculate"
+        ),
+        _exception_record(
+            sync_script, request_key="r3", route="/<country_id>/calculate"
+        ),
+        _exception_record(
+            sync_script,
+            request_key="s1",
+            route="/<country_id>/report",
+            environment_name="staging",
+        ),
+        _exception_record(
+            sync_script,
+            request_key="s2",
+            route="/<country_id>/report",
+            environment_name="staging",
+        ),
+    ]
+
+    group = _only_group(sync_script, records)
+
+    assert group.kind == "exception"
+    assert group.family == "policyengine-api"
+    assert group.error_type == "StaleDataError"
+    assert group.route == "/<country_id>/calculate"
+
+
+def test_measures_describe_groups_only_with_validated_values(
+    sync_script: ModuleType,
+) -> None:
+    group = _only_group(
+        sync_script,
+        [
+            _exception_record(
+                sync_script,
+                error_type="SENTINEL not a class",
+                route="/us/policy/12345",
+            )
+        ],
+    )
+
+    assert group.error_type == "<unrecognized>"
+    assert group.route == "<unrecognized>"
+
+
+def test_measures_list_up_to_three_related_fingerprints_by_shared_traces(
+    sync_script: ModuleType,
+) -> None:
+    base = _exception_record(sync_script, request_key="r1", trace_key="t1")
+    base_second = _exception_record(
+        sync_script, request_key="r2", trace_key="t2", timestamp=_at(1)
+    )
+    related_twice = [
+        _message_record(
+            sync_script,
+            service_name="policyengine-simulation-entry",
+            request_key=f"x{index}",
+            trace_key=trace,
+        )
+        for index, trace in enumerate(("t1", "t2"))
+    ]
+    related_once = [
+        _message_record(
+            sync_script,
+            service_name="policyengine-simulation-gateway",
+            request_key=f"y{index}",
+            trace_key="t1",
+            message_template=template,
+        )
+        for index, template in enumerate(("first error", "second error", "third"))
+    ]
+
+    groups = sync_script.build_groups(
+        [base, base_second, *related_twice, *related_once],
+        [],
+        sync_script.reporting_window(REPORT_DATE),
+        FINGERPRINT_KEY,
+    )
+    by_fingerprint = {group.fingerprint: group for group in groups}
+    base_group = by_fingerprint[sync_script.fingerprint(base, FINGERPRINT_KEY)]
+    twice = sync_script.fingerprint(related_twice[0], FINGERPRINT_KEY)
+    once = sorted(
+        sync_script.fingerprint(record, FINGERPRINT_KEY) for record in related_once
+    )
+
+    assert base_group.related_fingerprints == (twice, once[0], once[1])
+
+
+def test_measures_sort_groups_by_production_occurrences(
+    sync_script: ModuleType,
+) -> None:
+    frequent = [
+        _message_record(sync_script, request_key=f"f{index}", message_template="often")
+        for index in range(3)
+    ]
+    staging_only = [
+        _message_record(
+            sync_script,
+            request_key=f"s{index}",
+            message_template="staging",
+            environment_name="staging",
+        )
+        for index in range(5)
+    ]
+    rare = [_message_record(sync_script, request_key="rare", message_template="rare")]
+
+    groups = sync_script.build_groups(
+        staging_only + rare + frequent,
+        [],
+        sync_script.reporting_window(REPORT_DATE),
+        FINGERPRINT_KEY,
+    )
+
+    assert [group.production.occurrences for group in groups] == [3, 1, 0]
+
+
+def test_measures_count_production_occurrences_since_a_moment(
+    sync_script: ModuleType,
+) -> None:
+    records = [
+        _exception_record(sync_script, request_key="before", timestamp=_at(-30)),
+        _exception_record(sync_script, request_key="r1", timestamp=_at(1)),
+        _exception_record(sync_script, request_key="r2", timestamp=_at(2)),
+        _exception_record(
+            sync_script, request_key="r2", trace_key="t9", timestamp=_at(3)
+        ),
+        _exception_record(
+            sync_script, request_key="staging", environment_name="staging"
+        ),
+    ]
+
+    group = _only_group(sync_script, records)
+
+    assert group.production_since(_at(-1)) == (2, 2)
+    assert group.production_since(_at(-48)) == (3, 3)
