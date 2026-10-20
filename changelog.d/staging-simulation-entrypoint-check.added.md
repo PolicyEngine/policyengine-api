@@ -1,0 +1,1 @@
+Each release now checks, before deploying to staging or production, that the environment's simulation URL is served by that environment's Simulation Entrypoint service, and fails otherwise; staging must call the staging simulation service, not production.
