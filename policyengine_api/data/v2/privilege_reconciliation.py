@@ -28,6 +28,7 @@ import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sqlalchemy import bindparam, text
@@ -433,7 +434,7 @@ def _write_summary(environ: Mapping[str, str], summary: str) -> None:
     print(summary)
     summary_path = environ.get(GITHUB_STEP_SUMMARY, "").strip()
     if summary_path:
-        with open(summary_path, "a", encoding="utf-8") as summary_file:
+        with Path(summary_path).open("a", encoding="utf-8") as summary_file:
             summary_file.write(summary)
 
 
