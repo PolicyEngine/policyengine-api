@@ -427,26 +427,41 @@ def get_household_under_policy(
             int(policy_id),
             on_accepted=start_observability_id,
         )
-    except Exception as error:  # noqa: BLE001  # every failure maps to a typed error response
+    except (
+        HouseholdNotFoundError,
+        PolicyNotFoundError,
+        InvalidHouseholdInputsError,
+    ) as error:
         return _stored_calculation_error_response(
             error,
             household_id=household_id,
             policy_id=policy_id,
+        )
+    except Exception as error:
+        response = _spm_error_response(error)
+        if response is not None:
+            return response
+        module_logger.exception(
+            "Error calculating household #%s under policy #%s",
+            household_id,
+            policy_id,
+        )
+        return _make_error_response(
+            f"Error calculating household #{household_id} under policy "
+            f"#{policy_id}: {error}",
+            500,
         )
 
     return _calculation_response(calculation)
 
 
 def _stored_calculation_error_response(
-    error: Exception,
+    error: HouseholdNotFoundError | PolicyNotFoundError | InvalidHouseholdInputsError,
     *,
     household_id: str,
     policy_id: str,
 ) -> Response:
-    """Map a stored-household calculation failure to its error response.
-
-    Called while handling ``error``; an unexpected failure logs its traceback.
-    """
+    """Map an expected stored-household calculation failure to its error response."""
     if isinstance(error, HouseholdNotFoundError):
         return _make_error_response(
             f"Household #{household_id} not found.",
@@ -457,21 +472,7 @@ def _stored_calculation_error_response(
             f"Policy #{policy_id} not found.",
             404,
         )
-    if isinstance(error, InvalidHouseholdInputsError):
-        return _invalid_household_inputs_response(error)
-    response = _spm_error_response(error)
-    if response is not None:
-        return response
-    module_logger.exception(
-        "Error calculating household #%s under policy #%s",
-        household_id,
-        policy_id,
-    )
-    return _make_error_response(
-        f"Error calculating household #{household_id} under policy "
-        f"#{policy_id}: {error}",
-        500,
-    )
+    return _invalid_household_inputs_response(error)
 
 
 def _calculate() -> dict | Response:
@@ -484,8 +485,17 @@ def _calculate() -> dict | Response:
         calculation = household_calculation_service.calculate_prepared_household(
             g.prepared_household_calculation,
         )
-    except Exception as error:  # noqa: BLE001  # every failure maps to a typed error response
+    except (InvalidHouseholdInputsError, SituationParsingError) as error:
         return _calculation_error_response(error)
+    except Exception as error:
+        response = _spm_error_response(error)
+        if response is not None:
+            return response
+        module_logger.exception("Error calculating household under policy")
+        return _make_error_response(
+            f"Error calculating household under policy: {error}",
+            500,
+        )
 
     return _calculation_response(calculation)
 
@@ -522,26 +532,19 @@ def _parse_prepared_household_calculation() -> Response | None:
     return None
 
 
-def _calculation_error_response(error: Exception) -> Response:
-    """Map a household calculation failure to its error response.
-
-    Called while handling ``error``; an unexpected failure logs its traceback.
-    """
+def _calculation_error_response(
+    error: InvalidHouseholdInputsError | SituationParsingError,
+) -> Response:
+    """Map an expected household calculation failure to its error response."""
     if isinstance(error, InvalidHouseholdInputsError):
         return _invalid_household_inputs_response(error)
     response = _spm_error_response(error)
     if response is not None:
         return response
-    if isinstance(error, SituationParsingError):
-        return _make_error_response(
-            f"Invalid household payload: {error}",
-            400,
-            result=None,
-        )
-    module_logger.exception("Error calculating household under policy")
     return _make_error_response(
-        f"Error calculating household under policy: {error}",
-        500,
+        f"Invalid household payload: {error}",
+        400,
+        result=None,
     )
 
 
