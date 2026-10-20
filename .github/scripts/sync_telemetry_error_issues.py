@@ -55,6 +55,16 @@ VERSIONED_SIMULATION_SERVICE = re.compile(r"^(policyengine-simulation-py)\d+-\d+
 # one capturing group because BigQuery's REGEXP_EXTRACT_ALL allows only one,
 # and the trailing newline skips a header that stack truncation cut short.
 FRAME_PATTERN = r'File "([^"\n]+", line [0-9]+, in [^\s]+)\n'
+# Matches everything after the first traceback of a chained exception, so the
+# query can remove it before extracting frames. The logging library keeps only
+# the start of a long stack, which can drop the final traceback; the first
+# traceback is always kept, so frames from it give an exception the same
+# fingerprint however long its stack is.
+CHAINED_EXCEPTION_PATTERN = (
+    r"(?s)\n\n(?:The above exception was the direct cause of the following "
+    r"exception|During handling of the above exception, another exception "
+    r"occurred):\n.*"
+)
 FRAME_PARTS = re.compile(r'^(?P<path>[^"\n]+)", line [0-9]+, in (?P<function>\S+)$')
 FINGERPRINT_FRAME_COUNT = 3
 INSTALLED_PACKAGE_PREFIX = re.compile(r"^.*/(?:site|dist)-packages/")
@@ -177,8 +187,12 @@ SELECT
   JSON_VALUE(json_payload, '$."event.name"') AS event_name,
   JSON_VALUE(json_payload, '$."error.type"') AS error_type,
   JSON_VALUE(json_payload, '$."error.handled"') AS error_handled,
-  REGEXP_EXTRACT_ALL(JSON_VALUE(json_payload, '$."error.stack"'), @frame_pattern)
-    AS frames,
+  REGEXP_EXTRACT_ALL(
+    REGEXP_REPLACE(
+      JSON_VALUE(json_payload, '$."error.stack"'), @chained_exception_pattern, ''
+    ),
+    @frame_pattern
+  ) AS frames,
   COALESCE(LENGTH(JSON_VALUE(json_payload, '$."error.stack"')) >= 16384, FALSE)
     AS stack_truncated,
   ARRAY_TO_STRING(
@@ -330,9 +344,11 @@ def frame_key(frame: str) -> str | None:
 def fingerprint_frames(frames: Iterable[str] | None) -> tuple[str, ...]:
     """Choose the frames that identify where an exception was raised.
 
-    These are the three innermost frames in application packages. Without
-    application frames they are the three innermost frames of any kind, and
-    without a stack, a placeholder.
+    ``frames`` come from the first traceback of the stack only (see
+    ``CHAINED_EXCEPTION_PATTERN``); for a chained exception that is its first
+    cause. These are the three innermost frames in application packages.
+    Without application frames they are the three innermost frames of any
+    kind, and without a stack, a placeholder.
     """
     keys = [key for key in map(frame_key, frames or ()) if key is not None]
     if not keys:
@@ -1069,7 +1085,10 @@ def fetch_error_records(
     """Return the ERROR records of the window and the seven days before it."""
     parameters = _query_parameters(
         {"query_start": window.lookback_start, "window_end": window.end},
-        {"frame_pattern": FRAME_PATTERN},
+        {
+            "frame_pattern": FRAME_PATTERN,
+            "chained_exception_pattern": CHAINED_EXCEPTION_PATTERN,
+        },
     )
     rows = client.query(ERROR_RECORDS_QUERY, parameters, "error-records")
     return [error_record_from_row(row) for row in rows]
