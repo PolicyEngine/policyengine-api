@@ -60,6 +60,7 @@ dependencies = [
     "sqlmodel>=0.0.39,<0.1",
     "psycopg[binary]>=3.3,<4",
     "pyjwt[crypto]>=2.10,<3",
+    "typing-extensions>=4.4,<5",
 ]
 
 [project.optional-dependencies]

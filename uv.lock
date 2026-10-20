@@ -2806,6 +2806,7 @@ dependencies = [
     { name = "sqlalchemy" },
     { name = "sqlmodel" },
     { name = "streamlit" },
+    { name = "typing-extensions" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "werkzeug" },
 ]
@@ -2865,6 +2866,7 @@ requires-dist = [
     { name = "sqlmodel", specifier = ">=0.0.39,<0.1" },
     { name = "streamlit" },
     { name = "towncrier", marker = "extra == 'dev'", specifier = ">=24.8.0" },
+    { name = "typing-extensions", specifier = ">=4.4,<5" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32,<1" },
     { name = "werkzeug" },
 ]

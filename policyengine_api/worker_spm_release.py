@@ -6,8 +6,10 @@ import json
 import sys
 from importlib.metadata import version as distribution_version
 
+from typing_extensions import override
+
 from policyengine_api import constants
-from policyengine_api.worker_spm import validate_worker_spm
+from policyengine_api.worker_spm import SPMCapabilitySource, validate_worker_spm
 
 REQUIRED_BUNDLE_PACKAGES = (
     "policyengine",
@@ -18,17 +20,18 @@ REQUIRED_BUNDLE_PACKAGES = (
 )
 
 
-class RegistryCapability:
+class RegistryCapability(SPMCapabilitySource):
     """Expose one registry document through the request validator interface."""
 
     def __init__(self, registry: dict) -> None:
         """Wrap a parsed worker registry document."""
         self.registry = registry
 
+    @override
     def get_spm_capability(
         self,
-        country: str,  # noqa: ARG002  # implements SPMCapabilitySource.get_spm_capability
-        model_version: str | None,  # noqa: ARG002  # implements SPMCapabilitySource.get_spm_capability
+        country: str,
+        model_version: str | None,
         *,
         policyengine_version: str | None,
     ) -> object:
