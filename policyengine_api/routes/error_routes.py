@@ -5,6 +5,7 @@ from werkzeug.exceptions import (
     HTTPException,
 )
 
+from policyengine_api.observability import record_unhandled_exception
 from policyengine_api.response_factory import _make_error_response
 
 error_bp = Blueprint("error", __name__)
@@ -49,4 +50,5 @@ def response_http_exception(error: HTTPException) -> Response:
 @error_bp.app_errorhandler(Exception)
 def response_generic_error(error: Exception) -> Response:
     """Return an unhandled exception as a 500 JSON error body carrying its message."""
+    record_unhandled_exception(error, status_code=500)
     return _make_error_response(error, 500, result=None)

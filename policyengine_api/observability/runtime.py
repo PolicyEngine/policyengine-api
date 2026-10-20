@@ -78,3 +78,10 @@ def set_runtime_context(**attributes: object) -> None:
     # Telemetry must never affect application behavior.
     with contextlib.suppress(Exception):
         runtime.set_context(**attributes)
+
+
+def record_unhandled_exception(error: Exception, *, status_code: int = 500) -> None:
+    """Record an exception that reached a catch-all error handler."""
+    # Telemetry must never affect application behavior.
+    with contextlib.suppress(Exception):
+        runtime.record_exception(error, handled=False, status_code=status_code)

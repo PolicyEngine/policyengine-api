@@ -113,7 +113,7 @@ The infrastructure was applied and verified on 2026-09-22:
 - The alert policies have no notification channels, so they record incidents
   without sending email, Slack, or paging notifications.
 
-The consumer services require `policyengine-observability` 3.0.2. Record the
+The consumer services require `policyengine-observability` 3.0.3. Record the
 deployed consumer revisions and a representative cost and volume observation
 interval after the API v1 rollout.
 
