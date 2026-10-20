@@ -10,7 +10,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 from importlib import metadata as importlib_metadata
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple, Protocol
 from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -709,8 +709,21 @@ def _region_filter(strategy: object, code: str) -> tuple[str, str, str]:
     return strategy_type, filter_field, filter_value
 
 
+class _SourceRegion(Protocol):
+    """The attributes of a PolicyEngine.py region that _normalize_region reads directly.
+
+    It reads every other region attribute through getattr, with a default.
+    """
+
+    @property
+    def code(self) -> object: ...
+
+    @property
+    def region_type(self) -> object: ...
+
+
 def _normalize_region(
-    source_region: Any,  # noqa: ANN401  # a duck-typed PolicyEngine.py region
+    source_region: _SourceRegion,
     *,
     model_version_id: UUID,
     region_dataset_ids: Mapping[str, UUID],
