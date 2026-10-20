@@ -7,9 +7,15 @@ from policyengine_observability import (
 
 from policyengine_api.observability import (
     _build_runtime,
+    record_unhandled_exception,
     runtime,
     set_runtime_context,
 )
+
+
+def _fail_observability(*_arguments, **_options):
+    message = "observability unavailable"
+    raise RuntimeError(message)
 
 
 def test_runtime_uses_consumer_owned_identity_and_stdout(monkeypatch):
@@ -48,3 +54,23 @@ def test_runtime_context_failure_does_not_escape(monkeypatch):
     )
 
     set_runtime_context(country_id="us")
+
+
+def test_unhandled_exception_is_recorded_as_unhandled_server_error(monkeypatch):
+    recorded_calls = []
+    monkeypatch.setattr(
+        runtime,
+        "record_exception",
+        lambda error, **options: recorded_calls.append((error, options)),
+    )
+    error = RuntimeError("engine exploded")
+
+    record_unhandled_exception(error)
+
+    assert recorded_calls == [(error, {"handled": False, "status_code": 500})]
+
+
+def test_unhandled_exception_recording_failure_does_not_escape(monkeypatch):
+    monkeypatch.setattr(runtime, "record_exception", _fail_observability)
+
+    record_unhandled_exception(RuntimeError("engine exploded"))
