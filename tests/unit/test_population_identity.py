@@ -14,8 +14,8 @@ from policyengine_api.utils.population_identity import population_id_matches
         ("1 ", "1 ", True),
         ("00001", "1", True),
         ("1\n", "1", False),
-        ("１", "1", False),  # noqa: RUF001  # non-ASCII digits are the input under test
-        ("1", "１", False),  # noqa: RUF001  # non-ASCII digits are the input under test
+        ("\N{FULLWIDTH DIGIT ONE}", "1", False),
+        ("1", "\N{FULLWIDTH DIGIT ONE}", False),
     ],
 )
 def test_sql_alias_matching_is_strict_even_with_permissive_text_collation(

@@ -92,7 +92,12 @@ def test_opaque_simulation_identity_stays_distinct_for_immutable_household(
     assert control.status_code == 405
 
     if spelling in {"arabic", "fullwidth"}:
-        digits = "٠١٢٣٤٥٦٧٨٩" if spelling == "arabic" else "０１２３４５６７８９"  # noqa: RUF001  # non-ASCII digits are the input under test
+        # The Arabic-Indic and full-width spellings of the digits 0 to 9.
+        digits = (
+            "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669"
+            if spelling == "arabic"
+            else "\uff10\uff11\uff12\uff13\uff14\uff15\uff16\uff17\uff18\uff19"
+        )
         population_id = str(household_id).translate(str.maketrans("0123456789", digits))
     else:
         population_id = spelling.format(id=household_id)

@@ -66,7 +66,9 @@ def test_uk_household_population_ids_keep_their_existing_representation(
     assert created.simulation.simulation_spec_json["population_id"] == "0001"
 
 
-@pytest.mark.parametrize("unrelated_id", ["1suffix", "1.0", "+1", " 1", "1\n", "١"])  # noqa: RUF001  # non-ASCII digits are the input under test
+@pytest.mark.parametrize(
+    "unrelated_id", ["1suffix", "1.0", "+1", " 1", "1\n", "\N{ARABIC-INDIC DIGIT ONE}"]
+)
 def test_numeric_alias_lookup_does_not_reuse_nonnumeric_population_ids(
     orm_session_factory, unrelated_id
 ):
