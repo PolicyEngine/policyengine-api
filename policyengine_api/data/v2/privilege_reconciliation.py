@@ -56,8 +56,6 @@ GITHUB_STEP_SUMMARY = "GITHUB_STEP_SUMMARY"
 SCHEMA = "public"
 SAFE_IDENTIFIER = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
 
-DeclaredPrivileges = "Mapping[str, Mapping[str, frozenset[TablePrivilege]]]"
-
 
 class PrivilegeReconciliationError(RuntimeError):
     """Raised when privileges can't be reconciled or don't match the manifest."""
@@ -335,9 +333,9 @@ def read_default_privileges(
     """Return default privileges that involve the managed roles."""
     grouped: dict[tuple[str, str, str, str], set[str]] = defaultdict(set)
     for row in connection.execute(_DEFAULT_PRIVILEGES, {"roles": list(roles)}):
-        grouped[
-            (row.creating_role, row.schema_name, row.object_type, row.grantee)
-        ].add(row.privilege)
+        grouped[(row.creating_role, row.schema_name, row.object_type, row.grantee)].add(
+            row.privilege
+        )
     return [
         DefaultPrivilege(
             creating_role=creating_role,
@@ -412,7 +410,7 @@ def check_declared_privileges(
     return verification_failures(declared, has_privilege)
 
 
-# --- Command line ----------------------------------------------------------
+# --- Command-line interface -----------------------------------------------
 
 
 def _deployment_environment(
@@ -498,7 +496,7 @@ def run(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Parse the command line and run; configuration errors exit with status 2."""
+    """Parse the arguments and run; configuration errors exit with status 2."""
     parser = argparse.ArgumentParser(
         description="Grant or check the v2 table privileges the manifest declares."
     )
@@ -512,5 +510,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return run(arguments.mode, create_roles=arguments.create_missing_roles)
     except V2ConfigurationError as error:
-        print(f"v2 privilege reconciliation is not configured: {error}", file=sys.stderr)
+        print(
+            f"v2 privilege reconciliation is not configured: {error}", file=sys.stderr
+        )
         return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

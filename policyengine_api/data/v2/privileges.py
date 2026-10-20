@@ -115,9 +115,7 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "datasets": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
     "parameter_nodes": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
     # The Public API also inserts a v2 policy's own parameter values.
-    "parameter_values": _access(
-        runtime=READ_INSERT, catalog_writer=READ_INSERT_UPDATE
-    ),
+    "parameter_values": _access(runtime=READ_INSERT, catalog_writer=READ_INSERT_UPDATE),
     "parameters": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
     "regions": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
     "tax_benefit_model_versions": _access(
@@ -143,9 +141,7 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "users": _access(runtime=READ_WRITE),
     # Temporary Stage 12 comparison-run tables.
     "stage12_evaluation_reports": _access(runtime=READ_WRITE, stage12=READ_WRITE),
-    "stage12_evaluation_simulations": _access(
-        runtime=READ_WRITE, stage12=READ_WRITE
-    ),
+    "stage12_evaluation_simulations": _access(runtime=READ_WRITE, stage12=READ_WRITE),
 }
 
 

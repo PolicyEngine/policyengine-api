@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlmodel import Session
-
 from policyengine_api.data.v2.models import UserPolicy
 
 if TYPE_CHECKING:
     from uuid import UUID
+
+    from sqlmodel import Session
 
     from policyengine_api.data.v2.models import LegacyPolicyMapping
 

@@ -105,6 +105,42 @@ def test_user_association_qualification_precedes_schema_upgrade() -> None:
     assert household_qualification < user_association_qualification < upgrade
 
 
+def test_declared_privileges_are_granted_and_verified_before_catalog_seeding() -> None:
+    workflow = _read(".github/workflows/seed-v2-database.yml")
+
+    upgrade = workflow.index("migrate_v2_metadata_schema.sh")
+    grant = workflow.index("scripts/reconcile_v2_privileges.py apply")
+    verify = workflow.index("scripts/reconcile_v2_privileges.py verify")
+    catalog_seed = workflow.index("scripts/publish_v2_metadata_catalog.py")
+
+    assert upgrade < grant < verify < catalog_seed
+    assert "--create-missing-roles" not in workflow
+
+
+def test_privilege_steps_connect_with_the_migration_credential() -> None:
+    workflow = _read(".github/workflows/seed-v2-database.yml")
+    grant = _step(
+        workflow,
+        "Grant declared v2 table privileges",
+        "Verify declared v2 table privileges",
+    )
+    verify = _step(
+        workflow,
+        "Verify declared v2 table privileges",
+        "Seed and validate the v2 metadata catalog",
+    )
+
+    for step in (grant, verify):
+        assert (
+            "V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}"
+            in step
+        )
+        assert "V2_DATA_WRITE_DATABASE_URL" not in step
+    assert "DEPLOYMENT_ENVIRONMENT: ${{ inputs.deployment_environment }}" in _job(
+        workflow, "seed"
+    )
+
+
 def test_seeding_success_is_required_before_candidate_creation() -> None:
     workflow = _read(".github/workflows/push.yml")
     staging_seed = _job(workflow, "seed-v2-staging-database")

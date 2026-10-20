@@ -54,6 +54,14 @@ jobs:
         run: bash .github/scripts/migrate_v2_metadata_schema.sh
         env:
           V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
+      - name: Grant declared v2 table privileges
+        run: uv run python scripts/reconcile_v2_privileges.py apply
+        env:
+          V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
+      - name: Verify declared v2 table privileges
+        run: uv run python scripts/reconcile_v2_privileges.py verify
+        env:
+          V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
       - name: Seed and validate the v2 metadata catalog
         run: uv run python scripts/publish_v2_metadata_catalog.py
         env:

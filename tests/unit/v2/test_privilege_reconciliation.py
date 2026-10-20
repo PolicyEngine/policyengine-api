@@ -192,7 +192,9 @@ def test_summary_lists_grants_extras_and_default_privileges_without_secrets() ->
     )
 
     assert "## v2 table privileges (staging)" in summary
-    assert "| `policyengine_v2_runtime` | `legacy_policy_mappings` | SELECT |" in summary
+    assert (
+        "| `policyengine_v2_runtime` | `legacy_policy_mappings` | SELECT |" in summary
+    )
     assert "| `policyengine_v2_runtime` | `policies` | DELETE |" in summary
     assert "reported, not revoked" in summary
     assert "`policyengine_v2_migrator`" in summary

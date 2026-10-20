@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from unittest.mock import Mock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.dialects import postgresql
@@ -24,8 +24,6 @@ from policyengine_api.services.v2.comparison_runs.transformations import (
     simulation_record,
 )
 from policyengine_api.services.v2.comparison_runs.types import (
-    ComparisonReportRecord,
-    ComparisonSimulationRecord,
     ResultComparisonStatus,
 )
 from policyengine_api.services.v2.comparison_runs.validators import (
@@ -36,74 +34,26 @@ from policyengine_api.services.v2.comparison_runs.validators import (
     require_report_identity,
     require_result_comparison_transition,
 )
-
-NOW = datetime(2026, 9, 14, tzinfo=UTC)
-EVALUATION_ID = UUID("00000000-0000-4000-8000-000000000001")
-SIMULATION_ID = UUID("00000000-0000-4000-8000-000000000002")
-DIGEST_A = "a" * 64
-DIGEST_B = "b" * 64
-
-
-def _report(**changes: object) -> ComparisonReportRecord:
-    fields: dict[str, object] = {
-        "evaluation_id": EVALUATION_ID,
-        "status": "pending",
-        "aggregation_status": "not_started",
-        "environment": "test",
-        "calculation_flow": "economy",
-        "originating_request_id": "request-1",
-        "production_identity": "production-job-1",
-        "incumbent_execution_id": "production-job-1",
-        "worker_version": "5.2.0",
-        "modal_application": "policyengine-v2-worker-5-2-0",
-        "report_coordinator_callable": "coordinate_report",
-        "version_manifest_sha256": DIGEST_A,
-        "policyengine_version": "5.2.0",
-        "country_package_name": "policyengine-us",
-        "country_package_version": "1.900.0",
-        "country": "us",
-        "dataset_identity": "populace_us_2024",
-        "dataset_uri": "hf://policyengine/populace-us/data.h5@revision",
-        "data_package_name": "policyengine-us-data",
-        "data_package_version": "1.0.0",
-        "data_artifact_revision": "revision",
-        "created_at": NOW,
-        "updated_at": NOW,
-        "retention_expires_at": NOW + timedelta(days=30),
-    }
-    fields.update(changes)
-    return ComparisonReportRecord.model_validate(fields)
-
-
-def _simulation(**changes: object) -> ComparisonSimulationRecord:
-    fields: dict[str, object] = {
-        "simulation_execution_id": SIMULATION_ID,
-        "evaluation_id": EVALUATION_ID,
-        "role": "baseline",
-        "input_sha256": DIGEST_B,
-        "worker_version": "5.2.0",
-        "modal_application": "policyengine-v2-worker-5-2-0",
-        "simulation_callable": "run_simulation",
-        "version_manifest_sha256": DIGEST_A,
-        "status": "pending",
-        "created_at": NOW,
-        "updated_at": NOW,
-        "retention_expires_at": NOW + timedelta(days=30),
-    }
-    fields.update(changes)
-    return ComparisonSimulationRecord.model_validate(fields)
+from tests.unit.v2.comparison_run_support import (
+    DIGEST_A,
+    DIGEST_B,
+    EVALUATION_ID,
+    NOW,
+    comparison_report_record,
+    comparison_simulation_record,
+)
 
 
 def test_insert_statements_use_the_parent_and_child_identities() -> None:
     report_statement = (
         creates.insert(creates.Stage12ComparisonReport)
-        .values(**report_insert_values(_report()))
+        .values(**report_insert_values(comparison_report_record()))
         .on_conflict_do_nothing(constraint="uq_stage12_eval_reports_identity")
         .returning(creates.Stage12ComparisonReport.evaluation_id)
     )
     simulation_statement = (
         creates.insert(creates.Stage12ComparisonSimulation)
-        .values(**simulation_insert_values(_simulation()))
+        .values(**simulation_insert_values(comparison_simulation_record()))
         .on_conflict_do_nothing(constraint="uq_stage12_eval_simulations_identity")
         .returning(creates.Stage12ComparisonSimulation.simulation_execution_id)
     )
@@ -123,8 +73,8 @@ def test_insert_statements_use_the_parent_and_child_identities() -> None:
 
 
 def test_contract_records_round_trip_through_sqlmodel_rows() -> None:
-    report = _report()
-    simulation = _simulation()
+    report = comparison_report_record()
+    simulation = comparison_simulation_record()
     report_row = Stage12ComparisonReport(**report_insert_values(report))
     simulation_row = Stage12ComparisonSimulation(**simulation_insert_values(simulation))
 
@@ -133,7 +83,7 @@ def test_contract_records_round_trip_through_sqlmodel_rows() -> None:
 
 
 def test_conflicting_report_creation_reuses_the_stored_identity(monkeypatch) -> None:
-    stored = _report()
+    stored = comparison_report_record()
     row = Stage12ComparisonReport(**report_insert_values(stored))
     retried = stored.model_copy(
         update={
@@ -161,7 +111,7 @@ def test_conflicting_report_creation_reuses_the_stored_identity(monkeypatch) -> 
 def test_conflicting_report_creation_rejects_different_bundle_provenance(
     monkeypatch,
 ) -> None:
-    stored = _report()
+    stored = comparison_report_record()
     row = Stage12ComparisonReport(**report_insert_values(stored))
     candidate = stored.model_copy(update={"country_package_version": "1.901.0"})
     monkeypatch.setattr(services, "create_comparison_report", lambda *_args: None)
@@ -176,8 +126,10 @@ def test_conflicting_report_creation_rejects_different_bundle_provenance(
 
 
 def test_matching_successful_child_is_returned_for_a_retry(monkeypatch) -> None:
-    parent_row = Stage12ComparisonReport(**report_insert_values(_report()))
-    stored = _simulation(
+    parent_row = Stage12ComparisonReport(
+        **report_insert_values(comparison_report_record())
+    )
+    stored = comparison_simulation_record(
         status="succeeded",
         completed_at=NOW + timedelta(minutes=1),
         output_uri="gs://private-stage12/simulations/baseline.parquet",
@@ -188,7 +140,7 @@ def test_matching_successful_child_is_returned_for_a_retry(monkeypatch) -> None:
         row_identity_sha256=DIGEST_B,
     )
     row = Stage12ComparisonSimulation(**simulation_insert_values(stored))
-    retried = _simulation(simulation_execution_id=uuid4())
+    retried = comparison_simulation_record(simulation_execution_id=uuid4())
     monkeypatch.setattr(
         services,
         "create_comparison_simulation",
@@ -227,8 +179,10 @@ def test_child_creation_rejects_parent_provenance_or_retention_mismatch(
     field_name,
     other_value,
 ) -> None:
-    parent_row = Stage12ComparisonReport(**report_insert_values(_report()))
-    child = _simulation(**{field_name: other_value})
+    parent_row = Stage12ComparisonReport(
+        **report_insert_values(comparison_report_record())
+    )
+    child = comparison_simulation_record(**{field_name: other_value})
     create = Mock()
     monkeypatch.setattr(
         services,
@@ -253,13 +207,13 @@ def test_child_creation_requires_an_existing_parent(monkeypatch) -> None:
     monkeypatch.setattr(services, "create_comparison_simulation", create)
 
     with pytest.raises(LookupError, match="does not exist"):
-        services.create_or_resolve_simulation(Mock(), _simulation())
+        services.create_or_resolve_simulation(Mock(), comparison_simulation_record())
 
     create.assert_not_called()
 
 
 def test_successful_report_cannot_be_overwritten(monkeypatch) -> None:
-    stored = _report(
+    stored = comparison_report_record(
         status="succeeded",
         aggregation_status="succeeded",
         aggregate_output_uri="gs://private-stage12/reports/aggregate.json",
@@ -284,7 +238,7 @@ def test_successful_report_cannot_be_overwritten(monkeypatch) -> None:
 
 
 def test_successful_report_can_record_a_result_comparison(monkeypatch) -> None:
-    stored = _report(
+    stored = comparison_report_record(
         status="succeeded",
         aggregation_status="succeeded",
         aggregate_output_uri="gs://private-stage12/reports/aggregate.json",
@@ -320,7 +274,7 @@ def test_successful_report_can_record_a_result_comparison(monkeypatch) -> None:
 
 
 def test_lifecycle_update_cannot_change_result_comparison(monkeypatch) -> None:
-    stored = _report(comparison_status="pending")
+    stored = comparison_report_record(comparison_status="pending")
     row = Stage12ComparisonReport(**report_insert_values(stored))
     monkeypatch.setattr(
         services,
@@ -341,14 +295,14 @@ def test_lifecycle_update_cannot_change_result_comparison(monkeypatch) -> None:
 
 def test_comparison_contract_rejects_completed_state_without_artifact() -> None:
     with pytest.raises(ValueError, match="requires an output artifact"):
-        _report(
+        comparison_report_record(
             comparison_status="different",
             comparison_completed_at=NOW,
         )
 
 
 def test_successful_simulation_replay_is_read_only(monkeypatch) -> None:
-    stored = _simulation(
+    stored = comparison_simulation_record(
         status="succeeded",
         completed_at=NOW + timedelta(minutes=1),
         output_uri="gs://private-stage12/simulations/baseline.parquet",
@@ -377,7 +331,7 @@ def test_successful_simulation_replay_is_read_only(monkeypatch) -> None:
 
 
 def test_successful_simulation_cannot_be_overwritten(monkeypatch) -> None:
-    stored = _simulation(
+    stored = comparison_simulation_record(
         status="succeeded",
         completed_at=NOW + timedelta(minutes=1),
         output_uri="gs://private-stage12/simulations/baseline.parquet",
@@ -406,7 +360,7 @@ def test_successful_simulation_cannot_be_overwritten(monkeypatch) -> None:
 
 
 def test_lifecycle_updates_reject_identity_changes_and_state_reversal() -> None:
-    pending = _report()
+    pending = comparison_report_record()
     changed_identity = pending.model_copy(update={"worker_version": "5.3.0"})
     with pytest.raises(ComparisonRunIdentityError, match="worker_version"):
         require_report_identity(pending, changed_identity)
@@ -458,7 +412,7 @@ def test_lifecycle_updates_reject_identity_changes_and_state_reversal() -> None:
 
 @pytest.mark.parametrize(
     "record_factory",
-    [_report, _simulation],
+    [comparison_report_record, comparison_simulation_record],
 )
 def test_contract_records_require_bounded_timezone_aware_retention(
     record_factory,
