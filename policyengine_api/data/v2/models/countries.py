@@ -1,9 +1,16 @@
 """Canonical SQLModel table listing the countries v2 records may belong to.
 
-Every v2 column that names a record's country references ``countries.id``, so
-listing a new country takes a row, not a schema change. The two capability
-flags say which calculations the country supports: a household-only country
-has ``household_enabled`` set and ``society_wide_enabled`` unset.
+``users.primary_country`` and the ``country_id`` of households, policies and
+the four user association tables reference ``countries.id``, so storing those
+records for a new country takes a row, not a schema change. Other v2 country
+columns do not reference it: the v1 copy mapping tables keep their US-and-UK
+checks, and the ``country`` columns of the simulation-domain tables (such as
+``reports`` and ``household_jobs``), the Stage 12 evaluation reports and the
+retired association columns are unconstrained text.
+
+The two capability flags say which calculations the country supports: a
+household-only country has ``household_enabled`` set and
+``society_wide_enabled`` unset.
 """
 
 import sqlalchemy as sa
@@ -13,8 +20,8 @@ from sqlmodel import Field, SQLModel
 class Country(SQLModel, table=True):
     """One country, its display name, and the calculations it supports.
 
-    A society-wide country must also be household capable. A country that
-    any record names cannot be deleted.
+    A society-wide country must also be household capable. A country that a
+    user, household, policy or user association names cannot be deleted.
     """
 
     __tablename__ = "countries"
