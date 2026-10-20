@@ -19,6 +19,10 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.fastapi_routes.v2.metadata.catalog_routes import (
+    METADATA_CATALOG_FORMAT,
+    catalog_entity_tag,
+)
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataCatalogResponse,
 )
@@ -306,3 +310,69 @@ def test_cache_does_not_keep_a_failed_build() -> None:
     )
 
     assert document.body == b"us-1.0.0"
+
+
+DOCUMENT_FIELDS_BY_FORMAT = {
+    2: {
+        "result": {
+            "policyengine_version",
+            "parameter_nodes",
+            "parameters",
+            "variables",
+        },
+        "parameter_node": {"name", "label", "description"},
+        "parameter": {
+            "id",
+            "name",
+            "label",
+            "description",
+            "data_type",
+            "unit",
+            "metadata_label",
+            "period",
+            "economy",
+            "household",
+            "values",
+        },
+        "variable": {
+            "id",
+            "name",
+            "label",
+            "entity",
+            "description",
+            "data_type",
+            "possible_values",
+            "default_value",
+            "adds",
+            "subtracts",
+            "value_type",
+            "definition_period",
+            "unit",
+            "module_name",
+            "is_input_variable",
+            "hidden_input",
+            "possible_value_labels",
+        },
+    },
+}
+"""The fields of each document format. Adding or removing a field needs a new format."""
+
+
+def test_document_format_in_the_etag_names_the_served_fields(
+    catalog_session: Session,
+) -> None:
+    """A client holding a body of an older format never revalidates it as current."""
+    document = _service(catalog_session).get_model_catalog("us")
+    result = _result(document)
+
+    served_fields = {
+        "result": set(result),
+        "parameter_node": set(result["parameter_nodes"][0]),
+        "parameter": set(result["parameters"][0]),
+        "variable": set(result["variables"][0]),
+    }
+
+    assert DOCUMENT_FIELDS_BY_FORMAT.get(METADATA_CATALOG_FORMAT) == served_fields
+    assert catalog_entity_tag(document) == (
+        f'"us:{POLICYENGINE_VERSION}:{METADATA_CATALOG_FORMAT}"'
+    )
