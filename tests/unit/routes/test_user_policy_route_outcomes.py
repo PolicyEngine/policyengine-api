@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,6 +20,12 @@ from policyengine_api.services.user_policy_service import (
     UserPolicyPersistenceFailureCategory,
     UserPolicyUpdateResult,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from flask.testing import FlaskClient
+    from werkzeug.test import TestResponse
 
 UNAVAILABLE_CONFIGURATION = {
     "status": "error",
@@ -297,6 +303,14 @@ class _UncopiedWrite(NamedTuple):
     logged_categories: list[str]
 
 
+class _SavedPolicyWrite(NamedTuple):
+    """A saved-policy write request and the success response it returns."""
+
+    send_request: Callable[[FlaskClient], TestResponse]
+    status_code: int
+    message: str
+
+
 @pytest.mark.usefixtures("write_source")
 @pytest.mark.parametrize(
     "uncopied_write",
@@ -308,19 +322,23 @@ class _UncopiedWrite(NamedTuple):
     ],
 )
 @pytest.mark.parametrize(
-    ("send_request", "status_code", "message"),
+    "saved_policy_write",
     [
-        (_create, 201, "Record created successfully"),
-        (_update, 200, "Record updated successfully"),
+        pytest.param(
+            _SavedPolicyWrite(_create, 201, "Record created successfully"),
+            id="create",
+        ),
+        pytest.param(
+            _SavedPolicyWrite(_update, 200, "Record updated successfully"),
+            id="update",
+        ),
     ],
 )
 def test_committed_write_without_a_v2_copy_is_logged_and_still_succeeds(
     client,
     mirror: MagicMock,
     uncopied_write: _UncopiedWrite,
-    send_request,
-    status_code: int,
-    message: str,
+    saved_policy_write: _SavedPolicyWrite,
 ) -> None:
     mirror.side_effect = uncopied_write.mirror_error
 
@@ -339,10 +357,10 @@ def test_committed_write_without_a_v2_copy_is_logged_and_still_succeeds(
         ),
         patch.object(policy_routes, "logger") as route_logger,
     ):
-        response = send_request(client)
+        response = saved_policy_write.send_request(client)
 
-    assert response.status_code == status_code
-    assert response.get_json()["message"] == message
+    assert response.status_code == saved_policy_write.status_code
+    assert response.get_json()["message"] == saved_policy_write.message
     assert "secret" not in response.get_data(as_text=True)
     assert mirror.call_count == int(uncopied_write.mirror_revision is not None)
     copy_records = [
