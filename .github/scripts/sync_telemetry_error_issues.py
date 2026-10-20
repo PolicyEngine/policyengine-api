@@ -67,6 +67,14 @@ CHAINED_EXCEPTION_PATTERN = (
 )
 FRAME_PARTS = re.compile(r'^(?P<path>[^"\n]+)", line [0-9]+, in (?P<function>\S+)$')
 FINGERPRINT_FRAME_COUNT = 3
+# A message's template is its first three whole words after removing quoted
+# values, so values don't split one error into many groups. A single quote
+# opens a value only after the start of the message or a character that is not
+# a letter or digit; otherwise it is an apostrophe, as in "can't" or "users'".
+# The query passes these to REGEXP_REPLACE and REGEXP_EXTRACT_ALL.
+DOUBLE_QUOTED_PATTERN = r'"[^"]*"'
+SINGLE_QUOTED_PATTERN = r"(^|[^A-Za-z0-9])'[^']*'"
+TEMPLATE_WORD_PATTERN = r"\b[A-Za-z]+\b"
 INSTALLED_PACKAGE_PREFIX = re.compile(r"^.*/(?:site|dist)-packages/")
 STANDARD_LIBRARY_PREFIX = re.compile(r"^.*/lib/python3(?:\.\d+)?/")
 APPLICATION_PACKAGES = (
@@ -177,8 +185,8 @@ HEALTH_CHECK_ROUTES = (
 
 # Each query reads the linked dataset's _AllLogs view. Only code-defined or
 # normalized values leave BigQuery: stacks only as frame headers, messages
-# only as their first three whole words outside quotes, and identifiers only
-# as SHA-256 hashes. Duplicate deliveries of one log entry are removed.
+# only as templates (see DOUBLE_QUOTED_PATTERN), and identifiers only as
+# SHA-256 hashes. Duplicate deliveries of one log entry are removed.
 ERROR_RECORDS_QUERY = r"""
 SELECT
   timestamp,
@@ -201,11 +209,13 @@ SELECT
       FROM UNNEST(
         REGEXP_EXTRACT_ALL(
           REGEXP_REPLACE(
-            REGEXP_REPLACE(JSON_VALUE(json_payload, '$.message'), r'"[^"]*"', ''),
-            r"'[^']*'",
-            ''
+            REGEXP_REPLACE(
+              JSON_VALUE(json_payload, '$.message'), @double_quoted_pattern, ''
+            ),
+            @single_quoted_pattern,
+            r'\1'
           ),
-          r'\b[A-Za-z]+\b'
+          @template_word_pattern
         )
       ) AS word WITH OFFSET AS position
       WHERE position < 3
@@ -1088,6 +1098,9 @@ def fetch_error_records(
         {
             "frame_pattern": FRAME_PATTERN,
             "chained_exception_pattern": CHAINED_EXCEPTION_PATTERN,
+            "double_quoted_pattern": DOUBLE_QUOTED_PATTERN,
+            "single_quoted_pattern": SINGLE_QUOTED_PATTERN,
+            "template_word_pattern": TEMPLATE_WORD_PATTERN,
         },
     )
     rows = client.query(ERROR_RECORDS_QUERY, parameters, "error-records")
