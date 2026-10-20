@@ -24,6 +24,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as time_of_day
+from email.utils import parsedate_to_datetime
 from http import HTTPStatus
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
@@ -1354,17 +1355,41 @@ class GitHubLabelError(GitHubError):
     """GitHub didn't apply the labels the job asked for."""
 
 
+def _seconds_until_reset(response: HttpResponse) -> int | None:
+    """Return the seconds from the response's ``date`` to ``x-ratelimit-reset``."""
+    reset = response.headers.get("x-ratelimit-reset", "")
+    sent = response.headers.get("date")
+    if not (reset.isascii() and reset.isdigit()) or not sent:
+        return None
+    try:
+        sent_at = parsedate_to_datetime(sent)
+    except (TypeError, ValueError):
+        return None
+    return max(int(reset) - int(sent_at.timestamp()), 0)
+
+
 def _rate_limit_wait(response: HttpResponse) -> int | None:
     """Return the seconds to wait before retrying a rate-limited request.
 
-    A 403 without ``retry-after`` is a permission failure, so it isn't retried.
+    Follows GitHub's guidance: wait for ``retry-after``; when no requests
+    remain, wait until ``x-ratelimit-reset``; otherwise wait a minute. A 403
+    whose headers and message don't mention a rate limit is a permission
+    failure, so it isn't retried. The message is only searched, never printed.
     """
     if response.status not in RATE_LIMIT_STATUSES:
         return None
     retry_after = response.headers.get("retry-after", "")
     if retry_after.isascii() and retry_after.isdigit():
         seconds = int(retry_after)
-    elif response.status == HTTPStatus.TOO_MANY_REQUESTS:
+    elif response.headers.get("x-ratelimit-remaining") == "0":
+        until_reset = _seconds_until_reset(response)
+        seconds = (
+            DEFAULT_RATE_LIMIT_WAIT_SECONDS if until_reset is None else until_reset
+        )
+    elif (
+        response.status == HTTPStatus.TOO_MANY_REQUESTS
+        or b"rate limit" in response.body.lower()
+    ):
         seconds = DEFAULT_RATE_LIMIT_WAIT_SECONDS
     else:
         return None

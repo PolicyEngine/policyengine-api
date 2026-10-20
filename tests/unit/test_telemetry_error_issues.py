@@ -2692,6 +2692,76 @@ def test_sync_waits_for_retry_after_on_rate_limits(
     assert len(github.issues) == 1
 
 
+def _limited_github(sync_script: ModuleType, response: object) -> FakeGitHub:
+    """Return a fake whose first write gets ``response`` and later writes succeed."""
+    github = FakeGitHub(
+        sync_script, labels=("telemetry-error", "service: policyengine-api")
+    )
+    github.failures = [response]
+    return github
+
+
+def test_sync_waits_a_minute_on_a_secondary_rate_limit_without_retry_after(
+    sync_script: ModuleType,
+) -> None:
+    body = b'{"message": "You have exceeded a secondary rate limit. Please wait."}'
+    github = _limited_github(
+        sync_script,
+        sync_script.HttpResponse(status=403, reason="Forbidden", headers={}, body=body),
+    )
+
+    _sync(sync_script, _groups(sync_script, _failures(sync_script, 3)), github)
+
+    assert 60 in github.sleeps
+    assert len(github.issues) == 1
+
+
+def test_sync_waits_until_an_exhausted_rate_limit_resets(
+    sync_script: ModuleType,
+) -> None:
+    headers = {
+        "date": "Tue, 20 Oct 2026 23:00:00 GMT",
+        "x-ratelimit-remaining": "0",
+        "x-ratelimit-reset": str(
+            int(datetime(2026, 10, 20, 23, 0, 42, tzinfo=UTC).timestamp())
+        ),
+    }
+    github = _limited_github(
+        sync_script,
+        sync_script.HttpResponse(
+            status=403, reason="Forbidden", headers=headers, body=b"{}"
+        ),
+    )
+
+    _sync(sync_script, _groups(sync_script, _failures(sync_script, 3)), github)
+
+    assert 42 in github.sleeps
+    assert len(github.issues) == 1
+
+
+def test_sync_fails_instead_of_waiting_hours_for_a_rate_limit_reset(
+    sync_script: ModuleType,
+) -> None:
+    headers = {
+        "date": "Tue, 20 Oct 2026 23:00:00 GMT",
+        "x-ratelimit-remaining": "0",
+        "x-ratelimit-reset": str(
+            int(datetime(2026, 10, 21, 0, 0, tzinfo=UTC).timestamp())
+        ),
+    }
+    github = _limited_github(
+        sync_script,
+        sync_script.HttpResponse(
+            status=403, reason="Forbidden", headers=headers, body=b"{}"
+        ),
+    )
+
+    with pytest.raises(sync_script.GitHubError, match="HTTP 403"):
+        _sync(sync_script, _groups(sync_script, _failures(sync_script, 3)), github)
+
+    assert github.sleeps == []
+
+
 def test_sync_stops_after_three_rate_limit_retries(sync_script: ModuleType) -> None:
     groups = _groups(sync_script, _failures(sync_script, 3))
     github = FakeGitHub(
