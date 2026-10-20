@@ -85,15 +85,19 @@ def removed_model_imports(path: Path, *, module_name: str | None = None) -> list
             imported_module = _imported_module(node, importing_module)
             if imported_module in REMOVED_MODULES:
                 found.append(imported_module)
-            elif imported_module == V2_MODELS_PACKAGE or imported_module.startswith(
-                f"{V2_MODELS_PACKAGE}."
-            ):
-                found.extend(
-                    f"{imported_module}.{alias.name}"
-                    for alias in node.names
-                    if alias.name in REMOVED_MODEL_NAMES
-                    or f"{imported_module}.{alias.name}" in REMOVED_MODULES
-                )
+                continue
+            imports_from_v2_models = (
+                imported_module == V2_MODELS_PACKAGE
+                or imported_module.startswith(f"{V2_MODELS_PACKAGE}.")
+            )
+            # A removed module can also be imported from its parent package,
+            # as in ``from policyengine_api.data.v2 import report_runs``.
+            found.extend(
+                f"{imported_module}.{alias.name}"
+                for alias in node.names
+                if f"{imported_module}.{alias.name}" in REMOVED_MODULES
+                or (imports_from_v2_models and alias.name in REMOVED_MODEL_NAMES)
+            )
     return found
 
 
@@ -132,9 +136,13 @@ def test_rule_proof_simulation_tables_stay_removed() -> None:
         FIXTURES / "bad_import.py", module_name=fixture_module
     ) == [
         "policyengine_api.data.v2.report_runs",
+        # A removed module imported from its parent package, absolutely and
+        # relatively.
+        "policyengine_api.data.v2.report_runs",
         "policyengine_api.data.v2.models.HouseholdJob",
         "policyengine_api.data.v2.models.Report",
         "policyengine_api.data.v2.models.reports",
+        "policyengine_api.data.v2.report_runs",
         "policyengine_api.data.v2.models.simulations",
     ]
     assert (
