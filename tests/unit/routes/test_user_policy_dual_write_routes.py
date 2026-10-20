@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from flask import Flask
+from sqlalchemy import select
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
@@ -16,7 +17,7 @@ from sqlalchemy.exc import (
     TimeoutError as SQLAlchemyTimeoutError,
 )
 
-from policyengine_api.data.v1_models import UserPolicy
+from policyengine_api.data.v1_models import Policy, UserPolicy, UserPolicyMirrorEvent
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.services.user_policy_mirroring import (
     UserPolicyMirrorUnavailableError,
@@ -268,7 +269,7 @@ def test_dual_write_preserves_v1_only_saved_policy_mutations_for_non_v2_countrie
     update_mirror.assert_not_called()
 
 
-def test_saved_policy_mirror_failure_returns_503_and_retry_completes(
+def test_saved_policy_mirror_failure_returns_the_committed_record_and_a_retry_copies_it(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
@@ -294,14 +295,191 @@ def test_saved_policy_mirror_failure_returns_503_and_retry_completes(
         first = _client().post("/us/user-policy", json=_body())
         retry = _client().post("/us/user-policy", json=_body())
 
-    assert first.status_code == 503
-    assert first.json == {
-        "message": "V2 saved-policy mirroring is unavailable; retry the same request."
-    }
+    assert first.status_code == 200
+    assert first.json["status"] == "ok"
+    assert first.json["result"] == {"id": 10}
     assert "secret" not in first.text
     assert retry.status_code == 200
-    assert retry.json["result"] == {"id": 10}
+    assert retry.json == first.json
     assert create.call_count == mirror.call_count == 2
+
+
+def test_mirror_failure_for_a_new_saved_policy_still_returns_201(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
+    with (
+        patch(
+            "policyengine_api.routes.policy_routes.user_policy_service.create_or_get_user_policy",
+            return_value=_creation(created=True),
+        ),
+        patch(
+            "policyengine_api.routes.policy_routes.policy_service.get_policy_snapshot",
+            return_value=_reform_snapshot(),
+        ),
+        patch(
+            "policyengine_api.routes.policy_routes."
+            "mirror_pending_user_policy_events_after_commit",
+            side_effect=UserPolicyMirrorUnavailableError("database credential secret"),
+        ),
+    ):
+        response = _client().post("/us/user-policy", json=_body())
+
+    assert response.status_code == 201
+    assert response.json["message"] == "Record created successfully"
+    assert response.json["result"]["id"] == 10
+    assert "secret" not in response.text
+
+
+def test_destination_failure_keeps_the_saved_policy_event_pending_and_logs_an_error(
+    monkeypatch,
+    orm_session_factory,
+) -> None:
+    """Run the real saved-policy and copy services, with only the v2 write failing."""
+    monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
+    reform_snapshot = _reform_snapshot()
+    with orm_session_factory.begin() as session:
+        session.add(
+            Policy(
+                id=reform_snapshot.legacy_policy_id,
+                country_id=reform_snapshot.country_id,
+                label=reform_snapshot.label,
+                api_version=reform_snapshot.api_version,
+                policy_json=reform_snapshot.policy_json,
+                policy_hash=reform_snapshot.source_policy_hash,
+            )
+        )
+    failing_destination = MagicMock()
+    failing_destination.mirror_legacy_user_policy.side_effect = OperationalError(
+        "statement secret", {}, Exception("credential")
+    )
+    with (
+        patch(
+            "policyengine_api.services.user_policy_mirroring._default_mirror_factory",
+            return_value=failing_destination,
+        ),
+        patch("policyengine_api.services.user_policy_mirroring.logger") as copy_logger,
+    ):
+        response = _client().post("/us/user-policy", json=_body())
+
+    assert response.status_code == 201
+    assert response.json["message"] == "Record created successfully"
+    stored_user_policy_id = response.json["result"]["id"]
+    failing_destination.mirror_legacy_user_policy.assert_called_once()
+    with orm_session_factory() as session:
+        stored_events = session.scalars(
+            select(UserPolicyMirrorEvent).where(
+                UserPolicyMirrorEvent.legacy_user_policy_id == stored_user_policy_id
+            )
+        ).all()
+    assert [event.processed_at for event in stored_events] == [None]
+    logged_record = copy_logger.log_struct.call_args.args[0]
+    assert logged_record["metric_name"] == "v1_user_policy_mirror_operations"
+    assert logged_record["outcome"] == "error"
+    assert logged_record["failure_category"] == "database"
+    assert logged_record["legacy_user_policy_id"] == stored_user_policy_id
+    assert "secret" not in json.dumps(logged_record)
+    assert "credential" not in json.dumps(logged_record)
+
+
+def test_saved_policy_update_mirror_failure_returns_the_updated_record(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
+    update = UserPolicyUpdateResult(
+        user_policy=_row(reform_label="Renamed"),
+        snapshot=_snapshot(reform_label="Renamed"),
+        changed_fields=frozenset({"reform_label"}),
+        mirror_revision=2,
+    )
+    with (
+        patch(
+            "policyengine_api.routes.policy_routes.user_policy_service.update_user_policy",
+            return_value=update,
+        ),
+        patch(
+            "policyengine_api.routes.policy_routes.policy_service.get_policy_snapshot",
+            return_value=_reform_snapshot(),
+        ),
+        patch(
+            "policyengine_api.routes.policy_routes."
+            "mirror_pending_user_policy_events_after_commit",
+            side_effect=UserPolicyMirrorUnavailableError("database credential secret"),
+        ),
+    ):
+        response = _client().put(
+            "/us/user-policy",
+            json={"id": 10, "reform_label": "Renamed"},
+        )
+
+    assert response.status_code == 200
+    assert response.json == {
+        "status": "ok",
+        "message": "Record updated successfully",
+        "result": {"id": 10},
+    }
+    assert "secret" not in response.text
+
+
+def test_unexpected_saved_policy_mirror_error_is_logged_and_the_record_returned(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
+    with (
+        patch(
+            "policyengine_api.routes.policy_routes.user_policy_service.create_or_get_user_policy",
+            return_value=_creation(created=False),
+        ),
+        patch(
+            "policyengine_api.routes.policy_routes.policy_service.get_policy_snapshot",
+            return_value=_reform_snapshot(),
+        ),
+        patch(
+            "policyengine_api.routes.policy_routes."
+            "mirror_pending_user_policy_events_after_commit",
+            side_effect=RuntimeError("driver-secret"),
+        ),
+        patch("policyengine_api.routes.policy_routes.logger") as route_logger,
+    ):
+        response = _client().post("/us/user-policy", json=_body())
+
+    assert response.status_code == 200
+    assert response.json["result"] == {"id": 10}
+    assert "secret" not in response.text
+    logged_record = route_logger.log_struct.call_args.args[0]
+    assert logged_record["metric_name"] == "v1_user_policy_mirror_operations"
+    assert logged_record["outcome"] == "error"
+    assert logged_record["failure_category"] == "unexpected"
+    assert logged_record["legacy_user_policy_id"] == 10
+    assert "secret" not in json.dumps(logged_record)
+    assert route_logger.log_struct.call_args.kwargs["severity"] == "ERROR"
+
+
+def test_saved_policy_without_a_mirror_revision_is_returned_and_logged(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
+    with (
+        patch(
+            "policyengine_api.routes.policy_routes.user_policy_service.create_or_get_user_policy",
+            return_value=_creation(created=False, mirror_revision=None),
+        ),
+        patch(
+            "policyengine_api.routes.policy_routes."
+            "mirror_pending_user_policy_events_after_commit"
+        ) as mirror,
+        patch("policyengine_api.routes.policy_routes.logger") as route_logger,
+    ):
+        response = _client().post("/us/user-policy", json=_body())
+
+    assert response.status_code == 200
+    assert response.json["result"] == {"id": 10}
+    mirror.assert_not_called()
+    logged_record = route_logger.log_struct.call_args.args[0]
+    assert logged_record["metric_name"] == "v1_user_policy_mirror_operations"
+    assert logged_record["outcome"] == "error"
+    assert logged_record["failure_category"] == "missing_mirror_revision"
+    assert logged_record["legacy_user_policy_id"] == 10
 
 
 @pytest.mark.parametrize(

@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 from flask import Flask
+from sqlalchemy import select
 
-from policyengine_api.data.v1_models import Household
+from policyengine_api.data.v1_models import Household, HouseholdMirrorEvent
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.services.household_mirroring import (
     HouseholdMirrorUnavailableError,
 )
 from policyengine_api.services.household_service import HouseholdCreateResult
 from policyengine_api.services.v2.households.types import LegacyHouseholdSnapshot
+from policyengine_api.services.v2.households.validators import (
+    LegacyHouseholdTranslationError,
+)
 
 
 def _client():
@@ -147,7 +152,7 @@ def test_dual_write_keeps_other_v1_countries_entirely_on_cloud_sql(
     copy_event.assert_not_called()
 
 
-def test_destination_failure_reports_committed_source_and_does_not_claim_retry_repairs_it(
+def test_copy_failure_returns_the_created_household_without_retrying_the_copy(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("DB_WRITE_HOUSEHOLD", "dual_write")
@@ -159,16 +164,84 @@ def test_destination_failure_reports_committed_source_and_does_not_claim_retry_r
         patch(
             "policyengine_api.routes.household_routes.process_household_event_after_commit",
             side_effect=HouseholdMirrorUnavailableError("database credential secret"),
-        ),
+        ) as copy_event,
     ):
         response = _client().post("/us/household", json=_body())
 
-    assert response.status_code == 503
-    assert response.json["status"] == "error"
-    assert "committed" in response.json["message"]
-    assert "retained create event" in response.json["message"]
-    assert "retry" not in response.json["message"].lower()
+    assert response.status_code == 201
+    assert response.json == {
+        "status": "ok",
+        "message": None,
+        "result": {"household_id": 42},
+    }
     assert "secret" not in response.text
+    copy_event.assert_called_once()
+
+
+def test_destination_failure_keeps_the_stored_create_event_pending_and_logs_an_error(
+    monkeypatch,
+    orm_session_factory,
+) -> None:
+    """Run the real household and copy services, with only the v2 write failing."""
+    monkeypatch.setenv("DB_WRITE_HOUSEHOLD", "dual_write")
+    failing_destination = MagicMock()
+    failing_destination.mirror_legacy_household.side_effect = (
+        LegacyHouseholdTranslationError("private household value")
+    )
+    with (
+        patch(
+            "policyengine_api.services.household_mirroring._default_mirror_factory",
+            return_value=failing_destination,
+        ),
+        patch("policyengine_api.services.household_mirroring.logger") as copy_logger,
+    ):
+        response = _client().post("/us/household", json=_body())
+
+    assert response.status_code == 201
+    stored_household_id = response.json["result"]["household_id"]
+    failing_destination.mirror_legacy_household.assert_called_once()
+    with orm_session_factory() as session:
+        stored_events = session.scalars(
+            select(HouseholdMirrorEvent).where(
+                HouseholdMirrorEvent.legacy_household_id == stored_household_id
+            )
+        ).all()
+    assert [event.processed_at for event in stored_events] == [None]
+    logged_record = copy_logger.log_struct.call_args.args[0]
+    assert logged_record["metric_name"] == "v1_household_mirror_operations"
+    assert logged_record["outcome"] == "error"
+    assert logged_record["failure_category"] == "translation"
+    assert logged_record["legacy_household_id"] == stored_household_id
+    assert logged_record["pending_event"] is True
+    assert "private household value" not in json.dumps(logged_record)
+
+
+def test_household_without_a_create_event_is_returned_and_logged(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DB_WRITE_HOUSEHOLD", "dual_write")
+    with (
+        patch(
+            "policyengine_api.routes.household_routes.household_service.create_household",
+            return_value=_creation(mirrored=False),
+        ),
+        patch(
+            "policyengine_api.routes.household_routes.process_household_event_after_commit"
+        ) as copy_event,
+        patch("policyengine_api.routes.household_routes.logger") as route_logger,
+    ):
+        response = _client().post("/us/household", json=_body())
+
+    assert response.status_code == 201
+    assert response.json["result"] == {"household_id": 42}
+    copy_event.assert_not_called()
+    logged_record = route_logger.log_struct.call_args.args[0]
+    assert logged_record["metric_name"] == "v1_household_mirror_operations"
+    assert logged_record["outcome"] == "error"
+    assert logged_record["failure_category"] == "missing_mirror_event"
+    assert logged_record["country_id"] == "us"
+    assert logged_record["legacy_household_id"] == 42
+    assert route_logger.log_struct.call_args.kwargs["severity"] == "ERROR"
 
 
 def test_invalid_write_or_read_selector_stops_before_cloud_sql(monkeypatch) -> None:
