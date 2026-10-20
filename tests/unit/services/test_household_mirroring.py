@@ -175,9 +175,7 @@ def test_destination_failure_is_secret_safe_and_leaves_event_pending(
     assert "private value" not in repr(payload)
 
 
-def test_source_completion_failure_records_committed_destination_and_pending_event() -> (
-    None
-):
+def test_source_completion_failure_records_destination_and_pending_event() -> None:
     mirror = MagicMock()
     mirror.mirror_legacy_household.return_value = _result()
 

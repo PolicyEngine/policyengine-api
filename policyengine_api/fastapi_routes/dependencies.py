@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING, Protocol
 from fastapi import Depends
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
+from policyengine_api.fastapi_routes.v2.user_auth import authenticate_account_request
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
+from policyengine_api.readiness import is_ready
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -695,25 +697,29 @@ class SimulationGatewayProbe(Protocol):
 
 
 def _default_readiness_probe() -> bool:
-    from policyengine_api.readiness import is_ready
-
     return is_ready()
 
 
 def _default_gateway_client_factory() -> SimulationGatewayProbe:
-    from policyengine_api.libs.simulation_entrypoint import SimulationEntrypointClient
+    from policyengine_api.libs.simulation_entrypoint import (  # noqa: PLC0415  # builds its client at import, which needs the gateway URL configured
+        SimulationEntrypointClient,
+    )
 
     return SimulationEntrypointClient()
 
 
 def _default_metadata_reader_factory() -> MetadataReader:
-    from policyengine_api.services.metadata_service import MetadataService
+    from policyengine_api.services.metadata_service import (  # noqa: PLC0415  # loads every country model; only the default reader needs it
+        MetadataService,
+    )
 
     return MetadataService()
 
 
 def _default_specification_provider() -> JSONObject:
-    from policyengine_api.specification import OPENAPI_SPECIFICATION
+    from policyengine_api.specification import (  # noqa: PLC0415  # reads and builds the OpenAPI document at import
+        OPENAPI_SPECIFICATION,
+    )
 
     return OPENAPI_SPECIFICATION
 
@@ -724,7 +730,9 @@ def _running_policyengine_version() -> str:
 
 
 def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
-    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
     from policyengine_api.services.v2.metadata.database_session import (
         MetadataDatabaseSession,
     )
@@ -737,7 +745,9 @@ def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
 
 
 def _default_v2_policy_service_factory() -> V2PolicyResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
     from policyengine_api.services.v2.policies.database_session import (
         PolicyDatabaseSession,
     )
@@ -750,7 +760,9 @@ def _default_v2_policy_service_factory() -> V2PolicyResourceService:
 
 
 def _default_v2_household_service_factory() -> V2HouseholdResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
     from policyengine_api.services.v2.households.database_session import (
         HouseholdDatabaseSession,
     )
@@ -783,10 +795,6 @@ def _default_require_user(
     unauthenticated_user: str | None = Depends(_unauthenticated_user_scheme),
 ) -> AccountPrincipal:
     """Authenticate the request's account; fails closed without a credential."""
-    from policyengine_api.fastapi_routes.v2.user_auth import (
-        authenticate_account_request,
-    )
-
     return authenticate_account_request(
         None if credentials is None else f"Bearer {credentials.credentials}",
         unauthenticated_user,
@@ -794,7 +802,9 @@ def _default_require_user(
 
 
 def _build_v1_legacy_reference_service() -> LegacyReferenceChecker:
-    from policyengine_api.data.orm import get_v1_session_factory
+    from policyengine_api.data.orm import (  # noqa: PLC0415  # looked up per call, so tests can replace the v1 session factory
+        get_v1_session_factory,
+    )
     from policyengine_api.services.v2.legacy_refs.database_session import (
         LegacyReferenceDatabaseSession,
     )
@@ -817,13 +827,13 @@ def _default_legacy_reference_checker() -> LegacyReferenceChecker:
 
 
 def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
     from policyengine_api.services.v2.user_policies.database_session import (
         UserPolicyDatabaseSession,
     )
-    from policyengine_api.services.v2.user_policies.services import (
-        V2UserPolicyService,
-    )
+    from policyengine_api.services.v2.user_policies.services import V2UserPolicyService
 
     return V2UserPolicyService(
         UserPolicyDatabaseSession(get_v2_session_factory()),
@@ -832,7 +842,9 @@ def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
 
 
 def _default_v2_user_household_service_factory() -> V2UserHouseholdResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
     from policyengine_api.services.v2.user_households.database_session import (
         UserHouseholdDatabaseSession,
     )
@@ -847,7 +859,9 @@ def _default_v2_user_household_service_factory() -> V2UserHouseholdResourceServi
 
 
 def _default_v2_user_simulation_service_factory() -> V2UserSimulationResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
     from policyengine_api.services.v2.user_simulations.database_session import (
         UserSimulationDatabaseSession,
     )
@@ -862,13 +876,13 @@ def _default_v2_user_simulation_service_factory() -> V2UserSimulationResourceSer
 
 
 def _default_v2_user_report_service_factory() -> V2UserReportResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
     from policyengine_api.services.v2.user_reports.database_session import (
         UserReportDatabaseSession,
     )
-    from policyengine_api.services.v2.user_reports.services import (
-        V2UserReportService,
-    )
+    from policyengine_api.services.v2.user_reports.services import V2UserReportService
 
     return V2UserReportService(
         UserReportDatabaseSession(get_v2_session_factory()),
@@ -877,14 +891,16 @@ def _default_v2_user_report_service_factory() -> V2UserReportResourceService:
 
 
 def _default_v2_account_service_factory() -> V2AccountResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.libs.auth0_management import build_auth0_user_deleter
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.libs.auth0_management import (
+        build_auth0_user_deleter,
+    )
     from policyengine_api.services.v2.user_accounts.database_session import (
         AccountDatabaseSession,
     )
-    from policyengine_api.services.v2.user_accounts.services import (
-        V2AccountService,
-    )
+    from policyengine_api.services.v2.user_accounts.services import V2AccountService
 
     return V2AccountService(
         AccountDatabaseSession(get_v2_session_factory()),

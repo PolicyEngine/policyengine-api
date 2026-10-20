@@ -9,7 +9,7 @@ summary to stdout. Achieved RPS is an output — the capacity signal — not an 
 full request body, while the handler only reads the household/policy keys, so a
 top-level nonce field busts the cache without changing the computation. Cells
 that measure engine capacity must run with --cache-bust always (the default).
-"""
+"""  # noqa: E501  # the summary is the --help description; keep its text
 
 from __future__ import annotations
 

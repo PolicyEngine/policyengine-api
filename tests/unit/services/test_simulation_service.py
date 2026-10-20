@@ -91,7 +91,7 @@ def test_get_or_create_rolls_back_simulation_when_dual_write_fails(
         msg = "dual write sync failed"
         raise RuntimeError(msg)
 
-    monkeypatch.setattr(service, "_ensure_simulation_dual_write_state", fail_dual_write)
+    monkeypatch.setattr(service, "ensure_simulation_dual_write_state", fail_dual_write)
 
     with pytest.raises(RuntimeError, match="dual write sync failed"):
         service.get_or_create_simulation(

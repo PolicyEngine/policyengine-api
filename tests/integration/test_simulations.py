@@ -23,8 +23,9 @@ class TestSimsWithAxes:
         country = COUNTRIES.get(TEST_COUNTRY_ID)
         result = country.calculate(household_with_axes, {}).household
 
-        # This variable does not function like others; it is a list of member names and is not calculated
-        FORBIDDEN_VARIABLES = ["members"]
+        # This variable does not function like others; it is a list of member
+        # names and is not calculated.
+        uncalculated_variables = ["members"]
 
         # Verify every variable value is expanded across the configured axis.
         for entity_type in result:
@@ -32,7 +33,7 @@ class TestSimsWithAxes:
                 continue
             for entity_id in result[entity_type]:
                 for variable_name in result[entity_type][entity_id]:
-                    if variable_name in FORBIDDEN_VARIABLES:
+                    if variable_name in uncalculated_variables:
                         continue
                     for period in result[entity_type][entity_id][variable_name]:
                         value = result[entity_type][entity_id][variable_name][period]

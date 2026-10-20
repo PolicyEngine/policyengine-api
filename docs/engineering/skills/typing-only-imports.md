@@ -36,6 +36,21 @@ where `package/__init__.py` re-exports it) does not match its listed definition
 path. Ruff does not follow inheritance across modules, so every package class
 that models in other modules inherit from is listed.
 
+### Route modules with per-router dependencies
+
+FastAPI resolves an endpoint's string annotations against its module's globals
+only. A route that declares a dependency with `Annotated` therefore needs every
+name in that annotation at module level. Query dependencies are module-level
+aliases, such as `CountryQueryDependency`. The signed-in user routes also depend
+on `require_user`, the authenticator `NativeRouteDependencies` injects into each
+router, which exists only inside the router builder. Their modules
+(`fastapi_routes/v2/me`, `user_households`, `user_policies`, `user_reports` and
+`user_simulations`) don't use `from __future__ import annotations`, so
+`Annotated[AccountPrincipal, Depends(require_user)]` is evaluated where the
+handler is defined, and the names their other annotations use are imported at
+runtime. With the future import, FastAPI would silently treat `principal` as a
+required query parameter.
+
 ## Adding a model base
 
 When you add a model class that models in other modules inherit from, add the

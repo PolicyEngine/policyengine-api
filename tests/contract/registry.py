@@ -557,7 +557,9 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
     WorkflowContract(
         name="region_selection",
         current_contract="api_v1_compatible",
-        future_owner_pr="PR 9: v2 Metadata, Regions, Datasets, Parameters, and Variables",
+        future_owner_pr=(
+            "PR 9: v2 Metadata, Regions, Datasets, Parameters, and Variables"
+        ),
         requests=(
             ContractRequest(
                 method="GET",

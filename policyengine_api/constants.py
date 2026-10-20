@@ -93,6 +93,11 @@ def _resolve_bundle_package_versions(bundle: dict | None) -> dict[str, str]:
     return package_versions
 
 
+def get_bundle_manifest() -> dict | None:
+    """Return the installed bundle manifest read at import, or None if it is missing."""
+    return _policyengine_bundle
+
+
 def get_bundle_data_release(country_id: str) -> dict:
     """Return the bundle's data release entry for a country, or {} if it has none."""
     if not isinstance(_policyengine_bundle, dict):
@@ -246,13 +251,15 @@ US_REGION_TYPES = (
     "national",  # National level (e.g., "us")
     "state",  # US states (e.g., "state/ca", "state/ny")
     "place",  # US Census places (e.g., "place/NJ-57000")
-    "congressional_district",  # US congressional districts (e.g., "congressional_district/CA-37")
+    # US congressional districts (e.g., "congressional_district/CA-37")
+    "congressional_district",
 )
 
 UK_REGION_TYPES = (
     "national",  # National level (e.g., "uk")
     "country",  # UK countries (e.g., "country/england", "country/scotland")
-    "constituency",  # UK parliamentary constituencies (e.g., "constituency/Aldershot")
+    # UK parliamentary constituencies (e.g., "constituency/Aldershot")
+    "constituency",
     "local_authority",  # UK local authorities (e.g., "local_authority/Maidstone")
 )
 
@@ -262,11 +269,13 @@ REGION_PREFIXES = {
     "us": [
         "state/",  # US states (e.g., "state/ca", "state/ny")
         "place/",  # US Census places (e.g., "place/NJ-57000")
-        "congressional_district/",  # US congressional districts (e.g., "congressional_district/CA-37")
+        # US congressional districts (e.g., "congressional_district/CA-37")
+        "congressional_district/",
     ],
     "uk": [
         "country/",  # UK countries (e.g., "country/england", "country/scotland")
-        "constituency/",  # UK parliamentary constituencies (e.g., "constituency/Aldershot")
+        # UK parliamentary constituencies (e.g., "constituency/Aldershot")
+        "constituency/",
         "local_authority/",  # UK local authorities (e.g., "local_authority/Maidstone")
     ],
 }

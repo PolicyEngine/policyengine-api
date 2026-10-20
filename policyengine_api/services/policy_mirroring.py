@@ -47,7 +47,9 @@ class PolicyMirrorUnavailableError(RuntimeError):
 
 
 def _default_mirror_factory() -> LegacyPolicyMirror:
-    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
     from policyengine_api.services.v2.policies.database_session import (
         PolicyDatabaseSession,
     )

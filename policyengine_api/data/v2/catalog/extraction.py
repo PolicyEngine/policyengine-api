@@ -746,7 +746,9 @@ def extract_catalog(
 def extract_installed_catalog() -> NormalizedCatalog:
     """Load and normalize the installed PolicyEngine.py certified catalog."""
     import policyengine
-    from policyengine.bundle import get_current_bundle
+    from policyengine.bundle import (
+        get_current_bundle,
+    )
 
     policyengine_version = importlib_metadata.version("policyengine")
     return extract_catalog(

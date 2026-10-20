@@ -23,7 +23,9 @@ def test_remote_database_config_defaults_non_target_settings(monkeypatch):
     monkeypatch.delenv("POLICYENGINE_DB_NAME", raising=False)
 
     assert get_remote_database_config() == {
-        "instance_connection_name": "policyengine-api:us-central1:policyengine-api-data",
+        "instance_connection_name": (
+            "policyengine-api:us-central1:policyengine-api-data"
+        ),
         "db_user": "policyengine",
         "db_name": "policyengine",
     }

@@ -1,4 +1,7 @@
-"""Proof fixture: a user service that leaves queries to its connector. The rule must accept it."""
+"""Proof fixture: a user service that leaves queries to its connector.
+
+The rule must accept it.
+"""
 
 from sqlmodel import Session
 

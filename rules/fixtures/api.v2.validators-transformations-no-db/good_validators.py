@@ -1,4 +1,7 @@
-"""Proof fixture: a validator that checks an already-loaded record. The rule must accept it."""
+"""Proof fixture: a validator that checks an already-loaded record.
+
+The rule must accept it.
+"""
 
 from policyengine_api.data.v2.models import Policy
 

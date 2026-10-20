@@ -178,7 +178,8 @@ def _validate_cross_fields(rule: Rule) -> list[Violation]:
     if kind is Kind.RUFF and rule.baseline is not None:
         v(
             "ruff is never ratcheted",
-            "remove the baseline and fix every violation in a standalone PR that also changes the ruff select list",
+            "remove the baseline and fix every violation in a standalone PR that "
+            "also changes the ruff select list",
         )
     if tier is Tier.JUDGMENT and kind not in (Kind.LLM_REVIEW, Kind.NONE):
         v(
@@ -330,7 +331,8 @@ def validate(registry: Registry, root: Path, today: date) -> list[Violation]:
             elif baseline_entries(path) != rule.baseline.count:
                 v(
                     rule.id,
-                    f"baseline count is {rule.baseline.count} but {rule.baseline.file} lists {baseline_entries(path)}",
+                    f"baseline count is {rule.baseline.count} but "
+                    f"{rule.baseline.file} lists {baseline_entries(path)}",
                     "make the count match the file",
                     "baseline",
                 )

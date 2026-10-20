@@ -84,12 +84,19 @@ class SimulationService:
             return True
         return False
 
-    def _ensure_simulation_dual_write_state(
+    def ensure_simulation_dual_write_state(
         self,
         session: Session,
         simulation_id: int,
         country_id: str | None = None,
     ) -> Simulation:
+        """Lock a simulation and bring its spec and run rows up to date in ``session``.
+
+        Resets a stale SPM output to pending, records the simulation spec,
+        creates the first run or updates the active one (else the newest), and
+        sets the active and latest successful run ids. Raises ValueError if the
+        simulation is missing.
+        """
         simulation = self._select_simulation(
             session,
             simulation_id,
@@ -204,7 +211,7 @@ class SimulationService:
         )
         session.add(simulation)
         session.flush()
-        return self._ensure_simulation_dual_write_state(
+        return self.ensure_simulation_dual_write_state(
             session,
             simulation.id,
             country_id,
@@ -256,7 +263,7 @@ class SimulationService:
                     policy_id,
                 )
             else:
-                simulation = self._ensure_simulation_dual_write_state(
+                simulation = self.ensure_simulation_dual_write_state(
                     session,
                     simulation.id,
                     country_id,
@@ -330,7 +337,7 @@ class SimulationService:
             for key, value in values.items():
                 setattr(simulation, key, value)
             simulation.api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-            return self._ensure_simulation_dual_write_state(
+            return self.ensure_simulation_dual_write_state(
                 session,
                 simulation_id,
                 country_id,

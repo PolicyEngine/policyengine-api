@@ -177,7 +177,9 @@ class BudgetWindowEconomyQuery(EconomyQuery):
     window_size: Annotated[int, BeforeValidator(parse_integer_query_value)] = Field(
         ge=1,
         le=BUDGET_WINDOW_MAX_YEARS,
-        description="Number of years; start_year + window_size - 1 must not exceed 2099",
+        description=(
+            "Number of years; start_year + window_size - 1 must not exceed 2099"
+        ),
     )
     target: Literal["general"] = "general"
 
@@ -185,7 +187,10 @@ class BudgetWindowEconomyQuery(EconomyQuery):
     def validate_end_year(self) -> BudgetWindowEconomyQuery:
         """Reject a window whose last year falls after BUDGET_WINDOW_MAX_END_YEAR."""
         if int(self.start_year) + self.window_size - 1 > BUDGET_WINDOW_MAX_END_YEAR:
-            msg = f"budget-window end_year must be {BUDGET_WINDOW_MAX_END_YEAR} or earlier"
+            msg = (
+                "budget-window end_year must be "
+                f"{BUDGET_WINDOW_MAX_END_YEAR} or earlier"
+            )
             raise ValueError(msg)
         return self
 

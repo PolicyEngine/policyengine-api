@@ -47,7 +47,9 @@ class HouseholdMirrorUnavailableError(RuntimeError):
 
 
 def _default_mirror_factory() -> LegacyHouseholdMirror:
-    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
     from policyengine_api.services.v2.households.database_session import (
         HouseholdDatabaseSession,
     )

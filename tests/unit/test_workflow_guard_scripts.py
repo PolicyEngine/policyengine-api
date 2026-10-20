@@ -1,4 +1,7 @@
-"""Tests for small workflow scripts: require_git_ref.sh and cleanup_cloud_run_images.sh."""
+"""Tests for small workflow scripts.
+
+The scripts are require_git_ref.sh and cleanup_cloud_run_images.sh.
+"""
 
 from __future__ import annotations
 

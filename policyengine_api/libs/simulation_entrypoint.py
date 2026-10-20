@@ -25,6 +25,7 @@ from policyengine_api.request_context import (
     current_observability_id,
     current_request_id,
 )
+from policyengine_api.spm import SPMValidationError
 from policyengine_api.worker_spm import raise_worker_spm_error, validate_worker_spm
 
 
@@ -256,7 +257,7 @@ class SimulationEntrypointClient:
             msg = "Dataset overrides are not supported"
             raise ValueError(msg)
 
-        from policyengine_api.constants import (
+        from policyengine_api.constants import (  # noqa: PLC0415  # constants reads the installed bundle manifest at import
             COUNTRY_PACKAGE_VERSIONS,
             POLICYENGINE_VERSION,
         )
@@ -273,8 +274,6 @@ class SimulationEntrypointClient:
         )
         if resolved is not None:
             if bundle_version == "latest":
-                from policyengine_api.spm import SPMValidationError
-
                 error_code = "SPM_SETTINGS_INVALID"
                 raise SPMValidationError(
                     error_code,
@@ -344,7 +343,9 @@ class SimulationEntrypointClient:
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation entrypoint HTTP error: {e.response.status_code}",
+                    "message": (
+                        f"Simulation entrypoint HTTP error: {e.response.status_code}"
+                    ),
                     "observability_id": current_observability_id(),
                     "response_text": e.response.text[:500],
                 },
@@ -392,7 +393,9 @@ class SimulationEntrypointClient:
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation batch API HTTP error: {e.response.status_code}",
+                    "message": (
+                        f"Simulation batch API HTTP error: {e.response.status_code}"
+                    ),
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -423,8 +426,6 @@ class SimulationEntrypointClient:
         bundle publishes no capability. Raise SPMValidationError if the routes
         are unreachable or ambiguous.
         """
-        from policyengine_api.spm import SPMValidationError
-
         try:
             response = self.client.get(f"{self.base_url}/versions")
             response.raise_for_status()
@@ -529,7 +530,10 @@ class SimulationEntrypointClient:
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation entrypoint HTTP error polling job {job_id}: {e.response.status_code}",
+                    "message": (
+                        f"Simulation entrypoint HTTP error polling job {job_id}: "
+                        f"{e.response.status_code}"
+                    ),
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -539,7 +543,10 @@ class SimulationEntrypointClient:
         except httpx.RequestError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation entrypoint request error polling job {job_id}: {str(e)}",
+                    "message": (
+                        f"Simulation entrypoint request error polling job {job_id}: "
+                        f"{str(e)}"
+                    ),
                 },
                 severity="ERROR",
             )
@@ -573,7 +580,10 @@ class SimulationEntrypointClient:
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation batch API HTTP error polling job {batch_job_id}: {e.response.status_code}",
+                    "message": (
+                        "Simulation batch API HTTP error polling job "
+                        f"{batch_job_id}: {e.response.status_code}"
+                    ),
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -583,7 +593,10 @@ class SimulationEntrypointClient:
         except httpx.RequestError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation batch API request error polling job {batch_job_id}: {str(e)}",
+                    "message": (
+                        "Simulation batch API request error polling job "
+                        f"{batch_job_id}: {str(e)}"
+                    ),
                 },
                 severity="ERROR",
             )

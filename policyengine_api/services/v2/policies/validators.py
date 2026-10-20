@@ -97,7 +97,9 @@ def validate_policy_catalog(
     resolved_parameter_ids: set[UUID],
 ) -> ResolvedPolicyCreationInput:
     """Validate preloaded catalog records and bind them to policy content."""
-    from policyengine_api.services.v2.policies.types import ResolvedPolicyCreationInput
+    from policyengine_api.services.v2.policies.types import (  # noqa: PLC0415  # types imports this module
+        ResolvedPolicyCreationInput,
+    )
 
     if policy_input.tax_benefit_model_id != selected.model.id:
         msg = "tax_benefit_model_id does not match the selected country catalog"

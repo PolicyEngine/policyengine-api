@@ -166,7 +166,8 @@ def compare(registry: Registry, findings: Findings, root: Path) -> list[Violatio
             "untested workflow script",
             findings.untested,
             config.untested_baseline,
-            "add a test that runs the script (see docs/engineering/skills/ci-workflows.md)",
+            "add a test that runs the script "
+            "(see docs/engineering/skills/ci-workflows.md)",
         ),
         (
             "shellcheck",
@@ -190,7 +191,8 @@ def compare(registry: Registry, findings: Findings, root: Path) -> list[Violatio
                     rule_id,
                     "ci-scripts",
                     f"baseline entry no longer applies: {entry}",
-                    f"remove it from {baseline_path} and lower the rule's baseline count",
+                    f"remove it from {baseline_path} and lower the rule's "
+                    "baseline count",
                 )
             )
     return violations

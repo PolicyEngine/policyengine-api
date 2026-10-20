@@ -91,7 +91,7 @@ class ValidRepositoryTest(unittest.TestCase):
 
 
 class SchemaTest(unittest.TestCase):
-    def assertViolation(self, repo: Repo, fragment: str) -> None:
+    def assert_violation(self, repo: Repo, fragment: str) -> None:
         messages = repo.messages()
         self.assertTrue(any(fragment in m for m in messages), messages)
 
@@ -100,19 +100,19 @@ class SchemaTest(unittest.TestCase):
             repo.edit(
                 "rules/registry.toml", 'statement = "Routes never issue SQL."\n', ""
             )
-            self.assertViolation(repo, "statement must be a non-empty string")
+            self.assert_violation(repo, "statement must be a non-empty string")
 
     def test_unknown_enforcer_kind(self) -> None:
         with Repo(render=False) as repo:
             repo.edit("rules/registry.toml", 'kind = "mypy"', 'kind = "flake8"')
-            self.assertViolation(repo, "enforcer.kind is 'flake8'")
+            self.assert_violation(repo, "enforcer.kind is 'flake8'")
 
     def test_bad_status(self) -> None:
         with Repo(render=False) as repo:
             repo.edit(
                 "rules/registry.toml", 'status = "doc-only"', 'status = "optional"'
             )
-            self.assertViolation(repo, "status is 'optional'")
+            self.assert_violation(repo, "status is 'optional'")
 
     def test_unknown_key(self) -> None:
         with Repo(render=False) as repo:
@@ -121,7 +121,7 @@ class SchemaTest(unittest.TestCase):
                 "autofix = true",
                 'autofix = true\nowner = "someone"',
             )
-            self.assertViolation(repo, "unknown key 'owner'")
+            self.assert_violation(repo, "unknown key 'owner'")
 
     def test_duplicate_rule_id(self) -> None:
         with Repo(render=False) as repo:
@@ -130,7 +130,7 @@ class SchemaTest(unittest.TestCase):
                 'id = "ex.quality.types"',
                 'id = "ex.quality.format"',
             )
-            self.assertViolation(repo, "duplicate rule id")
+            self.assert_violation(repo, "duplicate rule id")
 
     def test_scope_glob_must_match(self) -> None:
         with Repo(render=False) as repo:
@@ -139,7 +139,7 @@ class SchemaTest(unittest.TestCase):
                 'scope = ["rules/registry.toml"]',
                 'scope = ["nowhere/*.py"]',
             )
-            self.assertViolation(repo, "scope 'nowhere/*.py' matches no files")
+            self.assert_violation(repo, "scope 'nowhere/*.py' matches no files")
 
     def test_doc_only_rule_cannot_claim_enforcer(self) -> None:
         with Repo(render=False) as repo:
@@ -148,7 +148,7 @@ class SchemaTest(unittest.TestCase):
                 'status = "enforced"\nautofix = true',
                 'status = "doc-only"\nautofix = true',
             )
-            self.assertViolation(repo, "doc-only rules have no enforcer")
+            self.assert_violation(repo, "doc-only rules have no enforcer")
 
     def test_enforced_rule_needs_ci(self) -> None:
         extra = """
@@ -166,7 +166,7 @@ kind = "pytest"
 nodes = ["tests/unit/test_boundaries.py::test_routes_have_no_sql"]
 """
         with Repo(with_rule(extra), render=False) as repo:
-            self.assertViolation(repo, "enforced rules must run in CI")
+            self.assert_violation(repo, "enforced rules must run in CI")
 
     def test_ruff_is_never_ratcheted(self) -> None:
         with Repo(render=False) as repo:
@@ -174,9 +174,10 @@ nodes = ["tests/unit/test_boundaries.py::test_routes_have_no_sql"]
             repo.edit(
                 "rules/registry.toml",
                 'kind = "ruff"\nmode = "format"',
-                'kind = "ruff"\nmode = "format"\n[rule.baseline]\nfile = "rules/baselines/ruff.txt"\ncount = 1',
+                'kind = "ruff"\nmode = "format"\n[rule.baseline]\n'
+                'file = "rules/baselines/ruff.txt"\ncount = 1',
             )
-            self.assertViolation(repo, "ruff is never ratcheted")
+            self.assert_violation(repo, "ruff is never ratcheted")
 
     def test_ratcheted_without_baseline(self) -> None:
         with Repo(render=False) as repo:
@@ -185,7 +186,7 @@ nodes = ["tests/unit/test_boundaries.py::test_routes_have_no_sql"]
                 'status = "enforced"\nautofix = false\n[rule.enforcer]\nkind = "mypy"',
                 'status = "ratcheted"\nautofix = false\n[rule.enforcer]\nkind = "mypy"',
             )
-            self.assertViolation(repo, "ratcheted rules need a baseline")
+            self.assert_violation(repo, "ratcheted rules need a baseline")
 
     def test_baseline_count_must_match_file(self) -> None:
         with Repo(with_rule(RATCHETED_RULE.format(count=3)), render=False) as repo:
@@ -193,7 +194,7 @@ nodes = ["tests/unit/test_boundaries.py::test_routes_have_no_sql"]
                 "rules/baselines/ratcheted.txt",
                 "# tolerated\npkg/routes.py\npkg/other.py\n",
             )
-            self.assertViolation(
+            self.assert_violation(
                 repo, "baseline count is 3 but rules/baselines/ratcheted.txt lists 2"
             )
 
@@ -204,11 +205,11 @@ nodes = ["tests/unit/test_boundaries.py::test_routes_have_no_sql"]
                 'tier = "mechanical"\nstatus = "enforced"\nautofix = true',
                 'tier = "judgment"\nstatus = "enforced"\nautofix = true',
             )
-            self.assertViolation(repo, "judgment rules are enforced by review")
+            self.assert_violation(repo, "judgment rules are enforced by review")
 
 
 class ResolutionTest(unittest.TestCase):
-    def assertViolation(self, repo: Repo, fragment: str) -> None:
+    def assert_violation(self, repo: Repo, fragment: str) -> None:
         messages = repo.messages()
         self.assertTrue(any(fragment in m for m in messages), messages)
 
@@ -219,7 +220,7 @@ class ResolutionTest(unittest.TestCase):
                 "def test_routes_have_no_sql",
                 "def test_renamed",
             )
-            self.assertViolation(repo, "has no test 'test_routes_have_no_sql'")
+            self.assert_violation(repo, "has no test 'test_routes_have_no_sql'")
 
     def test_parametrized_node_resolves(self) -> None:
         with Repo() as repo:
@@ -234,7 +235,7 @@ class ResolutionTest(unittest.TestCase):
     def test_test_outside_make_target_is_not_collected(self) -> None:
         with Repo() as repo:
             repo.edit("Makefile", "tests/unit", "tests/contract")
-            self.assertViolation(repo, "is not collected by 'make test'")
+            self.assert_violation(repo, "is not collected by 'make test'")
 
     def test_project_must_be_in_matrix(self) -> None:
         workflow = """
@@ -275,7 +276,7 @@ invocation = "pytest tests/"
             **with_rule(extra),
         }
         with Repo(files) as repo:
-            self.assertViolation(
+            self.assert_violation(
                 repo, "project projects/beta is not in the matrix of job 'test'"
             )
 
@@ -283,12 +284,12 @@ invocation = "pytest tests/"
         with Repo() as repo:
             repo.edit("rules/registry.toml", 'job = "typecheck"', 'job = "types"')
             repo.render()
-            self.assertViolation(repo, "no job 'types'")
+            self.assert_violation(repo, "no job 'types'")
 
     def test_invocation_only_in_comment_does_not_count(self) -> None:
         with Repo() as repo:
             repo.edit(".github/workflows/pr.yml", "run: make test", "run: echo skipped")
-            self.assertViolation(repo, "does not run 'make test'")
+            self.assert_violation(repo, "does not run 'make test'")
 
     def test_unknown_quality_guard(self) -> None:
         with Repo() as repo:
@@ -296,7 +297,7 @@ invocation = "pytest tests/"
                 "rules/registry.toml", 'name = "rules-registry"', 'name = "renamed"'
             )
             repo.render()
-            self.assertViolation(repo, "no guard named 'renamed'")
+            self.assert_violation(repo, "no guard named 'renamed'")
 
     def test_mypy_path_must_be_configured(self) -> None:
         with Repo() as repo:
@@ -304,7 +305,7 @@ invocation = "pytest tests/"
                 "rules/registry.toml", 'paths = ["pkg"]', 'paths = ["pkg", "other"]'
             )
             repo.render()
-            self.assertViolation(repo, "['other'] not in [tool.mypy].files")
+            self.assert_violation(repo, "['other'] not in [tool.mypy].files")
 
     def test_ruff_lint_codes_must_be_selected(self) -> None:
         extra = """
@@ -323,17 +324,19 @@ mode = "lint"
 codes = ["B"]
 """
         with Repo(with_rule(extra)) as repo:
-            self.assertViolation(repo, "ruff does not select ['B']")
+            self.assert_violation(repo, "ruff does not select ['B']")
 
     def test_proof_files_must_exist(self) -> None:
         with Repo(render=False) as repo:
             repo.edit(
                 "rules/registry.toml",
                 'kind = "mypy"\npaths = ["pkg"]',
-                'kind = "mypy"\npaths = ["pkg"]\n[rule.proof]\nbad_fixture = "rules/fixtures/bad.py"\n'
-                'good_fixture = "rules/fixtures/good.py"\ntest = "tests/unit/test_boundaries.py::test_routes_have_no_sql"',
+                'kind = "mypy"\npaths = ["pkg"]\n[rule.proof]\n'
+                'bad_fixture = "rules/fixtures/bad.py"\n'
+                'good_fixture = "rules/fixtures/good.py"\n'
+                'test = "tests/unit/test_boundaries.py::test_routes_have_no_sql"',
             )
-            self.assertViolation(
+            self.assert_violation(
                 repo, "proof bad_fixture rules/fixtures/bad.py does not exist"
             )
 
@@ -359,7 +362,8 @@ class ProofCiTest(unittest.TestCase):
             self.with_proof(
                 repo,
                 'nodes = ["tests/unit/test_boundaries.py::test_routes_have_no_sql"]',
-                'bad_fixture = "rules/fixtures/bad.py"\ngood_fixture = "rules/fixtures/good.py"\n'
+                'bad_fixture = "rules/fixtures/bad.py"\n'
+                'good_fixture = "rules/fixtures/good.py"\n'
                 'test = "tests/unit/test_proof.py::test_rule_proof_routes"',
             )
             self.assertEqual(repo.messages(), [])
@@ -373,7 +377,8 @@ class ProofCiTest(unittest.TestCase):
             self.with_proof(
                 repo,
                 'nodes = ["tests/unit/test_boundaries.py::test_routes_have_no_sql"]',
-                'bad_fixture = "rules/fixtures/bad.py"\ngood_fixture = "rules/fixtures/good.py"\n'
+                'bad_fixture = "rules/fixtures/bad.py"\n'
+                'good_fixture = "rules/fixtures/good.py"\n'
                 'test = "tests/contract/test_proof.py::test_rule_proof_routes"',
             )
             messages = "\n".join(repo.messages())
@@ -391,7 +396,8 @@ class ProofCiTest(unittest.TestCase):
             self.with_proof(
                 repo,
                 'paths = ["pkg"]',
-                'bad_fixture = "rules/fixtures/bad.py"\ngood_fixture = "rules/fixtures/good.py"\n'
+                'bad_fixture = "rules/fixtures/bad.py"\n'
+                'good_fixture = "rules/fixtures/good.py"\n'
                 'test = "tests/unit/test_proof.py::test_rule_proof_types"',
             )
             self.assertIn(
@@ -405,7 +411,9 @@ class ProofCiTest(unittest.TestCase):
         )
         files = {
             **self.PROOF_FILES,
-            "tools/tests/test_proof.py": "class TestProof:\n    def test_rule_proof_types(self):\n        pass\n",
+            "tools/tests/test_proof.py": (
+                "class TestProof:\n    def test_rule_proof_types(self):\n        pass\n"
+            ),
         }
         with Repo(files, render=False) as repo:
             repo.write(
@@ -415,10 +423,12 @@ class ProofCiTest(unittest.TestCase):
             repo.edit(
                 "rules/registry.toml",
                 "[discovery]\n",
-                '[discovery]\nignore_jobs = [{ job = "tool-tests", reason = "runs tool tests" }]\n',
+                "[discovery]\n"
+                'ignore_jobs = [{ job = "tool-tests", reason = "runs tool tests" }]\n',
             )
             proof = (
-                'bad_fixture = "rules/fixtures/bad.py"\ngood_fixture = "rules/fixtures/good.py"\n'
+                'bad_fixture = "rules/fixtures/bad.py"\n'
+                'good_fixture = "rules/fixtures/good.py"\n'
                 'test = "tools/tests/test_proof.py::TestProof::test_rule_proof_types"\n'
                 'workflow = ".github/workflows/pr.yml"\njob = "tool-tests"\n'
                 'invocation = "unittest discover -s tools/tests"'
@@ -434,7 +444,7 @@ class ProofCiTest(unittest.TestCase):
 
 
 class HiddenRuleTest(unittest.TestCase):
-    def assertViolation(self, repo: Repo, fragment: str) -> None:
+    def assert_violation(self, repo: Repo, fragment: str) -> None:
         messages = repo.messages()
         self.assertTrue(any(fragment in m for m in messages), messages)
 
@@ -442,9 +452,10 @@ class HiddenRuleTest(unittest.TestCase):
         with Repo() as repo:
             repo.write(
                 "scripts/run_quality_guards.py",
-                'GUARDS = (("rules-registry", lambda: []), ("secret-guard", lambda: []))\n',
+                'GUARDS = (("rules-registry", lambda: []), '
+                '("secret-guard", lambda: []))\n',
             )
-            self.assertViolation(repo, "quality guard 'secret-guard'")
+            self.assert_violation(repo, "quality guard 'secret-guard'")
 
     def test_unregistered_guard_test(self) -> None:
         with Repo() as repo:
@@ -453,22 +464,23 @@ class HiddenRuleTest(unittest.TestCase):
                 "tests/unit/test_boundaries.py",
                 text + "\n\ndef test_new_boundary():\n    pass\n",
             )
-            self.assertViolation(
+            self.assert_violation(
                 repo, "test_boundaries.py::test_new_boundary is not referenced"
             )
 
     def test_unregistered_mypy_file(self) -> None:
         with Repo() as repo:
             repo.write("pyproject.toml", '[tool.mypy]\nfiles = ["pkg", "scripts"]\n')
-            self.assertViolation(repo, "mypy checks 'scripts'")
+            self.assert_violation(repo, "mypy checks 'scripts'")
 
     def test_unregistered_ruff_ignore(self) -> None:
         with Repo() as repo:
             repo.write(
                 "pyproject.toml",
-                '[tool.mypy]\nfiles = ["pkg"]\n\n[tool.ruff.lint.per-file-ignores]\n"pkg/*.py" = ["E501"]\n',
+                '[tool.mypy]\nfiles = ["pkg"]\n\n'
+                '[tool.ruff.lint.per-file-ignores]\n"pkg/*.py" = ["E501"]\n',
             )
-            self.assertViolation(repo, "ruff per-file-ignores 'pkg/*.py' has no rule")
+            self.assert_violation(repo, "ruff per-file-ignores 'pkg/*.py' has no rule")
 
     def test_file_level_exceptions_only_for_tests_ci_and_scripts(self) -> None:
         program = 'def main():\n    pass\n\n\nif __name__ == "__main__":\n    main()\n'
@@ -495,7 +507,7 @@ class HiddenRuleTest(unittest.TestCase):
     def test_file_level_exception_outside_allowed_files_is_rejected(self) -> None:
         with Repo(with_rule(per_file_ignore_rule("routes", "pkg/*.py"))) as repo:
             repo.write("pyproject.toml", per_file_ignore_config("pkg/*.py"))
-            self.assertViolation(
+            self.assert_violation(
                 repo,
                 "covers files that may not take file-level exceptions: pkg/routes.py",
             )
@@ -510,25 +522,27 @@ class HiddenRuleTest(unittest.TestCase):
             }
         ) as repo:
             repo.write("pyproject.toml", per_file_ignore_config("pkg/cli.py"))
-            self.assertViolation(repo, "may not take file-level exceptions: pkg/cli.py")
+            self.assert_violation(
+                repo, "may not take file-level exceptions: pkg/cli.py"
+            )
 
     def test_file_level_exception_star_crosses_directories(self) -> None:
         # Ruff's * also matches "/", so "*/routes.py" reaches pkg/routes.py.
         with Repo(with_rule(per_file_ignore_rule("star", "*/routes.py"))) as repo:
             repo.write("pyproject.toml", per_file_ignore_config("*/routes.py"))
-            self.assertViolation(
+            self.assert_violation(
                 repo, "may not take file-level exceptions: pkg/routes.py"
             )
 
     def test_negated_file_level_exception_is_rejected(self) -> None:
         with Repo(with_rule(per_file_ignore_rule("negated", "!tests/**"))) as repo:
             repo.write("pyproject.toml", per_file_ignore_config("!tests/**"))
-            self.assertViolation(repo, "pattern '!tests/**' is negated")
+            self.assert_violation(repo, "pattern '!tests/**' is negated")
 
     def test_file_level_exception_must_match_a_file(self) -> None:
         with Repo(with_rule(per_file_ignore_rule("stale", "nowhere/**"))) as repo:
             repo.write("pyproject.toml", per_file_ignore_config("nowhere/**"))
-            self.assertViolation(repo, "pattern 'nowhere/**' matches no files")
+            self.assert_violation(repo, "pattern 'nowhere/**' matches no files")
 
     def test_unregistered_ci_job(self) -> None:
         with Repo() as repo:
@@ -537,7 +551,7 @@ class HiddenRuleTest(unittest.TestCase):
                 ".github/workflows/pr.yml",
                 text + "  deploy:\n    steps:\n      - run: ./deploy.sh\n",
             )
-            self.assertViolation(repo, "CI job 'deploy'")
+            self.assert_violation(repo, "CI job 'deploy'")
 
     def test_ignored_ci_job_with_reason_passes(self) -> None:
         with Repo() as repo:
@@ -549,7 +563,9 @@ class HiddenRuleTest(unittest.TestCase):
             repo.edit(
                 "rules/registry.toml",
                 "[discovery]\n",
-                '[discovery]\nignore_jobs = [{ job = "deploy", reason = "deploys, enforces nothing" }]\n',
+                "[discovery]\n"
+                'ignore_jobs = [{ job = "deploy", '
+                'reason = "deploys, enforces nothing" }]\n',
             )
             repo.render()
             self.assertEqual(repo.messages(), [])
@@ -608,7 +624,8 @@ class ExpiryTest(unittest.TestCase):
             repo.edit(
                 "rules/registry.toml",
                 'kind = "mypy"\npaths = ["pkg"]',
-                'kind = "mypy"\npaths = ["pkg"]\n[[rule.exception]]\npath = "pkg/routes.py"\n'
+                'kind = "mypy"\npaths = ["pkg"]\n[[rule.exception]]\n'
+                'path = "pkg/routes.py"\n'
                 'reason = "migrating"\nexpires = 2026-05-01',
             )
             repo.render()
@@ -623,7 +640,8 @@ class ExpiryTest(unittest.TestCase):
             repo.edit(
                 "rules/registry.toml",
                 'kind = "mypy"\npaths = ["pkg"]',
-                'kind = "mypy"\npaths = ["pkg"]\n[[rule.exception]]\npath = "pkg/routes.py"\n'
+                'kind = "mypy"\npaths = ["pkg"]\n[[rule.exception]]\n'
+                'path = "pkg/routes.py"\n'
                 'reason = "migrating"\nexpires = 2026-12-01',
             )
             repo.render()
@@ -653,9 +671,12 @@ class BaselineTest(unittest.TestCase):
     def test_downgrade_needs_reason(self) -> None:
         base = self.registry("")
         weakened = REGISTRY.replace(
-            'status = "enforced"\nautofix = true\n[rule.enforcer]\nkind = "ruff"\nmode = "format"\n[[rule.ci]]\n'
-            'workflow = ".github/workflows/pr.yml"\njob = "lint"\ninvocation = "ruff format --check"',
-            'status = "advisory"\nautofix = true\n[rule.enforcer]\nkind = "ruff"\nmode = "format"',
+            'status = "enforced"\nautofix = true\n[rule.enforcer]\nkind = "ruff"\n'
+            'mode = "format"\n[[rule.ci]]\n'
+            'workflow = ".github/workflows/pr.yml"\njob = "lint"\n'
+            'invocation = "ruff format --check"',
+            'status = "advisory"\nautofix = true\n[rule.enforcer]\nkind = "ruff"\n'
+            'mode = "format"',
         )
         current, _ = load_text(weakened)
         assert current is not None

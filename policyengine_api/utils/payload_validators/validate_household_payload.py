@@ -17,7 +17,8 @@ def validate_household_payload(
         payload (dict): The payload to validate.
 
     Returns:
-        tuple[bool, str]: A tuple containing a boolean indicating whether the payload is valid and a message.
+        tuple[bool, str]: A tuple containing a boolean indicating whether the
+        payload is valid and a message.
 
     """
     # Check that all required keys are present
