@@ -10,7 +10,7 @@ import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse, urlsplit
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -1606,3 +1606,343 @@ def test_bigquery_rows_become_request_counts(sync_script: ModuleType) -> None:
     assert counts == [
         _request_count(sync_script, "/<country_id>/report", 120),
     ]
+
+
+# Issue rendering
+
+PROJECT_ID = "policyengine-observability"
+
+
+def _group(sync_script: ModuleType, records: list, request_counts=()) -> object:
+    groups = sync_script.build_groups(
+        records,
+        list(request_counts),
+        sync_script.reporting_window(REPORT_DATE),
+        FINGERPRINT_KEY,
+    )
+    return groups[0]
+
+
+def _render(sync_script: ModuleType, group: object) -> tuple[str, str]:
+    window = sync_script.reporting_window(REPORT_DATE)
+    return (
+        sync_script.issue_title(group),
+        sync_script.issue_body(group, window, PROJECT_ID),
+    )
+
+
+def _section(sync_script: ModuleType, body: str) -> str:
+    start = body.index(sync_script.SECTION_START)
+    end = body.index(sync_script.SECTION_END) + len(sync_script.SECTION_END)
+    return body[start:end]
+
+
+def _logs_query(url: str) -> tuple[str, dict[str, str]]:
+    """Split a Logs Explorer URL into its decoded query and other settings."""
+    parsed = urlsplit(url)
+    settings = dict(
+        segment.split("=", 1)
+        for segment in parsed.path.split(";")[1:]
+        if "=" in segment
+    )
+    return unquote(settings.pop("query")), settings
+
+
+def test_render_title_names_the_exception_and_its_most_frequent_route(
+    sync_script: ModuleType,
+) -> None:
+    group = _group(sync_script, [_exception_record(sync_script)])
+
+    title, _ = _render(sync_script, group)
+
+    assert title == (
+        "[telemetry] policyengine-api: StaleDataError on `/<country_id>/report` "
+        f"({group.fingerprint})"
+    )
+
+
+def test_render_title_for_a_logged_error(sync_script: ModuleType) -> None:
+    route_group = _group(sync_script, [_message_record(sync_script)])
+    operation_group = _group(
+        sync_script,
+        [
+            _message_record(
+                sync_script, route=None, operation_name="simulation.dispatch"
+            )
+        ],
+    )
+
+    assert sync_script.issue_title(route_group).startswith(
+        "[telemetry] policyengine-api: logged error on `/<country_id>/report` ("
+    )
+    assert sync_script.issue_title(operation_group).startswith(
+        "[telemetry] policyengine-api: logged error in `simulation.dispatch` ("
+    )
+
+
+def test_render_title_for_a_failed_request_without_an_exception(
+    sync_script: ModuleType,
+) -> None:
+    group = _group(sync_script, [_failed_request_record(sync_script, status_code=502)])
+
+    assert sync_script.issue_title(group) == (
+        "[telemetry] policyengine-api: HTTP 502 without recorded exception on "
+        f"`/<country_id>/report` ({group.fingerprint})"
+    )
+
+
+def test_render_title_without_a_route(sync_script: ModuleType) -> None:
+    group = _group(
+        sync_script,
+        [
+            _exception_record(
+                sync_script,
+                service_name="policyengine-stage12-us-worker",
+                route=None,
+            )
+        ],
+    )
+
+    assert sync_script.issue_title(group) == (
+        "[telemetry] policyengine-stage12-us-worker: StaleDataError "
+        f"({group.fingerprint})"
+    )
+
+
+def test_render_body_marked_section_holds_the_measures_table(
+    sync_script: ModuleType,
+) -> None:
+    records = [
+        _exception_record(sync_script, request_key="r1", observability_key="o1"),
+        _exception_record(sync_script, request_key="r2", timestamp=_at(2)),
+        _exception_record(
+            sync_script, request_key="s1", environment_name="staging", timestamp=_at(1)
+        ),
+    ]
+    group = _group(
+        sync_script,
+        records,
+        [_request_count(sync_script, "/<country_id>/report", 400)],
+    )
+
+    _, body = _render(sync_script, group)
+    section = _section(sync_script, body)
+
+    assert body.index(sync_script.SECTION_START) > 0
+    assert f"`{group.fingerprint}`" in section
+    assert "2026-10-20 00:00 EDT to 2026-10-21 00:00 EDT (24 hours)" in section
+    assert "| Measure | Production | Staging |" in section
+    assert "| Occurrences | 2 | 1 |" in section
+    assert "| Affected requests | 2 | 1 |" in section
+    assert "| Observability IDs | 1 | 0 |" in section
+    assert (
+        "| Error rate on affected routes | 0.50% (2 of 400 requests) | n/a |" in section
+    )
+    assert "| Occurrences per hour | 0.08 | 0.04 |" in section
+    assert "| Occurrences per hour, previous 7 days | 0.00 | 0.00 |" in section
+    assert (
+        "| First seen in the last 8 days "
+        "| 2026-10-20 12:00 EDT | 2026-10-20 13:00 EDT |" in section
+    )
+    assert "| Last seen | 2026-10-20 14:00 EDT | 2026-10-20 13:00 EDT |" in section
+    assert "Related fingerprints: none" in section
+    assert "https://console.cloud.google.com/logs/query;" in section
+
+
+def test_render_body_lists_related_fingerprints(sync_script: ModuleType) -> None:
+    records = [
+        _exception_record(sync_script, trace_key="t1"),
+        _message_record(
+            sync_script, service_name="policyengine-simulation-entry", trace_key="t1"
+        ),
+    ]
+    groups = sync_script.build_groups(
+        records, [], sync_script.reporting_window(REPORT_DATE), FINGERPRINT_KEY
+    )
+    exception_group = next(group for group in groups if group.kind == "exception")
+    other = exception_group.related_fingerprints[0]
+
+    _, body = _render(sync_script, exception_group)
+
+    assert f"Related fingerprints (sharing traces): `{other}`" in body
+
+
+def test_render_body_state_comment_records_the_group_and_window(
+    sync_script: ModuleType,
+) -> None:
+    group = _group(sync_script, [_exception_record(sync_script)])
+
+    _, body = _render(sync_script, group)
+
+    assert sync_script.parse_state(body) == {
+        "algorithm": 1,
+        "fingerprint": group.fingerprint,
+        "kind": "exception",
+        "window_end": "2026-10-21T04:00:00+00:00",
+    }
+
+
+def test_render_body_stays_under_the_github_limit(sync_script: ModuleType) -> None:
+    # The longest route that still passes validation (195 characters).
+    long_route = "/" + "/".join(["<segment_name>"] * 13)
+    records = [
+        _exception_record(
+            sync_script,
+            error_type="E" * 120,
+            route=long_route,
+            trace_key=f"t{index}",
+            request_key=f"r{index}",
+        )
+        for index in range(4)
+    ]
+    records += [
+        _message_record(
+            sync_script,
+            request_key=f"m{index}",
+            trace_key=f"t{index}",
+            message_template=f"template {index}",
+            service_name="policyengine-simulation-entry",
+        )
+        for index in range(4)
+    ]
+    groups = sync_script.build_groups(
+        records, [], sync_script.reporting_window(REPORT_DATE), FINGERPRINT_KEY
+    )
+
+    for group in groups:
+        title, body = _render(sync_script, group)
+        assert len(body) < 65_536
+        assert len(title) <= 256
+
+
+def test_render_logs_link_filters_exceptions_by_service_and_type(
+    sync_script: ModuleType,
+) -> None:
+    group = _group(sync_script, [_exception_record(sync_script)])
+    url = sync_script.logs_explorer_url(
+        group, sync_script.reporting_window(REPORT_DATE), PROJECT_ID
+    )
+
+    query, settings = _logs_query(url)
+
+    assert urlparse(url).query == "project=policyengine-observability"
+    assert settings["storageScope"] == quote(
+        "storage,projects/policyengine-observability/locations/global/"
+        "buckets/policyengine-observability/views/_AllLogs",
+        safe="",
+    )
+    assert query.splitlines() == [
+        'jsonPayload.schema_version="policyengine.observability.v2"',
+        'jsonPayload."service.name"="policyengine-api"',
+        "severity>=ERROR",
+        'jsonPayload."error.type"="StaleDataError"',
+        'timestamp>="2026-10-20T04:00:00Z"',
+        'timestamp<"2026-10-21T04:00:00Z"',
+    ]
+    for character in (" ", "\n", '"'):
+        assert character not in url
+
+
+def test_render_logs_link_filters_failed_requests_by_route_and_status(
+    sync_script: ModuleType,
+) -> None:
+    group = _group(
+        sync_script,
+        [
+            _failed_request_record(
+                sync_script,
+                service_name="policyengine-simulation-py1-2-3",
+                route="/jobs/{job_id}",
+                status_code=504,
+            )
+        ],
+    )
+
+    query, _ = _logs_query(
+        sync_script.logs_explorer_url(
+            group, sync_script.reporting_window(REPORT_DATE), PROJECT_ID
+        )
+    )
+
+    assert query.splitlines()[1:5] == [
+        'jsonPayload."service.name"=~"^policyengine-simulation-py[0-9]+-[0-9]+-[0-9]+$"',
+        'jsonPayload."event.name"="request.completed"',
+        'jsonPayload."http.route"="/jobs/{job_id}"',
+        'jsonPayload."http.response.status_code"=504',
+    ]
+
+
+def test_render_logs_link_filters_logged_errors_by_route_or_operation(
+    sync_script: ModuleType,
+) -> None:
+    window = sync_script.reporting_window(REPORT_DATE)
+    route_group = _group(sync_script, [_message_record(sync_script)])
+    operation_group = _group(
+        sync_script,
+        [
+            _message_record(
+                sync_script, route=None, operation_name="simulation.dispatch"
+            )
+        ],
+    )
+
+    route_query, _ = _logs_query(
+        sync_script.logs_explorer_url(route_group, window, PROJECT_ID)
+    )
+    operation_query, _ = _logs_query(
+        sync_script.logs_explorer_url(operation_group, window, PROJECT_ID)
+    )
+
+    assert 'jsonPayload."http.route"="/<country_id>/report"' in route_query
+    assert "severity>=ERROR" in route_query
+    assert 'jsonPayload."operation.name"="simulation.dispatch"' in operation_query
+
+
+def _sentinel_row(sync_script: ModuleType, **overrides: object) -> dict[str, object]:
+    row: dict[str, object] = {
+        "timestamp": WINDOW_NOON,
+        "service_name": "SENTINEL service name",
+        "environment_name": "production",
+        "event_name": "SENTINEL event",
+        "error_type": "SENTINEL error type",
+        "error_handled": "SENTINEL handled",
+        "frames": [
+            '/app/policyengine_api/SENTINEL.py", line 1, in SENTINEL_function',
+            "SENTINEL frame text",
+        ],
+        "stack_truncated": "SENTINEL",
+        "message_template": "SENTINEL message words",
+        "attribute_error_type": "SENTINEL attribute type",
+        "failure_category": "SENTINEL category",
+        "route": "/SENTINEL/route?query=SENTINEL",
+        "status_code": "SENTINEL",
+        "operation_name": "SENTINEL operation",
+        "request_key": "SENTINEL request",
+        "observability_key": "SENTINEL observability",
+        "trace_key": "SENTINEL trace",
+    }
+    row.update(overrides)
+    return row
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {},
+        {"error_type": None},
+        {"error_type": None, "event_name": "request.completed"},
+        {"route": None},
+    ],
+)
+def test_render_never_includes_values_from_records(
+    sync_script: ModuleType, overrides: dict[str, object]
+) -> None:
+    record = sync_script.error_record_from_row(_sentinel_row(sync_script, **overrides))
+    group = _group(sync_script, [record])
+    window = sync_script.reporting_window(REPORT_DATE)
+
+    title, body = _render(sync_script, group)
+    url = sync_script.logs_explorer_url(group, window, PROJECT_ID)
+
+    for output in (title, body, url, unquote(url)):
+        assert "SENTINEL" not in output

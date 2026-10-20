@@ -101,6 +101,17 @@ MAXIMUM_BYTES_BILLED = 5 * 1024**3
 QUERY_WAIT_MILLISECONDS = 30_000
 MAX_QUERY_POLLS = 40
 UNIX_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+ISSUE_TITLE_PREFIX = "[telemetry]"
+MAX_TITLE_LENGTH = 256
+SECTION_START = "<!-- telemetry-error-issues:start -->"
+SECTION_END = "<!-- telemetry-error-issues:end -->"
+STATE_PATTERN = re.compile(r"<!-- telemetry-error-issues:state (\{[^\n]*?\}) -->")
+NOT_AVAILABLE = "n/a"
+LOGS_EXPLORER_URL = "https://console.cloud.google.com/logs/query"
+LOG_BUCKET = "policyengine-observability"
+LOG_VIEW = "_AllLogs"
+SCHEMA_VERSION = "policyengine.observability.v2"
+SIMULATION_FAMILY = "policyengine-simulation-py"
 HEALTH_CHECK_ROUTES = (
     "/health",
     "/simulation-gateway-check",
@@ -639,8 +650,8 @@ def _most_frequent_route(occurrences: list[Occurrence], window: ReportingWindow)
     """Return the route most failures in the window used, preferring production."""
     in_window = [item for item in occurrences if item.timestamp >= window.start]
     production = [item for item in in_window if item.environment == "production"]
-    routes = Counter(item.route or MISSING for item in production or in_window)
-    route, _ = min(routes.items(), key=lambda item: (-item[1], item[0]))
+    routes = Counter(item.route for item in production or in_window)
+    route, _ = min(routes.items(), key=lambda item: (-item[1], item[0] or ""))
     return public_route(route)
 
 
@@ -1031,6 +1042,214 @@ def fetch_request_counts(
         )
         for row in rows
     ]
+
+
+def _code(value: str) -> str:
+    return f"`{value}`"
+
+
+def _place(group: ErrorGroup) -> str:
+    """Describe where the group fails: its route, else its operation, else nothing."""
+    if group.route != MISSING:
+        return f" on {_code(group.route)}"
+    if group.kind == "message" and group.operation != MISSING:
+        return f" in {_code(group.operation)}"
+    return ""
+
+
+def _status_text(group: ErrorGroup) -> str:
+    return "HTTP error" if group.status_code is None else f"HTTP {group.status_code}"
+
+
+def _summary(group: ErrorGroup) -> str:
+    if group.kind == "exception":
+        return group.error_type
+    if group.kind == "message":
+        return "logged error"
+    return f"{_status_text(group)} without recorded exception"
+
+
+def issue_title(group: ErrorGroup) -> str:
+    """Return the issue title, which names the fingerprint for matching.
+
+    The route is left out when the title would exceed GitHub's length limit.
+    """
+    lead = f"{ISSUE_TITLE_PREFIX} {group.family}: {_summary(group)}"
+    suffix = f" ({group.fingerprint})"
+    title = f"{lead}{_place(group)}{suffix}"
+    return title if len(title) <= MAX_TITLE_LENGTH else f"{lead}{suffix}"
+
+
+def _logs_timestamp(moment: datetime) -> str:
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _logs_filters(group: ErrorGroup) -> list[str]:
+    """Return logging query clauses that select the group's records."""
+    filters = [f'jsonPayload.schema_version="{SCHEMA_VERSION}"']
+    if group.family == SIMULATION_FAMILY:
+        filters.append(
+            f'jsonPayload."service.name"=~"^{SIMULATION_FAMILY}[0-9]+-[0-9]+-[0-9]+$"'
+        )
+    elif group.family not in {MISSING, UNRECOGNIZED}:
+        filters.append(f'jsonPayload."service.name"="{group.family}"')
+    if group.kind == "failed_request":
+        filters.append('jsonPayload."event.name"="request.completed"')
+    else:
+        filters.append("severity>=ERROR")
+    if group.kind == "exception" and group.error_type not in {MISSING, UNRECOGNIZED}:
+        filters.append(f'jsonPayload."error.type"="{group.error_type}"')
+    if group.kind != "exception" and group.route not in {MISSING, UNRECOGNIZED}:
+        filters.append(f'jsonPayload."http.route"="{group.route}"')
+    elif group.kind == "message" and group.operation not in {MISSING, UNRECOGNIZED}:
+        filters.append(f'jsonPayload."operation.name"="{group.operation}"')
+    if group.kind == "failed_request" and group.status_code is not None:
+        filters.append(f'jsonPayload."http.response.status_code"={group.status_code}')
+    return filters
+
+
+def logs_explorer_url(
+    group: ErrorGroup, window: ReportingWindow, project_id: str
+) -> str:
+    """Return a Logs Explorer link to the group's records in the window."""
+    query = "\n".join(
+        [
+            *_logs_filters(group),
+            f'timestamp>="{_logs_timestamp(window.start)}"',
+            f'timestamp<"{_logs_timestamp(window.end)}"',
+        ]
+    )
+    view = (
+        f"projects/{project_id}/locations/global/buckets/{LOG_BUCKET}/views/{LOG_VIEW}"
+    )
+    settings = {"query": query, "storageScope": f"storage,{view}"}
+    encoded = "".join(
+        f";{name}={quote(value, safe='')}" for name, value in settings.items()
+    )
+    return f"{LOGS_EXPLORER_URL}{encoded}?{urlencode({'project': project_id})}"
+
+
+def _eastern_time(moment: datetime | None) -> str:
+    if moment is None:
+        return NOT_AVAILABLE
+    return moment.astimezone(REPORTING_TIME_ZONE).strftime("%Y-%m-%d %H:%M %Z")
+
+
+def _error_rate(measures: EnvironmentMeasures) -> str:
+    if measures.error_rate is None:
+        return NOT_AVAILABLE
+    return (
+        f"{measures.error_rate:.2%} ({measures.affected_requests:,} of "
+        f"{measures.route_requests:,} requests)"
+    )
+
+
+def _measures_table(group: ErrorGroup) -> list[str]:
+    rows = [
+        ("Occurrences", lambda measures: f"{measures.occurrences:,}"),
+        ("Affected requests", lambda measures: f"{measures.affected_requests:,}"),
+        ("Observability IDs", lambda measures: f"{measures.observability_ids:,}"),
+        ("Error rate on affected routes", _error_rate),
+        ("Occurrences per hour", lambda measures: f"{measures.hourly_rate:.2f}"),
+        (
+            "Occurrences per hour, previous 7 days",
+            lambda measures: f"{measures.previous_hourly_rate:.2f}",
+        ),
+        (
+            "First seen in the last 8 days",
+            lambda measures: _eastern_time(measures.first_seen),
+        ),
+        ("Last seen", lambda measures: _eastern_time(measures.last_seen)),
+    ]
+    return [
+        "| Measure | Production | Staging |",
+        "| --- | --- | --- |",
+        *(
+            f"| {name} | {describe(group.production)} | {describe(group.staging)} |"
+            for name, describe in rows
+        ),
+    ]
+
+
+def _group_details(group: ErrorGroup) -> list[str]:
+    details = [
+        f"- Kind: {group.kind} (fingerprint algorithm {FINGERPRINT_ALGORITHM})",
+        f"- Service: {_code(group.family)}",
+    ]
+    if group.kind == "exception":
+        details.append(f"- Exception type: {_code(group.error_type)}")
+    if group.kind == "failed_request":
+        details.append(f"- Response: {_status_text(group)}")
+    if group.kind == "message" and group.operation != MISSING:
+        details.append(f"- Operation: {_code(group.operation)}")
+    details.append(f"- Most frequent route: {_code(group.route)}")
+    return details
+
+
+def _state_comment(group: ErrorGroup, window: ReportingWindow) -> str:
+    state = {
+        "algorithm": FINGERPRINT_ALGORITHM,
+        "fingerprint": group.fingerprint,
+        "kind": group.kind,
+        "window_end": window.end.astimezone(UTC).isoformat(),
+    }
+    return f"<!-- telemetry-error-issues:state {json.dumps(state, sort_keys=True)} -->"
+
+
+def parse_state(body: str) -> dict[str, Any] | None:
+    """Return the state the job last wrote into an issue body, if it is there."""
+    match = STATE_PATTERN.search(body)
+    if match is None:
+        return None
+    try:
+        state = json.loads(match.group(1))
+    except ValueError:
+        return None
+    return state if isinstance(state, dict) else None
+
+
+def issue_section(group: ErrorGroup, window: ReportingWindow, project_id: str) -> str:
+    """Return the marked section of the issue body, which each run replaces."""
+    related = ", ".join(map(_code, group.related_fingerprints))
+    window_text = (
+        f"{_eastern_time(window.start)} to {_eastern_time(window.end)} "
+        f"({window.hours:.0f} hours)"
+    )
+    lines = [
+        SECTION_START,
+        f"### Error group {_code(group.fingerprint)}",
+        "",
+        *_group_details(group),
+        f"- Window: {window_text}",
+        "",
+        *_measures_table(group),
+        "",
+        (
+            f"Related fingerprints (sharing traces): {related}"
+            if related
+            else "Related fingerprints: none"
+        ),
+        "",
+        (
+            f"[Matching log records in Logs Explorer]"
+            f"({logs_explorer_url(group, window, project_id)}), for the window only. "
+            f"It needs read access to the `{project_id}` project."
+        ),
+        "",
+        _state_comment(group, window),
+        SECTION_END,
+    ]
+    return "\n".join(lines)
+
+
+def issue_body(group: ErrorGroup, window: ReportingWindow, project_id: str) -> str:
+    """Return a new issue's body: a short note, then the marked section."""
+    note = (
+        "The daily telemetry error report opened this issue for a production "
+        "error group. Each run replaces the marked section below with the "
+        "latest day's measures; text outside it is kept."
+    )
+    return f"{note}\n\n{issue_section(group, window, project_id)}\n"
 
 
 def _report_date_argument(value: str) -> date | None:
