@@ -195,6 +195,39 @@ class TestAxisResults:
         )
 
 
+class TestVariableQuantityType:
+    """Each variable's metadata says whether it is a stock or a flow."""
+
+    @pytest.mark.parametrize(
+        ("country_id", "variable_name", "quantity_type"),
+        [
+            # Money over a period: core's default for a float variable.
+            ("us", "employment_income", "flow"),
+            ("uk", "employment_income", "flow"),
+            # A value at one point in time, declared in the model.
+            ("us", "household_vehicles_value", "stock"),
+            ("uk", "mortgage_debt", "stock"),
+            # Core's default for a yes-or-no variable.
+            ("us", "is_blind", "stock"),
+        ],
+    )
+    def test__variable_metadata_includes_the_models_quantity_type(
+        self, country_id, variable_name, quantity_type
+    ):
+        variable_metadata = COUNTRIES[country_id].metadata["variables"][variable_name]
+
+        assert variable_metadata["quantityType"] == quantity_type
+
+    def test__every_variable_has_a_stock_or_flow_quantity_type(self):
+        for country_id, country in COUNTRIES.items():
+            quantity_types = {
+                variable_metadata["quantityType"]
+                for variable_metadata in country.metadata["variables"].values()
+            }
+
+            assert quantity_types <= {"stock", "flow"}, country_id
+
+
 class TestUKCountryMetadata:
     """Tests for UK country metadata, specifically local authority loading."""
 
