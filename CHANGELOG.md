@@ -1,3 +1,14 @@
+## [5.6.0] - 2026-10-20
+
+### Added
+
+- Declare the v2 database roles' table privileges in the repository (`policyengine_api/data/v2/privileges.py`), grant them after every v2 schema upgrade and check them before each deploy with `scripts/reconcile_v2_privileges.py`, and run the cross-database integration tests as those roles instead of the database superuser.
+
+### Fixed
+
+- The first deploy grants the Public API's production runtime role the privileges its v2 code needs and production lacked: INSERT on `policies`, `households` and `parameter_values`, and INSERT and UPDATE on `legacy_policy_mappings` and `legacy_household_mappings`. It also records in the repository the SELECT grants applied by hand to fix failed reform saves (#3977).
+
+
 ## [5.5.8] - 2026-10-20
 
 ### Changed

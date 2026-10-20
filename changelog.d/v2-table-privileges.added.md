@@ -1,1 +1,0 @@
-Declare the v2 database roles' table privileges in the repository (`policyengine_api/data/v2/privileges.py`), grant them after every v2 schema upgrade and check them before each deploy with `scripts/reconcile_v2_privileges.py`, and run the cross-database integration tests as those roles instead of the database superuser.

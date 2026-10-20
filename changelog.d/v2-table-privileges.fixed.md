@@ -1,1 +1,0 @@
-The first deploy grants the Public API's production runtime role the privileges its v2 code needs and production lacked: INSERT on `policies`, `households` and `parameter_values`, and INSERT and UPDATE on `legacy_policy_mappings` and `legacy_household_mappings`. It also records in the repository the SELECT grants applied by hand to fix failed reform saves (#3977).
