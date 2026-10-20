@@ -1567,6 +1567,11 @@ def _meets_thresholds(occurrences: int, affected_requests: int) -> bool:
     )
 
 
+def _folded(names: Iterable[str]) -> set[str]:
+    """Return label names case-folded, as GitHub compares them."""
+    return {name.casefold() for name in names}
+
+
 def _issue_labels(group: ErrorGroup) -> list[str]:
     service_label = f"{SERVICE_LABEL_PREFIX}{group.family}"
     if len(service_label) > MAX_LABEL_LENGTH:
@@ -1600,6 +1605,7 @@ class IssueSynchronizer:
         self._window = window
         self._project_id = project_id
         self._dry_run = dry_run
+        # Case-folded names: GitHub label names are unique regardless of case.
         self._known_labels: set[str] | None = None
 
     def run(self, groups: Iterable[ErrorGroup]) -> SyncResult:
@@ -1639,12 +1645,12 @@ class IssueSynchronizer:
 
     def _ensure_labels(self, names: Iterable[str]) -> None:
         if self._known_labels is None:
-            self._known_labels = self._github.list_labels()
+            self._known_labels = _folded(self._github.list_labels())
         for name in names:
-            if name not in self._known_labels:
+            if name.casefold() not in self._known_labels:
                 color, description = LABEL_DETAILS.get(name, SERVICE_LABEL_DETAILS)
                 self._github.create_label(name, color, description)
-                self._known_labels.add(name)
+                self._known_labels.add(name.casefold())
 
     def _open(self, group: ErrorGroup) -> int | None:
         if self._dry_run:
@@ -1657,9 +1663,11 @@ class IssueSynchronizer:
             labels,
         )
         number = issue["number"]
-        applied = {label["name"] for label in issue.get("labels", [])}
-        missing = [label for label in labels if label not in applied]
-        if missing and not set(missing) <= self._github.add_labels(number, missing):
+        applied = _folded(label["name"] for label in issue.get("labels", []))
+        missing = [label for label in labels if label.casefold() not in applied]
+        if missing and not _folded(missing) <= _folded(
+            self._github.add_labels(number, missing)
+        ):
             msg = f"GitHub did not apply the labels to issue #{number}"
             raise GitHubLabelError(msg)
         return number

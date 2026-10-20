@@ -2193,9 +2193,17 @@ class FakeGitHub:
             labels = [{"name": name} for name in sorted(self.labels)]
             return self._respond(self._page(labels, query))
         if parts == ["labels"]:
+            # GitHub label names are unique regardless of case.
+            if body["name"].casefold() in {name.casefold() for name in self.labels}:
+                return self._respond({"message": "Validation Failed"}, status=422)
             self.labels.add(body["name"])
             return self._respond({"name": body["name"]}, status=201)
         return self._create(body)
+
+    def _existing_label_names(self, requested: list[str]) -> list[str]:
+        """Return the stored spelling of each label, as GitHub applies them."""
+        stored = {name.casefold(): name for name in self.labels}
+        return [stored.get(name.casefold(), name) for name in requested]
 
     def _route_issue(
         self, method: str, number: int, rest: list[str], body: dict
@@ -2206,7 +2214,7 @@ class FakeGitHub:
         if rest == ["labels"]:
             names = {label["name"] for label in self.issues[number]["labels"]}
             if not self.drop_created_labels:
-                names |= set(body["labels"])
+                names |= set(self._existing_label_names(body["labels"]))
             self.issues[number]["labels"] = [{"name": name} for name in sorted(names)]
             return self._respond(self.issues[number]["labels"])
         self.comments.setdefault(number, []).append(body["body"])
@@ -2219,7 +2227,11 @@ class FakeGitHub:
 
     def _create(self, body: dict) -> object:
         number = max(self.issues, default=0) + 1
-        labels = [] if self.drop_created_labels else body["labels"]
+        labels = (
+            []
+            if self.drop_created_labels
+            else self._existing_label_names(body["labels"])
+        )
         self.issues[number] = {
             "number": number,
             "title": body["title"],
@@ -2579,6 +2591,49 @@ def test_sync_creates_missing_labels_before_opening_issues(
         if urlsplit(request.url).path.endswith("/labels")
     ]
     assert created_labels == ["service: policyengine-api"]
+
+
+def test_sync_uses_existing_labels_whatever_their_case(
+    sync_script: ModuleType,
+) -> None:
+    groups = _groups(sync_script, _failures(sync_script, 3))
+    github = FakeGitHub(
+        sync_script, labels=("Telemetry-Error", "Service: Policyengine-Api")
+    )
+
+    _sync(sync_script, groups, github)
+
+    created_labels = [
+        request
+        for _, request in github.writes
+        if urlsplit(request.url).path.endswith("/labels")
+    ]
+    assert created_labels == []
+    assert github.issues[1]["labels"] == [
+        {"name": "Telemetry-Error"},
+        {"name": "Service: Policyengine-Api"},
+    ]
+
+
+def test_sync_reopens_with_an_existing_regression_label_of_another_case(
+    sync_script: ModuleType,
+) -> None:
+    group = _groups(sync_script, _failures(sync_script, 4))[0]
+    closed_at = (WINDOW_NOON - timedelta(days=2)).isoformat()
+    issue = _existing_issue(
+        sync_script,
+        group,
+        state="closed",
+        state_reason="completed",
+        closed_at=closed_at,
+    )
+    github = FakeGitHub(sync_script, [issue], labels=("Regression",))
+
+    result = _sync(sync_script, [group], github)
+
+    assert result.actions[0].action == "reopened"
+    assert {"name": "Regression"} in github.issues[7]["labels"]
+    assert github.labels == {"Regression"}
 
 
 def test_sync_adds_labels_a_create_response_is_missing(
