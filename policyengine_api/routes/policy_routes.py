@@ -3,6 +3,8 @@
 import contextlib
 import json
 import time
+from dataclasses import dataclass
+from http import HTTPStatus
 
 from flask import Blueprint, Response, request
 from werkzeug.exceptions import BadRequest, NotFound
@@ -31,6 +33,7 @@ from policyengine_api.services.user_policy_service import (
     USER_POLICY_MUTABLE_FIELDS,
     UserPolicyPersistenceError,
     UserPolicyService,
+    UserPolicyUpdateResult,
 )
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.utils.payload_validators import (
@@ -41,6 +44,9 @@ from policyengine_api.utils.payload_validators import (
 policy_bp = Blueprint("policy", __name__)
 policy_service = PolicyService()
 user_policy_service = UserPolicyService()
+
+# v1 policy and saved-policy IDs are MySQL signed INT values.
+MAXIMUM_LEGACY_INTEGER_ID = 2_147_483_647
 
 
 def _should_mirror_to_v2(country_id: str, write_source: str) -> bool:
@@ -157,20 +163,26 @@ def _safe_legacy_integer_id(value: object) -> int | None:
     if (
         isinstance(value, int)
         and not isinstance(value, bool)
-        and 0 <= value <= 2_147_483_647
+        and 0 <= value <= MAXIMUM_LEGACY_INTEGER_ID
     ):
         return value
     return None
 
 
+@dataclass(frozen=True)
+class _UserPolicyWriteAttempt:
+    """One saved-policy write, as the record of its failure describes it."""
+
+    operation: str
+    country_id: str
+    configured_write_source: str
+    started_at: float
+    legacy_user_policy_id: object | None = None
+
+
 def _user_policy_persistence_failure(
     error: UserPolicyPersistenceError,
-    *,
-    operation: str,
-    country_id: str,
-    configured_write_source: str,
-    started_at: float,
-    legacy_user_policy_id: object | None = None,
+    attempt: _UserPolicyWriteAttempt,
 ) -> Response:
     """Return and record a failure without serializing exception details."""
     status_code = 503 if error.retryable else 500
@@ -182,17 +194,19 @@ def _user_policy_persistence_failure(
                 "metric_name": "v1_user_policy_persistence_failures",
                 "metric_value": 1,
                 "resource": "user_policy",
-                "operation": operation,
+                "operation": attempt.operation,
                 "database_source": "cloud_sql",
-                "configured_write_source": configured_write_source,
-                "country_id": country_id,
-                "legacy_user_policy_id": _safe_legacy_integer_id(legacy_user_policy_id),
+                "configured_write_source": attempt.configured_write_source,
+                "country_id": attempt.country_id,
+                "legacy_user_policy_id": _safe_legacy_integer_id(
+                    attempt.legacy_user_policy_id
+                ),
                 "request_id": current_request_id(),
                 "outcome": "error",
                 "failure_category": error.category.value,
                 "http_status": status_code,
                 "duration_ms": round(
-                    (time.perf_counter() - started_at) * 1000,
+                    (time.perf_counter() - attempt.started_at) * 1000,
                     3,
                 ),
             },
@@ -201,7 +215,7 @@ def _user_policy_persistence_failure(
 
     message = (
         "Policy database is temporarily unavailable; please try again later."
-        if status_code == 503
+        if status_code == HTTPStatus.SERVICE_UNAVAILABLE
         else "Internal database error; please try again later."
     )
     return _make_error_response(
@@ -310,6 +324,18 @@ def set_policy(country_id: str) -> Response:
     return Response(json.dumps(response_body), status=code, mimetype="application/json")
 
 
+def _user_policy_write_configuration(country_id: str) -> tuple[str, bool]:
+    """Return the configured write source and whether a write mirrors to v2.
+
+    Raise ValueError when a source setting the write needs is invalid.
+    """
+    write_source = get_v1_policy_write_source()
+    mirror_to_v2 = _should_mirror_to_v2(country_id, write_source)
+    if mirror_to_v2:
+        get_v1_policy_read_source()
+    return write_source, mirror_to_v2
+
+
 def _serialize_user_policy(user_policy: UserPolicy) -> dict:
     return {
         column.name: getattr(user_policy, column.name)
@@ -400,10 +426,7 @@ def set_user_policy(country_id: str) -> Response:
     }
 
     try:
-        write_source = get_v1_policy_write_source()
-        mirror_to_v2 = _should_mirror_to_v2(country_id, write_source)
-        if mirror_to_v2:
-            get_v1_policy_read_source()
+        write_source, mirror_to_v2 = _user_policy_write_configuration(country_id)
     except ValueError:
         return _policy_configuration_unavailable()
 
@@ -417,10 +440,12 @@ def set_user_policy(country_id: str) -> Response:
     except UserPolicyPersistenceError as error:
         return _user_policy_persistence_failure(
             error,
-            operation="create",
-            country_id=country_id,
-            configured_write_source=write_source,
-            started_at=persistence_started_at,
+            _UserPolicyWriteAttempt(
+                operation="create",
+                country_id=country_id,
+                configured_write_source=write_source,
+                started_at=persistence_started_at,
+            ),
         )
 
     if mirror_to_v2:
@@ -491,6 +516,45 @@ def update_user_policy(country_id: str) -> Response:
         )
 
     user_policy_id = payload.pop("id")
+    field_error = _user_policy_update_field_error(payload)
+    if field_error is not None:
+        return field_error
+
+    try:
+        write_source, mirror_to_v2 = _user_policy_write_configuration(country_id)
+    except ValueError:
+        return _policy_configuration_unavailable()
+
+    persistence_started_at = time.perf_counter()
+    try:
+        update = user_policy_service.update_user_policy(
+            country_id,
+            user_policy_id,
+            payload,
+            record_mirror_event=mirror_to_v2,
+        )
+    except UserPolicyPersistenceError as error:
+        return _user_policy_persistence_failure(
+            error,
+            _UserPolicyWriteAttempt(
+                operation="update",
+                country_id=country_id,
+                configured_write_source=write_source,
+                started_at=persistence_started_at,
+                legacy_user_policy_id=user_policy_id,
+            ),
+        )
+
+    return _committed_update_response(
+        country_id,
+        user_policy_id,
+        update,
+        mirror_to_v2=mirror_to_v2,
+    )
+
+
+def _user_policy_update_field_error(payload: dict) -> Response | None:
+    """Return the 400 for update fields that are unsupported or absent, else None."""
     unknown_keys = [
         key for key in payload if key not in UPDATE_USER_POLICY_ALLOWED_FIELDS
     ]
@@ -507,33 +571,17 @@ def update_user_policy(country_id: str) -> Response:
             400,
             include_status=False,
         )
+    return None
 
-    try:
-        write_source = get_v1_policy_write_source()
-        mirror_to_v2 = _should_mirror_to_v2(country_id, write_source)
-        if mirror_to_v2:
-            get_v1_policy_read_source()
-    except ValueError:
-        return _policy_configuration_unavailable()
 
-    persistence_started_at = time.perf_counter()
-    try:
-        update = user_policy_service.update_user_policy(
-            country_id,
-            user_policy_id,
-            payload,
-            record_mirror_event=mirror_to_v2,
-        )
-    except UserPolicyPersistenceError as error:
-        return _user_policy_persistence_failure(
-            error,
-            operation="update",
-            country_id=country_id,
-            configured_write_source=write_source,
-            started_at=persistence_started_at,
-            legacy_user_policy_id=user_policy_id,
-        )
-
+def _committed_update_response(
+    country_id: str,
+    user_policy_id: object,
+    update: UserPolicyUpdateResult | None,
+    *,
+    mirror_to_v2: bool,
+) -> Response:
+    """Answer a committed saved-policy update, mirroring it to v2 if selected."""
     if update is None:
         return _make_error_response(
             f"User policy #{user_policy_id} not found.",
