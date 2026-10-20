@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import importlib.util
+import itertools
 import json
 import re
 import sys
@@ -1946,3 +1947,567 @@ def test_render_never_includes_values_from_records(
 
     for output in (title, body, url, unquote(url)):
         assert "SENTINEL" not in output
+
+
+# GitHub issue sync
+
+REPOSITORY = "PolicyEngine/policyengine-api"
+BOT = "github-actions[bot]"
+
+
+class FakeGitHub:
+    """An in-memory GitHub issues API with a clock that advances when it sleeps."""
+
+    def __init__(
+        self,
+        sync_script: ModuleType,
+        issues: list[dict] = (),
+        labels: tuple[str, ...] = (),
+        *,
+        drop_created_labels: bool = False,
+    ) -> None:
+        self.sync_script = sync_script
+        self.issues = {issue["number"]: dict(issue) for issue in issues}
+        self.labels = set(labels)
+        self.drop_created_labels = drop_created_labels
+        self.failures: list[object] = []
+        self.requests: list[tuple[float, object]] = []
+        self.comments: dict[int, list[str]] = {}
+        self.sleeps: list[float] = []
+        self.now = 0.0
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+    def clock(self) -> float:
+        return self.now
+
+    def client(self) -> object:
+        return self.sync_script.GitHubClient(
+            REPOSITORY, "fake-github-token", self, sleep=self.sleep, clock=self.clock
+        )
+
+    @property
+    def writes(self) -> list[tuple[float, object]]:
+        return [entry for entry in self.requests if entry[1].method != "GET"]
+
+    def _respond(self, payload: object, status: int = 200) -> object:
+        return self.sync_script.HttpResponse(
+            status=status, reason="OK", headers={}, body=json.dumps(payload).encode()
+        )
+
+    def __call__(self, request: object) -> object:
+        self.requests.append((self.now, request))
+        if request.method != "GET" and self.failures:
+            return self.failures.pop(0)
+        split = urlsplit(request.url)
+        path = split.path.removeprefix(f"/repos/{REPOSITORY}")
+        query = {name: values[0] for name, values in parse_qs(split.query).items()}
+        body = json.loads(request.body) if request.body else None
+        return self._route(request.method, path, query, body)
+
+    def _route(self, method: str, path: str, query: dict, body: dict | None) -> object:
+        parts = path.strip("/").split("/")
+        if len(parts) > 1:
+            return self._route_issue(method, int(parts[1]), parts[2:], body)
+        if method == "GET" and parts == ["issues"]:
+            issues = sorted(self.issues.values(), key=lambda issue: issue["number"])
+            return self._respond(self._page(issues, query))
+        if method == "GET":
+            labels = [{"name": name} for name in sorted(self.labels)]
+            return self._respond(self._page(labels, query))
+        if parts == ["labels"]:
+            self.labels.add(body["name"])
+            return self._respond({"name": body["name"]}, status=201)
+        return self._create(body)
+
+    def _route_issue(
+        self, method: str, number: int, rest: list[str], body: dict
+    ) -> object:
+        if method == "PATCH":
+            self.issues[number].update(body)
+            return self._respond(self.issues[number])
+        if rest == ["labels"]:
+            names = {label["name"] for label in self.issues[number]["labels"]}
+            if not self.drop_created_labels:
+                names |= set(body["labels"])
+            self.issues[number]["labels"] = [{"name": name} for name in sorted(names)]
+            return self._respond(self.issues[number]["labels"])
+        self.comments.setdefault(number, []).append(body["body"])
+        return self._respond({"id": 1}, status=201)
+
+    def _page(self, items: list, query: dict) -> list:
+        page = int(query.get("page", "1"))
+        size = int(query.get("per_page", "30"))
+        return items[(page - 1) * size : page * size]
+
+    def _create(self, body: dict) -> object:
+        number = max(self.issues, default=0) + 1
+        labels = [] if self.drop_created_labels else body["labels"]
+        self.issues[number] = {
+            "number": number,
+            "title": body["title"],
+            "body": body["body"],
+            "state": "open",
+            "state_reason": None,
+            "closed_at": None,
+            "labels": [{"name": name} for name in labels],
+            "user": {"login": BOT},
+        }
+        return self._respond(self.issues[number], status=201)
+
+
+def _bot_issue(number: int, **fields: object) -> dict:
+    issue = {
+        "number": number,
+        "title": f"Issue {number}",
+        "body": "",
+        "state": "open",
+        "state_reason": None,
+        "closed_at": None,
+        "labels": [],
+        "user": {"login": BOT},
+    }
+    issue.update(fields)
+    return issue
+
+
+def _failures(
+    sync_script: ModuleType,
+    count: int,
+    *,
+    request_key_prefix: str = "r",
+    **fields: object,
+) -> list:
+    return [
+        _exception_record(
+            sync_script,
+            request_key=f"{request_key_prefix}{index}",
+            timestamp=_at(index),
+            **fields,
+        )
+        for index in range(count)
+    ]
+
+
+def _groups(sync_script: ModuleType, records: list) -> list:
+    return sync_script.build_groups(
+        records, [], sync_script.reporting_window(REPORT_DATE), FINGERPRINT_KEY
+    )
+
+
+def _sync(sync_script: ModuleType, groups: list, github: FakeGitHub, *, dry_run=False):
+    return sync_script.sync_issues(
+        groups,
+        sync_script.reporting_window(REPORT_DATE),
+        PROJECT_ID,
+        github.client(),
+        dry_run=dry_run,
+    )
+
+
+def _existing_issue(
+    sync_script: ModuleType, group: object, number: int = 7, **fields: object
+) -> dict:
+    """Return the issue the job opened for ``group`` on an earlier day."""
+    earlier = sync_script.reporting_window(REPORT_DATE - timedelta(days=1))
+    issue = _bot_issue(
+        number,
+        title=sync_script.issue_title(group),
+        body=sync_script.issue_body(group, earlier, PROJECT_ID),
+    )
+    issue.update(fields)
+    return issue
+
+
+def test_sync_lists_open_and_closed_issues_from_the_bot_page_by_page(
+    sync_script: ModuleType,
+) -> None:
+    github = FakeGitHub(sync_script, [_bot_issue(number) for number in range(1, 151)])
+
+    _sync(sync_script, [], github)
+
+    listing = [
+        parse_qs(urlsplit(request.url).query)
+        for _, request in github.requests
+        if urlsplit(request.url).path.endswith("/issues")
+    ]
+    assert len(listing) == 2
+    assert listing[0]["creator"] == [BOT]
+    assert listing[0]["state"] == ["all"]
+    assert listing[0]["per_page"] == ["100"]
+    assert [query["page"] for query in listing] == [["1"], ["2"]]
+
+
+def test_sync_opens_an_issue_at_three_production_occurrences_in_two_requests(
+    sync_script: ModuleType,
+) -> None:
+    eligible = _failures(sync_script, 3)
+    # Three failures that all affected the request with observability ID o1.
+    one_request = [
+        _exception_record(
+            sync_script,
+            error_type="KeyError",
+            request_key=None,
+            trace_key=None,
+            observability_key="o1",
+            timestamp=_at(index),
+        )
+        for index in range(3)
+    ]
+    too_few = _failures(
+        sync_script, 2, request_key_prefix="few", error_type="TypeError"
+    )
+    groups = _groups(sync_script, eligible + one_request + too_few)
+    github = FakeGitHub(sync_script)
+
+    result = _sync(sync_script, groups, github)
+
+    created = list(github.issues.values())
+    eligible_group = next(
+        group for group in groups if group.error_type == "StaleDataError"
+    )
+    assert [issue["title"] for issue in created] == [
+        sync_script.issue_title(eligible_group)
+    ]
+    assert created[0]["labels"] == [
+        {"name": "telemetry-error"},
+        {"name": "service: policyengine-api"},
+    ]
+    actions = {action.fingerprint: action.action for action in result.actions}
+    assert sorted(actions.values()) == ["below-threshold", "below-threshold", "created"]
+
+
+def test_sync_never_opens_an_issue_for_a_staging_only_group(
+    sync_script: ModuleType,
+) -> None:
+    groups = _groups(
+        sync_script, _failures(sync_script, 10, environment_name="staging")
+    )
+    github = FakeGitHub(sync_script)
+
+    result = _sync(sync_script, groups, github)
+
+    assert github.issues == {}
+    assert result.actions[0].action == "below-threshold"
+
+
+def test_sync_opens_at_most_five_issues_in_order_of_production_volume(
+    sync_script: ModuleType,
+) -> None:
+    records = []
+    for index in range(7):
+        records += _failures(
+            sync_script,
+            3 + index,
+            request_key_prefix=f"g{index}-",
+            error_type=f"Error{index}",
+        )
+    groups = _groups(sync_script, records)
+    github = FakeGitHub(sync_script)
+
+    result = _sync(sync_script, groups, github)
+
+    titles = [issue["title"] for issue in github.issues.values()]
+    assert [title.split(": ")[1].split(" ")[0] for title in titles] == [
+        "Error6",
+        "Error5",
+        "Error4",
+        "Error3",
+        "Error2",
+    ]
+    assert result.deferred == 2
+    assert [action.action for action in result.actions].count("deferred") == 2
+
+
+def test_sync_replaces_only_the_marked_section_and_never_the_title(
+    sync_script: ModuleType,
+) -> None:
+    group = _groups(sync_script, _failures(sync_script, 3))[0]
+    issue = _existing_issue(sync_script, group, title="Renamed by a person")
+    issue["body"] = f"Notes before.\n\n{issue['body']}\nNotes after.\n"
+    github = FakeGitHub(sync_script, [issue])
+
+    result = _sync(sync_script, [group], github)
+
+    patch = json.loads(github.writes[0][1].body)
+    expected_section = sync_script.issue_section(
+        group, sync_script.reporting_window(REPORT_DATE), PROJECT_ID
+    )
+    assert list(patch) == ["body"]
+    assert patch["body"].startswith("Notes before.\n\n")
+    assert patch["body"].endswith("\nNotes after.\n")
+    assert expected_section in patch["body"]
+    assert github.issues[7]["title"] == "Renamed by a person"
+    assert result.actions[0].action == "updated"
+    assert result.actions[0].issue_number == 7
+
+
+def test_sync_does_not_write_when_the_section_is_unchanged(
+    sync_script: ModuleType,
+) -> None:
+    group = _groups(sync_script, _failures(sync_script, 3))[0]
+    github = FakeGitHub(sync_script, [_existing_issue(sync_script, group)])
+
+    _sync(sync_script, [group], github)
+    first_run_writes = len(github.writes)
+    second = _sync(sync_script, [group], github)
+
+    assert first_run_writes == 1
+    assert len(github.writes) == 1
+    assert second.actions[0].action == "unchanged"
+
+
+def test_sync_adds_a_deleted_section_back_at_the_end(sync_script: ModuleType) -> None:
+    group = _groups(sync_script, _failures(sync_script, 3))[0]
+    issue = _existing_issue(sync_script, group, body="Only human notes now.")
+    github = FakeGitHub(sync_script, [issue])
+
+    _sync(sync_script, [group], github)
+
+    body = github.issues[7]["body"]
+    assert body.startswith("Only human notes now.\n\n")
+    assert body.rstrip().endswith(sync_script.SECTION_END)
+    assert len(github.issues) == 1
+
+
+def test_sync_ignores_issues_opened_by_other_authors(sync_script: ModuleType) -> None:
+    group = _groups(sync_script, _failures(sync_script, 3))[0]
+    person_issue = _existing_issue(sync_script, group, user={"login": "someone"})
+    github = FakeGitHub(sync_script, [person_issue])
+
+    _sync(sync_script, [group], github)
+
+    assert github.issues[7]["body"] == person_issue["body"]
+    assert len(github.issues) == 2
+
+
+def test_sync_reopens_a_completed_issue_when_production_failures_return(
+    sync_script: ModuleType,
+) -> None:
+    group = _groups(sync_script, _failures(sync_script, 4))[0]
+    closed_at = (WINDOW_NOON - timedelta(days=2)).isoformat().replace("+00:00", "Z")
+    issue = _existing_issue(
+        sync_script,
+        group,
+        state="closed",
+        state_reason="completed",
+        closed_at=closed_at,
+    )
+    github = FakeGitHub(sync_script, [issue], labels=("telemetry-error",))
+
+    result = _sync(sync_script, [group], github)
+
+    reopened = github.issues[7]
+    assert reopened["state"] == "open"
+    assert reopened["state_reason"] == "reopened"
+    assert {"name": "regression"} in reopened["labels"]
+    assert "regression" in github.labels
+    assert github.comments[7] == [
+        "Production failures returned after this issue was closed: 4 occurrences "
+        "in 4 requests since 2026-10-19 12:00 EDT, 24 hours after it was closed."
+    ]
+    assert result.actions[0].action == "reopened"
+
+
+def test_sync_treats_an_issue_closed_without_a_reason_as_completed(
+    sync_script: ModuleType,
+) -> None:
+    group = _groups(sync_script, _failures(sync_script, 3))[0]
+    closed_at = (WINDOW_NOON - timedelta(days=2)).isoformat()
+    issue = _existing_issue(
+        sync_script, group, state="closed", state_reason=None, closed_at=closed_at
+    )
+    github = FakeGitHub(sync_script, [issue])
+
+    result = _sync(sync_script, [group], github)
+
+    assert github.issues[7]["state"] == "open"
+    assert result.actions[0].action == "reopened"
+
+
+def test_sync_keeps_a_completed_issue_closed_within_24_hours_of_closing(
+    sync_script: ModuleType,
+) -> None:
+    group = _groups(sync_script, _failures(sync_script, 4))[0]
+    closed_at = (WINDOW_NOON - timedelta(hours=12)).isoformat()
+    issue = _existing_issue(
+        sync_script,
+        group,
+        state="closed",
+        state_reason="completed",
+        closed_at=closed_at,
+    )
+    github = FakeGitHub(sync_script, [issue])
+
+    result = _sync(sync_script, [group], github)
+
+    assert github.issues[7]["state"] == "closed"
+    assert 7 not in github.comments
+    assert (
+        sync_script.issue_section(
+            group, sync_script.reporting_window(REPORT_DATE), PROJECT_ID
+        )
+        in github.issues[7]["body"]
+    )
+    assert result.actions[0].action == "updated"
+
+
+@pytest.mark.parametrize("reason", ["not_planned", "duplicate"])
+def test_sync_updates_but_never_reopens_not_planned_or_duplicate_issues(
+    sync_script: ModuleType, reason: str
+) -> None:
+    group = _groups(sync_script, _failures(sync_script, 10))[0]
+    closed_at = (WINDOW_NOON - timedelta(days=5)).isoformat()
+    issue = _existing_issue(
+        sync_script, group, state="closed", state_reason=reason, closed_at=closed_at
+    )
+    github = FakeGitHub(sync_script, [issue])
+
+    result = _sync(sync_script, [group], github)
+
+    assert github.issues[7]["state"] == "closed"
+    assert result.actions[0].action == "updated"
+    assert len(github.issues) == 1
+
+
+def test_sync_keeps_a_newer_report_instead_of_overwriting_it(
+    sync_script: ModuleType,
+) -> None:
+    group = _groups(sync_script, _failures(sync_script, 3))[0]
+    later = sync_script.reporting_window(REPORT_DATE + timedelta(days=1))
+    issue = _bot_issue(
+        7,
+        title=sync_script.issue_title(group),
+        body=sync_script.issue_body(group, later, PROJECT_ID),
+    )
+    github = FakeGitHub(sync_script, [issue])
+
+    result = _sync(sync_script, [group], github)
+
+    assert github.writes == []
+    assert result.actions[0].action == "kept-newer"
+
+
+def test_sync_creates_missing_labels_before_opening_issues(
+    sync_script: ModuleType,
+) -> None:
+    groups = _groups(sync_script, _failures(sync_script, 3))
+    github = FakeGitHub(sync_script, labels=("telemetry-error",))
+
+    _sync(sync_script, groups, github)
+
+    created_labels = [
+        json.loads(request.body)["name"]
+        for _, request in github.writes
+        if urlsplit(request.url).path.endswith("/labels")
+    ]
+    assert created_labels == ["service: policyengine-api"]
+
+
+def test_sync_adds_labels_a_create_response_is_missing(
+    sync_script: ModuleType,
+) -> None:
+    groups = _groups(sync_script, _failures(sync_script, 3))
+    github = FakeGitHub(sync_script, drop_created_labels=True)
+
+    with pytest.raises(sync_script.GitHubError, match="labels"):
+        _sync(sync_script, groups, github)
+
+    added = [
+        request
+        for _, request in github.writes
+        if urlsplit(request.url).path.endswith("/issues/1/labels")
+    ]
+    assert len(added) == 1
+
+
+def test_sync_writes_one_at_a_time_at_least_a_second_apart(
+    sync_script: ModuleType,
+) -> None:
+    records = []
+    for index in range(3):
+        records += _failures(
+            sync_script, 3, request_key_prefix=f"g{index}-", error_type=f"Error{index}"
+        )
+    github = FakeGitHub(sync_script)
+
+    _sync(sync_script, _groups(sync_script, records), github)
+
+    write_times = [moment for moment, _ in github.writes]
+    assert len(write_times) == 5
+    assert all(
+        later - earlier >= 1.0 for earlier, later in itertools.pairwise(write_times)
+    )
+
+
+@pytest.mark.parametrize("status", [403, 429])
+def test_sync_waits_for_retry_after_on_rate_limits(
+    sync_script: ModuleType, status: int
+) -> None:
+    groups = _groups(sync_script, _failures(sync_script, 3))
+    github = FakeGitHub(
+        sync_script, labels=("telemetry-error", "service: policyengine-api")
+    )
+    github.failures = [
+        sync_script.HttpResponse(
+            status=status, reason="Forbidden", headers={"retry-after": "7"}, body=b"{}"
+        )
+    ]
+
+    _sync(sync_script, groups, github)
+
+    assert 7 in github.sleeps
+    assert len(github.issues) == 1
+
+
+def test_sync_stops_after_three_rate_limit_retries(sync_script: ModuleType) -> None:
+    groups = _groups(sync_script, _failures(sync_script, 3))
+    github = FakeGitHub(
+        sync_script, labels=("telemetry-error", "service: policyengine-api")
+    )
+    limited = sync_script.HttpResponse(
+        status=429, reason="Too Many Requests", headers={"retry-after": "2"}, body=b"{}"
+    )
+    github.failures = [limited] * 4
+
+    with pytest.raises(sync_script.GitHubError) as raised:
+        _sync(sync_script, groups, github)
+
+    assert str(raised.value) == "GitHub request failed: HTTP 429 Too Many Requests"
+    assert github.sleeps.count(2) == 3
+
+
+def test_sync_reports_a_forbidden_write_without_retrying(
+    sync_script: ModuleType,
+) -> None:
+    groups = _groups(sync_script, _failures(sync_script, 3))
+    github = FakeGitHub(
+        sync_script, labels=("telemetry-error", "service: policyengine-api")
+    )
+    github.failures = [
+        sync_script.HttpResponse(
+            status=403,
+            reason="Forbidden",
+            headers={},
+            body=b'{"message": "SENTINEL Resource not accessible"}',
+        )
+    ]
+
+    with pytest.raises(sync_script.GitHubError) as raised:
+        _sync(sync_script, groups, github)
+
+    assert str(raised.value) == "GitHub request failed: HTTP 403 Forbidden"
+    assert len(github.writes) == 1
+
+
+def test_sync_dry_run_makes_no_write_calls(sync_script: ModuleType) -> None:
+    eligible = _groups(sync_script, _failures(sync_script, 3))[0]
+    existing = _groups(sync_script, _failures(sync_script, 3, error_type="KeyError"))[0]
+    github = FakeGitHub(sync_script, [_existing_issue(sync_script, existing)])
+
+    result = _sync(sync_script, [eligible, existing], github, dry_run=True)
+
+    assert github.writes == []
+    assert sorted(action.action for action in result.actions) == ["created", "updated"]
