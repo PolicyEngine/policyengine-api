@@ -200,6 +200,19 @@ python3 .github/scripts/sync_telemetry_error_issues.py \
 The workflow also uses the repository secret `GCP_WORKLOAD_IDENTITY_PROVIDER`
 and the repository variable `OBSERVABILITY_PROJECT_ID`.
 
+These resources were created on 2026-10-20:
+
+- The linked dataset is in the BigQuery `US` location and holds one view,
+  `_AllLogs`.
+- `roles/bigquery.dataViewer` was granted on the dataset alone with
+  `GRANT ... ON SCHEMA`; `bq update --source` would replace the dataset's
+  access list. The service account needs no Cloud Logging role.
+- A dry run as the service account, for 2026-10-19, read 1,648 ERROR records
+  across eight days and found 15 error groups, 5 of them above the issue
+  thresholds. The queries scanned about 0.18 GiB of error records and
+  0.02 GiB of request counts, so a daily run stays well inside BigQuery's free
+  monthly allowance.
+
 Never rotate `TELEMETRY_ERROR_FINGERPRINT_KEY` on its own. Every fingerprint
 would change, so the next run would open a second issue for each group that
 already has one. A key change needs a plan for moving the existing issues to
