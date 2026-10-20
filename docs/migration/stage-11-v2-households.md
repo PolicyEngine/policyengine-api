@@ -125,10 +125,10 @@ v2 household plus its legacy mapping in one Supabase transaction. The source
 event receives `processed_at` only after the Supabase transaction commits.
 
 If translation or Supabase persistence fails, the v1 source row and event
-remain committed, the event remains pending, and the response is HTTP 503. A
-repeated POST creates another v1 household row and does not process the first
-row's pending event. No background process scans events. Use the exact-event
-workflow described below for recovery.
+remain committed, the event remains pending, the failure is logged with its
+`failure_category`, and the response is the normal HTTP 201 with the v1
+household ID. No background process scans events. Use the exact-event workflow
+described below to copy a pending event.
 
 Monitor structured records with `metric_name=v1_household_mirror_operations`.
 Alert on `outcome=error`, grouped by `failure_category` and `country_id`, and
@@ -240,7 +240,12 @@ DB_WRITE_HOUSEHOLD=cloud_sql
 ```
 
 Confirm that a new v1 household create succeeds without Supabase and creates no
-mirror event. Leave `DB_READ_HOUSEHOLD=cloud_sql` and
+mirror event. A failed copy does not fail a create under `dual_write`, so copy
+failures on their own are handled from the `outcome=error` records and the
+exact-event workflow, not by rolling back. Application revisions built before
+that change return HTTP 503 for a failed copy; do not route traffic to one
+whose environment selects `DB_WRITE_HOUSEHOLD=dual_write`. Leave
+`DB_READ_HOUSEHOLD=cloud_sql` and
 `ROUTE_IMPL_HOUSEHOLD=flask_fallback`. Do not delete previously committed v2
 households, mappings, associations, or source events. Application rollback
 does not automatically downgrade either schema; any schema downgrade requires

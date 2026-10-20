@@ -172,7 +172,11 @@ def mirror_user_policy_after_commit(
     changed_fields: frozenset[str] = frozenset(),
     mirror_factory: Callable[[], LegacyUserPolicyMirror] | None = None,
 ) -> LegacyUserPolicyPersistenceResult:
-    """Require one complete Supabase association transaction before v1 success."""
+    """Copy one committed saved-policy revision into v2 in one Supabase transaction.
+
+    Log the outcome. On failure, raise UserPolicyMirrorUnavailableError after
+    logging it.
+    """
     started_at = time.perf_counter()
     try:
         result = _run_user_policy_mirror(

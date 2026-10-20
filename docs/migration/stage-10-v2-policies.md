@@ -140,17 +140,23 @@ this phase. Their policy and saved-policy mutations continue using Cloud SQL
 only under `DB_WRITE_POLICY=dual_write`: they create no v2 snapshot or mirror
 event and do not access Supabase.
 
-A Supabase failure returns HTTP 503. An identical client retry reads the
-already committed v1 row, appends the next revision when applicable, and first
-replays any retained earlier event. Destination revision and fingerprint
-checks make a replay safe if Supabase committed but the Cloud SQL processing
-marker did not. There is no background processor or reconciliation process.
+A failed copy does not fail the request. Whatever the cause (a Supabase
+failure, a policy the v2 catalog cannot translate, or a missing catalog
+version), the v1 write is already committed, the copy failure is logged with
+its `failure_category`, and the route returns its normal v1 response. A
+saved-policy event that failed stays pending, and the next mutation of the same
+saved policy replays it, with earlier retained events first. A core policy
+whose copy failed is copied again the next time any request writes the same
+policy. Destination revision and fingerprint checks make a replay safe if
+Supabase committed but the Cloud SQL processing marker did not. There is no
+background processor or reconciliation process.
 
 The v2 runtime applies one five-second value to pool acquisition, PostgreSQL
 connection establishment, and each SQL statement. The API does not retry these
-operations internally. Native v2 routes and v1 mirroring return a secret-safe
-HTTP 503 for a timeout or other SQLAlchemy database failure so the caller can
-retry the complete request.
+operations internally. Native v2 routes return a secret-safe HTTP 503 for a
+timeout or other SQLAlchemy database failure so the caller can retry the
+complete request. v1 mirroring logs the same failure and returns the v1
+response.
 
 Browser preflight requests are handled by the outer ASGI CORS middleware before
 FastAPI or Flask route resolution. It permits the public HTTP methods and
@@ -181,8 +187,13 @@ The disposable and route-level tests verify that:
 
 ## Application Rollback
 
-Set `DB_WRITE_POLICY=cloud_sql` or route traffic to the prior application
-revision. This immediately removes the Supabase requirement from v1 mutations.
+Set `DB_WRITE_POLICY=cloud_sql`, or route traffic to a prior application
+revision whose environment selects it, to stop copying. v1 mutations then open
+no Supabase connection and record no saved-policy events. A failed copy does
+not fail a v1 mutation under `dual_write`, so copy failures on their own are
+handled from the `outcome=error` records, not by rolling back. Application
+revisions built before that change return HTTP 503 for a failed copy; do not
+route traffic to one whose environment selects `DB_WRITE_POLICY=dual_write`.
 Keep `DB_READ_POLICY=cloud_sql`. Do not delete policies, associations, or
 mappings already committed in Supabase; they remain valid for later retries.
 
