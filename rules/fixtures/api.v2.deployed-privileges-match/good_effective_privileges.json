@@ -1,0 +1,7 @@
+[
+  {"role": "policyengine_v2_runtime", "table": "users", "privilege": "SELECT"},
+  {"role": "policyengine_v2_runtime", "table": "users", "privilege": "INSERT"},
+  {"role": "policyengine_v2_runtime", "table": "users", "privilege": "UPDATE"},
+  {"role": "policyengine_v2_runtime", "table": "users", "privilege": "DELETE"},
+  {"role": "policyengine_v2_runtime", "table": "legacy_policy_mappings", "privilege": "SELECT"}
+]
