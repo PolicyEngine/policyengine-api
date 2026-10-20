@@ -260,6 +260,8 @@ downgrade recreates the tables and columns empty.
 
 The revision must not deploy while an application revision that maps the
 dropped tables or columns can serve traffic, and it may run only after an
-operator has confirmed in each environment that the tables are empty.
+operator has confirmed in each environment that the tables are empty. Once it
+has run, an application rollback to a revision that maps them, including any
+pre-Stage 12A revision, needs the schema downgraded to `fbb7488ebe8a` first.
 `api.v2.simulation-tables-stay-removed` stops code from importing the removed
 models again, and the v2 metadata validation rejects their table names.

@@ -345,6 +345,13 @@ caller can list a user's saved items by `user_id`, read, rename or delete one
 by record ID, and create rows for any user. Rolling the application back
 would therefore hand users' saved work to anyone.
 
+- **Once revision `81ecfa184cd5` has run in an environment, no pre-Stage 12A
+  revision can serve traffic there.** Those revisions map the simulation-domain
+  tables and the retired `country` and `label` association columns that it
+  drops; the oldest revision that can run is the release that stopped mapping
+  them. A rollback to a pre-Stage 12A revision then first needs the v2 schema
+  downgraded to `fbb7488ebe8a`, which recreates those tables and columns
+  empty, and only after that do the steps below apply.
 - **Before any user-owned record exists, an application rollback is safe
   without a database downgrade.** Signed-out saving needs no configuration, so
   treat user-owned records as existing from the moment this revision serves
@@ -531,7 +538,8 @@ Configure staging first, then production:
    (`docs/migration/armor/proposed/20261013-pol-api-lb-stage-12a-rollback-guard.yaml`)
    ready. From the first user-owned record on, signed in or not, it is a
    precondition for any application rollback to a pre-Stage 12A revision (see
-   "Rollback").
+   "Rollback"). Once revision `81ecfa184cd5` has run, such a rollback also
+   needs the v2 schema downgraded to `fbb7488ebe8a` first.
 
 User-owned routes must never become less restrictive during a cutover. The
 migration-contract guard rejects any `/v2/me` or `/v2/user-` contract that
