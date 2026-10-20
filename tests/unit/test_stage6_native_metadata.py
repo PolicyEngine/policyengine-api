@@ -180,7 +180,7 @@ def test_native_invalid_country_matches_legacy_flask_error():
     )
     assert native_response.json() == {
         "status": "error",
-        "message": "Country zz not found. Available countries are: uk, us, ca, ng, il",
+        "message": "Country zz not found. Available countries are: uk, us",
     }
     assert reader.calls == []
 
@@ -195,7 +195,7 @@ def test_country_validation_is_shared_by_flask_and_fastapi():
     assert raised.value.country_id == "zz"
     assert raised.value.available_country_ids == COUNTRIES
     assert str(raised.value) == (
-        "Country zz not found. Available countries are: uk, us, ca, ng, il"
+        "Country zz not found. Available countries are: uk, us"
     )
 
 

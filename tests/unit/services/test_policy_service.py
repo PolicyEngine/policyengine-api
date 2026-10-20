@@ -154,13 +154,13 @@ def test_set_policy_does_not_build_v2_snapshot_unless_requested(
     )
 
     result = service.set_policy(
-        "ca",
-        "Canadian policy",
+        "uk",
+        "UK policy",
         {"parameter": 1},
     )
 
     assert result.snapshot is None
-    assert service.get_policy("ca", result.policy_id) is not None
+    assert service.get_policy("uk", result.policy_id) is not None
 
 
 def test_set_policy_rejects_invalid_country(service):

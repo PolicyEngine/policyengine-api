@@ -19,13 +19,10 @@ UPDATE = "UPDATE"
 LIST = "LIST"
 VERSION = "3.38.1"
 CURRENT_YEAR = str(datetime.now().year)  # noqa: DTZ005  # the default year is the host's local calendar year
-COUNTRIES = ("uk", "us", "ca", "ng", "il")
+COUNTRIES = ("uk", "us")
 COUNTRY_PACKAGE_NAMES = (
     "policyengine_uk",
     "policyengine_us",
-    "policyengine_canada",
-    "policyengine_ng",
-    "policyengine_il",
 )
 BUNDLED_COUNTRY_PACKAGE_NAMES = {
     "uk": "policyengine-uk",

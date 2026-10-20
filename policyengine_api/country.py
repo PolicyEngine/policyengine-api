@@ -147,9 +147,6 @@ class PolicyEngineCountry:
                 current_law_id={
                     "uk": 1,
                     "us": 2,
-                    "ca": 3,
-                    "ng": 4,
-                    "il": 5,
                 }[self.country_id],
                 basicInputs=self.tax_benefit_system.basic_inputs,
                 modelled_policies=self.tax_benefit_system.modelled_policies,
@@ -302,39 +299,6 @@ class PolicyEngineCountry:
                 dict(name=2022, label="2022"),
             ]
             datasets = [get_bundle_default_dataset_option("us")]
-            options["region"] = region
-            options["time_period"] = time_period
-            options["datasets"] = datasets
-        elif self.country_id == "ca":
-            region = [
-                dict(name="ca", label="Canada"),
-            ]
-            time_period = [
-                dict(name=2023, label="2023"),
-            ]
-            datasets = [{}]
-            options["region"] = region
-            options["time_period"] = time_period
-            options["datasets"] = datasets
-        elif self.country_id == "ng":
-            region = [
-                dict(name="ng", label="Nigeria"),
-            ]
-            time_period = [
-                dict(name=2023, label="2023"),
-            ]
-            datasets = [{}]
-            options["region"] = region
-            options["time_period"] = time_period
-            options["datasets"] = datasets
-        elif self.country_id == "il":
-            region = [
-                dict(name="il", label="Israel"),
-            ]
-            time_period = [
-                dict(name=2023, label="2023"),
-            ]
-            datasets = [{}]
             options["region"] = region
             options["time_period"] = time_period
             options["datasets"] = datasets
@@ -734,7 +698,4 @@ def get_requested_computations(
 COUNTRIES = {
     "uk": PolicyEngineCountry("policyengine_uk", "uk"),
     "us": PolicyEngineCountry("policyengine_us", "us"),
-    "ca": PolicyEngineCountry("policyengine_canada", "ca"),
-    "ng": PolicyEngineCountry("policyengine_ng", "ng"),
-    "il": PolicyEngineCountry("policyengine_il", "il"),
 }

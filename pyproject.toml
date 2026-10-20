@@ -40,9 +40,6 @@ dependencies = [
     "openai",
     "packaging>=24,<27",
     "policyengine-observability[flask,google,httpx,otlp-grpc]>=3.0.2,<4",
-    "policyengine_canada==0.96.3",
-    "policyengine-ng==0.5.1",
-    "policyengine-il==0.1.0",
     # The models extra pins Core, US, UK, and the SPM calculator to the exact
     # versions certified by this PolicyEngine bundle. Cloud Run installs the
     # complete frozen environment from uv.lock; the generic image installs

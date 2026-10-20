@@ -57,9 +57,7 @@ def test_cloud_run_candidate_stage6_read_route_contracts(api_client):
     assert invalid_country_response.status_code == 400
     assert invalid_country_response.json() == {
         "status": "error",
-        "message": (
-            "Country zz not found. Available countries are: uk, us, ca, ng, il"
-        ),
+        "message": ("Country zz not found. Available countries are: uk, us"),
     }
 
 
