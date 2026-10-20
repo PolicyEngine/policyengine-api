@@ -1684,6 +1684,45 @@ def test_deploy_cloud_run_candidate_pins_http_startup_probe():
     assert int(settings["timeoutSeconds"]) <= period
 
 
+WORKFLOW_HEALTH_CHECK_CALL = re.compile(
+    r"run: bash \.github/scripts/"
+    r"(?P<script_name>health_check|restore_cloud_run_revision)\.sh "
+    r'"(?P<checked_url>[^"]+)"'
+)
+# Staging candidate, live-test candidate, staging stable URL and restore,
+# production candidate, production stable URL and restore.
+PUSH_WORKFLOW_HEALTH_CHECK_COUNT = 7
+
+
+def test_every_push_workflow_health_check_polls_health():
+    """Every deployment health check and revision restore polls ``/health``.
+
+    ``/liveness-check`` and ``/readiness-check`` are removed, so a check left
+    on either path would wait out its timeout and fail the deployment, and a
+    restore would report a healthy previous revision as failed.
+    """
+    workflow = _push_workflow()
+    checked_urls = [
+        (call.group("script_name"), call.group("checked_url"))
+        for call in WORKFLOW_HEALTH_CHECK_CALL.finditer(workflow)
+    ]
+
+    assert len(checked_urls) == PUSH_WORKFLOW_HEALTH_CHECK_COUNT, checked_urls
+    assert {script_name for script_name, _url in checked_urls} == {
+        "health_check",
+        "restore_cloud_run_revision",
+    }
+    for script_name, checked_url in checked_urls:
+        assert checked_url.endswith("}}/health"), (script_name, checked_url)
+    for workflow_path in sorted((REPO / ".github/workflows").glob("*.yml")):
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+        for removed_probe_path in ("/liveness-check", "/readiness-check"):
+            assert removed_probe_path not in workflow_text, (
+                workflow_path.name,
+                removed_probe_path,
+            )
+
+
 def test_push_workflow_pins_cloud_run_scaling_per_job():
     workflow = _push_workflow()
     staging_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
