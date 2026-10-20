@@ -159,7 +159,21 @@ def read_all_parameter_rows(
         .where(col(Parameter.tax_benefit_model_version_id) == model_version_id)
         .order_by(col(Parameter.name)),
     )
-    return [MetadataCatalogParameterRow(*row) for row in rows]
+    return [
+        MetadataCatalogParameterRow(
+            id=row.id,
+            name=row.name,
+            label=row.label,
+            description=row.description,
+            data_type=row.data_type,
+            unit=row.unit,
+            metadata_label=row.metadata_label,
+            period=row.period,
+            economy=row.economy,
+            household=row.household,
+        )
+        for row in rows
+    ]
 
 
 def iter_canonical_parameter_values(
