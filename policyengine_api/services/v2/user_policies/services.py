@@ -536,11 +536,11 @@ class V2UserPolicyService:
         A new ``legacy_policy_id`` must exist in v1 and repoints ``policy_id`` to the
         v2 copy of that policy, or to None when there is no copy. A new
         ``policy_id`` must exist in this country (AssociationPolicyNotFoundError or
-        AssociationCountryConflictError); without ``legacy_policy_id`` it clears the
-        v1 reference, and with it the two must name the same policy
-        (AssociationReferenceConflictError). Raise UserPolicyNotFoundError when the
-        association is not the principal's, and MirrorOwnedAssociationError when
-        the v1 saved-policy mirror maintains it.
+        AssociationCountryConflictError). Without ``legacy_policy_id`` it clears the
+        v1 reference; with it, both are stored, and it must be the v2 copy of that
+        v1 policy when one exists (AssociationReferenceConflictError). Raise
+        UserPolicyNotFoundError when the association is not the principal's, and
+        MirrorOwnedAssociationError when the v1 saved-policy mirror maintains it.
         """
         supplied = association_input.model_fields_set
         if "legacy_policy_id" in supplied:

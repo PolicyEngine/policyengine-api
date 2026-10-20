@@ -160,9 +160,10 @@ def build_v2_user_policy_router(
         description=(
             "Changing legacy_policy_id repoints the row and re-resolves policy_id "
             "from the Stage 10 mirror mapping, or clears it. Changing policy_id "
-            "alone points the row at that v2 policy and clears legacy_policy_id; "
-            "supplied together, the two must name the same policy. Rows "
-            "maintained by the v1 saved-policy mirror return 409."
+            "alone points the row at that v2 policy and clears legacy_policy_id. "
+            "Supplied together, both are stored, and policy_id must be the mirror "
+            "copy of legacy_policy_id when one exists. Rows maintained by the v1 "
+            "saved-policy mirror return 409."
         ),
     )
     def patch_user_policy_route(

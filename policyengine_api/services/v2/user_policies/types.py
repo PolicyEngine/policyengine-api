@@ -89,8 +89,9 @@ class UserPolicyUpdateInput(StrictAssociationInput):
     another v2 policy; supplied without ``legacy_policy_id``, it also clears the
     v1 reference, which no longer describes the saved policy. ``legacy_policy_id``
     alone points the association at another v1 policy and takes ``policy_id`` from
-    that policy's v2 copy. Supplied together, the two must name the same policy.
-    Neither reference can be set to null.
+    that policy's v2 copy. Supplied together, both are stored, and ``policy_id``
+    must be that v2 copy when the Stage 10 mirror made one. Neither reference can
+    be set to null.
     """
 
     policy_id: ResourceId | None = None

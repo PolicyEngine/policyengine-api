@@ -183,6 +183,11 @@ Concurrency on Postgres:
     `legacy_policy_mappings` / `legacy_household_mappings` when a mapping
     exists.
   - Changing the legacy ID re-resolves the v2 reference, or clears it.
+  - `PATCH /v2/user-policies` also accepts `policy_id`, which must name a v2
+    policy in the row's country. Supplied alone, it points the row at that
+    policy and clears `legacy_policy_id`, so an edited reform keeps its saved
+    policy ID. Supplied with `legacy_policy_id`, both are stored, and
+    `policy_id` must be the mirror copy of that v1 policy when one exists.
   - `user-simulations` and `user-reports` accept only legacy IDs in 12A.
 - **Stage 10 mirror rows.** A `user_policies` row with a
   `legacy_user_policy_mappings` entry returns 409 on PATCH and DELETE. The
