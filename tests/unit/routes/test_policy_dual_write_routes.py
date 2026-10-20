@@ -7,12 +7,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from flask import Flask
+from sqlalchemy import select
 
 from policyengine_api.data.v1_models import Policy
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.services.policy_mirroring import PolicyMirrorUnavailableError
 from policyengine_api.services.policy_service import PolicySetResult
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+from policyengine_api.services.v2.policies.validators import (
+    LegacyPolicyTranslationError,
+)
 
 
 def _client():
@@ -208,6 +212,42 @@ def test_mirror_failure_for_a_new_policy_still_returns_201(monkeypatch) -> None:
     }
     assert "secret" not in response.text
     mirror.assert_called_once()
+
+
+def test_destination_failure_returns_the_stored_policy_and_logs_an_error(
+    monkeypatch,
+    orm_session_factory,
+) -> None:
+    """Run the real policy and copy services, with only the v2 write failing."""
+    monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
+    failing_destination = MagicMock()
+    failing_destination.mirror_legacy_policy.side_effect = LegacyPolicyTranslationError(
+        "private parameter value"
+    )
+    with (
+        patch(
+            "policyengine_api.services.policy_mirroring._default_mirror_factory",
+            return_value=failing_destination,
+        ),
+        patch("policyengine_api.services.policy_mirroring.logger") as copy_logger,
+    ):
+        response = _client().post("/us/policy", json=_body())
+
+    assert response.status_code == 201
+    assert response.json["message"] == "Policy created"
+    stored_policy_id = response.json["result"]["policy_id"]
+    failing_destination.mirror_legacy_policy.assert_called_once()
+    with orm_session_factory() as session:
+        stored_policy = session.scalar(
+            select(Policy).where(Policy.id == stored_policy_id)
+        )
+    assert stored_policy is not None
+    logged_record = copy_logger.log_struct.call_args.args[0]
+    assert logged_record["metric_name"] == "v1_policy_mirror_operations"
+    assert logged_record["outcome"] == "error"
+    assert logged_record["failure_category"] == "catalog_or_translation"
+    assert logged_record["legacy_policy_id"] == stored_policy_id
+    assert "private parameter value" not in json.dumps(logged_record)
 
 
 def test_policy_without_a_mirror_snapshot_is_returned_and_logged(
