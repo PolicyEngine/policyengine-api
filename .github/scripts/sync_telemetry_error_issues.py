@@ -595,6 +595,7 @@ class EnvironmentMeasures:
     occurrences: int
     affected_requests: int
     observability_ids: int
+    route_affected_requests: int
     route_requests: int
     error_rate: float | None
     hourly_rate: float
@@ -700,7 +701,12 @@ def _environment_measures(
     in_window = [item for item in in_environment if item.timestamp >= window.start]
     before_window = len(in_environment) - len(in_window)
     affected_requests = len({item.affected_key for item in in_window})
-    routes = {item.route for item in in_window if item.route}
+    # The error rate compares failed requests with completed requests on the
+    # same routes, so failures without a route, such as background
+    # operations, are left out of both.
+    on_routes = [item for item in in_window if item.route]
+    route_affected_requests = len({item.affected_key for item in on_routes})
+    routes = {item.route for item in on_routes}
     requests = route_requests.total(family, environment, routes)
     timestamps = [item.timestamp for item in in_environment]
     return EnvironmentMeasures(
@@ -709,8 +715,9 @@ def _environment_measures(
         observability_ids=len(
             {item.observability_key for item in in_window if item.observability_key}
         ),
+        route_affected_requests=route_affected_requests,
         route_requests=requests,
-        error_rate=affected_requests / requests if requests else None,
+        error_rate=route_affected_requests / requests if requests else None,
         hourly_rate=len(in_window) / window.hours,
         previous_hourly_rate=before_window / window.lookback_hours,
         first_seen=min(timestamps, default=None),
@@ -1228,7 +1235,7 @@ def _error_rate(measures: EnvironmentMeasures) -> str:
     if measures.error_rate is None:
         return NOT_AVAILABLE
     return (
-        f"{measures.error_rate:.2%} ({measures.affected_requests:,} of "
+        f"{measures.error_rate:.2%} ({measures.route_affected_requests:,} of "
         f"{measures.route_requests:,} requests)"
     )
 

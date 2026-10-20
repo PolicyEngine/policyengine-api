@@ -968,6 +968,36 @@ def test_measures_error_rate_uses_requests_to_the_affected_routes(
     assert group.staging.error_rate is None
 
 
+def _failures_with_and_without_a_route(sync_script: ModuleType) -> list:
+    """Return one failed request on a route and two route-less failures."""
+    return [
+        _exception_record(
+            sync_script, request_key="r1", route="/<country_id>/calculate"
+        ),
+        _exception_record(
+            sync_script, request_key=None, trace_key="t2", route=None, timestamp=_at(1)
+        ),
+        _exception_record(
+            sync_script, request_key=None, trace_key="t3", route=None, timestamp=_at(2)
+        ),
+    ]
+
+
+def test_measures_error_rate_counts_only_failures_on_routes(
+    sync_script: ModuleType,
+) -> None:
+    group = _only_group(
+        sync_script,
+        _failures_with_and_without_a_route(sync_script),
+        [_request_count(sync_script, "/<country_id>/calculate", 1)],
+    )
+
+    assert group.production.affected_requests == 3
+    assert group.production.route_affected_requests == 1
+    assert group.production.route_requests == 1
+    assert group.production.error_rate == pytest.approx(1.0)
+
+
 def test_measures_error_rate_counts_every_simulation_service_version(
     sync_script: ModuleType,
 ) -> None:
@@ -1879,6 +1909,20 @@ def test_render_body_marked_section_holds_the_measures_table(
     assert "| Last seen | 2026-10-20 14:00 EDT | 2026-10-20 13:00 EDT |" in section
     assert "Related fingerprints: none" in section
     assert "https://console.cloud.google.com/logs/query;" in section
+
+
+def test_render_error_rate_names_only_failures_on_routes(
+    sync_script: ModuleType,
+) -> None:
+    group = _group(
+        sync_script,
+        _failures_with_and_without_a_route(sync_script),
+        [_request_count(sync_script, "/<country_id>/calculate", 1)],
+    )
+
+    _, body = _render(sync_script, group)
+
+    assert "| Error rate on affected routes | 100.00% (1 of 1 requests) | n/a |" in body
 
 
 def test_render_body_lists_related_fingerprints(sync_script: ModuleType) -> None:
