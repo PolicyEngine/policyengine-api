@@ -132,6 +132,15 @@ request-level or business validation, or convert rows into public response
 types. Connector modules do not call one another to sequence a workflow; the
 service makes that ordering explicit.
 
+The module name also decides which table privileges the connector needs
+(rule `api.v2.runtime-privileges-declared`): `reads` modules need SELECT;
+`creates`, `updates` and `deletes` modules need INSERT, UPDATE or DELETE, plus
+SELECT; and a function that locks rows with `with_for_update` needs UPDATE on
+the tables it locks. A connector that starts using a table, or a new kind of
+operation on one, needs that privilege declared in
+`policyengine_api/data/v2/privileges.py` in the same pull request; see
+[Table privileges](alembic-migrations.md#table-privileges).
+
 Do not use `repository` as a generic synonym for SQL access. Reserve that term
 for an intentional Repository-pattern abstraction with a stable interface that
 hides interchangeable persistence implementations. API v2 currently uses
