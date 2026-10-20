@@ -1,3 +1,14 @@
+## [5.5.7] - 2026-10-20
+
+### Changed
+
+- Enabled ruff's security, logging and debugging rules (S, T20, LOG, G, DTZ, ERA, TD, FIX, EXE): type-narrowing asserts became explicit checks, command-line scripts keep their printed output with reasons, commented-out code and TODO markers are gone, the remaining best-effort telemetry calls use a commented contextlib.suppress block, and every other deliberate exception carries a reasoned suppression; error responses and published schemas are unchanged. The unused GPT-4 dashboard experiment is removed, and a doc-only rule (api.process.agents-suppress-as-last-resort) has agents suppress a ruff finding only when no code change or ruff setting removes it, and list each new suppression in the PR description.
+
+### Fixed
+
+- Removed the debug prints from the country validator and the report output and simulation routes, so requests no longer write context-free lines to stdout.
+
+
 ## [5.5.6] - 2026-10-19
 
 ### Changed
