@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends, Header
 from starlette.responses import JSONResponse, Response
 
+from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     ERROR_RESPONSES,
     run_metadata_read,
@@ -14,6 +15,7 @@ from policyengine_api.fastapi_routes.v2.metadata.common import (
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataCatalogResponse,
 )
+from policyengine_api.query_parameters import CatalogQuery
 
 if TYPE_CHECKING:
     from policyengine_api.fastapi_routes.dependencies import (
@@ -75,6 +77,7 @@ def build_v2_model_catalog_router(
 ) -> APIRouter:
     """Build the whole-catalog route; building it touches no database."""
     router = APIRouter(prefix="/v2", responses=ERROR_RESPONSES)
+    catalog_query = query_dependency(CatalogQuery)
 
     @router.get(
         "/model-catalog",
@@ -89,14 +92,13 @@ def build_v2_model_catalog_router(
         ),
     )
     def get_model_catalog(
-        country_id: str,
-        policyengine_version: str | None = None,
+        query: CatalogQuery = Depends(catalog_query),
         if_none_match: str | None = Header(default=None),
     ) -> Response | JSONResponse:
         def read(reader: V2MetadataResourceReader) -> Response:
             return catalog_response(
-                reader.get_model_catalog(country_id, policyengine_version),
-                pinned=policyengine_version is not None,
+                reader.get_model_catalog(query.country_id, query.policyengine_version),
+                pinned=query.policyengine_version is not None,
                 if_none_match=if_none_match,
             )
 

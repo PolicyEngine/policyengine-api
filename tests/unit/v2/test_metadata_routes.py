@@ -696,3 +696,61 @@ def test_openapi_publishes_the_model_catalog_schema() -> None:
     }
     parameter_schema = schema["components"]["schemas"]["MetadataCatalogParameter"]
     assert "values" in parameter_schema["required"]
+
+
+def test_model_catalog_normalizes_the_shared_catalog_query() -> None:
+    reader = _catalog_reader()
+    client = _client(lambda: reader)
+
+    response = client.get("/v2/model-catalog?country_id=US")
+
+    assert response.status_code == 200
+    assert reader.calls == [("get_model_catalog", ("us", None), {})]
+
+
+@pytest.mark.parametrize(
+    "query_string",
+    [
+        "",
+        "country_id=ca",
+        "country_id=us&policyengine_versoin=4.20.3",
+        "country_id=us&country_id=uk",
+        "country_id=us&policyengine_version=4.20.3&policyengine_version=4.20.4",
+        "country_id=us&policyengine_version=latest",
+    ],
+)
+def test_model_catalog_rejects_queries_outside_the_shared_contract(
+    query_string: str,
+) -> None:
+    reader = _catalog_reader()
+    client = _client(lambda: reader)
+
+    response = client.get(f"/v2/model-catalog?{query_string}")
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "status": "error",
+        "message": "Invalid API v2 request",
+    }
+    assert reader.calls == []
+
+
+def test_openapi_declares_the_model_catalog_query_contract() -> None:
+    schema = _client(_catalog_reader).get("/v2/openapi.json").json()
+
+    parameters = {
+        parameter["name"]: parameter
+        for parameter in schema["paths"]["/v2/model-catalog"]["get"]["parameters"]
+        if parameter["in"] == "query"
+    }
+
+    assert set(parameters) == {"country_id", "policyengine_version"}
+    assert parameters["country_id"]["required"] is True
+    assert parameters["country_id"]["schema"]["enum"] == ["us", "uk"]
+    assert parameters["policyengine_version"]["required"] is False
+    version_schemas = parameters["policyengine_version"]["schema"]["anyOf"]
+    assert [
+        version_schema["maxLength"]
+        for version_schema in version_schemas
+        if version_schema["type"] == "string"
+    ] == [128]

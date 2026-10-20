@@ -213,7 +213,10 @@ and is 60.7 MB (12.1 MB gzipped); the UK document takes 1.0 second and is
 document format, and `Cache-Control: public, max-age=86400` when the request
 names `policyengine_version` (`max-age=300` otherwise, because the running
 version changes on deploy). The release workflow checks the UK document,
-including a conditional request that must return 304.
+including a conditional request that must return 304. The route reads its
+query through the shared `CatalogQuery` model, so an unknown or repeated
+parameter, an unsupported country or an invalid version returns 422 before
+any database read (the paged metadata routes return 400 for the last two).
 
 Also request the unprefixed US and UK metadata endpoints and confirm their
 responses still come from v1. Do not modify route selectors, internal callers,
