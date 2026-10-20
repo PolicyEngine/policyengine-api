@@ -1381,6 +1381,12 @@ def test_bigquery_error_query_request_limits_cost_and_names_its_parameters(
     assert parameters["chained_exception_pattern"]["parameterValue"]["value"] == (
         sync_script.CHAINED_EXCEPTION_PATTERN
     )
+    for name, pattern in (
+        ("double_quoted_pattern", sync_script.DOUBLE_QUOTED_PATTERN),
+        ("single_quoted_pattern", sync_script.SINGLE_QUOTED_PATTERN),
+        ("template_word_pattern", sync_script.TEMPLATE_WORD_PATTERN),
+    ):
+        assert parameters[name]["parameterValue"]["value"] == pattern
     assert [
         item["value"]
         for item in parameters["excluded_routes"]["parameterValue"]["arrayValues"]
@@ -1424,7 +1430,17 @@ def test_bigquery_error_query_reads_stacks_and_messages_only_through_expressions
     ) in sql
     assert f"LENGTH({stack}) >= 16384" in sql
     assert sql.count("$.message") == 1
-    assert "REGEXP_REPLACE(JSON_VALUE(json_payload, '$.message')" in sql
+    assert (
+        "          REGEXP_REPLACE(\n"
+        "            REGEXP_REPLACE(\n"
+        "              JSON_VALUE(json_payload, '$.message'), "
+        "@double_quoted_pattern, ''\n"
+        "            ),\n"
+        "            @single_quoted_pattern,\n"
+        "            r'\\1'\n"
+        "          ),\n"
+        "          @template_word_pattern\n"
+    ) in sql
     assert "error.message" not in sql
     assert "SELECT *" not in sql
     assert "json_payload AS" not in sql
@@ -1444,6 +1460,43 @@ def test_bigquery_error_query_hashes_identifiers(
 
     assert sql.count(identifier) == 1
     assert f"TO_HEX(SHA256({identifier}))" in sql
+
+
+def _message_template(sync_script: ModuleType, message: str) -> str:
+    """Build the template the way the query does, with RE2's ASCII word rules."""
+    without_double_quotes = re.sub(sync_script.DOUBLE_QUOTED_PATTERN, "", message)
+    without_quotes = re.sub(
+        sync_script.SINGLE_QUOTED_PATTERN, r"\1", without_double_quotes
+    )
+    words = re.findall(sync_script.TEMPLATE_WORD_PATTERN, without_quotes, re.ASCII)
+    return " ".join(word.lower() for word in words[:3])
+
+
+def test_bigquery_template_keeps_words_around_an_apostrophe(
+    sync_script: ModuleType,
+) -> None:
+    templates = {
+        _message_template(sync_script, f"Can't load policy '{value}'")
+        for value in ("alpha", "beta", "gamma")
+    }
+
+    assert templates == {"can t load"}
+
+
+@pytest.mark.parametrize(
+    ("message", "template"),
+    [
+        ("Failed to save 'report 12' for user", "failed to save"),
+        ("'SENTINEL' could not be parsed", "could not be"),
+        ('Missing "SENTINEL" in household input', "missing in household"),
+        ("Timeout after 30s calling the simulation API", "timeout after calling"),
+        ("The users' policies 'SENTINEL' failed", "the users policies"),
+    ],
+)
+def test_bigquery_template_drops_quoted_values_and_partial_words(
+    sync_script: ModuleType, message: str, template: str
+) -> None:
+    assert _message_template(sync_script, message) == template
 
 
 def test_bigquery_error_query_hashes_the_trace(sync_script: ModuleType) -> None:
