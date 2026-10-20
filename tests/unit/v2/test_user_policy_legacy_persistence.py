@@ -9,6 +9,7 @@ from uuid import UUID
 import pytest
 
 from policyengine_api.data.v2.models import LegacyUserPolicyMapping, UserPolicy
+from policyengine_api.services.v2.policies import services as policy_services
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.user_policies import services
 from policyengine_api.services.v2.user_policies.transformations import (
@@ -86,8 +87,10 @@ FINGERPRINT = fingerprint_legacy_user_policy(_snapshot())
 
 @pytest.fixture(autouse=True)
 def resolved_policy_and_user(monkeypatch) -> None:
+    # mirror_legacy_user_policy_in_session imports this function when it runs,
+    # so it is replaced in the module that defines it.
     monkeypatch.setattr(
-        services,
+        policy_services,
         "mirror_legacy_policy_in_session",
         lambda _session, _reform: SimpleNamespace(policy_id=POLICY_ID),
     )
