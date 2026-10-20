@@ -629,3 +629,58 @@ def test_rejects_records_missing_from_the_country_system(record_kind: str) -> No
             models=models,
             installed_version=installed_version,
         )
+
+
+def test_rejects_enum_labels_that_do_not_match_the_possible_values() -> None:
+    models = source_models()
+
+    class Region(Enum):
+        NORTH_EAST = "North East"
+
+    public_variable = models["uk"].variables_by_name["employment_income"]
+    public_variable.value_type = type("Enum", (), {})
+    public_variable.possible_values = ["NORTH_EAST", "LONDON"]
+    core_variable = models["uk"]._load_system().variables["employment_income"]
+    core_variable.possible_values = Region
+
+    with pytest.raises(CatalogExtractionError, match="enum labels do not match"):
+        extract_catalog(
+            bundle=bundle(),
+            policyengine_version=POLICYENGINE_VERSION,
+            models=models,
+            installed_version=installed_version,
+        )
+
+
+@pytest.mark.parametrize(
+    ("flag_name", "flag_value"),
+    [("economy", "false"), ("household", 1)],
+)
+def test_rejects_parameter_flags_that_are_not_booleans(
+    flag_name: str, flag_value: object
+) -> None:
+    models = source_models()
+    core_parameter = models["uk"]._load_system().parameters.get_descendants()[1]
+    core_parameter.metadata = {**core_parameter.metadata, flag_name: flag_value}
+
+    with pytest.raises(CatalogExtractionError, match=f"{flag_name} must be a boolean"):
+        extract_catalog(
+            bundle=bundle(),
+            policyengine_version=POLICYENGINE_VERSION,
+            models=models,
+            installed_version=installed_version,
+        )
+
+
+def test_rejects_variable_flags_that_are_not_booleans() -> None:
+    models = source_models()
+    core_variable = models["uk"]._load_system().variables["employment_income"]
+    core_variable.hidden_input = "no"
+
+    with pytest.raises(CatalogExtractionError, match="hidden_input must be a boolean"):
+        extract_catalog(
+            bundle=bundle(),
+            policyengine_version=POLICYENGINE_VERSION,
+            models=models,
+            installed_version=installed_version,
+        )
