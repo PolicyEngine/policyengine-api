@@ -26,13 +26,16 @@ from scripts.rules.model import RuleException, Violation
 from scripts.rules.workflows import parse_jobs
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Callable, Iterable, Iterator
+
+    Classifier = Callable[[str], "tuple[bool, bool] | None"]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALL_RULE = "api.dependencies.install-from-lock"
+TEST_RULE = "api.dependencies.test-from-lock"
 PINNED_TOOL = "pinned-tool"
 # Proof fixtures hold deliberate violations; they are scanned by their tests.
-EXCLUDED_PREFIXES = ("scripts/rules/tests/fixtures/",)
+EXCLUDED_PREFIXES = ("scripts/rules/tests/fixtures/", "rules/fixtures/")
 WORKFLOW_DIRECTORIES = (".github/workflows/",)
 MAKEFILE_NAMES = {"Makefile", "GNUmakefile", "makefile"}
 
@@ -53,6 +56,10 @@ _OTHER_INSTALL = re.compile(
     r"\buv\s+add\b|\bpoetry\s+(?:install|add)\b|\b(?:conda|mamba|micromamba)\s+install\b"
     r"|\beasy_install\b|\bsetup\.py\s+(?:install|develop)\b|\bpip-sync\b"
 )
+_TEST_COMMAND = re.compile(
+    r"\bpytest\b|\bcoverage\s+run\b|-m\s+unittest\b|\bunittest\s+discover\b"
+    r"|(?:^|\s)(?:tox|nox)(?:\s|$)"
+)
 _MODAL_CALL = re.compile(
     r"\.(?P<method>pip_install_from_requirements|pip_install_from_pyproject"
     r"|pip_install|uv_pip_install|uv_sync|poetry_install_from_file"
@@ -69,7 +76,7 @@ _PYTHON_INSTALLER_CALL = re.compile(
 
 @dataclass(frozen=True)
 class Site:
-    """One command or call in a scanned file that installs Python packages."""
+    """One command or call in a scanned file that installs packages or runs tests."""
 
     path: str
     command: str
@@ -224,7 +231,7 @@ def _python_sites(path: str, text: str) -> Iterator[Site]:
         ]
         if method == "run_commands":
             for literal in literals:
-                yield from _shell_sites(path, literal)
+                yield from _sites(path, _commands(literal), classify_command)
             continue
         label = f".{method}({' '.join(arguments.split())})"
         if method == "uv_sync":
@@ -242,55 +249,79 @@ def _python_sites(path: str, text: str) -> Iterator[Site]:
             command = " ".join(
                 match.group("text") for match in _STRING_LITERAL.finditer(source_line)
             )
-            classified = classify_command(command)
-            if classified is not None:
-                yield Site(path, command, *classified)
+            yield from _sites(path, [command], classify_command)
 
 
-def _shell_sites(path: str, text: str) -> Iterator[Site]:
-    for command in _commands(text):
-        classified = classify_command(command)
+def classify_test_command(command: str) -> tuple[bool, bool] | None:
+    """Return ``(locked, False)`` for a command that runs tests, else None."""
+    if not _TEST_COMMAND.search(command):
+        return None
+    installs = classify_command(command)
+    if installs is not None and _UV_RUN.search(command) is None:
+        return None
+    return installs == (True, False), False
+
+
+def _sites(path: str, commands: Iterable[str], classify: Classifier) -> Iterator[Site]:
+    for command in commands:
+        classified = classify(command)
         if classified is not None:
             yield Site(path, command, *classified)
 
 
-def _workflow_sites(path: str, text: str) -> Iterator[Site]:
+def _workflow_commands(text: str) -> Iterator[str]:
     jobs, _ = parse_jobs(text)
     for job in jobs.values():
         for run_block in job.run_blocks:
-            yield from _shell_sites(path, run_block.text)
+            yield from _commands(run_block.text)
 
 
-def _makefile_sites(path: str, text: str) -> Iterator[Site]:
+def _makefile_commands(text: str) -> Iterator[str]:
     recipe_text = "\n".join(
         makefile_line
         for makefile_line in _CONTINUATION.sub(" ", text).splitlines()
         if makefile_line.startswith("\t")
     )
-    yield from _shell_sites(path, recipe_text)
+    yield from _commands(recipe_text)
 
 
-_SITE_FINDERS = {
-    "workflow": _workflow_sites,
-    "shell": _shell_sites,
-    "makefile": _makefile_sites,
-    "dockerfile": _shell_sites,
-    "python": _python_sites,
+_COMMAND_FINDERS: dict[str, Callable[[str], Iterator[str]]] = {
+    "workflow": _workflow_commands,
+    "shell": _commands,
+    "makefile": _makefile_commands,
+    "dockerfile": _commands,
 }
+
+
+def _scanned_texts(root: Path) -> Iterator[tuple[str, str, str]]:
+    for path, kind in sorted(scanned_files(root).items()):
+        yield path, kind, (root / path).read_text(encoding="utf-8", errors="replace")
 
 
 def install_sites(root: Path = REPO_ROOT) -> list[Site]:
     """Return every install site in the scanned files."""
-    sites = []
-    for path, kind in sorted(scanned_files(root).items()):
-        text = (root / path).read_text(encoding="utf-8", errors="replace")
-        sites += _SITE_FINDERS[kind](path, text)
+    sites: list[Site] = []
+    for path, kind, text in _scanned_texts(root):
+        if kind == "python":
+            sites += _python_sites(path, text)
+        else:
+            sites += _sites(path, _COMMAND_FINDERS[kind](text), classify_command)
     return sites
 
 
 def unlocked_install_sites(root: Path = REPO_ROOT) -> list[Site]:
     """Return every install site that does not install exactly what uv.lock pins."""
     return [site for site in install_sites(root) if not site.locked]
+
+
+def unlocked_test_commands(root: Path = REPO_ROOT) -> list[Site]:
+    """Return every test command that does not run through uv run --frozen."""
+    sites: list[Site] = []
+    for path, kind, text in _scanned_texts(root):
+        if kind in _COMMAND_FINDERS:
+            commands = _COMMAND_FINDERS[kind](text)
+            sites += _sites(path, commands, classify_test_command)
+    return [site for site in sites if not site.locked]
 
 
 def _matches(exception: RuleException, site: Site) -> bool:
@@ -329,6 +360,18 @@ def _exception_problems(rule_id: str, exception: RuleException) -> Iterator[Viol
         )
 
 
+_SITE_PROBLEMS = {
+    INSTALL_RULE: (
+        "installs packages outside uv.lock",
+        "install with uv sync --frozen or run with uv run --frozen",
+    ),
+    TEST_RULE: (
+        "runs tests outside the uv.lock environment",
+        "run the tests with uv run --frozen",
+    ),
+}
+
+
 def exception_violations(
     rule_id: str, sites: Iterable[Site], exceptions: Iterable[RuleException]
 ) -> list[Violation]:
@@ -361,15 +404,16 @@ def exception_violations(
                 for site in covered
                 if not site.pinned
             ]
+    problem, fix = _SITE_PROBLEMS[rule_id]
     for site in sites:
         if not any(_matches(exception, site) for exception in exceptions):
             violations.append(
                 Violation(
                     rule_id,
                     "locked-installs",
-                    f"{site.path}: '{site.command}' installs packages outside uv.lock",
-                    "install with uv sync --frozen or run with uv run --frozen; "
-                    "if locking is not possible, register a [[rule.exception]] "
+                    f"{site.path}: '{site.command}' {problem}",
+                    f"{fix}; if locking is not possible, register a "
+                    "[[rule.exception]] "
                     "(docs/engineering/skills/dependencies.md#exceptions)",
                 )
             )
@@ -381,6 +425,13 @@ def install_violations(
 ) -> list[Violation]:
     """Report unlocked installs under ``root`` that ``exceptions`` do not cover."""
     return exception_violations(INSTALL_RULE, unlocked_install_sites(root), exceptions)
+
+
+def test_command_violations(
+    root: Path, exceptions: Iterable[RuleException]
+) -> list[Violation]:
+    """Report test commands under ``root`` that run outside the locked environment."""
+    return exception_violations(TEST_RULE, unlocked_test_commands(root), exceptions)
 
 
 def run_check(root: Path = REPO_ROOT) -> list[Violation]:
