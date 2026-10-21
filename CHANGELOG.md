@@ -1,3 +1,10 @@
+## [5.6.2] - 2026-10-21
+
+### Changed
+
+- Enabled ruff's argument, idiom and pytest-style rules (ARG, ASYNC, B, C4, FBT, PD, PERF, PGH, PLW, PT, PTH, RUF, SIM): unused arguments are removed, underscored or explained (test stand-ins that mirror a real signature take ARG001, ARG002 and ARG005 as file-level test exceptions instead), tests request side-effect fixtures with usefixtures and match the exception messages they expect, boolean options of internal helpers are keyword-only, and re-raised errors keep their cause; published schemas and the HTTP API are unchanged, and the shared rules tool's unittest tests are exempt from pytest-style rules.
+
+
 ## [5.6.1] - 2026-10-21
 
 ### Changed
