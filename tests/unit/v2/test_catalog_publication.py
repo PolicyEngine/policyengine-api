@@ -145,6 +145,31 @@ def test_revision_check_rejects_non_postgres_missing_and_wrong_revisions() -> No
         )
 
 
+class _CountRecordingConnection:
+    """Records the tables each row-count statement selects from."""
+
+    def __init__(self) -> None:
+        self.counted_tables: list[str] = []
+
+    def execute(self, statement):
+        self.counted_tables.extend(
+            from_clause.name for from_clause in statement.get_final_froms()
+        )
+        return _ScalarResult(value=0)
+
+
+def test_protected_row_counts_read_only_dataset_versions() -> None:
+    # The simulation service owns simulations, reports and report runs, and a
+    # later v2 revision drops the Public API's copies of those tables, so
+    # publication must not read them.
+    connection = _CountRecordingConnection()
+
+    counts = publication._protected_row_counts(connection)
+
+    assert counts == (0,)
+    assert connection.counted_tables == ["dataset_versions"]
+
+
 def test_copy_streams_rows_through_psycopg_without_an_orm_write() -> None:
     connection = FakeConnection()
     rows = ((index, f"row-{index}") for index in range(3))

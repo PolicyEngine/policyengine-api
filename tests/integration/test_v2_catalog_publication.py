@@ -29,6 +29,7 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.data.v2.privileges import CATALOG_WRITER_ROLE
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from tests.fixtures.v2_catalog import normalized_catalog
 
@@ -305,6 +306,29 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
         assert persisted_simulation.dataset_id == protected_ids[4]
         assert persisted_simulation.output_dataset_id == protected_ids[5]
         assert persisted_report.dataset_id == protected_ids[6]
+
+
+def test_catalog_writer_publishes_without_access_to_simulation_tables(
+    publication_engine: Engine,
+    v2_engine_as_role,
+) -> None:
+    # A later v2 revision drops simulations, reports and report_runs while
+    # this release serves traffic, so publication must work without them.
+    with publication_engine.begin() as connection:
+        connection.execute(
+            text(
+                "REVOKE ALL ON simulations, reports, report_runs "
+                f"FROM {CATALOG_WRITER_ROLE}"
+            )
+        )
+    catalog_writer_engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
+    try:
+        evidence = publish_catalog(catalog_writer_engine, normalized_catalog())
+    finally:
+        catalog_writer_engine.dispose()
+
+    assert evidence.as_dict()["outcome"] == "ok"
+    assert _counts(publication_engine)["tax_benefit_models"] == 2
 
 
 def test_new_version_is_additive_and_concurrent_retries_serialize(

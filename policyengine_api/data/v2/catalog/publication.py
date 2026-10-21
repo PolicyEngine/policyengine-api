@@ -24,12 +24,7 @@ from policyengine_api.data.v2.catalog.publication_types import (
     PublicationEvidence,
 )
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
-from policyengine_api.data.v2.models import (
-    DatasetVersion,
-    Report,
-    ReportRun,
-    Simulation,
-)
+from policyengine_api.data.v2.models import DatasetVersion
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -43,12 +38,10 @@ ALEMBIC_VERSION = sa.table(
     "alembic_version",
     sa.column("version_num", sa.String),
 )
-PROTECTED_TABLES = (
-    DatasetVersion.__table__,
-    Simulation.__table__,
-    Report.__table__,
-    ReportRun.__table__,
-)
+# User-created rows that publication must never change. Simulations, reports
+# and report runs belong to the simulation service's own schema, and a later
+# v2 revision drops the Public API's copies, so publication doesn't read them.
+PROTECTED_TABLES = (DatasetVersion.__table__,)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -80,7 +73,7 @@ def _acquire_publication_lock(connection: Connection) -> None:
     ).scalar_one()
 
 
-def _protected_row_counts(connection: Connection) -> tuple[int, int, int, int]:
+def _protected_row_counts(connection: Connection) -> tuple[int, ...]:
     return tuple(
         connection.execute(sa.select(sa.func.count()).select_from(table)).scalar_one()
         for table in PROTECTED_TABLES
@@ -120,7 +113,7 @@ def publish_catalog(
             assert_country_matches(connection, country)
         assert_canonical_value_uniqueness(connection)
         if _protected_row_counts(connection) != before:
-            msg = "publication changed simulation, report, or dataset-version rows"
+            msg = "publication changed dataset-version rows"
             raise CatalogPublicationError(msg)
         if checkpoint is not None:
             checkpoint("after_validation", connection)
