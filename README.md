@@ -26,7 +26,11 @@ git clone https://github.com/PolicyEngine/policyengine-api.git
 
 To contribute, clone the repository instead of forking it and then request to be added as a contributor. Create a new branch and get started!
 
-### 2. Activate your virtual environment
+### 2. Install uv
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/). The
+project's dependencies are pinned in `uv.lock`, the same file the Cloud Run
+image installs from.
 
 ### 3. Install dependencies
 
@@ -34,6 +38,13 @@ To contribute, clone the repository instead of forking it and then request to be
 make install
 make setup-env
 ```
+
+`make install` runs `uv sync --frozen --extra dev`, which creates `.venv` with
+exactly the versions in `uv.lock` on Python 3.12, the version the Cloud Run
+image runs. The Make targets that run Python (`make test`, `make debug-test`,
+`make debug` and others) run it through `uv run --frozen --extra dev`, so you
+don't need to activate `.venv`. To run another command in that environment,
+prefix it the same way, for example `uv run --frozen --extra dev pytest tests/unit`.
 
 ### 3a. Configure environment variables
 

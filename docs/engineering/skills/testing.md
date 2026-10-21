@@ -2,6 +2,24 @@
 
 Use this skill whenever adding, moving, or reviewing tests.
 
+## Test Environment
+
+Tests run in the environment `uv.lock` defines, on Python 3.12, the same
+versions the Cloud Run image installs (`gcp/cloud_run/Dockerfile`):
+
+- `make install` runs `uv sync --frozen --extra dev`, and `make test` runs
+  pytest and coverage through `uv run --frozen --extra dev`. The Makefile sets
+  `UV_PYTHON=3.12` unless it is already set, because `.python-version` selects
+  3.14.
+- To run other commands in that environment, prefix them with
+  `uv run --frozen --extra dev --python 3.12`. The commands below omit the
+  prefix for brevity.
+- A CI job that runs tests sets `UV_PYTHON: "3.12"`, installs with
+  `make install` (or `uv sync --frozen --extra dev`), runs every pytest and
+  coverage command through `uv run --frozen`, and never installs packages with
+  pip. `tests/unit/test_locked_test_environments.py` checks this for every
+  workflow job that runs pytest or coverage.
+
 ## Migration Test Layout
 
 - Put API migration compatibility tests under `tests/contract/`.
