@@ -10,9 +10,11 @@ from pathlib import Path
 from scripts.rules.load import load_text
 from scripts.rules.locked_installs import (
     INSTALL_RULE,
+    LOCK_RULE,
     REPO_ROOT,
     TEST_RULE,
     install_violations,
+    lock_violations,
     scanned_files,
     test_command_violations,
     unlocked_install_sites,
@@ -78,6 +80,24 @@ class TestTestFromLockProof(unittest.TestCase):
 
         self.assertEqual({violation.rule_id for violation in violations}, {TEST_RULE})
         self.assertIn("outside the uv.lock environment", violations[0].message)
+
+
+class TestLockCommittedProof(unittest.TestCase):
+    """Proof: every project has a uv.lock that pull request CI checks."""
+
+    def test_rule_proof_lock_committed(self) -> None:
+        violations = lock_violations(FIXTURES / "lock_bad")
+
+        self.assertEqual({violation.rule_id for violation in violations}, {LOCK_RULE})
+        self.assertEqual(
+            sorted(violation.message for violation in violations),
+            [
+                "libs/helper has a pyproject.toml but no committed uv.lock",
+                "no pull request job runs uv lock --check for .",
+                "no pull request job runs uv lock --check for libs/helper",
+            ],
+        )
+        self.assertEqual(lock_violations(FIXTURES / "lock_good"), [])
 
 
 class TestInstallExceptions(unittest.TestCase):

@@ -121,6 +121,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # The same uv version as the Cloud Run image and the release job.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.4"
+      - name: Check uv.lock matches pyproject.toml
+        run: uv lock --check
       - name: Test the rules registry tool
         run: python -m unittest discover -s scripts/rules/tests -t .
       - name: Install shellcheck (for the ci-scripts guard)

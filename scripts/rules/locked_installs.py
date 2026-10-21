@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALL_RULE = "api.dependencies.install-from-lock"
 TEST_RULE = "api.dependencies.test-from-lock"
+LOCK_RULE = "api.dependencies.lock-committed"
 PINNED_TOOL = "pinned-tool"
 # Proof fixtures hold deliberate violations; they are scanned by their tests.
 EXCLUDED_PREFIXES = ("scripts/rules/tests/fixtures/", "rules/fixtures/")
@@ -60,6 +61,14 @@ _TEST_COMMAND = re.compile(
     r"\bpytest\b|\bcoverage\s+run\b|-m\s+unittest\b|\bunittest\s+discover\b"
     r"|(?:^|\s)(?:tox|nox)(?:\s|$)"
 )
+_SCRIPT_REFERENCE = re.compile(r"\.github/[\w./-]+\.sh")
+_MAKE_TARGET_REFERENCE = re.compile(r"\bmake ([\w-]+)")
+_MAKE_TARGET_HEADER = re.compile(r"^([\w-]+)\s*:(?!=)")
+_PULL_REQUEST_TRIGGERS = {"pull_request", "pull_request_target"}
+_ON_KEY = re.compile(r"""^["']?on["']?:\s*(?P<inline>.*)$""")
+_TRIGGER_KEY = re.compile(r"^(?P<indent>\s+)(?P<name>[\w-]+):")
+_LOCK_CHECK = re.compile(r"\buv\s+lock\b.*--(?:check|locked)\b")
+_PROJECT_OPTION = re.compile(r"--(?:project|directory)[=\s]+(?P<directory>\S+)")
 _MODAL_CALL = re.compile(
     r"\.(?P<method>pip_install_from_requirements|pip_install_from_pyproject"
     r"|pip_install|uv_pip_install|uv_sync|poetry_install_from_file"
@@ -425,6 +434,147 @@ def install_violations(
 ) -> list[Violation]:
     """Report unlocked installs under ``root`` that ``exceptions`` do not cover."""
     return exception_violations(INSTALL_RULE, unlocked_install_sites(root), exceptions)
+
+
+def makefile_recipes(root: Path = REPO_ROOT) -> dict[str, list[str]]:
+    """Return each root Makefile target's recipe lines."""
+    makefile = root / "Makefile"
+    if not makefile.is_file():
+        return {}
+    recipes: dict[str, list[str]] = {}
+    current_target = None
+    for makefile_line in makefile.read_text(encoding="utf-8").splitlines():
+        header = _MAKE_TARGET_HEADER.match(makefile_line)
+        if header is not None and header.group(1) != ".PHONY":
+            current_target = header.group(1)
+            recipes[current_target] = []
+        elif makefile_line.startswith("\t") and current_target is not None:
+            recipes[current_target].append(makefile_line.strip())
+        elif makefile_line.strip():
+            current_target = None
+    return recipes
+
+
+def executed_lines(
+    root: Path, command_text: str, visited: set[str] | None = None
+) -> list[str]:
+    """Return the command's lines plus those of the scripts and Make targets it runs."""
+    visited = set() if visited is None else visited
+    recipes = makefile_recipes(root)
+    executed = []
+    for command_line in command_text.splitlines():
+        if command_line.lstrip().startswith("#"):
+            continue
+        executed.append(command_line)
+        for script_path in _SCRIPT_REFERENCE.findall(command_line):
+            if script_path in visited or not (root / script_path).is_file():
+                continue
+            visited.add(script_path)
+            script_text = (root / script_path).read_text(encoding="utf-8")
+            executed += executed_lines(root, script_text, visited)
+        for target in _MAKE_TARGET_REFERENCE.findall(command_line):
+            if f"make {target}" in visited or target not in recipes:
+                continue
+            visited.add(f"make {target}")
+            executed += executed_lines(root, "\n".join(recipes[target]), visited)
+    return executed
+
+
+def _workflow_job_commands(root: Path, path: str) -> dict[str, list[str]]:
+    """Return each job's commands, including the scripts and Make targets it runs."""
+    jobs, _ = parse_jobs((root / path).read_text(encoding="utf-8"))
+    return {
+        job_id: list(
+            _commands(
+                "\n".join(
+                    executed_line
+                    for run_block in job.run_blocks
+                    for executed_line in executed_lines(root, run_block.text)
+                )
+            )
+        )
+        for job_id, job in jobs.items()
+    }
+
+
+def workflow_triggers(text: str) -> set[str]:
+    """Return the event names in a workflow's top-level ``on:``."""
+    lines = [raw_line.split(" #")[0].rstrip() for raw_line in text.splitlines()]
+    for position, workflow_line in enumerate(lines):
+        on_key = _ON_KEY.match(workflow_line)
+        if on_key is None:
+            continue
+        inline = on_key.group("inline").strip()
+        if inline:
+            return {name.strip() for name in inline.strip("[]").split(",")}
+        triggers: set[str] = set()
+        trigger_indent = None
+        for trigger_line in lines[position + 1 :]:
+            if trigger_line and not trigger_line[0].isspace():
+                break
+            key = _TRIGGER_KEY.match(trigger_line)
+            if key is None or trigger_line.lstrip().startswith("#"):
+                continue
+            trigger_indent = trigger_indent or key.group("indent")
+            if key.group("indent") == trigger_indent:
+                triggers.add(key.group("name"))
+        return triggers
+    return set()
+
+
+def _project_directory(command: str) -> str:
+    option = _PROJECT_OPTION.search(command)
+    return "." if option is None else option.group("directory").rstrip("/")
+
+
+def _locked_directories(root: Path, name: str) -> list[str]:
+    return sorted(
+        Path(path).parent.as_posix()
+        for path in _tracked_files(root)
+        if Path(path).name == name and not path.startswith(EXCLUDED_PREFIXES)
+    )
+
+
+def _workflows(root: Path) -> list[str]:
+    return sorted(
+        path for path, kind in scanned_files(root).items() if kind == "workflow"
+    )
+
+
+def lock_violations(root: Path = REPO_ROOT) -> list[Violation]:
+    """Report projects without a committed uv.lock, or whose lock PR CI never checks."""
+    locks = set(_locked_directories(root, "uv.lock"))
+    projects = _locked_directories(root, "pyproject.toml")
+    violations = [
+        Violation(
+            LOCK_RULE,
+            "locked-installs",
+            f"{project} has a pyproject.toml but no committed uv.lock",
+            f"run uv lock in {project} and commit uv.lock",
+        )
+        for project in projects
+        if project not in locks
+    ]
+    checked = {
+        _project_directory(command)
+        for path in _workflows(root)
+        if workflow_triggers((root / path).read_text(encoding="utf-8"))
+        & _PULL_REQUEST_TRIGGERS
+        for commands in _workflow_job_commands(root, path).values()
+        for command in commands
+        if _LOCK_CHECK.search(command)
+    }
+    violations += [
+        Violation(
+            LOCK_RULE,
+            "locked-installs",
+            f"no pull request job runs uv lock --check for {project}",
+            "add a pull request CI step that runs uv lock --check for it",
+        )
+        for project in projects
+        if project not in checked
+    ]
+    return violations
 
 
 def test_command_violations(

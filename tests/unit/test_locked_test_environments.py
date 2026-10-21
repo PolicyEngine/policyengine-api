@@ -204,3 +204,21 @@ def test_operational_job_keeps_an_explicit_install_for_its_python(workflow, job_
     # make install now syncs .venv, which the job's bare python never reads.
     assert EXPLICIT_UNLOCKED_INSTALL in executed
     assert "make install" not in executed
+
+
+def _setup_uv_version(workflow: str, job_id: str) -> str:
+    workflow_text = (WORKFLOW_DIRECTORY / workflow).read_text(encoding="utf-8")
+    versions = re.findall(
+        r'uses: astral-sh/setup-uv@\S+\n\s+with:\n\s+version: "([^"]+)"',
+        _job_text(workflow_text, job_id),
+    )
+    assert len(versions) == 1, f"{workflow} {job_id} must pin one setup-uv version"
+    return versions[0]
+
+
+def test_lock_check_uses_the_uv_version_that_locks_releases():
+    # quality-guards runs uv lock --check; a different uv can read or write
+    # another lock revision than the versioning job's uv lock does.
+    assert _setup_uv_version("pr.yml", "quality-guards") == _setup_uv_version(
+        "push.yml", "versioning"
+    )
