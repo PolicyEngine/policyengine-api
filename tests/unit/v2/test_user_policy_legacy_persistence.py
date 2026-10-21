@@ -37,9 +37,9 @@ MAPPING_COLUMNS = (
 )
 SELECT_MAPPING = (
     f"SELECT {MAPPING_COLUMNS} \nFROM legacy_user_policy_mappings \n"
-    "WHERE legacy_user_policy_mappings.country_id = %(country_id_1)s AND "
+    "WHERE legacy_user_policy_mappings.country_id = %(country_id_1)s::VARCHAR AND "
     "legacy_user_policy_mappings.legacy_user_policy_id = "
-    "%(legacy_user_policy_id_1)s"
+    "%(legacy_user_policy_id_1)s::BIGINT"
 )
 SELECT_MAPPING_FOR_UPDATE = f"{SELECT_MAPPING} FOR UPDATE"
 MAPPING_LOOKUP = {"country_id_1": "us", "legacy_user_policy_id_1": 10}
@@ -50,16 +50,17 @@ SELECT_MAPPED_ASSOCIATION = (
     "user_policies.name, user_policies.description, user_policies.baseline, "
     "user_policies.provenance \nFROM user_policies \n"
     "WHERE user_policies.id = %(id_1)s::UUID AND "
-    "user_policies.country_id = %(country_id_1)s"
+    "user_policies.country_id = %(country_id_1)s::VARCHAR"
 )
 INSERT_MAPPING = (
     "INSERT INTO legacy_user_policy_mappings (id, created_at, updated_at, "
     "country_id, legacy_user_policy_id, user_policy_id, "
     "last_applied_source_revision, fingerprint_version, fingerprint_sha256) "
-    "VALUES (%(id)s::UUID, %(created_at)s, %(updated_at)s, %(country_id)s, "
-    "%(legacy_user_policy_id)s, %(user_policy_id)s::UUID, "
-    "%(last_applied_source_revision)s, %(fingerprint_version)s, "
-    "%(fingerprint_sha256)s) ON CONFLICT ON CONSTRAINT "
+    "VALUES (%(id)s::UUID, %(created_at)s::TIMESTAMP WITH TIME ZONE, "
+    "%(updated_at)s::TIMESTAMP WITH TIME ZONE, %(country_id)s::VARCHAR, "
+    "%(legacy_user_policy_id)s::BIGINT, %(user_policy_id)s::UUID, "
+    "%(last_applied_source_revision)s::BIGINT, %(fingerprint_version)s::INTEGER, "
+    "%(fingerprint_sha256)s::VARCHAR) ON CONFLICT ON CONSTRAINT "
     "uq_legacy_user_policy_mappings_country_legacy DO NOTHING RETURNING "
     "legacy_user_policy_mappings.id"
 )

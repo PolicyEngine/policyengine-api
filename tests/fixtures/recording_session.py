@@ -5,7 +5,16 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
 
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine import make_url
+
+from policyengine_api.data.v2.settings import POSTGRES_DRIVER
+
+# Statements are compiled for the driver the v2 database engines must use, so
+# they render as the application sends them, whichever SQLAlchemy is installed.
+# ``postgresql.dialect()`` takes SQLAlchemy's default PostgreSQL driver instead,
+# which is psycopg2 in SQLAlchemy 2.0 and psycopg in 2.1, and the two render
+# different casts: psycopg casts string, integer and timestamp parameters too.
+V2_DATABASE_DIALECT = make_url(f"{POSTGRES_DRIVER}://").get_dialect()()
 
 
 @dataclass
@@ -23,7 +32,7 @@ class _ScriptedResult:
 
 @dataclass
 class RecordingSession:
-    """Record statements (compiled for PostgreSQL) and ORM writes, in order.
+    """Record statements (compiled for the v2 driver) and ORM writes, in order.
 
     Each ``exec`` or ``execute`` returns the next value from ``results``.
     """
@@ -32,7 +41,7 @@ class RecordingSession:
     operations: list[tuple[object, ...]] = field(default_factory=list)
 
     def _record_statement(self, method: str, statement: object) -> _ScriptedResult:
-        compiled = statement.compile(dialect=postgresql.dialect())
+        compiled = statement.compile(dialect=V2_DATABASE_DIALECT)
         self.operations.append((method, str(compiled), dict(compiled.params)))
         return _ScriptedResult(self.results.popleft())
 
