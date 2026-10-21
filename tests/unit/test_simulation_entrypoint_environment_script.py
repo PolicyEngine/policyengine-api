@@ -8,9 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / ".github/scripts/check_simulation_entrypoint_environment.sh"
+PUSH_WORKFLOW = REPO / ".github/workflows/push.yml"
+CHECK_COMMAND = "bash .github/scripts/check_simulation_entrypoint_environment.sh"
 SIMULATION_URL = "https://simulation.example.test"
 STAGING_REVISION = "policyengine-simulation-entry-staging-00070-abc"
 PRODUCTION_REVISION = "policyengine-simulation-entry-00122-low"
@@ -214,3 +217,40 @@ def test_does_not_check_the_shared_old_gateway(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert curl_calls == []
     assert "old_gateway_direct" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("job_name", "deployment_environment"),
+    [
+        ("ensure-staging-model-version-aligns-with-sim-api", "staging"),
+        ("ensure-production-model-version-aligns-with-sim-api", "production"),
+    ],
+)
+def test_each_release_checks_its_own_simulation_service_first(
+    job_name: str, deployment_environment: str
+) -> None:
+    """Each version-alignment job fails if it reaches the other environment.
+
+    The check runs right after checkout, before the job asks the simulation
+    service which bundle it supports, so a crossed environment fails the
+    release instead of validating against the wrong service.
+    """
+    job = yaml.safe_load(PUSH_WORKFLOW.read_text(encoding="utf-8"))["jobs"][job_name]
+
+    assert job["environment"] == deployment_environment
+    assert job["env"]["DEPLOYMENT_ENVIRONMENT"] == deployment_environment
+    assert job["env"]["SIM_ENTRYPOINT"] == "${{ vars.SIM_ENTRYPOINT }}"
+    assert (
+        job["env"]["SIMULATION_ENTRYPOINT_URL"]
+        == "${{ secrets.SIMULATION_ENTRYPOINT_URL }}"
+    )
+    step_commands = [step.get("run", "") for step in job["steps"]]
+    assert step_commands.count(CHECK_COMMAND) == 1
+    check_position = step_commands.index(CHECK_COMMAND)
+    bundle_check_position = step_commands.index(
+        "bash .github/check-policyengine-bundle-supported.sh"
+    )
+    assert (
+        job["steps"][check_position - 1].get("uses", "").startswith("actions/checkout@")
+    )
+    assert check_position < bundle_check_position
