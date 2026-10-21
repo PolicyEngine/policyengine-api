@@ -40,7 +40,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Validate collector configuration
-        run: docker run --rm --env OBSERVABILITY_PROJECT_ID="${OBSERVABILITY_PROJECT_ID}" --env OBSERVABILITY_METRIC_LOCATION="${OBSERVABILITY_METRIC_LOCATION}" --volume "${PWD}/gcp/observability/collector/config.yaml:/etc/otelcol-google/config.yaml:ro" us-docker.pkg.dev/cloud-ops-agents-artifacts/google-cloud-opentelemetry-collector/otelcol-google:0.160.0 validate --config=/etc/otelcol-google/config.yaml
+        run: docker run --rm --env OBSERVABILITY_PROJECT_ID="${OBSERVABILITY_PROJECT_ID}" --env OBSERVABILITY_METRIC_LOCATION="${OBSERVABILITY_METRIC_LOCATION}" --volume "${PWD}/gcp/observability/collector/config.yaml:/etc/otelcol-google/config.yaml:ro" us-docker.pkg.dev/cloud-ops-agents-artifacts/google-cloud-opentelemetry-collector/otelcol-google:0.163.1 validate --config=/etc/otelcol-google/config.yaml
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -51,7 +51,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
         with:
-          version: "0.12.1"
+          version: "0.13.4"
       - name: Build and deploy collector
         id: collector
         run: bash .github/scripts/deploy_observability_collector.sh

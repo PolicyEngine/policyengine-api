@@ -131,7 +131,7 @@ def test_versioning_refreshes_the_lock_after_bumping_the_project_version():
     changelog_target = makefile[makefile.index("changelog:") :]
 
     assert "uses: astral-sh/setup-uv@v6" in versioning_job
-    assert 'version: "0.12.1"' in versioning_job
+    assert 'version: "0.13.4"' in versioning_job
     assert versioning_job.index("python .github/bump_version.py") < (
         versioning_job.index("uv lock")
     )
