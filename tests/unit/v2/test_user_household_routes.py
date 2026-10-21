@@ -13,6 +13,7 @@ from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
 )
 from policyengine_api.services.v2.user_households.types import (
+    UserHouseholdFilter,
     UserHouseholdPage,
     UserHouseholdRead,
 )
@@ -156,8 +157,9 @@ def test_list_and_patch_use_the_session_user_and_legacy_fields() -> None:
         {
             "principal": PRINCIPAL,
             "country_id": "us",
-            "household_id": None,
-            "legacy_household_id": 123,
+            "household_filter": UserHouseholdFilter(
+                household_id=None, legacy_household_id=123
+            ),
             "offset": 0,
             "limit": 1,
         },

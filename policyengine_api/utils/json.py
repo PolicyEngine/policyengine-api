@@ -41,6 +41,15 @@ def hash_object(o: object) -> str:
     return base64.b64encode(hasher.digest()).decode()
 
 
+def _safe_json_number(value: float) -> JSONValue:
+    """Return a number unchanged, or an infinity as the string JavaScript reads."""
+    if value == np.inf:
+        return "Infinity"
+    if value == -np.inf:
+        return "-Infinity"
+    return value
+
+
 def get_safe_json(value: object) -> JSONValue:
     """Return a JSON-safe copy of a metadata value, writing infinities as strings.
 
@@ -49,11 +58,7 @@ def get_safe_json(value: object) -> JSONValue:
     # This function is used when constructing metadata,
     # which will be consumed by JS, hence Infinity, not .inf
     if isinstance(value, (int, float)):
-        if value == np.inf:
-            return "Infinity"
-        if value == -np.inf:
-            return "-Infinity"
-        return value
+        return _safe_json_number(value)
     if isinstance(value, str):
         return value
     if isinstance(value, dict):

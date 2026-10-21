@@ -15,7 +15,9 @@ from policyengine_api.fastapi_routes.dependencies import (
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import (
+    V2ErrorMapping,
     V2RequestTooLargeError,
+    run_v2_operation,
     v2_error_response,
 )
 from policyengine_api.fastapi_routes.v2.households.request_models import (
@@ -89,24 +91,34 @@ def _service_factory(
 
 OperationT = TypeVar("OperationT")
 
+# Checked in order, so the collision is matched before its integrity base class.
+HOUSEHOLD_ERROR_MAPPINGS = (
+    V2ErrorMapping((HouseholdValidationError,), 400),
+    V2ErrorMapping((HouseholdNotFoundError,), 404),
+    V2ErrorMapping(
+        (HouseholdContentHashCollisionError,),
+        409,
+        "Household content hash conflicts with storage",
+    ),
+    V2ErrorMapping(
+        (HouseholdCreationIntegrityError,), 500, "Stored household integrity failed"
+    ),
+    V2ErrorMapping(
+        (V2ConfigurationError, SQLAlchemyError),
+        503,
+        "V2 household persistence is unavailable",
+    ),
+)
+
 
 def _household_operation(
     operation: Callable[[], OperationT],
 ) -> OperationT | JSONResponse:
-    try:
-        return operation()
-    except HouseholdValidationError as error:
-        return v2_error_response(400, str(error))
-    except HouseholdNotFoundError as error:
-        return v2_error_response(404, str(error))
-    except HouseholdContentHashCollisionError:
-        return v2_error_response(409, "Household content hash conflicts with storage")
-    except HouseholdCreationIntegrityError:
-        return v2_error_response(500, "Stored household integrity failed")
-    except (V2ConfigurationError, SQLAlchemyError):
-        return v2_error_response(503, "V2 household persistence is unavailable")
-    except Exception:  # noqa: BLE001  # return a secret-safe typed error
-        return v2_error_response(500, "V2 household operation failed")
+    return run_v2_operation(
+        operation,
+        HOUSEHOLD_ERROR_MAPPINGS,
+        fallback_message="V2 household operation failed",
+    )
 
 
 def build_v2_household_router(

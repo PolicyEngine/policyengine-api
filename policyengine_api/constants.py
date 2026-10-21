@@ -197,6 +197,10 @@ RUNTIME_CACHE_SCHEMA_VERSIONS = {
     "economy_impact": 3,
     "report_output": 3,
 }
+# Runtime cache versions are stored in legacy VARCHAR(10) columns, and keep at
+# least this many digest characters after their scope prefix and schema version.
+RUNTIME_CACHE_VERSION_LENGTH = 10
+MINIMUM_RUNTIME_CACHE_DIGEST_LENGTH = 4
 
 
 def _build_runtime_cache_version(
@@ -209,8 +213,8 @@ def _build_runtime_cache_version(
     """
     schema_version = str(RUNTIME_CACHE_SCHEMA_VERSIONS[scope])
     prefix = "e" if scope == "economy_impact" else "r"
-    digest_length = 10 - len(prefix) - len(schema_version)
-    if digest_length < 4:
+    digest_length = RUNTIME_CACHE_VERSION_LENGTH - len(prefix) - len(schema_version)
+    if digest_length < MINIMUM_RUNTIME_CACHE_DIGEST_LENGTH:
         msg = f"Runtime cache version for {scope} does not fit in VARCHAR(10)"
         raise ValueError(msg)
 

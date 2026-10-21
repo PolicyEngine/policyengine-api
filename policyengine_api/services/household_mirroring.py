@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -78,17 +79,25 @@ def _failure_category(error: Exception) -> str:
     return "unexpected"
 
 
+@dataclass(frozen=True)
+class _CopyOutcome:
+    """How one immediate household copy ended, as its metric record reports it."""
+
+    outcome: str
+    actual_write_sources: list[str]
+    pending_event: bool
+    result: LegacyHouseholdPersistenceResult | None = None
+    failure_category: str | None = None
+
+
 def _log_copy_operation(
     *,
     country_id: str,
     legacy_household_id: int,
     started_at: float,
-    outcome: str,
-    actual_write_sources: list[str],
-    pending_event: bool,
-    result: LegacyHouseholdPersistenceResult | None = None,
-    failure_category: str | None = None,
+    copy_outcome: _CopyOutcome,
 ) -> None:
+    result = copy_outcome.result
     # Metric logging must not change the mirror outcome.
     with contextlib.suppress(Exception):
         logger.log_struct(
@@ -98,24 +107,24 @@ def _log_copy_operation(
                 "metric_value": 1,
                 "configured_write_source": "dual_write",
                 "attempted_write_sources": ["cloud_sql", "supabase"],
-                "actual_write_sources": actual_write_sources,
+                "actual_write_sources": copy_outcome.actual_write_sources,
                 "country_id": country_id,
                 "legacy_household_id": legacy_household_id,
                 "destination_household_id": (
                     str(result.household_id) if result is not None else None
                 ),
-                "outcome": outcome,
-                "failure_category": failure_category,
+                "outcome": copy_outcome.outcome,
+                "failure_category": copy_outcome.failure_category,
                 "household_created": (
                     result.household_created if result is not None else None
                 ),
                 "mapping_created": (
                     result.mapping_created if result is not None else None
                 ),
-                "pending_event": pending_event,
+                "pending_event": copy_outcome.pending_event,
                 "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
             },
-            severity="INFO" if outcome == "ok" else "ERROR",
+            severity="INFO" if copy_outcome.outcome == "ok" else "ERROR",
         )
 
 
@@ -149,10 +158,12 @@ def process_household_event_after_commit(
             country_id=event.snapshot.country_id,
             legacy_household_id=event.snapshot.legacy_household_id,
             started_at=started_at,
-            outcome="ok",
-            actual_write_sources=["cloud_sql", "supabase"],
-            pending_event=False,
-            result=result,
+            copy_outcome=_CopyOutcome(
+                outcome="ok",
+                actual_write_sources=["cloud_sql", "supabase"],
+                pending_event=False,
+                result=result,
+            ),
         )
 
     try:
@@ -168,15 +179,17 @@ def process_household_event_after_commit(
             country_id=country_id,
             legacy_household_id=legacy_household_id,
             started_at=started_at,
-            outcome="error",
-            actual_write_sources=(
-                ["cloud_sql", "supabase"]
-                if destination_result is not None
-                else ["cloud_sql"]
+            copy_outcome=_CopyOutcome(
+                outcome="error",
+                actual_write_sources=(
+                    ["cloud_sql", "supabase"]
+                    if destination_result is not None
+                    else ["cloud_sql"]
+                ),
+                pending_event=True,
+                result=destination_result,
+                failure_category=_failure_category(error),
             ),
-            pending_event=True,
-            result=destination_result,
-            failure_category=_failure_category(error),
         )
         msg = "The committed v1 household event could not be copied to v2"
         raise HouseholdMirrorUnavailableError(msg) from error

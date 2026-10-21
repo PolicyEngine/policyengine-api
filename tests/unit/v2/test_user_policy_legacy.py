@@ -15,7 +15,11 @@ from policyengine_api.services.v2.user_policies.transformations import (
     USER_POLICY_FINGERPRINT_VERSION,
     fingerprint_legacy_user_policy,
 )
-from policyengine_api.services.v2.user_policies.types import LegacyUserPolicySnapshot
+from policyengine_api.services.v2.user_policies.types import (
+    LegacyUserPolicyRevision,
+    LegacyUserPolicySnapshot,
+    UserPolicyCreationInput,
+)
 from policyengine_api.services.v2.user_policies.validators import (
     LegacyUserPolicyIntegrityError,
 )
@@ -123,13 +127,17 @@ def _apply_update(
     result = apply_existing_legacy_user_policy_mapping(
         session,
         mapping=mapping,
-        country_id="us",
-        reform_label="Legacy rename",
-        fingerprint=fingerprint,
-        user_id=USER_ID,
-        policy_id=POLICY_ID,
-        changed_fields=changed_fields,
-        source_revision=source_revision,
+        revision=LegacyUserPolicyRevision(
+            country_id="us",
+            legacy_user_policy_id=10,
+            reform_label="Legacy rename",
+            fingerprint=fingerprint,
+            source_revision=source_revision,
+            changed_fields=changed_fields,
+        ),
+        projection=UserPolicyCreationInput(
+            country_id="us", user_id=USER_ID, policy_id=POLICY_ID
+        ),
     )
     return association, mapping, result
 

@@ -105,6 +105,33 @@ class UserHouseholdRead:
 
 
 @dataclass(frozen=True)
+class UserHouseholdFilter:
+    """Which of the caller's saved households a listing keeps.
+
+    ``household_id`` keeps links to one v2 household and ``legacy_household_id``
+    links to one v1 household; with neither, every saved household is kept.
+    """
+
+    household_id: UUID | None = None
+    legacy_household_id: int | None = None
+
+
+@dataclass(frozen=True)
+class UserHouseholdListing:
+    """One page of a user's associations to read, optionally for one household.
+
+    ``household_id`` names a v2 household and ``legacy_household_id`` a v1 one.
+    """
+
+    country_id: str
+    user_id: UUID
+    household_id: UUID | None
+    offset: int
+    limit: int
+    legacy_household_id: int | None = None
+
+
+@dataclass(frozen=True)
 class UserHouseholdPage:
     """One page of associations in creation order; ``has_more`` says if more follow."""
 

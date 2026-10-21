@@ -306,6 +306,17 @@ class SharedUserReportRead:
 
 
 @dataclass(frozen=True)
+class UserReportListing:
+    """One page of a user's associations to read, optionally for one v1 report."""
+
+    country_id: str
+    user_id: UUID
+    legacy_report_id: int | None
+    offset: int
+    limit: int
+
+
+@dataclass(frozen=True)
 class UserReportPage:
     """One page of associations in creation order; ``has_more`` says if more follow."""
 

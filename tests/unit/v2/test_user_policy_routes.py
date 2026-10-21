@@ -17,6 +17,7 @@ from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
 )
 from policyengine_api.services.v2.user_policies.types import (
+    UserPolicyFilter,
     UserPolicyPage,
     UserPolicyRead,
 )
@@ -203,8 +204,9 @@ def test_detail_and_list_are_scoped_to_the_session_user() -> None:
             {
                 "principal": PRINCIPAL,
                 "country_id": "us",
-                "policy_id": POLICY_ID,
-                "legacy_policy_id": 95762,
+                "policy_filter": UserPolicyFilter(
+                    policy_id=POLICY_ID, legacy_policy_id=95762
+                ),
                 "offset": 2,
                 "limit": 3,
             },

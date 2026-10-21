@@ -40,6 +40,8 @@ if TYPE_CHECKING:
     )
 
 POLICY_CANONICALIZATION_VERSION = 1
+# A v1 date-range period key is "start.end": two dates joined by one dot.
+LEGACY_DATE_RANGE_PART_COUNT = 2
 
 
 def _canonical_number(value: float) -> str:
@@ -234,7 +236,7 @@ def parse_legacy_period(value: str) -> tuple[datetime, datetime]:
         raise LegacyPolicyTranslationError(msg)
     if "." in value:
         parts = value.split(".")
-        if len(parts) != 2:
+        if len(parts) != LEGACY_DATE_RANGE_PART_COUNT:
             msg = f"legacy period {value!r} must contain one date range"
             raise LegacyPolicyTranslationError(msg)
         start_date, end_date = (_utc_midnight(item) for item in parts)

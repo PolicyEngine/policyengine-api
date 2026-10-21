@@ -22,6 +22,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataRegionType,
     MetadataTimePeriodOption,
     MetadataVariable,
+    ParameterValueSelection,
 )
 
 if TYPE_CHECKING:
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
         Region,
         Variable,
     )
+    from policyengine_api.services.v2.metadata.types import ParameterValueFilter
 
 ResourceT = TypeVar("ResourceT")
 
@@ -133,6 +135,24 @@ def utc_day_start(selected_time: datetime) -> datetime:
         selected_time = selected_time.replace(tzinfo=UTC)
     return selected_time.astimezone(UTC).replace(
         hour=0, minute=0, second=0, microsecond=0
+    )
+
+
+def parameter_value_selection(
+    value_filter: ParameterValueFilter,
+) -> ParameterValueSelection:
+    """Resolve a listing's filter to the parameter and day its read selects.
+
+    A current filter selects the UTC day of its ``now``, or of the present.
+    """
+    selected_day = (
+        utc_day_start(value_filter.now or datetime.now(UTC))
+        if value_filter.current
+        else None
+    )
+    return ParameterValueSelection(
+        parameter_id=value_filter.parameter_id,
+        selected_day=selected_day,
     )
 
 

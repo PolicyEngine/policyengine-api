@@ -2,6 +2,7 @@ import pytest
 
 from policyengine_api.data.v1_models import ReportOutput, Simulation
 from policyengine_api.services.report_spec_service import (
+    EconomyReportSettings,
     EconomyReportSpec,
     HouseholdReportSpec,
     ReportSpecService,
@@ -74,7 +75,10 @@ def test_builds_economy_spec_from_models(orm_session):
     report = add_report(orm_session, first, second)
 
     spec = service.build_report_spec(
-        report, first, second, dataset="cps", options={"foo": "bar"}
+        report,
+        first,
+        second,
+        EconomyReportSettings(dataset="cps", options={"foo": "bar"}),
     )
 
     assert isinstance(spec, EconomyReportSpec)

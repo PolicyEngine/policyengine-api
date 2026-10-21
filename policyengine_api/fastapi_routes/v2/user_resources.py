@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import traceback
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 # FastAPI reads the request-size dependency's annotations when routes are
 # registered, so Request must exist at runtime.
@@ -45,7 +45,7 @@ from policyengine_api.services.v2.user_policies.validators import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Mapping
 
     from starlette.responses import JSONResponse
 
@@ -167,41 +167,77 @@ def _log_failure(event: str, error: Exception) -> None:
         )
 
 
+class UserResourceFailure(NamedTuple):
+    """The API v2 error response for one family of user-route service errors.
+
+    Without a ``message``, the response carries the error's own message. A
+    ``logged_event`` records the failure, without its message, under that name.
+    """
+
+    error_types: tuple[type[Exception], ...]
+    status_code: int
+    message: str | None = None
+    headers: Mapping[str, str] | None = None
+    logged_event: str | None = None
+
+
+# Checked in order, so a subclass is listed before any base it shares a status
+# with, and IntegrityError before the SQLAlchemyError it specializes.
+USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
+    UserResourceFailure(
+        (StandardUserRequiresSignInError,),
+        401,
+        headers={"WWW-Authenticate": BEARER_CHALLENGE},
+    ),
+    UserResourceFailure((AccountEditRequiresSignInError,), 403),
+    UserResourceFailure((AssociationReferenceConflictError,), 400),
+    UserResourceFailure(
+        (LegacyReferenceNotFoundError, AssociationLinkNotFoundError), 422
+    ),
+    UserResourceFailure(
+        (
+            AssociationNotFoundError,
+            AssociationPolicyNotFoundError,
+            AssociationHouseholdNotFoundError,
+            AccountNotFoundError,
+        ),
+        404,
+    ),
+    UserResourceFailure((AssociationConflictError,), 409),
+    UserResourceFailure(
+        (IntegrityError,), 409, "The record conflicts with stored state"
+    ),
+    UserResourceFailure((AccountIdentityDeletionError,), 502),
+    UserResourceFailure((AccountDeletionUnavailableError,), 503),
+    # Schema drift and rejected data surface here too, so keep a record.
+    UserResourceFailure(
+        (V2ConfigurationError, SQLAlchemyError),
+        503,
+        "V2 user persistence is unavailable",
+        logged_event="v2_user_persistence_unavailable",
+    ),
+)
+
+
+def _user_failure_response(error: Exception) -> JSONResponse:
+    """Answer a failure with its first matching typed error, or a logged 500."""
+    for failure in USER_RESOURCE_FAILURES:
+        if isinstance(error, failure.error_types):
+            if failure.logged_event is not None:
+                _log_failure(failure.logged_event, error)
+            message = str(error) if failure.message is None else failure.message
+            return v2_error_response(
+                failure.status_code, message, headers=failure.headers
+            )
+    _log_failure("v2_user_operation_failed", error)
+    return v2_error_response(500, "V2 user operation failed")
+
+
 def user_resource_operation(
     operation: Callable[[], OperationT],
 ) -> OperationT | JSONResponse:
     """Run one service call and map typed failures to secret-safe errors."""
     try:
         return operation()
-    except StandardUserRequiresSignInError as error:
-        return v2_error_response(
-            401, str(error), headers={"WWW-Authenticate": BEARER_CHALLENGE}
-        )
-    except AccountEditRequiresSignInError as error:
-        return v2_error_response(403, str(error))
-    except AssociationReferenceConflictError as error:
-        return v2_error_response(400, str(error))
-    except (LegacyReferenceNotFoundError, AssociationLinkNotFoundError) as error:
-        return v2_error_response(422, str(error))
-    except (
-        AssociationNotFoundError,
-        AssociationPolicyNotFoundError,
-        AssociationHouseholdNotFoundError,
-        AccountNotFoundError,
-    ) as error:
-        return v2_error_response(404, str(error))
-    except AssociationConflictError as error:
-        return v2_error_response(409, str(error))
-    except IntegrityError:
-        return v2_error_response(409, "The record conflicts with stored state")
-    except AccountIdentityDeletionError as error:
-        return v2_error_response(502, str(error))
-    except AccountDeletionUnavailableError as error:
-        return v2_error_response(503, str(error))
-    except (V2ConfigurationError, SQLAlchemyError) as error:
-        # Schema drift and rejected data surface here too, so keep a record.
-        _log_failure("v2_user_persistence_unavailable", error)
-        return v2_error_response(503, "V2 user persistence is unavailable")
     except Exception as error:  # noqa: BLE001  # return a secret-safe typed error
-        _log_failure("v2_user_operation_failed", error)
-        return v2_error_response(500, "V2 user operation failed")
+        return _user_failure_response(error)

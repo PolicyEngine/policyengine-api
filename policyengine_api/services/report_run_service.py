@@ -1,6 +1,7 @@
 """Run history for v1 report outputs, one numbered row per calculation attempt."""
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -22,6 +23,24 @@ REPORT_RUN_VERSION_FIELDS = (
 )
 
 
+@dataclass(frozen=True)
+class NewReportOutputRun:
+    """The fields of a report-output run to append; omitted fields take these defaults.
+
+    ``version_manifest`` supplies the run's version fields, and ``run_id`` a fixed
+    ID instead of a new UUID.
+    """
+
+    status: str = "pending"
+    trigger_type: str = "initial"
+    output: dict[str, Any] | list[Any] | None = None
+    error_message: str | None = None
+    source_run_id: str | None = None
+    report_spec_snapshot: dict[str, Any] | None = None
+    version_manifest: dict[str, str | None] | None = None
+    run_id: str | None = None
+
+
 class ReportRunService:
     """Report-run operations performed through a caller-owned ORM Session."""
 
@@ -37,21 +56,18 @@ class ReportRunService:
         self,
         session: Session,
         report_output_id: int,
-        status: str = "pending",
-        trigger_type: str = "initial",
-        output: dict[str, Any] | list[Any] | None = None,
-        error_message: str | None = None,
-        source_run_id: str | None = None,
-        report_spec_snapshot: dict[str, Any] | None = None,
-        version_manifest: dict[str, str | None] | None = None,
-        run_id: str | None = None,
+        new_run: NewReportOutputRun | None = None,
     ) -> ReportOutputRun:
         """Append the next numbered run to a report output and return it.
 
+        ``new_run`` gives the run's fields; without it the run takes the defaults.
         The parent row is locked while the sequence number is chosen, and timestamps are
-        set to now according to ``status``. Raise ValueError if the report output does
-        not exist. The caller owns the transaction.
+        set to now according to its ``status``. Raise ValueError if the report output
+        does not exist. The caller owns the transaction.
         """
+        if new_run is None:
+            new_run = NewReportOutputRun()
+        status = new_run.status
         parent = session.scalar(
             select(ReportOutput)
             .where(ReportOutput.id == report_output_id)
@@ -71,23 +87,23 @@ class ReportRunService:
         now = datetime.now(UTC).replace(microsecond=0, tzinfo=None)
         values = {
             "status": status,
-            "output": output,
-            "error_message": error_message,
-            "trigger_type": trigger_type,
+            "output": new_run.output,
+            "error_message": new_run.error_message,
+            "trigger_type": new_run.trigger_type,
             "requested_at": now,
             "started_at": now if status in {"running", "complete", "error"} else None,
             "finished_at": now if status in {"complete", "error"} else None,
-            "source_run_id": source_run_id,
-            "report_spec_snapshot_json": report_spec_snapshot,
+            "source_run_id": new_run.source_run_id,
+            "report_spec_snapshot_json": new_run.report_spec_snapshot,
         }
         values.update(
             {
-                field: (version_manifest or {}).get(field)
+                field: (new_run.version_manifest or {}).get(field)
                 for field in REPORT_RUN_VERSION_FIELDS
             }
         )
         run = ReportOutputRun(
-            id=run_id or str(uuid.uuid4()),
+            id=new_run.run_id or str(uuid.uuid4()),
             report_output_id=report_output_id,
             run_sequence=sequence,
             **values,

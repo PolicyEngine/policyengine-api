@@ -137,6 +137,41 @@ class UserPolicyUpdateResult:
     mirror_revision: int | None = None
 
 
+def _decoded_changed_fields(changed_fields: object) -> list[str]:
+    """Return a mirror event's changed fields once they are sorted, unique and mutable.
+
+    Raise UserPolicyMirrorEventIntegrityError for anything else.
+    """
+    if not isinstance(changed_fields, list) or not all(
+        isinstance(field, str) for field in changed_fields
+    ):
+        msg = "saved-policy mirror event changed fields are invalid"
+        raise UserPolicyMirrorEventIntegrityError(msg)
+    if (
+        changed_fields != sorted(set(changed_fields))
+        or not set(changed_fields) <= USER_POLICY_MUTABLE_FIELDS
+    ):
+        msg = "saved-policy mirror event changed fields are unsupported"
+        raise UserPolicyMirrorEventIntegrityError(msg)
+    return changed_fields
+
+
+def _require_event_type_matches_changes(
+    event_type: str,
+    changed_fields: list[str],
+) -> None:
+    """Require a create event with no changed fields or an update event with some."""
+    if event_type not in {"create", "update"}:
+        msg = "saved-policy mirror event type is unsupported"
+        raise UserPolicyMirrorEventIntegrityError(msg)
+    if event_type == "create" and changed_fields:
+        msg = "saved-policy create mirror event contains changed fields"
+        raise UserPolicyMirrorEventIntegrityError(msg)
+    if event_type == "update" and not changed_fields:
+        msg = "saved-policy update mirror event has no changed fields"
+        raise UserPolicyMirrorEventIntegrityError(msg)
+
+
 class UserPolicyService:
     """Saved-policy operations with service-owned ORM transactions."""
 
@@ -230,18 +265,7 @@ class UserPolicyService:
         }:
             msg = "saved-policy mirror event payload has an invalid shape"
             raise UserPolicyMirrorEventIntegrityError(msg)
-        changed_fields = payload["changed_fields"]
-        if not isinstance(changed_fields, list) or not all(
-            isinstance(field, str) for field in changed_fields
-        ):
-            msg = "saved-policy mirror event changed fields are invalid"
-            raise UserPolicyMirrorEventIntegrityError(msg)
-        if (
-            changed_fields != sorted(set(changed_fields))
-            or not set(changed_fields) <= USER_POLICY_MUTABLE_FIELDS
-        ):
-            msg = "saved-policy mirror event changed fields are unsupported"
-            raise UserPolicyMirrorEventIntegrityError(msg)
+        changed_fields = _decoded_changed_fields(payload["changed_fields"])
         try:
             snapshot = LegacyUserPolicySnapshot.model_validate(payload["snapshot"])
         except (TypeError, ValueError) as error:
@@ -257,15 +281,7 @@ class UserPolicyService:
         if fingerprint != event.source_fingerprint_sha256:
             msg = "saved-policy mirror event fingerprint conflicts with its payload"
             raise UserPolicyMirrorEventIntegrityError(msg)
-        if event.event_type not in {"create", "update"}:
-            msg = "saved-policy mirror event type is unsupported"
-            raise UserPolicyMirrorEventIntegrityError(msg)
-        if event.event_type == "create" and changed_fields:
-            msg = "saved-policy create mirror event contains changed fields"
-            raise UserPolicyMirrorEventIntegrityError(msg)
-        if event.event_type == "update" and not changed_fields:
-            msg = "saved-policy update mirror event has no changed fields"
-            raise UserPolicyMirrorEventIntegrityError(msg)
+        _require_event_type_matches_changes(event.event_type, changed_fields)
         return PendingUserPolicyMirrorEvent(
             event_id=event.id,
             source_revision=event.source_revision,

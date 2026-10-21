@@ -44,6 +44,33 @@ DEFAULT_DB_SOURCE = "cloud_sql"
 DEFAULT_SIM_ENTRYPOINT = "old_gateway_direct"
 DEFAULT_SIM_COMPUTE_BACKEND = "old_gateway"
 
+ROUTE_GROUP_BY_PATH = {
+    "": "home",
+    "/": "home",
+    "/health": "health",
+    "/simulation-gateway-check": "health",
+    "/liveness-check": "health",
+    "/readiness-check": "health",
+    "/specification": "specification",
+    "/v2/openapi.json": "specification",
+}
+# Any other path's group is named by one of its leading segments: the resource
+# ("/policy"), the resource after a country ("/us/policy") or, under "/v2", the
+# resource after the version and a country ("/v2/us/policy").
+ROUTE_GROUP_SEGMENT_DEPTH = 2
+V2_ROUTE_GROUP_SEGMENT_DEPTH = 3
+
+
+@dataclass(frozen=True)
+class ExplicitDatabaseSources:
+    """Database sources a request names itself, in place of the configured flags.
+
+    Each source is validated against the known sources; None records no source.
+    """
+
+    db_write_source: str | None = None
+    db_read_source: str | None = None
+
 
 @dataclass(frozen=True)
 class MigrationContext:
@@ -83,32 +110,22 @@ def _read_choice(env_name: str, default: str, valid_values: frozenset[str]) -> s
 
 def infer_route_group(path: str) -> str:
     """Infer a migration route group from a request path."""
-    if path in {"/", ""}:
-        return "home"
-    if path in {
-        "/health",
-        "/simulation-gateway-check",
-        "/liveness-check",
-        "/readiness-check",
-    }:
-        return "health"
-    if path in {"/specification", "/v2/openapi.json"}:
-        return "specification"
+    path_group = ROUTE_GROUP_BY_PATH.get(path)
+    if path_group is not None:
+        return path_group
 
     segments = [segment for segment in path.strip("/").split("/") if segment]
     if not segments:
         return "home"
 
-    first = segments[0]
-    if first in ROUTE_GROUP_BY_SEGMENT:
-        return ROUTE_GROUP_BY_SEGMENT[first]
-
-    if len(segments) >= 2 and segments[1] in ROUTE_GROUP_BY_SEGMENT:
-        return ROUTE_GROUP_BY_SEGMENT[segments[1]]
-
-    if first == "v2" and len(segments) >= 3 and segments[2] in ROUTE_GROUP_BY_SEGMENT:
-        return ROUTE_GROUP_BY_SEGMENT[segments[2]]
-
+    searched_depth = (
+        V2_ROUTE_GROUP_SEGMENT_DEPTH
+        if segments[0] == "v2"
+        else ROUTE_GROUP_SEGMENT_DEPTH
+    )
+    for segment in segments[:searched_depth]:
+        if segment in ROUTE_GROUP_BY_SEGMENT:
+            return ROUTE_GROUP_BY_SEGMENT[segment]
     return "unknown"
 
 
@@ -221,43 +238,47 @@ def get_sim_entrypoint() -> str:
     )
 
 
+def _validated_explicit_sources(
+    sources: ExplicitDatabaseSources,
+) -> tuple[str | None, str | None]:
+    """Return the explicit write and read sources, or raise ValueError if unknown."""
+    db_write_source = sources.db_write_source
+    if db_write_source is not None and db_write_source not in DB_WRITE_SOURCES:
+        msg = f"invalid explicit database write source {db_write_source!r}"
+        raise ValueError(msg)
+    db_read_source = sources.db_read_source
+    if db_read_source is not None and db_read_source not in DB_READ_SOURCES:
+        msg = f"invalid explicit database read source {db_read_source!r}"
+        raise ValueError(msg)
+    return db_write_source, db_read_source
+
+
 def get_migration_context(
     route_group: str,
     *,
     route_impl: RouteImplementation | None = None,
-    db_entity: str | None = None,
-    sim_flow: str | None = None,
-    use_configured_db_sources: bool = True,
-    db_write_source: str | None = None,
-    db_read_source: str | None = None,
+    explicit_db_sources: ExplicitDatabaseSources | None = None,
     include_compute: bool = True,
 ) -> MigrationContext:
     """Return current migration flag values for a request or route group.
 
+    The route group's configuration names its database entity and simulation
+    flow. ``explicit_db_sources`` replaces the configured database source flags.
     ``include_compute=False`` describes a persistence-only request in a route
     group that also computes, so it carries no simulation flow or compute
     selection.
     """
     route_config = ROUTE_GROUP_CONFIG_BY_NAME.get(route_group)
-    if db_entity is None and route_config is not None:
-        db_entity = route_config.db_entity
-    if not include_compute:
-        sim_flow = None
-    elif sim_flow is None and route_config is not None:
-        sim_flow = route_config.sim_flow
+    db_entity = route_config.db_entity if route_config is not None else None
+    sim_flow = (
+        route_config.sim_flow if include_compute and route_config is not None else None
+    )
 
-    if use_configured_db_sources:
+    if explicit_db_sources is None:
         db_write = get_db_write(db_entity) if db_entity else None
         db_read = get_db_read(db_entity) if db_entity else None
     else:
-        if db_write_source is not None and db_write_source not in DB_WRITE_SOURCES:
-            msg = f"invalid explicit database write source {db_write_source!r}"
-            raise ValueError(msg)
-        if db_read_source is not None and db_read_source not in DB_READ_SOURCES:
-            msg = f"invalid explicit database read source {db_read_source!r}"
-            raise ValueError(msg)
-        db_write = db_write_source
-        db_read = db_read_source
+        db_write, db_read = _validated_explicit_sources(explicit_db_sources)
 
     return MigrationContext(
         route_group=route_group,
@@ -275,9 +296,7 @@ def get_migration_log_context(
     route_group: str,
     *,
     route_impl: RouteImplementation | None = None,
-    use_configured_db_sources: bool = True,
-    db_write_source: str | None = None,
-    db_read_source: str | None = None,
+    explicit_db_sources: ExplicitDatabaseSources | None = None,
     include_compute: bool = True,
 ) -> dict:
     """Best-effort logging context; never raises on invalid flag settings."""
@@ -285,9 +304,7 @@ def get_migration_log_context(
         return get_migration_context(
             route_group,
             route_impl=route_impl,
-            use_configured_db_sources=use_configured_db_sources,
-            db_write_source=db_write_source,
-            db_read_source=db_read_source,
+            explicit_db_sources=explicit_db_sources,
             include_compute=include_compute,
         ).to_log_dict()
     except ValueError as error:

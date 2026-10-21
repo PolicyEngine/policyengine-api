@@ -11,6 +11,7 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
 )
 from policyengine_api.migration_logging import (
+    ServedRequest,
     log_migration_request,
     register_migration_request_logging,
 )
@@ -384,13 +385,15 @@ def test_v2_metadata_resource_logs_its_actual_supabase_read_source(monkeypatch):
 
     with patch("policyengine_api.migration_logging.logger") as mock_logger:
         log_migration_request(
-            request_id="request-123",
-            method="GET",
-            path="/v2/variables",
-            status_code=200,
-            started_at=None,
-            country_id="us",
-            route_impl=RouteImplementation.FASTAPI_NATIVE,
+            ServedRequest(
+                request_id="request-123",
+                method="GET",
+                path="/v2/variables",
+                status_code=200,
+                started_at=None,
+                country_id="us",
+                route_impl=RouteImplementation.FASTAPI_NATIVE,
+            )
         )
 
     migration_context = mock_logger.log_struct.call_args.args[0]["migration"]
@@ -408,22 +411,26 @@ def test_v2_policy_resources_log_actual_supabase_read_and_write_sources(
 
     with patch("policyengine_api.migration_logging.logger") as mock_logger:
         log_migration_request(
-            request_id="request-read",
-            method="GET",
-            path="/v2/policies",
-            status_code=200,
-            started_at=None,
-            country_id="us",
-            route_impl=RouteImplementation.FASTAPI_NATIVE,
+            ServedRequest(
+                request_id="request-read",
+                method="GET",
+                path="/v2/policies",
+                status_code=200,
+                started_at=None,
+                country_id="us",
+                route_impl=RouteImplementation.FASTAPI_NATIVE,
+            )
         )
         log_migration_request(
-            request_id="request-write",
-            method="PATCH",
-            path="/v2/user-policies/00000000-0000-0000-0000-000000000001",
-            status_code=200,
-            started_at=None,
-            country_id="us",
-            route_impl=RouteImplementation.FASTAPI_NATIVE,
+            ServedRequest(
+                request_id="request-write",
+                method="PATCH",
+                path="/v2/user-policies/00000000-0000-0000-0000-000000000001",
+                status_code=200,
+                started_at=None,
+                country_id="us",
+                route_impl=RouteImplementation.FASTAPI_NATIVE,
+            )
         )
 
     read_context = mock_logger.log_struct.call_args_list[0].args[0]["migration"]
@@ -452,22 +459,26 @@ def test_v2_household_resources_log_actual_supabase_read_and_write_sources(
 
     with patch("policyengine_api.migration_logging.logger") as mock_logger:
         log_migration_request(
-            request_id="request-read",
-            method="GET",
-            path="/v2/households",
-            status_code=200,
-            started_at=None,
-            country_id="us",
-            route_impl=RouteImplementation.FASTAPI_NATIVE,
+            ServedRequest(
+                request_id="request-read",
+                method="GET",
+                path="/v2/households",
+                status_code=200,
+                started_at=None,
+                country_id="us",
+                route_impl=RouteImplementation.FASTAPI_NATIVE,
+            )
         )
         log_migration_request(
-            request_id="request-write",
-            method="PATCH",
-            path="/v2/user-households/00000000-0000-0000-0000-000000000001",
-            status_code=200,
-            started_at=None,
-            country_id="us",
-            route_impl=RouteImplementation.FASTAPI_NATIVE,
+            ServedRequest(
+                request_id="request-write",
+                method="PATCH",
+                path="/v2/user-households/00000000-0000-0000-0000-000000000001",
+                status_code=200,
+                started_at=None,
+                country_id="us",
+                route_impl=RouteImplementation.FASTAPI_NATIVE,
+            )
         )
 
     read_context = mock_logger.log_struct.call_args_list[0].args[0]["migration"]
@@ -537,13 +548,15 @@ def test_signed_in_user_resources_log_supabase_sources(
 
     with patch("policyengine_api.migration_logging.logger") as mock_logger:
         log_migration_request(
-            request_id="request",
-            method=method,
-            path=path,
-            status_code=200,
-            started_at=None,
-            country_id="us",
-            route_impl=RouteImplementation.FASTAPI_NATIVE,
+            ServedRequest(
+                request_id="request",
+                method=method,
+                path=path,
+                status_code=200,
+                started_at=None,
+                country_id="us",
+                route_impl=RouteImplementation.FASTAPI_NATIVE,
+            )
         )
 
     context = mock_logger.log_struct.call_args.args[0]["migration"]
@@ -670,13 +683,15 @@ def test_asgi_shell_does_not_add_retired_backend_header_to_fallback():
 def test_compute_routes_in_the_same_groups_keep_their_compute_labels():
     with patch("policyengine_api.migration_logging.logger") as mock_logger:
         log_migration_request(
-            request_id="request",
-            method="POST",
-            path="/us/simulation",
-            status_code=200,
-            started_at=None,
-            country_id="us",
-            route_impl=RouteImplementation.FLASK_FALLBACK,
+            ServedRequest(
+                request_id="request",
+                method="POST",
+                path="/us/simulation",
+                status_code=200,
+                started_at=None,
+                country_id="us",
+                route_impl=RouteImplementation.FLASK_FALLBACK,
+            )
         )
 
     context = mock_logger.log_struct.call_args.args[0]["migration"]
