@@ -39,6 +39,10 @@ When modifying the `Makefile`, read
 When adding or changing a GitHub Actions workflow step or a script under
 `.github/scripts/`, read `docs/engineering/skills/ci-workflows.md`.
 
+When adding or changing anything that installs Python packages (a workflow
+step, a script, a Makefile target, a Dockerfile, a Modal image,
+`pyproject.toml` or `uv.lock`), read `docs/engineering/skills/dependencies.md`.
+
 When adding, changing, or removing a rule, a guard test, a checker
 configuration, or a CI job that enforces one, read
 `docs/engineering/skills/rules-registry.md`.
@@ -115,6 +119,10 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 ### CI workflows and scripts
 
 - Checked: `api.ci.multiline-run-is-script`, `api.ci.shell-scripts-pass-shellcheck`, `api.ci.workflow-scripts-tested`
+
+### Dependencies and uv.lock
+
+- Checked: `api.dependencies.install-from-lock`, `api.dependencies.lock-committed`, `api.dependencies.scheduled-relock`, `api.dependencies.test-from-lock`
 
 ### Process and repository hygiene
 
