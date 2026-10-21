@@ -107,7 +107,7 @@ git commit --quiet -m "Relock dependencies"
 
 remote_commit="$(git ls-remote --heads origin "refs/heads/${relock_branch}" | cut -f1)"
 if [[ -n "${remote_commit}" ]]; then
-  git fetch --quiet origin "refs/heads/${relock_branch}"
+  git fetch --quiet --depth=1 origin "refs/heads/${relock_branch}"
 fi
 if [[ -n "${remote_commit}" ]] && git diff --quiet "${remote_commit}" HEAD --; then
   echo "${relock_branch} already holds this relock; not pushing."
