@@ -170,12 +170,13 @@ def test_reusable_alembic_check_uses_only_disposable_mysql():
     assert "POLICYENGINE_DB_MIGRATION_PASSWORD" not in workflow
 
 
-def test_reusable_alembic_check_uses_the_installed_python_environment():
+def test_reusable_alembic_check_uses_the_locked_python_environment():
     workflow = _workflow("alembic-v1-check.yml")
 
-    assert "python -m pytest" in workflow
-    assert "python -m alembic" in workflow
-    assert "uv run" not in workflow
+    assert "run: make install" in workflow
+    assert "uv run --frozen --extra dev python -m pytest" in workflow
+    assert workflow.count("uv run --frozen --extra dev python -m alembic") == 2
+    assert "pip install" not in workflow
 
 
 def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
