@@ -65,6 +65,7 @@ _TEST_COMMAND = re.compile(
 _SCRIPT_REFERENCE = re.compile(r"\.github/[\w./-]+\.sh")
 _MAKE_TARGET_REFERENCE = re.compile(r"\bmake ([\w-]+)")
 _MAKE_TARGET_HEADER = re.compile(r"^([\w-]+)\s*:(?!=)")
+_RUN_KEY = re.compile(r"^(?P<indent>\s*)(?:-\s+)?run:(?P<value>.*)$")
 _PULL_REQUEST_TRIGGERS = {"pull_request", "pull_request_target"}
 _ON_KEY = re.compile(r"""^["']?on["']?:\s*(?P<inline>.*)$""")
 _TRIGGER_KEY = re.compile(r"^(?P<indent>\s+)(?P<name>[\w-]+):")
@@ -120,7 +121,7 @@ def _file_kind(path: str) -> str | None:
     if path.startswith(WORKFLOW_DIRECTORIES) and name.endswith((".yml", ".yaml")):
         return "workflow"
     if path.startswith(".github/actions/") and name in {"action.yml", "action.yaml"}:
-        return "workflow"
+        return "action"
     if name.endswith(".sh"):
         return "shell"
     if name in MAKEFILE_NAMES or name.endswith(".mk"):
@@ -291,6 +292,29 @@ def _workflow_commands(text: str) -> Iterator[str]:
             yield from _commands(run_block.text)
 
 
+def _action_commands(text: str) -> Iterator[str]:
+    """Yield the commands of a composite action's ``run:`` steps."""
+    action_lines = text.splitlines()
+    for position, action_line in enumerate(action_lines):
+        run_key = _RUN_KEY.match(action_line)
+        if run_key is None:
+            continue
+        value = run_key.group("value").strip()
+        if value and value[0] not in "|>":
+            yield from _commands(value)
+            continue
+        key_indent = len(run_key.group("indent"))
+        block = []
+        for block_line in action_lines[position + 1 :]:
+            if (
+                block_line.strip()
+                and len(block_line) - len(block_line.lstrip()) <= key_indent
+            ):
+                break
+            block.append(block_line)
+        yield from _commands("\n".join(block))
+
+
 def _makefile_commands(text: str) -> Iterator[str]:
     recipe_text = "\n".join(
         makefile_line
@@ -302,6 +326,7 @@ def _makefile_commands(text: str) -> Iterator[str]:
 
 _COMMAND_FINDERS: dict[str, Callable[[str], Iterator[str]]] = {
     "workflow": _workflow_commands,
+    "action": _action_commands,
     "shell": _commands,
     "makefile": _makefile_commands,
     "dockerfile": _commands,
