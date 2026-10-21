@@ -273,10 +273,10 @@ def classify_test_command(command: str) -> tuple[bool, bool] | None:
     """Return ``(locked, False)`` for a command that runs tests, else None."""
     if not _TEST_COMMAND.search(command):
         return None
-    installs = classify_command(command)
-    if installs is not None and _UV_RUN.search(command) is None:
-        return None
-    return installs == (True, False), False
+    if _UV_RUN.search(command) is None:
+        return None if classify_command(command) is not None else (False, False)
+    locked = _LOCK_FLAG.search(command) is not None
+    return locked and not _EXTRA_PACKAGES_FLAG.search(command), False
 
 
 def _sites(path: str, commands: Iterable[str], classify: Classifier) -> Iterator[Site]:
