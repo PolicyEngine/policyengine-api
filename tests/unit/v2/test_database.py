@@ -117,11 +117,11 @@ def test_forked_process_state_builds_a_new_engine(
 ) -> None:
     settings = load_v2_runtime_database_settings(_environment())
     parent_engine = database.get_v2_engine(settings)
-    parent_pid = database._engine_pid
+    parent_pid = database._engine_state.engine_pid
     assert parent_pid is not None
     monkeypatch.setattr(database.os, "getpid", lambda: parent_pid + 1)
 
     child_engine = database.get_v2_engine(settings)
 
     assert child_engine is not parent_engine
-    assert database._engine_pid == parent_pid + 1
+    assert database._engine_state.engine_pid == parent_pid + 1

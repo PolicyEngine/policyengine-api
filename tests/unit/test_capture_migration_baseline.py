@@ -101,7 +101,7 @@ def test_run_probes_treats_unexpected_4xx_as_failure(monkeypatch):
         "Client",
         lambda **kwargs: real_client(
             transport=httpx.MockTransport(
-                lambda request: httpx.Response(404, json={"status": "missing"})
+                lambda _request: httpx.Response(404, json={"status": "missing"})
             ),
             base_url=kwargs["base_url"],
             timeout=kwargs["timeout"],

@@ -34,4 +34,4 @@ def api_client(mock_v2_runtime_settings):
     from policyengine_api.api import app
 
     app.config["TESTING"] = True
-    yield app.test_client()
+    return app.test_client()

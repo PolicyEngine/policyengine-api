@@ -132,7 +132,7 @@ def test_rule_proof_runtime_privileges_declared() -> None:
     The bad fixture repeats the mistake behind issue #3977: a runtime connector
     reads ``legacy_policy_mappings``, which the runtime role had no grant on.
     """
-    runtime_before_3977 = {table: NO_ACCESS for table in TABLE_ACCESS} | {
+    runtime_before_3977 = dict.fromkeys(TABLE_ACCESS, NO_ACCESS) | {
         "user_policies": READ_WRITE
     }
     table_by_model = _table_by_model()

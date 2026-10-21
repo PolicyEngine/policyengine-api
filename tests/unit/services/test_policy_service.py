@@ -14,7 +14,8 @@ def service(orm_session_factory):
     return PolicyService(orm_session_factory)
 
 
-def test_get_policy_returns_mapped_entity(service, existing_policy_record):
+@pytest.mark.usefixtures("existing_policy_record")
+def test_get_policy_returns_mapped_entity(service):
     policy = service.get_policy(
         valid_policy_data["country_id"],
         valid_policy_data["id"],
@@ -43,7 +44,8 @@ def test_get_policy_rejects_empty_country(service, country_id):
         service.get_policy(country_id, 1)
 
 
-def test_get_policy_json_returns_python_object(service, existing_policy_record):
+@pytest.mark.usefixtures("existing_policy_record")
+def test_get_policy_json_returns_python_object(service):
     result = service.get_policy_json("us", valid_policy_data["id"])
 
     assert result == {
@@ -95,7 +97,7 @@ def test_search_policies_filters_and_deduplicates(service, orm_session_factory):
 def test_set_policy_adds_mapped_entity(service, monkeypatch):
     monkeypatch.setattr(
         "policyengine_api.services.policy_service.hash_object",
-        lambda value: "new-hash",
+        lambda _value: "new-hash",
     )
 
     result = service.set_policy(
@@ -129,7 +131,7 @@ def test_set_policy_builds_mirror_snapshot_from_refreshed_database_row(
 ):
     monkeypatch.setattr(
         "policyengine_api.services.policy_service.hash_object",
-        lambda value: "new-hash",
+        lambda _value: "new-hash",
     )
     original_refresh = orm_session_factory.class_.refresh
 
@@ -154,14 +156,14 @@ def test_set_policy_builds_mirror_snapshot_from_refreshed_database_row(
     assert result.snapshot.policy_json == {"parameter": 0.04094}
 
 
+@pytest.mark.usefixtures("existing_policy_record")
 def test_set_policy_returns_existing_mapped_entity(
     service,
-    existing_policy_record,
     monkeypatch,
 ):
     monkeypatch.setattr(
         "policyengine_api.services.policy_service.hash_object",
-        lambda value: valid_policy_data["policy_hash"],
+        lambda _value: valid_policy_data["policy_hash"],
     )
 
     result = service.set_policy(
@@ -185,12 +187,12 @@ def test_set_policy_does_not_build_v2_snapshot_unless_requested(
 ):
     monkeypatch.setattr(
         "policyengine_api.services.policy_service.hash_object",
-        lambda value: "new-hash",
+        lambda _value: "new-hash",
     )
     monkeypatch.setattr(
         service._sessions.class_,
         "refresh",
-        lambda *args, **kwargs: pytest.fail("cloud_sql-only writes must not refresh"),
+        lambda *_args, **_kwargs: pytest.fail("cloud_sql-only writes must not refresh"),
     )
 
     result = service.set_policy(
@@ -215,12 +217,12 @@ def test_set_policy_propagates_flush_failure(
 ):
     monkeypatch.setattr(
         "policyengine_api.services.policy_service.hash_object",
-        lambda value: "new-hash",
+        lambda _value: "new-hash",
     )
     monkeypatch.setattr(
         orm_session_factory.class_,
         "flush",
-        lambda self: (_ for _ in ()).throw(SQLAlchemyError("insert failed")),
+        lambda _self: (_ for _ in ()).throw(SQLAlchemyError("insert failed")),
     )
 
     with pytest.raises(SQLAlchemyError, match="insert failed"):
@@ -234,7 +236,7 @@ def test_mirror_snapshot_read_failure_rolls_back_new_v1_policy(
         failing_read.setattr(
             orm_session_factory.class_,
             "refresh",
-            lambda *args, **kwargs: (_ for _ in ()).throw(
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
                 SQLAlchemyError("snapshot read failed")
             ),
         )

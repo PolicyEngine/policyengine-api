@@ -30,7 +30,7 @@ def check_adapters(agents: Agents, root: Path) -> list[Violation]:
             continue
         text = path.read_text()
 
-        def v(message: str, fix: str) -> None:
+        def v(message: str, fix: str, adapter: str = adapter) -> None:
             violations.append(Violation(None, "adapters", f"{adapter} {message}", fix))
 
         if instructions not in text:

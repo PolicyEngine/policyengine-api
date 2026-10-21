@@ -177,9 +177,11 @@ def _spm_error_response(error: Exception) -> Response | None:
 
 
 def _calculation_response(calculation: HouseholdCalculationResult) -> dict:
-    result: dict[str, object] = dict(
-        status="ok", message=None, result=calculation.household
-    )
+    result: dict[str, object] = {
+        "status": "ok",
+        "message": None,
+        "result": calculation.household,
+    }
     if calculation.warnings:
         result["warnings"] = list(calculation.warnings)
     if calculation.spm_provenance is not None:
@@ -282,7 +284,7 @@ def _validate_calculation_request(
     return decorator
 
 
-def _calculation_cache_key(*args: object, **kwargs: object) -> str:
+def _calculation_cache_key(*_args: object, **_kwargs: object) -> str:
     country_id = request.view_args["country_id"]
     return hash_object(
         {
@@ -516,7 +518,7 @@ def _calculate() -> dict | Response:
 @validate_country
 @_validate_calculation_request(add_missing=False)
 @cache.cached(make_cache_key=_calculation_cache_key)
-def get_calculate(country_id: str) -> dict | Response:
+def get_calculate(country_id: str) -> dict | Response:  # noqa: ARG001  # Flask passes the <country_id> URL variable by keyword
     """Calculate a household without adding omitted yearly variables."""
     return _calculate()
 
@@ -525,6 +527,6 @@ def get_calculate(country_id: str) -> dict | Response:
 @validate_country
 @_validate_calculation_request(add_missing=True)
 @cache.cached(make_cache_key=_calculation_cache_key)
-def get_calculate_full(country_id: str) -> dict | Response:
+def get_calculate_full(country_id: str) -> dict | Response:  # noqa: ARG001  # Flask passes the <country_id> URL variable by keyword
     """Calculate a household after adding omitted yearly variables."""
     return _calculate()

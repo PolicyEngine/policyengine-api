@@ -162,7 +162,16 @@ def comparison_models(country_id, population_type, first_id, second_id):
 
 
 @pytest.mark.parametrize(
-    "unrelated_id", ["1suffix", "1.0", "+1", "1\n", "١", "１", "2"]
+    "unrelated_id",
+    [
+        "1suffix",
+        "1.0",
+        "+1",
+        "1\n",
+        "\N{ARABIC-INDIC DIGIT ONE}",
+        "\N{FULLWIDTH DIGIT ONE}",
+        "2",
+    ],
 )
 def test_household_report_does_not_alias_nonnumeric_or_different_ids(unrelated_id):
     models = comparison_models("us", "household", "00001", unrelated_id)
@@ -171,7 +180,7 @@ def test_household_report_does_not_alias_nonnumeric_or_different_ids(unrelated_i
 
 
 @pytest.mark.parametrize(
-    "country_id,population_type",
+    ("country_id", "population_type"),
     [("uk", "household"), ("us", "geography"), ("uk", "geography")],
 )
 def test_numeric_report_aliases_are_limited_to_us_households(
@@ -183,7 +192,16 @@ def test_numeric_report_aliases_are_limited_to_us_households(
 
 
 @pytest.mark.parametrize(
-    "population_id", ["household-1", "1suffix", "1.0", "+1", "1\n", "١", "１"]
+    "population_id",
+    [
+        "household-1",
+        "1suffix",
+        "1.0",
+        "+1",
+        "1\n",
+        "\N{ARABIC-INDIC DIGIT ONE}",
+        "\N{FULLWIDTH DIGIT ONE}",
+    ],
 )
 def test_matching_literal_household_ids_retain_saved_spelling(population_id):
     models = comparison_models("us", "household", population_id, population_id)

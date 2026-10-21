@@ -506,7 +506,7 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
     assert 'op.create_table(\n        "user_identities"' in revision
     assert '"uq_user_identities_issuer_subject"' in revision
     assert 'op.drop_table("user_identities")' in revision
-    for table_name, reference in (
+    for _table_name, reference in (
         ("user_policies", "policy"),
         ("user_household_associations", "household"),
         ("user_simulation_associations", "simulation"),
@@ -572,10 +572,12 @@ def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -
     (missing / "versions/f5ef4347cb2a_establish_v2_platform_baseline.py").unlink()
     missing_config = Config()
     missing_config.set_main_option("script_location", str(missing))
-    with pytest.warns(UserWarning, match=r"Revision f5ef4347cb2a .* is not present"):
-        missing_script = ScriptDirectory.from_config(missing_config)
-        with pytest.raises((CommandError, KeyError, ResolutionError)):
-            missing_script.get_revision("f5ef4347cb2a")
+    missing_script = ScriptDirectory.from_config(missing_config)
+    with (
+        pytest.warns(UserWarning, match=r"Revision f5ef4347cb2a .* is not present"),
+        pytest.raises((CommandError, KeyError, ResolutionError)),
+    ):
+        missing_script.get_revision("f5ef4347cb2a")
 
     divergent = tmp_path / "divergent"
     shutil.copytree(original, divergent)

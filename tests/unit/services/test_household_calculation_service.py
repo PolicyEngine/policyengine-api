@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from typing import ClassVar
 from unittest.mock import MagicMock, Mock
 
 import pytest
@@ -111,7 +112,7 @@ def test_calculate_household_preserves_calculation_warnings():
     household = {"people": {"you": {"employment_income": {"2026": None}}}}
 
     class Country:
-        metadata = {
+        metadata: ClassVar[dict] = {
             "variables": {"employment_income": {"entity": "person"}},
             "entities": {"person": {"plural": "people", "roles": {}}},
             "parameters": {},
@@ -138,7 +139,7 @@ def test_parsed_country_calculation_is_reused_for_calculation():
     parsed_calculation = object()
 
     class Country:
-        metadata = {
+        metadata: ClassVar[dict] = {
             "variables": {},
             "entities": {"person": {"plural": "people", "roles": {}}},
             "parameters": {},
@@ -185,7 +186,7 @@ def test_successful_situation_parsing_accepts_calculation_before_stage_ends():
     accepted = Mock()
 
     class Country:
-        metadata = {
+        metadata: ClassVar[dict] = {
             "variables": {},
             "entities": {"person": {"plural": "people", "roles": {}}},
             "parameters": {},
@@ -213,7 +214,7 @@ def test_failed_situation_parsing_does_not_accept_calculation():
     accepted = Mock()
 
     class Country:
-        metadata = {
+        metadata: ClassVar[dict] = {
             "variables": {},
             "entities": {"person": {"plural": "people", "roles": {}}},
             "parameters": {},
@@ -249,7 +250,7 @@ def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
     cache = _cache()
 
     class Country:
-        metadata = {
+        metadata: ClassVar[dict] = {
             "variables": {},
             "entities": {"person": {"plural": "people", "roles": {}}},
         }

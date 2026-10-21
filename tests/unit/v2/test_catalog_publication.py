@@ -111,7 +111,7 @@ class _RevisionConnection:
 
 
 class _Inspector:
-    def __init__(self, table_exists: bool):
+    def __init__(self, *, table_exists: bool):
         self.table_exists = table_exists
 
     def has_table(self, table_name: str) -> bool:
@@ -124,13 +124,17 @@ def test_revision_check_rejects_non_postgres_missing_and_wrong_revisions() -> No
         publication._verify_expected_revision(_RevisionConnection(dialect="sqlite"))
 
     with (
-        patch.object(publication.sa, "inspect", return_value=_Inspector(False)),
+        patch.object(
+            publication.sa, "inspect", return_value=_Inspector(table_exists=False)
+        ),
         pytest.raises(publication.CatalogPublicationError, match="table is absent"),
     ):
         publication._verify_expected_revision(_RevisionConnection(dialect="postgresql"))
 
     with (
-        patch.object(publication.sa, "inspect", return_value=_Inspector(True)),
+        patch.object(
+            publication.sa, "inspect", return_value=_Inspector(table_exists=True)
+        ),
         pytest.raises(publication.CatalogPublicationError, match="expected"),
     ):
         publication._verify_expected_revision(
@@ -172,15 +176,6 @@ def test_copy_streams_rows_through_psycopg_without_an_orm_write() -> None:
 def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
     dialect = postgresql.dialect()
     assert (
-        publication_reconciliation.DATASETS,
-        publication_reconciliation.MODELS,
-        publication_reconciliation.MODEL_VERSIONS,
-        publication_reconciliation.PARAMETERS,
-        publication_reconciliation.PARAMETER_NODES,
-        publication_reconciliation.PARAMETER_VALUES,
-        publication_reconciliation.REGIONS,
-        publication_reconciliation.VARIABLES,
-    ) == (
         Dataset.__table__,
         TaxBenefitModel.__table__,
         TaxBenefitModelVersion.__table__,
@@ -189,6 +184,15 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
         ParameterValue.__table__,
         Region.__table__,
         Variable.__table__,
+    ) == (
+        publication_reconciliation.DATASETS,
+        publication_reconciliation.MODELS,
+        publication_reconciliation.MODEL_VERSIONS,
+        publication_reconciliation.PARAMETERS,
+        publication_reconciliation.PARAMETER_NODES,
+        publication_reconciliation.PARAMETER_VALUES,
+        publication_reconciliation.REGIONS,
+        publication_reconciliation.VARIABLES,
     )
     staging_ddl = tuple(
         str(CreateTable(table).compile(dialect=dialect))

@@ -21,7 +21,7 @@ from policyengine_api.constants import (
 
 class TestBundleDatasetDisplayLabels:
     @pytest.mark.parametrize(
-        "dataset_name, expected_label",
+        ("dataset_name", "expected_label"),
         [
             ("populace_us_2024", "Microcosm"),
             ("enhanced_frs_2024_25", "Enhanced FRS"),
@@ -233,7 +233,7 @@ print(
 
     def test__uses_policyengine_bundle_versions_for_us_uk_and_core(self):
         expected_versions = self._expected_bundle_versions()
-        assert POLICYENGINE_VERSION == expected_versions["policyengine"]
-        assert POLICYENGINE_CORE_VERSION == expected_versions["core"]
+        assert expected_versions["policyengine"] == POLICYENGINE_VERSION
+        assert expected_versions["core"] == POLICYENGINE_CORE_VERSION
         assert COUNTRY_PACKAGE_VERSIONS["us"] == expected_versions["us"]
         assert COUNTRY_PACKAGE_VERSIONS["uk"] == expected_versions["uk"]

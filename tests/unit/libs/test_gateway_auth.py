@@ -148,15 +148,17 @@ class TestGatewayAuthTokenProvider:
                 client_secret_resource=CLIENT_SECRET_RESOURCE,
             )
 
-            with patch(
-                "policyengine_api.libs.gateway_auth._load_secret_from_secret_manager",
-                side_effect=RuntimeError("no access"),
-            ):
-                with pytest.raises(
+            with (
+                patch(
+                    "policyengine_api.libs.gateway_auth._load_secret_from_secret_manager",
+                    side_effect=RuntimeError("no access"),
+                ),
+                pytest.raises(
                     GatewayAuthError,
                     match="Failed to load gateway auth client secret",
-                ):
-                    provider.get_token()
+                ),
+            ):
+                provider.get_token()
 
         def test__given_trailing_slash_issuer__then_no_double_slash(self):
             provider = GatewayAuthTokenProvider(
@@ -224,12 +226,14 @@ class TestGatewayAuthTokenProvider:
                 client_secret=CLIENT_SECRET,
             )
 
-            with patch(
-                "policyengine_api.libs.gateway_auth.httpx.post",
-                side_effect=httpx.ConnectError("boom"),
+            with (
+                patch(
+                    "policyengine_api.libs.gateway_auth.httpx.post",
+                    side_effect=httpx.ConnectError("boom"),
+                ),
+                pytest.raises(GatewayAuthError),
             ):
-                with pytest.raises(GatewayAuthError):
-                    provider.get_token()
+                provider.get_token()
 
         def test__given_response_without_access_token__then_raises(self):
             provider = GatewayAuthTokenProvider(
@@ -243,12 +247,14 @@ class TestGatewayAuthTokenProvider:
             response.raise_for_status = MagicMock()
             response.json.return_value = {"token_type": "Bearer", "expires_in": 3600}
 
-            with patch(
-                "policyengine_api.libs.gateway_auth.httpx.post",
-                return_value=response,
+            with (
+                patch(
+                    "policyengine_api.libs.gateway_auth.httpx.post",
+                    return_value=response,
+                ),
+                pytest.raises(GatewayAuthError),
             ):
-                with pytest.raises(GatewayAuthError):
-                    provider.get_token()
+                provider.get_token()
 
         def test__given_missing_expires_in__then_raises(self):
             provider = GatewayAuthTokenProvider(
@@ -262,12 +268,14 @@ class TestGatewayAuthTokenProvider:
             response.raise_for_status = MagicMock()
             response.json.return_value = {"access_token": "tok"}
 
-            with patch(
-                "policyengine_api.libs.gateway_auth.httpx.post",
-                return_value=response,
+            with (
+                patch(
+                    "policyengine_api.libs.gateway_auth.httpx.post",
+                    return_value=response,
+                ),
+                pytest.raises(GatewayAuthError),
             ):
-                with pytest.raises(GatewayAuthError):
-                    provider.get_token()
+                provider.get_token()
 
         def test__given_zero_expires_in__then_clamped_to_refresh_margin(self):
             provider = GatewayAuthTokenProvider(

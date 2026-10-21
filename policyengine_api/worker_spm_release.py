@@ -6,8 +6,10 @@ import json
 import sys
 from importlib.metadata import version as distribution_version
 
+from typing_extensions import override
+
 from policyengine_api import constants
-from policyengine_api.worker_spm import validate_worker_spm
+from policyengine_api.worker_spm import SPMCapabilitySource, validate_worker_spm
 
 REQUIRED_BUNDLE_PACKAGES = (
     "policyengine",
@@ -18,13 +20,14 @@ REQUIRED_BUNDLE_PACKAGES = (
 )
 
 
-class RegistryCapability:
+class RegistryCapability(SPMCapabilitySource):
     """Expose one registry document through the request validator interface."""
 
     def __init__(self, registry: dict) -> None:
         """Wrap a parsed worker registry document."""
         self.registry = registry
 
+    @override
     def get_spm_capability(
         self,
         country: str,
@@ -80,7 +83,7 @@ def validate_installed_worker(registry: dict, expected_bundle: str) -> dict | No
     if versions["policyengine"] != expected_bundle:
         msg = "The bundle manifest differs from the release requirement"
         raise ValueError(msg)
-    if constants.POLICYENGINE_VERSION != expected_bundle:
+    if expected_bundle != constants.POLICYENGINE_VERSION:
         msg = "The API runtime differs from the release requirement"
         raise ValueError(msg)
 

@@ -53,7 +53,7 @@ def _account(**changes) -> AccountRead:
     return AccountRead(**values)
 
 
-def _result(name: str, kwargs: dict):
+def _result(name: str, _kwargs: dict):
     if name == "export_account":
         return AccountExport(
             user=_account(),
@@ -263,7 +263,7 @@ def test_unauthenticated_principals_reach_every_account_operation() -> None:
 
 
 def test_unauthenticated_account_items_have_no_primary_country() -> None:
-    def result(name: str, kwargs: dict):
+    def result(_name: str, _kwargs: dict):
         return _account(
             id=BROWSER_USER_ID, user_type="unauthenticated", primary_country=None
         )
@@ -284,7 +284,7 @@ def test_unauthenticated_account_items_have_no_primary_country() -> None:
 
 
 def test_absent_unauthenticated_users_read_as_not_found_and_export_empty() -> None:
-    def result(name: str, kwargs: dict):
+    def result(name: str, _kwargs: dict):
         if name == "get_account":
             msg = "The account was not found"
             raise AccountNotFoundError(msg)
@@ -350,7 +350,7 @@ def test_a_credential_naming_a_signed_in_account_asks_the_browser_to_sign_in() -
 def test_upgrade_returns_the_signed_in_account_and_outcome(
     outcome: AccountConversionOutcome, expected: str
 ) -> None:
-    def result(name: str, kwargs: dict):
+    def result(_name: str, _kwargs: dict):
         return AccountUpgrade(account=_account(), outcome=outcome)
 
     client, service = _client(RecordingService(result))

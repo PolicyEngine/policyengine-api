@@ -96,7 +96,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Code quality and types
 
-- Checked: `api.quality.alembic-revisions-unused-imports`, `api.quality.ci-cd-scripts-ruff-exemptions`, `api.quality.command-line-modules-ruff-exemptions`, `api.quality.command-line-scripts-ruff-exemptions`, `api.quality.environment-variables-load`, `api.quality.mypy-v2`, `api.quality.ruff-format`, `api.quality.ruff-lint`, `api.quality.runtime-evaluated-models-resolve`, `api.quality.tests-pass`, `api.quality.tests-ruff-exemptions`
+- Checked: `api.quality.alembic-revisions-unused-imports`, `api.quality.ci-cd-scripts-ruff-exemptions`, `api.quality.command-line-modules-ruff-exemptions`, `api.quality.command-line-scripts-ruff-exemptions`, `api.quality.environment-variables-load`, `api.quality.mypy-v2`, `api.quality.ruff-format`, `api.quality.ruff-lint`, `api.quality.runtime-evaluated-models-resolve`, `api.quality.tests-pass`, `api.quality.tests-ruff-exemptions`, `api.quality.unittest-ruff-exemptions`
 
 ### Observability
 

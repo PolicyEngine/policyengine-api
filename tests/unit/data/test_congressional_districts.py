@@ -49,7 +49,7 @@ class TestStateCodeToName:
         assert len(STATE_CODE_TO_NAME) == 51
 
     def test__contains_all_state_codes_uppercase(self):
-        for code in STATE_CODE_TO_NAME.keys():
+        for code in STATE_CODE_TO_NAME:
             assert code == code.upper()
             assert len(code) == 2
 

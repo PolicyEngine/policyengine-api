@@ -115,11 +115,11 @@ def create_simulation(country_id: str) -> Response:
         )
         status_code = 201 if creation.created else 200
 
-        response_body = dict(
-            status="ok",
-            message=message,
-            result=result,
-        )
+        response_body = {
+            "status": "ok",
+            "message": message,
+            "result": result,
+        }
 
         return Response(
             json.dumps(response_body),
@@ -136,7 +136,7 @@ def create_simulation(country_id: str) -> Response:
             "Bad request creating simulation for country %s: %s", country_id, e
         )
         msg = f"Failed to create simulation: {e}"
-        raise BadRequest(msg)
+        raise BadRequest(msg) from e
     except Exception:
         current_app.logger.exception(
             "Unexpected error creating simulation for country %s", country_id
@@ -168,11 +168,11 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
         msg = f"Simulation #{simulation_id} not found."
         raise NotFound(msg)
 
-    response_body = dict(
-        status="ok",
-        message=None,
-        result=result,
-    )
+    response_body = {
+        "status": "ok",
+        "message": None,
+        "result": result,
+    }
 
     return Response(
         json.dumps(response_body),
@@ -234,11 +234,11 @@ def update_simulation(country_id: str) -> Response:
 
         result = _serialize_v1_simulation(simulation)
 
-        response_body = dict(
-            status="ok",
-            message="Simulation updated successfully",
-            result=result,
-        )
+        response_body = {
+            "status": "ok",
+            "message": "Simulation updated successfully",
+            "result": result,
+        }
 
         return Response(
             json.dumps(response_body),
@@ -261,7 +261,7 @@ def update_simulation(country_id: str) -> Response:
             e,
         )
         msg = f"Failed to update simulation: {e}"
-        raise BadRequest(msg)
+        raise BadRequest(msg) from e
     except Exception:
         current_app.logger.exception(
             "Unexpected error updating simulation #%s for country %s",

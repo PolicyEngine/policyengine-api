@@ -101,15 +101,17 @@ def _annotation_nodes(module: ast.Module) -> set[int]:
             if node.returns is not None:
                 annotation_roots.append(node.returns)
             arguments = node.args
-            for argument in [
-                *arguments.posonlyargs,
-                *arguments.args,
-                *arguments.kwonlyargs,
-                *([arguments.vararg] if arguments.vararg else []),
-                *([arguments.kwarg] if arguments.kwarg else []),
-            ]:
-                if argument.annotation is not None:
-                    annotation_roots.append(argument.annotation)
+            annotation_roots.extend(
+                argument.annotation
+                for argument in [
+                    *arguments.posonlyargs,
+                    *arguments.args,
+                    *arguments.kwonlyargs,
+                    *([arguments.vararg] if arguments.vararg else []),
+                    *([arguments.kwarg] if arguments.kwarg else []),
+                ]
+                if argument.annotation is not None
+            )
         elif isinstance(node, ast.AnnAssign):
             annotation_roots.append(node.annotation)
     return {id(inner) for root in annotation_roots for inner in ast.walk(root)}

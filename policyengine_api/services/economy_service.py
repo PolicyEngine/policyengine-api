@@ -1557,6 +1557,7 @@ class EconomyService:
         region: str,
         time_period: str,
         scope: Literal["macro", "household"] = "macro",
+        *,
         include_cliffs: bool = False,
         model_version: str | None = None,
         policyengine_version: str | None = None,
@@ -1677,18 +1678,26 @@ class EconomyService:
             "dataset": setup_options.dataset,
         }
         if isinstance(result.get("policyengine_bundle"), dict):
-            for key, value in result["policyengine_bundle"].items():
-                if value is not None:
-                    bundle[key] = value
+            bundle.update(
+                {
+                    key: value
+                    for key, value in result["policyengine_bundle"].items()
+                    if value is not None
+                }
+            )
         execution_bundle = (
             getattr(execution, "policyengine_bundle", None)
             if execution is not None
             else None
         )
         if isinstance(execution_bundle, dict):
-            for key, value in execution_bundle.items():
-                if value is not None:
-                    bundle[key] = value
+            bundle.update(
+                {
+                    key: value
+                    for key, value in execution_bundle.items()
+                    if value is not None
+                }
+            )
         response = {
             **result,
             "policyengine_bundle": bundle,
@@ -1819,7 +1828,7 @@ class EconomyService:
         except Exception as e:
             logger.log_struct(
                 {
-                    "message": f"Error inserting computing record: {str(e)}",
+                    "message": f"Error inserting computing record: {e!s}",
                     **setup_options.model_dump(),
                 }
             )
@@ -1850,9 +1859,7 @@ class EconomyService:
         except Exception as e:
             logger.log_struct(
                 {
-                    "message": (
-                        f"Error setting completed reform impact record: {str(e)}"
-                    ),
+                    "message": (f"Error setting completed reform impact record: {e!s}"),
                     **setup_options.model_dump(),
                 }
             )
@@ -1885,7 +1892,7 @@ class EconomyService:
         except Exception as e:
             logger.log_struct(
                 {
-                    "message": f"Error setting error reform impact record: {str(e)}",
+                    "message": f"Error setting error reform impact record: {e!s}",
                     **setup_options.model_dump(),
                 }
             )

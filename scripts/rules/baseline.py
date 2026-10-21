@@ -33,6 +33,7 @@ def load_base_registry(root: Path, ref: str) -> Registry | None:
         cwd=root,
         capture_output=True,
         text=True,
+        check=False,
     )
     if verify.returncode != 0:
         raise BaseUnavailableError(ref)
@@ -41,6 +42,7 @@ def load_base_registry(root: Path, ref: str) -> Registry | None:
         cwd=root,
         capture_output=True,
         text=True,
+        check=False,
     )
     if shown.returncode != 0:
         return None
@@ -85,6 +87,8 @@ def check_baselines(
                         "explicit and reviewable",
                     )
                 )
-    for rule_id in sorted(current_ids - {rule.id for rule in base.rules}):
-        notes.append(f"rule {rule_id} is new")
+    notes.extend(
+        f"rule {rule_id} is new"
+        for rule_id in sorted(current_ids - {rule.id for rule in base.rules})
+    )
     return violations, notes

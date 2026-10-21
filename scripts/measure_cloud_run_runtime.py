@@ -151,8 +151,7 @@ def _summarize_endpoint(records: list[dict], duration_seconds: float) -> dict:
     }
 
 
-async def _run(args: argparse.Namespace) -> dict:
-    base_payload = json.loads(Path(args.calculate_payload).read_text())
+async def _run(args: argparse.Namespace, base_payload: dict) -> dict:
     base_payload["household"]["axes"][0][0]["count"] = args.axes_count
     cache_bust = args.cache_bust == "always"
     run_token = uuid.uuid4().hex[:8]
@@ -262,7 +261,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    summary = asyncio.run(_run(args))
+    base_payload = json.loads(Path(args.calculate_payload).read_text())
+    summary = asyncio.run(_run(args, base_payload))
     json.dump(summary, sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 0

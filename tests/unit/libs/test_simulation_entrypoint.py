@@ -5,6 +5,7 @@ job submission, status polling, and error handling.
 """
 
 import os
+from typing import ClassVar
 from unittest.mock import patch
 
 import httpx
@@ -13,14 +14,14 @@ from flask import Flask, g
 
 os.environ.setdefault("FLASK_DEBUG", "1")
 
-from policyengine_api.constants import (  # noqa: E402
+from policyengine_api.constants import (
     MODAL_EXECUTION_STATUS_COMPLETE,
     MODAL_EXECUTION_STATUS_FAILED,
     MODAL_EXECUTION_STATUS_RUNNING,
     MODAL_EXECUTION_STATUS_SUBMITTED,
     POLICYENGINE_VERSION,
 )
-from policyengine_api.libs.simulation_entrypoint import (  # noqa: E402
+from policyengine_api.libs.simulation_entrypoint import (
     ModalBudgetWindowBatchExecution,
     ModalSimulationExecution,
     SimulationAPIModal,
@@ -28,17 +29,17 @@ from policyengine_api.libs.simulation_entrypoint import (  # noqa: E402
     SimulationRunProgress,
     resolve_simulation_entrypoint_url,
 )
-from policyengine_api.observability.identifiers import (  # noqa: E402
+from policyengine_api.observability.identifiers import (
     OBSERVABILITY_ID_HEADER,
 )
-from policyengine_api.request_context import (  # noqa: E402
+from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     _asgi_observability_id,
     _asgi_request_id,
     current_observability_id,
     start_observability_id,
 )
-from tests.fixtures.libs.simulation_entrypoint import (  # noqa: E402
+from tests.fixtures.libs.simulation_entrypoint import (
     MOCK_BATCH_JOB_ID,
     MOCK_BATCH_POLL_RESPONSE_COMPLETE,
     MOCK_BATCH_POLL_RESPONSE_FAILED,
@@ -60,7 +61,7 @@ from tests.fixtures.libs.simulation_entrypoint import (  # noqa: E402
     MOCK_WORKER_VERSIONS,
     create_mock_httpx_response,
 )
-from tests.fixtures.spm import INSTALLED_SPM_SELECTION  # noqa: E402
+from tests.fixtures.spm import INSTALLED_SPM_SELECTION
 
 pytest_plugins = ("tests.fixtures.libs.simulation_entrypoint",)
 
@@ -83,9 +84,9 @@ ENTRYPOINT_TEST_ENV_VARS = (
 class RequestRecordingHTTPXClient:
     """Minimal HTTPX-compatible client that executes request event hooks."""
 
-    instances = []
+    instances: ClassVar[list] = []
 
-    def __init__(self, *, event_hooks=None, **kwargs):
+    def __init__(self, *, event_hooks=None, **_kwargs):
         self.event_hooks = event_hooks or {}
         self.requests = []
         type(self).instances.append(self)
@@ -282,7 +283,8 @@ class TestSimulationAPIModal:
     """Tests for the SimulationAPIModal class."""
 
     class TestInit:
-        def test__given_env_var_set__then_uses_env_url(self, mock_httpx_client):
+        @pytest.mark.usefixtures("mock_httpx_client")
+        def test__given_env_var_set__then_uses_env_url(self):
             # Given
             with patch.dict(
                 "os.environ",
@@ -297,9 +299,8 @@ class TestSimulationAPIModal:
                 # Then
                 assert api.base_url == MOCK_MODAL_BASE_URL
 
-        def test__given_selected_url_not_set__then_fails_startup(
-            self, mock_httpx_client
-        ):
+        @pytest.mark.usefixtures("mock_httpx_client")
+        def test__given_selected_url_not_set__then_fails_startup(self):
             # Given
             with patch.dict("os.environ", {}, clear=False):
                 import os
@@ -314,8 +315,9 @@ class TestSimulationAPIModal:
                 ):
                     SimulationAPIModal()
 
+        @pytest.mark.usefixtures("mock_httpx_client")
         def test__given_gateway_auth_env_vars__then_attaches_bearer_auth(
-            self, mock_httpx_client, monkeypatch
+            self, monkeypatch
         ):
             from policyengine_api.libs.gateway_auth import GatewayBearerAuth
             from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
@@ -330,8 +332,9 @@ class TestSimulationAPIModal:
             _, kwargs = modal_httpx.Client.call_args
             assert isinstance(kwargs.get("auth"), GatewayBearerAuth)
 
+        @pytest.mark.usefixtures("mock_httpx_client", "mock_modal_logger")
         def test__given_missing_gateway_auth_env_vars__then_no_auth_attached(
-            self, mock_httpx_client, monkeypatch, mock_modal_logger
+            self, monkeypatch
         ):
             from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
 
@@ -349,8 +352,9 @@ class TestSimulationAPIModal:
             _, kwargs = modal_httpx.Client.call_args
             assert kwargs.get("auth") is None
 
+        @pytest.mark.usefixtures("mock_httpx_client")
         def test__given_missing_gateway_auth_env_vars_when_required__then_raises(
-            self, mock_httpx_client, monkeypatch
+            self, monkeypatch
         ):
             from policyengine_api.libs.gateway_auth import GatewayAuthError
 
@@ -366,9 +370,8 @@ class TestSimulationAPIModal:
             with pytest.raises(GatewayAuthError, match="Gateway auth is required"):
                 SimulationAPIModal()
 
-        def test__given_partial_gateway_auth_env_vars__then_raises(
-            self, mock_httpx_client, monkeypatch
-        ):
+        @pytest.mark.usefixtures("mock_httpx_client")
+        def test__given_partial_gateway_auth_env_vars__then_raises(self, monkeypatch):
             from policyengine_api.libs.gateway_auth import GatewayAuthError
 
             monkeypatch.setenv("GATEWAY_AUTH_ISSUER", "https://tenant.auth0.com")
@@ -379,9 +382,8 @@ class TestSimulationAPIModal:
             with pytest.raises(GatewayAuthError):
                 SimulationAPIModal()
 
-        def test__given_client_initialized__then_installs_correlation_hooks(
-            self, mock_httpx_client
-        ):
+        @pytest.mark.usefixtures("mock_httpx_client")
+        def test__given_client_initialized__then_installs_correlation_hooks(self):
             from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
 
             SimulationAPIModal()
@@ -390,8 +392,9 @@ class TestSimulationAPIModal:
             assert list(kwargs["event_hooks"]) == ["request"]
             assert len(kwargs["event_hooks"]["request"]) == 1
 
+        @pytest.mark.usefixtures("mock_httpx_client")
         def test__given_client_initialized__then_instruments_explicit_httpx_client(
-            self, mock_httpx_client
+            self,
         ):
             from policyengine_api.libs import simulation_entrypoint as module
 
@@ -404,9 +407,8 @@ class TestSimulationAPIModal:
 
             instrument.assert_called_once_with(client.client, runtime)
 
-        def test__given_flask_request__then_hook_uses_current_request_id(
-            self, mock_httpx_client
-        ):
+        @pytest.mark.usefixtures("mock_httpx_client")
+        def test__given_flask_request__then_hook_uses_current_request_id(self):
             from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
 
             SimulationAPIModal()
@@ -424,9 +426,8 @@ class TestSimulationAPIModal:
 
             assert request.headers[REQUEST_ID_HEADER] == "flask-request-id"
 
-        def test__given_asgi_request__then_hook_uses_current_correlation_ids(
-            self, mock_httpx_client
-        ):
+        @pytest.mark.usefixtures("mock_httpx_client")
+        def test__given_asgi_request__then_hook_uses_current_correlation_ids(self):
             from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
 
             SimulationAPIModal()
@@ -443,8 +444,9 @@ class TestSimulationAPIModal:
             assert request.headers[REQUEST_ID_HEADER] == "asgi-request-id"
             assert request.headers[OBSERVABILITY_ID_HEADER] == MOCK_OBSERVABILITY_ID
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_no_request_context__then_hook_omits_request_id(
-            self, monkeypatch, mock_modal_logger
+            self, monkeypatch
         ):
             from policyengine_api.libs import simulation_entrypoint as module
 
@@ -470,10 +472,10 @@ class TestSimulationAPIModal:
                 ),
             ],
         )
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_request_context__then_all_calls_forward_request_id(
             self,
             monkeypatch,
-            mock_modal_logger,
             entrypoint,
             url_env_name,
         ):
@@ -514,10 +516,10 @@ class TestSimulationAPIModal:
                 for request in requests
             )
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_started_calculation__then_client_preserves_one_observability_id(
             self,
             monkeypatch,
-            mock_modal_logger,
         ):
             from policyengine_api.libs import simulation_entrypoint as module
 
@@ -555,8 +557,9 @@ class TestSimulationAPIModal:
             {"data_version": "1.77.0"},
         ],
     )
+    @pytest.mark.usefixtures("mock_modal_logger")
     def test__given_dataset_override__then_does_not_post(
-        self, method, override, mock_httpx_client, mock_modal_logger
+        self, method, override, mock_httpx_client
     ):
         api = SimulationAPIModal()
 
@@ -566,10 +569,10 @@ class TestSimulationAPIModal:
         mock_httpx_client.post.assert_not_called()
 
     class TestRun:
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_valid_payload__then_returns_execution_with_job_id(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.post.return_value = create_mock_httpx_response(
@@ -589,10 +592,10 @@ class TestSimulationAPIModal:
             assert execution.resolved_app_name == MOCK_RESOLVED_APP_NAME
             mock_httpx_client.post.assert_called_once()
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_valid_payload__then_posts_to_correct_endpoint(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.post.return_value = create_mock_httpx_response(
@@ -613,10 +616,10 @@ class TestSimulationAPIModal:
                 "policyengine_version": POLICYENGINE_VERSION,
             }
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_telemetry_payload__then_preserves_non_identity_fields(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.post.return_value = create_mock_httpx_response(
                 status_code=202,
@@ -632,10 +635,10 @@ class TestSimulationAPIModal:
                 "capture_mode": "disabled",
             }
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_model_and_bundle_versions__then_translates_payload_for_modal(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.post.return_value = create_mock_httpx_response(
                 status_code=202,
@@ -656,10 +659,10 @@ class TestSimulationAPIModal:
             assert "model_version" not in posted_payload
             assert "data_version" not in posted_payload
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_api_v1_default_bundle_payload__then_posts_gateway_contract_body(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.post.return_value = create_mock_httpx_response(
                 status_code=202,
@@ -716,10 +719,10 @@ class TestSimulationAPIModal:
             assert "model_version" not in posted_payload
             assert "data_version" not in posted_payload
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_http_error__then_raises_exception(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_response = create_mock_httpx_response(
@@ -757,10 +760,10 @@ class TestSimulationAPIModal:
             assert log_payload["observability_id"] == MOCK_OBSERVABILITY_ID
 
     class TestResolveAppName:
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_country_and_version__then_returns_registered_app(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.get.return_value = create_mock_httpx_response(
                 status_code=200,
@@ -776,10 +779,10 @@ class TestSimulationAPIModal:
             assert app_name == MOCK_RESOLVED_APP_NAME
             assert resolved_version == "1.459.0"
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_unknown_version__then_raises_value_error(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.get.return_value = create_mock_httpx_response(
                 status_code=200,
@@ -791,14 +794,14 @@ class TestSimulationAPIModal:
             api = SimulationAPIModal()
 
             with pytest.raises(
-                ValueError, match="Unknown version 9.9.9 for country us"
+                ValueError, match=r"Unknown version 9\.9\.9 for country us"
             ):
                 api.resolve_app_name("us", "9.9.9")
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_policyengine_version__then_returns_registered_bundle_app(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.get.return_value = create_mock_httpx_response(
                 status_code=200,
@@ -822,10 +825,10 @@ class TestSimulationAPIModal:
             )
 
     class TestRunBudgetWindowBatch:
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_valid_payload__then_returns_batch_execution(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.post.return_value = create_mock_httpx_response(
                 status_code=202,
@@ -840,10 +843,10 @@ class TestSimulationAPIModal:
             call_args = mock_httpx_client.post.call_args
             assert "/simulate/economy/budget-window" in call_args[0][0]
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_model_and_bundle_versions__then_translates_payload_for_modal(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.post.return_value = create_mock_httpx_response(
                 status_code=202,
@@ -864,10 +867,10 @@ class TestSimulationAPIModal:
             assert "model_version" not in posted_payload
             assert "data_version" not in posted_payload
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_http_error__then_raises_exception(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_response = create_mock_httpx_response(
                 status_code=400,
@@ -900,10 +903,10 @@ class TestSimulationAPIModal:
             assert log_payload["observability_id"] == MOCK_OBSERVABILITY_ID
 
     class TestGetExecutionById:
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_running_job__then_returns_running_status(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
@@ -920,10 +923,10 @@ class TestSimulationAPIModal:
             assert execution.status == MODAL_EXECUTION_STATUS_RUNNING
             assert execution.result is None
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_complete_job__then_returns_result(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
@@ -941,10 +944,10 @@ class TestSimulationAPIModal:
             assert execution.policyengine_bundle == MOCK_POLICYENGINE_BUNDLE
             assert execution.resolved_app_name == MOCK_RESOLVED_APP_NAME
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_failed_job__then_returns_error(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
@@ -960,10 +963,10 @@ class TestSimulationAPIModal:
             assert execution.status == MODAL_EXECUTION_STATUS_FAILED
             assert execution.error == "Simulation timed out"
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_running_job_with_stage_fields__then_reads_run_progress(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
@@ -997,10 +1000,10 @@ class TestSimulationAPIModal:
                 "segments": {"completed": 19, "total": 20},
             }
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_running_job_without_stage_fields__then_has_no_run_progress(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
@@ -1015,10 +1018,10 @@ class TestSimulationAPIModal:
             # Then
             assert execution.run_progress is None
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_only_a_submission_time__then_relays_it(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given - a job on a worker app without stages, after
             # policyengine-sim-api#781 deploys its gateway
@@ -1039,10 +1042,10 @@ class TestSimulationAPIModal:
                 "submitted_at": "2026-10-13T12:00:00Z"
             }
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_a_malformed_timestamp__then_drops_the_stage_fields(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
@@ -1062,10 +1065,10 @@ class TestSimulationAPIModal:
             assert execution.status == MODAL_EXECUTION_STATUS_RUNNING
             assert execution.run_progress is None
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_malformed_stage_fields__then_still_returns_status(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
@@ -1085,10 +1088,10 @@ class TestSimulationAPIModal:
             assert execution.status == MODAL_EXECUTION_STATUS_RUNNING
             assert execution.run_progress is None
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_job_id__then_polls_correct_endpoint(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
@@ -1104,10 +1107,10 @@ class TestSimulationAPIModal:
             call_args = mock_httpx_client.get.call_args
             assert f"/jobs/{MOCK_MODAL_JOB_ID}" in call_args[0][0]
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_unexpected_http_error__then_raises_exception(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.get.return_value = create_mock_httpx_response(
                 status_code=403,
@@ -1144,10 +1147,10 @@ class TestSimulationAPIModal:
             }
 
     class TestGetBudgetWindowBatchById:
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_running_batch__then_returns_running_status(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.get.return_value = create_mock_httpx_response(
                 status_code=202,
@@ -1163,10 +1166,10 @@ class TestSimulationAPIModal:
             assert execution.running_years == ["2027"]
             assert execution.queued_years == ["2028"]
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_complete_batch__then_returns_result(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.get.return_value = create_mock_httpx_response(
                 status_code=200,
@@ -1179,10 +1182,10 @@ class TestSimulationAPIModal:
             assert execution.status == MODAL_EXECUTION_STATUS_COMPLETE
             assert execution.result == MOCK_BATCH_POLL_RESPONSE_COMPLETE["result"]
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_failed_batch__then_returns_error(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.get.return_value = create_mock_httpx_response(
                 status_code=500,
@@ -1196,10 +1199,10 @@ class TestSimulationAPIModal:
             assert execution.failed_years == ["2027"]
             assert execution.error == "Budget window failed"
 
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_unexpected_http_error__then_raises_exception(
             self,
             mock_httpx_client,
-            mock_modal_logger,
         ):
             mock_httpx_client.get.return_value = create_mock_httpx_response(
                 status_code=404,
@@ -1225,7 +1228,8 @@ class TestSimulationAPIModal:
             assert MOCK_BATCH_JOB_ID in log_payload["message"]
 
     class TestGetExecutionId:
-        def test__given_execution__then_returns_job_id(self, mock_httpx_client):
+        @pytest.mark.usefixtures("mock_httpx_client")
+        def test__given_execution__then_returns_job_id(self):
             # Given
             api = SimulationAPIModal()
             execution = ModalSimulationExecution(
@@ -1240,7 +1244,8 @@ class TestSimulationAPIModal:
             assert execution_id == MOCK_MODAL_JOB_ID
 
     class TestGetExecutionStatus:
-        def test__given_execution__then_returns_status_string(self, mock_httpx_client):
+        @pytest.mark.usefixtures("mock_httpx_client")
+        def test__given_execution__then_returns_status_string(self):
             # Given
             api = SimulationAPIModal()
             execution = ModalSimulationExecution(
@@ -1255,9 +1260,8 @@ class TestSimulationAPIModal:
             assert status == MODAL_EXECUTION_STATUS_RUNNING
 
     class TestGetExecutionResult:
-        def test__given_complete_execution__then_returns_result(
-            self, mock_httpx_client
-        ):
+        @pytest.mark.usefixtures("mock_httpx_client")
+        def test__given_complete_execution__then_returns_result(self):
             # Given
             api = SimulationAPIModal()
             execution = ModalSimulationExecution(
@@ -1272,9 +1276,8 @@ class TestSimulationAPIModal:
             # Then
             assert result == MOCK_SIMULATION_RESULT
 
-        def test__given_incomplete_execution__then_returns_none(
-            self, mock_httpx_client
-        ):
+        @pytest.mark.usefixtures("mock_httpx_client")
+        def test__given_incomplete_execution__then_returns_none(self):
             # Given
             api = SimulationAPIModal()
             execution = ModalSimulationExecution(
@@ -1290,9 +1293,8 @@ class TestSimulationAPIModal:
             assert result is None
 
     class TestHealthCheck:
-        def test__given_healthy_api__then_returns_true(
-            self, mock_httpx_client, mock_modal_logger
-        ):
+        @pytest.mark.usefixtures("mock_modal_logger")
+        def test__given_healthy_api__then_returns_true(self, mock_httpx_client):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
                 status_code=200,
@@ -1306,9 +1308,8 @@ class TestSimulationAPIModal:
             # Then
             assert is_healthy is True
 
-        def test__given_unhealthy_api__then_returns_false(
-            self, mock_httpx_client, mock_modal_logger
-        ):
+        @pytest.mark.usefixtures("mock_modal_logger")
+        def test__given_unhealthy_api__then_returns_false(self, mock_httpx_client):
             # Given
             mock_httpx_client.get.return_value = create_mock_httpx_response(
                 status_code=503,
@@ -1322,9 +1323,8 @@ class TestSimulationAPIModal:
             # Then
             assert is_healthy is False
 
-        def test__given_network_error__then_returns_false(
-            self, mock_httpx_client, mock_modal_logger
-        ):
+        @pytest.mark.usefixtures("mock_modal_logger")
+        def test__given_network_error__then_returns_false(self, mock_httpx_client):
             # Given
             mock_httpx_client.get.side_effect = httpx.RequestError("Connection failed")
             api = SimulationAPIModal()

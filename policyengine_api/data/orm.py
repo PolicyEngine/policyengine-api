@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import atexit
 import os
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
@@ -23,9 +24,21 @@ DATABASE_POOL_RECYCLE_SECONDS = 1800
 DATABASE_POOL_SIZE = 5
 DATABASE_POOL_MAX_OVERFLOW = 2
 DATABASE_POOL_TIMEOUT_SECONDS = 30
-_v1_engine: Engine | None = None
-_v1_session_factory: sessionmaker[Session] | None = None
-_cloud_sql_connector: Connector | None = None
+
+
+@dataclass
+class _CloudSqlState:
+    """The process-owned Cloud SQL connector, engine and session factory.
+
+    Each is created on first use and released by close_v1_engines.
+    """
+
+    connector: Connector | None = None
+    engine: Engine | None = None
+    session_factory: sessionmaker[Session] | None = None
+
+
+_cloud_sql_state = _CloudSqlState()
 
 
 def get_remote_database_config() -> dict[str, str]:
@@ -49,7 +62,6 @@ def build_session_factory(engine: Engine) -> sessionmaker[Session]:
 
 
 def _build_remote_engine() -> Engine:
-    global _cloud_sql_connector
     config = get_remote_database_config()
     connector = Connector(
         ip_type=CLOUD_SQL_IP_TYPE,
@@ -75,42 +87,38 @@ def _build_remote_engine() -> Engine:
         max_overflow=DATABASE_POOL_MAX_OVERFLOW,
         pool_timeout=DATABASE_POOL_TIMEOUT_SECONDS,
     )
-    _cloud_sql_connector = connector
+    _cloud_sql_state.connector = connector
     return engine
 
 
 def get_v1_engine() -> Engine:
     """Return the process-owned Cloud SQL engine; never select SQLite."""
-    global _v1_engine
-    if _v1_engine is None:
-        _v1_engine = _build_remote_engine()
-    return _v1_engine
+    if _cloud_sql_state.engine is None:
+        _cloud_sql_state.engine = _build_remote_engine()
+    return _cloud_sql_state.engine
 
 
 def get_v1_session_factory() -> sessionmaker[Session]:
     """Return one configured Session factory for the Cloud SQL engine."""
-    global _v1_session_factory
-    if _v1_session_factory is None:
-        _v1_session_factory = build_session_factory(get_v1_engine())
-    return _v1_session_factory
+    if _cloud_sql_state.session_factory is None:
+        _cloud_sql_state.session_factory = build_session_factory(get_v1_engine())
+    return _cloud_sql_state.session_factory
 
 
 def clear_v1_session_factories() -> None:
     """Forget cached factories, primarily after replacing an Engine in tests."""
-    global _v1_session_factory
-    _v1_session_factory = None
+    _cloud_sql_state.session_factory = None
 
 
 def close_v1_engines() -> None:
     """Release process-owned SQLAlchemy pools and Cloud SQL connectors."""
-    global _cloud_sql_connector, _v1_engine
     clear_v1_session_factories()
-    if _v1_engine is not None:
-        _v1_engine.dispose()
-        _v1_engine = None
-    if _cloud_sql_connector is not None:
-        _cloud_sql_connector.close()
-        _cloud_sql_connector = None
+    if _cloud_sql_state.engine is not None:
+        _cloud_sql_state.engine.dispose()
+        _cloud_sql_state.engine = None
+    if _cloud_sql_state.connector is not None:
+        _cloud_sql_state.connector.close()
+        _cloud_sql_state.connector = None
 
 
 atexit.register(close_v1_engines)

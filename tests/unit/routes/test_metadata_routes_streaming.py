@@ -7,6 +7,7 @@ import importlib
 import json
 import sys
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 from flask import Flask
@@ -18,7 +19,7 @@ ROUTE_MODULE = "policyengine_api.routes.metadata_routes"
 
 
 class _MetadataService:
-    metadata_by_country: dict = {}
+    metadata_by_country: ClassVar[dict] = {}
 
     def get_metadata(self, country_id: str):
         return self.metadata_by_country[country_id]

@@ -1,4 +1,5 @@
 import json
+from typing import ClassVar
 
 from sqlalchemy import delete
 
@@ -10,9 +11,9 @@ from policyengine_api.utils import hash_object
 class TestPolicyCreation:
     # Define the policy to test against
     country_id = "us"
-    policy_json = {"sample_parameter": {"2024-01-01.2025-12-31": True}}
+    policy_json: ClassVar[dict] = {"sample_parameter": {"2024-01-01.2025-12-31": True}}
     label = "dworkin"
-    test_policy = {"data": policy_json, "label": label}
+    test_policy: ClassVar[dict] = {"data": policy_json, "label": label}
     policy_hash = hash_object(policy_json)
 
     """

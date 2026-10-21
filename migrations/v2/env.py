@@ -34,7 +34,7 @@ def _include_application_object(
     _object: SchemaItem,
     name: str | None,
     type_: NameFilterType,
-    _reflected: bool,
+    _reflected: bool,  # noqa: FBT001  # Alembic calls include_object with positional arguments
     _compare_to: SchemaItem | None,
 ) -> bool:
     """Keep Alembic's own version table outside application drift."""

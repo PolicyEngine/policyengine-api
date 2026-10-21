@@ -5,6 +5,8 @@ from __future__ import annotations
 from threading import RLock
 from typing import TYPE_CHECKING, Self
 
+from typing_extensions import override
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -167,7 +169,7 @@ class InMemoryCacheBackend:
                 return 0
             return self.delete(key)
 
-    def pipeline(self, transaction: bool = True) -> InMemoryPipeline:
+    def pipeline(self, *, transaction: bool = True) -> InMemoryPipeline:
         """Return a pipeline that queues commands until ``execute``."""
         return InMemoryPipeline(self, transaction=transaction)
 
@@ -217,42 +219,51 @@ class InMemoryPipeline:
 class DisabledCacheBackend(InMemoryCacheBackend):
     """No-storage backend for unselected unit-test/application cache mode."""
 
+    @override
     def get(self, key: str) -> None:
         """Return None: every read is a miss."""
 
-    def set(self, key: str, value: str, **kwargs: object) -> bool:
+    @override
+    def set(self, key: str, value: str, **_kwargs: object) -> bool:
         """Discard the value and report the write as not stored."""
         return False
 
-    def delete(self, *keys: str) -> int:
+    @override
+    def delete(self, *_keys: str) -> int:
         """Return 0: no key ever exists."""
         return 0
 
+    @override
     def zadd(self, key: str, mapping: dict[str, float]) -> int:
         """Discard the members and report none added."""
         return 0
 
+    @override
     def zrevrange(self, key: str, start: int, end: int) -> list[str]:
         """Return an empty list: no sorted set ever exists."""
         return []
 
-    def zrem(self, key: str, *members: str) -> int:
+    @override
+    def zrem(self, key: str, *_members: str) -> int:
         """Return 0: there is nothing to remove."""
         return 0
 
+    @override
     def zremrangebyrank(self, key: str, start: int, end: int) -> int:
         """Return 0: there is nothing to remove."""
         return 0
 
+    @override
     def expire(self, key: str, seconds: int) -> bool:
         """Return False, as Redis does for a key that does not exist."""
         return False
 
+    @override
     def eval(
         self,
         _script: str,
         numkeys: int,
-        *keys_and_args: str,
+        *_keys_and_args: str,
     ) -> int:
         """Raise RuntimeError, so claim operations fail closed when disabled."""
         msg = "the shared runtime cache is disabled"

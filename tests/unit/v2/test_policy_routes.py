@@ -372,7 +372,7 @@ def test_openapi_publishes_request_query_response_and_error_contracts() -> None:
     client, _flask_calls = _client(service)
     schema = client.get("/v2/openapi.json").json()
 
-    assert set(path for path in schema["paths"] if path.startswith("/v2/policies")) == {
+    assert {path for path in schema["paths"] if path.startswith("/v2/policies")} == {
         "/v2/policies",
         "/v2/policies/{policy_id}",
     }

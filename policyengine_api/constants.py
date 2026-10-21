@@ -59,7 +59,7 @@ def get_py_manifest() -> Any:  # noqa: ANN401  # SimplePath, which open() reject
 
 def _load_policyengine_bundle() -> dict | None:
     try:
-        with open(get_py_manifest()) as manifest_file:
+        with Path(get_py_manifest()).open() as manifest_file:
             manifest = json.load(manifest_file)
     except Exception as exc:
         msg = (
@@ -167,11 +167,11 @@ try:
     }
     COUNTRY_PACKAGE_VERSIONS = {
         country: _resolve_distribution_version(_dist_versions, package_name)
-        for country, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES)
+        for country, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES, strict=True)
     }
 except Exception:  # noqa: BLE001  # unreadable package metadata falls back to 0.0.0; import must not fail
     _dist_versions = {}
-    COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES}
+    COUNTRY_PACKAGE_VERSIONS = dict.fromkeys(COUNTRIES, "0.0.0")
 
 _policyengine_bundle = _load_policyengine_bundle()
 _bundle_package_versions = _resolve_bundle_package_versions(_policyengine_bundle)

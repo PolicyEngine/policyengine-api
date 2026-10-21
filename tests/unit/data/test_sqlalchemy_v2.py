@@ -89,14 +89,14 @@ def test_production_orm_has_no_sqlite_debug_or_local_schema_path():
 def test_close_v1_engines_disposes_pools_and_connectors(monkeypatch):
     engine = Mock()
     connector = Mock()
-    monkeypatch.setattr(orm, "_v1_engine", engine)
-    monkeypatch.setattr(orm, "_cloud_sql_connector", connector)
-    monkeypatch.setattr(orm, "_v1_session_factory", Mock())
+    monkeypatch.setattr(orm._cloud_sql_state, "engine", engine)
+    monkeypatch.setattr(orm._cloud_sql_state, "connector", connector)
+    monkeypatch.setattr(orm._cloud_sql_state, "session_factory", Mock())
 
     orm.close_v1_engines()
 
     engine.dispose.assert_called_once_with()
     connector.close.assert_called_once_with()
-    assert orm._v1_engine is None
-    assert orm._cloud_sql_connector is None
-    assert orm._v1_session_factory is None
+    assert orm._cloud_sql_state.engine is None
+    assert orm._cloud_sql_state.connector is None
+    assert orm._cloud_sql_state.session_factory is None

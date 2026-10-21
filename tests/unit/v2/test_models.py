@@ -619,7 +619,7 @@ def test_simulation_and_report_associations_have_no_cross_service_keys() -> None
         assert isinstance(postgres_type, postgresql.JSONB)
     assert set(sa.inspect(UserSimulationAssociation).relationships.keys()) == {"user"}
     assert set(sa.inspect(UserReportAssociation).relationships.keys()) == {"user"}
-    assert "user_associations" not in sa.inspect(Simulation).relationships.keys()
+    assert "user_associations" not in sa.inspect(Simulation).relationships
 
 
 def test_user_policy_records_v3_reform_fields() -> None:

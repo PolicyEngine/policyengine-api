@@ -87,7 +87,7 @@ def test_cloud_sql_mode_preserves_v1_create_response_without_mirroring(
     mirror.assert_not_called()
 
 
-@pytest.mark.parametrize("country_id", ("us", "uk"))
+@pytest.mark.parametrize("country_id", ["us", "uk"])
 def test_dual_write_mirrors_new_and_existing_rows_before_success(
     monkeypatch,
     country_id,
@@ -96,12 +96,14 @@ def test_dual_write_mirrors_new_and_existing_rows_before_success(
     for existing, expected_status in ((False, 201), (True, 200)):
         events: list[str] = []
         service = MagicMock(
-            side_effect=lambda *_args, **_kwargs: (
+            side_effect=lambda *_args, events=events, existing=existing, **_kwargs: (
                 events.append("cloud_sql")
                 or _creation(existing=existing, country_id=country_id)
             )
         )
-        mirror = MagicMock(side_effect=lambda _snapshot: events.append("supabase"))
+        mirror = MagicMock(
+            side_effect=lambda _snapshot, events=events: events.append("supabase")
+        )
         with (
             patch(
                 "policyengine_api.routes.policy_routes.policy_service.set_policy",
@@ -122,7 +124,7 @@ def test_dual_write_mirrors_new_and_existing_rows_before_success(
         mirror.assert_called_once_with(_snapshot(country_id))
 
 
-@pytest.mark.parametrize("country_id", ("ca", "ng", "il"))
+@pytest.mark.parametrize("country_id", ["ca", "ng", "il"])
 def test_dual_write_preserves_v1_only_policy_writes_for_non_v2_countries(
     monkeypatch,
     country_id,
