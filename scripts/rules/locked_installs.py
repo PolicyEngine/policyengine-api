@@ -74,6 +74,7 @@ _RELOCK = re.compile(r"\buv\s+lock\b")
 _UPGRADE_FLAG = re.compile(
     r"(?:^|[\s(])(?:--upgrade|--upgrade-package|-U|-P)(?=[\s=)]|$)", re.MULTILINE
 )
+_ARRAY_EXPANSION = re.compile(r"\$\{(\w+)\[@\]\}")
 _OPENS_PULL_REQUEST = re.compile(r"\bgh\s+pr\s+(?:create|edit)\b")
 _PROJECT_OPTION = re.compile(r"--(?:project|directory)[=\s]+(?P<directory>\S+)")
 _MODAL_CALL = re.compile(
@@ -608,6 +609,23 @@ def lock_violations(root: Path = REPO_ROOT) -> list[Violation]:
     return violations
 
 
+def _upgrades(relock: str, job_text: str) -> bool:
+    """Whether a ``uv lock`` command upgrades, directly or through an array it expands.
+
+    The array form is ``arguments+=(--upgrade-package name)`` followed by
+    ``uv lock "${arguments[@]}"``.
+    """
+    if _UPGRADE_FLAG.search(relock):
+        return True
+    for array_name in _ARRAY_EXPANSION.findall(relock):
+        for assignment in re.finditer(
+            rf"\b{re.escape(array_name)}\+?=\((?P<items>[^)]*)\)", job_text
+        ):
+            if _UPGRADE_FLAG.search(assignment.group("items")):
+                return True
+    return False
+
+
 def _relocked_directories(root: Path, path: str) -> set[str] | None:
     """Return what a scheduled workflow's relock jobs relock, or None if none do."""
     jobs, _ = parse_jobs((root / path).read_text(encoding="utf-8"))
@@ -617,12 +635,14 @@ def _relocked_directories(root: Path, path: str) -> set[str] | None:
         relocks = [
             command
             for command in commands
-            if _RELOCK.search(command) and not _LOCK_CHECK.search(command)
+            if _RELOCK.search(command)
+            and not _LOCK_CHECK.search(command)
+            and _upgrades(command, job_text)
         ]
         opens_pull_request = _OPENS_PULL_REQUEST.search(job_text) is not None or any(
             "create-pull-request" in action for action in jobs[job_id].step_uses
         )
-        if relocks and _UPGRADE_FLAG.search(job_text) and opens_pull_request:
+        if relocks and opens_pull_request:
             relocked = (relocked or set()) | {
                 _project_directory(command) for command in relocks
             }
