@@ -164,7 +164,7 @@ def test_create_rejects_bad_references_before_writing(store) -> None:
 
 
 def test_other_users_rows_are_not_found_and_lists_are_owner_scoped(store) -> None:
-    service, _selected, _legacy_references = store
+    service, selected, _legacy_references = store
     alice_row = service.create_user_policy(
         principal=ALICE, association_input=_fields(name="Alice")
     )
@@ -182,6 +182,12 @@ def test_other_users_rows_are_not_found_and_lists_are_owner_scoped(store) -> Non
             country_id="us",
             association_id=alice_row.id,
             association_input=UserPolicyUpdateInput(name="stolen"),
+        ),
+        lambda: service.patch_user_policy(
+            principal=BOB,
+            country_id="us",
+            association_id=alice_row.id,
+            association_input=UserPolicyUpdateInput(policy_id=selected.policy_id),
         ),
         lambda: service.delete_user_policy(
             principal=BOB, country_id="us", association_id=alice_row.id
@@ -253,6 +259,145 @@ def test_repointing_re_resolves_or_clears_the_v2_reference(store) -> None:
     assert legacy_references.calls[-1] == ("us", {"policy": [404]})
 
 
+def test_repointing_to_a_v2_policy_keeps_the_saved_row_and_clears_the_v1_reference(
+    store,
+) -> None:
+    service, selected, legacy_references = store
+    created = service.create_user_policy(principal=ALICE, association_input=_fields())
+    v1_checks_before_repoint = list(legacy_references.calls)
+
+    repointed = service.patch_user_policy(
+        principal=ALICE,
+        country_id="us",
+        association_id=created.id,
+        association_input=UserPolicyUpdateInput(policy_id=selected.policy_id),
+    )
+
+    assert (repointed.policy_id, repointed.legacy_policy_id) == (
+        selected.policy_id,
+        None,
+    )
+    assert (repointed.id, repointed.name, repointed.description) == (
+        created.id,
+        "Saved reform",
+        "Personal note",
+    )
+    assert repointed.created_at == created.created_at
+    assert repointed.updated_at >= created.updated_at
+    assert legacy_references.calls == v1_checks_before_repoint
+    with selected.sessions() as session:
+        stored = session.get(UserPolicy, created.id)
+        assert stored is not None
+        assert (stored.policy_id, stored.legacy_policy_id) == (
+            selected.policy_id,
+            None,
+        )
+
+
+def test_repointing_to_both_references_stores_both(store) -> None:
+    service, selected, legacy_references = store
+    created = service.create_user_policy(principal=ALICE, association_input=_fields())
+
+    mirrored = service.patch_user_policy(
+        principal=ALICE,
+        country_id="us",
+        association_id=created.id,
+        association_input=UserPolicyUpdateInput(
+            policy_id=selected.policy_id,
+            legacy_policy_id=MAPPED_LEGACY_POLICY_ID,
+        ),
+    )
+    assert (mirrored.policy_id, mirrored.legacy_policy_id) == (
+        selected.policy_id,
+        MAPPED_LEGACY_POLICY_ID,
+    )
+    assert legacy_references.calls[-1] == (
+        "us",
+        {"policy": [MAPPED_LEGACY_POLICY_ID]},
+    )
+
+    # v1 policy 3 has no v2 copy, so nothing can contradict the v2 reference:
+    # both are stored, as creation stores them.
+    unmirrored = service.patch_user_policy(
+        principal=ALICE,
+        country_id="us",
+        association_id=created.id,
+        association_input=UserPolicyUpdateInput(
+            policy_id=selected.policy_id, legacy_policy_id=3
+        ),
+    )
+    assert (unmirrored.policy_id, unmirrored.legacy_policy_id) == (
+        selected.policy_id,
+        3,
+    )
+    assert unmirrored.id == created.id
+
+
+def test_repointing_to_a_missing_foreign_or_conflicting_policy_changes_nothing(
+    store,
+) -> None:
+    service, selected, _legacy_references = store
+    created = service.create_user_policy(principal=ALICE, association_input=_fields())
+    with selected.sessions.begin() as session:
+        mirrored_policy = session.get(Policy, selected.policy_id)
+        assert mirrored_policy is not None
+        other_us_policy = Policy(
+            country_id="us",
+            tax_benefit_model_id=mirrored_policy.tax_benefit_model_id,
+            tax_benefit_model_version_id=mirrored_policy.tax_benefit_model_version_id,
+            canonicalization_version=1,
+            content_hash="e" * 64,
+        )
+        session.add(other_us_policy)
+        session.flush()
+        other_us_policy_id = other_us_policy.id
+
+    rejected_updates = (
+        (
+            AssociationPolicyNotFoundError,
+            UserPolicyUpdateInput(
+                policy_id=UUID("00000000-0000-0000-0000-000000000099"), name="Lost"
+            ),
+        ),
+        (
+            AssociationCountryConflictError,
+            UserPolicyUpdateInput(policy_id=selected.uk_policy_id, name="Lost"),
+        ),
+        (
+            AssociationReferenceConflictError,
+            UserPolicyUpdateInput(
+                policy_id=other_us_policy_id,
+                legacy_policy_id=MAPPED_LEGACY_POLICY_ID,
+                name="Lost",
+            ),
+        ),
+        (
+            LegacyReferenceNotFoundError,
+            UserPolicyUpdateInput(
+                policy_id=selected.policy_id, legacy_policy_id=404, name="Lost"
+            ),
+        ),
+    )
+    for expected_error, rejected_update in rejected_updates:
+        with pytest.raises(expected_error):
+            service.patch_user_policy(
+                principal=ALICE,
+                country_id="us",
+                association_id=created.id,
+                association_input=rejected_update,
+            )
+
+    unchanged = service.get_user_policy(
+        principal=ALICE, country_id="us", association_id=created.id
+    )
+    assert (unchanged.policy_id, unchanged.legacy_policy_id, unchanged.name) == (
+        None,
+        1,
+        "Saved reform",
+    )
+    assert unchanged.updated_at == created.updated_at
+
+
 def test_rows_owned_by_the_stage_10_mirror_conflict(store) -> None:
     service, selected, _legacy_references = store
     created = service.create_user_policy(principal=ALICE, association_input=_fields())
@@ -273,6 +418,13 @@ def test_rows_owned_by_the_stage_10_mirror_conflict(store) -> None:
             country_id="us",
             association_id=created.id,
             association_input=UserPolicyUpdateInput(name="Renamed"),
+        )
+    with pytest.raises(MirrorOwnedAssociationError):
+        service.patch_user_policy(
+            principal=ALICE,
+            country_id="us",
+            association_id=created.id,
+            association_input=UserPolicyUpdateInput(policy_id=selected.policy_id),
         )
     with pytest.raises(MirrorOwnedAssociationError):
         service.delete_user_policy(
@@ -331,13 +483,22 @@ def test_stage_10_projection_records_the_v1_reform_id() -> None:
 
 
 def test_patch_input_requires_a_supported_field() -> None:
-    with pytest.raises(ValueError, match="At least one of legacy_policy_id"):
+    with pytest.raises(ValueError, match="At least one of policy_id, legacy_policy_id"):
         UserPolicyUpdateInput()
-    with pytest.raises(
-        ValueError, match=r"policy_id\n  Extra inputs are not permitted"
-    ):
+    with pytest.raises(ValueError, match=r"user_id\n  Extra inputs are not permitted"):
         UserPolicyUpdateInput.model_validate(
-            {"policy_id": "00000000-0000-0000-0000-000000000001"}
+            {"user_id": "00000000-0000-0000-0000-0000000000a1"}
         )
     with pytest.raises(ValueError, match="legacy_policy_id must not be null"):
         UserPolicyUpdateInput(legacy_policy_id=None)
+    with pytest.raises(ValueError, match="policy_id must not be null"):
+        UserPolicyUpdateInput(policy_id=None)
+
+
+def test_patch_input_accepts_a_v2_policy_reference() -> None:
+    repoint = UserPolicyUpdateInput.model_validate(
+        {"policy_id": "00000000-0000-0000-0000-000000000001"}
+    )
+
+    assert repoint.policy_id == UUID("00000000-0000-0000-0000-000000000001")
+    assert repoint.model_fields_set == {"policy_id"}

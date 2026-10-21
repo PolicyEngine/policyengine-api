@@ -82,13 +82,22 @@ class UserPolicyCreationInput(StrictAssociationInput):
         return self
 
 
+USER_POLICY_REFERENCE_FIELDS = frozenset({"policy_id", "legacy_policy_id"})
+
+
 class UserPolicyUpdateInput(StrictAssociationInput):
     """A partial update of a saved policy; only supplied fields are changed.
 
-    At least one field must be supplied. ``legacy_policy_id`` may point the
-    association at another v1 policy but cannot be cleared.
+    At least one field must be supplied. ``policy_id`` points the association at
+    another v2 policy; supplied without ``legacy_policy_id``, it also clears the
+    v1 reference, which no longer describes the saved policy. ``legacy_policy_id``
+    alone points the association at another v1 policy and takes ``policy_id`` from
+    that policy's v2 copy, or clears it when there is none. Supplied together,
+    both are stored, and ``policy_id`` must be that v2 copy when one exists.
+    Neither reference can be set to null.
     """
 
+    policy_id: ResourceId | None = None
     legacy_policy_id: LegacyRecordId | None = None
     name: AssociationName | None = None
     description: AssociationDescription | None = None
@@ -97,20 +106,40 @@ class UserPolicyUpdateInput(StrictAssociationInput):
 
     @model_validator(mode="after")
     def require_supplied_field(self) -> UserPolicyUpdateInput:
-        """Require a supplied field, and reject an explicit null legacy_policy_id."""
+        """Require a supplied field, and reject an explicit null policy reference."""
         supplied = self.model_fields_set.intersection(
-            {"legacy_policy_id", "name", "description", "baseline", "provenance"}
+            {
+                *USER_POLICY_REFERENCE_FIELDS,
+                "name",
+                "description",
+                "baseline",
+                "provenance",
+            }
         )
         if not supplied:
             msg = (
-                "At least one of legacy_policy_id, name, description, baseline, "
-                "or provenance must be supplied"
+                "At least one of policy_id, legacy_policy_id, name, description, "
+                "baseline, or provenance must be supplied"
             )
             raise ValueError(msg)
-        if "legacy_policy_id" in supplied and self.legacy_policy_id is None:
-            msg = "legacy_policy_id must not be null"
-            raise ValueError(msg)
+        for reference_field in sorted(USER_POLICY_REFERENCE_FIELDS):
+            if reference_field in supplied and getattr(self, reference_field) is None:
+                msg = f"{reference_field} must not be null"
+                raise ValueError(msg)
         return self
+
+    @property
+    def repoints(self) -> bool:
+        """Whether the update changes which policy the association references."""
+        return bool(self.model_fields_set & USER_POLICY_REFERENCE_FIELDS)
+
+
+@dataclass(frozen=True)
+class UserPolicyReferences:
+    """The v2 and v1 policy references a repointed association stores."""
+
+    policy_id: UUID | None
+    legacy_policy_id: int | None
 
 
 class LegacyUserPolicySnapshot(StrictAssociationInput):
