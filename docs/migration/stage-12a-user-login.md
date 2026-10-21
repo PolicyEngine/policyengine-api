@@ -189,6 +189,10 @@ Concurrency on Postgres:
     ID, name and creation time. Supplied with `legacy_policy_id`, both are
     stored, and `policy_id` must be the mirror copy of that v1 policy when
     one exists.
+  - `PATCH /v2/user-households` accepts `household_id` the same way: it must
+    name a v2 household in the row's country; alone, it clears
+    `legacy_household_id`; with `legacy_household_id`, both are stored, and
+    it must be the copy of that v1 household when one exists.
   - `user-simulations` and `user-reports` accept only legacy IDs in 12A.
 - **Stage 10 mirror rows.** A `user_policies` row with a
   `legacy_user_policy_mappings` entry returns 409 on PATCH and DELETE. The

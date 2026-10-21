@@ -106,6 +106,7 @@ class V2Store:
     policy_id: UUID
     uk_policy_id: UUID
     household_id: UUID
+    uk_household_id: UUID
 
 
 @contextmanager
@@ -166,7 +167,14 @@ def v2_store() -> Iterator[V2Store]:
             canonicalization_version=1,
             content_hash="c" * 64,
         )
-        session.add_all([value, uk_policy, household])
+        uk_household = Household(
+            country_id="uk",
+            default_year=2026,
+            household_data={"people": [], "household": []},
+            canonicalization_version=1,
+            content_hash="f" * 64,
+        )
+        session.add_all([value, uk_policy, household, uk_household])
         session.flush()
         session.add_all(
             [
@@ -192,6 +200,7 @@ def v2_store() -> Iterator[V2Store]:
             policy_id=policy.id,
             uk_policy_id=uk_policy.id,
             household_id=household.id,
+            uk_household_id=uk_household.id,
         )
     try:
         yield store
