@@ -86,14 +86,16 @@ EOF
   cat "${RELOCK_SUMMARY_FILE}"
 }
 
+# --head matches the branch name in forks too; only this repository's branch
+# is the relock branch.
 open_pr="$(
   gh pr list \
     --repo "${GITHUB_REPOSITORY}" \
     --base "${base_branch}" \
     --head "${relock_branch}" \
     --state open \
-    --json number \
-    --jq '.[0].number // empty'
+    --json number,isCrossRepository \
+    --jq 'map(select(.isCrossRepository | not)) | .[0].number // empty'
 )"
 ISSUE_NUMBER=""
 find_or_open_tracking_issue
