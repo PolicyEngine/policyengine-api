@@ -1,0 +1,14 @@
+name: Relock
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+jobs:
+  relock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Relock
+        run: bash .github/scripts/relock.sh
+      - name: Open the pull request
+        run: bash .github/scripts/open_pull_request.sh
