@@ -1,3 +1,10 @@
+## [5.6.3] - 2026-10-21
+
+### Changed
+
+- Refactored the economy comparison and service, the reform-impact and budget-window caches, the SPM and worker-SPM modules and the household calculation service under ruff's complexity rules (C901, PLR): long functions are split into named steps, related arguments travel as small value objects, and magic numbers are named, with characterization tests pinning the behaviour first; responses, cache keys, stored records and published schemas are unchanged.
+
+
 ## [5.6.2] - 2026-10-21
 
 ### Changed
