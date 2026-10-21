@@ -1,1 +1,0 @@
-Stop trusting the compromised eMudhra (emSign) intermediate certificate authorities: upgrade certifi to 2026.10.19, refresh the Cloud Run image's operating-system CA bundle and point gRPC clients at it instead of the CA list bundled in grpcio, and raise uv to 0.13.4 and the observability collector image to 0.163.1.

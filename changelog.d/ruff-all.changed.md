@@ -1,1 +1,0 @@
-Selected every ruff rule (ALL) now that each rule family passes, ignoring only COM812 and ISC001, which conflict with ruff format, and D203 and D213, which conflict with the kept D211 and D212; the ruff-lint rule in the registry now names ALL, and published schemas and the HTTP API are unchanged.

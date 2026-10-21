@@ -1,3 +1,16 @@
+## [5.6.4] - 2026-10-21
+
+### Changed
+
+- Selected every ruff rule (ALL) now that each rule family passes, ignoring only COM812 and ISC001, which conflict with ruff format, and D203 and D213, which conflict with the kept D211 and D212; the ruff-lint rule in the registry now names ALL, and published schemas and the HTTP API are unchanged.
+- Refactored the rest of the application under ruff's complexity rules (C901, PLR): the ASGI shell, Flask migration logging, household and policy routes, v1 and v2 household translation and validation, saved-policy mirrors, catalog extraction and the metadata layers are split into named steps, related arguments travel as small value objects, and magic numbers are named, with characterization tests pinning the behaviour first; responses, error messages, logs and published schemas are unchanged.
+- Refactored the tests, the repository scripts and the rules tool under ruff's complexity rules (C901, PLR): long tests and script functions are split into named steps or helpers, related arguments travel as small value objects, and magic numbers are named, with characterization tests pinning the scripts' and rules tool's behaviour first; command output, test coverage and published schemas are unchanged.
+
+### Fixed
+
+- Stop trusting the compromised eMudhra (emSign) intermediate certificate authorities: upgrade certifi to 2026.10.19, refresh the Cloud Run image's operating-system CA bundle and point gRPC clients at it instead of the CA list bundled in grpcio, and raise uv to 0.13.4 and the observability collector image to 0.163.1.
+
+
 ## [5.6.3] - 2026-10-21
 
 ### Changed
