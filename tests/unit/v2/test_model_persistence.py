@@ -10,7 +10,9 @@ from sqlmodel import Session, create_engine, select
 
 from policyengine_api.data.v2.models import (
     V2_METADATA,
+    Country,
     Dynamic,
+    Household,
     LegacyPolicyMapping,
     LegacyUserMapping,
     LegacyUserPolicyMapping,
@@ -20,9 +22,11 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
     User,
+    UserHouseholdAssociation,
     UserPolicy,
 )
 from policyengine_api.data.v2.models.base import DIRECT_SQLALCHEMY_EXCEPTIONS
+from tests.fixtures.v2_countries import add_listed_countries
 
 
 def _relational_sqlite_engine():
@@ -35,6 +39,8 @@ def _relational_sqlite_engine():
         cursor.close()
 
     V2_METADATA.create_all(engine)
+    with Session(engine) as session:
+        add_listed_countries(session)
     return engine
 
 
@@ -99,9 +105,8 @@ def test_direct_sqlalchemy_categories_are_complete_and_documented() -> None:
     assert all(DIRECT_SQLALCHEMY_EXCEPTIONS.values())
 
 
-def test_user_primary_country_can_change_between_us_and_uk_only() -> None:
-    engine = create_engine("sqlite://")
-    V2_METADATA.create_all(engine)
+def test_user_primary_country_must_be_a_listed_country() -> None:
+    engine = _relational_sqlite_engine()
 
     with Session(engine) as session:
         user = User(
@@ -120,6 +125,73 @@ def test_user_primary_country_can_change_between_us_and_uk_only() -> None:
 
         user.primary_country = "ca"
         session.add(user)
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+    engine.dispose()
+
+
+def test_a_country_row_lets_records_use_a_household_only_country() -> None:
+    engine = _relational_sqlite_engine()
+    household_only_country = Country(
+        id="be",
+        household_enabled=True,
+        society_wide_enabled=False,
+    )
+
+    with Session(engine) as session:
+        session.add(User(primary_country="be"))
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        session.add(household_only_country)
+        session.commit()
+        user = User(primary_country="be")
+        household = Household(
+            country_id="be",
+            household_data={"people": {}},
+            canonicalization_version=1,
+            content_hash="b" * 64,
+        )
+        session.add_all([user, household])
+        session.flush()
+        session.add(
+            UserHouseholdAssociation(
+                user_id=user.id,
+                household_id=household.id,
+                country_id="be",
+            )
+        )
+        session.commit()
+
+        stored_country = session.exec(select(UserHouseholdAssociation.country_id)).one()
+        assert stored_country == "be"
+
+    engine.dispose()
+
+
+def test_a_listed_country_cannot_be_deleted_while_records_use_it() -> None:
+    engine = _relational_sqlite_engine()
+
+    with Session(engine) as session:
+        session.add(User(primary_country="uk"))
+        session.commit()
+
+        session.delete(session.get(Country, "uk"))
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+    engine.dispose()
+
+
+def test_a_society_wide_country_must_also_be_household_capable() -> None:
+    engine = _relational_sqlite_engine()
+
+    with Session(engine) as session:
+        session.add(
+            Country(id="be", household_enabled=False, society_wide_enabled=True)
+        )
         with pytest.raises(IntegrityError):
             session.commit()
 
