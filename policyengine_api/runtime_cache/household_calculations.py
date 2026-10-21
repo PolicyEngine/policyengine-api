@@ -1,7 +1,7 @@
 """Recoverable calculated-household result caching."""
 
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, TypeGuard
 
 from pydantic import ValidationError
 
@@ -74,36 +74,19 @@ class HouseholdCalculationCache:
         different SPM configuration than ``identity`` asks for is also a miss.
         """
         payload = self._cache.get(asdict(identity))
-        if not isinstance(payload, dict):
-            return None
-        household = payload.get("household")
-        warnings = payload.get("warnings")
-        if not isinstance(household, dict) or not isinstance(warnings, list):
-            return None
-        if not all(isinstance(warning, str) for warning in warnings):
-            return None
-        if "spm_config" in payload:
+        if not _is_well_formed_entry(payload):
             return None
         spm_provenance = payload.get("spm_provenance")
-        if spm_provenance is not None and not isinstance(spm_provenance, dict):
-            return None
         if identity.spm is None:
             if spm_provenance is not None:
                 return None
         else:
-            try:
-                receipt = validate_spm_calculation_provenance(spm_provenance)
-            except (ValidationError, ValueError):
+            spm_provenance = _certified_receipt(spm_provenance, identity.spm)
+            if spm_provenance is None:
                 return None
-            if (
-                resolved_spm_configuration(receipt).model_dump(mode="json")
-                != identity.spm
-            ):
-                return None
-            spm_provenance = receipt.model_dump(mode="json", by_alias=True)
         return CachedHouseholdCalculation(
-            household=household,
-            warnings=tuple(warnings),
+            household=payload["household"],
+            warnings=tuple(payload["warnings"]),
             spm_provenance=spm_provenance,
         )
 
@@ -130,3 +113,36 @@ class HouseholdCalculationCache:
         payload = asdict(value)
         payload["spm_provenance"] = receipt.model_dump(mode="json", by_alias=True)
         return self._cache.set(asdict(identity), payload)
+
+
+def _is_well_formed_entry(payload: object) -> TypeGuard[dict[str, Any]]:
+    """Return whether a cached payload has the current calculated-household shape.
+
+    That is a household object, a list of string warnings, no legacy
+    ``spm_config`` and an SPM receipt that is an object when present.
+    """
+    if not isinstance(payload, dict):
+        return False
+    household = payload.get("household")
+    warnings = payload.get("warnings")
+    if not isinstance(household, dict) or not isinstance(warnings, list):
+        return False
+    if not all(isinstance(warning, str) for warning in warnings):
+        return False
+    if "spm_config" in payload:
+        return False
+    spm_provenance = payload.get("spm_provenance")
+    return spm_provenance is None or isinstance(spm_provenance, dict)
+
+
+def _certified_receipt(
+    spm_provenance: dict[str, Any] | None, expected_spm: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Return the receipt in canonical form, or None unless it certifies the SPM."""
+    try:
+        receipt = validate_spm_calculation_provenance(spm_provenance)
+    except (ValidationError, ValueError):
+        return None
+    if resolved_spm_configuration(receipt).model_dump(mode="json") != expected_spm:
+        return None
+    return receipt.model_dump(mode="json", by_alias=True)

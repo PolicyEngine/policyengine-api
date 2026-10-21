@@ -10,6 +10,10 @@ from typing_extensions import override
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+# The claim store's compare-and-delete script takes one key and one argument:
+# the token the key must still hold.
+COMPARE_AND_DELETE_ARGUMENT_COUNT = 2
+
 
 class InMemoryCacheBackend:
     """Small Redis-like fake with explicit time advancement and atomic pipelines."""
@@ -160,7 +164,7 @@ class InMemoryCacheBackend:
         The script text is ignored: delete the one key if it still holds the
         expected token, and raise ValueError for any other key/argument shape.
         """
-        if numkeys != 1 or len(keys_and_args) != 2:
+        if numkeys != 1 or len(keys_and_args) != COMPARE_AND_DELETE_ARGUMENT_COUNT:
             msg = "fake supports one-key compare-and-delete only"
             raise ValueError(msg)
         key, expected = keys_and_args

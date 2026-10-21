@@ -12,8 +12,12 @@ from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
 from policyengine_api.services import economy_service as economy_module
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
+from policyengine_api.services.economic_impact_request import EconomicImpactRequest
 from policyengine_api.services.economy_service import EconomyService
-from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from policyengine_api.services.reform_impacts_service import (
+    ReformImpactExecution,
+    ReformImpactsService,
+)
 
 SELECTION = {
     "forecast_content_sha256": "a" * 64,
@@ -150,14 +154,16 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
 
     with httpx.Client(transport=httpx.MockTransport(transport)) as gateway.client:
         setup = service._build_economic_impact_setup_options(
-            country_id="us",
-            policy_id=1,
-            baseline_policy_id=2,
-            region="us",
-            dataset="default",
+            EconomicImpactRequest(
+                country_id="us",
+                policy_id=1,
+                baseline_policy_id=2,
+                region="us",
+                dataset="default",
+                options={},
+                api_version="1.0.0",
+            ),
             time_period="budget_window:2035:2" if budget_window else "2036",
-            options={},
-            api_version="1.0.0",
         )
         if budget_window:
             cache_key = service._build_budget_window_cache_key(setup)
@@ -171,19 +177,11 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
         else:
             service._resolve_runtime_bundle_for_setup_options(setup)
             annual_impacts.set_reform_impact(
-                country_id=setup.country_id,
-                policy_id=setup.reform_policy_id,
-                baseline_policy_id=setup.baseline_policy_id,
-                region=setup.region,
-                dataset=setup.dataset,
-                time_period=setup.time_period,
+                service._reform_impact_identity(setup),
+                ReformImpactExecution(execution_id=job_id, start_time=None),
                 options=setup.options,
-                options_hash=setup.options_hash,
                 status="computing",
-                api_version=setup.api_version,
                 reform_impact_json={},
-                start_time=None,
-                execution_id=job_id,
             )
             url = "/us/economy/1/over/2"
             query = {"time_period": "2036"}
@@ -310,14 +308,16 @@ def test_an_uncertifiable_stored_result_becomes_terminal_instead_of_repeating(
     # this build cannot certify, exactly as a worker defect would leave it.
     with httpx.Client(transport=httpx.MockTransport(transport)) as gateway.client:
         setup = service._build_economic_impact_setup_options(
-            country_id="us",
-            policy_id=1,
-            baseline_policy_id=2,
-            region="us",
-            dataset="default",
+            EconomicImpactRequest(
+                country_id="us",
+                policy_id=1,
+                baseline_policy_id=2,
+                region="us",
+                dataset="default",
+                options={},
+                api_version="1.0.0",
+            ),
             time_period="budget_window:2035:2" if budget_window else "2036",
-            options={},
-            api_version="1.0.0",
         )
         if budget_window:
             cache_key = service._build_budget_window_cache_key(setup)
@@ -338,19 +338,11 @@ def test_an_uncertifiable_stored_result_becomes_terminal_instead_of_repeating(
         else:
             service._resolve_runtime_bundle_for_setup_options(setup)
             annual_impacts.set_reform_impact(
-                country_id=setup.country_id,
-                policy_id=setup.reform_policy_id,
-                baseline_policy_id=setup.baseline_policy_id,
-                region=setup.region,
-                dataset=setup.dataset,
-                time_period=setup.time_period,
+                service._reform_impact_identity(setup),
+                ReformImpactExecution(execution_id=job_id, start_time=None),
                 options=setup.options,
-                options_hash=setup.options_hash,
                 status="ok",
-                api_version=setup.api_version,
                 reform_impact_json=segmented_result("2036", "reform"),
-                start_time=None,
-                execution_id=job_id,
             )
             url = "/us/economy/1/over/2"
             query = {"time_period": "2036"}

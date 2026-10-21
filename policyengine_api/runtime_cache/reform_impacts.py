@@ -58,6 +58,31 @@ class ReformImpactStartClaim:
 
 
 @dataclass(frozen=True)
+class ReformImpactScope:
+    """The policy pair, region, dataset and period a reform impact is computed for."""
+
+    country_id: str
+    reform_policy_id: int
+    baseline_policy_id: int
+    region: str
+    dataset: str
+    time_period: str
+
+
+@dataclass(frozen=True)
+class ReformImpactIdentity:
+    """Everything that identifies one cached reform impact calculation.
+
+    ``api_version`` is the cache generation and ``options_hash`` identifies the
+    calculation options and runtime bundle.
+    """
+
+    scope: ReformImpactScope
+    api_version: str
+    options_hash: str | None
+
+
+@dataclass(frozen=True)
 class CachedReformImpact:
     """An economy-impact job and its result, shaped like a legacy reform_impact row.
 
@@ -175,32 +200,21 @@ class ReformImpactCache:
         self.namespace = namespace
         self._start_claims = ExpiringClaimStore(client, family=self.family)
 
-    def _start_claim_key(
-        self,
-        *,
-        country_id: str,
-        reform_policy_id: int,
-        baseline_policy_id: int,
-        region: str,
-        dataset: str,
-        time_period: str,
-        api_version: str,
-        options_hash: str,
-        target: str,
-    ) -> str:
+    def _start_claim_key(self, identity: ReformImpactIdentity, target: str) -> str:
+        scope = identity.scope
         return self.namespace.key(
             REFORM_IMPACT_START_CLAIM_FAMILY,
             REFORM_IMPACT_SCHEMA_VERSION,
             {
-                "api_version": api_version,
-                "baseline_policy_id": baseline_policy_id,
-                "country_id": country_id,
-                "dataset": dataset,
-                "options_hash": options_hash,
-                "reform_policy_id": reform_policy_id,
-                "region": region,
+                "api_version": identity.api_version,
+                "baseline_policy_id": scope.baseline_policy_id,
+                "country_id": scope.country_id,
+                "dataset": scope.dataset,
+                "options_hash": identity.options_hash,
+                "reform_policy_id": scope.reform_policy_id,
+                "region": scope.region,
                 "target": target,
-                "time_period": time_period,
+                "time_period": scope.time_period,
             },
         )
 
@@ -214,15 +228,8 @@ class ReformImpactCache:
 
     def claim_start(
         self,
+        identity: ReformImpactIdentity,
         *,
-        country_id: str,
-        reform_policy_id: int,
-        baseline_policy_id: int,
-        region: str,
-        dataset: str,
-        time_period: str,
-        api_version: str,
-        options_hash: str,
         target: str,
         claim_token: str,
         observability_id: str,
@@ -238,47 +245,20 @@ class ReformImpactCache:
             msg = "a claim token and valid observability identifier are required"
             raise ValueError(msg)
         return self._start_claims.acquire(
-            self._start_claim_key(
-                country_id=country_id,
-                reform_policy_id=reform_policy_id,
-                baseline_policy_id=baseline_policy_id,
-                region=region,
-                dataset=dataset,
-                time_period=time_period,
-                api_version=api_version,
-                options_hash=options_hash,
-                target=target,
-            ),
+            self._start_claim_key(identity, target),
             self._encoded_start_claim(claim),
             ttl_seconds=REFORM_IMPACT_START_CLAIM_TTL_SECONDS,
         )
 
     def get_start_claim(
         self,
+        identity: ReformImpactIdentity,
         *,
-        country_id: str,
-        reform_policy_id: int,
-        baseline_policy_id: int,
-        region: str,
-        dataset: str,
-        time_period: str,
-        api_version: str,
-        options_hash: str,
         target: str,
     ) -> ReformImpactStartClaim | None:
         """Read the current submission owner and its diagnostic identifier."""
         started_at = time.perf_counter()
-        key = self._start_claim_key(
-            country_id=country_id,
-            reform_policy_id=reform_policy_id,
-            baseline_policy_id=baseline_policy_id,
-            region=region,
-            dataset=dataset,
-            time_period=time_period,
-            api_version=api_version,
-            options_hash=options_hash,
-            target=target,
-        )
+        key = self._start_claim_key(identity, target)
         try:
             encoded = self.client.get(key)
         except Exception as error:
@@ -319,15 +299,8 @@ class ReformImpactCache:
 
     def release_start(
         self,
+        identity: ReformImpactIdentity,
         *,
-        country_id: str,
-        reform_policy_id: int,
-        baseline_policy_id: int,
-        region: str,
-        dataset: str,
-        time_period: str,
-        api_version: str,
-        options_hash: str,
         target: str,
         claim_token: str,
         observability_id: str,
@@ -344,17 +317,7 @@ class ReformImpactCache:
             raise ValueError(msg)
 
         return self._start_claims.release(
-            self._start_claim_key(
-                country_id=country_id,
-                reform_policy_id=reform_policy_id,
-                baseline_policy_id=baseline_policy_id,
-                region=region,
-                dataset=dataset,
-                time_period=time_period,
-                api_version=api_version,
-                options_hash=options_hash,
-                target=target,
-            ),
+            self._start_claim_key(identity, target),
             self._encoded_start_claim(claim),
         )
 
@@ -484,15 +447,8 @@ class ReformImpactCache:
 
     def matching(
         self,
+        identity: ReformImpactIdentity,
         *,
-        country_id: str,
-        reform_policy_id: int,
-        baseline_policy_id: int,
-        region: str,
-        dataset: str,
-        time_period: str,
-        api_version: str,
-        options_hash: str,
         options_hash_pattern: str | None = None,
     ) -> list[CachedReformImpact]:
         """Return the cached impacts for one policy pair and scope, best match first.
@@ -501,17 +457,19 @@ class ReformImpactCache:
         ``options_hash_pattern``, a SQL ``LIKE`` pattern; ties go to the most
         recently started. Only the scope index's newest 1,000 entries are read.
         """
+        scope = identity.scope
+        options_hash = identity.options_hash
         probe = CachedReformImpact(
             reform_impact_id=0,
-            baseline_policy_id=baseline_policy_id,
-            reform_policy_id=reform_policy_id,
-            country_id=country_id,
-            region=region,
-            dataset=dataset,
-            time_period=time_period,
+            baseline_policy_id=scope.baseline_policy_id,
+            reform_policy_id=scope.reform_policy_id,
+            country_id=scope.country_id,
+            region=scope.region,
+            dataset=scope.dataset,
+            time_period=scope.time_period,
             options_json=None,
             options_hash=options_hash,
-            api_version=api_version,
+            api_version=identity.api_version,
             reform_impact_json={},
             status="",
             message=None,
@@ -565,13 +523,8 @@ class ReformImpactCache:
 
     def delete_matching_computing(
         self,
+        scope: ReformImpactScope,
         *,
-        country_id: str,
-        reform_policy_id: int,
-        baseline_policy_id: int,
-        region: str,
-        dataset: str,
-        time_period: str,
         options_hash: str,
     ) -> None:
         """Remove in-flight (``computing``) impacts for this scope and options.
@@ -584,12 +537,12 @@ class ReformImpactCache:
         selected = [
             impact
             for impact in impacts
-            if impact.country_id == country_id
-            and impact.reform_policy_id == reform_policy_id
-            and impact.baseline_policy_id == baseline_policy_id
-            and impact.region == region
-            and impact.dataset == dataset
-            and impact.time_period == time_period
+            if impact.country_id == scope.country_id
+            and impact.reform_policy_id == scope.reform_policy_id
+            and impact.baseline_policy_id == scope.baseline_policy_id
+            and impact.region == scope.region
+            and impact.dataset == scope.dataset
+            and impact.time_period == scope.time_period
             and impact.options_hash == options_hash
             and impact.status == "computing"
         ]

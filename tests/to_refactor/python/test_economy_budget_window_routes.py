@@ -149,6 +149,10 @@ def test_budget_window_route_rejects_end_year_after_2099(api_client):
 def test_budget_window_route_passes_version_to_service(
     mock_get_budget_window_economic_impact, api_client
 ):
+    from policyengine_api.services.economic_impact_request import (
+        EconomicImpactRequest,
+    )
+
     mock_result = _mock_budget_window_result()
     mock_get_budget_window_economic_impact.return_value = mock_result
 
@@ -162,16 +166,18 @@ def test_budget_window_route_passes_version_to_service(
     assert response.status_code == 200
     assert data["status"] == "ok"
     mock_get_budget_window_economic_impact.assert_called_once_with(
-        country_id="us",
-        policy_id=123,
-        baseline_policy_id=456,
-        region="us",
-        dataset="default",
+        impact_request=EconomicImpactRequest(
+            country_id="us",
+            policy_id=123,
+            baseline_policy_id=456,
+            region="us",
+            dataset="default",
+            options={},
+            api_version="1.2.3",
+            target="general",
+        ),
         start_year="2026",
         window_size=2,
-        options={},
-        api_version="1.2.3",
-        target="general",
     )
 
 

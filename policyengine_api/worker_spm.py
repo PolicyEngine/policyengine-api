@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 from policyengine_api.spm import (
+    CALENDAR_YEAR_LENGTH,
     SPMComparisonProvenance,
     SPMSelection,
     SPMValidationError,
@@ -129,38 +130,58 @@ def _check_worker_result(
         if expected_year is not None:
             msg = "Expected an annual SPM result"
             raise ValueError(msg)
-        rows = result.get("annualImpacts")
-        size = result.get("windowSize")
-        if type(size) is not int or size < 1:
-            msg = "Budget window size must be a positive integer"
-            raise ValueError(msg)
-        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
-            msg = "Budget window annual impacts must be objects"
-            raise ValueError(msg)
-        if len(rows) != size:
-            msg = "Budget window has incomplete SPM receipts"
-            raise ValueError(msg)
-        actual = [str(row.get("year")) for row in rows]
-        if any(
-            len(year) != 4 or not year.isascii() or not year.isdigit()
-            for year in actual
-        ):
-            msg = "Budget window annual impacts require calendar years"
-            raise ValueError(msg)
-        if len(set(actual)) != len(actual):
-            msg = "Budget window SPM result years differ from request"
-            raise ValueError(msg)
-        if expected_years is not None:
-            wanted = [str(year) for year in expected_years]
-            if actual != wanted:
-                msg = "Budget window SPM result years differ from request"
-                raise ValueError(msg)
+        rows = _budget_window_rows(result)
+        _check_budget_window_years(rows, expected_years)
         for row in rows:
             validate_worker_result(row, selection, expected_year=row.get("year"))
         return
     if expected_years is not None:
         msg = "Expected a budget window SPM result"
         raise ValueError(msg)
+    _check_annual_receipts(result, selection, expected_year=expected_year)
+
+
+def _budget_window_rows(result: dict) -> list[dict]:
+    """Return a budget window's annual results; raise ValueError if any is missing."""
+    rows = result.get("annualImpacts")
+    size = result.get("windowSize")
+    if type(size) is not int or size < 1:
+        msg = "Budget window size must be a positive integer"
+        raise ValueError(msg)
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        msg = "Budget window annual impacts must be objects"
+        raise ValueError(msg)
+    if len(rows) != size:
+        msg = "Budget window has incomplete SPM receipts"
+        raise ValueError(msg)
+    return rows
+
+
+def _check_budget_window_years(
+    rows: list[dict], expected_years: list[str] | None
+) -> None:
+    """Raise ValueError unless each row has a distinct, requested calendar year."""
+    actual = [str(row.get("year")) for row in rows]
+    if any(
+        len(year) != CALENDAR_YEAR_LENGTH or not year.isascii() or not year.isdigit()
+        for year in actual
+    ):
+        msg = "Budget window annual impacts require calendar years"
+        raise ValueError(msg)
+    if len(set(actual)) != len(actual):
+        msg = "Budget window SPM result years differ from request"
+        raise ValueError(msg)
+    if expected_years is not None:
+        wanted = [str(year) for year in expected_years]
+        if actual != wanted:
+            msg = "Budget window SPM result years differ from request"
+            raise ValueError(msg)
+
+
+def _check_annual_receipts(
+    result: dict, selection: dict, *, expected_year: str | int | None
+) -> None:
+    """Raise unless both receipts resolve to the selection and cover the year."""
     if "spm_config" in result:
         msg = "Worker result must not include legacy spm_config"
         raise ValueError(msg)
