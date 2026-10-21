@@ -5,6 +5,9 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+# A fragment named "<issue>.<category>.md" has at least two dot-separated stem parts.
+STEM_PARTS_WITH_CATEGORY = 2
+
 
 def _report(message: str, *, file: TextIO | None = None) -> None:
     """Print one line of this command's output, to stdout unless ``file`` is given."""
@@ -40,7 +43,7 @@ def infer_bump(changelog_dir: Path) -> str:
     categories = {f.suffix.lstrip(".") for f in fragments}
     for f in fragments:
         parts = f.stem.split(".")
-        if len(parts) >= 2:
+        if len(parts) >= STEM_PARTS_WITH_CATEGORY:
             categories.add(parts[-1])
 
     if "breaking" in categories:

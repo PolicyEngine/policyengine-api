@@ -7,12 +7,15 @@ from uuid import UUID
 
 import pytest
 from sqlalchemy import Engine
+from sqlalchemy.engine import URL
+from sqlalchemy.pool import NullPool
 
 from policyengine_api.services.v2.households.types import (
     LegacyHouseholdPersistenceResult,
 )
 from scripts import process_v1_household_mirror_event as command
 
+PROXY_PASSWORD = "proxy-password"
 STAGING_ENVIRONMENT = {
     "DEPLOYMENT_ENVIRONMENT": "staging",
     "V2_SUPABASE_ENVIRONMENT": "staging",
@@ -192,3 +195,233 @@ def test_command_redacts_processing_failure_and_records_error(
     assert "secret" not in error_output
     assert "private-host" not in error_output
     assert audit.call_args.args[0]["outcome"] == "error"
+
+
+def _staging_identity_fields() -> dict[str, str]:
+    return {
+        "environment": "staging",
+        "cloud_sql_instance": "project:region:staging-db",
+        "supabase_project_ref": "abcdefghijklmnopqrst",
+        "operator_identity": "stage11-operator@example.iam",
+    }
+
+
+def _run_staging_command(
+    environ: dict[str, str], legacy_household_id: str = "42"
+) -> int:
+    return command.main(
+        [
+            "--environment",
+            "staging",
+            "--country-id",
+            "us",
+            "--legacy-household-id",
+            legacy_household_id,
+        ],
+        environ=environ,
+    )
+
+
+def test_success_audit_record_lists_every_field(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    destination_id = UUID("00000000-0000-0000-0000-000000000012")
+    monkeypatch.setattr(
+        command,
+        "process_household_event_after_commit",
+        Mock(
+            return_value=LegacyHouseholdPersistenceResult(
+                household_id=destination_id,
+                household_created=True,
+                mapping_created=False,
+            )
+        ),
+    )
+    audit = Mock()
+    monkeypatch.setattr(command.logger, "log_struct", audit)
+
+    assert _run_staging_command(STAGING_ENVIRONMENT) == 0
+
+    audit.assert_called_once_with(
+        {
+            "message": "Explicit v1 household create-event processing completed",
+            "metric_name": "v1_household_event_operator_operations",
+            "metric_value": 1,
+            **_staging_identity_fields(),
+            "country_id": "us",
+            "legacy_household_id": 42,
+            "destination_household_id": str(destination_id),
+            "outcome": "ok",
+            "error_type": None,
+        },
+        severity="INFO",
+    )
+    assert capsys.readouterr().out == (
+        '{"country_id": "us", "destination_household_id": '
+        '"00000000-0000-0000-0000-000000000012", "environment": "staging", '
+        '"household_created": true, "legacy_household_id": 42, '
+        '"mapping_created": false, "outcome": "ok"}\n'
+    )
+
+
+def test_failure_audit_record_names_only_the_error_type(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        command,
+        "process_household_event_after_commit",
+        Mock(side_effect=LookupError("secret detail")),
+    )
+    audit = Mock()
+    monkeypatch.setattr(command.logger, "log_struct", audit)
+
+    assert _run_staging_command(STAGING_ENVIRONMENT) == 1
+
+    audit.assert_called_once_with(
+        {
+            "message": "Explicit v1 household create-event processing completed",
+            "metric_name": "v1_household_event_operator_operations",
+            "metric_value": 1,
+            **_staging_identity_fields(),
+            "country_id": "us",
+            "legacy_household_id": 42,
+            "destination_household_id": None,
+            "outcome": "error",
+            "error_type": "LookupError",
+        },
+        severity="ERROR",
+    )
+    assert capsys.readouterr().err == (
+        '{"country_id": "us", "error": {"message": "household create-event '
+        'processing failed", "type": "LookupError"}, "legacy_household_id": 42, '
+        '"outcome": "error"}\n'
+    )
+
+
+def test_configuration_failure_audit_record_has_no_identity(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    audit = Mock()
+    monkeypatch.setattr(command.logger, "log_struct", audit)
+    environ = {**STAGING_ENVIRONMENT, "DEPLOYMENT_ENVIRONMENT": ""}
+
+    assert _run_staging_command(environ, legacy_household_id="7") == 1
+
+    audit.assert_called_once_with(
+        {
+            "message": "Explicit v1 household create-event processing completed",
+            "metric_name": "v1_household_event_operator_operations",
+            "metric_value": 1,
+            "environment": None,
+            "cloud_sql_instance": None,
+            "supabase_project_ref": None,
+            "operator_identity": None,
+            "country_id": "us",
+            "legacy_household_id": 7,
+            "destination_household_id": None,
+            "outcome": "error",
+            "error_type": "HouseholdEventCommandConfigurationError",
+        },
+        severity="ERROR",
+    )
+    assert capsys.readouterr().err == (
+        '{"country_id": "us", "error": {"message": "DEPLOYMENT_ENVIRONMENT is '
+        'required", "type": "HouseholdEventCommandConfigurationError"}, '
+        '"legacy_household_id": 7, "outcome": "error"}\n'
+    )
+
+
+def test_audit_failure_does_not_change_the_command_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        command,
+        "process_household_event_after_commit",
+        Mock(
+            return_value=LegacyHouseholdPersistenceResult(
+                household_id=UUID("00000000-0000-0000-0000-000000000013"),
+                household_created=True,
+                mapping_created=True,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        command.logger, "log_struct", Mock(side_effect=RuntimeError("log down"))
+    )
+
+    assert _run_staging_command(STAGING_ENVIRONMENT) == 0
+
+
+@pytest.mark.parametrize("raw_port", ["", "   "])
+def test_proxy_is_not_used_without_a_port(raw_port: str) -> None:
+    assert command._proxy_event_service({"POLICYENGINE_DB_PROXY_PORT": raw_port}) == (
+        None,
+        None,
+    )
+    assert command._proxy_event_service({}) == (None, None)
+
+
+@pytest.mark.parametrize(
+    ("raw_port", "message"),
+    [
+        ("proxy", "POLICYENGINE_DB_PROXY_PORT must be an integer"),
+        ("0", "POLICYENGINE_DB_PROXY_PORT is outside the valid range"),
+        ("65536", "POLICYENGINE_DB_PROXY_PORT is outside the valid range"),
+        ("-1", "POLICYENGINE_DB_PROXY_PORT is outside the valid range"),
+    ],
+)
+def test_proxy_port_must_be_a_valid_tcp_port(raw_port: str, message: str) -> None:
+    with pytest.raises(
+        command.HouseholdEventCommandConfigurationError, match=f"^{message}$"
+    ):
+        command._proxy_event_service(
+            {
+                "POLICYENGINE_DB_PROXY_PORT": raw_port,
+                "POLICYENGINE_DB_PASSWORD": PROXY_PASSWORD,
+            }
+        )
+
+
+@pytest.mark.parametrize(("raw_port", "port"), [("1", 1), (" 65535 ", 65535)])
+def test_proxy_connects_as_the_migration_user(
+    monkeypatch: pytest.MonkeyPatch, raw_port: str, port: int
+) -> None:
+    engine = Mock(spec=Engine)
+    create_engine = Mock(return_value=engine)
+    session_factory = Mock()
+    build_session_factory = Mock(return_value=session_factory)
+    household_service = Mock()
+    monkeypatch.setattr(command, "create_engine", create_engine)
+    monkeypatch.setattr(command, "build_session_factory", build_session_factory)
+    monkeypatch.setattr(command, "HouseholdService", household_service)
+
+    service, returned_engine = command._proxy_event_service(
+        {
+            "POLICYENGINE_DB_PROXY_PORT": raw_port,
+            "POLICYENGINE_DB_PASSWORD": PROXY_PASSWORD,
+        }
+    )
+
+    assert returned_engine is engine
+    assert service is household_service.return_value
+    household_service.assert_called_once_with(session_factory)
+    build_session_factory.assert_called_once_with(engine)
+    create_engine.assert_called_once_with(
+        URL.create(
+            "mysql+pymysql",
+            username="policyengine_schema_migrator",
+            password=PROXY_PASSWORD,
+            host="127.0.0.1",
+            port=port,
+            database="policyengine",
+        ),
+        poolclass=NullPool,
+    )
+
+
+def test_proxy_requires_the_database_password() -> None:
+    with pytest.raises(
+        command.HouseholdEventCommandConfigurationError,
+        match=r"^POLICYENGINE_DB_PASSWORD is required$",
+    ):
+        command._proxy_event_service({"POLICYENGINE_DB_PROXY_PORT": "3307"})

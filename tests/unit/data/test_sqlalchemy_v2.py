@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import sqlalchemy
 
-import policyengine_api.data.orm as orm
+from policyengine_api.data import orm
 
 
 def test_sqlalchemy_v2_or_newer_is_installed():

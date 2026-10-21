@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -36,28 +37,32 @@ def _strategy(field: str, value: str | int) -> SimpleNamespace:
     )
 
 
-def _region(
-    *,
-    code: str,
-    label: str,
-    region_type: str,
-    parent_code: str | None = None,
-    dataset_path: str | None = None,
-    strategy: SimpleNamespace | None = None,
-    state_code: str | None = None,
-    state_name: str | None = None,
-) -> SimpleNamespace:
-    return SimpleNamespace(
-        code=code,
-        label=label,
-        region_type=region_type,
-        parent_code=parent_code,
-        dataset_path=dataset_path,
-        scoping_strategy=strategy,
-        requires_filter=strategy is not None,
-        state_code=state_code,
-        state_name=state_name,
-    )
+@dataclass(frozen=True, kw_only=True)
+class _Region:
+    """One public region; ``source`` gives the mutable object the registry holds."""
+
+    code: str
+    label: str
+    region_type: str
+    parent_code: str | None = None
+    dataset_path: str | None = None
+    strategy: SimpleNamespace | None = None
+    state_code: str | None = None
+    state_name: str | None = None
+
+    def source(self) -> SimpleNamespace:
+        """Return the region as a registry entry; it needs a filter if scoped."""
+        return SimpleNamespace(
+            code=self.code,
+            label=self.label,
+            region_type=self.region_type,
+            parent_code=self.parent_code,
+            dataset_path=self.dataset_path,
+            scoping_strategy=self.strategy,
+            requires_filter=self.strategy is not None,
+            state_code=self.state_code,
+            state_name=self.state_name,
+        )
 
 
 def bundle(*, policyengine_version: str = POLICYENGINE_VERSION) -> dict:
@@ -165,13 +170,13 @@ def source_models(
             country_package_version=DEPENDENCY_VERSIONS["policyengine-us"],
             policyengine_version=policyengine_version,
             regions=[
-                _region(
+                _Region(
                     code="us",
                     label="United States",
                     region_type="national",
                     dataset_path=us_default_uri,
-                ),
-                _region(
+                ).source(),
+                _Region(
                     code="state/ca",
                     label="California",
                     region_type="state",
@@ -180,15 +185,15 @@ def source_models(
                     strategy=_strategy("state_fips", 6),
                     state_code="CA",
                     state_name="California",
-                ),
-                _region(
+                ).source(),
+                _Region(
                     code="place/CA-44000",
                     label="Los Angeles",
                     region_type="place",
                     parent_code="state/ca",
                     state_code="CA",
                     state_name="California",
-                ),
+                ).source(),
             ],
         ),
         "uk": _model_source(
@@ -196,19 +201,19 @@ def source_models(
             country_package_version=DEPENDENCY_VERSIONS["policyengine-uk"],
             policyengine_version=policyengine_version,
             regions=[
-                _region(
+                _Region(
                     code="uk",
                     label="United Kingdom",
                     region_type="national",
                     dataset_path=uk_default_uri,
-                ),
-                _region(
+                ).source(),
+                _Region(
                     code="country/england",
                     label="England",
                     region_type="country",
                     parent_code="uk",
                     strategy=_strategy("country", "ENGLAND"),
-                ),
+                ).source(),
             ],
         ),
     }

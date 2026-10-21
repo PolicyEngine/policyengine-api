@@ -1,0 +1,41 @@
+[registry] schema: agents file MISSING.md does not exist. Fix: fix [agents] or create the file.
+[registry] schema: ci_scripts.scripts_dir .github/scripts does not exist. Fix: fix [ci_scripts].
+[registry] schema: ci_scripts baseline rules/baselines/missing-untested.txt does not exist. Fix: create it (it may be empty).
+[registry] schema: ci_scripts baseline rules/baselines/missing-shellcheck.txt does not exist. Fix: create it (it may be empty).
+[registry] schema: duplicate category 'layers'. Fix: give each category a unique id.
+[ex.layers.no-sql-in-routes] schema: duplicate rule id. Fix: give each rule a unique id.
+[Bad_ID] schema: id must be lowercase dotted, e.g. 'api.v2.routes-no-sql'. Fix: rename the rule.
+[Bad_ID] schema: unknown category 'nowhere'. Fix: use one of ['layers', 'quality', 'layers'] or add a [[category]].
+[Bad_ID] schema: rationale docs/missing.md does not exist. Fix: link an existing doc.
+[Bad_ID] schema: scope 'nothing/**/*.py' matches no files. Fix: fix the glob.
+[Bad_ID] schema: unknown key 'extra' in enforcer (ruff). Fix: remove it; allowed: ['codes', 'config', 'mode', 'pattern'].
+[Bad_ID] schema: ruff per-file-ignore needs codes. Fix: list the ruff codes.
+[Bad_ID] schema: ruff per-file-ignore needs a pattern. Fix: set pattern.
+[Bad_ID] schema: doc-only rules have no enforcer. Fix: set enforcer.kind = "none", or pick a stronger status.
+[Bad_ID] schema: doc-only rules have no CI wiring. Fix: remove rule.ci, or pick a stronger status.
+[Bad_ID] schema: only ratcheted rules may have a baseline. Fix: remove [rule.baseline] or set status = "ratcheted".
+[Bad_ID] schema: ruff is never ratcheted. Fix: remove the baseline and fix every violation in a standalone PR that also changes the ruff select list.
+[Bad_ID] schema: judgment rules are enforced by review, not by a mechanical checker. Fix: use enforcer.kind = "llm-review" or "none".
+[Bad_ID] baseline: baseline file rules/baselines/missing.txt does not exist. Fix: create it.
+[Bad_ID] expiry: review_by 2026-05-01 has passed. Fix: review the rule, then remove or extend review_by.
+[Bad_ID] expiry: exception for nothing/*.py expired on 2026-01-01. Fix: remove the exception (fix the code) or extend it with a reason.
+[Bad_ID] schema: exception path 'nothing/*.py' matches no files. Fix: remove the stale exception.
+[ex.quality.unenforced] schema: status ratcheted needs an enforcer. Fix: add [rule.enforcer] or use doc-only/advisory.
+[ex.quality.unenforced] schema: ratcheted rules must run in CI. Fix: add a [[rule.ci]] reference.
+[ex.quality.unenforced] schema: ratcheted rules need a baseline. Fix: add [rule.baseline] or use enforced.
+[ex.quality.review-only] schema: enforcer (llm-review).prompt has the wrong type. Fix: make it a <class 'str'>.
+[ex.quality.review-only] schema: enforcer (llm-review) is missing 'model'. Fix: add model.
+[ex.quality.review-only] schema: llm-review only enforces judgment rules. Fix: set tier = "judgment".
+[ex.quality.review-only] schema: proof names its CI job only partly. Fix: set all of proof.workflow, proof.job and proof.invocation, or none.
+[ex.quality.review-only] proof: proof bad_fixture fixtures/bad.py does not exist. Fix: add the fixture or fix the path.
+[ex.quality.review-only] proof: tests/unit/test_boundaries.py has no test 'test_missing'. Fix: point proof.test at the test that runs the fixtures.
+[ex.quality.pytest-empty] schema: pytest enforcer has no nodes. Fix: list at least one test node.
+[ex.quality.pytest-empty] schema: proof (metric).threshold has the wrong type. Fix: make it a (<class 'int'>, <class 'float'>).
+[ex.quality.pytest-empty] proof: proof above_fixture fixtures/above.py does not exist. Fix: add the fixture or fix the path.
+[ex.quality.ruff-modes] schema: ruff lint needs codes. Fix: list the ruff codes.
+[ex.quality.ruff-modes] schema: only ratcheted rules may have a baseline. Fix: remove [rule.baseline] or set status = "ratcheted".
+[ex.quality.ruff-modes] schema: ruff is never ratcheted. Fix: remove the baseline and fix every violation in a standalone PR that also changes the ruff select list.
+[ex.quality.ruff-modes] baseline: baseline count is 3 but rules/baselines/ruff.txt lists 2. Fix: make the count match the file.
+[ex.quality.ruff-bad-mode] schema: ruff mode is 'fix'. Fix: use one of ['format', 'lint', 'per-file-ignore'].
+[ex.quality.judged] schema: proof (judgment).measured_precision has the wrong type. Fix: make it a <class 'float'>.
+[ex.quality.judged] proof: proof eval_set evals/missing.jsonl does not exist. Fix: add the fixture or fix the path.

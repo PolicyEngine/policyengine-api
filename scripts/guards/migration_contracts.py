@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +60,45 @@ def _check_route_groups(payload: dict[str, Any]) -> list[str]:
     return violations
 
 
+def _request_key(request: dict[str, Any]) -> str:
+    """Key a request by method, path and credential headers.
+
+    One route may be recorded once per credential that can call it.
+    """
+    headers = request.get("headers", [])
+    return " ".join((request["method"], request["path"], *sorted(headers)))
+
+
+def _request_violations(
+    workflow_name: str,
+    request: dict[str, Any],
+    declared_route_groups: set[str],
+) -> list[str]:
+    """Return one contract request's problems, in the order they are checked."""
+    violations = []
+    headers = request.get("headers", [])
+    context = f"{workflow_name} {request['method']} {request['path']}"
+    if request["route_group"] not in declared_route_groups:
+        violations.append(f"{context}: unknown route_group {request['route_group']!r}")
+    if (
+        not request["stable_response_fields"]
+        and request["expected_status"] != HTTPStatus.NO_CONTENT
+    ):
+        violations.append(f"{context}: stable_response_fields is required")
+    if not request["path"].startswith("/"):
+        violations.append(f"{context}: path must start with /")
+    if request["path"].startswith(
+        USER_OWNED_PATH_PREFIXES
+    ) and USER_CREDENTIAL_HEADERS.isdisjoint(headers):
+        violations.append(
+            f"{context}: user-owned routes must require the "
+            f"{AUTHORIZATION_HEADER} or {UNAUTHENTICATED_USER_HEADER} header"
+        )
+    if request["expected_status"] not in {200, 201, 202, 204}:
+        violations.append(f"{context}: unexpected status {request['expected_status']}")
+    return violations
+
+
 def _check_workflows(payload: dict[str, Any]) -> list[str]:
     violations = []
     declared_route_groups = {group["name"] for group in payload["route_groups"]}
@@ -80,34 +120,10 @@ def _check_workflows(payload: dict[str, Any]) -> list[str]:
             violations.append(f"{workflow['name']}: at least one request is required")
 
         for request in workflow["requests"]:
-            headers = request.get("headers", [])
-            context = f"{workflow['name']} {request['method']} {request['path']}"
-            # One route may be recorded once per credential that can call it.
-            request_keys.append(
-                " ".join((request["method"], request["path"], *sorted(headers)))
+            request_keys.append(_request_key(request))
+            violations.extend(
+                _request_violations(workflow["name"], request, declared_route_groups)
             )
-            if request["route_group"] not in declared_route_groups:
-                violations.append(
-                    f"{context}: unknown route_group {request['route_group']!r}"
-                )
-            if (
-                not request["stable_response_fields"]
-                and request["expected_status"] != 204
-            ):
-                violations.append(f"{context}: stable_response_fields is required")
-            if not request["path"].startswith("/"):
-                violations.append(f"{context}: path must start with /")
-            if request["path"].startswith(
-                USER_OWNED_PATH_PREFIXES
-            ) and USER_CREDENTIAL_HEADERS.isdisjoint(headers):
-                violations.append(
-                    f"{context}: user-owned routes must require the "
-                    f"{AUTHORIZATION_HEADER} or {UNAUTHENTICATED_USER_HEADER} header"
-                )
-            if request["expected_status"] not in {200, 201, 202, 204}:
-                violations.append(
-                    f"{context}: unexpected status {request['expected_status']}"
-                )
 
     violations.extend(_check_unique_values(request_keys, label="contract request"))
     return violations

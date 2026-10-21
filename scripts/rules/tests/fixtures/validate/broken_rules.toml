@@ -1,0 +1,159 @@
+[[category]]
+id = "layers"
+title = "Layers again"
+
+[agents]
+instructions = "AGENTS.md"
+adapters = ["CLAUDE.md", "MISSING.md"]
+
+[ci_scripts]
+workflows = ".github/workflows/*.yml"
+scripts_dir = ".github/scripts"
+test_globs = ["tests/**/test_*.py"]
+multiline_baseline = "rules/baselines/ci-multiline-run.txt"
+untested_baseline = "rules/baselines/missing-untested.txt"
+shellcheck_baseline = "rules/baselines/missing-shellcheck.txt"
+
+[[rule]]
+id = "ex.layers.no-sql-in-routes"
+category = "layers"
+statement = "Duplicate id."
+rationale = "docs/guide.md"
+scope = ["pkg/*.py"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "Bad_ID"
+category = "nowhere"
+statement = "Doc-only rule that still claims everything."
+rationale = "docs/missing.md#section"
+scope = ["pkg/*.py", "nothing/**/*.py"]
+tier = "judgment"
+status = "doc-only"
+autofix = false
+review_by = 2026-05-01
+[rule.enforcer]
+kind = "ruff"
+mode = "per-file-ignore"
+extra = 1
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "lint"
+invocation = "ruff check"
+[rule.baseline]
+file = "rules/baselines/missing.txt"
+count = 1
+[[rule.exception]]
+path = "nothing/*.py"
+reason = "legacy"
+expires = 2026-01-01
+[[rule.exception]]
+path = "pkg/*.py"
+reason = "current"
+expires = 2027-01-01
+
+[[rule]]
+id = "ex.quality.unenforced"
+category = "quality"
+statement = "Enforced but has no enforcer or CI."
+rationale = "docs/guide.md"
+scope = ["pkg/*.py"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "ex.quality.review-only"
+category = "quality"
+statement = "LLM review of a mechanical rule."
+rationale = "docs/guide.md"
+scope = ["pkg/*.py"]
+tier = "mechanical"
+status = "advisory"
+autofix = false
+[rule.enforcer]
+kind = "llm-review"
+prompt = 5
+[rule.proof]
+bad_fixture = "fixtures/bad.py"
+good_fixture = "pkg/routes.py"
+test = "tests/unit/test_boundaries.py::test_missing"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+
+[[rule]]
+id = "ex.quality.pytest-empty"
+category = "quality"
+statement = "Pytest enforcer without nodes."
+rationale = "docs/guide.md"
+scope = ["pkg/*.py"]
+tier = "metric"
+status = "advisory"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = []
+[rule.proof]
+below_fixture = "pkg/routes.py"
+above_fixture = "fixtures/above.py"
+threshold = "high"
+test = "test_boundaries.py::test_routes_have_no_sql"
+project = "tests/unit/"
+
+[[rule]]
+id = "ex.quality.ruff-modes"
+category = "quality"
+statement = "Ruff lint without codes."
+rationale = "docs/guide.md"
+scope = ["pkg/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "ruff"
+mode = "lint"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "lint"
+invocation = "ruff check"
+[rule.baseline]
+file = "rules/baselines/ruff.txt"
+count = 3
+
+[[rule]]
+id = "ex.quality.ruff-bad-mode"
+category = "quality"
+statement = "Ruff with an unknown mode."
+rationale = "docs/guide.md"
+scope = ["pkg/*.py"]
+tier = "mechanical"
+status = "advisory"
+autofix = false
+[rule.enforcer]
+kind = "ruff"
+mode = "fix"
+
+[[rule]]
+id = "ex.quality.judged"
+category = "quality"
+statement = "Judgment rule with a proof."
+rationale = "docs/guide.md"
+scope = ["pkg/*.py"]
+tier = "judgment"
+status = "advisory"
+autofix = false
+[rule.enforcer]
+kind = "llm-review"
+prompt = "prompts/review.md"
+model = "claude"
+[rule.proof]
+eval_set = "evals/missing.jsonl"
+min_precision = 0.9
+measured_precision = "high"
+measured_on = 2026-01-01

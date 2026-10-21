@@ -231,3 +231,46 @@ def test_upgrade_refuses_databases_without_valid_revision_history(monkeypatch, s
 
     with pytest.raises(RuntimeError, match="no valid Alembic revision"):
         upgrade_database(FakeConnection(), backup_id="verified-backup")
+
+
+@pytest.mark.parametrize(
+    ("difference", "message"),
+    [
+        (("remove_table",), "Unsupported metadata difference operation: remove_table"),
+        (
+            ("modify_nullable", None, "t", "c", {}, True),
+            "Unsupported metadata difference operation: modify_nullable",
+        ),
+        (
+            ("modify_default", None, "t", "c", {}, None),
+            "Unsupported metadata difference operation: modify_default",
+        ),
+        ((), "Unsupported metadata difference shape"),
+        ([], "Unsupported metadata difference shape"),
+        (
+            [("remove_table",), ("remove_table",)],
+            "Unsupported metadata difference shape",
+        ),
+        ("remove_table", "Unsupported metadata difference shape"),
+    ],
+)
+def test_metadata_difference_rejects_short_or_unknown_shapes(
+    difference: object, message: str
+) -> None:
+    with pytest.raises(ValueError, match=f"^{message}$"):
+        describe_metadata_difference(difference)
+
+
+def test_metadata_difference_accepts_longer_tuples_and_unwraps_one_item_lists() -> None:
+    assert (
+        describe_metadata_difference(
+            [("modify_default", None, "t", "c", {}, None, "now()", "extra")]
+        )
+        == "default:t.c:none->present"
+    )
+    assert (
+        describe_metadata_difference(
+            ("modify_nullable", "schema", "t", "c", {}, False, True)
+        )
+        == "nullable:t.c:false->true"
+    )

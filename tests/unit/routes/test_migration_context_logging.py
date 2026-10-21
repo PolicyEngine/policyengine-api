@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import NamedTuple
 from unittest.mock import Mock, patch
 
 import pytest
@@ -499,43 +500,61 @@ def test_v2_household_resources_log_actual_supabase_read_and_write_sources(
     }
 
 
+class _UserResourceRequest(NamedTuple):
+    method: str
+    path: str
+    route_group: str
+    db_read: str | None
+    db_write: str | None
+
+
+_USER_RESOURCE_REQUESTS = (
+    _UserResourceRequest("GET", "/v2/me", "user_profile", "supabase", None),
+    _UserResourceRequest("PATCH", "/v2/me", "user_profile", None, "supabase"),
+    _UserResourceRequest("DELETE", "/v2/me", "user_profile", None, "supabase"),
+    _UserResourceRequest("GET", "/v2/me/export", "user_profile", "supabase", None),
+    _UserResourceRequest("POST", "/v2/me/upgrade", "user_profile", None, "supabase"),
+    _UserResourceRequest("GET", "/v2/user-simulations", "simulation", "supabase", None),
+    _UserResourceRequest("POST", "/v2/user-households", "household", None, "supabase"),
+    _UserResourceRequest(
+        "POST", "/v2/user-simulations", "simulation", None, "supabase"
+    ),
+    _UserResourceRequest(
+        "DELETE",
+        "/v2/user-simulations/00000000-0000-0000-0000-000000000001",
+        "simulation",
+        None,
+        "supabase",
+    ),
+    _UserResourceRequest(
+        "GET",
+        "/v2/user-reports/00000000-0000-0000-0000-000000000001",
+        "report",
+        "supabase",
+        None,
+    ),
+    _UserResourceRequest(
+        "PATCH",
+        "/v2/user-reports/00000000-0000-0000-0000-000000000001",
+        "report",
+        None,
+        "supabase",
+    ),
+)
+
+
 @pytest.mark.parametrize(
-    ("method", "path", "route_group", "db_read", "db_write"),
+    "request_case",
     [
-        ("GET", "/v2/me", "user_profile", "supabase", None),
-        ("PATCH", "/v2/me", "user_profile", None, "supabase"),
-        ("DELETE", "/v2/me", "user_profile", None, "supabase"),
-        ("GET", "/v2/me/export", "user_profile", "supabase", None),
-        ("POST", "/v2/me/upgrade", "user_profile", None, "supabase"),
-        ("GET", "/v2/user-simulations", "simulation", "supabase", None),
-        ("POST", "/v2/user-households", "household", None, "supabase"),
-        ("POST", "/v2/user-simulations", "simulation", None, "supabase"),
-        (
-            "DELETE",
-            "/v2/user-simulations/00000000-0000-0000-0000-000000000001",
-            "simulation",
-            None,
-            "supabase",
-        ),
-        (
-            "GET",
-            "/v2/user-reports/00000000-0000-0000-0000-000000000001",
-            "report",
-            "supabase",
-            None,
-        ),
-        (
-            "PATCH",
-            "/v2/user-reports/00000000-0000-0000-0000-000000000001",
-            "report",
-            None,
-            "supabase",
-        ),
+        # The IDs pytest generated for the five separate parameters.
+        pytest.param(case, id="-".join(str(value) for value in case))
+        for case in _USER_RESOURCE_REQUESTS
     ],
 )
 def test_signed_in_user_resources_log_supabase_sources(
-    monkeypatch, method, path, route_group, db_read, db_write
+    monkeypatch, request_case: _UserResourceRequest
 ):
+    method, path, route_group, db_read, db_write = request_case
     for name in (
         "DB_READ_SIMULATION",
         "DB_WRITE_SIMULATION",

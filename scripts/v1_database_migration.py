@@ -25,6 +25,10 @@ READONLY_USER = "policyengine_schema_reader"
 MIGRATION_USER = "policyengine_schema_migrator"
 PROXY_HOST = "127.0.0.1"
 PROXY_PORT = 3307
+# Alembic's metadata differences: ("remove_table", table) and, for a column,
+# (operation, schema, table, column, existing settings, old value, new value).
+TABLE_DIFFERENCE_LENGTH = 2
+COLUMN_DIFFERENCE_LENGTH = 7
 
 
 class DatabaseState(StrEnum):
@@ -88,14 +92,14 @@ def describe_metadata_difference(difference: object) -> str:
         raise ValueError(msg)
 
     operation = item[0]
-    if operation == "remove_table" and len(item) >= 2:
+    if operation == "remove_table" and len(item) >= TABLE_DIFFERENCE_LENGTH:
         return f"extra_table:{item[1].name}"
-    if operation == "modify_nullable" and len(item) >= 7:
+    if operation == "modify_nullable" and len(item) >= COLUMN_DIFFERENCE_LENGTH:
         return (
             f"nullable:{item[2]}.{item[3]}:"
             f"{str(item[5]).lower()}->{str(item[6]).lower()}"
         )
-    if operation == "modify_default" and len(item) >= 7:
+    if operation == "modify_default" and len(item) >= COLUMN_DIFFERENCE_LENGTH:
         existing = "none" if item[5] is None else "present"
         target = "none" if item[6] is None else "present"
         return f"default:{item[2]}.{item[3]}:{existing}->{target}"

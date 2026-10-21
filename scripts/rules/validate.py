@@ -7,7 +7,7 @@ from datetime import date
 from typing import TYPE_CHECKING, Any
 
 from scripts.rules.model import Kind, Registry, Rule, Status, Tier, Violation
-from scripts.rules.resolve import node_exists
+from scripts.rules.resolve import PROOF_CI_FIELDS, node_exists
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -144,51 +144,98 @@ def _validate_enforcer(rule: Rule) -> list[Violation]:
     return violations
 
 
-def _validate_cross_fields(rule: Rule) -> list[Violation]:
+def _schema_violation(rule: Rule, message: str, fix: str) -> Violation:
+    """Report a schema problem with one rule."""
+    return Violation(rule.id, "schema", message, fix)
+
+
+def _status_conflicts(rule: Rule) -> list[Violation]:
+    """Check that the rule's status fits its enforcer, CI wiring and baseline."""
+    kind, status = rule.enforcer.kind, rule.status
     violations = []
-
-    def v(message: str, fix: str) -> None:
-        violations.append(Violation(rule.id, "schema", message, fix))
-
-    kind, status, tier = rule.enforcer.kind, rule.status, rule.tier
     if status is Status.DOC_ONLY and kind is not Kind.NONE:
-        v(
-            "doc-only rules have no enforcer",
-            'set enforcer.kind = "none", or pick a stronger status',
+        violations.append(
+            _schema_violation(
+                rule,
+                "doc-only rules have no enforcer",
+                'set enforcer.kind = "none", or pick a stronger status',
+            )
         )
     if status is Status.DOC_ONLY and rule.ci:
-        v(
-            "doc-only rules have no CI wiring",
-            "remove rule.ci, or pick a stronger status",
+        violations.append(
+            _schema_violation(
+                rule,
+                "doc-only rules have no CI wiring",
+                "remove rule.ci, or pick a stronger status",
+            )
         )
     if kind is Kind.NONE and status not in (Status.DOC_ONLY, Status.ADVISORY):
-        v(
-            f"status {status} needs an enforcer",
-            "add [rule.enforcer] or use doc-only/advisory",
+        violations.append(
+            _schema_violation(
+                rule,
+                f"status {status} needs an enforcer",
+                "add [rule.enforcer] or use doc-only/advisory",
+            )
         )
     if status in (Status.ENFORCED, Status.RATCHETED) and not rule.ci:
-        v(f"{status} rules must run in CI", "add a [[rule.ci]] reference")
-    if status is Status.RATCHETED and rule.baseline is None:
-        v("ratcheted rules need a baseline", "add [rule.baseline] or use enforced")
-    if rule.baseline is not None and status is not Status.RATCHETED:
-        v(
-            "only ratcheted rules may have a baseline",
-            'remove [rule.baseline] or set status = "ratcheted"',
+        violations.append(
+            _schema_violation(
+                rule, f"{status} rules must run in CI", "add a [[rule.ci]] reference"
+            )
         )
+    if status is Status.RATCHETED and rule.baseline is None:
+        violations.append(
+            _schema_violation(
+                rule,
+                "ratcheted rules need a baseline",
+                "add [rule.baseline] or use enforced",
+            )
+        )
+    if rule.baseline is not None and status is not Status.RATCHETED:
+        violations.append(
+            _schema_violation(
+                rule,
+                "only ratcheted rules may have a baseline",
+                'remove [rule.baseline] or set status = "ratcheted"',
+            )
+        )
+    return violations
+
+
+def _checker_conflicts(rule: Rule) -> list[Violation]:
+    """Check that the rule's enforcer kind suits its tier and baseline."""
+    kind, tier = rule.enforcer.kind, rule.tier
+    violations = []
     if kind is Kind.RUFF and rule.baseline is not None:
-        v(
-            "ruff is never ratcheted",
-            "remove the baseline and fix every violation in a standalone PR that "
-            "also changes the ruff select list",
+        violations.append(
+            _schema_violation(
+                rule,
+                "ruff is never ratcheted",
+                "remove the baseline and fix every violation in a standalone PR "
+                "that also changes the ruff select list",
+            )
         )
     if tier is Tier.JUDGMENT and kind not in (Kind.LLM_REVIEW, Kind.NONE):
-        v(
-            "judgment rules are enforced by review, not by a mechanical checker",
-            'use enforcer.kind = "llm-review" or "none"',
+        violations.append(
+            _schema_violation(
+                rule,
+                "judgment rules are enforced by review, not by a mechanical checker",
+                'use enforcer.kind = "llm-review" or "none"',
+            )
         )
     if kind is Kind.LLM_REVIEW and tier is not Tier.JUDGMENT:
-        v("llm-review only enforces judgment rules", 'set tier = "judgment"')
+        violations.append(
+            _schema_violation(
+                rule,
+                "llm-review only enforces judgment rules",
+                'set tier = "judgment"',
+            )
+        )
     return violations
+
+
+def _validate_cross_fields(rule: Rule) -> list[Violation]:
+    return _status_conflicts(rule) + _checker_conflicts(rule)
 
 
 def _validate_proof(rule: Rule, root: Path) -> list[Violation]:
@@ -203,8 +250,8 @@ def _validate_proof(rule: Rule, root: Path) -> list[Violation]:
     violations = _check_fields(
         rule, fields, PROOF_FIELDS[rule.tier], optional, f"proof ({rule.tier})"
     )
-    named = [key for key in ("workflow", "job", "invocation") if key in fields]
-    if named and len(named) != 3:
+    named = [key for key in PROOF_CI_FIELDS if key in fields]
+    if named and len(named) != len(PROOF_CI_FIELDS):
         violations.append(
             Violation(
                 rule.id,
@@ -243,120 +290,198 @@ def _validate_proof(rule: Rule, root: Path) -> list[Violation]:
     return violations
 
 
+def _validate_agents(registry: Registry, root: Path) -> list[Violation]:
+    """Check that every agent instruction file named in ``[agents]`` exists."""
+    if registry.agents is None:
+        return []
+    return [
+        Violation(
+            None,
+            "schema",
+            f"agents file {path} does not exist",
+            "fix [agents] or create the file",
+        )
+        for path in (registry.agents.instructions, *registry.agents.adapters)
+        if path and not (root / path).is_file()
+    ]
+
+
+def _validate_ci_scripts(registry: Registry, root: Path) -> list[Violation]:
+    """Check that the ``[ci_scripts]`` directory and baseline files exist."""
+    config = registry.ci_scripts
+    if config is None:
+        return []
+    violations = []
+    if config.scripts_dir and not (root / config.scripts_dir).is_dir():
+        violations.append(
+            Violation(
+                None,
+                "schema",
+                f"ci_scripts.scripts_dir {config.scripts_dir} does not exist",
+                "fix [ci_scripts]",
+            )
+        )
+    violations.extend(
+        Violation(
+            None,
+            "schema",
+            f"ci_scripts baseline {path} does not exist",
+            "create it (it may be empty)",
+        )
+        for path in (
+            config.multiline_baseline,
+            config.untested_baseline,
+            config.shellcheck_baseline,
+        )
+        if path and not (root / path).is_file()
+    )
+    return violations
+
+
+def _duplicate_ids(registry: Registry, category_ids: list[str]) -> list[Violation]:
+    """Report each category id, then each rule id, that is used more than once."""
+    violations = [
+        Violation(
+            None,
+            "schema",
+            f"duplicate category '{duplicate}'",
+            "give each category a unique id",
+        )
+        for duplicate in sorted({c for c in category_ids if category_ids.count(c) > 1})
+    ]
+    rule_ids = [rule.id for rule in registry.rules]
+    violations.extend(
+        Violation(
+            duplicate, "schema", "duplicate rule id", "give each rule a unique id"
+        )
+        for duplicate in sorted({r for r in rule_ids if rule_ids.count(r) > 1})
+    )
+    return violations
+
+
+def _validate_identity(
+    rule: Rule, root: Path, category_ids: list[str]
+) -> list[Violation]:
+    """Check the rule's id, category, rationale link and scope globs."""
+    violations = []
+    if rule.id and not RULE_ID.match(rule.id):
+        violations.append(
+            _schema_violation(
+                rule,
+                "id must be lowercase dotted, e.g. 'api.v2.routes-no-sql'",
+                "rename the rule",
+            )
+        )
+    if rule.category not in category_ids:
+        violations.append(
+            _schema_violation(
+                rule,
+                f"unknown category '{rule.category}'",
+                f"use one of {category_ids} or add a [[category]]",
+            )
+        )
+    rationale_path = rule.rationale.split("#", 1)[0]
+    if rationale_path and not (root / rationale_path).exists():
+        violations.append(
+            _schema_violation(
+                rule,
+                f"rationale {rationale_path} does not exist",
+                "link an existing doc",
+            )
+        )
+    violations.extend(
+        _schema_violation(rule, f"scope '{pattern}' matches no files", "fix the glob")
+        for pattern in rule.scope
+        if not any(root.glob(pattern))
+    )
+    return violations
+
+
+def _validate_baseline(rule: Rule, root: Path) -> list[Violation]:
+    """Check that a ratcheted rule's baseline file exists and matches its count."""
+    if rule.baseline is None:
+        return []
+    path = root / rule.baseline.file
+    if not path.is_file():
+        return [
+            Violation(
+                rule.id,
+                "baseline",
+                f"baseline file {rule.baseline.file} does not exist",
+                "create it",
+            )
+        ]
+    if baseline_entries(path) != rule.baseline.count:
+        return [
+            Violation(
+                rule.id,
+                "baseline",
+                f"baseline count is {rule.baseline.count} but "
+                f"{rule.baseline.file} lists {baseline_entries(path)}",
+                "make the count match the file",
+            )
+        ]
+    return []
+
+
+def _validate_expiry(rule: Rule, root: Path, today: date) -> list[Violation]:
+    """Check the review date and each exception's expiry and path on ``today``."""
+    violations = []
+    if rule.review_by is not None and rule.review_by < today:
+        violations.append(
+            Violation(
+                rule.id,
+                "expiry",
+                f"review_by {rule.review_by} has passed",
+                "review the rule, then remove or extend review_by",
+            )
+        )
+    for exception in rule.exceptions:
+        if exception.expires < today:
+            violations.append(
+                Violation(
+                    rule.id,
+                    "expiry",
+                    f"exception for {exception.path} expired on {exception.expires}",
+                    "remove the exception (fix the code) or extend it with a reason",
+                )
+            )
+        if not any(root.glob(exception.path)):
+            violations.append(
+                _schema_violation(
+                    rule,
+                    f"exception path '{exception.path}' matches no files",
+                    "remove the stale exception",
+                )
+            )
+    return violations
+
+
+def _validate_rule(
+    rule: Rule, root: Path, category_ids: list[str], today: date
+) -> list[Violation]:
+    """Run every per-rule check, in the order the guard reports them."""
+    return [
+        *_validate_identity(rule, root, category_ids),
+        *_validate_enforcer(rule),
+        *_validate_cross_fields(rule),
+        *_validate_proof(rule, root),
+        *_validate_baseline(rule, root),
+        *_validate_expiry(rule, root, today),
+    ]
+
+
 def validate(registry: Registry, root: Path, today: date) -> list[Violation]:
     """Check the registry's fields and file references against the tree at ``root``.
 
     ``today`` decides whether review dates and exceptions have expired.
     """
-    violations: list[Violation] = []
-
-    def v(rule_id: str | None, message: str, fix: str, check: str = "schema") -> None:
-        violations.append(Violation(rule_id, check, message, fix))
-
-    if registry.agents is not None:
-        for path in (registry.agents.instructions, *registry.agents.adapters):
-            if path and not (root / path).is_file():
-                v(
-                    None,
-                    f"agents file {path} does not exist",
-                    "fix [agents] or create the file",
-                )
-    if registry.ci_scripts is not None:
-        config = registry.ci_scripts
-        if config.scripts_dir and not (root / config.scripts_dir).is_dir():
-            v(
-                None,
-                f"ci_scripts.scripts_dir {config.scripts_dir} does not exist",
-                "fix [ci_scripts]",
-            )
-        for path in (
-            config.multiline_baseline,
-            config.untested_baseline,
-            config.shellcheck_baseline,
-        ):
-            if path and not (root / path).is_file():
-                v(
-                    None,
-                    f"ci_scripts baseline {path} does not exist",
-                    "create it (it may be empty)",
-                )
-
     category_ids = [category.id for category in registry.categories]
-    for duplicate in sorted({c for c in category_ids if category_ids.count(c) > 1}):
-        v(None, f"duplicate category '{duplicate}'", "give each category a unique id")
-
-    rule_ids = [rule.id for rule in registry.rules]
-    for duplicate in sorted({r for r in rule_ids if rule_ids.count(r) > 1}):
-        v(duplicate, "duplicate rule id", "give each rule a unique id")
-
+    violations = [
+        *_validate_agents(registry, root),
+        *_validate_ci_scripts(registry, root),
+        *_duplicate_ids(registry, category_ids),
+    ]
     for rule in registry.rules:
-        if rule.id and not RULE_ID.match(rule.id):
-            v(
-                rule.id,
-                "id must be lowercase dotted, e.g. 'api.v2.routes-no-sql'",
-                "rename the rule",
-            )
-        if rule.category not in category_ids:
-            v(
-                rule.id,
-                f"unknown category '{rule.category}'",
-                f"use one of {category_ids} or add a [[category]]",
-            )
-
-        rationale_path = rule.rationale.split("#", 1)[0]
-        if rationale_path and not (root / rationale_path).exists():
-            v(
-                rule.id,
-                f"rationale {rationale_path} does not exist",
-                "link an existing doc",
-            )
-
-        for pattern in rule.scope:
-            if not any(root.glob(pattern)):
-                v(rule.id, f"scope '{pattern}' matches no files", "fix the glob")
-
-        violations.extend(_validate_enforcer(rule))
-        violations.extend(_validate_cross_fields(rule))
-        violations.extend(_validate_proof(rule, root))
-
-        if rule.baseline is not None:
-            path = root / rule.baseline.file
-            if not path.is_file():
-                v(
-                    rule.id,
-                    f"baseline file {rule.baseline.file} does not exist",
-                    "create it",
-                    "baseline",
-                )
-            elif baseline_entries(path) != rule.baseline.count:
-                v(
-                    rule.id,
-                    f"baseline count is {rule.baseline.count} but "
-                    f"{rule.baseline.file} lists {baseline_entries(path)}",
-                    "make the count match the file",
-                    "baseline",
-                )
-
-        if rule.review_by is not None and rule.review_by < today:
-            v(
-                rule.id,
-                f"review_by {rule.review_by} has passed",
-                "review the rule, then remove or extend review_by",
-                "expiry",
-            )
-        for exception in rule.exceptions:
-            if exception.expires < today:
-                v(
-                    rule.id,
-                    f"exception for {exception.path} expired on {exception.expires}",
-                    "remove the exception (fix the code) or extend it with a reason",
-                    "expiry",
-                )
-            if not any(root.glob(exception.path)):
-                v(
-                    rule.id,
-                    f"exception path '{exception.path}' matches no files",
-                    "remove the stale exception",
-                )
-
+        violations.extend(_validate_rule(rule, root, category_ids, today))
     return violations
