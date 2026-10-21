@@ -31,6 +31,7 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
 )
 from policyengine_api.services.economic_impact_request import LocalAreaBreakdown
 from policyengine_api.spm import SPMSelection
+from policyengine_api.supported_countries import SupportedCountryId
 from policyengine_api.utils.budget_window import (
     BUDGET_WINDOW_MAX_END_YEAR,
     BUDGET_WINDOW_MAX_YEARS,
@@ -42,7 +43,6 @@ if TYPE_CHECKING:
 DEFAULT_QUERY_LIMIT = 100
 MAXIMUM_QUERY_LIMIT = 500
 MAXIMUM_USER_ID_LENGTH = 255
-SUPPORTED_COUNTRY_IDS = frozenset({"us", "uk"})
 
 
 def normalize_country_id(value: object) -> object:
@@ -59,7 +59,7 @@ def validate_legacy_user_id(value: str) -> str:
 
 
 CountryId = Annotated[
-    Literal["us", "uk"],
+    SupportedCountryId,
     BeforeValidator(normalize_country_id),
     Field(description="Supported PolicyEngine country ID"),
 ]
