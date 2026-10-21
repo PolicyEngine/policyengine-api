@@ -17,8 +17,10 @@ versions the Cloud Run image installs (`gcp/cloud_run/Dockerfile`):
 - A CI job that runs tests sets `UV_PYTHON: "3.12"`, installs with
   `make install` (or `uv sync --frozen --extra dev`), runs every pytest and
   coverage command through `uv run --frozen`, and never installs packages with
-  pip. `tests/unit/test_locked_test_environments.py` checks this for every
-  workflow job that runs pytest or coverage.
+  pip. `tests/unit/test_locked_test_environments.py` checks the Python
+  version and the Make targets; rules `api.dependencies.install-from-lock`
+  and `api.dependencies.test-from-lock`
+  ([dependencies.md](dependencies.md)) check every install and test command.
 
 ## Migration Test Layout
 

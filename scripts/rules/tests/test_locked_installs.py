@@ -17,6 +17,7 @@ from scripts.rules.locked_installs import (
     install_violations,
     lock_violations,
     relock_violations,
+    run_check,
     scanned_files,
     test_command_violations,
     unlocked_install_sites,
@@ -246,6 +247,13 @@ removal = "when the image installs with uv sync --frozen"
         (exception,) = registry.rules[0].exceptions
         self.assertEqual(exception.match, "pip install requests")
         self.assertIsNone(exception.expires)
+
+
+class TestRepository(unittest.TestCase):
+    """The repository satisfies the four rules, apart from registered exceptions."""
+
+    def test_repository_has_no_violations(self) -> None:
+        self.assertEqual([str(violation) for violation in run_check(REPO_ROOT)], [])
 
 
 class TestScanCoverage(unittest.TestCase):

@@ -648,21 +648,36 @@ def test_command_violations(
 
 
 def run_check(root: Path = REPO_ROOT) -> list[Violation]:
-    """Load the registry and return every locked-installs violation."""
+    """Load the registry and return every violation of the four uv.lock rules."""
     registry, violations = load_registry(root)
     if registry is None:
         return violations
-    install_rule = registry.rule(INSTALL_RULE)
-    if install_rule is None:
+    exceptions = {
+        rule.id: rule.exceptions
+        for rule in registry.rules
+        if rule.id in {LOCK_RULE, INSTALL_RULE, TEST_RULE, RELOCK_RULE}
+    }
+    missing = [
+        rule_id
+        for rule_id in (LOCK_RULE, INSTALL_RULE, TEST_RULE, RELOCK_RULE)
+        if rule_id not in exceptions
+    ]
+    if missing:
         return [
             Violation(
                 None,
                 "locked-installs",
-                f"rules/registry.toml has no rule {INSTALL_RULE}",
+                f"rules/registry.toml has no rule {rule_id}",
                 "register the rule",
             )
+            for rule_id in missing
         ]
-    return install_violations(root, install_rule.exceptions)
+    return (
+        lock_violations(root)
+        + install_violations(root, exceptions[INSTALL_RULE])
+        + test_command_violations(root, exceptions[TEST_RULE])
+        + relock_violations(root)
+    )
 
 
 def check() -> list[str]:

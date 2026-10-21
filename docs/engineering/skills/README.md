@@ -15,6 +15,8 @@ Current skills:
   deployment safeguards, and migration validation.
 - `ci-workflows.md`: one line of code per workflow `run:` block, tested
   workflow scripts, and shellcheck.
+- `dependencies.md`: installing and testing from `uv.lock`, the scheduled
+  relock, and how to register an install that cannot use the lock.
 - `github-prs.md`: PR workflow and migration PR handoff expectations.
 - `migration_contracts.md`: API v2 migration route contracts, route-group
   metadata, generated migration artifacts, and quality guards.
