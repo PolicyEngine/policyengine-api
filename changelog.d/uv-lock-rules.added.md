@@ -1,0 +1,1 @@
+Registered rules, checked by a new quality guard, that every project has a committed `uv.lock` checked in pull request CI, that every install and test command uses `uv.lock` unless it is a registered exception, and that a scheduled workflow relocks `uv.lock`.
