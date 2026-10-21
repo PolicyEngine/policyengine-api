@@ -1,0 +1,16 @@
+name: CI
+on: pull_request
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      # A real past mistake: tests ran on setup-python's interpreter after a
+      # pip install that resolved the newest releases.
+      - name: Run pytest
+        run: python -m pytest tests
+      - name: Run the scripted tests
+        run: bash .github/scripts/run_tests.sh
+      - name: Run make test
+        run: make test

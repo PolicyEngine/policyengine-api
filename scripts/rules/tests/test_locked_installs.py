@@ -11,9 +11,12 @@ from scripts.rules.load import load_text
 from scripts.rules.locked_installs import (
     INSTALL_RULE,
     REPO_ROOT,
+    TEST_RULE,
     install_violations,
     scanned_files,
+    test_command_violations,
     unlocked_install_sites,
+    unlocked_test_commands,
 )
 from scripts.rules.model import RuleException
 
@@ -50,6 +53,31 @@ class TestLockedInstallsProof(unittest.TestCase):
         self.assertEqual(
             install_violations(FIXTURES / "install_good", (PINNED_SHELLCHECK,)), []
         )
+
+
+class TestTestFromLockProof(unittest.TestCase):
+    """Proof: every test command runs through uv run --frozen or --locked."""
+
+    def test_rule_proof_test_from_lock(self) -> None:
+        self.assertEqual(
+            {
+                f"{site.path}: {site.command}"
+                for site in unlocked_test_commands(FIXTURES / "test_bad")
+            },
+            {
+                ".github/workflows/ci.yml: python -m pytest tests",
+                ".github/scripts/run_tests.sh: coverage run -m pytest tests",
+                ".github/scripts/run_tests.sh: python -m unittest discover -s tests",
+                "Makefile: pytest tests",
+            },
+        )
+        self.assertEqual(test_command_violations(FIXTURES / "test_good", ()), [])
+
+    def test_unlocked_test_command_names_the_test_rule(self) -> None:
+        violations = test_command_violations(FIXTURES / "test_bad", ())
+
+        self.assertEqual({violation.rule_id for violation in violations}, {TEST_RULE})
+        self.assertIn("outside the uv.lock environment", violations[0].message)
 
 
 class TestInstallExceptions(unittest.TestCase):
@@ -182,11 +210,12 @@ class TestScanCoverage(unittest.TestCase):
             text=True,
             check=True,
         ).stdout.splitlines()
-        fixture_prefix = "scripts/rules/tests/fixtures/"
+        fixture_prefixes = ("scripts/rules/tests/fixtures/", "rules/fixtures/")
+        this_module = Path(__file__).resolve().relative_to(REPO_ROOT).as_posix()
         install_sources = {
             path
             for path in tracked
-            if not path.startswith(fixture_prefix)
+            if not path.startswith(fixture_prefixes)
             and (
                 path.startswith(".github/workflows/")
                 or path.endswith((".sh", ".mk"))
@@ -206,11 +235,13 @@ class TestScanCoverage(unittest.TestCase):
             check=False,
         ).stdout.splitlines()
         install_sources |= {
-            path for path in modal_images if not path.startswith(fixture_prefix)
+            path
+            for path in modal_images
+            if not path.startswith(fixture_prefixes) and path != this_module
         }
 
         self.assertTrue(install_sources)
-        self.assertLessEqual(install_sources, set(scanned_files(REPO_ROOT)))
+        self.assertEqual(install_sources - set(scanned_files(REPO_ROOT)), set())
 
 
 if __name__ == "__main__":
