@@ -114,7 +114,7 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
         with:
-          version: "0.12.1"
+          version: "0.13.4"
       - name: Install changelog tool
         run: pip install towncrier
       - name: Bump project version
