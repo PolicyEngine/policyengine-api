@@ -9,6 +9,9 @@ import pytest
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
+from policyengine_api.services.v2.associations.validators import (
+    AssociationReferenceConflictError,
+)
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
 )
@@ -219,6 +222,37 @@ def test_failures_map_to_secret_safe_typed_errors(
     assert response.json()["status"] == "error"
     assert "secret" not in response.text
     assert "credential" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("error", "status", "message"),
+    [
+        (AssociationCountryConflictError("different country"), 400, "country"),
+        (
+            AssociationReferenceConflictError("household_id mismatch"),
+            400,
+            "mismatch",
+        ),
+        (AssociationHouseholdNotFoundError("household was not found"), 404, "not"),
+        (UserHouseholdNotFoundError("association was not found"), 404, "not"),
+        (LegacyReferenceNotFoundError("v1 household 9 was not found"), 422, "v1"),
+    ],
+)
+def test_repoint_failures_map_to_typed_errors(
+    error: Exception, status: int, message: str
+) -> None:
+    service = RecordingService(_result)
+    service.error = error
+    client, _service, _flask_calls = _client(service)
+
+    response = client.patch(
+        f"/v2/user-households/{ASSOCIATION_ID}?country_id=us",
+        json={"household_id": str(HOUSEHOLD_ID), "legacy_household_id": 9},
+    )
+
+    assert response.status_code == status
+    assert response.json()["status"] == "error"
+    assert message in response.json()["message"].lower()
 
 
 def test_patch_preflight_and_native_routes_avoid_cloud_sql_and_flask(
