@@ -1875,14 +1875,15 @@ def _assert_live_tests_run_in_parallel_after_readiness(
     assert "strategy:" not in parallel_live_tests
     assert "matrix:" not in parallel_live_tests
     assert "needs: deploy-cloud-run-staging" in parallel_live_tests
-    assert "pip install pytest pytest-xdist httpx" in parallel_live_tests
+    assert "pip install" not in parallel_live_tests
+    assert "run: make install" in parallel_live_tests
     live_readiness_command = (
         'bash .github/scripts/health_check.sh "'
         '${{ needs.deploy-cloud-run-staging.outputs.url }}/readiness-check"'
     )
     assert live_readiness_command in parallel_live_tests
     assert parallel_live_tests.index(
-        "Install live test dependencies"
+        "Install locked live test dependencies"
     ) < parallel_live_tests.index(live_readiness_command)
     assert parallel_live_tests.index(
         live_readiness_command

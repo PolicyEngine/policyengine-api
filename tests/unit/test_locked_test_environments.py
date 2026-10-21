@@ -67,6 +67,8 @@ def _executed_lines(command_text: str, visited: set[str] | None = None) -> list[
     recipes = _makefile_recipes()
     executed = []
     for command_line in command_text.splitlines():
+        if command_line.lstrip().startswith("#"):
+            continue
         executed.append(command_line)
         for script_path in SCRIPT_REFERENCE.findall(command_line):
             if script_path in visited or not (REPO / script_path).is_file():
