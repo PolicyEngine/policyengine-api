@@ -380,7 +380,7 @@ def _exception_problems(rule_id: str, exception: RuleException) -> Iterator[Viol
         yield Violation(
             rule_id,
             "locked-installs",
-            f"{where} names no install site",
+            f"{where} names no site",
             "set match to text from the one command or call it covers",
         )
     if exception.category not in {None, PINNED_TOOL}:
