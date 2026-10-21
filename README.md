@@ -41,9 +41,10 @@ make setup-env
 
 `make install` runs `uv sync --frozen --extra dev`, which creates `.venv` with
 exactly the versions in `uv.lock` on Python 3.12, the version the Cloud Run
-image runs. The Make targets that run Python (`make test`, `make debug-test`,
-`make debug` and others) run it through `uv run --frozen --extra dev`, so you
-don't need to activate `.venv`. To run another command in that environment,
+image runs. `make test`, `make test-env-vars`, `make debug-test`, `make debug`,
+`make debug-asgi`, `make typecheck-v2` and the towncrier step of
+`make changelog` run through `uv run --frozen --extra dev`, so you don't need
+to activate `.venv` for them. To run another command in that environment,
 prefix it the same way, for example `uv run --frozen --extra dev pytest tests/unit`.
 
 ### 3a. Configure environment variables

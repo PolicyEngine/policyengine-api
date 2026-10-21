@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
@@ -44,6 +45,15 @@ UNLOCKED_OPERATIONAL_JOBS = {
     ("process-v1-household-mirror-event.yml", "process-event"),
 }
 EXPLICIT_UNLOCKED_INSTALL = 'pip install -e ".[dev]"'
+
+
+class WorkflowJob(NamedTuple):
+    """One workflow job and every command line it runs."""
+
+    workflow: str
+    job_id: str
+    job_text: str
+    executed_lines: list[str]
 
 
 def _makefile_recipes() -> dict[str, list[str]]:
@@ -94,8 +104,8 @@ def _job_text(workflow_text: str, job_id: str) -> str:
     return match.group("body")
 
 
-def _workflow_jobs() -> list[tuple[str, str, str, list[str]]]:
-    """Return (workflow, job, job text, executed lines) for every workflow job."""
+def _workflow_jobs() -> list[WorkflowJob]:
+    """Return every workflow job with the command lines it runs."""
     jobs = []
     for workflow_path in sorted(WORKFLOW_DIRECTORY.glob("*.y*ml")):
         workflow_text = workflow_path.read_text(encoding="utf-8")
@@ -106,7 +116,7 @@ def _workflow_jobs() -> list[tuple[str, str, str, list[str]]]:
             for run_block in job.run_blocks:
                 executed += _executed_lines(run_block.text)
             jobs.append(
-                (
+                WorkflowJob(
                     workflow_path.name,
                     job_id,
                     _job_text(workflow_text, job_id),
@@ -116,20 +126,22 @@ def _workflow_jobs() -> list[tuple[str, str, str, list[str]]]:
     return jobs
 
 
-def _test_jobs() -> list[tuple[str, str, str, list[str]]]:
+def _test_jobs() -> list[WorkflowJob]:
     return [
         job
         for job in _workflow_jobs()
-        if any(TEST_COMMAND.search(executed_line) for executed_line in job[3])
+        if any(
+            TEST_COMMAND.search(executed_line) for executed_line in job.executed_lines
+        )
     ]
 
 
-def _test_job_id(job: tuple[str, str, str, list[str]]) -> str:
-    return f"{job[0]}:{job[1]}"
+def _test_job_id(job: WorkflowJob) -> str:
+    return f"{job.workflow}:{job.job_id}"
 
 
 def test_detects_every_known_test_job():
-    found = {(workflow, job_id) for workflow, job_id, _, _ in _test_jobs()}
+    found = {(job.workflow, job.job_id) for job in _test_jobs()}
 
     assert found >= EXPECTED_TEST_JOBS
 
@@ -157,9 +169,10 @@ def test_makefile_runs_the_production_python_version():
 
 @pytest.mark.parametrize("job", _test_jobs(), ids=_test_job_id)
 def test_test_job_installs_nothing_outside_the_lock(job):
-    _, _, _, executed = job
     unlocked_installs = [
-        executed_line for executed_line in executed if "pip install" in executed_line
+        executed_line
+        for executed_line in job.executed_lines
+        if "pip install" in executed_line
     ]
 
     assert unlocked_installs == []
@@ -167,10 +180,9 @@ def test_test_job_installs_nothing_outside_the_lock(job):
 
 @pytest.mark.parametrize("job", _test_jobs(), ids=_test_job_id)
 def test_test_job_runs_every_test_command_through_the_lock(job):
-    _, _, _, executed = job
     unlocked_test_commands = [
         executed_line
-        for executed_line in executed
+        for executed_line in job.executed_lines
         if TEST_COMMAND.search(executed_line) and "uv run --frozen" not in executed_line
     ]
 
@@ -179,17 +191,15 @@ def test_test_job_runs_every_test_command_through_the_lock(job):
 
 @pytest.mark.parametrize("job", _test_jobs(), ids=_test_job_id)
 def test_test_job_selects_the_production_python_version(job):
-    _, _, job_text, _ = job
-
-    assert PRODUCTION_PYTHON_SETTING in job_text
+    assert PRODUCTION_PYTHON_SETTING in job.job_text
 
 
 @pytest.mark.parametrize(
     ("workflow", "job_id"), sorted(UNLOCKED_OPERATIONAL_JOBS), ids=str
 )
 def test_operational_job_keeps_an_explicit_install_for_its_python(workflow, job_id):
-    jobs = {(name, job): executed for name, job, _, executed in _workflow_jobs()}
-    executed = jobs[(workflow, job_id)]
+    jobs = {(job.workflow, job.job_id): job for job in _workflow_jobs()}
+    executed = jobs[(workflow, job_id)].executed_lines
 
     # make install now syncs .venv, which the job's bare python never reads.
     assert EXPLICIT_UNLOCKED_INSTALL in executed
