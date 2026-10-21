@@ -173,7 +173,7 @@ class TestInstallExceptions(unittest.TestCase):
             for violation in install_violations(FIXTURES / "install_bad", (blanket,))
         ]
 
-        self.assertTrue(any("names no install site" in message for message in messages))
+        self.assertTrue(any("names no site" in message for message in messages))
 
     def test_exception_without_removal_or_tracked_review_is_rejected(self) -> None:
         undated = RuleException(
