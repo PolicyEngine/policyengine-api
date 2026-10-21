@@ -250,3 +250,17 @@ def test_fails_before_any_change_without_the_summary(checkout: Path) -> None:
     assert "missing-summary.md" in result.stderr
     assert calls == []
     assert _remote_branch(checkout) == ""
+
+
+def test_ignores_pull_requests_from_forks_with_the_same_branch_name(
+    checkout: Path,
+) -> None:
+    result, calls = _open_pull_request(checkout, RELOCK_TEST_OPEN_ISSUE="41")
+
+    assert result.returncode == 0, result.stderr
+    (pr_lookup,) = _calls_to(calls, "pr", "list")
+    lookup = pr_lookup["arguments"]
+    assert "isCrossRepository" in lookup[lookup.index("--json") + 1]
+    assert lookup[lookup.index("--jq") + 1] == (
+        "map(select(.isCrossRepository | not)) | .[0].number // empty"
+    )
