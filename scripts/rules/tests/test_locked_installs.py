@@ -53,6 +53,8 @@ class TestLockedInstallsProof(unittest.TestCase):
                 "Makefile: uv sync --extra dev",
                 "Dockerfile: RUN pip install requests",
                 'modal_app.py: .pip_install("numpy")',
+                ".github/actions/setup/action.yml: pip install requests",
+                ".github/actions/setup/action.yml: uv sync --extra dev",
             },
         )
         self.assertEqual(
@@ -120,6 +122,12 @@ class TestScheduledRelockProof(unittest.TestCase):
             ],
         )
         self.assertEqual(relock_violations(FIXTURES / "relock_good"), [])
+
+    def test_upgrade_flag_must_belong_to_the_relock(self) -> None:
+        violations = relock_violations(FIXTURES / "relock_unrelated_flag")
+
+        self.assertEqual(len(violations), 1)
+        self.assertIn("no scheduled workflow job relocks", violations[0].message)
 
     def test_scheduled_relock_must_cover_every_lock(self) -> None:
         violations = relock_violations(FIXTURES / "relock_partial")
@@ -275,6 +283,7 @@ class TestScanCoverage(unittest.TestCase):
             if not path.startswith(fixture_prefixes)
             and (
                 path.startswith(".github/workflows/")
+                or Path(path).name in {"action.yml", "action.yaml"}
                 or path.endswith((".sh", ".mk"))
                 or Path(path).name == "Makefile"
                 or (
