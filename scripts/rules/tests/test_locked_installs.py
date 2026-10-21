@@ -11,10 +11,12 @@ from scripts.rules.load import load_text
 from scripts.rules.locked_installs import (
     INSTALL_RULE,
     LOCK_RULE,
+    RELOCK_RULE,
     REPO_ROOT,
     TEST_RULE,
     install_violations,
     lock_violations,
+    relock_violations,
     scanned_files,
     test_command_violations,
     unlocked_install_sites,
@@ -98,6 +100,33 @@ class TestLockCommittedProof(unittest.TestCase):
             ],
         )
         self.assertEqual(lock_violations(FIXTURES / "lock_good"), [])
+
+
+class TestScheduledRelockProof(unittest.TestCase):
+    """Proof: a scheduled job relocks every uv.lock with upgrades and opens a PR."""
+
+    def test_rule_proof_scheduled_relock(self) -> None:
+        violations = relock_violations(FIXTURES / "relock_bad")
+
+        self.assertEqual(
+            [(violation.rule_id, violation.message) for violation in violations],
+            [
+                (
+                    RELOCK_RULE,
+                    "no scheduled workflow job relocks uv.lock with upgrades "
+                    "and opens or updates a pull request",
+                )
+            ],
+        )
+        self.assertEqual(relock_violations(FIXTURES / "relock_good"), [])
+
+    def test_scheduled_relock_must_cover_every_lock(self) -> None:
+        violations = relock_violations(FIXTURES / "relock_partial")
+
+        self.assertEqual(
+            [violation.message for violation in violations],
+            ["the scheduled relock does not relock libs/helper/uv.lock"],
+        )
 
 
 class TestInstallExceptions(unittest.TestCase):

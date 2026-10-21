@@ -34,6 +34,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALL_RULE = "api.dependencies.install-from-lock"
 TEST_RULE = "api.dependencies.test-from-lock"
 LOCK_RULE = "api.dependencies.lock-committed"
+RELOCK_RULE = "api.dependencies.scheduled-relock"
 PINNED_TOOL = "pinned-tool"
 # Proof fixtures hold deliberate violations; they are scanned by their tests.
 EXCLUDED_PREFIXES = ("scripts/rules/tests/fixtures/", "rules/fixtures/")
@@ -68,6 +69,11 @@ _PULL_REQUEST_TRIGGERS = {"pull_request", "pull_request_target"}
 _ON_KEY = re.compile(r"""^["']?on["']?:\s*(?P<inline>.*)$""")
 _TRIGGER_KEY = re.compile(r"^(?P<indent>\s+)(?P<name>[\w-]+):")
 _LOCK_CHECK = re.compile(r"\buv\s+lock\b.*--(?:check|locked)\b")
+_RELOCK = re.compile(r"\buv\s+lock\b")
+_UPGRADE_FLAG = re.compile(
+    r"(?:^|[\s(])(?:--upgrade|--upgrade-package|-U|-P)(?=[\s=)]|$)", re.MULTILINE
+)
+_OPENS_PULL_REQUEST = re.compile(r"\bgh\s+pr\s+(?:create|edit)\b")
 _PROJECT_OPTION = re.compile(r"--(?:project|directory)[=\s]+(?P<directory>\S+)")
 _MODAL_CALL = re.compile(
     r"\.(?P<method>pip_install_from_requirements|pip_install_from_pyproject"
@@ -575,6 +581,63 @@ def lock_violations(root: Path = REPO_ROOT) -> list[Violation]:
         if project not in checked
     ]
     return violations
+
+
+def _relocked_directories(root: Path, path: str) -> set[str] | None:
+    """Return what a scheduled workflow's relock jobs relock, or None if none do."""
+    jobs, _ = parse_jobs((root / path).read_text(encoding="utf-8"))
+    relocked = None
+    for job_id, commands in _workflow_job_commands(root, path).items():
+        job_text = "\n".join(commands)
+        relocks = [
+            command
+            for command in commands
+            if _RELOCK.search(command) and not _LOCK_CHECK.search(command)
+        ]
+        opens_pull_request = _OPENS_PULL_REQUEST.search(job_text) is not None or any(
+            "create-pull-request" in action for action in jobs[job_id].step_uses
+        )
+        if relocks and _UPGRADE_FLAG.search(job_text) and opens_pull_request:
+            relocked = (relocked or set()) | {
+                _project_directory(command) for command in relocks
+            }
+    return relocked
+
+
+def relock_violations(root: Path = REPO_ROOT) -> list[Violation]:
+    """Report when no scheduled job relocks every uv.lock and proposes it as a PR."""
+    relocked: set[str] | None = None
+    for path in _workflows(root):
+        if "schedule" not in workflow_triggers(
+            (root / path).read_text(encoding="utf-8")
+        ):
+            continue
+        workflow_relocks = _relocked_directories(root, path)
+        if workflow_relocks is not None:
+            relocked = (relocked or set()) | workflow_relocks
+    if relocked is None:
+        return [
+            Violation(
+                RELOCK_RULE,
+                "locked-installs",
+                "no scheduled workflow job relocks uv.lock with upgrades "
+                "and opens or updates a pull request",
+                "add a workflow on a schedule that runs uv lock --upgrade (or "
+                "--upgrade-package) and gh pr create",
+            )
+        ]
+    return [
+        Violation(
+            RELOCK_RULE,
+            "locked-installs",
+            f"the scheduled relock does not relock {directory}/uv.lock".replace(
+                "./", ""
+            ),
+            "relock that project in the scheduled relock job",
+        )
+        for directory in _locked_directories(root, "uv.lock")
+        if directory not in relocked
+    ]
 
 
 def test_command_violations(
