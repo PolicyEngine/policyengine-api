@@ -52,8 +52,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install dependencies
-        run: make install
+      # make install syncs .venv from uv.lock, which the bare python this
+      # job's scripts run does not read. Moving this job to uv.lock is a
+      # separate, verified change; until then it installs unlocked.
+      - name: Install dependencies (unlocked)
+        run: pip install -e ".[dev]"
       - name: Authenticate authorized database operator
         uses: google-github-actions/auth@v2
         with:
