@@ -39,4 +39,4 @@ format:
 changelog:
 	python .github/bump_version.py
 	uv lock
-	towncrier build --yes --version $$(python -c "import re; print(re.search(r'version = \"(.+?)\"', open('pyproject.toml').read()).group(1))")
+	uv run --frozen --extra dev towncrier build --yes --version $$(python -c "import re; print(re.search(r'version = \"(.+?)\"', open('pyproject.toml').read()).group(1))")

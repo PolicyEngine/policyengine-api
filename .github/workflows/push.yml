@@ -96,6 +96,10 @@ jobs:
       (github.repository == 'PolicyEngine/policyengine-api')
       && !(github.event.head_commit.message == 'Update PolicyEngine API')
     runs-on: ubuntu-latest
+    env:
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -115,8 +119,6 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.13.4"
-      - name: Install changelog tool
-        run: pip install towncrier
       - name: Bump project version
         run: python .github/bump_version.py
       - name: Refresh uv lock

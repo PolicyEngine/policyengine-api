@@ -479,3 +479,19 @@ def test_v1_and_future_v2_alembic_domains_are_explicitly_separate():
     assert "migrations/v1" in text
     assert "Supabase/Postgres" in text
     assert "separate revision chain" in text
+
+
+def test_changelog_builds_with_the_locked_towncrier():
+    workflow = _workflow("push.yml")
+    versioning_job = workflow[workflow.index("  versioning:") :]
+    versioning_job = versioning_job[: versioning_job.index("\n  publish-git-tag:")]
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+    changelog_target = makefile[makefile.index("changelog:") :]
+    build_script = (REPO / ".github/scripts/build_changelog.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "pip install" not in versioning_job
+    assert 'UV_PYTHON: "3.12"' in versioning_job
+    assert "uv run --frozen --extra dev towncrier build" in build_script
+    assert "uv run --frozen --extra dev towncrier build" in changelog_target
