@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from scripts.rules.model import Kind, Registry, Rule, Status, Tier
+from scripts.rules.model import Kind, Registry, Rule, RuleException, Status, Tier
 
 RULES_MD = Path("docs/generated/rules.md")
 AGENTS_MD = Path("AGENTS.md")
@@ -193,9 +193,7 @@ def render_rules_md(registry: Registry) -> str:
         ],
     )
     dated = [f"- `{r.id}`: review by {r.review_by}" for r in rules if r.review_by] + [
-        f"- `{r.id}`: exception for `{e.path}` until {e.expires} ({e.reason})"
-        for r in rules
-        for e in r.exceptions
+        f"- `{r.id}`: {_exception_summary(e)}" for r in rules for e in r.exceptions
     ]
     section("Exceptions and review dates", sorted(dated))
 
@@ -289,3 +287,19 @@ def write_outputs(registry: Registry, root: Path) -> list[Path]:
     current = agents.read_text() if agents.exists() else "# Agent Instructions\n"
     agents.write_text(splice_block(current, render_agents_block(registry)))
     return [rules_md, agents]
+
+
+def _exception_summary(exception: RuleException) -> str:
+    """Describe where an exception applies, why, and when it ends."""
+    site = f"`{exception.path}`"
+    if exception.match is not None:
+        site += f" (`{exception.match}`)"
+    if exception.category is not None:
+        ends = f"allowed as a {exception.category}"
+    elif exception.removal is not None:
+        ends = f"until {exception.removal}"
+    else:
+        ends = f"until {exception.expires}"
+    if exception.issue is not None:
+        ends += f", tracked in #{exception.issue}"
+    return f"exception for {site} {ends} ({exception.reason})"
