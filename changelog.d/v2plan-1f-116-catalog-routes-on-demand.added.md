@@ -1,0 +1,1 @@
+Every successful v2 metadata response carries a strong ETag (a hash of its body) and a public Cache-Control lifetime: a day when the request names its catalog with policyengine_version, five minutes for the running version. A request whose If-None-Match names the ETag gets 304 with no body.

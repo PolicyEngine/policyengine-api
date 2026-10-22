@@ -27,6 +27,18 @@ package-derived `DatasetVersion` rows or simulation/report output datasets and
 does not modify `Simulation`, `Report`, or `ReportRun` rows or their dataset
 references.
 
+## Response caching
+
+Every successful metadata response carries a strong `ETag`, a hash of its
+exact body, and `Cache-Control: public`. A request that names its catalog with
+`policyengine_version` may be reused for a day (`max-age=86400`): a published
+catalog version never changes, so only a change to the route's response format
+can change such a response, and the `ETag` lets a client revalidate after the
+day. A request without it selects the running version, which changes on
+deploy, and may be reused for five minutes (`max-age=300`). A request whose
+`If-None-Match` names the current `ETag` (strong or weak form, alone or in a
+list) gets HTTP 304 with no body. Error responses carry neither header.
+
 ## Configuration and credential boundaries
 
 Select the target with `V2_SUPABASE_PROJECT_REF` and

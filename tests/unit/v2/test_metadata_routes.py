@@ -583,3 +583,95 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
                 "application/json"
             ]["schema"]
             assert error_schema["$ref"] == "#/components/schemas/V2ErrorResponse"
+
+
+def _every_resource_path(ids: dict[str, object]) -> list[str]:
+    return [
+        "/v2/tax-benefit-models?country_id=us",
+        "/v2/tax-benefit-models/by-country/us",
+        f"/v2/tax-benefit-models/{ids['model_id']}?country_id=us",
+        "/v2/tax-benefit-model-versions?country_id=us",
+        f"/v2/tax-benefit-model-versions/{ids['model_version_id']}?country_id=us",
+        "/v2/variables?country_id=us",
+        f"/v2/variables/{ids['variable_id']}?country_id=us",
+        "/v2/parameters?country_id=us",
+        "/v2/parameters/children?country_id=us&parent_path=gov.example",
+        f"/v2/parameters/{ids['parameter_id']}?country_id=us",
+        "/v2/parameter-values?country_id=us",
+        f"/v2/parameter-values/{ids['parameter_value_id']}?country_id=us",
+        "/v2/datasets?country_id=us",
+        f"/v2/datasets/{ids['dataset_id']}?country_id=us",
+        "/v2/regions?country_id=us",
+        "/v2/regions/by-code/us?country_id=us",
+        f"/v2/regions/{ids['region_id']}?country_id=us",
+        "/v2/economy-options?country_id=us",
+    ]
+
+
+def test_every_resource_route_serves_an_entity_tag_and_cache_lifetime() -> None:
+    results, ids = _resource_results()
+    client = _client(lambda: ResourceReader(results))
+
+    for path in _every_resource_path(ids):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert response.headers["cache-control"] == "public, max-age=300", path
+        assert response.headers["etag"].startswith('"'), path
+        assert response.headers["etag"].endswith('"'), path
+
+
+def test_a_named_catalog_version_is_reusable_for_a_day() -> None:
+    results, _ids = _resource_results()
+    client = _client(lambda: ResourceReader(results))
+    query = {"country_id": "us", "policyengine_version": "4.20.3"}
+
+    first = client.get("/v2/variables", params=query)
+    second = client.get("/v2/variables", params=query)
+
+    assert first.headers["cache-control"] == "public, max-age=86400"
+    assert first.headers["etag"] == second.headers["etag"]
+
+
+def test_a_matching_entity_tag_gets_a_not_modified_response_without_a_body() -> None:
+    results, _ids = _resource_results()
+    client = _client(lambda: ResourceReader(results))
+    path = "/v2/variables?country_id=us&policyengine_version=4.20.3"
+    entity_tag = client.get(path).headers["etag"]
+
+    revalidated = client.get(path, headers={"If-None-Match": entity_tag})
+    weakly_revalidated = client.get(path, headers={"If-None-Match": f"W/{entity_tag}"})
+    listed = client.get(path, headers={"If-None-Match": f'"other", {entity_tag}'})
+    stale = client.get(path, headers={"If-None-Match": '"other"'})
+
+    for not_modified in (revalidated, weakly_revalidated, listed):
+        assert not_modified.status_code == 304
+        assert not_modified.content == b""
+        assert not_modified.headers["etag"] == entity_tag
+        assert not_modified.headers["cache-control"] == "public, max-age=86400"
+    assert stale.status_code == 200
+    assert stale.json()["status"] == "ok"
+
+
+def test_different_content_gets_a_different_entity_tag() -> None:
+    results, _ids = _resource_results()
+    changed_results, _changed_ids = _resource_results()
+
+    first = _client(lambda: ResourceReader(results)).get("/v2/variables?country_id=us")
+    changed = _client(lambda: ResourceReader(changed_results)).get(
+        "/v2/variables?country_id=us"
+    )
+
+    assert first.headers["etag"] != changed.headers["etag"]
+
+
+def test_failed_reads_carry_no_cache_headers() -> None:
+    results, _ids = _resource_results()
+    reader = ResourceReader(results, error=MetadataResourceNotFoundError("missing"))
+
+    response = _client(lambda: reader).get(
+        "/v2/variables?country_id=us&policyengine_version=4.20.3"
+    )
+
+    assert response.status_code == 404
+    assert "etag" not in response.headers
+    assert "cache-control" not in response.headers

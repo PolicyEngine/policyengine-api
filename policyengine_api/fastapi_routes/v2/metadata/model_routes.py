@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     ERROR_RESPONSES,
+    CacheableMetadataRoute,
     read_resource,
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
@@ -37,7 +38,11 @@ def build_v2_metadata_model_router(
     Each request opens and closes its own metadata reader, so building the
     router touches no database.
     """
-    router = APIRouter(prefix="/v2", responses=ERROR_RESPONSES)
+    router = APIRouter(
+        prefix="/v2",
+        responses=ERROR_RESPONSES,
+        route_class=CacheableMetadataRoute,
+    )
 
     @router.get(
         "/tax-benefit-models",
