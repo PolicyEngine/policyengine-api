@@ -23,7 +23,7 @@ from policyengine_api.data.v2.privilege_reconciliation import (
     check_declared_privileges,
     run,
 )
-from policyengine_api.data.v2.privileges import READ, TablePrivilege
+from policyengine_api.data.v2.privileges import READ, READ_WRITE, TablePrivilege
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 
 if TYPE_CHECKING:
@@ -60,6 +60,21 @@ def temporary_role(superuser_engine) -> Iterator[Callable[[], str]]:
             for role in created_roles:
                 connection.execute(text(f'DROP OWNED BY "{role}"'))
                 connection.execute(text(f'DROP ROLE "{role}"'))
+
+
+@pytest.fixture
+def temporary_view(superuser_engine) -> Iterator[str]:
+    """Create a view over ``regions`` for one test, then drop it."""
+    view = f"policyengine_privilege_test_view_{uuid4().hex[:12]}"
+    with superuser_engine.begin() as connection:
+        connection.execute(
+            text(f'CREATE VIEW public."{view}" AS SELECT * FROM public.regions')
+        )
+    try:
+        yield view
+    finally:
+        with superuser_engine.begin() as connection:
+            connection.execute(text(f'DROP VIEW public."{view}"'))
 
 
 def _has_privilege(engine: Engine, role: str, table: str, privilege: str) -> bool:
@@ -137,3 +152,22 @@ def test_a_missing_role_blocks_every_grant_and_fails_verification(
             PrivilegeEntry(role, "regions", "SELECT"),
         ]
     )
+
+
+def test_apply_grants_and_verify_checks_privileges_on_a_declared_view(
+    superuser_engine, temporary_role, temporary_view
+) -> None:
+    """A view declared like a table is found, granted and verified."""
+    role = temporary_role()
+    declared = {role: {temporary_view: READ_WRITE}}
+    with superuser_engine.begin() as connection:
+        plan, _defaults = apply_declared_privileges(connection, declared)
+        missing = check_declared_privileges(connection, declared)
+
+    assert plan.missing_tables == ()
+    assert {entry.privilege for entry in plan.grants} == {
+        privilege.value for privilege in READ_WRITE
+    }
+    assert missing == []
+    for privilege in READ_WRITE:
+        assert _has_privilege(superuser_engine, role, temporary_view, privilege.value)

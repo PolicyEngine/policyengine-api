@@ -276,7 +276,8 @@ _PUBLIC_TABLES = text(
     FROM pg_class AS table_class
     JOIN pg_namespace AS table_namespace
       ON table_namespace.oid = table_class.relnamespace
-    WHERE table_namespace.nspname = :schema AND table_class.relkind IN ('r', 'p')
+    WHERE table_namespace.nspname = :schema
+      AND table_class.relkind IN ('r', 'p', 'v')
     """
 )
 
@@ -312,7 +313,11 @@ def read_existing_roles(connection: Connection, roles: Collection[str]) -> set[s
 
 
 def read_public_tables(connection: Connection) -> set[str]:
-    """Return every table in the public schema."""
+    """Return every table and view in the public schema.
+
+    Views count because the manifest declares privileges on temporary views as
+    it does on tables, and ``GRANT ... ON TABLE`` grants on a view too.
+    """
     return set(connection.execute(_PUBLIC_TABLES, {"schema": SCHEMA}).scalars())
 
 
