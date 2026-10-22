@@ -4,11 +4,10 @@ Every association names its target through a nullable v2 reference, a
 nullable country-scoped v1 (legacy) reference, or both; a database check
 requires at least one.
 
-The simulation and report associations still carry the pre-Stage 12A
-``country`` and ``label`` columns. Nothing reads or writes them; they stay
-nullable only so the previous Public API revision, whose models still map
-them, can load these rows during a deploy or rollback. A later revision drops
-them once that revision can no longer be deployed.
+The simulation and report association tables still have the pre-Stage 12A
+``country`` and ``label`` columns, which a later revision drops. These models
+don't declare them, so nothing reads or writes them; ``retired_tables``
+declares them on the tables only so the metadata matches the schema.
 """
 
 from datetime import datetime
@@ -217,9 +216,6 @@ class UserSimulationAssociation(TimestampedModel, table=True):
     country_id: str = Field(max_length=2)
     name: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, sa_type=sa.Text)
-    # Retired; see the module docstring.
-    country: str | None = Field(default=None, max_length=16)
-    label: str | None = Field(default=None, max_length=255)
 
     user: User = Relationship(back_populates="simulation_associations")
 
@@ -299,8 +295,5 @@ class UserReportAssociation(TimestampedModel, table=True):
         default=None,
         sa_type=sa.DateTime(timezone=True),
     )
-    # Retired; see the module docstring.
-    country: str | None = Field(default=None, max_length=16)
-    label: str | None = Field(default=None, max_length=255)
 
     user: User = Relationship(back_populates="report_associations")
