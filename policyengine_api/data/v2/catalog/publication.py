@@ -97,10 +97,13 @@ def unpublished_countries(
 ) -> tuple[str, ...]:
     """Return the countries whose catalog version is not stored yet, in catalog order.
 
-    A read outside publication's transaction: a version another publisher adds
-    meanwhile is still compared with the staged one when this one publishes.
+    It first requires the expected v2 revision, as publication does, so a
+    missing or older schema is reported as such. A read outside publication's
+    transaction: a version another publisher adds meanwhile is still compared
+    with the staged one when this one publishes.
     """
     with engine.connect() as connection:
+        _verify_expected_revision(connection)
         return tuple(
             country.country_id
             for country in catalog.countries
