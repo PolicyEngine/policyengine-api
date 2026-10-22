@@ -143,3 +143,48 @@ def test_main_redacts_unexpected_errors(monkeypatch, capsys) -> None:
     payload = json.loads(capsys.readouterr().err)
     assert payload["outcome"] == "error"
     assert "secret" not in json.dumps(payload)
+
+
+def test_saved_policies_are_counted_under_the_name_of_the_pending_revision() -> None:
+    """The reshape is pending only before the later rename of ``user_policies``.
+
+    Counting through the current model would query ``user_policy_associations``,
+    which a database still waiting for the reshape does not have yet.
+    """
+    _evidence, connection, _engine = _qualify((0, 0, 0, 0), pending=True)
+
+    saved_policy_count = connection.statements[0]
+    assert "FROM user_policies" in saved_policy_count
+    assert "user_policy_associations" not in saved_policy_count
+
+
+class RecordingExecutor:
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    def scalar(self, statement: object) -> int:
+        self.statements.append(str(statement))
+        return 3
+
+
+def test_saved_policies_are_counted_under_their_name_after_the_rename() -> None:
+    """Once ``user_policies`` is renamed, its rows are counted under the new name.
+
+    The command runs before every upgrade, so it meets the table under either
+    name; reading only the old name would report no saved policies.
+    """
+    executor = RecordingExecutor()
+
+    counts = qualification.read_user_association_counts(
+        executor,
+        existing_tables={
+            "user_policy_associations",
+            "user_household_associations",
+            "user_simulation_associations",
+            "user_report_associations",
+        },
+    )
+
+    assert counts.user_policies == 3
+    saved_policy_count = executor.statements[0]
+    assert "FROM user_policy_associations" in saved_policy_count

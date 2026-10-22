@@ -24,14 +24,13 @@ from typing import TYPE_CHECKING, Protocol
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import Connection, Engine, func, inspect, select
+from sqlalchemy import Connection, Engine, func, inspect, select, table
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.pool import NullPool
 from sqlmodel import create_engine
 
 from policyengine_api.data.v2.models import (
     UserHouseholdAssociation,
-    UserPolicy,
     UserReportAssociation,
     UserSimulationAssociation,
 )
@@ -44,7 +43,14 @@ from policyengine_api.data.v2.settings import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Mapping
 
+    from sqlalchemy.sql.expression import TableClause
+
 USER_ASSOCIATION_MIGRATION_REVISION = "fbb7488ebe8a"
+# The saved-policy table's name at this revision, and the name a later
+# revision gives it. The command runs before every upgrade, so it counts the
+# table under whichever name the database has.
+SAVED_POLICY_TABLE_AT_RESHAPE = "user_policies"
+SAVED_POLICY_TABLE_AFTER_RENAME = "user_policy_associations"
 V2_ALEMBIC_CONFIG = "alembic-v2.ini"
 
 
@@ -122,13 +128,20 @@ def read_user_association_counts(
 ) -> UserAssociationCounts:
     """Count every row in the four user-association tables."""
 
-    def count(model: type, table_name: str) -> int:
+    def count(source: type | TableClause, table_name: str) -> int:
         if existing_tables is not None and table_name not in existing_tables:
             return 0
-        return int(executor.scalar(select(func.count()).select_from(model)) or 0)
+        return int(executor.scalar(select(func.count()).select_from(source)) or 0)
+
+    saved_policy_table = (
+        SAVED_POLICY_TABLE_AFTER_RENAME
+        if existing_tables is not None
+        and SAVED_POLICY_TABLE_AFTER_RENAME in existing_tables
+        else SAVED_POLICY_TABLE_AT_RESHAPE
+    )
 
     return UserAssociationCounts(
-        user_policies=count(UserPolicy, "user_policies"),
+        user_policies=count(table(saved_policy_table), saved_policy_table),
         user_household_associations=count(
             UserHouseholdAssociation, "user_household_associations"
         ),
