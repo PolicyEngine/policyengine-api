@@ -144,7 +144,7 @@ class TestMetadataService:
         ("country_id", "expected_label"),
         [
             ("us", "Microcosm"),
-            ("uk", "Enhanced FRS"),
+            ("uk", "Microcosm"),
         ],
     )
     def test_default_dataset_uses_user_facing_label(self, country_id, expected_label):

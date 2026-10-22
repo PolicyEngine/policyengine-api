@@ -1,0 +1,1 @@
+With .py 6.10.0, the UK default dataset is `microcosm_uk_2024_25`: the v2 catalog extractor accepts it as the reviewed UK default, and the metadata labels it "Microcosm", as it does the US Microcosm dataset, instead of the generic "Certified dataset".

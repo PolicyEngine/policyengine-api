@@ -24,6 +24,8 @@ class TestBundleDatasetDisplayLabels:
         ("dataset_name", "expected_label"),
         [
             ("populace_us_2024", "Microcosm"),
+            ("microcosm_uk_2024_25", "Microcosm"),
+            ("microcosm_uk_2024_25_dense", "Microcosm"),
             ("enhanced_frs_2024_25", "Enhanced FRS"),
             ("future_dataset", "Certified dataset"),
             (None, "Certified dataset"),
