@@ -39,6 +39,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataDatedValue,
     MetadataEntity,
     MetadataEnumValue,
+    ParameterFilter,
     ParameterValueFilter,
 )
 from policyengine_api.services.v2.metadata.validators import (
@@ -452,7 +453,9 @@ def test_resource_filters_and_details_remain_inside_selected_catalog(
 ) -> None:
     service = _service(catalog_session)
     variables = service.list_variables("us", search="employment")
-    parameters = service.list_parameters("us", search="example rate")
+    parameters = service.list_parameters(
+        "us", parameter_filter=ParameterFilter(search="example rate")
+    )
     states = service.list_regions("us", region_type="state")
     region = service.get_region_by_code("us", "state/ca")
 
@@ -978,6 +981,32 @@ def test_named_parameters_exclude_policy_and_dynamic_values(
     )
 
     assert [value.value for value in result.parameters[0].values] == [0.1, 0.2]
+
+
+def test_parameter_pages_and_values_can_be_narrowed_to_named_parameters(
+    catalog_session: Session,
+) -> None:
+    _add_bracket_schedule(catalog_session)
+    service = _service(catalog_session)
+
+    parameters = service.list_parameters(
+        "us",
+        parameter_filter=ParameterFilter(
+            names=("gov.example.rates[0].rate", "gov.removed.amount")
+        ),
+    )
+    values = service.list_parameter_values(
+        "us",
+        value_filter=ParameterValueFilter(
+            parameter_names=("gov.example.rate", "gov.example.rates[0].rate")
+        ),
+    )
+
+    assert [parameter.name for parameter in parameters.items] == [
+        "gov.example.rates[0].rate"
+    ]
+    assert parameters.items[0].economy is True
+    assert sorted(value.value for value in values.items) == [0.1, 0.2, 0.2]
 
 
 def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:

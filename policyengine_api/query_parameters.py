@@ -249,6 +249,35 @@ class CatalogParameterQuery(CatalogQuery):
     )
 
 
+class ParameterCollectionQuery(CatalogQuery, PaginationQuery):
+    """Query contract for a page of a catalog's parameters."""
+
+    search: str | None = Field(
+        default=None,
+        description="Case-insensitive substring of the name, label or description",
+    )
+    name: list[ParameterName] | None = Field(
+        default=None,
+        max_length=MAXIMUM_PARAMETER_NAMES,
+        description="Keep only these exact parameter paths; repeat the key",
+    )
+
+
+class ParameterValueCollectionQuery(CatalogQuery, PaginationQuery):
+    """Query contract for a page of a catalog's current-law parameter values."""
+
+    parameter_id: ResourceId | None = None
+    parameter_name: list[ParameterName] | None = Field(
+        default=None,
+        max_length=MAXIMUM_PARAMETER_NAMES,
+        description="Keep only these exact parameter paths' values; repeat the key",
+    )
+    current: bool = Field(
+        default=False,
+        description="Keep only the values in effect today (UTC)",
+    )
+
+
 class PolicyCreateQuery(CatalogQuery):
     """Query contract for native immutable policy creation."""
 

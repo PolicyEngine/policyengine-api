@@ -14,7 +14,10 @@ if TYPE_CHECKING:
     from collections.abc import Collection
     from uuid import UUID
 
-    from policyengine_api.services.v2.metadata.types import ParameterValueSelection
+    from policyengine_api.services.v2.metadata.types import (
+        ParameterFilter,
+        ParameterValueSelection,
+    )
 
 
 def _escape_like(value: str) -> str:
@@ -27,17 +30,23 @@ def read_parameters(
     model_version_id: UUID,
     offset: int,
     limit: int,
-    search: str | None,
+    parameter_filter: ParameterFilter,
 ) -> list[Parameter]:
     """Return a page of a model version's parameters in name order.
 
-    search matches name, label or description as a literal, case-insensitive
-    substring. Fetch limit + 1 rows so the caller can tell whether another page
-    exists.
+    The filter's search matches name, label or description as a literal,
+    case-insensitive substring, and its names keep only parameters with those
+    exact names. Fetch limit + 1 rows so the caller can tell whether another
+    page exists.
     """
     statement = select(Parameter).where(
         col(Parameter.tax_benefit_model_version_id) == model_version_id
     )
+    if parameter_filter.names is not None:
+        statement = statement.where(
+            col(Parameter.name).in_(sorted(parameter_filter.names))
+        )
+    search = parameter_filter.search
     if search:
         pattern = f"%{_escape_like(search)}%"
         statement = statement.where(
@@ -98,8 +107,9 @@ def read_parameter_values(
     """Return a page of a model version's current-law parameter values.
 
     Values tied to a policy or dynamic are excluded. The selection's
-    parameter_id keeps one parameter's values and its selected_day keeps those
-    in effect on that day. Rows are ordered by parameter name, then newest
+    parameter_id keeps one parameter's values, its parameter_names the values
+    of the parameters with those names, and its selected_day those in effect
+    on that day. Rows are ordered by parameter name, then newest
     first, and limit + 1 are fetched so the caller can tell whether another
     page exists.
     """
@@ -116,6 +126,10 @@ def read_parameter_values(
     )
     if parameter_id is not None:
         statement = statement.where(col(ParameterValue.parameter_id) == parameter_id)
+    if selection.parameter_names is not None:
+        statement = statement.where(
+            col(Parameter.name).in_(sorted(selection.parameter_names))
+        )
     if selected_day is not None:
         statement = statement.where(
             col(ParameterValue.start_date) <= selected_day,

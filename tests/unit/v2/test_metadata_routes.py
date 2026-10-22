@@ -47,6 +47,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataRegionOption,
     MetadataTimePeriodOption,
     MetadataVariable,
+    ParameterFilter,
 )
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
@@ -928,3 +929,123 @@ def test_catalog_parameters_route_declares_a_repeated_name_in_openapi() -> None:
     assert name_schema["type"] == "array"
     assert name_schema["minItems"] == 1
     assert name_schema["maxItems"] == 100
+
+
+def test_parameter_collection_fetches_several_parameters_by_name() -> None:
+    results, _ids = _resource_results()
+    reader = ResourceReader(results)
+    client = _client(lambda: reader)
+
+    named = client.get(
+        "/v2/parameters?country_id=US&name=gov.example.rate&name=gov.other.rate"
+    )
+    paged = client.get("/v2/parameters?country_id=us&offset=5&limit=50&search=rate")
+
+    assert named.status_code == 200
+    assert paged.status_code == 200
+    assert reader.calls == [
+        (
+            "list_parameters",
+            ("us", None),
+            {
+                "offset": 0,
+                "limit": 100,
+                "parameter_filter": ParameterFilter(
+                    search=None, names=("gov.example.rate", "gov.other.rate")
+                ),
+            },
+        ),
+        (
+            "list_parameters",
+            ("us", None),
+            {
+                "offset": 5,
+                "limit": 50,
+                "parameter_filter": ParameterFilter(search="rate", names=None),
+            },
+        ),
+    ]
+
+
+def test_parameter_values_fetch_several_parameters_by_name() -> None:
+    results, _ids = _resource_results()
+    reader = ResourceReader(results)
+
+    response = _client(lambda: reader).get(
+        "/v2/parameter-values?country_id=us&policyengine_version=4.20.3"
+        "&parameter_name=gov.example.rate&parameter_name=gov.other.rate&current=true"
+    )
+
+    assert response.status_code == 200
+    name, args, kwargs = reader.calls[0]
+    assert (name, args) == ("list_parameter_values", ("us", "4.20.3"))
+    assert kwargs["value_filter"].parameter_names == (
+        "gov.example.rate",
+        "gov.other.rate",
+    )
+    assert kwargs["value_filter"].parameter_id is None
+    assert kwargs["value_filter"].current is True
+    assert (kwargs["offset"], kwargs["limit"]) == (0, 100)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v2/parameters?country_id=us&parameter_id=1",
+        "/v2/parameters?country_id=us&limit=5&limit=6",
+        "/v2/parameters?country_id=us&name=",
+        "/v2/parameters?country_id=ca",
+        "/v2/parameters?country_id=us&"
+        + "&".join(f"name=gov.p{index}" for index in range(101)),
+        "/v2/parameter-values?country_id=us&name=gov.example.rate",
+        "/v2/parameter-values?country_id=us&current=true&current=false",
+        "/v2/parameter-values?country_id=us&parameter_id=not-a-uuid",
+    ],
+)
+def test_parameter_collections_reject_unknown_repeated_and_invalid_queries(
+    path: str,
+) -> None:
+    calls = []
+
+    def factory():
+        calls.append("called")
+        results, _ids = _resource_results()
+        return ResourceReader(results)
+
+    response = _client(factory).get(path)
+
+    assert response.status_code == 422
+    assert calls == []
+
+
+def test_parameter_collections_declare_their_name_filters_in_openapi() -> None:
+    results, _ids = _resource_results()
+    schema = _client(lambda: ResourceReader(results)).get("/v2/openapi.json").json()
+
+    def query_parameters(path: str) -> dict[str, dict]:
+        return {
+            parameter["name"]: parameter
+            for parameter in schema["paths"][path]["get"]["parameters"]
+        }
+
+    parameters = query_parameters("/v2/parameters")
+    values = query_parameters("/v2/parameter-values")
+    assert set(parameters) == {
+        "country_id",
+        "policyengine_version",
+        "offset",
+        "limit",
+        "search",
+        "name",
+    }
+    assert parameters["name"]["required"] is False
+    assert set(values) == {
+        "country_id",
+        "policyengine_version",
+        "offset",
+        "limit",
+        "parameter_id",
+        "parameter_name",
+        "current",
+    }
+    assert values["parameter_name"]["required"] is False

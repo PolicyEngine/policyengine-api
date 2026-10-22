@@ -66,6 +66,15 @@ lists requested names the version has no parameter for, so a reform saved
 against an older version still opens. `GET /v2/parameters` pages and details
 carry the same `economy` and `household` flags.
 
+`GET /v2/parameters` also accepts repeated `name` keys (at most 100) to page
+only those exact parameters, and `GET /v2/parameter-values` repeated
+`parameter_name` keys to page only those parameters' values. Both routes now
+read their query through the shared query models (`ParameterCollectionQuery`
+and `ParameterValueCollectionQuery`): unknown and repeated scalar parameters,
+an unsupported `country_id` and a malformed `policyengine_version` are
+rejected with HTTP 422 before any read; before, the last two returned HTTP 400
+from the read and unknown parameters were ignored.
+
 ## Response caching
 
 Every successful metadata response carries a strong `ETag`, a hash of its

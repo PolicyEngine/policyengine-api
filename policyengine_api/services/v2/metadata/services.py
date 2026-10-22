@@ -75,6 +75,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataParameterSummary,
     MetadataRegion,
     MetadataVariable,
+    ParameterFilter,
     ParameterValueFilter,
 )
 from policyengine_api.services.v2.metadata.validators import (
@@ -271,12 +272,13 @@ class V2MetadataService:
         *,
         offset: int = 0,
         limit: int = 100,
-        search: str | None = None,
+        parameter_filter: ParameterFilter | None = None,
     ) -> MetadataPageResult[MetadataParameterSummary]:
         """Return a page of the catalog's parameters in name order.
 
-        search keeps parameters whose name, label or description contains it,
-        ignoring case.
+        The filter's search keeps parameters whose name, label or description
+        contains it, ignoring case, and its names keep only parameters with
+        those exact names. No filter lists them all.
         """
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
@@ -286,7 +288,9 @@ class V2MetadataService:
             model_version_id=selected.model_version.id,
             offset=offset,
             limit=limit,
-            search=search,
+            parameter_filter=(
+                parameter_filter if parameter_filter is not None else ParameterFilter()
+            ),
         )
         return page_result(
             selected,
@@ -359,8 +363,9 @@ class V2MetadataService:
         """Return a page of current-law parameter values, newest first per parameter.
 
         Values belonging to a reform or dynamic are never listed. The filter's
-        parameter_id keeps one parameter's values, and current=True keeps those in
-        effect on the UTC day of now (today by default). No filter lists them all.
+        parameter_id keeps one parameter's values, parameter_names the values of
+        the parameters with those exact names, and current=True those in effect
+        on the UTC day of now (today by default). No filter lists them all.
         """
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
