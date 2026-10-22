@@ -70,6 +70,8 @@ must execute in this order:
    `uv run python scripts/publish_v2_metadata_catalog.py`. Before publishing a
    catalog version that is not stored yet, the command reads the certified data
    artifacts its regions' filters use and stops if one cannot select a region.
+   It stops before reading anything if a UK version needs checking and
+   `HUGGING_FACE_TOKEN` is unset, because the UK data repository is private.
 5. Require the command to finish successfully and retain its non-secret JSON
    evidence before creating the candidate revision.
 6. Deploy the Cloud Run candidate with the target identity and
