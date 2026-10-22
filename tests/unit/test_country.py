@@ -5,6 +5,8 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
+from policyengine.countries.uk.regions import build_uk_region_registry
+from policyengine.data.uk_geography_assets import packaged_uk_area_list_path
 from policyengine_core.enums import EnumArray
 from policyengine_core.model_api import Enum
 
@@ -213,12 +215,45 @@ class TestUKCountryMetadata:
         ]
         assert len(local_authority_regions) > 0
 
-    def test__uk_has_360_local_authorities(self, uk_regions):
+    def test__uk_has_361_local_authorities(self, uk_regions):
         """Verify the correct number of local authorities are loaded."""
         local_authority_regions = [
             r for r in uk_regions if r.get("type") == "local_authority"
         ]
-        assert len(local_authority_regions) == 360
+        assert len(local_authority_regions) == 361
+
+    def test__ards_and_north_down_is_offered(self, uk_regions):
+        """The 11th Northern Ireland district (N09000011) is a selectable region."""
+        assert {
+            "name": "local_authority/Ards and North Down",
+            "label": "Ards and North Down",
+            "type": "local_authority",
+        } in uk_regions
+
+    def test__every_local_authority_resolves_in_the_policyengine_registry(
+        self, uk_regions
+    ):
+        """Each offered name matches a .py registry label, ignoring case.
+
+        The simulation API resolves ``local_authority/{name}`` to the registry
+        code whose label matches the name, ignoring case.
+        """
+        registry = build_uk_region_registry(
+            include_constituencies=False, include_local_authorities=True
+        )
+        registry_labels = {
+            region.label.casefold(): region.code
+            for region in registry.get_by_type("local_authority")
+        }
+        offered = [
+            region["label"]
+            for region in uk_regions
+            if region.get("type") == "local_authority"
+        ]
+        assert [
+            label for label in offered if label.casefold() not in registry_labels
+        ] == []
+        assert registry_labels["ards and north down"] == "local_authority/N09000011"
 
     def test__local_authority_regions_have_correct_name_format(self, uk_regions):
         """Verify local authority region names have the correct prefix."""
@@ -295,9 +330,44 @@ class TestLocalAuthoritiesDataFile:
         expected_columns = {"code", "name", "x", "y"}
         assert expected_columns == set(local_authorities_df.columns)
 
-    def test__file_has_360_local_authorities(self, local_authorities_df):
+    def test__file_has_361_local_authorities(self, local_authorities_df):
         """Verify the correct number of local authorities in file."""
-        assert len(local_authorities_df) == 360
+        assert len(local_authorities_df) == 361
+
+    def test__file_matches_the_installed_policyengine_list(self, local_authorities_df):
+        """Codes, names and hex positions equal .py's packaged 2023 list.
+
+        .py's list is read from the installed package, so a .py update that
+        changes the area frame makes this test fail until the file follows.
+        """
+        policyengine_list = pd.read_csv(packaged_uk_area_list_path("local_authority"))
+
+        def by_code(frame: pd.DataFrame) -> dict[str, tuple[str, float, float]]:
+            return {
+                row.code: (row.name, float(row.x), float(row.y))
+                for row in frame.itertuples(index=False)
+            }
+
+        assert by_code(local_authorities_df) == by_code(policyengine_list)
+
+    def test__april_2023_unitaries_leave_the_origin_placeholder(
+        self, local_authorities_df
+    ):
+        """The four unitaries created in April 2023 have their own hex positions.
+
+        They used to share the (0, 0) placeholder. Another authority may still
+        sit at (0, 0) when .py's list puts it there; the comparison with .py's
+        list above covers every position.
+        """
+        april_2023_unitaries = local_authorities_df[
+            local_authorities_df["code"].isin(
+                ["E06000063", "E06000064", "E06000065", "E06000066"]
+            )
+        ]
+        assert len(april_2023_unitaries) == 4
+        assert not (
+            (april_2023_unitaries["x"] == 0) & (april_2023_unitaries["y"] == 0)
+        ).any()
 
     def test__all_codes_are_valid_ons_codes(self, local_authorities_df):
         """Verify all codes follow ONS local authority code patterns."""
@@ -321,7 +391,7 @@ class TestLocalAuthoritiesDataFile:
         english_las = local_authorities_df[
             local_authorities_df["code"].str.startswith("E")
         ]
-        # England has 296 local authorities (majority of the 360 total)
+        # England has 296 local authorities (majority of the 361 total)
         assert len(english_las) == 296
 
     def test__scottish_local_authorities_have_s_prefix(self, local_authorities_df):
@@ -339,6 +409,16 @@ class TestLocalAuthoritiesDataFile:
         ]
         # Wales has 22 principal areas
         assert len(welsh_las) == 22
+
+    def test__northern_irish_local_authorities_have_n_prefix(
+        self, local_authorities_df
+    ):
+        """Verify all 11 Northern Ireland districts have N prefix codes."""
+        northern_irish_las = local_authorities_df[
+            local_authorities_df["code"].str.startswith("N")
+        ]
+        assert len(northern_irish_las) == 11
+        assert "N09000011" in set(northern_irish_las["code"])
 
 
 class TestSimulationCompatibility:

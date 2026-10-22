@@ -58,10 +58,10 @@ E06000059,-1.0,0.0,Dorset
 E06000060,5.0,5.0,Buckinghamshire
 E06000061,9.0,9.0,North Northamptonshire
 E06000062,7.0,6.0,West Northamptonshire
-E06000063,0.0,0.0,Cumberland
-E06000064,0.0,0.0,Westmorland and Furness
-E06000065,0.0,0.0,North Yorkshire
-E06000066,0.0,0.0,Somerset
+E06000063,4.0,18.0,Cumberland
+E06000064,4.0,17.0,Westmorland and Furness
+E06000065,8.0,17.0,North Yorkshire
+E06000066,0.0,1.0,Somerset
 E07000008,12.0,8.0,Cambridge
 E07000009,12.0,9.0,East Cambridgeshire
 E07000010,13.0,10.0,Fenland
@@ -305,6 +305,7 @@ N09000007,-5.0,15.0,Lisburn and Castlereagh
 N09000008,-4.0,18.0,Mid and East Antrim
 N09000009,-5.0,17.0,Mid Ulster
 N09000010,-4.0,15.0,"Newry, Mourne and Down"
+N09000011,-3.0,16.0,Ards and North Down
 S12000005,2.0,24.0,Clackmannanshire
 S12000006,4.0,20.0,Dumfries and Galloway
 S12000008,3.0,20.0,East Ayrshire
