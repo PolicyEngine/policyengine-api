@@ -44,7 +44,10 @@ from policyengine_api.data.v2.catalog.region_references import (
     RegionReference,
     load_region_references,
 )
-from policyengine_api.data.v2.catalog.region_scoping import scope_regions
+from policyengine_api.data.v2.catalog.region_scoping import (
+    filtered_artifacts,
+    scope_regions,
+)
 from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
 
 if TYPE_CHECKING:
@@ -471,6 +474,7 @@ def _normalize_country(
             OmittedRegionSummary(region_type=region_type, count=count)
             for region_type, count in scoping.omitted_counts.items()
         ),
+        certified_artifacts=filtered_artifacts(scoping),
     )
 
 
