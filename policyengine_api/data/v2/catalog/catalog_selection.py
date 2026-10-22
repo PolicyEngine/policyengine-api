@@ -12,8 +12,9 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
 
-SUPPORTED_V2_COUNTRY_IDS = frozenset({"us", "uk"})
+SUPPORTED_V2_COUNTRY_IDS = frozenset(SUPPORTED_COUNTRY_IDS)
 MAXIMUM_POLICYENGINE_VERSION_LENGTH = 128
 
 

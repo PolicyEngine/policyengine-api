@@ -1,0 +1,1 @@
+Added a v2 `countries` table that records, for each country the Public API serves, whether it supports household and society-wide calculations. Its revision lists the US and the UK, both with both. Users' primary country and the country of every v2 household, policy and user association now reference this table instead of a fixed US-and-UK check.
