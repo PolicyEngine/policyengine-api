@@ -19,6 +19,7 @@ from policyengine_api.data.v2.catalog.records import (
     VariableRecord,
     iter_batches,
 )
+from policyengine_api.data.v2.models import CatalogEntity, CatalogEnumValue
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Sequence
@@ -178,11 +179,11 @@ def _model_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
         country.model_version.catalog_format,
         Jsonb(
             [
-                {
-                    "key": entity.key,
-                    "plural": entity.plural,
-                    "is_person": entity.is_person,
-                }
+                CatalogEntity(
+                    key=entity.key,
+                    plural=entity.plural,
+                    is_person=entity.is_person,
+                )
                 for entity in country.model_version.entities
             ]
         ),
@@ -195,7 +196,10 @@ def _enum_values_json(record: VariableRecord) -> Jsonb | None:
     if record.enum_values is None:
         return None
     return Jsonb(
-        [{"value": item.value, "label": item.label} for item in record.enum_values]
+        [
+            CatalogEnumValue(value=item.value, label=item.label)
+            for item in record.enum_values
+        ]
     )
 
 
