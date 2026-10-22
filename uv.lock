@@ -2743,7 +2743,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "6.7.5"
+version = "6.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -2755,9 +2755,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/dc/db/3c18644cc814dcfc1abcea6f58df67d012712d7c6b2d9c8e01b746c18dc0/policyengine-6.7.5.tar.gz", hash = "sha256:872457de79f51dc57f33efb85274cb461d14aa42017e39aabf9d6611a673b30a", size = 1465755, upload-time = "2026-10-18T22:31:35.177Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/91/5a/0d03113f0598ca24205e5a25f6fc03c034860fa450e70b3003cd7f123d19/policyengine-6.9.0.tar.gz", hash = "sha256:eb9fedb1411570e421f5a742dd18a8cfb2d3bc45de4fc84827788564be7afae4", size = 1507452, upload-time = "2026-10-20T18:20:23.839Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4f/21/8faef0956e0c9a0f4ac73d16e7aae7330088e25ed3b6f81323572c4b8440/policyengine-6.7.5-py3-none-any.whl", hash = "sha256:acb921a6cd78c5bd5692827d3830fad9225a25f7e93e5742b92b2909624f76d3", size = 508363, upload-time = "2026-10-18T22:31:33.068Z" },
+    { url = "https://files.pythonhosted.org/packages/36/8a/904c82e6aab3935b930b7b31d0edd975fee7d12bf50336c4e1f6128095a8/policyengine-6.9.0-py3-none-any.whl", hash = "sha256:832cb4c72cc847d477cf4b2653984fac503eafba833056bd842f370847524866", size = 532365, upload-time = "2026-10-20T18:20:21.86Z" },
 ]
 
 [package.optional-dependencies]
@@ -2846,7 +2846,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.15,<2" },
     { name = "openai" },
     { name = "packaging", specifier = ">=24,<27" },
-    { name = "policyengine", extras = ["models"], specifier = "==6.7.5" },
+    { name = "policyengine", extras = ["models"], specifier = "==6.9.0" },
     { name = "policyengine-canada", specifier = "==0.96.3" },
     { name = "policyengine-il", specifier = "==0.1.0" },
     { name = "policyengine-ng", specifier = "==0.5.1" },
