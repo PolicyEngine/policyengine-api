@@ -163,10 +163,10 @@ def test_publish_and_republish_preserve_complete_catalog(
         storage_path is None and not output for _, storage_path, output in datasets
     )
     assert dict(region_defaults) == {
-        "country/england": "enhanced_frs_2024_25",
+        "country/england": "microcosm_uk_2024_25",
         "place/CA-44000": "populace_us_2024",
         "state/ca": "populace_us_ca_2024",
-        "uk": "enhanced_frs_2024_25",
+        "uk": "microcosm_uk_2024_25",
         "us": "populace_us_2024",
     }
 

@@ -36,17 +36,20 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         importlib_metadata.version(name) == expected
         for name, expected in expected_dependencies
     )
-    # Counts for the 6.7.5 bundle's models: US 2.2.1 and UK 2.130.1. Keep
+    # Counts for the 6.10.0 bundle's models: US 2.2.1 and UK 2.132.6. Keep
     # this exact assertion so later package changes require explicit review.
+    # Since 6.10.0 the UK registry also lists its 650 constituencies and 361
+    # local authorities, because the bundle routes them to a local-area
+    # release, so regions grow by 1,011 from 6.7.5's 826.
     assert catalog.entity_counts() == {
         "models": 2,
         "model_versions": 2,
-        "variables": 7_330,
-        "parameter_nodes": 29_306,
-        "parameters": 104_171,
-        "parameter_values": 1_194_357,
+        "variables": 7_337,
+        "parameter_nodes": 29_307,
+        "parameters": 104_172,
+        "parameter_values": 1_194_360,
         "datasets": 3,
-        "regions": 826,
+        "regions": 1_837,
     }
 
     for country_id in ("us", "uk"):
@@ -74,7 +77,7 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "populace_us_2024_acs_local",
     }
     assert {dataset.name for dataset in catalog.country("uk").datasets} == {
-        "enhanced_frs_2024_25"
+        "microcosm_uk_2024_25"
     }
     england = next(
         region

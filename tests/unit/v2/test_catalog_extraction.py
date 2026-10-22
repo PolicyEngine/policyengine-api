@@ -41,7 +41,7 @@ def test_extracts_canonical_policyengine_catalog_and_dataset_defaults() -> None:
         "populace_us_2024",
         "populace_us_ca_2024",
     }
-    assert {dataset.name for dataset in uk.datasets} == {"enhanced_frs_2024_25"}
+    assert {dataset.name for dataset in uk.datasets} == {"microcosm_uk_2024_25"}
     assert all(
         not dataset.is_output_dataset for dataset in (*us.datasets, *uk.datasets)
     )

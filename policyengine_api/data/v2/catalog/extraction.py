@@ -39,7 +39,7 @@ REQUIRED_DEPENDENCIES = (
 )
 REVIEWED_DEFAULT_DATASETS = {
     "us": "populace_us_2024",
-    "uk": "enhanced_frs_2024_25",
+    "uk": "microcosm_uk_2024_25",
 }
 CURRENT_LAW_IDS = {"us": 2, "uk": 1}
 METADATA_TIME_PERIODS = {
