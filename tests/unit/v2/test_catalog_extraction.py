@@ -62,6 +62,66 @@ def test_extracts_canonical_policyengine_catalog_and_dataset_defaults() -> None:
     assert all(region.default_dataset_id == uk.datasets[0].id for region in uk.regions)
 
 
+UK_DENSE_URI = "hf://policyengine/uk/microcosm_uk_2024_25_dense.h5@fixture"
+
+
+def _uk_area_region(code: str, region_type: str, filter_field: str) -> SimpleNamespace:
+    """Return a UK area region routed to the local-area dataset, as .py 6.10 does."""
+    return SimpleNamespace(
+        code=code,
+        label=code.split("/", maxsplit=1)[1],
+        region_type=region_type,
+        parent_code="uk",
+        dataset_path=UK_DENSE_URI,
+        scoping_strategy=SimpleNamespace(
+            strategy_type="row_filter",
+            variable_name=filter_field,
+            variable_value=code.split("/", maxsplit=1)[1],
+            additional_filters={},
+        ),
+        requires_filter=True,
+        state_code=None,
+        state_name=None,
+    )
+
+
+def test_uk_area_regions_use_the_dataset_their_path_names() -> None:
+    models = source_models()
+    models["uk"].region_registry.extend(
+        [
+            _uk_area_region(
+                "constituency/E14001063", "constituency", "constituency_code_oa"
+            ),
+            _uk_area_region(
+                "local_authority/E07000092", "local_authority", "la_code_oa"
+            ),
+        ]
+    )
+
+    uk = extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    ).country("uk")
+
+    assert {dataset.name for dataset in uk.datasets} == {
+        "microcosm_uk_2024_25",
+        "microcosm_uk_2024_25_dense",
+    }
+    uk_datasets = {dataset.id: dataset.name for dataset in uk.datasets}
+    assert {
+        region.code: uk_datasets[region.default_dataset_id] for region in uk.regions
+    } == {
+        "uk": "microcosm_uk_2024_25",
+        "country/england": "microcosm_uk_2024_25",
+        "constituency/E14001063": "microcosm_uk_2024_25_dense",
+        "local_authority/E07000092": "microcosm_uk_2024_25_dense",
+    }
+    # A UK country filters the national dataset by design; it is no fallback.
+    assert uk.fallback_summaries == ()
+
+
 def test_durable_ids_are_deterministic_and_stable_at_the_intended_scope() -> None:
     first = normalized_catalog()
     repeated = normalized_catalog()

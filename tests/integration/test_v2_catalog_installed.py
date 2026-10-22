@@ -40,7 +40,8 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
     # this exact assertion so later package changes require explicit review.
     # Since 6.10.0 the UK registry also lists its 650 constituencies and 361
     # local authorities, because the bundle routes them to a local-area
-    # release, so regions grow by 1,011 from 6.7.5's 826.
+    # release, so regions grow by 1,011 from 6.7.5's 826 and the catalog
+    # adds that release's dataset.
     assert catalog.entity_counts() == {
         "models": 2,
         "model_versions": 2,
@@ -48,7 +49,7 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "parameter_nodes": 29_307,
         "parameters": 104_172,
         "parameter_values": 1_194_360,
-        "datasets": 3,
+        "datasets": 4,
         "regions": 1_837,
     }
 
@@ -77,8 +78,26 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "populace_us_2024_acs_local",
     }
     assert {dataset.name for dataset in catalog.country("uk").datasets} == {
-        "microcosm_uk_2024_25"
+        "microcosm_uk_2024_25",
+        "microcosm_uk_2024_25_dense",
     }
+    # The national file has no area codes, so UK constituencies and local
+    # authorities use the local-area dataset .py routes them to, while the
+    # UK countries filter the national file.
+    uk_catalog = catalog.country("uk")
+    uk_dataset_names = {dataset.id: dataset.name for dataset in uk_catalog.datasets}
+    uk_region_type_datasets: dict[str, set[str]] = {}
+    for region in uk_catalog.regions:
+        uk_region_type_datasets.setdefault(region.region_type, set()).add(
+            uk_dataset_names[region.default_dataset_id]
+        )
+    assert uk_region_type_datasets == {
+        "national": {"microcosm_uk_2024_25"},
+        "country": {"microcosm_uk_2024_25"},
+        "constituency": {"microcosm_uk_2024_25_dense"},
+        "local_authority": {"microcosm_uk_2024_25_dense"},
+    }
+    assert uk_catalog.fallback_summaries == ()
     england = next(
         region
         for region in catalog.country("uk").regions

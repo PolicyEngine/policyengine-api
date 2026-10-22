@@ -106,8 +106,11 @@ congressional-district, or place region uses its PolicyEngine.py regional
 alternative when one is available. Until a later reviewed change removes the
 fallback, a subnational region without such an alternative uses
 `populace_us_2024`. The command emits one summary warning containing only the
-affected region types and counts. UK regions use the
-`enhanced_frs_2024_25` default certified by PolicyEngine.py 5.0.4.
+affected region types and counts. The UK national and country regions use
+`microcosm_uk_2024_25`, the default certified by PolicyEngine.py 6.10.0; a
+country filters that national file. UK constituency and local-authority
+regions use the dataset PolicyEngine.py routes them to,
+`microcosm_uk_2024_25_dense`, because the national file has no area codes.
 
 Review the fallback summary on every new PolicyEngine.py release. A changed
 count may identify an upstream catalog change that needs a reviewed dataset
