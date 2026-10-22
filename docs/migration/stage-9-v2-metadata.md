@@ -146,9 +146,12 @@ dataset from the certified data release and its filter:
 | US states and congressional districts | the release's state and district dataset | `row_filter` on `state_fips` or `congressional_district_geoid` |
 | UK national | `enhanced_frs_2024_25` | none |
 | UK nations | `enhanced_frs_2024_25` | `row_filter` on `region` |
-| UK constituencies and local authorities | `enhanced_frs_2024_25` | `weight_replacement`: field `parliamentary_constituency_weights` or `local_authority_weights`, value the ONS code |
+| UK constituencies and local authorities, when the release certifies the weight matrices | `enhanced_frs_2024_25` | `weight_replacement`: field `parliamentary_constituency_weights` or `local_authority_weights`, value the ONS code |
+| UK constituencies and local authorities, when the release has no weight matrices and routes the region type to its own dataset | that dataset (for example `microcosm_uk_2024_25_dense`) | `row_filter` on `constituency_code_oa` or `la_code_oa`, value the ONS code |
 
 A weight matrix must come from the same release as the dataset it reweights.
+A release with neither the weight matrix nor a dataset for the region type
+stops publication.
 If the release names no dataset for a sub-national type, its regions use the
 default dataset and the command emits one summary warning with the affected
 region types and counts. Region types without a rule, such as US places until
