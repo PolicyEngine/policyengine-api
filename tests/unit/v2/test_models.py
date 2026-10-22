@@ -4,6 +4,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateTable
+from sqlmodel.sql.sqltypes import AutoString
 
 from policyengine_api.data.v1_models import V1Base
 from policyengine_api.data.v2.models import (
@@ -676,3 +677,47 @@ def test_saved_policy_table_is_named_like_the_other_association_tables() -> None
         ("user_report_associations", "user_policy_id"),
         ("user_report_associations", "baseline_user_policy_id"),
     }
+
+
+def test_catalog_format_2_columns_are_nullable_for_earlier_versions() -> None:
+    """Catalog format 2 stores v3's metadata; versions published before it keep null.
+
+    The model version records its catalog format, entities and basic inputs; each
+    variable its input flags, module, parameter-named parts and enum labels; each
+    parameter its economy and household flags.
+    """
+    expected_columns = {
+        "tax_benefit_model_versions": {
+            "catalog_format": sa.Integer,
+            "entities": sa.JSON,
+            "basic_inputs": sa.JSON,
+        },
+        "variables": {
+            "is_input_variable": sa.Boolean,
+            "hidden_input": sa.Boolean,
+            "module_name": AutoString,
+            "adds_parameter_path": AutoString,
+            "subtracts_parameter_path": AutoString,
+            "enum_values": sa.JSON,
+        },
+        "parameters": {
+            "economy": sa.Boolean,
+            "household": sa.Boolean,
+        },
+    }
+
+    for table_name, columns in expected_columns.items():
+        table = V2_METADATA.tables[table_name]
+        for column_name, column_type in columns.items():
+            column = table.c[column_name]
+            assert column.nullable, f"{table_name}.{column_name}"
+            assert column.server_default is None, f"{table_name}.{column_name}"
+            assert isinstance(column.type, column_type), f"{table_name}.{column_name}"
+
+    variables = V2_METADATA.tables["variables"]
+    for column_name in (
+        "module_name",
+        "adds_parameter_path",
+        "subtracts_parameter_path",
+    ):
+        assert variables.c[column_name].type.length == 512
