@@ -46,7 +46,6 @@ def test_postgres_countries_list_the_rows_the_revision_inserted(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
-        specification_provider=dict,
         v2_country_service_factory=lambda: V2CountryService(
             CountryDatabaseSession(sessions)
         ),

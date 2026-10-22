@@ -79,7 +79,6 @@ def _client(engine: Engine) -> TestClient:
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
-        specification_provider=dict,
         v2_metadata_reader_factory=lambda: V2MetadataService(
             MetadataDatabaseSession(Session(engine)),
             running_policyengine_version=POLICYENGINE_VERSION,

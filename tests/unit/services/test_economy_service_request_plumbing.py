@@ -204,7 +204,7 @@ def test_annual_submission_stores_record_and_sends_payload(
             "capture_mode": "disabled",
         },
     }
-    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    stored = economy_service._reform_impacts._cache.recent(5)
     assert stored == [
         CachedReformImpact(
             reform_impact_id=reform_impact_id(MOCK_MODAL_JOB_ID),
