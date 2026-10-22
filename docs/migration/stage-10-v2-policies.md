@@ -217,3 +217,7 @@ Run request logs for the 30 days to 2026-10-19 showed no saved-policy
 requests. No new v1 saved policies are created, so none are copied to v2. The
 saved-policy copying and v1 saved-policy service modules stay until dual-write
 is deleted, and existing Cloud SQL `user_policies` rows are kept.
+
+The Public API also no longer serves Canada, Nigeria and Israel: their v1
+policy requests are rejected as unknown countries before any write, so every
+v1 policy write is now for a country that v2 supports.

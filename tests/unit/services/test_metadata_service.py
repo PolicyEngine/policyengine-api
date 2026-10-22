@@ -63,9 +63,6 @@ class TestMetadataService:
                     "state/fl",
                 ],
             ),
-            ("ca", 3, ["ca"]),
-            ("ng", 4, ["ng"]),
-            ("il", 5, ["il"]),
         ],
     )
     def test_verify_metadata_for_given_country(
