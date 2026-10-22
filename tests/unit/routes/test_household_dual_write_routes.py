@@ -131,7 +131,7 @@ def test_dual_write_processes_exact_selected_event_before_success(
 
 
 @pytest.mark.parametrize("country_id", ["ca", "ng", "il"])
-def test_dual_write_keeps_other_v1_countries_entirely_on_cloud_sql(
+def test_removed_countries_are_rejected_before_any_household_write(
     monkeypatch,
     country_id: str,
 ) -> None:
@@ -139,7 +139,6 @@ def test_dual_write_keeps_other_v1_countries_entirely_on_cloud_sql(
     with (
         patch(
             "policyengine_api.routes.household_routes.household_service.create_household",
-            return_value=_creation(country_id=country_id, mirrored=False),
         ) as create,
         patch(
             "policyengine_api.routes.household_routes.process_household_event_after_commit"
@@ -147,8 +146,8 @@ def test_dual_write_keeps_other_v1_countries_entirely_on_cloud_sql(
     ):
         response = _client().post(f"/{country_id}/household", json=_body())
 
-    assert response.status_code == 201
-    assert create.call_args.kwargs == {"record_mirror_event": False}
+    assert response.status_code == 400
+    create.assert_not_called()
     copy_event.assert_not_called()
 
 
