@@ -2,44 +2,72 @@ from pathlib import Path
 
 from flask import Flask
 
-from policyengine_api.routes.home_routes import home_bp
+from policyengine_api.routes.economy_routes import economy_bp
+from policyengine_api.routes.error_routes import error_bp
 from policyengine_api.routes.household_routes import household_bp
+from policyengine_api.routes.metadata_routes import metadata_bp
 from policyengine_api.routes.policy_routes import policy_bp
-from policyengine_api.routes.reform_impact_routes import reform_impact_bp
+from policyengine_api.routes.report_output_routes import report_output_bp
+from policyengine_api.routes.simulation_routes import simulation_bp
 from policyengine_api.routes.system_routes import system_bp
 
 PACKAGE_ROOT = Path(__file__).parents[3] / "policyengine_api"
+REGISTERED_BLUEPRINTS = (
+    error_bp,
+    metadata_bp,
+    household_bp,
+    policy_bp,
+    economy_bp,
+    simulation_bp,
+    report_output_bp,
+    system_bp,
+)
+# Routes that only legacy.policyengine.org or the API documentation used.
+REMOVED_LEGACY_ROUTES = {
+    ("/", "GET"),
+    ("/specification", "GET"),
+    ("/<country_id>/policies", "GET"),
+    ("/<country_id>/user-policy", "POST"),
+    ("/<country_id>/user-policy", "PUT"),
+    ("/<country_id>/user-policy/<user_id>", "GET"),
+    ("/<country_id>/user-profile", "POST"),
+    ("/<country_id>/user-profile", "PUT"),
+    ("/<country_id>/user-profile", "GET"),
+    ("/simulations", "GET"),
+}
+REMOVED_BLUEPRINT_MODULES = (
+    "home_routes",
+    "reform_impact_routes",
+    "user_profile_routes",
+)
 
 
-def test_legacy_flask_urls_are_owned_by_blueprints():
+def _flask_rules() -> set[tuple[str, str]]:
     app = Flask(__name__)
-    app.register_blueprint(home_bp)
-    app.register_blueprint(household_bp)
-    app.register_blueprint(policy_bp)
-    app.register_blueprint(reform_impact_bp)
-    app.register_blueprint(system_bp)
-
-    rules = {
+    for blueprint in REGISTERED_BLUEPRINTS:
+        app.register_blueprint(blueprint)
+    return {
         (rule.rule, method)
         for rule in app.url_map.iter_rules()
         for method in rule.methods
         if method not in {"HEAD", "OPTIONS"}
     }
 
+
+def test_legacy_flask_urls_are_owned_by_blueprints():
+    rules = _flask_rules()
+
     assert {
-        ("/", "GET"),
-        ("/<country_id>/policies", "GET"),
+        ("/<country_id>/policy", "POST"),
+        ("/<country_id>/policy/<int:policy_id>", "GET"),
         ("/<country_id>/household/<household_id>/policy/<policy_id>", "GET"),
         ("/<country_id>/calculate", "POST"),
         ("/<country_id>/calculate-full", "POST"),
-        ("/<country_id>/user-policy", "POST"),
-        ("/<country_id>/user-policy", "PUT"),
-        ("/<country_id>/user-policy/<user_id>", "GET"),
-        ("/simulations", "GET"),
-        ("/liveness-check", "GET"),
-        ("/readiness-check", "GET"),
-        ("/specification", "GET"),
     } <= rules
+    # Routes that only legacy.policyengine.org or the documentation used.
+    assert rules & REMOVED_LEGACY_ROUTES == set()
+    for module_name in REMOVED_BLUEPRINT_MODULES:
+        assert not (PACKAGE_ROOT / "routes" / f"{module_name}.py").exists()
 
 
 def test_flask_app_assembles_blueprints_without_legacy_endpoint_wiring():
@@ -57,6 +85,10 @@ def test_flask_app_assembles_blueprints_without_legacy_endpoint_wiring():
     assert "get_simulations" not in source
     assert "@app.route" not in source
     assert "app.route(" not in source
+    for module_name in REMOVED_BLUEPRINT_MODULES:
+        assert module_name not in source
+    for blueprint in REGISTERED_BLUEPRINTS:
+        assert f"app.register_blueprint({blueprint.name}_bp)" in source
 
 
 def test_legacy_endpoints_package_is_removed():

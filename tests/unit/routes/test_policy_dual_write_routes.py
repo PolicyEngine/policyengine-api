@@ -395,21 +395,3 @@ def test_v1_policy_read_reports_the_parameters_the_model_lacks(
         "missing_parameters": missing_parameters,
     }
     check.assert_called_once_with("us", policy.policy_json)
-
-
-def test_policy_search_failure_does_not_expose_exception_details(
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("DB_READ_POLICY", "cloud_sql")
-    with patch(
-        "policyengine_api.routes.policy_routes.policy_service.search_policies",
-        side_effect=RuntimeError("database-credential-secret"),
-    ):
-        response = _client().get("/us/policies?query=example")
-
-    assert response.status_code == 500
-    assert response.json == {
-        "status": "error",
-        "message": "Internal server error; please try again later.",
-    }
-    assert "database-credential-secret" not in response.text

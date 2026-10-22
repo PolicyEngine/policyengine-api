@@ -51,7 +51,6 @@ def _dependencies(reader: _MetadataReader) -> NativeRouteDependencies:
         readiness_probe=lambda: True,
         gateway_client_factory=_HealthySimulationGateway,
         metadata_reader_factory=lambda: reader,
-        specification_provider=dict,
     )
 
 

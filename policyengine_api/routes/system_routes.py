@@ -1,9 +1,8 @@
-"""Flask routes for the liveness and readiness probes and the legacy OpenAPI spec."""
+"""Flask routes for the liveness and readiness probes."""
 
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response
 
 from policyengine_api.readiness import is_ready
-from policyengine_api.specification import OPENAPI_SPECIFICATION
 
 system_bp = Blueprint("system", __name__)
 
@@ -26,9 +25,3 @@ def readiness_check() -> Response:
             headers={"Content-Type": "text/plain"},
         )
     return Response("OK", status=200, headers={"Content-Type": "text/plain"})
-
-
-@system_bp.route("/specification", methods=["GET"])
-def get_specification() -> Response:
-    """Return the legacy public OpenAPI specification as JSON."""
-    return jsonify(OPENAPI_SPECIFICATION)

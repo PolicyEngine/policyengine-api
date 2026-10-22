@@ -238,7 +238,6 @@ def _client(factory) -> TestClient:
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
-        specification_provider=dict,
         v2_metadata_reader_factory=factory,
     )
     settings = RouteImplementationSettings(

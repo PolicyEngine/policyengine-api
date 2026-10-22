@@ -83,7 +83,6 @@ def test_run_probes_uses_lightweight_baseline_routes(monkeypatch):
     assert requests == [
         ("GET", "/liveness-check"),
         ("GET", "/readiness-check"),
-        ("GET", "/specification"),
         ("GET", "/us/metadata"),
         ("GET", "/uk/metadata"),
     ]
@@ -113,9 +112,9 @@ def test_run_probes_treats_unexpected_4xx_as_failure(monkeypatch):
         capture_migration_baseline.run_probes("https://api.test", 1)
     )
 
-    assert summary["request_count"] == 5
-    assert summary["failure_count"] == 5
-    assert summary["status_counts"] == {"404": 5}
+    assert summary["request_count"] == 4
+    assert summary["failure_count"] == 4
+    assert summary["status_counts"] == {"404": 4}
 
 
 def test_run_simulation_gateway_probe_records_completion(monkeypatch):

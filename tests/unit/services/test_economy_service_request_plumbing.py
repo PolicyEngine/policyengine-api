@@ -226,7 +226,7 @@ def test_annual_submission_stores_record_and_sends_payload(
             "capture_mode": "disabled",
         },
     }
-    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    stored = economy_service._reform_impacts._cache.recent(5)
     assert stored == [
         CachedReformImpact(
             reform_impact_id=reform_impact_id(MOCK_MODAL_JOB_ID),
@@ -470,7 +470,7 @@ def test_uk_breakdown_submission_has_its_own_hash_and_sends_breakdown(
         "policyengine_version": MOCK_POLICYENGINE_VERSION,
         "breakdown": "local_areas",
     }
-    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    stored = economy_service._reform_impacts._cache.recent(5)
     assert [impact.options_hash for impact in stored] == [
         _stored_options_hash(UK_BREAKDOWN_LOOKUP_HASH)
     ]
@@ -533,7 +533,7 @@ def test_uk_national_submission_sends_no_breakdown_and_keeps_its_hash(
 
     payload = mock_simulation_entrypoint.run.call_args.args[0]
     assert "breakdown" not in payload
-    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    stored = economy_service._reform_impacts._cache.recent(5)
     assert [impact.options_hash for impact in stored] == [
         _stored_options_hash(UK_NATIONAL_LOOKUP_HASH)
     ]
@@ -608,7 +608,7 @@ def test_a_northern_ireland_breakdown_sends_and_stores_the_registry_code(
     mock_simulation_entrypoint.get_execution_by_id.assert_called_once_with(
         MOCK_MODAL_JOB_ID
     )
-    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    stored = economy_service._reform_impacts._cache.recent(5)
     assert [(impact.region, impact.options_json) for impact in stored] == [
         ("country/northern_ireland", {"breakdown": "local_areas"})
     ]
@@ -675,7 +675,7 @@ def test_a_failed_breakdown_is_returned_for_two_minutes_then_resubmitted(
     # After that the record has expired and the next request submits again.
     assert retried == EconomicImpactResult.computing()
     assert mock_simulation_entrypoint.run.call_count == 2
-    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    stored = economy_service._reform_impacts._cache.recent(5)
     assert [(impact.execution_id, impact.status) for impact in stored] == [
         ("second-breakdown-job", "computing")
     ]
@@ -787,7 +787,7 @@ def test_a_failed_national_job_is_still_replayed(
     assert replayed == expected
     mock_simulation_entrypoint.run.assert_called_once()
     mock_simulation_entrypoint.get_execution_by_id.assert_called_once()
-    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    stored = economy_service._reform_impacts._cache.recent(5)
     assert [impact.status for impact in stored] == ["error"]
 
 
@@ -832,7 +832,7 @@ def test_a_breakdown_job_without_a_local_areas_result_is_not_stored(
     assert within_two_minutes == expected
     assert retried == EconomicImpactResult.computing()
     assert mock_simulation_entrypoint.run.call_count == 2
-    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    stored = economy_service._reform_impacts._cache.recent(5)
     assert [(impact.execution_id, impact.status) for impact in stored] == [
         ("second-breakdown-job", "computing")
     ]

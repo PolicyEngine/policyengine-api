@@ -263,8 +263,8 @@ calculation result and SPM receipts. `active_run_id` identifies a pending/runnin
 run and becomes null when
 inactive; `latest_successful_run_id` identifies the latest successful run. These
 run fields and specification metadata may be null on historical records. The
-served `/specification` documents these request and response shapes through both
-Flask and the native specification route.
+legacy `GET /specification` document, which also described these request and
+response shapes, has been removed; this section describes them.
 
 HTTP response cache identity includes the normalized selection and model/bundle
 versions, and validates certification before reading the cache. The stored
@@ -321,9 +321,9 @@ annual requests require `time_period`, while budget-window requests require
 `start_year` and `window_size` (1–75, ending no later than 2099). Years use four
 digits. Optional fields are `version` (installed country model version),
 `target` (`general`, or annual-only `cliff`) and the annual-only `breakdown`.
-Omitted `spm` inherits certified bundle defaults. The served `/specification`
-generates these query declarations from the same typed models as the Flask
-parser.
+Omitted `spm` inherits certified bundle defaults. The Flask parser's typed
+models define these query rules; the legacy `GET /specification` document
+that also declared them has been removed.
 
 `breakdown=local_areas` asks the annual route for the UK constituency and
 local-authority impacts only. It is a calculation option, so the request has
