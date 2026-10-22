@@ -130,7 +130,7 @@ def test_user_owned_associations_have_relational_integrity() -> None:
             "user_simulation_associations",
             "simulation_associations",
         ),
-        (UserPolicy, "user_policies", "policy_associations"),
+        (UserPolicy, "user_policy_associations", "policy_associations"),
         (UserReportAssociation, "user_report_associations", "report_associations"),
     )
 
@@ -195,7 +195,7 @@ def test_policy_parameter_values_use_jsonb_and_enforce_period_identity() -> None
 
 
 def test_user_policy_is_an_independent_country_scoped_association() -> None:
-    associations = V2_METADATA.tables["user_policies"]
+    associations = V2_METADATA.tables["user_policy_associations"]
 
     assert isinstance(associations.c.user_id.type, sa.Uuid)
     user_foreign_key = next(iter(associations.c.user_id.foreign_keys))
@@ -215,7 +215,7 @@ def test_user_policy_is_an_independent_country_scoped_association() -> None:
     policy_country = next(
         constraint
         for constraint in associations.foreign_key_constraints
-        if constraint.name == "fk_user_policies_policy_country"
+        if constraint.name == "fk_user_policy_associations_policy_country"
     )
     assert [column.name for column in policy_country.columns] == [
         "policy_id",
@@ -571,7 +571,7 @@ def test_user_identity_maps_one_issuer_subject_to_one_user() -> None:
 
 def test_associations_are_v1_anchored_without_client_refs() -> None:
     for table_name, reference in (
-        ("user_policies", "policy"),
+        ("user_policy_associations", "policy"),
         ("user_household_associations", "household"),
         ("user_simulation_associations", "simulation"),
         ("user_report_associations", "report"),
@@ -610,7 +610,7 @@ def test_simulation_and_report_associations_have_no_cross_service_keys() -> None
     } == {"users.id"}
     assert {foreign_key.target_fullname for foreign_key in reports.foreign_keys} == {
         "users.id",
-        "user_policies.id",
+        "user_policy_associations.id",
     }
     user_policy_key = next(iter(reports.c.user_policy_id.foreign_keys))
     assert user_policy_key.ondelete == "SET NULL"
@@ -623,15 +623,56 @@ def test_simulation_and_report_associations_have_no_cross_service_keys() -> None
 
 
 def test_user_policy_records_v3_reform_fields() -> None:
-    policies = V2_METADATA.tables["user_policies"]
+    policies = V2_METADATA.tables["user_policy_associations"]
 
     assert policies.c.baseline.type.length == 16
     baseline_check = next(
         constraint
         for constraint in policies.constraints
-        if constraint.name == "ck_user_policies_baseline"
+        if constraint.name == "ck_user_policy_associations_baseline"
     )
     assert "current-law" in str(baseline_check.sqltext)
     assert "current-policy" in str(baseline_check.sqltext)
     postgres_type = policies.c.provenance.type.dialect_impl(postgresql.dialect())
     assert isinstance(postgres_type, postgresql.JSONB)
+
+
+def test_saved_policy_table_is_named_like_the_other_association_tables() -> None:
+    """The saved-reform table and its constraints follow the association pattern.
+
+    Composite indexes keep their short ``ix_user_policies_*`` names, as the
+    household, simulation and report associations keep ``ix_user_households_*``
+    and the like; constraints and convention-named indexes take the table name.
+    """
+    assert UserPolicy.__tablename__ == "user_policy_associations"
+    assert "user_policies" not in V2_METADATA.tables
+    table = V2_METADATA.tables["user_policy_associations"]
+
+    assert {constraint.name for constraint in table.constraints} == {
+        "pk_user_policy_associations",
+        "uq_user_policy_associations_id_country",
+        "ck_user_policy_associations_country",
+        "ck_user_policy_associations_policy_ref",
+        "ck_user_policy_associations_baseline",
+        "fk_user_policy_associations_policy_country",
+        "fk_user_policy_associations_user_id_users",
+    }
+    assert {index.name for index in table.indexes} == {
+        "ix_user_policy_associations_user_id",
+        "ix_user_policy_associations_policy_id",
+        "ix_user_policies_country_user_created_id",
+        "ix_user_policies_country_policy",
+        "ix_user_policies_country_legacy_policy",
+    }
+    referring_keys = {
+        (foreign_key.parent.table.name, foreign_key.parent.name)
+        for referring_table in V2_METADATA.tables.values()
+        for foreign_key in referring_table.foreign_keys
+        if foreign_key.column.table is table
+    }
+    assert referring_keys == {
+        ("legacy_user_policy_mappings", "user_policy_id"),
+        ("legacy_user_policy_mappings", "country_id"),
+        ("user_report_associations", "user_policy_id"),
+        ("user_report_associations", "baseline_user_policy_id"),
+    }

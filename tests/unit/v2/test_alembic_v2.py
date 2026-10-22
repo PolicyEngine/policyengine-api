@@ -54,6 +54,8 @@ POOLER_URL = (
     f"{PROJECT_REF}:test-password@aws-0-us-east-2.pooler.supabase.com:5432/"
     "postgres?sslmode=require"
 )
+# The Stage 12A revision; the saved-policy rename follows it.
+SAVED_POLICY_RENAME_PARENT_REVISION = "fbb7488ebe8a"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -235,6 +237,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        SAVED_POLICY_RENAME_PARENT_REVISION,
         "91af4fc8d8c1",
         "60d6518b6a98",
         "439303be14fe",
@@ -495,7 +498,6 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
         / "migrations/v2/versions/fbb7488ebe8a_link_signed_in_users_to_v1_anchored_.py"
     ).read_text(encoding="utf-8")
 
-    assert V2_ALEMBIC_HEAD_REVISION == "fbb7488ebe8a"
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
@@ -739,3 +741,39 @@ def test_v2_environment_commits_after_persistent_target_qualification() -> None:
     assert "current_heads != previous_heads" in env_source
     assert "current_heads == script_heads" in env_source
     assert "validate_v2_head_schema(connection, target_metadata)" in env_source
+
+
+def _revision_source(revision_id: str) -> str:
+    (path,) = (REPO / "migrations/v2/versions").glob(f"{revision_id}_*.py")
+    return path.read_text(encoding="utf-8")
+
+
+def test_saved_policy_rename_revision_renames_the_table_in_place() -> None:
+    """The rename keeps every saved reform: no table is created or dropped.
+
+    Autogeneration replaces a renamed table with a new empty one; the revision
+    records its corrections, and every other operation is generated.
+    """
+    revision = _revision_source(V2_ALEMBIC_HEAD_REVISION)
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert V2_ALEMBIC_HEAD_REVISION != SAVED_POLICY_RENAME_PARENT_REVISION
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert (
+        f'down_revision: Union[str, None] = "{SAVED_POLICY_RENAME_PARENT_REVISION}"'
+    ) in revision
+    assert 'op.rename_table("user_policies", "user_policy_associations")' in upgrade
+    assert 'op.rename_table("user_policy_associations", "user_policies")' in downgrade
+    for body in (upgrade, downgrade):
+        assert "op.create_table(" not in body
+        assert "op.drop_table(" not in body
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+    assert upgrade.count("Post-generation correction:") == 1
+    assert downgrade.count("Post-generation correction:") == 1

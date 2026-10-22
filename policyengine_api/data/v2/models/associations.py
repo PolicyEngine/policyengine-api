@@ -106,29 +106,29 @@ class UserPolicy(TimestampedModel, table=True):
     policy that users have saved cannot be deleted.
     """
 
-    __tablename__ = "user_policies"
+    __tablename__ = "user_policy_associations"
     __table_args__ = (
         sa.UniqueConstraint(
             "id",
             "country_id",
-            name="uq_user_policies_id_country",
+            name="uq_user_policy_associations_id_country",
         ),
         sa.CheckConstraint(
             "country_id IN ('us', 'uk')",
-            name="ck_user_policies_country",
+            name="ck_user_policy_associations_country",
         ),
         sa.CheckConstraint(
             "policy_id IS NOT NULL OR legacy_policy_id IS NOT NULL",
-            name="ck_user_policies_policy_ref",
+            name="ck_user_policy_associations_policy_ref",
         ),
         sa.CheckConstraint(
             "baseline IS NULL OR baseline IN ('current-law', 'current-policy')",
-            name="ck_user_policies_baseline",
+            name="ck_user_policy_associations_baseline",
         ),
         sa.ForeignKeyConstraint(
             ["policy_id", "country_id"],
             ["policies.id", "policies.country_id"],
-            name="fk_user_policies_policy_country",
+            name="fk_user_policy_associations_policy_country",
             ondelete="RESTRICT",
         ),
         sa.Index(
@@ -278,7 +278,7 @@ class UserReportAssociation(TimestampedModel, table=True):
     description: str | None = Field(default=None, sa_type=sa.Text)
     user_policy_id: UUID | None = Field(
         default=None,
-        foreign_key="user_policies.id",
+        foreign_key="user_policy_associations.id",
         ondelete="SET NULL",
         index=True,
     )
@@ -286,7 +286,7 @@ class UserReportAssociation(TimestampedModel, table=True):
     # comparison was not current law; its name is the baseline's label.
     baseline_user_policy_id: UUID | None = Field(
         default=None,
-        foreign_key="user_policies.id",
+        foreign_key="user_policy_associations.id",
         ondelete="SET NULL",
         index=True,
     )

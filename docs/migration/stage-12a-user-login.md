@@ -324,7 +324,13 @@ from the final SQLModel metadata. It has no post-generation corrections.
   "Rollback").
 
 The models drop the `user_associations` relationships from v2 simulations and
-reports. `V2_ALEMBIC_HEAD_REVISION` is `fbb7488ebe8a`.
+reports. `V2_ALEMBIC_HEAD_REVISION` was `fbb7488ebe8a` when Stage 12A shipped.
+
+Revision `fa7fa1035444` later renamed `user_policies` to
+`user_policy_associations`, with its constraints and its convention-named
+indexes, matching the other association tables; the composite listing
+indexes keep their `ix_user_policies_*` names. The route `/v2/user-policies`,
+the `user_policy_id` columns and `legacy_user_policy_mappings` are unchanged.
 
 ### Reshape safety
 

@@ -104,7 +104,7 @@ class LegacyUserPolicyMapping(TimestampedModel, table=True):
         ),
         sa.ForeignKeyConstraint(
             ["user_policy_id", "country_id"],
-            ["user_policies.id", "user_policies.country_id"],
+            ["user_policy_associations.id", "user_policy_associations.country_id"],
             name="fk_legacy_user_policy_mappings_association_country",
             ondelete="CASCADE",
         ),
