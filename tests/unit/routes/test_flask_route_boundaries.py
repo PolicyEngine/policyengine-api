@@ -9,7 +9,6 @@ from policyengine_api.routes.metadata_routes import metadata_bp
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
-from policyengine_api.routes.system_routes import system_bp
 
 PACKAGE_ROOT = Path(__file__).parents[3] / "policyengine_api"
 REGISTERED_BLUEPRINTS = (
@@ -20,11 +19,13 @@ REGISTERED_BLUEPRINTS = (
     economy_bp,
     simulation_bp,
     report_output_bp,
-    system_bp,
 )
-# Routes that only legacy.policyengine.org or the API documentation used.
+# Routes that only legacy.policyengine.org or the API documentation used, and
+# the probe routes that /health replaces.
 REMOVED_LEGACY_ROUTES = {
     ("/", "GET"),
+    ("/liveness-check", "GET"),
+    ("/readiness-check", "GET"),
     ("/specification", "GET"),
     ("/<country_id>/policies", "GET"),
     ("/<country_id>/user-policy", "POST"),
@@ -38,6 +39,7 @@ REMOVED_LEGACY_ROUTES = {
 REMOVED_BLUEPRINT_MODULES = (
     "home_routes",
     "reform_impact_routes",
+    "system_routes",
     "user_profile_routes",
 )
 

@@ -80,6 +80,45 @@ def test_staging_and_production_use_distinct_cloud_run_runtime_identities():
     assert "GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT" in production
 
 
+WORKFLOW_HEALTH_CHECK_CALL = re.compile(
+    r"run: bash \.github/scripts/"
+    r"(?P<script_name>health_check|restore_cloud_run_revision)\.sh "
+    r'"(?P<checked_url>[^"]+)"'
+)
+# Staging candidate, live-test candidate, staging stable URL and restore,
+# production candidate, production stable URL and restore.
+PUSH_WORKFLOW_HEALTH_CHECK_COUNT = 7
+
+
+def test_every_push_workflow_health_check_polls_health():
+    """Every deployment health check and revision restore polls ``/health``.
+
+    ``/liveness-check`` and ``/readiness-check`` are removed, so a check left
+    on either path would wait out its timeout and fail the deployment, and a
+    restore would report a healthy previous revision as failed.
+    """
+    workflow = _push_workflow()
+    checked_urls = [
+        (call.group("script_name"), call.group("checked_url"))
+        for call in WORKFLOW_HEALTH_CHECK_CALL.finditer(workflow)
+    ]
+
+    assert len(checked_urls) == PUSH_WORKFLOW_HEALTH_CHECK_COUNT, checked_urls
+    assert {script_name for script_name, _url in checked_urls} == {
+        "health_check",
+        "restore_cloud_run_revision",
+    }
+    for script_name, checked_url in checked_urls:
+        assert checked_url.endswith("}}/health"), (script_name, checked_url)
+    for workflow_path in sorted((REPO / ".github/workflows").glob("*.yml")):
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+        for removed_probe_path in ("/liveness-check", "/readiness-check"):
+            assert removed_probe_path not in workflow_text, (
+                workflow_path.name,
+                removed_probe_path,
+            )
+
+
 def test_push_workflow_pins_cloud_run_scaling_per_job():
     workflow = _push_workflow()
     staging_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
@@ -178,7 +217,7 @@ def _assert_live_tests_run_in_parallel_after_readiness(
     assert "run: make install" in parallel_live_tests
     live_readiness_command = (
         'bash .github/scripts/health_check.sh "'
-        '${{ needs.deploy-cloud-run-staging.outputs.url }}/readiness-check"'
+        '${{ needs.deploy-cloud-run-staging.outputs.url }}/health"'
     )
     assert live_readiness_command in parallel_live_tests
     assert parallel_live_tests.index(
@@ -224,7 +263,7 @@ def _assert_promotion_verifies_the_tested_candidate(
     )
     assert "Restore previous Cloud Run staging revision" in cloud_run_promotion
     assert (
-        "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}/readiness-check"
+        "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}/health"
         in cloud_run_promotion
     )
     verify_index = cloud_run_promotion.index(
@@ -405,10 +444,7 @@ def test_push_workflow_promotes_production_cloud_run_after_candidate_smoke():
         "${{ steps.previous.outputs.revision }}" in cloud_run_production
     )
     assert "Restore previous Cloud Run production revision" in cloud_run_production
-    assert (
-        "${{ steps.previous.outputs.stable_url }}/readiness-check"
-        in cloud_run_production
-    )
+    assert "${{ steps.previous.outputs.stable_url }}/health" in cloud_run_production
     verify_index = cloud_run_production.index(
         "Verify exact tested Cloud Run production candidate"
     )

@@ -308,8 +308,9 @@ def test_deploy_cloud_run_candidate_pins_http_startup_probe():
 
     gunicorn's master binds the port long before a worker finishes importing,
     so a TCP probe reports "started" while the app cannot answer and Cloud Run
-    routes live traffic onto it. Probing /readiness-check makes Cloud Run
-    withhold traffic until the app can actually serve.
+    routes live traffic onto it. Probing /health, which answers 503 until the
+    warmup has finished and the runtime configuration is valid, makes Cloud
+    Run withhold traffic until the app can actually serve.
     """
     result = _run_script(
         ".github/scripts/deploy_cloud_run_candidate.sh",
@@ -322,15 +323,13 @@ def test_deploy_cloud_run_candidate_pins_http_startup_probe():
 
     assert result.returncode == 0, result.stderr
     assert "--startup-probe " in result.stdout
-    assert "httpGet.path=/readiness-check" in result.stdout
+    assert "httpGet.path=/health" in result.stdout
     assert "httpGet.port=8080" in result.stdout
     # A tcpSocket probe would reintroduce routing-before-ready.
     assert "tcpSocket" not in result.stdout
 
     probe = next(
-        part
-        for part in result.stdout.split()
-        if "httpGet.path=/readiness-check" in part
+        part for part in result.stdout.split() if "httpGet.path=/health" in part
     )
     # The dry-run echoes the command shell-escaped, so commas arrive as "\,".
     settings = dict(
