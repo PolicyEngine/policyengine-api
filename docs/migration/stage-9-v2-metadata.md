@@ -99,6 +99,34 @@ metadata time-period options are stored on the model-version snapshot.
 PolicyEngine Core and country-package versions are derived diagnostic evidence
 and are not separately persisted.
 
+Catalog format 2 adds the metadata the app's v3 workspace reads, taken only
+from PolicyEngine.py's public records, which carry it from the release that
+publishes entities, basic inputs and these flags:
+
+| Record | Fields |
+| --- | --- |
+| Model version | `catalog_format` (2), `entities` (`key`, `plural`, `is_person`, in the package's order), `basic_inputs` (the household builder's default fields) |
+| Variable | `is_input_variable`, `hidden_input`, `module_name`, `adds_parameter_path` and `subtracts_parameter_path` (the parameter whose dated value lists the variables summed; `adds` and `subtracts` keep the list PolicyEngine.py resolved), `enum_values` (`value` and declared `label`, in order) |
+| Parameter | `economy`, `household` |
+
+Bracket schedules are parameter nodes with their stored label, or none when
+the package stores none. An empty basic-input list is stored as empty.
+Extraction stops before reading any record if the installed PolicyEngine.py
+does not publish these fields, as 6.7.5 does not, and names each missing
+field. It also stops if the model has other than one person entity, names a
+basic input or a parameter path that is not published, gives enum labels that
+do not match the variable's possible values or are not JSON scalars, or gives
+a flag that is not a boolean. An opt-in test
+(`tests/integration/test_v2_catalog_metadata_parity.py`, run by the v2
+integration check) compares every format 2 field for the US and the UK with
+what `/{country}/metadata` builds.
+
+Publication never rewrites a stored version. A version published before
+format 2 has a null `catalog_format` and null format 2 fields, and later
+publications of the same PolicyEngine.py version compare it without those
+fields. The first PolicyEngine.py version published after format 2 deploys
+carries them.
+
 Parameter extraction requires the PolicyEngine.py public history contract from
 5.0.4 and later: values are ordered from oldest to newest, bounded `end_date`
 values are inclusive and fall one day before the following `start_date`, and
@@ -120,9 +148,12 @@ dataset from the certified data release and its filter:
 | US states and congressional districts | the release's state and district dataset | `row_filter` on `state_fips` or `congressional_district_geoid` |
 | UK national | `enhanced_frs_2024_25` | none |
 | UK nations | `enhanced_frs_2024_25` | `row_filter` on `region` |
-| UK constituencies and local authorities | `enhanced_frs_2024_25` | `weight_replacement`: field `parliamentary_constituency_weights` or `local_authority_weights`, value the ONS code |
+| UK constituencies and local authorities, when the release certifies the weight matrices | `enhanced_frs_2024_25` | `weight_replacement`: field `parliamentary_constituency_weights` or `local_authority_weights`, value the ONS code |
+| UK constituencies and local authorities, when the release has no weight matrices and routes the region type to its own dataset | that dataset (for example `microcosm_uk_2024_25_dense`) | `row_filter` on `constituency_code_oa` or `la_code_oa`, value the ONS code |
 
 A weight matrix must come from the same release as the dataset it reweights.
+A release with neither the weight matrix nor a dataset for the region type
+stops publication.
 If the release names no dataset for a sub-national type, its regions use the
 default dataset and the command emits one summary warning with the affected
 region types and counts. Region types without a rule, such as US places until

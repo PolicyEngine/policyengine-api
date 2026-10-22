@@ -7,6 +7,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship
+from typing_extensions import TypedDict
 
 from policyengine_api.data.v2.models.base import (
     IdentifiedModel,
@@ -34,6 +35,28 @@ class RegionType(StrEnum):
     LOCAL_AUTHORITY = "local_authority"
     CITY = "city"
     PLACE = "place"
+
+
+class CatalogEntity(TypedDict):
+    """One entity of a catalog version's ``entities`` column.
+
+    ``is_person`` marks the person entity; each version has exactly one.
+    """
+
+    key: str
+    plural: str
+    is_person: bool
+
+
+class CatalogEnumValue(TypedDict):
+    """One value of a variable's ``enum_values`` column.
+
+    ``value`` is the stored name and ``label`` the label the country package
+    declares, kept as declared (usually a string).
+    """
+
+    value: str
+    label: str | int | float | bool | None
 
 
 class TaxBenefitModel(TimestampedModel, table=True):
@@ -85,6 +108,11 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
     description: str | None = None
     current_law_id: int
     metadata_time_periods: list[int] = Field(sa_type=sa.JSON)
+    # Catalog format 2 fields. Versions published before format 2 keep them
+    # null.
+    catalog_format: int | None = None
+    entities: list[CatalogEntity] | None = Field(default=None, sa_type=sa.JSON)
+    basic_inputs: list[str] | None = Field(default=None, sa_type=sa.JSON)
 
     model: TaxBenefitModel = Relationship(back_populates="versions")
     variables: list["Variable"] = Relationship(
@@ -279,6 +307,15 @@ class Variable(IdentifiedModel, table=True):
     default_value: Any = Field(default=None, sa_type=sa.JSON)
     adds: list[str] | None = Field(default=None, sa_type=sa.JSON)
     subtracts: list[str] | None = Field(default=None, sa_type=sa.JSON)
+    # Catalog format 2 fields; null in versions published before it. A
+    # parameter path names the parameter whose dated value lists the variables
+    # this one adds or subtracts.
+    is_input_variable: bool | None = None
+    hidden_input: bool | None = None
+    module_name: str | None = Field(default=None, max_length=512)
+    adds_parameter_path: str | None = Field(default=None, max_length=512)
+    subtracts_parameter_path: str | None = Field(default=None, max_length=512)
+    enum_values: list[CatalogEnumValue] | None = Field(default=None, sa_type=sa.JSON)
     tax_benefit_model_version_id: UUID = Field(
         foreign_key="tax_benefit_model_versions.id",
         ondelete="CASCADE",
@@ -339,6 +376,9 @@ class Parameter(IdentifiedModel, table=True):
     description: str | None = None
     data_type: str | None = Field(default=None, max_length=128)
     unit: str | None = Field(default=None, max_length=128)
+    # Catalog format 2 fields; null in versions published before it.
+    economy: bool | None = None
+    household: bool | None = None
     tax_benefit_model_version_id: UUID = Field(
         foreign_key="tax_benefit_model_versions.id",
         ondelete="CASCADE",

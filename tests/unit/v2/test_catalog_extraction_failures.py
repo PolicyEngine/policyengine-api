@@ -258,9 +258,9 @@ def _remove_every_artifact_repository(
         ),
         (
             _remove_the_weight_matrix,
-            "^region 'constituency/E14001063' reweights households with "
-            "parliamentary_constituency_weights, which the uk release does not "
-            "certify$",
+            "^the uk release certifies neither the weight matrix "
+            "parliamentary_constituency_weights nor a constituency region dataset, "
+            "so region 'constituency/E14001063' cannot select its households$",
         ),
         (
             _take_the_weight_matrix_from_another_release,

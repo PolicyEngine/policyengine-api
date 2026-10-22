@@ -73,8 +73,8 @@ jobs:
         run: uv run python scripts/reconcile_v2_privileges.py apply --create-missing-roles
       - name: Verify the managed v2 roles hold their declared privileges
         run: uv run python scripts/reconcile_v2_privileges.py verify
-      - name: Verify the installed PolicyEngine.py catalog interface
-        run: uv run coverage run --branch -m pytest -q tests/integration/test_v2_catalog_installed.py
+      - name: Verify the installed PolicyEngine.py catalog interface and its parity with v1 metadata
+        run: uv run coverage run --branch -m pytest -q tests/integration/test_v2_catalog_installed.py tests/integration/test_v2_catalog_metadata_parity.py
         env:
           RUN_V2_CATALOG_COMPATIBILITY: "1"
       - name: Test v2 metadata publication and resource routes
