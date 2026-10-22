@@ -1,3 +1,10 @@
+## [5.7.0] - 2026-10-22
+
+### Removed
+
+- Removed the unused economy comparison module (`policyengine_api/services/economy_comparison.py`) with its tests and snapshot data. Nothing has called it since the Public API stopped falling back to its own society-wide simulations (#2569); the route-boundary rule now covers the calculation route alone.
+
+
 ## [5.6.4] - 2026-10-21
 
 ### Changed
