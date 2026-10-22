@@ -11,6 +11,7 @@ import h5py
 import numpy as np
 import pandas as pd
 import pytest
+from huggingface_hub import HfFileSystem
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
@@ -127,13 +128,33 @@ def test_refuses_a_household_group_that_holds_no_frame(tmp_path: Path) -> None:
         _columns(path)
 
 
+def test_refuses_a_household_entry_that_is_not_a_group(tmp_path: Path) -> None:
+    path = tmp_path / "flat.h5"
+    with h5py.File(path, "w") as h5:
+        h5.create_dataset("household", data=np.array([1, 2]))
+
+    with pytest.raises(
+        CertifiedDataReadError, match=r"^household entry is not an HDF5 group$"
+    ):
+        _columns(path)
+
+
 def test_counts_the_region_rows_of_a_weight_matrix(tmp_path: Path) -> None:
     path = tmp_path / "matrix.h5"
     with h5py.File(path, "w") as h5:
         h5.create_dataset("2024", data=np.ones((3, 5)))
         h5.create_dataset("2025", data=np.ones((3, 5)))
+        h5.create_group("metadata").create_dataset("note", data=np.ones(1))
 
     assert _rows(path) == 3
+
+
+def test_default_file_system_is_hugging_face_with_the_token() -> None:
+    inspector = HuggingFaceDataInspector(token="read-token")
+
+    file_system = inspector._file_system
+    assert isinstance(file_system, HfFileSystem)
+    assert file_system.token == "read-token"
 
 
 @pytest.mark.parametrize(
