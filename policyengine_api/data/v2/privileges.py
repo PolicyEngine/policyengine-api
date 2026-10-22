@@ -132,8 +132,9 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Stage 10 saved-policy mirror.
     "legacy_user_mappings": _access(runtime=READ_WRITE),
     "legacy_user_policy_mappings": _access(runtime=READ_WRITE),
-    # Served countries; the migration that creates the table inserts its rows.
-    "countries": _access(),
+    # Served countries; the migration that creates the table inserts its rows,
+    # and the Public API reads them.
+    "countries": _access(runtime=READ),
     # Users and their saved work (Stage 12A).
     "user_household_associations": _access(runtime=READ_WRITE),
     "user_identities": _access(runtime=READ_WRITE),

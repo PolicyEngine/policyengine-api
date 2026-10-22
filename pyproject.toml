@@ -230,6 +230,8 @@ banned-module-level-imports = [
     "policyengine",
     "policyengine_api.data.v2.database",
     "policyengine_api.libs.auth0_management",
+    "policyengine_api.services.v2.countries.database_session",
+    "policyengine_api.services.v2.countries.services",
     "policyengine_api.services.v2.households.database_session",
     "policyengine_api.services.v2.households.services",
     "policyengine_api.services.v2.legacy_refs.database_session",

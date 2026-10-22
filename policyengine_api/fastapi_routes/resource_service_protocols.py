@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from uuid import UUID
 
+    from policyengine_api.services.v2.countries.types import CountryRead
     from policyengine_api.services.v2.households.types import (
         HouseholdPage,
         HouseholdRead,
@@ -57,6 +58,14 @@ if TYPE_CHECKING:
         UserSimulationRead,
         UserSimulationUpdateInput,
     )
+
+
+class V2CountryResourceService(Protocol):
+    """Route-independent countries list read for one request."""
+
+    def list_countries(self) -> list[CountryRead]:
+        """Return every served country and its capability, ordered by ID."""
+        ...
 
 
 class V2PolicyResourceService(Protocol):
