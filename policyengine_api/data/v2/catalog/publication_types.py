@@ -19,6 +19,9 @@ class PublicationEvidence:
     fallback_summaries: tuple[tuple[str, str, int], ...]
     elapsed_seconds: float
     omitted_region_summaries: tuple[tuple[str, str, int], ...] = ()
+    # Stored catalog versions whose region rows were kept although the staged
+    # regions differ: country, version, stored and staged region counts.
+    kept_region_summaries: tuple[tuple[str, str, int, int], ...] = ()
     # The catalog's versions whose parameter tree this publication wrote:
     # model, version and tree rows. Empty when none needed one: each already
     # has its tree, or was stored before catalog format 2 and gets none.
@@ -49,6 +52,15 @@ class PublicationEvidence:
                     "count": count,
                 }
                 for country_id, region_type, count in self.omitted_region_summaries
+            ],
+            "kept_regions": [
+                {
+                    "country_id": country_id,
+                    "policyengine_version": version,
+                    "stored_regions": stored,
+                    "staged_regions": staged,
+                }
+                for country_id, version, stored, staged in self.kept_region_summaries
             ],
             "parameter_trees_written": [
                 {"model": model_name, "version": version, "rows": rows}
