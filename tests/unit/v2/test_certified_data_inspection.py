@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import ast
+import importlib.metadata
+import tomllib
+from pathlib import Path
 
 import h5py
 import numpy as np
 import pandas as pd
 import pytest
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 
 from policyengine_api.data.v2.catalog.certified_data_inspection import (
     CertifiedDataReadError,
@@ -17,9 +22,6 @@ from policyengine_api.data.v2.catalog.certified_data_inspection import (
     weight_matrix_rows_in_hdf5,
 )
 from policyengine_api.data.v2.catalog.records import CertifiedArtifact
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 HOUSEHOLDS = pd.DataFrame(
     {
@@ -216,3 +218,33 @@ def test_inspector_reads_artifacts_through_an_authenticated_file_system(
     assert inspector.weight_matrix_row_count(matrix) == 2
     assert tokens == ["read-token"]
     assert file_system.opened == [huggingface_path(dataset), huggingface_path(matrix)]
+
+
+def test_imports_only_packages_the_project_depends_on_directly() -> None:
+    repo = Path(__file__).parents[3]
+    module = repo / "policyengine_api/data/v2/catalog/certified_data_inspection.py"
+    tree = ast.parse(module.read_text(encoding="utf-8"))
+    top_level_imports = {
+        alias.name.split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        (node.module or "").split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.level == 0
+    }
+    distributions = importlib.metadata.packages_distributions()
+    third_party = {
+        canonicalize_name(distributions[name][0])
+        for name in top_level_imports
+        if name in distributions and name != "policyengine_api"
+    }
+    project = tomllib.loads((repo / "pyproject.toml").read_text(encoding="utf-8"))
+    direct = {
+        canonicalize_name(Requirement(requirement).name)
+        for requirement in project["project"]["dependencies"]
+    }
+
+    assert third_party == {"h5py", "huggingface-hub"}
+    assert third_party <= direct
