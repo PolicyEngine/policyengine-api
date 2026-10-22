@@ -6,7 +6,7 @@ from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v1_models import V1Base
-from policyengine_api.data.v2 import models as v2_models
+from policyengine_api.data.v2.metadata_validation import SIMULATION_DOMAIN_TABLES
 from policyengine_api.data.v2.models import (
     V2_METADATA,
     DatasetVersion,
@@ -28,57 +28,8 @@ from policyengine_api.data.v2.models import (
     UserType,
 )
 
-RUN_OUTPUT_TABLES = frozenset(
-    {
-        "aggregates",
-        "budget_summary",
-        "change_aggregates",
-        "congressional_district_impacts",
-        "constituency_impacts",
-        "decile_impacts",
-        "inequality",
-        "intra_decile_impacts",
-        "local_authority_impacts",
-        "poverty",
-        "program_statistics",
-    }
-)
-
-# The simulation service owns these tables in its own schema. The v2 metadata
-# still declares them, so it matches the schema until a later revision drops
-# them, but no model maps them: nothing this release runs reads or writes them.
-RETIRED_SIMULATION_TABLES = frozenset(
-    {"household_jobs", "simulations", "reports", "report_runs", *RUN_OUTPUT_TABLES}
-)
-# Retired at Stage 12A; dropped by the same later revision.
+# Retired at Stage 12A and dropped with the simulation-domain tables.
 RETIRED_ASSOCIATION_COLUMNS = frozenset({"country", "label"})
-REMOVED_SIMULATION_MODEL_NAMES = frozenset(
-    {
-        "AggregateOutput",
-        "AggregateType",
-        "BudgetSummary",
-        "ChangeAggregate",
-        "CongressionalDistrictImpact",
-        "ConstituencyImpact",
-        "DecileImpact",
-        "DecileType",
-        "HouseholdJob",
-        "HouseholdJobStatus",
-        "Inequality",
-        "IntraDecileImpact",
-        "LocalAuthorityImpact",
-        "OutputStatus",
-        "Poverty",
-        "ProgramStatistics",
-        "Report",
-        "ReportRun",
-        "ReportRunStatus",
-        "ReportRunTrigger",
-        "Simulation",
-        "SimulationStatus",
-        "SimulationType",
-    }
-)
 
 
 def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
@@ -113,23 +64,17 @@ def _v2_mappers():
     )
 
 
-def test_every_kept_metadata_table_has_one_mapped_model() -> None:
+def test_every_metadata_table_has_one_mapped_model() -> None:
     metadata_table_names = set(V2_METADATA.tables)
     model_table_names = {mapper.local_table.name for mapper in _v2_mappers()}
 
     assert V2_METADATA is not V1Base.metadata
-    assert metadata_table_names >= RETIRED_SIMULATION_TABLES
-    assert model_table_names == metadata_table_names - RETIRED_SIMULATION_TABLES
-    assert len(_v2_mappers()) == len(model_table_names)
+    assert SIMULATION_DOMAIN_TABLES.isdisjoint(metadata_table_names)
+    assert model_table_names == metadata_table_names
+    assert len(_v2_mappers()) == len(metadata_table_names)
 
 
-def test_models_package_exports_no_simulation_domain_model() -> None:
-    exported_names = set(v2_models.__all__) | set(vars(v2_models))
-
-    assert REMOVED_SIMULATION_MODEL_NAMES.isdisjoint(exported_names)
-
-
-def test_kept_models_have_no_relationship_to_a_retired_table() -> None:
+def test_kept_models_have_no_relationship_to_a_dropped_simulation_table() -> None:
     related_tables = {
         f"{mapper.class_.__name__}.{relationship.key}": (
             relationship.mapper.local_table.name
@@ -141,18 +86,14 @@ def test_kept_models_have_no_relationship_to_a_retired_table() -> None:
     assert not {
         relationship: table_name
         for relationship, table_name in related_tables.items()
-        if table_name in RETIRED_SIMULATION_TABLES
+        if table_name in SIMULATION_DOMAIN_TABLES
     }
 
 
-def test_association_models_do_not_map_the_retired_columns() -> None:
+def test_association_tables_no_longer_have_the_retired_columns() -> None:
     for model in (UserSimulationAssociation, UserReportAssociation):
         table = V2_METADATA.tables[model.__tablename__]
-        # Declared on the table, so the metadata matches the schema...
-        assert set(table.c.keys()) >= RETIRED_ASSOCIATION_COLUMNS
-        assert all(table.c[name].nullable for name in RETIRED_ASSOCIATION_COLUMNS)
-        # ...but neither mapped nor a model field.
-        assert RETIRED_ASSOCIATION_COLUMNS.isdisjoint(sa.inspect(model).columns.keys())
+        assert RETIRED_ASSOCIATION_COLUMNS.isdisjoint(table.c.keys())
         assert RETIRED_ASSOCIATION_COLUMNS.isdisjoint(model.model_fields)
 
 

@@ -1,0 +1,1 @@
+Dropped the Public API's copies of the 15 simulation-domain v2 tables, their 8 PostgreSQL enum types and the retired `country` and `label` columns of the simulation and report associations. The simulation service has its own replacements for all of these tables except the unused custom-total tables `aggregates` and `change_aggregates`.

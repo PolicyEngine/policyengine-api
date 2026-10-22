@@ -87,7 +87,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Data source isolation
 
-- Checked: `api.catalog.extractor-import-isolation`, `api.metadata.read-modules-isolated`, `api.reports.v1-persistence-only`, `api.stage12.comparison-tables-isolated`, `api.stage12.retirement-owned`, `api.v2.single-orm-layer`
+- Checked: `api.catalog.extractor-import-isolation`, `api.metadata.read-modules-isolated`, `api.reports.v1-persistence-only`, `api.stage12.comparison-tables-isolated`, `api.stage12.retirement-owned`, `api.v2.simulation-tables-stay-removed`, `api.v2.single-orm-layer`
 
 ### Migration and schema
 

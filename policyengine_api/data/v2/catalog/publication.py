@@ -39,8 +39,8 @@ ALEMBIC_VERSION = sa.table(
     sa.column("version_num", sa.String),
 )
 # User-created rows that publication must never change. Simulations, reports
-# and report runs belong to the simulation service's own schema, and a later
-# v2 revision drops the Public API's copies, so publication doesn't read them.
+# and report runs belong to the simulation service's own schema, and v2
+# revision 363f34954a14 dropped the Public API's copies.
 PROTECTED_TABLES = (DatasetVersion.__table__,)
 
 LOGGER = logging.getLogger(__name__)
