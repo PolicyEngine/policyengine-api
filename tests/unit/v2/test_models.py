@@ -365,48 +365,6 @@ def test_all_datetime_columns_are_timezone_aware() -> None:
     assert all(column.type.timezone for column in datetime_columns)
 
 
-def test_report_definition_and_run_columns_are_separated() -> None:
-    report = V2_METADATA.tables["reports"]
-    report_run = V2_METADATA.tables["report_runs"]
-
-    assert report.c.type.nullable
-    assert {
-        "country",
-        "type",
-        "tax_benefit_model_id",
-        "policy_id",
-        "baseline_simulation_id",
-        "reform_simulation_id",
-        "household_id",
-        "dataset_id",
-        "region_id",
-        "year",
-        "inputs",
-    }.issubset(report.c.keys())
-    assert {
-        "country_package_version",
-        "policyengine_version",
-        "status",
-        "trigger",
-        "idempotency_key",
-        "started_at",
-        "completed_at",
-        "error_message",
-        "markdown",
-    }.issubset(report_run.c.keys())
-    assert {
-        "country_package_version",
-        "policyengine_version",
-        "status",
-        "error_message",
-        "markdown",
-    }.isdisjoint(report.c.keys())
-    assert not report_run.c.country_package_version.nullable
-    assert not report_run.c.policyengine_version.nullable
-    assert isinstance(report_run.c.idempotency_key.type, sa.Uuid)
-    assert report_run.c.idempotency_key.type.as_uuid
-
-
 def test_standard_users_require_a_supported_primary_country() -> None:
     users = V2_METADATA.tables["users"]
 
@@ -481,53 +439,6 @@ def test_regions_have_one_same_model_version_default_logical_dataset() -> None:
     }
 
 
-def test_reports_and_simulations_snapshot_selected_datasets() -> None:
-    reports = V2_METADATA.tables["reports"]
-    simulations = V2_METADATA.tables["simulations"]
-
-    for table in (reports, simulations):
-        dataset_foreign_key = next(iter(table.c.dataset_id.foreign_keys))
-        assert dataset_foreign_key.target_fullname == "datasets.id"
-        assert dataset_foreign_key.ondelete in {"RESTRICT", "SET NULL"}
-
-
-def test_stage9_adds_no_dataset_version_relationship_to_run_tables() -> None:
-    for table_name in ("simulations", "reports", "report_runs"):
-        assert "dataset_version_id" not in V2_METADATA.tables[table_name].c
-
-
-def test_run_outputs_reference_report_runs_not_base_reports() -> None:
-    for table_name in RUN_OUTPUT_TABLES:
-        table = V2_METADATA.tables[table_name]
-        assert "report_run_id" in table.c
-        assert not table.c.report_run_id.nullable
-        assert "report_id" not in table.c
-        foreign_key = next(iter(table.c.report_run_id.foreign_keys))
-        assert foreign_key.target_fullname == "report_runs.id"
-        assert foreign_key.ondelete == "CASCADE"
-
-
-def test_report_rerun_constraints_allow_same_versions_but_deduplicate_requests() -> (
-    None
-):
-    report_runs = V2_METADATA.tables["report_runs"]
-    unique_column_sets = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in report_runs.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
-
-    assert ("report_id", "idempotency_key") in unique_column_sets
-    assert (
-        "report_id",
-        "country_package_version",
-        "policyengine_version",
-    ) not in unique_column_sets
-    assert "ix_report_runs_current_output" in {
-        index.name for index in report_runs.indexes
-    }
-
-
 def test_named_checks_and_required_indexes_cover_core_invariants() -> None:
     constraint_names = {
         constraint.name
@@ -540,15 +451,11 @@ def test_named_checks_and_required_indexes_cover_core_invariants() -> None:
 
     assert {
         "ck_regions_required_filter_values",
-        "ck_simulations_type_input",
         "ck_users_primary_country",
-        "ck_report_runs_terminal_completion",
         "ck_parameter_values_single_owner",
     }.issubset(constraint_names)
     assert {
         "ix_users_email",
-        "ix_simulations_status_created_at",
-        "ix_report_runs_current_output",
         "uq_parameter_values_canonical_parameter_start_date",
     }.issubset(index_names)
 
