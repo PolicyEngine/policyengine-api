@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Protocol
 from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from policyengine_api.data.v2.catalog.errors import CatalogExtractionError
 from policyengine_api.data.v2.catalog.records import (
     CountryCatalog,
     DatasetRecord,
@@ -26,6 +27,10 @@ from policyengine_api.data.v2.catalog.records import (
     ParameterValueRecord,
     RegionRecord,
     VariableRecord,
+)
+from policyengine_api.data.v2.catalog.region_references import (
+    MAX_REGION_FILTER_VALUE_LENGTH,
+    SUPPORTED_REGION_TYPES,
 )
 
 if TYPE_CHECKING:
@@ -46,24 +51,8 @@ METADATA_TIME_PERIODS = {
     "us": tuple(range(2035, 2021, -1)),
     "uk": tuple(range(2024, 2031)),
 }
-SUPPORTED_REGION_TYPES = frozenset(
-    {
-        "national",
-        "country",
-        "state",
-        "congressional_district",
-        "constituency",
-        "local_authority",
-        "city",
-        "place",
-    }
-)
 PLACEHOLDER_VERSIONS = frozenset({"", "0", "0.0", "0.0.0", "unknown"})
 DATASET_YEAR_PATTERN = re.compile(r"(?:19|20)\d{2}")
-
-
-class CatalogExtractionError(RuntimeError):
-    """Raised before database access when source metadata cannot be normalized."""
 
 
 def _identifier(*parts: object) -> UUID:
@@ -97,10 +86,6 @@ def _optional_text(
         msg = f"{field_name} exceeds {maximum} characters"
         raise CatalogExtractionError(msg)
     return value
-
-
-# The catalog's region filter_value column holds at most this many characters.
-MAX_REGION_FILTER_VALUE_LENGTH = 255
 
 
 def _serialize_region_filter_value(value: object, *, region_code: str) -> str:
