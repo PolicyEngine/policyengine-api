@@ -501,7 +501,7 @@ jobs:
         env:
           CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
       - name: Wait for Cloud Run staging health
-        run: bash .github/scripts/health_check.sh "${{ steps.candidate.outputs.url }}/readiness-check"
+        run: bash .github/scripts/health_check.sh "${{ steps.candidate.outputs.url }}/health"
       - name: Run staging integration tests
         run: uv run --frozen --extra dev python -m pytest tests/integration/test_cloud_run_candidate.py tests/integration/test_live_v2_metadata.py tests/integration/test_live_v2_policies.py -v
         env:
@@ -543,7 +543,7 @@ jobs:
       - name: Install locked live test dependencies
         run: make install
       - name: Wait for Cloud Run staging candidate health before live tests
-        run: bash .github/scripts/health_check.sh "${{ needs.deploy-cloud-run-staging.outputs.url }}/readiness-check"
+        run: bash .github/scripts/health_check.sh "${{ needs.deploy-cloud-run-staging.outputs.url }}/health"
       - name: Run live staging tests, one pytest worker per test
         run: bash .github/scripts/run_live_staging_tests.sh
         env:
@@ -610,10 +610,10 @@ jobs:
         id: stable_health
         if: ${{ steps.promote.outcome == 'success' }}
         continue-on-error: true
-        run: bash .github/scripts/health_check.sh "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}/readiness-check"
+        run: bash .github/scripts/health_check.sh "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}/health"
       - name: Restore previous Cloud Run staging revision
         if: ${{ steps.promote.outcome == 'failure' || steps.stable_health.outcome == 'failure' }}
-        run: bash .github/scripts/restore_cloud_run_revision.sh "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}/readiness-check"
+        run: bash .github/scripts/restore_cloud_run_revision.sh "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}/health"
         env:
           CLOUD_RUN_TARGET_REVISION: ${{ needs.deploy-cloud-run-staging.outputs.previous_revision }}
           CLOUD_RUN_EXPECTED_CURRENT_REVISION: ${{ needs.deploy-cloud-run-staging.outputs.revision }}
@@ -788,7 +788,7 @@ jobs:
         env:
           CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
       - name: Wait for Cloud Run candidate health
-        run: bash .github/scripts/health_check.sh "${{ steps.candidate.outputs.url }}/readiness-check"
+        run: bash .github/scripts/health_check.sh "${{ steps.candidate.outputs.url }}/health"
       - name: Install locked Cloud Run smoke test dependencies
         run: make install
       - name: Run Cloud Run candidate smoke tests
@@ -813,10 +813,10 @@ jobs:
         id: stable_health
         if: ${{ steps.promote.outcome == 'success' }}
         continue-on-error: true
-        run: bash .github/scripts/health_check.sh "${{ steps.previous.outputs.stable_url }}/readiness-check"
+        run: bash .github/scripts/health_check.sh "${{ steps.previous.outputs.stable_url }}/health"
       - name: Restore previous Cloud Run production revision
         if: ${{ steps.promote.outcome == 'failure' || steps.stable_health.outcome == 'failure' }}
-        run: bash .github/scripts/restore_cloud_run_revision.sh "${{ steps.previous.outputs.stable_url }}/readiness-check"
+        run: bash .github/scripts/restore_cloud_run_revision.sh "${{ steps.previous.outputs.stable_url }}/health"
         env:
           CLOUD_RUN_TARGET_REVISION: ${{ steps.previous.outputs.revision }}
           CLOUD_RUN_EXPECTED_CURRENT_REVISION: ${{ steps.candidate.outputs.revision }}

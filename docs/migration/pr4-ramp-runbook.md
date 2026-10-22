@@ -44,7 +44,7 @@ it; sampling is curl/server-side only.
 
 ```bash
 for i in $(seq 1 "$N"); do
-  curl -sI --max-time 10 "https://$HOST/liveness-check" | tr -d '\r' \
+  curl -sI --max-time 10 "https://$HOST/health" | tr -d '\r' \
     | awk -F': ' 'tolower($1)=="x-policyengine-backend" {print $2}'
 done | sort | uniq -c
 ```
