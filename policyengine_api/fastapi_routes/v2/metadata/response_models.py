@@ -6,6 +6,7 @@ from typing import Generic, Literal, TypeVar
 
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogVariablesResult,
     MetadataDataset,
     MetadataDetailResult,
     MetadataEconomyOptionsResult,
@@ -146,3 +147,9 @@ class MetadataModelCatalogResponse(
     MetadataResourceSuccessResponse[MetadataModelCatalogResult]
 ):
     """Success response holding the small parts of one catalog version."""
+
+
+class MetadataCatalogVariablesResponse(
+    MetadataResourceSuccessResponse[MetadataCatalogVariablesResult]
+):
+    """Success response holding every variable of one catalog version."""

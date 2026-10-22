@@ -26,8 +26,10 @@ from policyengine_api.migration_flags import (
 )
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogVariablesResult,
     MetadataDataset,
     MetadataDatasetOption,
+    MetadataDatedValue,
     MetadataDetailResult,
     MetadataEconomyOptions,
     MetadataEconomyOptionsResult,
@@ -196,6 +198,20 @@ def _resource_results() -> tuple[dict[str, object], dict[str, object]]:
             "list_regions": page([region]),
             "get_region_by_code": detail(region),
             "get_region": detail(region),
+            "get_catalog_variables": MetadataCatalogVariablesResult(
+                policyengine_version=version,
+                catalog_format=2,
+                variables=[variable],
+                part_parameter_values={
+                    "gov.example.parts": [
+                        MetadataDatedValue(
+                            start_date=datetime(2025, 1, 1, tzinfo=UTC),
+                            end_date=None,
+                            value=["employment_income"],
+                        )
+                    ]
+                },
+            ),
             "get_model_catalog": MetadataModelCatalogResult(
                 policyengine_version=version,
                 catalog_format=2,
@@ -550,6 +566,7 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/datasets/{dataset_id}",
         "/v2/economy-options",
         "/v2/model-catalog",
+        "/v2/model-catalog/variables",
         "/v2/parameters",
         "/v2/parameters/children",
         "/v2/parameters/{parameter_id}",
@@ -635,6 +652,7 @@ def _every_resource_path(ids: dict[str, object]) -> list[str]:
         f"/v2/regions/{ids['region_id']}?country_id=us",
         "/v2/economy-options?country_id=us",
         "/v2/model-catalog?country_id=us",
+        "/v2/model-catalog/variables?country_id=us",
     ]
 
 
@@ -779,3 +797,47 @@ def test_model_catalog_route_declares_its_query_in_openapi() -> None:
     assert parameters["policyengine_version"]["required"] is False
     success = operation["responses"]["200"]["content"]["application/json"]["schema"]
     assert success == {"$ref": "#/components/schemas/MetadataModelCatalogResponse"}
+
+
+def test_catalog_variables_route_serves_every_variable_and_part_values() -> None:
+    results, _ids = _resource_results()
+    reader = ResourceReader(results)
+
+    response = _client(lambda: reader).get(
+        "/v2/model-catalog/variables",
+        params={"country_id": "us", "policyengine_version": "4.20.3"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    result = response.json()["result"]
+    assert result["catalog_format"] == 2
+    assert [variable["name"] for variable in result["variables"]] == [
+        "employment_income"
+    ]
+    assert result["variables"][0]["module_name"] is None
+    assert result["part_parameter_values"] == {
+        "gov.example.parts": [
+            {
+                "start_date": "2025-01-01T00:00:00Z",
+                "end_date": None,
+                "value": ["employment_income"],
+            }
+        ]
+    }
+    assert reader.calls == [("get_catalog_variables", ("us", "4.20.3"), {})]
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["", "country_id=us&offset=0", "country_id=us&search=income"],
+)
+def test_catalog_variables_route_rejects_paging_and_unknown_queries(
+    query: str,
+) -> None:
+    results, _ids = _resource_results()
+    response = _client(lambda: ResourceReader(results)).get(
+        f"/v2/model-catalog/variables?{query}"
+    )
+
+    assert response.status_code == 422

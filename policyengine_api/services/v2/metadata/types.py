@@ -71,11 +71,26 @@ class MetadataModelVersion(StrictResponseModel):
     description: str | None
 
 
+class MetadataEnumValue(StrictResponseModel):
+    """One value of an enum variable: its stored name and its display label.
+
+    The label keeps the type the country package declares it with.
+    """
+
+    value: str
+    label: str | int | float | bool | None
+
+
 class MetadataVariable(StrictResponseModel):
     """A variable the tax-benefit model computes or accepts as input.
 
     adds and subtracts, when present, list the variables summed into or
-    subtracted from this one.
+    subtracted from this one. When the model takes that list from a
+    parameter, adds_parameter_path or subtracts_parameter_path names the
+    parameter, whose dated values give the list for each year (adds and
+    subtracts hold its value on 2025-01-01). The catalog format 2 fields
+    (is_input_variable, hidden_input, module_name, the two parameter paths
+    and enum_values) are null in versions published before that format.
     """
 
     id: UUID
@@ -88,6 +103,12 @@ class MetadataVariable(StrictResponseModel):
     default_value: JsonValue
     adds: list[str] | None
     subtracts: list[str] | None
+    is_input_variable: bool | None = None
+    hidden_input: bool | None = None
+    module_name: str | None = None
+    adds_parameter_path: str | None = None
+    subtracts_parameter_path: str | None = None
+    enum_values: list[MetadataEnumValue] | None = None
 
 
 class MetadataParameterSummary(StrictResponseModel):
@@ -284,3 +305,30 @@ class MetadataModelCatalogResult(StrictResponseModel):
     regions: list[MetadataRegion]
     datasets: list[MetadataDataset]
     economy_options: MetadataEconomyOptions
+
+
+class MetadataDatedValue(StrictResponseModel):
+    """A current-law parameter value from start_date until end_date.
+
+    A null end_date means the value applies until a later value starts, or
+    indefinitely.
+    """
+
+    start_date: datetime
+    end_date: datetime | None
+    value: JsonValue
+
+
+class MetadataCatalogVariablesResult(StrictResponseModel):
+    """Every variable of one catalog version, in name order.
+
+    part_parameter_values has an entry for each parameter path a variable's
+    adds_parameter_path or subtracts_parameter_path names: that parameter's
+    current-law values in start-date order, or an empty list when the
+    catalog has no such parameter.
+    """
+
+    policyengine_version: str
+    catalog_format: int | None
+    variables: list[MetadataVariable]
+    part_parameter_values: dict[str, list[MetadataDatedValue]]

@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.metadata.types import (
         MetadataCanonicalParameterValue,
+        MetadataCatalogVariablesResult,
         MetadataDataset,
         MetadataDetailResult,
         MetadataEconomyOptionsResult,
@@ -323,6 +324,18 @@ class V2MetadataResourceReader(Protocol):
         logical input datasets and economy choices, which are empty for a
         catalog without regions. Raise ``MetadataCatalogUnavailableError`` when
         a catalog with regions lacks what ``get_economy_options`` needs.
+        """
+        ...
+
+    def get_catalog_variables(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> MetadataCatalogVariablesResult:
+        """Return every variable of the selected catalog version, in name order.
+
+        It also carries the current-law values of each parameter a variable's
+        adds or subtracts names.
         """
         ...
 

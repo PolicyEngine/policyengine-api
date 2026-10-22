@@ -62,3 +62,13 @@ def read_variable(
         ),
     )
     return rows[0] if rows else None
+
+
+def read_all_variables(session: Session, *, model_version_id: UUID) -> list[Variable]:
+    """Return every variable of a model version in name order."""
+    return read_rows(
+        session,
+        select(Variable)
+        .where(col(Variable.tax_benefit_model_version_id) == model_version_id)
+        .order_by(col(Variable.name)),
+    )

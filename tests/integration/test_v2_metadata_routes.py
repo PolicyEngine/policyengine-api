@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -20,8 +21,11 @@ from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.publication import publish_catalog
 from policyengine_api.data.v2.models import (
     Dataset,
+    Parameter,
+    ParameterValue,
     TaxBenefitModel,
     TaxBenefitModelVersion,
+    Variable,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
@@ -410,3 +414,97 @@ def test_postgres_model_catalog_serves_the_small_parts_of_a_version(
         headers={"If-None-Match": running.headers["etag"]},
     )
     assert revalidated.status_code == 304
+
+
+def _us_model_version_id(engine: Engine):
+    with Session(engine) as session:
+        return session.exec(
+            select(TaxBenefitModelVersion.id)
+            .join(
+                TaxBenefitModel, TaxBenefitModel.id == TaxBenefitModelVersion.model_id
+            )
+            .where(TaxBenefitModel.name == "policyengine-us")
+        ).one()
+
+
+def test_postgres_catalog_variables_carry_part_parameter_values_by_date(
+    published_engine: Engine,
+) -> None:
+    model_version_id = _us_model_version_id(published_engine)
+    parts_id = uuid4()
+    with Session(published_engine) as session:
+        session.add(
+            Parameter(
+                id=parts_id,
+                tax_benefit_model_version_id=model_version_id,
+                name="gov.example.parts",
+                label="Income parts",
+                economy=False,
+                household=True,
+            )
+        )
+        session.flush()
+        session.add_all(
+            [
+                ParameterValue(
+                    parameter_id=parts_id,
+                    value_json=["employment_income"],
+                    start_date=datetime(2024, 1, 1, tzinfo=UTC),
+                ),
+                ParameterValue(
+                    parameter_id=parts_id,
+                    value_json=["employment_income", "pension_income"],
+                    start_date=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                Variable(
+                    tax_benefit_model_version_id=model_version_id,
+                    name="total_income",
+                    entity="person",
+                    data_type="float",
+                    default_value=0,
+                    adds=["employment_income"],
+                    is_input_variable=False,
+                    hidden_input=False,
+                    module_name="household.income.total_income",
+                    adds_parameter_path="gov.example.parts",
+                ),
+            ]
+        )
+        session.commit()
+    client = _client(published_engine)
+
+    response = client.get(
+        "/v2/model-catalog/variables",
+        params={"country_id": "us", "policyengine_version": POLICYENGINE_VERSION},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    result = response.json()["result"]
+    assert [variable["name"] for variable in result["variables"]] == [
+        "employment_income",
+        "total_income",
+    ]
+    assert result["variables"][0]["module_name"] == (
+        "household.income.employment_income"
+    )
+    assert result["variables"][1]["adds_parameter_path"] == "gov.example.parts"
+    assert result["part_parameter_values"] == {
+        "gov.example.parts": [
+            {
+                "start_date": "2024-01-01T00:00:00Z",
+                "end_date": None,
+                "value": ["employment_income"],
+            },
+            {
+                "start_date": "2026-01-01T00:00:00Z",
+                "end_date": None,
+                "value": ["employment_income", "pension_income"],
+            },
+        ]
+    }
+    uk = client.get("/v2/model-catalog/variables", params={"country_id": "uk"})
+    assert [variable["name"] for variable in uk.json()["result"]["variables"]] == [
+        "employment_income"
+    ]
+    assert uk.json()["result"]["part_parameter_values"] == {}
