@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from policyengine_api.data.v2.catalog.extraction_regions import (
     DATASET_YEAR_PATTERN,
@@ -23,6 +24,7 @@ from policyengine_api.data.v2.catalog.extraction_values import (
     catalog_identifier,
     normalize_json_value,
     optional_text,
+    required_bool,
     required_text,
 )
 from policyengine_api.data.v2.catalog.extraction_variables_and_parameters import (
@@ -32,14 +34,25 @@ from policyengine_api.data.v2.catalog.extraction_variables_and_parameters import
     public_named_records,
 )
 from policyengine_api.data.v2.catalog.records import (
+    CATALOG_FORMAT,
     CountryCatalog,
     DatasetRecord,
+    EntityRecord,
     FallbackSummary,
     ModelRecord,
     ModelVersionRecord,
     NormalizedCatalog,
 )
 from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.data.v2.catalog.records import (
+        ParameterNodeRecord,
+        ParameterRecord,
+        VariableRecord,
+    )
 
 __all__ = [
     "CURRENT_LAW_IDS",
@@ -53,9 +66,11 @@ __all__ = [
     "SUPPORTED_COUNTRIES",
     "SUPPORTED_REGION_TYPES",
     "CatalogExtractionError",
+    "ModelMetadata",
     "extract_catalog",
     "extract_installed_catalog",
     "normalize_json_value",
+    "normalize_model_metadata",
 ]
 
 
@@ -176,6 +191,150 @@ def _verified_release_manifest(
     return release_manifest
 
 
+def _normalize_entities(country_id: str, source: object) -> tuple[EntityRecord, ...]:
+    """Normalize the public model's entities, in its order, with one person entity."""
+    source_entities = getattr(source, "entities", None)
+    if not isinstance(source_entities, Sequence) or isinstance(
+        source_entities, (str, bytes)
+    ):
+        msg = (
+            f"{country_id} public model publishes no entities; catalog format 2 "
+            "needs PolicyEngine.py's public entity records"
+        )
+        raise CatalogExtractionError(msg)
+    entities: list[EntityRecord] = []
+    for source_entity in source_entities:
+        key = required_text(
+            getattr(source_entity, "key", None),
+            field_name=f"{country_id} entity key",
+            maximum=128,
+        )
+        if any(entity.key == key for entity in entities):
+            msg = f"{country_id} entity key {key!r} is repeated"
+            raise CatalogExtractionError(msg)
+        entities.append(
+            EntityRecord(
+                key=key,
+                plural=required_text(
+                    getattr(source_entity, "plural", None),
+                    field_name=f"{country_id} entity {key} plural",
+                    maximum=128,
+                ),
+                is_person=required_bool(
+                    getattr(source_entity, "is_person", None),
+                    field_name=f"{country_id} entity {key} is_person",
+                ),
+            )
+        )
+    if sum(entity.is_person for entity in entities) != 1:
+        msg = f"{country_id} public model must have exactly one person entity"
+        raise CatalogExtractionError(msg)
+    return tuple(entities)
+
+
+def _normalize_basic_inputs(
+    country_id: str,
+    source: object,
+    *,
+    variable_names: frozenset[str],
+) -> tuple[str, ...]:
+    """Normalize the country's default household fields; each is a variable."""
+    source_inputs = getattr(source, "basic_inputs", None)
+    if not isinstance(source_inputs, Sequence) or isinstance(
+        source_inputs, (str, bytes)
+    ):
+        msg = (
+            f"{country_id} public model publishes no basic inputs; catalog format 2 "
+            "needs PolicyEngine.py's public basic inputs"
+        )
+        raise CatalogExtractionError(msg)
+    basic_inputs = tuple(
+        required_text(value, field_name=f"{country_id} basic input", maximum=512)
+        for value in source_inputs
+    )
+    for name in basic_inputs:
+        if name not in variable_names:
+            msg = f"{country_id} basic input {name!r} is not a published variable"
+            raise CatalogExtractionError(msg)
+    return basic_inputs
+
+
+def _verify_parameter_paths(
+    variables: tuple[VariableRecord, ...],
+    *,
+    parameter_names: frozenset[str],
+) -> None:
+    """Require each parameter named by ``adds`` or ``subtracts`` to be published."""
+    for variable in variables:
+        for field_name, path in (
+            ("adds_parameter_path", variable.adds_parameter_path),
+            ("subtracts_parameter_path", variable.subtracts_parameter_path),
+        ):
+            if path is not None and path not in parameter_names:
+                msg = (
+                    f"variable {variable.name} {field_name} {path!r} is not a "
+                    "published parameter"
+                )
+                raise CatalogExtractionError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class ModelMetadata:
+    """The model metadata of one country's catalog, without regions or datasets."""
+
+    entities: tuple[EntityRecord, ...]
+    basic_inputs: tuple[str, ...]
+    variables: tuple[VariableRecord, ...]
+    parameter_nodes: tuple[ParameterNodeRecord, ...]
+    parameters: tuple[ParameterRecord, ...]
+
+
+def normalize_model_metadata(
+    country_id: str,
+    source: object,
+    *,
+    model_version_id: UUID,
+) -> ModelMetadata:
+    """Normalize a public model's entities, variables and parameter tree.
+
+    Everything comes from PolicyEngine.py's public records. Separate from the
+    certified data release, so the metadata can be checked on its own.
+    """
+    variables = tuple(
+        normalize_variable(variable, model_version_id=model_version_id)
+        for variable in public_named_records(
+            source,
+            attribute="variables_by_name",
+            entity_name="variable",
+        )
+    )
+    parameters = tuple(
+        normalize_parameter(parameter, model_version_id=model_version_id)
+        for parameter in public_named_records(
+            source,
+            attribute="parameters_by_name",
+            entity_name="parameter",
+        )
+    )
+    _verify_parameter_paths(
+        variables,
+        parameter_names=frozenset(parameter.name for parameter in parameters),
+    )
+    return ModelMetadata(
+        entities=_normalize_entities(country_id, source),
+        basic_inputs=_normalize_basic_inputs(
+            country_id,
+            source,
+            variable_names=frozenset(variable.name for variable in variables),
+        ),
+        variables=variables,
+        parameter_nodes=normalize_parameter_nodes(
+            source, model_version_id=model_version_id
+        ),
+        parameters=parameters,
+    )
+
+
 def _normalize_country(
     *,
     country_id: str,
@@ -196,24 +355,8 @@ def _normalize_country(
         expected_country_package_version=expected_country_package_version,
     )
 
-    variables = tuple(
-        normalize_variable(variable, model_version_id=model_version_id)
-        for variable in public_named_records(
-            source,
-            attribute="variables_by_name",
-            entity_name="variable",
-        )
-    )
-    parameter_nodes = normalize_parameter_nodes(
-        source, model_version_id=model_version_id
-    )
-    parameters = tuple(
-        normalize_parameter(parameter, model_version_id=model_version_id)
-        for parameter in public_named_records(
-            source,
-            attribute="parameters_by_name",
-            entity_name="parameter",
-        )
+    metadata = normalize_model_metadata(
+        country_id, source, model_version_id=model_version_id
     )
 
     reviewed_default, default_dataset_uri = verified_default_dataset(
@@ -272,10 +415,13 @@ def _normalize_country(
             ),
             current_law_id=CURRENT_LAW_IDS[country_id],
             metadata_time_periods=METADATA_TIME_PERIODS[country_id],
+            catalog_format=CATALOG_FORMAT,
+            entities=metadata.entities,
+            basic_inputs=metadata.basic_inputs,
         ),
-        variables=variables,
-        parameter_nodes=parameter_nodes,
-        parameters=parameters,
+        variables=metadata.variables,
+        parameter_nodes=metadata.parameter_nodes,
+        parameters=metadata.parameters,
         datasets=datasets,
         regions=tuple(sorted(regions, key=lambda record: record.code)),
         fallback_summaries=tuple(

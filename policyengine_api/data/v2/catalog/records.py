@@ -11,6 +11,37 @@ if TYPE_CHECKING:
     from uuid import UUID
 
 
+CATALOG_FORMAT = 2
+"""The catalog content format this extractor publishes.
+
+Format 2 adds the metadata the app's v3 workspace reads, from PolicyEngine.py's
+public records: entities and basic inputs; each variable's input and
+hidden-input flags, module, the parameter its ``adds`` or ``subtracts`` names,
+and enum value labels; each parameter's economy and household flags. Versions
+published before it store null for these fields.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class EntityRecord:
+    """A model entity: its key, plural name, and whether it is the person entity."""
+
+    key: str
+    plural: str
+    is_person: bool
+
+
+@dataclass(frozen=True, slots=True)
+class EnumValueRecord:
+    """One value of an enum variable: its stored name and its declared label.
+
+    The label is kept as the country package declares it, usually a string.
+    """
+
+    value: str
+    label: str | int | float | bool | None
+
+
 @dataclass(frozen=True, slots=True)
 class ModelRecord:
     """One country's tax-benefit model as named in the catalog."""
@@ -35,11 +66,19 @@ class ModelVersionRecord:
     description: str | None
     current_law_id: int
     metadata_time_periods: tuple[int, ...]
+    catalog_format: int
+    entities: tuple[EntityRecord, ...]
+    basic_inputs: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class VariableRecord:
-    """One model variable, with its entity, type and the variables it sums."""
+    """One model variable, with its entity, type and the variables it sums.
+
+    ``adds_parameter_path`` and ``subtracts_parameter_path`` name the parameter
+    whose dated value lists the variables summed; ``adds`` and ``subtracts``
+    keep the list PolicyEngine.py resolved from it.
+    """
 
     id: UUID
     model_version_id: UUID
@@ -52,11 +91,20 @@ class VariableRecord:
     default_value: Any
     adds: list[str] | None
     subtracts: list[str] | None
+    is_input_variable: bool | None
+    hidden_input: bool | None
+    module_name: str | None
+    adds_parameter_path: str | None
+    subtracts_parameter_path: str | None
+    enum_values: tuple[EnumValueRecord, ...] | None
 
 
 @dataclass(frozen=True, slots=True)
 class ParameterNodeRecord:
-    """A non-leaf node of the parameter tree; it groups parameters and has no values."""
+    """A non-leaf node of the parameter tree; it groups parameters and has no values.
+
+    Bracket schedules are nodes too, with their stored label or none.
+    """
 
     id: UUID
     model_version_id: UUID
@@ -88,6 +136,8 @@ class ParameterRecord:
     data_type: str | None
     unit: str | None
     values: tuple[ParameterValueRecord, ...]
+    economy: bool
+    household: bool
 
 
 @dataclass(frozen=True, slots=True)
