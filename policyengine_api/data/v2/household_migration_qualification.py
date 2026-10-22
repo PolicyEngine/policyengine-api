@@ -27,9 +27,10 @@ if TYPE_CHECKING:
 
 HOUSEHOLD_MIGRATION_REVISION = "724b1b11a33e"
 V2_ALEMBIC_CONFIG = "alembic-v2.ini"
-# A target before the household revision has these tables, but revision
-# 363f34954a14 dropped them and their models, so the counts name them
-# directly. The existing-table check skips them on a target without them.
+# A target before the household revision has these tables. They have no
+# models (an earlier release removed them, and revision 363f34954a14 dropped
+# the tables), so the counts name them directly. The existing-table check
+# skips them on a target without them.
 SIMULATIONS = table("simulations", column("household_id"))
 REPORTS = table("reports", column("household_id"))
 HOUSEHOLD_JOBS = table("household_jobs")

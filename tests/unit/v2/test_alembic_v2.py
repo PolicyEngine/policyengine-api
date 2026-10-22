@@ -16,7 +16,7 @@ from alembic.util import CommandError
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base
-from policyengine_api.data.v2.metadata_validation import SIMULATION_SERVICE_TABLES
+from policyengine_api.data.v2.metadata_validation import SIMULATION_DOMAIN_TABLES
 from policyengine_api.data.v2.migration_target import (
     DISPOSABLE_DATABASE_NAME,
     MIGRATION_ROLE,
@@ -53,7 +53,7 @@ POST_BASELINE_TABLE_NAMES = frozenset(
 STAGE_12A_REVISION = "fbb7488ebe8a"
 SIMULATION_TABLE_REMOVAL_REVISION = "363f34954a14"
 # The output tables of a report run, which reference report_runs and simulations.
-RUN_OUTPUT_TABLES = SIMULATION_SERVICE_TABLES - {
+RUN_OUTPUT_TABLES = SIMULATION_DOMAIN_TABLES - {
     "household_jobs",
     "report_runs",
     "reports",
@@ -295,7 +295,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     # The baseline also created the simulation-domain tables a later revision
     # dropped.
     baseline_table_count = len(
-        (V2_TABLE_NAMES | SIMULATION_SERVICE_TABLES) - POST_BASELINE_TABLE_NAMES
+        (V2_TABLE_NAMES | SIMULATION_DOMAIN_TABLES) - POST_BASELINE_TABLE_NAMES
     )
     assert baseline.count("op.create_table(") == baseline_table_count
     assert baseline.count("op.drop_table(") == baseline_table_count
@@ -796,11 +796,11 @@ def test_simulation_table_removal_revision_is_generated_and_drops_only_them() ->
     # The upgrade drops exactly the simulation-domain tables and the two
     # retired columns of each association; the downgrade recreates them.
     assert set(re.findall(r'op\.drop_table\("([a-z0-9_]+)"\)', upgrade)) == (
-        SIMULATION_SERVICE_TABLES
+        SIMULATION_DOMAIN_TABLES
     )
     assert "op.create_table(" not in upgrade
     assert set(re.findall(r'op\.create_table\(\s*"([a-z0-9_]+)"', downgrade)) == (
-        SIMULATION_SERVICE_TABLES
+        SIMULATION_DOMAIN_TABLES
     )
     assert "op.drop_table(" not in downgrade
     retired_columns = {

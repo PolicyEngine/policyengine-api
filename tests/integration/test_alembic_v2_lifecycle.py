@@ -18,7 +18,7 @@ from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.dialects import postgresql
 
 from policyengine_api.constants import REPO
-from policyengine_api.data.v2.metadata_validation import SIMULATION_SERVICE_TABLES
+from policyengine_api.data.v2.metadata_validation import SIMULATION_DOMAIN_TABLES
 from policyengine_api.data.v2.migration_target import (
     V2_ALEMBIC_DISPOSABLE_TEST,
     V2_ALEMBIC_HEAD_REVISION,
@@ -230,7 +230,7 @@ def _enum_type_names(engine) -> set[str]:
 
 def _assert_simulation_domain_schema_present(engine) -> None:
     assert set(inspect(engine).get_table_names(schema="public")) >= (
-        SIMULATION_SERVICE_TABLES
+        SIMULATION_DOMAIN_TABLES
     )
     assert _enum_type_names(engine) >= SIMULATION_DOMAIN_ENUM_TYPES
     for table_name, retired_columns in RETIRED_ASSOCIATION_COLUMNS.items():
@@ -247,7 +247,7 @@ def _assert_simulation_domain_schema_present(engine) -> None:
 
 
 def _assert_simulation_domain_schema_removed(engine) -> None:
-    assert SIMULATION_SERVICE_TABLES.isdisjoint(
+    assert SIMULATION_DOMAIN_TABLES.isdisjoint(
         inspect(engine).get_table_names(schema="public")
     )
     assert SIMULATION_DOMAIN_ENUM_TYPES.isdisjoint(_enum_type_names(engine))
@@ -822,7 +822,7 @@ def _reflect_previous_revision_usage(engine) -> sa.MetaData:
         )
     parent.reflect(
         engine,
-        only=lambda table_name, _metadata: table_name not in SIMULATION_SERVICE_TABLES,
+        only=lambda table_name, _metadata: table_name not in SIMULATION_DOMAIN_TABLES,
     )
     return parent
 
@@ -852,7 +852,7 @@ def test_simulation_table_removal_serves_the_previous_revision() -> None:
         head = sa.MetaData()
         head.reflect(engine)
 
-        assert set(full_parent.tables) - set(head.tables) == SIMULATION_SERVICE_TABLES
+        assert set(full_parent.tables) - set(head.tables) == SIMULATION_DOMAIN_TABLES
         assert sorted(
             f"{table.name}.{column.name}"
             for table in full_parent.tables.values()
@@ -933,7 +933,7 @@ def test_simulation_table_removal_downgrade_restores_the_previous_schema() -> No
     database_url = _disposable_url()
     config = _config()
     engine = create_engine(database_url)
-    compared_tables = SIMULATION_SERVICE_TABLES | RETIRED_ASSOCIATION_COLUMNS.keys()
+    compared_tables = SIMULATION_DOMAIN_TABLES | RETIRED_ASSOCIATION_COLUMNS.keys()
 
     try:
         command.downgrade(config, "base")

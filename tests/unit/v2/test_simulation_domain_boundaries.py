@@ -1,10 +1,11 @@
 """The simulation-domain tables and models stay out of the Public API.
 
-The simulation service owns household jobs, simulations, reports, report runs
-and their outputs in its own ``simulation`` schema. A v2 revision dropped the
-Public API's copies of those tables after their models were removed, so no
-code here may import those models again and no v2 model may declare those
-tables again (rule ``api.v2.simulation-tables-stay-removed``).
+A v2 revision dropped the Public API's copies of the household job,
+simulation, report, report run and report-run output tables after their models
+were removed. The simulation service has its own replacements for all of them
+in its ``simulation`` schema except ``aggregates`` and ``change_aggregates``,
+which were unused. No code here may import those models again and no v2 model
+may declare those tables again (rule ``api.v2.simulation-tables-stay-removed``).
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2 import models as v2_models
-from policyengine_api.data.v2.metadata_validation import SIMULATION_SERVICE_TABLES
+from policyengine_api.data.v2.metadata_validation import SIMULATION_DOMAIN_TABLES
 from policyengine_api.data.v2.models import V2_METADATA
 
 if TYPE_CHECKING:
@@ -123,8 +124,8 @@ def test_no_module_imports_a_removed_simulation_model() -> None:
     )
 
 
-def test_v2_metadata_declares_no_simulation_service_table() -> None:
-    assert SIMULATION_SERVICE_TABLES.isdisjoint(V2_METADATA.tables)
+def test_v2_metadata_declares_no_dropped_simulation_table() -> None:
+    assert SIMULATION_DOMAIN_TABLES.isdisjoint(V2_METADATA.tables)
     assert not any(
         (REPO / "policyengine_api/data/v2" / relative_path).exists()
         for relative_path in (

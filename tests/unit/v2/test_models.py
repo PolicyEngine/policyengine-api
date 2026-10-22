@@ -6,7 +6,7 @@ from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v1_models import V1Base
-from policyengine_api.data.v2.metadata_validation import SIMULATION_SERVICE_TABLES
+from policyengine_api.data.v2.metadata_validation import SIMULATION_DOMAIN_TABLES
 from policyengine_api.data.v2.models import (
     V2_METADATA,
     DatasetVersion,
@@ -69,12 +69,12 @@ def test_every_metadata_table_has_one_mapped_model() -> None:
     model_table_names = {mapper.local_table.name for mapper in _v2_mappers()}
 
     assert V2_METADATA is not V1Base.metadata
-    assert SIMULATION_SERVICE_TABLES.isdisjoint(metadata_table_names)
+    assert SIMULATION_DOMAIN_TABLES.isdisjoint(metadata_table_names)
     assert model_table_names == metadata_table_names
     assert len(_v2_mappers()) == len(metadata_table_names)
 
 
-def test_kept_models_have_no_relationship_to_a_simulation_service_table() -> None:
+def test_kept_models_have_no_relationship_to_a_dropped_simulation_table() -> None:
     related_tables = {
         f"{mapper.class_.__name__}.{relationship.key}": (
             relationship.mapper.local_table.name
@@ -86,7 +86,7 @@ def test_kept_models_have_no_relationship_to_a_simulation_service_table() -> Non
     assert not {
         relationship: table_name
         for relationship, table_name in related_tables.items()
-        if table_name in SIMULATION_SERVICE_TABLES
+        if table_name in SIMULATION_DOMAIN_TABLES
     }
 
 

@@ -35,10 +35,12 @@ PROHIBITED_V2_TABLES = frozenset(
 )
 
 
-# The simulation service owns these tables in its own ``simulation`` schema.
-# A v2 revision dropped the Public API's copies, and its metadata must not
-# declare them again.
-SIMULATION_SERVICE_TABLES = frozenset(
+# The simulation-domain tables a v2 revision dropped. The simulation service
+# has its own replacements for all of them in its ``simulation`` schema except
+# ``aggregates`` and ``change_aggregates``, v2 alpha's custom totals, which
+# were unused and have none. The Public API's metadata must not declare them
+# again.
+SIMULATION_DOMAIN_TABLES = frozenset(
     {
         "aggregates",
         "budget_summary",
@@ -64,15 +66,15 @@ class V2MetadataValidationError(RuntimeError):
 
 
 def validate_v2_metadata_table_names(table_names: Iterable[str]) -> None:
-    """Reject known v1-only, simulation-service and prohibited v2 table names."""
+    """Reject known v1-only, dropped simulation-domain and prohibited v2 tables."""
     actual = frozenset(table_names)
     prohibited = sorted(actual & PROHIBITED_V2_TABLES)
     v1_only = sorted(actual & V1_ONLY_TABLES)
-    simulation_service = sorted(actual & SIMULATION_SERVICE_TABLES)
-    if prohibited or v1_only or simulation_service:
+    simulation_domain = sorted(actual & SIMULATION_DOMAIN_TABLES)
+    if prohibited or v1_only or simulation_domain:
         msg = (
             "API v2-alpha metadata contains rejected tables: "
             f"prohibited={prohibited}, v1_only={v1_only}, "
-            f"simulation_service={simulation_service}"
+            f"simulation_domain={simulation_domain}"
         )
         raise V2MetadataValidationError(msg)
