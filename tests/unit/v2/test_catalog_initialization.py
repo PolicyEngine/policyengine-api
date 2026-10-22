@@ -139,8 +139,33 @@ def test_installed_verification_reads_artifacts_with_the_hugging_face_token(
         "call": (POLICYENGINE_VERSION, RecordingInspector, ("uk",)),
     }
 
-    initialization.verify_installed_region_data(normalized_catalog(), ("uk",), {})
-    assert observed["token"] is None
+    initialization.verify_installed_region_data(normalized_catalog(), ("us",), {})
+    assert observed == {
+        "token": None,
+        "call": (POLICYENGINE_VERSION, RecordingInspector, ("us",)),
+    }
+
+
+@pytest.mark.parametrize("environ", [{}, {"HUGGING_FACE_TOKEN": ""}])
+def test_uk_verification_requires_the_hugging_face_token_before_reading(
+    monkeypatch: pytest.MonkeyPatch,
+    environ: dict[str, str],
+) -> None:
+    def refuse(*_args, **_kwargs):
+        msg = "no artifact may be read without the token"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(initialization, "HuggingFaceDataInspector", refuse)
+    monkeypatch.setattr(initialization, "verify_region_data", refuse)
+
+    with pytest.raises(
+        RegionDataVerificationError,
+        match=r"^HUGGING_FACE_TOKEN must be set to read the certified uk data, "
+        r"whose repository is private$",
+    ):
+        initialization.verify_installed_region_data(
+            normalized_catalog(), ("us", "uk"), environ
+        )
 
 
 def test_default_verification_checks_only_countries_not_yet_published(

@@ -24,6 +24,7 @@ from policyengine_api.data.v2.catalog.publication import (
     unpublished_countries,
 )
 from policyengine_api.data.v2.catalog.region_data_verification import (
+    RegionDataVerificationError,
     verify_region_data,
 )
 from policyengine_api.data.v2.settings import (
@@ -41,6 +42,8 @@ if TYPE_CHECKING:
 # The environment variable holding the Hugging Face read token; PolicyEngine
 # Core's data downloads read the same variable.
 HUGGING_FACE_TOKEN_VARIABLE = "HUGGING_FACE_TOKEN"  # noqa: S105  # an environment variable name, not a secret
+# Countries whose certified data repository needs the read token.
+PRIVATE_DATA_COUNTRIES = frozenset({"uk"})
 
 
 def build_data_write_engine(settings: V2DatabaseSettings) -> Engine:
@@ -55,12 +58,22 @@ def verify_installed_region_data(
 ) -> None:
     """Check the named countries' regions against their certified artifacts.
 
-    The artifacts are read from Hugging Face with ``HUGGING_FACE_TOKEN``,
-    which the UK's private data repository needs.
+    The artifacts are read from Hugging Face with ``HUGGING_FACE_TOKEN``.
+    Countries whose certified data repository is private need it, so their
+    check fails before any read when it is unset.
     """
     token = (os.environ if environ is None else environ).get(
         HUGGING_FACE_TOKEN_VARIABLE
     )
+    needing_token = [
+        country for country in countries if country in PRIVATE_DATA_COUNTRIES
+    ]
+    if needing_token and not token:
+        msg = (
+            f"{HUGGING_FACE_TOKEN_VARIABLE} must be set to read the certified "
+            f"{', '.join(needing_token)} data, whose repository is private"
+        )
+        raise RegionDataVerificationError(msg)
     verify_region_data(
         catalog,
         HuggingFaceDataInspector(token=token or None),
