@@ -66,3 +66,6 @@ jobs:
         run: uv run python scripts/publish_v2_metadata_catalog.py
         env:
           V2_DATA_WRITE_DATABASE_URL: ${{ secrets.V2_DATA_WRITE_DATABASE_URL }}
+          # Reads the certified UK data release, whose repository is private,
+          # to check each new catalog version's region filters.
+          HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}

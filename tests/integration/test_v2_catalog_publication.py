@@ -18,6 +18,7 @@ from sqlmodel import Session, select
 from policyengine_api.data.v2.catalog.publication import (
     CatalogPublicationError,
     publish_catalog,
+    unpublished_countries,
 )
 from policyengine_api.data.v2.models import (
     Dataset,
@@ -171,6 +172,19 @@ def test_publish_and_republish_preserve_complete_catalog(
         "uk": "microcosm_uk_2024_25",
         "us": "populace_us_2024",
     }
+
+
+def test_lists_only_countries_whose_catalog_version_is_not_stored(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+    newer = normalized_catalog(policyengine_version="4.21.0")
+
+    assert unpublished_countries(publication_engine, catalog) == ("us", "uk")
+    publish_catalog(publication_engine, catalog)
+
+    assert unpublished_countries(publication_engine, catalog) == ()
+    assert unpublished_countries(publication_engine, newer) == ("us", "uk")
 
 
 @pytest.mark.parametrize(
