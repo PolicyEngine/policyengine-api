@@ -40,6 +40,8 @@ from policyengine_api.data.v2.models.households import (  # noqa: E402
     HouseholdJobStatus,
 )
 from policyengine_api.data.v2.models.metadata import (  # noqa: E402
+    CatalogEntity,
+    CatalogEnumValue,
     Dataset,
     DatasetVersion,
     Parameter,
@@ -99,6 +101,8 @@ __all__ = [
     "AggregateOutput",
     "AggregateType",
     "BudgetSummary",
+    "CatalogEntity",
+    "CatalogEnumValue",
     "ChangeAggregate",
     "CongressionalDistrictImpact",
     "ConstituencyImpact",

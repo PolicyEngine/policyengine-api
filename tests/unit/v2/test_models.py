@@ -721,3 +721,30 @@ def test_catalog_format_2_columns_are_nullable_for_earlier_versions() -> None:
         "subtracts_parameter_path",
     ):
         assert variables.c[column_name].type.length == 512
+
+
+def test_catalog_format_2_json_columns_have_typed_shapes() -> None:
+    """The entity and enum-value columns name typed shapes the catalog records match.
+
+    Readers of these columns get the keys and value types without re-checking.
+    """
+    from typing import get_type_hints
+
+    from policyengine_api.data.v2.catalog.records import EntityRecord, EnumValueRecord
+    from policyengine_api.data.v2.models import (
+        CatalogEntity,
+        CatalogEnumValue,
+        Variable,
+    )
+
+    assert TaxBenefitModelVersion.model_fields["entities"].annotation == (
+        list[CatalogEntity] | None
+    )
+    assert Variable.model_fields["enum_values"].annotation == (
+        list[CatalogEnumValue] | None
+    )
+    for typed_shape, record in (
+        (CatalogEntity, EntityRecord),
+        (CatalogEnumValue, EnumValueRecord),
+    ):
+        assert get_type_hints(typed_shape) == get_type_hints(record)
