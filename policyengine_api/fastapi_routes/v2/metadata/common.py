@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from fastapi.routing import APIRoute
 from pydantic import BaseModel
+from starlette.responses import Response
+from starlette.status import HTTP_200_OK
 
 from policyengine_api.data.v2.catalog.catalog_selection import (
     InvalidPolicyEngineVersionError,
@@ -24,8 +28,9 @@ from policyengine_api.services.v2.metadata.validators import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Coroutine
 
+    from fastapi import Request
     from starlette.responses import JSONResponse
 
     from policyengine_api.fastapi_routes.dependencies import (
@@ -62,6 +67,71 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 
 
 ResponseT = TypeVar("ResponseT", bound=BaseModel)
+ReadT = TypeVar("ReadT")
+
+EXPLICIT_VERSION_MAX_AGE_SECONDS = 86_400
+"""How long a response for a named catalog version may be reused (a day).
+
+A published catalog version never changes, so such a response stays valid
+until its code's response format changes; the ETag lets a client revalidate
+it cheaply after that.
+"""
+RUNNING_VERSION_MAX_AGE_SECONDS = 300
+"""How long a response for the running catalog version may be reused.
+
+Without ``policyengine_version`` the running PolicyEngine.py version answers,
+and it changes whenever the API deploys a new one.
+"""
+
+
+class CacheableMetadataRoute(APIRoute):
+    """A metadata route whose successful responses carry caching headers.
+
+    See ``with_cache_headers``. Failures are served unchanged, without them.
+    """
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        """Wrap FastAPI's handler so a 200 response gains its caching headers."""
+        handle = super().get_route_handler()
+
+        async def handle_with_cache_headers(request: Request) -> Response:
+            response = await handle(request)
+            if response.status_code != HTTP_200_OK:
+                return response
+            return with_cache_headers(request, response)
+
+        return handle_with_cache_headers
+
+
+def with_cache_headers(request: Request, response: Response) -> Response:
+    """Give a JSON response a strong ETag and a public cache lifetime.
+
+    The ETag is a hash of the exact body, so it changes with any change to the
+    content, including the catalog format. A request naming its catalog with
+    ``policyengine_version`` may be reused for a day, one that takes the
+    running version for five minutes. A request whose ``If-None-Match`` names
+    the ETag gets a 304 with no body.
+    """
+    entity_tag = f'"{hashlib.sha256(response.body).hexdigest()[:32]}"'
+    max_age = (
+        EXPLICIT_VERSION_MAX_AGE_SECONDS
+        if "policyengine_version" in request.query_params
+        else RUNNING_VERSION_MAX_AGE_SECONDS
+    )
+    headers = {"Cache-Control": f"public, max-age={max_age}", "ETag": entity_tag}
+    if _names_entity_tag(request.headers.get("if-none-match"), entity_tag):
+        return Response(status_code=304, headers=headers)
+    response.headers.update(headers)
+    return response
+
+
+def _names_entity_tag(if_none_match: str | None, entity_tag: str) -> bool:
+    if if_none_match is None:
+        return False
+    candidates = {candidate.strip() for candidate in if_none_match.split(",")}
+    return "*" in candidates or bool(
+        {entity_tag, f"W/{entity_tag}"}.intersection(candidates)
+    )
 
 
 def read_resource(
@@ -75,6 +145,20 @@ def read_resource(
     (400, 404 or 503, and 500 for anything unexpected), and the reader is
     closed whatever happens.
     """
+    return run_metadata_read(
+        dependencies, lambda reader: response_type(result=operation(reader))
+    )
+
+
+def run_metadata_read(
+    dependencies: NativeRouteDependencies,
+    operation: Callable[[V2MetadataResourceReader], ReadT],
+) -> ReadT | JSONResponse:
+    """Run one metadata read and return its result unchanged.
+
+    Failures become the typed v2 error responses described by read_resource,
+    and the reader is closed whatever happens.
+    """
     reader = None
     try:
         factory = dependencies.v2_metadata_reader_factory
@@ -85,7 +169,7 @@ def read_resource(
 
             factory = _default_v2_metadata_reader_factory
         reader = factory()
-        return response_type(result=operation(reader))
+        return operation(reader)
     except (InvalidMetadataPageError, InvalidPolicyEngineVersionError) as error:
         return v2_error_response(400, str(error))
     except UnsupportedPreviewCountryError as error:
