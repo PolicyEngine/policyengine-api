@@ -493,8 +493,6 @@ def test_invalid_country_contract(contract_client: ContractClient):
         response_json(response),
         {
             "status": "error",
-            "message": (
-                "Country zz not found. Available countries are: uk, us, ca, ng, il"
-            ),
+            "message": "Country zz not found. Available countries are: uk, us",
         },
     )
