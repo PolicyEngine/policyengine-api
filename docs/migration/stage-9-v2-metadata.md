@@ -340,6 +340,14 @@ service error. None of these outcomes reads or repairs v1. Unsupported
 countries and methods
 return typed client errors.
 
+The same test loads each country's catalog in parts as a client starting
+cold would: `GET /v2/model-catalog` for the running version, then
+`/v2/model-catalog/variables` for that exact version twice (the second served
+from the process's kept body) and once more with `If-None-Match`, which must
+return 304, then `/v2/model-catalog/parameters` for one parameter. It appends
+each request's time and body size to the GitHub job summary, so every staging
+and production release records these route times against its own catalog.
+
 Request `GET /v2/openapi.json` and confirm that the public document contains
 every documented resource path and explicit component schema references for
 success and error responses.
