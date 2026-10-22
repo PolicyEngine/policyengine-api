@@ -175,3 +175,29 @@ def test_main_redacts_unexpected_errors(
     assert "qualification failed unexpectedly" in captured.err
     assert "secret" not in captured.err
     assert "private-host" not in captured.err
+
+
+class RecordingExecutor:
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    def scalar(self, statement: object) -> int:
+        self.statements.append(str(statement))
+        return 0
+
+
+def test_saved_policies_are_counted_under_the_name_of_the_pending_revision() -> None:
+    """The policy revision is pending only before the rename of ``user_policies``.
+
+    Counting through the current model would query ``user_policy_associations``,
+    which a database still waiting for the policy revision does not have yet.
+    """
+    executor = RecordingExecutor()
+
+    qualification.read_policy_data_counts(
+        executor, existing_tables={"policies", "parameter_values", "user_policies"}
+    )
+
+    saved_policy_count = executor.statements[2]
+    assert "FROM user_policies" in saved_policy_count
+    assert "user_policy_associations" not in saved_policy_count

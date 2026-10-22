@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import psycopg
 import pytest
 import sqlalchemy as sa
 from alembic import command
@@ -30,6 +31,7 @@ STAGE_11_PREVIOUS_REVISION = "af34023a728f"
 STAGE_12_PREVIOUS_REVISION = "724b1b11a33e"
 STAGE_12_COMPARISON_PREVIOUS_REVISION = "439303be14fe"
 STAGE_12A_PREVIOUS_REVISION = "91af4fc8d8c1"
+SAVED_POLICY_RENAME_PARENT_REVISION = "fbb7488ebe8a"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 
 
@@ -147,7 +149,7 @@ def _assert_stage_12a_association_shape(engine) -> None:
         "subject",
     ]
     for table_name, reference in (
-        ("user_policies", "policy"),
+        ("user_policy_associations", "policy"),
         ("user_household_associations", "household"),
         ("user_simulation_associations", "simulation"),
         ("user_report_associations", "report"),
@@ -171,7 +173,7 @@ def _assert_stage_12a_association_shape(engine) -> None:
     report_policy_key = next(
         foreign_key
         for foreign_key in inspect(engine).get_foreign_keys("user_report_associations")
-        if foreign_key["referred_table"] == "user_policies"
+        if foreign_key["referred_table"] == "user_policy_associations"
     )
     assert report_policy_key["options"]["ondelete"] == "SET NULL"
     for table_name in ("user_simulation_associations", "user_report_associations"):
@@ -408,6 +410,11 @@ USER_ASSOCIATION_TABLES = (
     "user_simulation_associations",
     "user_report_associations",
 )
+# Tables head renamed, keyed by their name at the parent revision. The
+# previous release's statements name the old table, which head does not have
+# until a view under that name exists (test_previous_release_still_finds_
+# user_policies), so its column usage runs against the renamed table here.
+RENAMED_AT_HEAD = {"user_policies": "user_policy_associations"}
 COUNTRY_COLUMN_NAMES = frozenset({"country", "country_id", "primary_country"})
 # Nullable references that a parent-revision check constraint requires.
 REFERENCES_REQUIRED_BY_CHECKS = frozenset({("simulations", "household_id")})
@@ -587,7 +594,7 @@ def _assert_user_deletion_cascades(
 
     assert result.rowcount == 1
     for table_name in (*USER_ASSOCIATION_TABLES, "user_identities"):
-        table = head.tables[table_name]
+        table = head.tables[RENAMED_AT_HEAD.get(table_name, table_name)]
         remaining = connection.execute(
             sa.select(sa.func.count())
             .select_from(table)
@@ -604,7 +611,8 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
     requires), read the row back with every mapped column, rewrite those
     columns, delete it, and delete a user who owns Stage 12A rows so the
     cascades run. Head may not give any table the parent revision writes a
-    new required column without a server default.
+    new required column without a server default. A table head renamed is
+    used under its new name (``RENAMED_AT_HEAD``).
     """
     database_url = _disposable_url()
     config = _config()
@@ -614,6 +622,8 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
         command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
         parent = sa.MetaData()
         parent.reflect(engine)
+        for parent_name, head_name in RENAMED_AT_HEAD.items():
+            parent.tables[parent_name].name = head_name
         command.upgrade(config, "head")
         head = sa.MetaData()
         head.reflect(engine)
@@ -956,4 +966,409 @@ def test_stage_12a_reshape_refuses_retained_dormant_association_rows() -> None:
                 table = reflected(table_name)
                 connection.execute(sa.delete(table).where(table.c.id == row_id))
         command.upgrade(config, "head")
+        engine.dispose()
+
+
+def _constraint_names(engine, table_name: str) -> set[str]:
+    with engine.connect() as connection:
+        return set(
+            connection.execute(
+                text(
+                    "SELECT conname FROM pg_constraint "
+                    "WHERE conrelid = to_regclass(:table_name)"
+                ),
+                {"table_name": f"public.{table_name}"},
+            ).scalars()
+        )
+
+
+def _index_names(engine, table_name: str) -> set[str]:
+    with engine.connect() as connection:
+        return set(
+            connection.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE schemaname = 'public' AND tablename = :table_name"
+                ),
+                {"table_name": table_name},
+            ).scalars()
+        )
+
+
+def _referring_foreign_keys(engine, table_name: str) -> set[tuple[str, str]]:
+    with engine.connect() as connection:
+        return {
+            (row.on_table, row.conname)
+            for row in connection.execute(
+                text(
+                    "SELECT conrelid::regclass::text AS on_table, conname "
+                    "FROM pg_constraint WHERE contype = 'f' "
+                    "AND confrelid = to_regclass(:table_name)"
+                ),
+                {"table_name": f"public.{table_name}"},
+            )
+        }
+
+
+def _closure_of_referred_tables(
+    metadata: sa.MetaData, table_names: set[str]
+) -> set[str]:
+    closure: set[str] = set()
+    pending = list(table_names)
+    while pending:
+        table_name = pending.pop()
+        if table_name in closure:
+            continue
+        closure.add(table_name)
+        pending.extend(
+            foreign_key.referred_table.name
+            for foreign_key in metadata.tables[table_name].foreign_key_constraints
+        )
+    return closure
+
+
+def _saved_policy_with_references(connection, parent: sa.MetaData) -> dict:
+    """Store a user, a policy, a saved policy, its v1 mapping and a report."""
+    sequence = itertools.count()
+    stored_rows: dict[str, dict] = {}
+    owner_tables = _closure_of_referred_tables(parent, {"users", "policies"})
+    for table in parent.sorted_tables:
+        if table.name in owner_tables:
+            values = _row_values(table, stored_rows, sequence)
+            if table.name == "users":
+                # A standard user needs a country (ck_users_standard_primary_country).
+                values["primary_country"] = "us"
+            stored_rows[table.name] = _insert_and_read_back(connection, table, values)
+    saved_policy_id = uuid4()
+    connection.execute(
+        parent.tables["user_policies"]
+        .insert()
+        .values(
+            id=saved_policy_id,
+            user_id=stored_rows["users"]["id"],
+            policy_id=stored_rows["policies"]["id"],
+            country_id=stored_rows["policies"]["country_id"],
+            name="Saved reform",
+            baseline="current-law",
+        )
+    )
+    connection.execute(
+        parent.tables["legacy_user_policy_mappings"]
+        .insert()
+        .values(
+            id=uuid4(),
+            country_id=stored_rows["policies"]["country_id"],
+            legacy_user_policy_id=41,
+            user_policy_id=saved_policy_id,
+            fingerprint_version=1,
+            fingerprint_sha256="a" * 64,
+        )
+    )
+    report_id = uuid4()
+    connection.execute(
+        parent.tables["user_report_associations"]
+        .insert()
+        .values(
+            id=report_id,
+            user_id=stored_rows["users"]["id"],
+            country_id=stored_rows["policies"]["country_id"],
+            legacy_report_id=42,
+            user_policy_id=saved_policy_id,
+            baseline_user_policy_id=saved_policy_id,
+        )
+    )
+    return {
+        "stored_rows": stored_rows,
+        "saved_policy_id": saved_policy_id,
+        "report_id": report_id,
+    }
+
+
+def _saved_policy_row(connection, table_name: str, saved_policy_id: UUID) -> dict:
+    return dict(
+        connection.execute(
+            sa.select(sa.text("*"))
+            .select_from(sa.table(table_name))
+            .where(sa.column("id") == saved_policy_id)
+        )
+        .mappings()
+        .one()
+    )
+
+
+def _delete_saved_policy_rows(engine, parent: sa.MetaData, saved: dict) -> None:
+    """Remove the stored rows at head, children first, so later tests start clean."""
+    with engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM user_report_associations WHERE id = :id"),
+            {"id": saved["report_id"]},
+        )
+        # Deleting the saved policy cascades to its v1 mapping.
+        connection.execute(
+            text("DELETE FROM user_policy_associations WHERE id = :id"),
+            {"id": saved["saved_policy_id"]},
+        )
+        for table in reversed(parent.sorted_tables):
+            stored_row = saved["stored_rows"].get(table.name)
+            if stored_row is not None:
+                connection.execute(
+                    table.delete().where(_primary_key_clause(table, stored_row))
+                )
+
+
+# The names head gives the renamed table's constraints, indexes and the
+# foreign keys that refer to it. Names longer than PostgreSQL's 63 characters
+# end in a hash, as SQLAlchemy shortens the model's convention names.
+SAVED_POLICY_SCHEMA_NAMES_AT_HEAD = {
+    "constraints": {
+        "pk_user_policy_associations",
+        "uq_user_policy_associations_id_country",
+        "ck_user_policy_associations_country",
+        "ck_user_policy_associations_policy_ref",
+        "ck_user_policy_associations_baseline",
+        "fk_user_policy_associations_policy_country",
+        "fk_user_policy_associations_user_id_users",
+    },
+    "indexes": {
+        "pk_user_policy_associations",
+        "uq_user_policy_associations_id_country",
+        "ix_user_policy_associations_user_id",
+        "ix_user_policy_associations_policy_id",
+        "ix_user_policies_country_user_created_id",
+        "ix_user_policies_country_policy",
+        "ix_user_policies_country_legacy_policy",
+    },
+    "referring_foreign_keys": {
+        (
+            "legacy_user_policy_mappings",
+            "fk_legacy_user_policy_mappings_association_country",
+        ),
+        (
+            "user_report_associations",
+            "fk_user_report_associations_user_policy_id_user_policy__0820",
+        ),
+        (
+            "user_report_associations",
+            "fk_user_report_associations_baseline_user_policy_id_use_0a3d",
+        ),
+    },
+}
+RENAME_PRIVILEGE_PROBE_ROLE = "rename_privilege_probe"
+
+
+def _schema_names(engine, table_name: str) -> dict[str, set]:
+    return {
+        "constraints": _constraint_names(engine, table_name),
+        "indexes": _index_names(engine, table_name),
+        "referring_foreign_keys": _referring_foreign_keys(engine, table_name),
+    }
+
+
+def _saved_policy_references(connection, saved: dict) -> tuple:
+    """Return the saved policy a v1 mapping and a report's two keys point at."""
+    mapped = connection.execute(
+        text(
+            "SELECT user_policy_id FROM legacy_user_policy_mappings "
+            "WHERE legacy_user_policy_id = 41"
+        )
+    ).scalar_one_or_none()
+    report_references = connection.execute(
+        text(
+            "SELECT user_policy_id, baseline_user_policy_id "
+            "FROM user_report_associations WHERE id = :id"
+        ),
+        {"id": saved["report_id"]},
+    ).one()
+    return (mapped, *report_references)
+
+
+def _references_after_deleting_saved_policy(
+    engine, table_name: str, saved: dict
+) -> tuple:
+    """Delete the saved policy in a rolled-back transaction; return the references.
+
+    The v1 mapping cascades away and the report's keys are set to null.
+    """
+    with engine.connect() as connection:
+        transaction = connection.begin()
+        try:
+            connection.execute(
+                sa.delete(sa.table(table_name, sa.column("id"))).where(
+                    sa.column("id") == saved["saved_policy_id"]
+                )
+            )
+            return _saved_policy_references(connection, saved)
+        finally:
+            transaction.rollback()
+
+
+def _probe_privileges(connection, table_name: str) -> dict[str, bool]:
+    """Return which of three privileges the probe role holds, one at a time.
+
+    ``has_table_privilege`` with a list of privileges is true when any one is
+    held, so each is checked separately.
+    """
+    return {
+        privilege: connection.execute(
+            text("SELECT has_table_privilege(:role, :table, :privilege)"),
+            {
+                "role": RENAME_PRIVILEGE_PROBE_ROLE,
+                "table": f"public.{table_name}",
+                "privilege": privilege,
+            },
+        ).scalar_one()
+        for privilege in ("SELECT", "UPDATE", "INSERT")
+    }
+
+
+GRANTED_TO_PROBE = {"SELECT": True, "UPDATE": True, "INSERT": False}
+CLEARED_REFERENCES = (None, None, None)
+
+
+def _drop_rename_privilege_probe(engine) -> None:
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "DO $$ BEGIN IF EXISTS (SELECT FROM pg_roles WHERE rolname = "
+                f"'{RENAME_PRIVILEGE_PROBE_ROLE}') THEN "
+                f"DROP OWNED BY {RENAME_PRIVILEGE_PROBE_ROLE}; "
+                f"DROP ROLE {RENAME_PRIVILEGE_PROBE_ROLE}; END IF; END $$"
+            )
+        )
+
+
+def test_saved_policy_rename_keeps_rows_references_and_privileges() -> None:
+    """Upgrading renames the table in place, and downgrading renames it back.
+
+    Saved policies, their v1 mappings and the reports that name them survive
+    both directions, the references and a table grant follow the table, and
+    the constraints and indexes named after the table take its name. The
+    downgrade restores every name the parent revision had.
+    """
+    config = _config()
+    engine = create_engine(_disposable_url())
+    parent = sa.MetaData()
+    saved = None
+    try:
+        command.downgrade(config, SAVED_POLICY_RENAME_PARENT_REVISION)
+        parent.reflect(engine)
+        names_at_parent = _schema_names(engine, "user_policies")
+        _drop_rename_privilege_probe(engine)
+        with engine.begin() as connection:
+            saved = _saved_policy_with_references(connection, parent)
+            connection.execute(text(f"CREATE ROLE {RENAME_PRIVILEGE_PROBE_ROLE}"))
+            connection.execute(
+                text(
+                    "GRANT SELECT, UPDATE ON user_policies TO "
+                    f"{RENAME_PRIVILEGE_PROBE_ROLE}"
+                )
+            )
+            before = _saved_policy_row(
+                connection, "user_policies", saved["saved_policy_id"]
+            )
+        saved_policy_id = saved["saved_policy_id"]
+
+        command.upgrade(config, "head")
+
+        table_names = set(inspect(engine).get_table_names(schema="public"))
+        assert "user_policies" not in table_names
+        with engine.connect() as connection:
+            after = _saved_policy_row(
+                connection, "user_policy_associations", saved_policy_id
+            )
+            references = _saved_policy_references(connection, saved)
+            privileges = _probe_privileges(connection, "user_policy_associations")
+        assert after == before
+        assert references == (saved_policy_id, saved_policy_id, saved_policy_id)
+        assert privileges == GRANTED_TO_PROBE
+        assert (
+            _schema_names(engine, "user_policy_associations")
+            == SAVED_POLICY_SCHEMA_NAMES_AT_HEAD
+        )
+        assert (
+            _references_after_deleting_saved_policy(
+                engine, "user_policy_associations", saved
+            )
+            == CLEARED_REFERENCES
+        )
+
+        command.downgrade(config, SAVED_POLICY_RENAME_PARENT_REVISION)
+
+        table_names = set(inspect(engine).get_table_names(schema="public"))
+        assert "user_policy_associations" not in table_names
+        with engine.connect() as connection:
+            restored = _saved_policy_row(connection, "user_policies", saved_policy_id)
+            restored_references = _saved_policy_references(connection, saved)
+            restored_privileges = _probe_privileges(connection, "user_policies")
+        assert restored == before
+        assert restored_references == references
+        assert restored_privileges == GRANTED_TO_PROBE
+        assert _schema_names(engine, "user_policies") == names_at_parent
+        assert (
+            _references_after_deleting_saved_policy(engine, "user_policies", saved)
+            == CLEARED_REFERENCES
+        )
+    finally:
+        command.upgrade(config, "head")
+        if saved is not None:
+            _delete_saved_policy_rows(engine, parent, saved)
+        _drop_rename_privilege_probe(engine)
+        engine.dispose()
+
+
+class OldTableNameMissingError(Exception):
+    """Raised when head has no relation named ``user_policies`` to read from."""
+
+
+def _saved_policy_row_by_old_name(connection, saved_policy_id: UUID) -> dict:
+    """Read a saved policy as the previous release does, under the old name.
+
+    Only the missing relation is turned into ``OldTableNameMissingError``, so
+    any other failure in the test is reported as a failure.
+    """
+    try:
+        return _saved_policy_row(connection, "user_policies", saved_policy_id)
+    except sa.exc.ProgrammingError as error:
+        if isinstance(error.orig, psycopg.errors.UndefinedTable):
+            raise OldTableNameMissingError from error
+        raise
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=OldTableNameMissingError,
+    reason=(
+        "Head has no view named user_policies yet. Autogeneration cannot "
+        "create one, and a hand-written view needs a human migration decision "
+        "(see the saved-policy table rename in the Alembic migrations skill); "
+        "until then the release running during a deploy cannot find the table."
+    ),
+)
+def test_previous_release_still_finds_user_policies() -> None:
+    """The release running during the deploy reads saved policies by the old name.
+
+    A saved policy stored before the rename must still be found under
+    ``user_policies`` at head, as the previous release's statements name it.
+    """
+    config = _config()
+    engine = create_engine(_disposable_url())
+    parent = sa.MetaData()
+    saved = None
+    try:
+        command.downgrade(config, SAVED_POLICY_RENAME_PARENT_REVISION)
+        parent.reflect(engine)
+        with engine.begin() as connection:
+            saved = _saved_policy_with_references(connection, parent)
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            stored = _saved_policy_row(
+                connection, "user_policy_associations", saved["saved_policy_id"]
+            )
+        with engine.connect() as connection:
+            found = _saved_policy_row_by_old_name(connection, saved["saved_policy_id"])
+        assert found == stored
+    finally:
+        command.upgrade(config, "head")
+        if saved is not None:
+            _delete_saved_policy_rows(engine, parent, saved)
         engine.dispose()
