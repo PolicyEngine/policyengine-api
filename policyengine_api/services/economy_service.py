@@ -111,6 +111,8 @@ LOCAL_AREA_BREAKDOWN = "local_areas"
 # 422 from an entry deployment that does not know the field.
 LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES = frozenset({400, 422})
 UK_COUNTRY_REGION_PREFIX = "country/"
+# UK regions whose public metadata name differs from .py's region registry code.
+UK_REGISTRY_REGION_CODES = {"country/ni": "country/northern_ireland"}
 BUDGET_WINDOW_CLAIM_ATTEMPTS = 3
 REFORM_IMPACT_START_CLAIM_ATTEMPTS = 3
 # A budget-window progress message names this many computing years and counts
@@ -1956,15 +1958,19 @@ class EconomyService:
         return response
 
     def _setup_region(self, country_id: str, region: str) -> str:
-        """Validate the region for the given country.
+        """Validate the region and return the code the simulation API expects.
 
         Assumes region has already been normalized (e.g., "ca" -> "state/ca").
-        Raises ValueError for invalid regions.
+        Raises ValueError for invalid regions. The UK metadata names Northern
+        Ireland ``country/ni``, but .py's UK region registry names it
+        ``country/northern_ireland``, so the payload uses the registry's name.
         """
         # For US regions, validate (skip validation for national "us")
         if country_id == "us" and region != "us":
             self._validate_us_region(region)
 
+        if country_id == "uk":
+            return UK_REGISTRY_REGION_CODES.get(region, region)
         return region
 
     def _validate_us_region(self, region: str) -> None:

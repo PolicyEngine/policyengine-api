@@ -1,0 +1,1 @@
+UK economy requests for Northern Ireland (`country/ni` in the Public API metadata) now send `country/northern_ireland`, the name .py's UK region registry uses, to the simulation API. The cached result keeps the `country/ni` region.

@@ -2959,6 +2959,22 @@ class TestEconomicImpactSetupOptions:
 
             assert "breakdown" not in sim_options
 
+        def test__given_uk_northern_ireland__sends_registry_code_but_keeps_scope(
+            self,
+        ):
+            setup_options = setup_options_for("uk", "country/ni")
+
+            sim_options = EconomyService()._setup_sim_options(
+                setup_options,
+                reform_policy=self.test_reform_policy,
+                baseline_policy=self.test_current_law_baseline_policy,
+                time_period=2026,
+            )
+
+            assert sim_options.region == "country/northern_ireland"
+            # The cache scope keeps the public region name.
+            assert setup_options.region == "country/ni"
+
     class TestSetupRegion:
         """Tests for _setup_region method.
 
@@ -2982,6 +2998,27 @@ class TestEconomicImpactSetupOptions:
             service = EconomyService()
             result = service._setup_region("us", "us")
             assert result == "us"
+
+        def test__given_uk_northern_ireland__returns_the_region_registry_code(self):
+            # API v1's metadata publishes country/ni; .py's UK region registry
+            # names the region country/northern_ireland.
+            service = EconomyService()
+            result = service._setup_region("uk", "country/ni")
+            assert result == "country/northern_ireland"
+
+        @pytest.mark.parametrize(
+            "region",
+            [
+                "uk",
+                "country/england",
+                "country/scotland",
+                "country/wales",
+                "country/northern_ireland",
+                "constituency/Aldershot",
+            ],
+        )
+        def test__given_other_uk_region__returns_unchanged(self, region):
+            assert EconomyService()._setup_region("uk", region) == region
 
         def test__given_prefixed_state_tx__returns_unchanged(self):
             service = EconomyService()
