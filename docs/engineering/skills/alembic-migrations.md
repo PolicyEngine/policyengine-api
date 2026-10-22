@@ -316,5 +316,7 @@ existing rows, the downgrade, a downgrade refused by another country's
 records, and the re-upgrade.
 
 The table must list exactly the countries in
-`policyengine_api/supported_countries.py`. Listing another country later
-needs a revision that inserts its row, and the same human migration decision.
+`policyengine_api/supported_countries.py`: the Public API refuses to start
+when they differ (`policyengine_api/startup_country_check.py`). Listing
+another country later needs a revision that inserts its row, and the same
+human migration decision.
