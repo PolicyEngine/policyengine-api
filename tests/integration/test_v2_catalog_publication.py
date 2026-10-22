@@ -175,6 +175,20 @@ def test_publish_and_republish_preserve_complete_catalog(
     }
 
 
+def test_unpublished_country_check_reports_a_missing_schema_specifically() -> None:
+    # The same server's maintenance database has no v2 schema at all.
+    schema_less = make_url(_disposable_url()).set(database="postgres")
+    engine = create_engine(schema_less, poolclass=NullPool)
+    try:
+        with pytest.raises(
+            CatalogPublicationError,
+            match=r"^the v2 Alembic revision table is absent$",
+        ):
+            unpublished_countries(engine, normalized_catalog())
+    finally:
+        engine.dispose()
+
+
 def test_lists_only_countries_whose_catalog_version_is_not_stored(
     publication_engine: Engine,
 ) -> None:
