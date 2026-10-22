@@ -197,3 +197,32 @@ def test_reform_impact_service_deletes_only_matching_computing_rows(
 
 def test_reform_impact_transitions_return_none_for_missing_execution(service):
     assert service.set_error_reform_impact("missing-job", message="missing") is None
+
+
+def test_a_briefly_kept_error_expires_and_leaves_other_records() -> None:
+    backend = InMemoryCacheBackend()
+    service = ReformImpactsService(
+        ReformImpactCache(backend, CacheNamespace("test", "api"))
+    )
+    _create_impact(service, execution_id="failed-job", options_hash="hash", day=1)
+    _create_impact(service, execution_id="next-job", options_hash="hash", day=2)
+    identity = ReformImpactIdentity(scope=SCOPE, api_version="1", options_hash="hash")
+
+    failed = service.set_error_reform_impact(
+        "failed-job", message="out of memory", keep_seconds=120
+    )
+    backend.advance(119)
+    kept = service.get_all_reform_impacts(identity)
+    backend.advance(2)
+    after_expiry = service.get_all_reform_impacts(identity)
+
+    assert failed is not None
+    assert failed.status == "error"
+    assert [(impact.execution_id, impact.status) for impact in kept] == [
+        ("next-job", "computing"),
+        ("failed-job", "error"),
+    ]
+    # Only the failed job's record expires; the next job's record is untouched.
+    assert [(impact.execution_id, impact.status) for impact in after_expiry] == [
+        ("next-job", "computing")
+    ]

@@ -946,7 +946,7 @@ paths:
                   message:
                     type: string
         502:
-          description: The calculation failed, or the simulation API refused a breakdown=local_areas request it cannot run. The message gives the reason. A failed breakdown=local_areas job, or one whose result is not kind local_areas, is not stored, so the next request submits a new job.
+          description: The calculation failed, or the simulation API refused a breakdown=local_areas request it cannot run. The message gives the reason. A failed breakdown=local_areas job, or one whose result is not kind local_areas, keeps its error for two minutes only; after that the next request submits a new job.
           content:
             application/json:
               schema:

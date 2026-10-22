@@ -341,9 +341,12 @@ deployed simulation API or the .py release it routes to cannot run breakdowns,
 the route returns HTTP 502 with the simulation API's reason and stores
 nothing, so a later request tries again. A breakdown job that fails (for
 example by running out of time or memory on the local-area dataset), or that
-completes without `kind: "local_areas"`, also returns HTTP 502 and is not kept:
-its record is deleted, so the next request submits a new job. A failed
-national job is still stored and returned again for the cache lifetime.
+completes without `kind: "local_areas"`, also returns HTTP 502. Its result is
+not stored. Its error is kept for two minutes on that job's own record, so
+every request in that time gets the same error, which says when a new
+breakdown can be requested; then the record expires and the next request
+submits a new job. Other jobs' records are not changed. A failed national job
+is still stored and returned again for the cache lifetime of 30 days.
 
 Before cache access or submission,
 the API validates the selected worker application's `canonical-spm-v1` capability

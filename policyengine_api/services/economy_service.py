@@ -115,6 +115,15 @@ BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES = {400, 422}
 # 400 from a gateway whose routed .py release does not declare breakdowns, and
 # 422 from an entry deployment that does not know the field.
 LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES = frozenset({400, 422})
+# How long a failed breakdown's error is returned before the next request may
+# submit a new job. Short, so the app's Retry works soon, but long enough that
+# a client retrying on every 502 does not start a run on the large local-area
+# dataset each time.
+LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS = 120
+LOCAL_AREA_BREAKDOWN_RETRY_NOTE = (
+    "A new local-area breakdown can be requested "
+    f"{LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS // 60} minutes after this failure."
+)
 # The telemetry simulation_kind of a breakdown run. The simulation API's
 # telemetry envelope forbids extra fields, so the run is marked here rather
 # than by a new field; geography_type and geography_code still name its region.
@@ -1548,7 +1557,7 @@ class EconomyService:
         self,
         setup_options: EconomicImpactSetupOptions,
         execution_state: str,
-        reform_impact: ReformImpact,
+        reform_impact: CachedReformImpact,
         execution: ModalSimulationExecution | None = None,
     ) -> EconomicImpactResult:
         """Map an execution's state to the impact status and result to return.
@@ -1560,7 +1569,7 @@ class EconomyService:
             raw_result = self._simulation_gateway.get_execution_result(execution)
             kind_error = self._breakdown_result_kind_error(setup_options, raw_result)
             if kind_error is not None:
-                return self._discard_failed_breakdown(
+                return self._record_breakdown_failure(
                     setup_options, reform_impact, kind_error
                 )
             result = self._with_policyengine_bundle(
@@ -1596,7 +1605,7 @@ class EconomyService:
                     f"Simulation entrypoint execution failed: {execution.error}"
                 )
             if setup_options.options.get("breakdown") is not None:
-                return self._discard_failed_breakdown(
+                return self._record_breakdown_failure(
                     setup_options, reform_impact, error_message
                 )
 
@@ -1646,25 +1655,31 @@ class EconomyService:
             f"{LOCAL_AREA_BREAKDOWN!r}; the result was not stored"
         )
 
-    def _discard_failed_breakdown(
+    def _record_breakdown_failure(
         self,
         setup_options: EconomicImpactSetupOptions,
-        reform_impact: ReformImpact,
-        message: str,
+        reform_impact: CachedReformImpact,
+        reason: str,
     ) -> EconomicImpactResult:
-        """Return a failed breakdown job's error without keeping its record.
+        """Keep a failed breakdown job's error for two minutes, then let it go.
 
         A breakdown runs on the large local-area dataset, where a timeout or
-        memory failure may not repeat. Storing the failure would replay it for
-        the cache lifetime, so the job's computing record is deleted instead
-        and the next request submits a new job. No submission claim is held at
-        this point: it was released once the job was handed off. Failures of
-        requests without a breakdown are still stored and replayed.
+        memory failure may not repeat, so its failure is not kept for the usual
+        30 days. This job's own record, found by its execution ID, becomes an
+        error that expires after ``LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS``.
+        Until then every request gets the same error, which says when to try
+        again; after it, the next request finds no record and submits a new
+        job. No other job's record is read or changed, and no submission claim
+        is held at this point: it was released once the job was handed off.
+        Failures of requests without a breakdown are stored as before.
         """
-        options_hash = reform_impact.options_hash or setup_options.options_hash
-        if options_hash is not None:
-            self._reform_impacts.delete_reform_impact(
-                self._reform_impact_scope(setup_options), options_hash
+        message = f"{reason}. {LOCAL_AREA_BREAKDOWN_RETRY_NOTE}"
+        if reform_impact.execution_id:
+            self._set_reform_impact_error(
+                setup_options=setup_options,
+                message=message,
+                execution_id=reform_impact.execution_id,
+                keep_seconds=LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS,
             )
         return EconomicImpactResult.error(message=message)
 
@@ -2176,13 +2191,24 @@ class EconomyService:
         message: str,
         execution_id: str,
         error_code: str | None = None,
+        keep_seconds: int | None = None,
     ) -> None:
-        """Record the impact as "error" with its message; log and re-raise errors."""
+        """Record the impact as "error" with its message; log and re-raise errors.
+
+        ``keep_seconds`` keeps the error for that long instead of the usual
+        30 days.
+        """
+        # Optional fields are passed only when set, as before keep_seconds existed.
+        optional_fields: dict[str, Any] = {}
+        if error_code is not None:
+            optional_fields["error_code"] = error_code
+        if keep_seconds is not None:
+            optional_fields["keep_seconds"] = keep_seconds
         try:
             self._reform_impacts.set_error_reform_impact(
                 execution_id=execution_id,
                 message=message,
-                **({"error_code": error_code} if error_code is not None else {}),
+                **optional_fields,
             )
         except Exception as e:
             logger.log_struct(
