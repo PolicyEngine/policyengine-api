@@ -87,6 +87,16 @@ deploy, and may be reused for five minutes (`max-age=300`). A request whose
 `If-None-Match` names the current `ETag` (strong or weak form, alone or in a
 list) gets HTTP 304 with no body. Error responses carry neither header.
 
+Each API process also keeps the serialized bodies of `/v2/model-catalog` and
+`/v2/model-catalog/variables` once built, for up to eight route, country and
+requested-version combinations (least recently used dropped first; a request
+without `policyengine_version` is keyed to the process's running version,
+which never changes while it runs). Only the first successful request per
+process reads the database; concurrent first requests wait for one read, and
+a failed read is not kept. Measured locally against the full 6.10.0 US
+catalog, the variables route takes about 160 ms when read and about 25 ms
+when kept, most of it compression.
+
 ## Configuration and credential boundaries
 
 Select the target with `V2_SUPABASE_PROJECT_REF` and

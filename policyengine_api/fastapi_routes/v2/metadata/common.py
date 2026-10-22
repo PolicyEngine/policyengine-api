@@ -37,6 +37,9 @@ if TYPE_CHECKING:
         NativeRouteDependencies,
         V2MetadataResourceReader,
     )
+    from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+        ResponseKey,
+    )
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
@@ -148,6 +151,35 @@ def read_resource(
     return run_metadata_read(
         dependencies, lambda reader: response_type(result=operation(reader))
     )
+
+
+def read_whole_version_resource(
+    dependencies: NativeRouteDependencies,
+    key: ResponseKey,
+    response_type: type[ResponseT],
+    operation: Callable[[V2MetadataResourceReader], object],
+) -> ResponseT | Response:
+    """Serve a whole catalog-version response, built once per process when kept.
+
+    With the dependencies' response cache, the serialized body for ``key`` is
+    read and built only on the first successful request; failures are served
+    as ``read_resource`` serves them and never kept. Without a cache this is
+    ``read_resource``.
+    """
+    cache = dependencies.v2_metadata_response_cache
+    if cache is None:
+        return read_resource(dependencies, response_type, operation)
+
+    def build() -> bytes | JSONResponse:
+        result = read_resource(dependencies, response_type, operation)
+        if isinstance(result, BaseModel):
+            return result.model_dump_json().encode()
+        return result
+
+    built = cache.get_or_build(key, build)
+    if isinstance(built, bytes):
+        return Response(content=built, media_type="application/json")
+    return built
 
 
 def run_metadata_read(

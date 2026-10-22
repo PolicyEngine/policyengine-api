@@ -24,6 +24,9 @@ from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2UserReportResourceService,
     V2UserSimulationResourceService,
 )
+from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+    MetadataResponseCache,
+)
 from policyengine_api.fastapi_routes.v2.user_auth import authenticate_account_request
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.readiness import is_ready
@@ -85,6 +88,12 @@ def _default_metadata_reader_factory() -> MetadataReader:
 @lru_cache(maxsize=1)
 def _running_policyengine_version() -> str:
     return importlib_metadata.version("policyengine")
+
+
+@lru_cache(maxsize=1)
+def _process_metadata_response_cache() -> MetadataResponseCache:
+    """Return the whole catalog-version responses this process keeps."""
+    return MetadataResponseCache()
 
 
 def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
@@ -304,6 +313,9 @@ class NativeRouteDependencies:
         None
     )
     v2_account_service_factory: Callable[[], V2AccountResourceService] | None = None
+    # Whole catalog-version responses (/v2/model-catalog and its variables) are
+    # kept here once built; None reads them on every request.
+    v2_metadata_response_cache: MetadataResponseCache | None = None
     # User-owned routes attach this at router level. The default validates the
     # Auth0 bearer token, or else accepts the unauthenticated-user header, and
     # fails closed (401/403/503); tests replace it with a callable returning a
@@ -319,6 +331,7 @@ class NativeRouteDependencies:
             metadata_reader_factory=_default_metadata_reader_factory,
             v2_metadata_reader_factory=_default_v2_metadata_reader_factory,
             v2_country_service_factory=_default_v2_country_service_factory,
+            v2_metadata_response_cache=_process_metadata_response_cache(),
             v2_policy_service_factory=_default_v2_policy_service_factory,
             v2_household_service_factory=_default_v2_household_service_factory,
             v2_user_policy_service_factory=(_default_v2_user_policy_service_factory),
