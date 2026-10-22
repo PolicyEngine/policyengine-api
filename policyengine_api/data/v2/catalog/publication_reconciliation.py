@@ -317,6 +317,14 @@ def assert_country_matches(
             raise CatalogPublicationError(msg)
 
 
+def count_stored_regions(connection: Connection, country: CountryCatalog) -> int:
+    """Count the region rows stored for one country's catalog version."""
+    _staged, actual = _region_comparison_pair(country)
+    return connection.execute(
+        sa.select(sa.func.count()).select_from(actual.subquery())
+    ).scalar_one()
+
+
 def count_region_differences(
     connection: Connection,
     country: CountryCatalog,

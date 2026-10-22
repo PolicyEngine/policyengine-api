@@ -263,6 +263,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         fallback_summaries=(("us", "state", 3),),
         elapsed_seconds=2.3456,
         omitted_region_summaries=(("us", "place", 333),),
+        kept_region_summaries=(("uk", "6.7.5", 5, 1_015),),
     ).as_dict()
 
     assert evidence == {
@@ -275,6 +276,14 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         ],
         "omitted_region_summaries": [
             {"country_id": "us", "region_type": "place", "count": 333}
+        ],
+        "kept_regions": [
+            {
+                "country_id": "uk",
+                "policyengine_version": "6.7.5",
+                "stored_regions": 5,
+                "staged_regions": 1_015,
+            }
         ],
         "elapsed_seconds": 2.346,
     }
@@ -320,10 +329,13 @@ def _kept_region_records(
         "count_region_differences",
         lambda _connection, _country: differences,
     )
+    monkeypatch.setattr(publication, "count_stored_regions", lambda *_args: 4)
     # An earlier test's Alembic logging setup may have disabled existing loggers.
     monkeypatch.setattr(publication.LOGGER, "disabled", False)
+    us = normalized_catalog().country("us")
     with caplog.at_level(logging.WARNING, logger=publication.LOGGER.name):
-        publication._log_kept_regions(object(), normalized_catalog().country("us"))
+        summary = publication._kept_region_summary(object(), us)
+    assert summary == (None if differences == (0, 0) else ("us", "5.0.4", 4, 3))
     return [
         record for record in caplog.records if record.name == publication.LOGGER.name
     ]

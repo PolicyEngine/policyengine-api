@@ -145,7 +145,10 @@ never changes once published. When the command republishes a stored version
 whose staged regions differ from the stored ones, it keeps the stored regions
 unchanged, prints a warning with the country, the version and the counts of
 staged region rows the stored version lacks and of stored rows not staged, and
-continues. Every other table must still match exactly.
+continues. Its evidence then describes what is stored: the region count is the
+stored one, `kept_regions` lists the country, version, stored and staged region
+counts, and the fallback and omitted-region summaries leave that country out,
+since they describe staged regions that were not published. Every other table must still match exactly.
 Region reference changes therefore take effect in the next catalog version
 that is published.
 
@@ -156,7 +159,9 @@ Successful JSON evidence contains:
 - the canonical PolicyEngine.py version;
 - the dependency versions derived from its packaged manifest;
 - catalog entity counts;
-- fallback counts and omitted-region counts by country and region type;
+- fallback counts and omitted-region counts by country and region type, and
+  the stored and staged region counts of any stored version whose regions were
+  kept;
 - elapsed publication time; and
 - a success outcome.
 

@@ -337,6 +337,22 @@ def test_stored_version_keeps_its_published_regions_and_logs_the_difference(
     assert _region_rows(publication_engine) == before_regions
     assert _identifiers(publication_engine) == before_ids
     assert _counts(publication_engine) == before_counts
+    # The evidence describes the stored rows, not the staged regions.
+    assert evidence.entity_counts == {
+        "models": before_counts["tax_benefit_models"],
+        "model_versions": before_counts["tax_benefit_model_versions"],
+        "variables": before_counts["variables"],
+        "parameter_nodes": before_counts["parameter_nodes"],
+        "parameters": before_counts["parameters"],
+        "parameter_values": before_counts["parameter_values"],
+        "datasets": before_counts["datasets"],
+        "regions": before_counts["regions"],
+    }
+    assert evidence.kept_region_summaries == (
+        ("us", catalog.policyengine_version, 3, 2),
+    )
+    assert evidence.omitted_region_summaries == ()
+    assert evidence.fallback_summaries == ()
     notices = [
         (message, keywords["extra"])
         for message, keywords in warnings
