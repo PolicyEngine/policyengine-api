@@ -4,7 +4,8 @@ A row-filtered region needs its filter column among the household columns of
 its dataset. A weight-replacement region needs a row in its weight matrix: the
 matrix's rows follow the order of the row lookup that compute uses to find a
 region's row, so the lookup must list exactly as many codes as the matrix has
-rows and include the region's code.
+rows and include the region's code. The release certifies no lookup file, so
+the Public API's own copies of the lookups stand in for it.
 """
 
 from __future__ import annotations
@@ -34,8 +35,11 @@ if TYPE_CHECKING:
         RegionRecord,
     )
 
-# The Public API's copies of the row lookups compute reads to find a region's
-# row in each UK weight matrix (the files compute downloads under the same names).
+# The Public API's own copies of the row lookups compute reads to find a
+# region's row in each UK weight matrix. The certified data release lists no
+# lookup file, so the matrix check compares each matrix with these copies. On
+# 2026-10-22 both were byte-identical to the files compute downloads under the
+# same names (last changed 2025-04-29).
 _DATA_DIRECTORY = Path(__file__).parents[2]
 WEIGHT_MATRIX_ROW_LOOKUPS: Mapping[str, Path] = {
     "parliamentary_constituency_weights": _DATA_DIRECTORY / "constituencies_2024.csv",
