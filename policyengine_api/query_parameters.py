@@ -168,6 +168,21 @@ class AnnualEconomyQuery(EconomyQuery):
 
     time_period: EconomyYear
     target: Literal["general", "cliff"] = "general"
+    breakdown: Literal["local_areas"] | None = Field(
+        default=None,
+        description=(
+            "local_areas computes only the UK constituency and local-authority "
+            "impacts, in a run separate from the national result. UK only, "
+            "with region uk or country/*, and not with target=cliff"
+        ),
+    )
+
+    def calculation_options(self) -> dict[str, Any]:
+        """Add ``breakdown`` only when requested, so other options hashes stay put."""
+        options = super().calculation_options()
+        if self.breakdown is not None:
+            options["breakdown"] = self.breakdown
+        return options
 
 
 class BudgetWindowEconomyQuery(EconomyQuery):

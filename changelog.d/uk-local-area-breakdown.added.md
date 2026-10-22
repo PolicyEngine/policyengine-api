@@ -1,0 +1,1 @@
+The annual economy route accepts `breakdown=local_areas`, which requests the UK constituency and local-authority impacts as a calculation option with its own options hash and cached result. Requests without it keep their existing options hash.

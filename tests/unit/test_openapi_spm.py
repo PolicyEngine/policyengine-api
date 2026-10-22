@@ -49,6 +49,15 @@ def test_economy_query_and_receipt_schemas_match_public_http_contract():
             ["general"] if suffix else ["general", "cliff"]
         )
         if suffix:
+            assert "breakdown" not in parameters
+        else:
+            breakdown = parameters["breakdown"]
+            assert breakdown["required"] is False
+            assert breakdown["schema"]["type"] == "string"
+            assert breakdown["schema"]["enum"] == ["local_areas"]
+            assert breakdown["schema"]["nullable"] is True
+            assert "constituency" in breakdown["description"]
+        if suffix:
             assert parameters["window_size"]["schema"]["minimum"] == 1
             assert parameters["window_size"]["schema"]["maximum"] == 75
         result = operation["responses"]["200"]["content"]["application/json"]["schema"][

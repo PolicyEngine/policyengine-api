@@ -289,3 +289,112 @@ def test_a_rejected_economy_query_parameter_quotes_no_validator_internals(econom
     message = response.get_json()["message"]
     assert not any(part in message for part in PYDANTIC_INTERNALS)
     dispatch.assert_not_called()
+
+
+UK_ANNUAL_PATH = "/uk/economy/123/over/456"
+UK_ANNUAL_QUERY = [("region", "uk"), ("time_period", "2026")]
+UK_BUDGET_WINDOW_QUERY = [
+    ("region", "uk"),
+    ("start_year", "2026"),
+    ("window_size", "2"),
+]
+
+
+@pytest.fixture
+def uk_economy_http(monkeypatch):
+    """Return a real Flask client for the UK economy routes and their service mock.
+
+    The mock stands in for both service methods, so a test sees exactly what
+    the route parsed, and no request reaches the cache or the simulation API.
+    """
+    dispatch = Mock(
+        return_value=SimpleNamespace(
+            cache_status=None,
+            run_progress=None,
+            to_dict=lambda: {
+                "status": "computing",
+                "message": None,
+                "data": None,
+                "progress": 0,
+                "completed_years": [],
+                "computing_years": [],
+                "queued_years": [],
+                "error": None,
+            },
+        )
+    )
+    for method in ("get_economic_impact", "get_budget_window_economic_impact"):
+        monkeypatch.setattr(economy_routes.economy_service, method, dispatch)
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(economy_routes.economy_bp)
+    return app.test_client(), dispatch
+
+
+def test_annual_route_passes_a_local_area_breakdown_to_the_service(uk_economy_http):
+    client, dispatch = uk_economy_http
+
+    response = client.get(
+        UK_ANNUAL_PATH,
+        query_string=[*UK_ANNUAL_QUERY, ("breakdown", "local_areas")],
+    )
+
+    assert response.status_code == 200, response.get_json()
+    impact_request = dispatch.call_args.kwargs["impact_request"]
+    assert impact_request.options == {"breakdown": "local_areas"}
+    assert impact_request.region == "uk"
+    assert impact_request.target == "general"
+
+
+def test_annual_route_without_breakdown_passes_no_breakdown_option(uk_economy_http):
+    client, dispatch = uk_economy_http
+
+    response = client.get(UK_ANNUAL_PATH, query_string=UK_ANNUAL_QUERY)
+
+    assert response.status_code == 200, response.get_json()
+    assert dispatch.call_args.kwargs["impact_request"].options == {}
+
+
+def test_annual_route_rejects_a_repeated_breakdown(uk_economy_http):
+    client, dispatch = uk_economy_http
+
+    response = client.get(
+        UK_ANNUAL_PATH,
+        query_string=[
+            *UK_ANNUAL_QUERY,
+            ("breakdown", "local_areas"),
+            ("breakdown", "local_areas"),
+        ],
+    )
+
+    assert response.status_code == 400
+    assert "'breakdown' must not be repeated" in response.get_json()["message"]
+    dispatch.assert_not_called()
+
+
+def test_annual_route_rejects_an_unknown_breakdown(uk_economy_http):
+    client, dispatch = uk_economy_http
+
+    response = client.get(
+        UK_ANNUAL_PATH,
+        query_string=[*UK_ANNUAL_QUERY, ("breakdown", "constituencies")],
+    )
+
+    assert response.status_code == 400
+    message = response.get_json()["message"]
+    assert message.startswith("breakdown: Input should be 'local_areas'")
+    assert not any(part in message for part in PYDANTIC_INTERNALS)
+    dispatch.assert_not_called()
+
+
+def test_budget_window_route_rejects_a_breakdown(uk_economy_http):
+    client, dispatch = uk_economy_http
+
+    response = client.get(
+        UK_ANNUAL_PATH + "/budget-window",
+        query_string=[*UK_BUDGET_WINDOW_QUERY, ("breakdown", "local_areas")],
+    )
+
+    assert response.status_code == 400
+    assert "breakdown" in response.get_json()["message"]
+    dispatch.assert_not_called()

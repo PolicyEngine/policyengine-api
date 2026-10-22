@@ -319,10 +319,16 @@ HTTP 400. An omitted `spm` inherits the certified default measurement, while a
 misspelled parameter is rejected. `region` is required;
 annual requests require `time_period`, while budget-window requests require
 `start_year` and `window_size` (1–75, ending no later than 2099). Years use four
-digits. Optional fields are `version` (installed country model version) and
-`target` (`general`, or annual-only `cliff`). Omitted `spm` inherits certified
-bundle defaults. The served `/specification` generates these query declarations
-from the same typed models as the Flask parser.
+digits. Optional fields are `version` (installed country model version),
+`target` (`general`, or annual-only `cliff`) and the annual-only `breakdown`.
+Omitted `spm` inherits certified bundle defaults. The served `/specification`
+generates these query declarations from the same typed models as the Flask
+parser.
+
+`breakdown=local_areas` asks the annual route for the UK constituency and
+local-authority impacts only. It is a calculation option, so the request has
+its own options hash and its own cached result. Any other value returns HTTP
+400, and requests without `breakdown` keep their existing options hash.
 
 Before cache access or submission,
 the API validates the selected worker application's `canonical-spm-v1` capability
