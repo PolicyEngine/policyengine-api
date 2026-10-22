@@ -9,7 +9,7 @@ import sys
 from typing import TYPE_CHECKING
 
 import pytest
-from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.exc import InterfaceError, OperationalError, ProgrammingError
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.services.v2.countries.validators import (
@@ -125,23 +125,44 @@ def test_a_failed_check_stops_startup(error: Exception) -> None:
         )
 
 
-def test_unusable_v2_configuration_stops_startup() -> None:
-    def unusable_configuration() -> FakeCountryListVerifier:
-        msg = "V2_RUNTIME_DATABASE_URL must name a non-local Postgres host"
-        raise V2ConfigurationError(msg)
+@pytest.mark.parametrize(
+    "message",
+    [
+        "V2_RUNTIME_DATABASE_URL must name a non-local Postgres host",
+        "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE could not be resolved",
+    ],
+    ids=["invalid-url", "secret-unavailable"],
+)
+def test_unusable_v2_configuration_is_logged_and_left_to_readiness(
+    message: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Readiness already reports not ready for it, and recovers when it does."""
 
-    with pytest.raises(V2ConfigurationError):
+    def unusable_configuration() -> FakeCountryListVerifier:
+        raise V2ConfigurationError(message)
+
+    with caplog.at_level(logging.WARNING):
         check_countries_table_at_startup(
             environ={"K_SERVICE": "policyengine-api"},
             verifier_factory=unusable_configuration,
         )
 
+    assert [record.levelno for record in caplog.records] == [logging.WARNING]
+    assert message in caplog.records[0].getMessage()
 
+
+@pytest.mark.parametrize(
+    "error_type",
+    [OperationalError, InterfaceError],
+    ids=["operational", "interface"],
+)
 def test_an_unreachable_database_is_logged_and_startup_continues(
+    error_type: type[OperationalError | InterfaceError],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     verifier = FakeCountryListVerifier(
-        error=OperationalError(
+        error=error_type(
             "SELECT countries.id FROM countries",
             {},
             Exception("connection to db.secret-host failed: password=hunter2"),
@@ -158,13 +179,13 @@ def test_an_unreachable_database_is_logged_and_startup_continues(
     assert [record.levelno for record in caplog.records] == [logging.WARNING]
     message = caplog.records[0].getMessage()
     assert "countries table" in message
-    assert "OperationalError" in message
+    assert error_type.__name__ in message
     assert "secret-host" not in message
     assert "hunter2" not in message
 
 
 def test_importing_the_asgi_application_runs_the_check(tmp_path: Path) -> None:
-    """An unusable v2 runtime database URL stops the application from loading."""
+    """The check runs at import; an unusable v2 runtime URL is only logged."""
     environment = os.environ.copy()
     environment.update(
         {
@@ -189,8 +210,9 @@ def test_importing_the_asgi_application_runs_the_check(tmp_path: Path) -> None:
         check=False,
     )
 
-    assert result.returncode != 0
-    assert "V2_RUNTIME_DATABASE_URL must name a non-local Postgres host" in (
-        result.stderr
-    )
-    assert "hunter2" not in result.stderr
+    # The application's log handler writes structured records to stdout.
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, result.stderr
+    assert "Skipped the countries table check" in output
+    assert "V2_RUNTIME_DATABASE_URL must name a non-local Postgres host" in output
+    assert "hunter2" not in output

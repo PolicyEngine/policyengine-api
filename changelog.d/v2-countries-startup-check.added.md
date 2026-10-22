@@ -1,1 +1,1 @@
-The Public API refuses to start when the v2 `countries` table and its country list in code name different countries. The check runs on Cloud Run and wherever a v2 runtime database is configured; an unreachable database is logged and skipped.
+The Public API refuses to start when the v2 `countries` table and its country list in code name different countries, or when the table or the privilege to read it is missing. The check runs on Cloud Run and wherever a v2 runtime database is configured; when it cannot query the table, it logs why and startup continues.
