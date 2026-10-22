@@ -238,6 +238,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        SAVED_POLICY_RENAME_REVISION,
         SAVED_POLICY_RENAME_PARENT_REVISION,
         "91af4fc8d8c1",
         "60d6518b6a98",
@@ -772,3 +773,52 @@ def test_saved_policy_rename_revision_renames_the_table_in_place() -> None:
         assert "op.bulk_insert(" not in body
     assert upgrade.count("Post-generation correction:") == 1
     assert downgrade.count("Post-generation correction:") == 1
+
+
+def test_catalog_format_2_revision_adds_only_nullable_columns() -> None:
+    """The revision after the saved-policy rename adds catalog format 2's columns.
+
+    It is generated, adds each column as nullable so versions published earlier
+    keep them empty, drops them on downgrade, and writes no data.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == SAVED_POLICY_RENAME_REVISION
+    ]
+    assert len(children) == 1
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    added_columns = {
+        "tax_benefit_model_versions": ("catalog_format", "entities", "basic_inputs"),
+        "variables": (
+            "is_input_variable",
+            "hidden_input",
+            "module_name",
+            "adds_parameter_path",
+            "subtracts_parameter_path",
+            "enum_values",
+        ),
+        "parameters": ("economy", "household"),
+    }
+    column_count = sum(len(columns) for columns in added_columns.values())
+    assert upgrade.count("op.add_column(") == column_count
+    assert upgrade.count("nullable=True") == column_count
+    assert downgrade.count("op.drop_column(") == column_count
+    for table_name, columns in added_columns.items():
+        for column_name in columns:
+            assert f'"{column_name}"' in upgrade
+            assert f'op.drop_column("{table_name}", "{column_name}")' in downgrade
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "server_default" not in body

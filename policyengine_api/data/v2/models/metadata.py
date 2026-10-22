@@ -85,6 +85,11 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
     description: str | None = None
     current_law_id: int
     metadata_time_periods: list[int] = Field(sa_type=sa.JSON)
+    # Catalog format 2 fields. Versions published before format 2 keep them
+    # null; entities are {key, plural, is_person} objects.
+    catalog_format: int | None = None
+    entities: list[dict[str, Any]] | None = Field(default=None, sa_type=sa.JSON)
+    basic_inputs: list[str] | None = Field(default=None, sa_type=sa.JSON)
 
     model: TaxBenefitModel = Relationship(back_populates="versions")
     variables: list["Variable"] = Relationship(
@@ -279,6 +284,15 @@ class Variable(IdentifiedModel, table=True):
     default_value: Any = Field(default=None, sa_type=sa.JSON)
     adds: list[str] | None = Field(default=None, sa_type=sa.JSON)
     subtracts: list[str] | None = Field(default=None, sa_type=sa.JSON)
+    # Catalog format 2 fields; null in versions published before it. A
+    # parameter path names the parameter whose dated value lists the variables
+    # this one adds or subtracts. Enum values are {value, label} objects.
+    is_input_variable: bool | None = None
+    hidden_input: bool | None = None
+    module_name: str | None = Field(default=None, max_length=512)
+    adds_parameter_path: str | None = Field(default=None, max_length=512)
+    subtracts_parameter_path: str | None = Field(default=None, max_length=512)
+    enum_values: list[dict[str, Any]] | None = Field(default=None, sa_type=sa.JSON)
     tax_benefit_model_version_id: UUID = Field(
         foreign_key="tax_benefit_model_versions.id",
         ondelete="CASCADE",
@@ -339,6 +353,9 @@ class Parameter(IdentifiedModel, table=True):
     description: str | None = None
     data_type: str | None = Field(default=None, max_length=128)
     unit: str | None = Field(default=None, max_length=128)
+    # Catalog format 2 fields; null in versions published before it.
+    economy: bool | None = None
+    household: bool | None = None
     tax_benefit_model_version_id: UUID = Field(
         foreign_key="tax_benefit_model_versions.id",
         ondelete="CASCADE",
