@@ -14,7 +14,7 @@ import json
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from policyengine_api.data.v2.catalog.errors import CatalogExtractionError
 from policyengine_api.data.v2.catalog.records import CertifiedArtifact
@@ -92,22 +92,46 @@ def _manifest_text(value: object, *, description: str) -> str:
     return value
 
 
+@runtime_checkable
+class ReleaseManifest(Protocol):
+    """What scoping reads from a PolicyEngine.py country release manifest.
+
+    The manifest is an untyped public object, so each value is checked where
+    it is read.
+    """
+
+    @property
+    def datasets(self) -> object:
+        """The certified artifacts by name."""
+        ...
+
+    @property
+    def region_datasets(self) -> object:
+        """The dataset path of each region type."""
+        ...
+
+    @property
+    def data_package(self) -> object:
+        """The repository and revision artifacts default to."""
+        ...
+
+
 def certified_artifacts(
     country_id: str,
-    release_manifest: object,
+    release_manifest: ReleaseManifest,
 ) -> dict[str, CertifiedArtifact]:
     """Return the release manifest's artifacts, with the data package's defaults.
 
     An artifact without its own repository, repository type or revision is in
     the data package's repository at the release revision.
     """
-    data_package = getattr(release_manifest, "data_package", None)
+    data_package = release_manifest.data_package
     default_repo_id = getattr(data_package, "repo_id", None)
     default_repo_type = getattr(data_package, "repo_type", None) or "model"
     default_revision = getattr(
         data_package, "release_manifest_revision", None
     ) or getattr(data_package, "version", None)
-    datasets = getattr(release_manifest, "datasets", None)
+    datasets = release_manifest.datasets
     if not isinstance(datasets, Mapping):
         msg = f"{country_id} release manifest has no dataset map"
         raise CatalogExtractionError(msg)
@@ -138,11 +162,11 @@ def certified_artifacts(
 
 def _role_datasets(
     country_id: str,
-    release_manifest: object,
+    release_manifest: ReleaseManifest,
     artifacts: Mapping[str, CertifiedArtifact],
 ) -> dict[str, str]:
     """Map each dataset role the release names to its certified dataset's name."""
-    region_datasets = getattr(release_manifest, "region_datasets", None)
+    region_datasets = release_manifest.region_datasets
     if not isinstance(region_datasets, Mapping):
         msg = f"{country_id} release manifest has no region dataset map"
         raise CatalogExtractionError(msg)
@@ -243,6 +267,12 @@ def scope_regions(
     type has no scoping rule is left out, and a runnable region may not sit
     under a region that is left out.
     """
+    if not isinstance(release_manifest, ReleaseManifest):
+        msg = (
+            f"{country_id} release manifest lacks datasets, region_datasets or "
+            "data_package"
+        )
+        raise CatalogExtractionError(msg)
     artifacts = certified_artifacts(country_id, release_manifest)
     if reviewed_default not in artifacts:
         msg = f"{country_id} release does not certify {reviewed_default}"
