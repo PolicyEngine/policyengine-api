@@ -136,7 +136,8 @@ household columns, or if a weight matrix's row count differs from its row
 lookup (`constituencies_2024.csv`, `local_authorities_2021.csv`) or the lookup
 lacks a region's code. The certified data release lists no lookup file, so these
 are the Public API's own copies of the lookups compute reads; on 2026-10-22 both
-were byte-identical to the files compute downloads.
+copies were checked to be identical in content to the lookups the calculation
+workers download.
 
 Review the fallback and omitted-region summaries on every new PolicyEngine.py
 release. A changed count may identify an upstream catalog change that needs a
