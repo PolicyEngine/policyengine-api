@@ -53,7 +53,8 @@ def _changelog_bin(tmp_path: Path) -> tuple[Path, Path]:
     bin_dir.mkdir()
     (bin_dir / "python").symlink_to(sys.executable)
     log = tmp_path / "calls.log"
-    _recording_command(bin_dir, "towncrier", log)
+    # towncrier runs from uv.lock through uv run, so uv is the command to fake.
+    _recording_command(bin_dir, "uv", log)
     return bin_dir, log
 
 
@@ -68,7 +69,9 @@ def test_build_changelog_uses_the_pyproject_version(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert _lines(log) == ["towncrier build --yes --version 3.4.5"]
+    assert _lines(log) == [
+        "uv run --frozen --extra dev towncrier build --yes --version 3.4.5"
+    ]
 
 
 def test_build_changelog_fails_without_a_version(tmp_path: Path) -> None:
