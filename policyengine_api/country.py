@@ -364,6 +364,9 @@ class PolicyEngineCountry:
                 "entity": variable.entity.key,
                 "valueType": variable.value_type.__name__,
                 "definitionPeriod": variable.definition_period,
+                # "stock" for a balance or value at one point in time, "flow"
+                # for an amount over a period.
+                "quantityType": variable.quantity_type,
                 "name": variable_name,
                 "label": variable.label,
                 "category": variable.category,
