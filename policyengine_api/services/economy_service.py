@@ -115,6 +115,10 @@ BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES = {400, 422}
 # 400 from a gateway whose routed .py release does not declare breakdowns, and
 # 422 from an entry deployment that does not know the field.
 LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES = frozenset({400, 422})
+# The telemetry simulation_kind of a breakdown run. The simulation API's
+# telemetry envelope forbids extra fields, so the run is marked here rather
+# than by a new field; geography_type and geography_code still name its region.
+LOCAL_AREA_BREAKDOWN_SIMULATION_KIND = "local_area_breakdown"
 # The regions a breakdown can cover: the UK, each UK country the metadata
 # publishes, and .py's own code for a country the metadata names differently.
 LOCAL_AREA_BREAKDOWN_REGIONS = frozenset(
@@ -2021,6 +2025,8 @@ class EconomyService:
                 region=setup_options.region,
             )
         )
+        if setup_options.options.get("breakdown") is not None:
+            simulation_kind = LOCAL_AREA_BREAKDOWN_SIMULATION_KIND
 
         return {
             "submission_claim_id": setup_options.submission_claim_id,

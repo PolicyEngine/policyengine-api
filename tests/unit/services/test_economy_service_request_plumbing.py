@@ -456,6 +456,54 @@ def test_uk_breakdown_submission_has_its_own_hash_and_sends_breakdown(
     assert stored[0].options_json == {"breakdown": "local_areas"}
 
 
+# The simulation API's TelemetryEnvelope forbids extra fields, so a breakdown
+# is marked through the existing simulation_kind field, not a new one.
+TELEMETRY_FIELDS = {
+    "submission_claim_id",
+    "requested_at",
+    "simulation_kind",
+    "geography_code",
+    "geography_type",
+    "config_hash",
+    "capture_mode",
+}
+
+
+@pytest.mark.usefixtures("uk_package_versions")
+@pytest.mark.parametrize(
+    ("options", "region", "expected"),
+    [
+        (
+            {"breakdown": "local_areas"},
+            "uk",
+            ("local_area_breakdown", "national", "uk"),
+        ),
+        (
+            {"breakdown": "local_areas"},
+            "country/scotland",
+            ("local_area_breakdown", "country", "scotland"),
+        ),
+        ({}, "uk", ("national", "national", "uk")),
+        ({}, "country/scotland", ("country", "country", "scotland")),
+    ],
+    ids=["breakdown-uk", "breakdown-scotland", "national-uk", "national-scotland"],
+)
+def test_uk_submission_telemetry_marks_breakdown_runs(
+    economy_service, mock_simulation_entrypoint, options, region, expected
+):
+    economy_service.get_economic_impact(
+        _uk_request(options, region=region), time_period="2026"
+    )
+
+    telemetry = mock_simulation_entrypoint.run.call_args.args[0]["_telemetry"]
+    assert set(telemetry) == TELEMETRY_FIELDS
+    assert (
+        telemetry["simulation_kind"],
+        telemetry["geography_type"],
+        telemetry["geography_code"],
+    ) == expected
+
+
 @pytest.mark.usefixtures("uk_package_versions")
 def test_uk_national_submission_sends_no_breakdown_and_keeps_its_hash(
     economy_service, mock_simulation_entrypoint
