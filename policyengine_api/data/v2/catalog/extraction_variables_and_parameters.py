@@ -179,7 +179,14 @@ def _normalize_enum_values(
             field_name=f"variable {name} enum value",
             maximum=255,
         )
-        label = normalize_json_value(getattr(source_value, "label", None))
+        try:
+            label = normalize_json_value(getattr(source_value, "label", None))
+        except CatalogExtractionError as error:
+            msg = (
+                f"variable {name} enum label for {value} is not JSON-compatible: "
+                f"{error}"
+            )
+            raise CatalogExtractionError(msg) from error
         if isinstance(label, (dict, list)):
             msg = f"variable {name} enum label for {value} must be a JSON scalar"
             raise CatalogExtractionError(msg)

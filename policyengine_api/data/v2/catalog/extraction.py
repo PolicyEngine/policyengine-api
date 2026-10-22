@@ -191,17 +191,63 @@ def _verified_release_manifest(
     return release_manifest
 
 
-def _normalize_entities(country_id: str, source: object) -> tuple[EntityRecord, ...]:
-    """Normalize the public model's entities, in its order, with one person entity."""
-    source_entities = getattr(source, "entities", None)
-    if not isinstance(source_entities, Sequence) or isinstance(
-        source_entities, (str, bytes)
-    ):
+# The public fields catalog format 2 reads, by the record that carries them.
+FORMAT_2_FIELDS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("model version", "", ("entities", "basic_inputs")),
+    (
+        "variable",
+        "variables_by_name",
+        (
+            "is_input_variable",
+            "hidden_input",
+            "module_name",
+            "adds_parameter_path",
+            "subtracts_parameter_path",
+            "enum_values",
+        ),
+    ),
+    ("parameter", "parameters_by_name", ("economy", "household")),
+)
+
+
+def _require_format_2_fields(country_id: str, source: object) -> None:
+    """Fail first, naming each field, when PolicyEngine.py does not publish them.
+
+    Older releases, such as 6.7.5, publish none of catalog format 2's fields.
+    """
+    missing: list[str] = []
+    for record_name, mapping_attribute, field_names in FORMAT_2_FIELDS:
+        if mapping_attribute:
+            records = getattr(source, mapping_attribute, None)
+            holders = list(records.values()) if isinstance(records, Mapping) else []
+        else:
+            holders = [source]
+        absent = [
+            field_name
+            for field_name in field_names
+            if any(not hasattr(holder, field_name) for holder in holders)
+        ]
+        if absent:
+            missing.append(f"{record_name} {', '.join(absent)}")
+    if missing:
         msg = (
-            f"{country_id} public model publishes no entities; catalog format 2 "
-            "needs PolicyEngine.py's public entity records"
+            "the installed PolicyEngine.py does not publish catalog format 2's "
+            f"fields for {country_id}: {'; '.join(missing)}"
         )
         raise CatalogExtractionError(msg)
+
+
+def _source_sequence(country_id: str, source: object, attribute: str) -> Sequence:
+    values = getattr(source, attribute, None)
+    if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
+        msg = f"{country_id} public model {attribute} must be a sequence"
+        raise CatalogExtractionError(msg)
+    return values
+
+
+def _normalize_entities(country_id: str, source: object) -> tuple[EntityRecord, ...]:
+    """Normalize the public model's entities, in its order, with one person entity."""
+    source_entities = _source_sequence(country_id, source, "entities")
     entities: list[EntityRecord] = []
     for source_entity in source_entities:
         key = required_text(
@@ -238,16 +284,12 @@ def _normalize_basic_inputs(
     *,
     variable_names: frozenset[str],
 ) -> tuple[str, ...]:
-    """Normalize the country's default household fields; each is a variable."""
-    source_inputs = getattr(source, "basic_inputs", None)
-    if not isinstance(source_inputs, Sequence) or isinstance(
-        source_inputs, (str, bytes)
-    ):
-        msg = (
-            f"{country_id} public model publishes no basic inputs; catalog format 2 "
-            "needs PolicyEngine.py's public basic inputs"
-        )
-        raise CatalogExtractionError(msg)
+    """Normalize the country's default household fields; each is a variable.
+
+    An empty list, which PolicyEngine.py gives a package that declares none, is
+    stored as empty.
+    """
+    source_inputs = _source_sequence(country_id, source, "basic_inputs")
     basic_inputs = tuple(
         required_text(value, field_name=f"{country_id} basic input", maximum=512)
         for value in source_inputs
@@ -300,6 +342,7 @@ def normalize_model_metadata(
     Everything comes from PolicyEngine.py's public records. Separate from the
     certified data release, so the metadata can be checked on its own.
     """
+    _require_format_2_fields(country_id, source)
     variables = tuple(
         normalize_variable(variable, model_version_id=model_version_id)
         for variable in public_named_records(
