@@ -319,3 +319,72 @@ def normalized_catalog(
         installed_version=installed_version,
         region_references=region_references(),
     )
+
+
+def add_enum_and_parameter_part_records(model: SimpleNamespace) -> None:
+    """Add an enum variable and a variable whose parts are named by parameters.
+
+    The enum's labels are a string and an integer. The two parameters hold the
+    lists ``countable_income`` adds and subtracts.
+    """
+    for name in ("gov.example.countable_income", "gov.example.deductions"):
+        parameter = SimpleNamespace(
+            name=name,
+            label=None,
+            description=None,
+            data_type=list,
+            unit=None,
+            economy=True,
+            household=True,
+            parameter_values=[
+                SimpleNamespace(
+                    value=["employment_income"],
+                    start_date=datetime(2025, 1, 1, tzinfo=UTC),
+                    end_date=None,
+                )
+            ],
+        )
+        model.parameters.append(parameter)
+        model.parameters_by_name[name] = parameter
+    variables = (
+        SimpleNamespace(
+            name="filing_status",
+            label="Filing status",
+            entity="person",
+            description=None,
+            data_type="Enum",
+            possible_values=["SINGLE", "JOINT"],
+            default_value="SINGLE",
+            adds=None,
+            subtracts=None,
+            is_input_variable=True,
+            hidden_input=False,
+            module_name="household.demographic.filing_status",
+            adds_parameter_path=None,
+            subtracts_parameter_path=None,
+            enum_values=[
+                SimpleNamespace(value="SINGLE", label="Single"),
+                SimpleNamespace(value="JOINT", label=2),
+            ],
+        ),
+        SimpleNamespace(
+            name="countable_income",
+            label="Countable income",
+            entity="person",
+            description=None,
+            data_type=float,
+            possible_values=None,
+            default_value=0.0,
+            adds=["employment_income"],
+            subtracts=["employment_income"],
+            is_input_variable=False,
+            hidden_input=False,
+            module_name="household.income.countable_income",
+            adds_parameter_path="gov.example.countable_income",
+            subtracts_parameter_path="gov.example.deductions",
+            enum_values=None,
+        ),
+    )
+    for variable in variables:
+        model.variables.append(variable)
+        model.variables_by_name[variable.name] = variable

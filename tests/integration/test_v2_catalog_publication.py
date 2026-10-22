@@ -16,11 +16,13 @@ from sqlalchemy.pool import NullPool
 from sqlmodel import Session, select
 
 from policyengine_api.data.v2.catalog import publication as publication_module
+from policyengine_api.data.v2.catalog.extraction import extract_catalog
 from policyengine_api.data.v2.catalog.publication import (
     CatalogPublicationError,
     publish_catalog,
     unpublished_countries,
 )
+from policyengine_api.data.v2.catalog.records import EnumValueRecord
 from policyengine_api.data.v2.models import (
     Dataset,
     DatasetVersion,
@@ -32,7 +34,15 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
-from tests.fixtures.v2_catalog import normalized_catalog
+from tests.fixtures.v2_catalog import (
+    POLICYENGINE_VERSION,
+    add_enum_and_parameter_part_records,
+    bundle,
+    installed_version,
+    normalized_catalog,
+    region_references,
+    source_models,
+)
 
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
@@ -678,3 +688,102 @@ def test_version_stored_with_format_2_fails_when_a_format_2_field_changes(
 
     assert _counts(publication_engine) == before_counts
     assert _format_2_values(publication_engine)["parameter"] == (True, False)
+
+
+def _catalog_with_enum_and_parameter_parts():
+    models = source_models()
+    add_enum_and_parameter_part_records(models["us"])
+    return extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+        region_references=region_references(),
+    )
+
+
+def _stored_us_variables(engine: Engine) -> dict[str, tuple[object, ...]]:
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT variable.name, variable.enum_values, "
+                "variable.adds_parameter_path, variable.subtracts_parameter_path "
+                "FROM variables AS variable "
+                "JOIN tax_benefit_model_versions AS version "
+                "ON version.id = variable.tax_benefit_model_version_id "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = 'policyengine-us'"
+            )
+        ).all()
+    return {row[0]: tuple(row[1:]) for row in rows}
+
+
+def _with_changed_us_variable(catalog, name: str, **changes: object):
+    us = catalog.country("us")
+    variables = tuple(
+        replace(variable, **changes) if variable.name == name else variable
+        for variable in us.variables
+    )
+    return replace(
+        catalog,
+        countries=(replace(us, variables=variables), catalog.country("uk")),
+    )
+
+
+def test_enum_labels_and_parameter_paths_round_trip_exactly(
+    publication_engine: Engine,
+) -> None:
+    catalog = _catalog_with_enum_and_parameter_parts()
+
+    publish_catalog(publication_engine, catalog)
+    before_ids = _identifiers(publication_engine)
+    stored = _stored_us_variables(publication_engine)
+    republished = publish_catalog(publication_engine, catalog)
+
+    assert stored["filing_status"] == (
+        [{"value": "SINGLE", "label": "Single"}, {"value": "JOINT", "label": 2}],
+        None,
+        None,
+    )
+    assert type(stored["filing_status"][0][1]["label"]) is int
+    assert stored["countable_income"] == (
+        None,
+        "gov.example.countable_income",
+        "gov.example.deductions",
+    )
+    assert republished.as_dict()["outcome"] == "ok"
+    assert _identifiers(publication_engine) == before_ids
+
+
+@pytest.mark.parametrize(
+    ("variable_name", "changes"),
+    [
+        (
+            "filing_status",
+            {
+                "enum_values": (
+                    EnumValueRecord(value="SINGLE", label="Single filer"),
+                    EnumValueRecord(value="JOINT", label=2),
+                )
+            },
+        ),
+        ("countable_income", {"adds_parameter_path": "gov.example.deductions"}),
+        ("countable_income", {"subtracts_parameter_path": None}),
+    ],
+)
+def test_republication_detects_a_changed_enum_label_or_parameter_path(
+    publication_engine: Engine,
+    variable_name: str,
+    changes: dict[str, object],
+) -> None:
+    catalog = _catalog_with_enum_and_parameter_parts()
+    publish_catalog(publication_engine, catalog)
+    stored = _stored_us_variables(publication_engine)
+
+    with pytest.raises(CatalogPublicationError, match=r"in its variables$"):
+        publish_catalog(
+            publication_engine,
+            _with_changed_us_variable(catalog, variable_name, **changes),
+        )
+
+    assert _stored_us_variables(publication_engine) == stored
