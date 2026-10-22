@@ -13,6 +13,8 @@ from urllib.parse import quote
 import h5py
 from huggingface_hub import HfFileSystem
 
+from policyengine_api.data.v2.catalog.errors import CertifiedDataReadError
+
 if TYPE_CHECKING:
     from collections.abc import Callable
     from contextlib import AbstractContextManager
@@ -26,10 +28,6 @@ VALUE_BLOCK_PREFIX = "values_block_"
 TABLE_INDEX_COLUMN = "index"
 
 _Result = TypeVar("_Result")
-
-
-class CertifiedDataReadError(RuntimeError):
-    """Raised when a certified artifact does not have the structure expected."""
 
 
 # HDF5 metadata is read in many small, scattered pieces; caching whole blocks of

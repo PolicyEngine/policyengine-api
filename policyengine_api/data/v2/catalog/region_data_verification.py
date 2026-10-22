@@ -15,7 +15,10 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, TypeVar
 
-from policyengine_api.data.v2.catalog.errors import CatalogExtractionError
+from policyengine_api.data.v2.catalog.errors import (
+    CatalogExtractionError,
+    CertifiedDataReadError,
+)
 from policyengine_api.data.v2.catalog.region_scoping import (
     ROW_FILTER,
     WEIGHT_REPLACEMENT,
@@ -77,11 +80,19 @@ def _noun(count: int) -> str:
 
 
 def _read(artifact: CertifiedArtifact, read: Callable[[], _Result]) -> _Result:
-    """Run one read of an artifact, reporting a failure without its error text."""
+    """Run one read of an artifact, reporting a failure safely.
+
+    A structure error keeps its own message; any other failure is reduced to
+    the artifact's name and the error type, since its text may hold a location.
+    """
     try:
         return read()
     except RegionDataVerificationError:
         raise
+    except CertifiedDataReadError as error:
+        # Its message names only HDF5 entries and counts.
+        msg = f"the certified artifact {artifact.name} cannot be checked: {error}"
+        raise RegionDataVerificationError(msg) from error
     except Exception as error:
         # Only the artifact's name and the error type: the error text may hold
         # its location, and command output names no dataset release.
