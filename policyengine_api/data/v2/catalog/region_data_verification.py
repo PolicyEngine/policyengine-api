@@ -38,8 +38,8 @@ if TYPE_CHECKING:
 # The Public API's own copies of the row lookups compute reads to find a
 # region's row in each UK weight matrix. The certified data release lists no
 # lookup file, so the matrix check compares each matrix with these copies. On
-# 2026-10-22 both were byte-identical to the files compute downloads under the
-# same names (last changed 2025-04-29).
+# 2026-10-22 both copies were checked to be identical in content to the lookups
+# the calculation workers download.
 _DATA_DIRECTORY = Path(__file__).parents[2]
 WEIGHT_MATRIX_ROW_LOOKUPS: Mapping[str, Path] = {
     "parliamentary_constituency_weights": _DATA_DIRECTORY / "constituencies_2024.csv",
