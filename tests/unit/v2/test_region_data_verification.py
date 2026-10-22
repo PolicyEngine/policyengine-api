@@ -87,12 +87,18 @@ def test_catalog_records_only_the_artifacts_its_filters_read() -> None:
         )
     ]
     assert [
-        (artifact.name, artifact.path, artifact.repo_type)
+        (artifact.name, artifact.repo_id, artifact.path, artifact.repo_type)
         for artifact in catalog.country("uk").certified_artifacts
     ] == [
-        ("enhanced_frs_2024_25", "enhanced_frs_2024_25.h5", "model"),
+        (
+            "enhanced_frs_2024_25",
+            "example-org/example-uk-data",
+            "enhanced_frs_2024_25.h5",
+            "model",
+        ),
         (
             "parliamentary_constituency_weights",
+            "example-org/example-uk-data",
             "parliamentary_constituency_weights.h5",
             "model",
         ),
