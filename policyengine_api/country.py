@@ -47,6 +47,7 @@ from policyengine_api.spm import (
     spm_metadata,
 )
 from policyengine_api.utils import get_safe_json
+from policyengine_api.utils.get_current_law import get_current_law_policy_id
 
 logger = logging.getLogger(__name__)
 
@@ -175,10 +176,7 @@ class PolicyEngineCountry:
                 "entities": self.build_entities(),
                 "variableModules": self.tax_benefit_system.variable_module_metadata,
                 "economy_options": self.build_microsimulation_options(),
-                "current_law_id": {
-                    "uk": 1,
-                    "us": 2,
-                }[self.country_id],
+                "current_law_id": get_current_law_policy_id(self.country_id),
                 "basicInputs": self.tax_benefit_system.basic_inputs,
                 "modelled_policies": self.tax_benefit_system.modelled_policies,
                 "spm": spm_metadata(self.country_id),

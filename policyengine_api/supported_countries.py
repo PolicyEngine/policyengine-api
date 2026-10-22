@@ -13,6 +13,11 @@ that revision before it starts the new release, instances of the previous
 release that start afterwards, or a rollback to it, refuse to start until
 the revision is downgraded.
 
+The v1 routes load the ``policyengine_<id>`` package of every listed country
+(``policyengine_api.country``) and look up its current-law policy ID
+(``policyengine_api.utils.get_current_law``), so a new country also needs its
+package installed and that ID, or API v1 fails while it loads.
+
 A new country also needs the US-and-UK checks widened on the tables that
 pair v1 records with their v2 copies (``legacy_policy_mappings``,
 ``legacy_user_policy_mappings``, ``legacy_household_mappings``) and on the

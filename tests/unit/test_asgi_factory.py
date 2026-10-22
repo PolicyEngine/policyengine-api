@@ -128,6 +128,23 @@ def test_health_returns_503_until_the_readiness_probe_passes():
     assert response.headers["content-type"].startswith("application/json")
 
 
+@pytest.mark.parametrize(("ready", "expected_status"), [(True, 200), (False, 503)])
+def test_health_answers_head_requests_like_get(ready, expected_status):
+    """Uptime monitors and `curl -I` send HEAD; the removed checks answered it."""
+    client = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            route_settings=_stage6_settings(),
+            dependencies=_stage6_dependencies(ready=ready),
+        )
+    )
+
+    response = client.head("/health")
+
+    assert response.status_code == expected_status
+    assert response.content == b""
+
+
 def test_default_health_probe_reports_warmup_and_configuration_readiness(
     monkeypatch,
 ):
