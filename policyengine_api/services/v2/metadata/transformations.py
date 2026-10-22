@@ -10,8 +10,11 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
     MetadataDataset,
     MetadataDatasetOption,
+    MetadataEconomyOptions,
     MetadataEconomyOptionsResult,
+    MetadataEntity,
     MetadataModel,
+    MetadataModelCatalogResult,
     MetadataModelSelectionResult,
     MetadataModelVersionDetail,
     MetadataPageResult,
@@ -221,9 +224,22 @@ def metadata_economy_options(
 
     The national dataset is the only dataset choice, and it is the default.
     """
+    options = _economy_option_lists(
+        selected, regions=regions, national_dataset=national_dataset
+    )
     return MetadataEconomyOptionsResult(
         policyengine_version=selected.policyengine_version,
         current_law_id=selected.model_version.current_law_id,
+        region=options.region,
+        time_period=options.time_period,
+        datasets=options.datasets,
+    )
+
+
+def _economy_option_lists(
+    selected: SelectedCatalog, *, regions: list[Region], national_dataset: Dataset
+) -> MetadataEconomyOptions:
+    return MetadataEconomyOptions(
         region=[
             MetadataRegionOption(
                 name=region.code,
@@ -242,4 +258,40 @@ def metadata_economy_options(
                 label=get_dataset_display_label(national_dataset.name),
             )
         ],
+    )
+
+
+def metadata_model_catalog(
+    selected: SelectedCatalog,
+    *,
+    regions: list[Region],
+    datasets: list[Dataset],
+    national_dataset: Dataset | None,
+) -> MetadataModelCatalogResult:
+    """Build the small parts of the selected catalog version.
+
+    Without a national dataset (a catalog without regions) the economy choices
+    are empty. Entities and basic inputs a version published before catalog
+    format 2 lacks are empty lists.
+    """
+    model_version = selected.model_version
+    return MetadataModelCatalogResult(
+        policyengine_version=selected.policyengine_version,
+        catalog_format=model_version.catalog_format,
+        model=metadata_model(selected),
+        model_version=metadata_model_version(selected),
+        entities=[
+            MetadataEntity.model_validate(entity)
+            for entity in model_version.entities or []
+        ],
+        basic_inputs=list(model_version.basic_inputs or []),
+        regions=[metadata_region(region) for region in regions],
+        datasets=[metadata_dataset(dataset) for dataset in datasets],
+        economy_options=(
+            _economy_option_lists(
+                selected, regions=regions, national_dataset=national_dataset
+            )
+            if national_dataset is not None
+            else MetadataEconomyOptions(region=[], time_period=[], datasets=[])
+        ),
     )
