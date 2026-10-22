@@ -15,6 +15,7 @@ from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session, select
 
+from policyengine_api.data.v2.catalog import publication as publication_module
 from policyengine_api.data.v2.catalog.publication import (
     CatalogPublicationError,
     publish_catalog,
@@ -230,6 +231,130 @@ def test_same_version_with_changed_content_fails_without_mutation(
 
     assert _identifiers(publication_engine) == before_ids
     assert _counts(publication_engine) == before_counts
+
+
+def _region_rows(engine: Engine) -> list[tuple[object, ...]]:
+    with engine.connect() as connection:
+        return [
+            tuple(row)
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT id, code, label, region_type, requires_filter,
+                           filter_field, filter_value, filter_strategy,
+                           parent_code, state_code, state_name, default_dataset_id
+                    FROM regions
+                    ORDER BY id
+                    """
+                )
+            )
+        ]
+
+
+def _with_changed_us_regions(catalog):
+    """Relabel state/ca and drop the district, as a reference-file change would."""
+    us = catalog.country("us")
+    regions = tuple(
+        replace(region, label="Changed California")
+        if region.code == "state/ca"
+        else region
+        for region in us.regions
+        if region.code != "congressional_district/CA-01"
+    )
+    return replace(
+        catalog,
+        countries=(replace(us, regions=regions), catalog.country("uk")),
+    )
+
+
+def test_stored_version_keeps_its_published_regions_and_logs_the_difference(
+    publication_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = normalized_catalog()
+    publish_catalog(publication_engine, catalog)
+    before_regions = _region_rows(publication_engine)
+    before_ids = _identifiers(publication_engine)
+    before_counts = _counts(publication_engine)
+    # Alembic's logging configuration disables existing loggers, so the
+    # warnings are recorded where they are emitted.
+    warnings: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        publication_module.LOGGER,
+        "warning",
+        lambda message, *args, **kwargs: warnings.append((message, kwargs)),
+    )
+
+    evidence = publish_catalog(publication_engine, _with_changed_us_regions(catalog))
+
+    assert evidence.as_dict()["outcome"] == "ok"
+    assert _region_rows(publication_engine) == before_regions
+    assert _identifiers(publication_engine) == before_ids
+    assert _counts(publication_engine) == before_counts
+    notices = [
+        keywords["extra"]
+        for message, keywords in warnings
+        if message == "kept_published_catalog_regions"
+    ]
+    assert [notice["policyengine_attributes"] for notice in notices] == [
+        {
+            "country_id": "us",
+            "policyengine_version": catalog.policyengine_version,
+            "staged_region_rows_not_stored": 1,
+            "stored_region_rows_not_staged": 2,
+        }
+    ]
+
+
+def test_stored_version_with_changed_regions_still_fails_on_other_tables(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+    publish_catalog(publication_engine, catalog)
+    before_regions = _region_rows(publication_engine)
+    changed = _with_changed_us_regions(catalog)
+    us = changed.country("us")
+    changed = replace(
+        changed,
+        countries=(
+            replace(us, variables=(replace(us.variables[0], label="Changed"),)),
+            changed.country("uk"),
+        ),
+    )
+
+    with pytest.raises(CatalogPublicationError, match="differs"):
+        publish_catalog(publication_engine, changed)
+
+    assert _region_rows(publication_engine) == before_regions
+
+
+def test_new_version_publishes_the_reference_file_regions(
+    publication_engine: Engine,
+) -> None:
+    publish_catalog(publication_engine, normalized_catalog())
+    newer = _with_changed_us_regions(normalized_catalog(policyengine_version="4.21.0"))
+
+    publish_catalog(publication_engine, newer)
+
+    with publication_engine.connect() as connection:
+        newer_us_regions = dict(
+            connection.execute(
+                text(
+                    """
+                    SELECT region.code, region.label
+                    FROM regions AS region
+                    JOIN tax_benefit_model_versions AS version
+                      ON version.id = region.tax_benefit_model_version_id
+                    JOIN tax_benefit_models AS model ON model.id = version.model_id
+                    WHERE version.version = '4.21.0' AND model.name = 'policyengine-us'
+                    """
+                )
+            ).all()
+        )
+    assert newer_us_regions == {
+        "state/ca": "Changed California",
+        "us": "United States",
+    }
 
 
 def test_republish_preserves_existing_run_and_dataset_version_records(

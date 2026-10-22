@@ -12,6 +12,7 @@ from sqlalchemy import Connection, Engine
 from policyengine_api.data.v2.catalog.publication_reconciliation import (
     assert_canonical_value_uniqueness,
     assert_country_matches,
+    count_region_differences,
     publish_new_country,
     version_exists,
 )
@@ -34,7 +35,10 @@ from policyengine_api.data.v2.models import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from policyengine_api.data.v2.catalog.records import NormalizedCatalog
+    from policyengine_api.data.v2.catalog.records import (
+        CountryCatalog,
+        NormalizedCatalog,
+    )
 
 # Stable application-defined PostgreSQL lock ID shared by all v2 catalog publishers.
 PUBLICATION_ADVISORY_LOCK_KEY = 8_629_020_026_090_001
@@ -121,10 +125,14 @@ def publish_catalog(
         if checkpoint is not None:
             checkpoint("after_copy", connection)
 
+        # A stored catalog version never changes. Its regions stay as they
+        # were published even when the reference files differ now; every
+        # other table must still match exactly.
         existing: set[str] = set()
         for country in catalog.countries:
             if version_exists(connection, country):
-                assert_country_matches(connection, country)
+                assert_country_matches(connection, country, include_regions=False)
+                _log_kept_regions(connection, country)
                 existing.add(country.country_id)
 
         for country in catalog.countries:
@@ -134,7 +142,11 @@ def publish_catalog(
             checkpoint("after_reconciliation", connection)
 
         for country in catalog.countries:
-            assert_country_matches(connection, country)
+            assert_country_matches(
+                connection,
+                country,
+                include_regions=country.country_id not in existing,
+            )
         assert_canonical_value_uniqueness(connection)
         if _protected_row_counts(connection) != before:
             msg = "publication changed simulation, report, or dataset-version rows"
@@ -159,6 +171,24 @@ def publish_catalog(
             for country in catalog.countries
             for summary in country.omitted_region_summaries
         ),
+    )
+
+
+def _log_kept_regions(connection: Connection, country: CountryCatalog) -> None:
+    """Log, with counts only, how a stored version's regions differ from the staged."""
+    staged_not_stored, stored_not_staged = count_region_differences(connection, country)
+    if not staged_not_stored and not stored_not_staged:
+        return
+    LOGGER.warning(
+        "kept_published_catalog_regions",
+        extra={
+            "policyengine_attributes": {
+                "country_id": country.country_id,
+                "policyengine_version": country.model_version.version,
+                "staged_region_rows_not_stored": staged_not_stored,
+                "stored_region_rows_not_staged": stored_not_staged,
+            }
+        },
     )
 
 

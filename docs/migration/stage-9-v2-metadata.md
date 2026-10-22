@@ -138,9 +138,14 @@ Review the fallback and omitted-region summaries on every new PolicyEngine.py
 release. A changed count may identify an upstream catalog change that needs a
 reviewed dataset selection even when publication otherwise succeeds.
 
-A catalog version is immutable: republishing a stored PolicyEngine.py version
-whose regions differ from the stored ones fails. Region reference changes
-therefore reach the catalog with the next PolicyEngine.py version.
+A catalog version is identified by its country and PolicyEngine.py version and
+never changes once published. When the command republishes a stored version
+whose staged regions differ from the stored ones, it keeps the stored regions
+unchanged, logs `kept_published_catalog_regions` with the country, the version
+and the counts of staged region rows the stored version lacks and of stored
+rows not staged, and continues. Every other table must still match exactly.
+Region reference changes therefore take effect in the next catalog version
+that is published.
 
 ## Validation evidence and retry
 
@@ -169,7 +174,9 @@ A failed attempt rolls back all catalog changes. Retry the same artifact only
 after correcting the external failure. A matching retry preserves identifiers,
 content, and row counts. Different normalized content under the same
 PolicyEngine.py version fails for operator review; it is never silently
-replaced. A later PolicyEngine.py version adds a catalog version without
+replaced. Regions are the exception: they come from the Public API's reference
+files, so a stored version keeps the regions it was published with (see
+"Source and regional dataset behavior"). A later PolicyEngine.py version adds a catalog version without
 deleting or modifying earlier versioned rows, including their logical datasets,
 regions, model descriptions, current-law IDs, and time-period options.
 
