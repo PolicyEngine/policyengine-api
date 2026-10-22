@@ -1,44 +1,26 @@
-"""Canonical SQLModel tables for v2 households and household jobs."""
+"""Canonical SQLModel table for v2 households."""
 
-from datetime import datetime
-from enum import StrEnum
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from sqlmodel import Field, Relationship
 
-from policyengine_api.data.v2.models.base import (
-    IdentifiedModel,
-    TimestampedModel,
-    enum_type,
-)
-from policyengine_api.data.v2.models.policies import Dynamic, Policy
+from policyengine_api.data.v2.models.base import TimestampedModel
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import UserHouseholdAssociation
     from policyengine_api.data.v2.models.household_mappings import (
         LegacyHouseholdMapping,
     )
-    from policyengine_api.data.v2.models.reports import Report
-    from policyengine_api.data.v2.models.simulations import Simulation
-
-
-class HouseholdJobStatus(StrEnum):
-    """Lifecycle state of a queued household calculation job."""
-
-    PENDING = "pending"
-    RUNNING = "running"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
 
 
 class Household(TimestampedModel, table=True):
     """Immutable household input, stored once per canonicalization version and hash.
 
     ``content_hash`` is the SHA-256 of the canonical document, so saving the same
-    household again finds the existing row. Households that simulations, reports
-    or saved links use cannot be deleted.
+    household again finds the existing row. Households that saved links use
+    cannot be deleted.
     """
 
     __tablename__ = "households"
@@ -81,58 +63,14 @@ class Household(TimestampedModel, table=True):
     country_id: str = Field(max_length=2)
     default_year: int | None = None
     household_data: dict[str, Any] = Field(
-        sa_type=sa.JSON().with_variant(sa.dialects.postgresql.JSONB(), "postgresql")
+        sa_type=sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
     )
     canonicalization_version: int
     content_hash: str = Field(max_length=64)
 
-    simulations: list["Simulation"] = Relationship(back_populates="household")
-    reports: list["Report"] = Relationship(back_populates="household")
     user_associations: list["UserHouseholdAssociation"] = Relationship(
         back_populates="household",
     )
     legacy_mappings: list["LegacyHouseholdMapping"] = Relationship(
         back_populates="household"
     )
-
-
-class HouseholdJob(IdentifiedModel, table=True):
-    """A queued household calculation request, with its status and result or error.
-
-    Deleting the job's policy or dynamic keeps the job but clears the reference.
-    """
-
-    __tablename__ = "household_jobs"
-    __table_args__ = (
-        sa.Index("ix_household_jobs_status_created_at", "status", "created_at"),
-    )
-
-    country: str = Field(max_length=16)
-    request_data: dict[str, Any] = Field(sa_type=sa.JSON)
-    policy_id: UUID | None = Field(
-        default=None,
-        foreign_key="policies.id",
-        ondelete="SET NULL",
-    )
-    dynamic_id: UUID | None = Field(
-        default=None,
-        foreign_key="dynamics.id",
-        ondelete="SET NULL",
-    )
-    status: HouseholdJobStatus = Field(
-        default=HouseholdJobStatus.PENDING,
-        sa_type=enum_type(HouseholdJobStatus, "v2_household_job_status"),
-    )
-    error_message: str | None = None
-    result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
-    started_at: datetime | None = Field(
-        default=None,
-        sa_type=sa.DateTime(timezone=True),
-    )
-    completed_at: datetime | None = Field(
-        default=None,
-        sa_type=sa.DateTime(timezone=True),
-    )
-
-    policy: Policy | None = Relationship(back_populates="household_jobs")
-    dynamic: Dynamic | None = Relationship(back_populates="household_jobs")

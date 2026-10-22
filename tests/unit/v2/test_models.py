@@ -6,19 +6,18 @@ from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v1_models import V1Base
+from policyengine_api.data.v2 import models as v2_models
 from policyengine_api.data.v2.models import (
     V2_METADATA,
     DatasetVersion,
     Dynamic,
     Household,
-    HouseholdJob,
     LegacyHouseholdMapping,
     LegacyPolicyMapping,
     LegacyUserMapping,
     LegacyUserPolicyMapping,
     ParameterValue,
     Policy,
-    Simulation,
     TaxBenefitModelVersion,
     User,
     UserHouseholdAssociation,
@@ -45,8 +44,41 @@ RUN_OUTPUT_TABLES = frozenset(
     }
 )
 
-# Retired at Stage 12A; a later revision drops them.
+# The simulation service owns these tables in its own schema. The v2 metadata
+# still declares them, so it matches the schema until a later revision drops
+# them, but no model maps them: nothing this release runs reads or writes them.
+RETIRED_SIMULATION_TABLES = frozenset(
+    {"household_jobs", "simulations", "reports", "report_runs", *RUN_OUTPUT_TABLES}
+)
+# Retired at Stage 12A; dropped by the same later revision.
 RETIRED_ASSOCIATION_COLUMNS = frozenset({"country", "label"})
+REMOVED_SIMULATION_MODEL_NAMES = frozenset(
+    {
+        "AggregateOutput",
+        "AggregateType",
+        "BudgetSummary",
+        "ChangeAggregate",
+        "CongressionalDistrictImpact",
+        "ConstituencyImpact",
+        "DecileImpact",
+        "DecileType",
+        "HouseholdJob",
+        "HouseholdJobStatus",
+        "Inequality",
+        "IntraDecileImpact",
+        "LocalAuthorityImpact",
+        "OutputStatus",
+        "Poverty",
+        "ProgramStatistics",
+        "Report",
+        "ReportRun",
+        "ReportRunStatus",
+        "ReportRunTrigger",
+        "Simulation",
+        "SimulationStatus",
+        "SimulationType",
+    }
+)
 
 
 def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
@@ -56,9 +88,7 @@ def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
         Policy: "policies",
         Dynamic: "policies",
         Household: "households",
-        HouseholdJob: "households",
         LegacyHouseholdMapping: "household_mappings",
-        Simulation: "simulations",
         UserHouseholdAssociation: "associations",
         UserPolicy: "associations",
         LegacyPolicyMapping: "policy_mappings",
@@ -83,13 +113,36 @@ def _v2_mappers():
     )
 
 
-def test_every_metadata_table_has_one_mapped_model() -> None:
+def test_every_kept_metadata_table_has_one_mapped_model() -> None:
     metadata_table_names = set(V2_METADATA.tables)
     model_table_names = {mapper.local_table.name for mapper in _v2_mappers()}
 
     assert V2_METADATA is not V1Base.metadata
-    assert model_table_names == metadata_table_names
-    assert len(_v2_mappers()) == len(metadata_table_names)
+    assert metadata_table_names >= RETIRED_SIMULATION_TABLES
+    assert model_table_names == metadata_table_names - RETIRED_SIMULATION_TABLES
+    assert len(_v2_mappers()) == len(model_table_names)
+
+
+def test_models_package_exports_no_simulation_domain_model() -> None:
+    exported_names = set(v2_models.__all__) | set(vars(v2_models))
+
+    assert REMOVED_SIMULATION_MODEL_NAMES.isdisjoint(exported_names)
+
+
+def test_kept_models_have_no_relationship_to_a_retired_table() -> None:
+    related_tables = {
+        f"{mapper.class_.__name__}.{relationship.key}": (
+            relationship.mapper.local_table.name
+        )
+        for mapper in _v2_mappers()
+        for relationship in mapper.relationships
+    }
+
+    assert not {
+        relationship: table_name
+        for relationship, table_name in related_tables.items()
+        if table_name in RETIRED_SIMULATION_TABLES
+    }
 
 
 def test_association_models_do_not_map_the_retired_columns() -> None:
@@ -629,7 +682,6 @@ def test_simulation_and_report_associations_have_no_cross_service_keys() -> None
         assert isinstance(postgres_type, postgresql.JSONB)
     assert set(sa.inspect(UserSimulationAssociation).relationships.keys()) == {"user"}
     assert set(sa.inspect(UserReportAssociation).relationships.keys()) == {"user"}
-    assert "user_associations" not in sa.inspect(Simulation).relationships
 
 
 def test_user_policy_records_v3_reform_fields() -> None:

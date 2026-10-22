@@ -129,7 +129,6 @@ def test_direct_sqlalchemy_categories_are_complete_and_documented() -> None:
         "typed_json_and_text",
         "named_constraints_and_indexes",
         "ambiguous_foreign_key_relationships",
-        "transaction_conflict_recovery",
         "retired_table_declarations",
     }
     assert all(DIRECT_SQLALCHEMY_EXCEPTIONS.values())
@@ -481,6 +480,24 @@ def test_v2_models_do_not_create_a_parallel_sqlalchemy_orm_layer() -> None:
     assert "mapped_column" not in model_sources
     assert "sqlalchemy.orm.Session" not in model_sources
     assert "class_=sqlalchemy" not in model_sources
+
+
+def test_orm_user_deletion_reads_no_retired_table_or_column() -> None:
+    engine = _relational_sqlite_engine()
+    with Session(engine) as session:
+        user = User(primary_country="us")
+        session.add(user)
+        session.add(
+            UserReportAssociation(user=user, country_id="us", legacy_report_id=615)
+        )
+        session.flush()
+        statements = _record_statements(engine)
+
+        session.delete(user)
+        session.flush()
+
+    _assert_no_retired_schema_references(statements)
+    engine.dispose()
 
 
 @pytest.mark.parametrize(
