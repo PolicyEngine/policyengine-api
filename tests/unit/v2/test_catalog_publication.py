@@ -18,8 +18,10 @@ from sqlalchemy.sql.elements import TextClause
 
 from policyengine_api.data.v2.catalog import (
     publication,
+    publication_inserts,
     publication_reconciliation,
     publication_staging,
+    publication_tables,
 )
 from policyengine_api.data.v2.catalog.publication_parameter_tree import (
     catalog_parameter_tree,
@@ -193,14 +195,14 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
         Region.__table__,
         Variable.__table__,
     ) == (
-        publication_reconciliation.DATASETS,
-        publication_reconciliation.MODELS,
-        publication_reconciliation.MODEL_VERSIONS,
-        publication_reconciliation.PARAMETERS,
-        publication_reconciliation.PARAMETER_NODES,
-        publication_reconciliation.PARAMETER_VALUES,
-        publication_reconciliation.REGIONS,
-        publication_reconciliation.VARIABLES,
+        publication_tables.DATASETS,
+        publication_tables.MODELS,
+        publication_tables.MODEL_VERSIONS,
+        publication_tables.PARAMETERS,
+        publication_tables.PARAMETER_NODES,
+        publication_tables.PARAMETER_VALUES,
+        publication_tables.REGIONS,
+        publication_tables.VARIABLES,
     )
     staging_ddl = tuple(
         str(CreateTable(table).compile(dialect=dialect))
@@ -211,7 +213,7 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
         for statement in staging_ddl
     )
 
-    inserts = publication_reconciliation.SET_BASED_INSERT_STATEMENTS
+    inserts = publication_inserts.SET_BASED_INSERT_STATEMENTS
     assert all(not isinstance(statement, TextClause) for statement in inserts)
     compiled_inserts = tuple(
         str(statement.compile(dialect=dialect)) for statement in inserts
@@ -227,26 +229,31 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
         )
         for with_format_2 in (False, True)
     )
+    region_pair = publication_reconciliation._region_comparison_pair(
+        catalog.country("us")
+    )
     for comparisons in (format_1_comparisons, format_2_comparisons):
+        pairs = (*comparisons, region_pair)
         assert all(
             isinstance(statement, sa.sql.Select)
             and not isinstance(statement, TextClause)
-            for pair in comparisons
+            for pair in pairs
             for statement in pair
         )
         assert all(
             len(staged.selected_columns) == len(stored.selected_columns)
-            for staged, stored in comparisons
+            for staged, stored in pairs
         )
     # Format 2 compares model versions, variables and parameters on more fields;
     # the pairs are model versions, variables, parameter nodes, parameters,
-    # parameter values, datasets and regions.
+    # parameter values and datasets. Regions are compared separately, on the
+    # same fields in both formats.
     assert [
         len(format_2[0].selected_columns) - len(format_1[0].selected_columns)
         for format_1, format_2 in zip(
             format_1_comparisons, format_2_comparisons, strict=True
         )
-    ] == [3, 8, 0, 2, 0, 0, 0]
+    ] == [3, 8, 0, 2, 0, 0]
 
     class Result:
         def scalar_one(self):
