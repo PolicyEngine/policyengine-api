@@ -3263,7 +3263,13 @@ class TestEconomicImpactSetupOptions:
         ):
             gateway = MagicMock()
 
-            with pytest.raises(ValueError, match=message):
+            with (
+                patch(
+                    "policyengine_api.services.economy_service."
+                    "get_economy_impact_cache_version"
+                ) as cache_version,
+                pytest.raises(ValueError, match=message),
+            ):
                 EconomyService(
                     simulation_entrypoint_=gateway
                 )._build_economic_impact_setup_options(
@@ -3273,8 +3279,14 @@ class TestEconomicImpactSetupOptions:
                     time_period=MOCK_TIME_PERIOD,
                 )
 
-            # Rejected before the worker's SPM capability is fetched.
-            gateway.get_spm_capability.assert_not_called()
+            # Every case is rejected before the cache identity is built.
+            cache_version.assert_not_called()
+            assert gateway.mock_calls == []
+            if country_id == "us":
+                # Only a US request reaches the worker's SPM capability check,
+                # which runs right after this one: a UK request has no SPM
+                # selection, so it would never fetch the capability anyway.
+                gateway.get_spm_capability.assert_not_called()
 
         def test__given_unsupported_region__names_every_accepted_region(self):
             with pytest.raises(ValueError, match="breakdown=local_areas") as raised:

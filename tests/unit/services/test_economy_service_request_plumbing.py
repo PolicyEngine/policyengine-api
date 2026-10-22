@@ -569,6 +569,31 @@ def test_a_breakdown_request_never_reuses_the_national_job(
     )
 
 
+@pytest.mark.usefixtures("uk_package_versions")
+def test_a_northern_ireland_breakdown_sends_the_registry_code_and_keeps_its_scope(
+    economy_service, mock_simulation_entrypoint
+):
+    request = _uk_request({"breakdown": "local_areas"}, region="country/ni")
+
+    economy_service.get_economic_impact(request, time_period="2026")
+    # The second request finds the stored job under country/ni and polls it.
+    economy_service.get_economic_impact(request, time_period="2026")
+
+    payload = mock_simulation_entrypoint.run.call_args.args[0]
+    assert payload["region"] == "country/northern_ireland"
+    assert payload["breakdown"] == "local_areas"
+    assert payload["_telemetry"]["geography_code"] == "ni"
+    mock_simulation_entrypoint.run.assert_called_once()
+    mock_simulation_entrypoint.get_execution_by_id.assert_called_once_with(
+        MOCK_MODAL_JOB_ID
+    )
+    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    assert [(impact.region, impact.options_json) for impact in stored] == [
+        ("country/ni", {"breakdown": "local_areas"})
+    ]
+    assert stored[0].options_hash == _stored_options_hash(UK_BREAKDOWN_LOOKUP_HASH)
+
+
 def _finish_jobs_with(
     simulation_entrypoint, *, status: str, result=None, error=None
 ) -> None:
