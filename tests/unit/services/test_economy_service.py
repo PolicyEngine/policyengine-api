@@ -2079,6 +2079,67 @@ class TestEconomyService:
 
             assert message == expected_message
 
+        def test__given_modal_validation_error_list__names_each_field(
+            self, economy_service
+        ):
+            error = make_http_status_error(
+                422,
+                {
+                    "detail": [
+                        {
+                            "type": "missing",
+                            "loc": ["body", "start_year"],
+                            "msg": "Field required",
+                            "input": {},
+                        },
+                        {
+                            "type": "extra_forbidden",
+                            "loc": ["body", "breakdown"],
+                            "msg": "Extra inputs are not permitted",
+                            "input": "local_areas",
+                        },
+                    ]
+                },
+            )
+
+            message = economy_service._build_submission_error_message(error)
+
+            assert message == (
+                "body.start_year: Field required; "
+                "body.breakdown: Extra inputs are not permitted"
+            )
+
+        def test__given_modal_rejects_batch_with_error_list__names_each_field(
+            self,
+            economy_service,
+            base_params,
+            mock_simulation_entrypoint,
+            mock_budget_window_cache,
+        ):
+            mock_simulation_entrypoint.run_budget_window_batch.side_effect = (
+                make_http_status_error(
+                    422,
+                    {
+                        "detail": [
+                            {
+                                "type": "less_than_equal",
+                                "loc": ["body", "window_size"],
+                                "msg": "Input should be less than or equal to 75",
+                                "input": 80,
+                            }
+                        ]
+                    },
+                )
+            )
+
+            result = economy_service.get_budget_window_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.ERROR
+            assert result.error == (
+                "body.window_size: Input should be less than or equal to 75"
+            )
+            mock_budget_window_cache.set_execution_failure.assert_called_once()
+
         def test__given_modal_validation_plain_text_error__extracts_response_text(
             self, economy_service
         ):

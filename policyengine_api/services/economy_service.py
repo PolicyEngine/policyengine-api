@@ -868,12 +868,22 @@ class EconomyService:
         return self._simulation_gateway.run_budget_window_batch(sim_params)
 
     def _build_submission_error_message(self, error: httpx.HTTPStatusError) -> str:
+        """Return the reason in a simulation API refusal.
+
+        A request-validation body (``detail`` as a list) names each field and
+        its problem, without echoing the rejected input. Otherwise the first
+        of ``detail``, ``message`` or ``error``, then the response text, then
+        the exception text.
+        """
         try:
             response_json = error.response.json()
         except ValueError:
             response_json = None
 
         if isinstance(response_json, dict):
+            field_reasons = self._validation_field_reasons(response_json.get("detail"))
+            if field_reasons:
+                return field_reasons
             for key in ("detail", "message", "error"):
                 value = response_json.get(key)
                 if value:
@@ -1121,33 +1131,28 @@ class EconomyService:
         return EconomicImpactResult.error(
             message=(
                 "The simulation API refused the local-area breakdown request "
-                f"(HTTP {status_code}): {self._refusal_reason(error)}"
+                f"(HTTP {status_code}): {self._build_submission_error_message(error)}"
             )
         )
 
-    def _refusal_reason(self, error: httpx.HTTPStatusError) -> str:
-        """Return the reason in a refusal, naming each field of a 422 body."""
-        try:
-            body = error.response.json()
-        except ValueError:
-            body = None
-        details = body.get("detail") if isinstance(body, dict) else None
-        if isinstance(details, list):
-            reasons = [
-                ": ".join(
-                    part
-                    for part in (
-                        ".".join(str(item) for item in detail.get("loc", [])),
-                        str(detail.get("msg", "")),
-                    )
-                    if part
+    @staticmethod
+    def _validation_field_reasons(details: object) -> str | None:
+        """Join each ``loc: msg`` of a request-validation ``detail`` list."""
+        if not isinstance(details, list):
+            return None
+        reasons = [
+            ": ".join(
+                part
+                for part in (
+                    ".".join(str(item) for item in detail.get("loc", [])),
+                    str(detail.get("msg", "")),
                 )
-                for detail in details
-                if isinstance(detail, dict)
-            ]
-            if any(reasons):
-                return "; ".join(reason for reason in reasons if reason)
-        return self._build_submission_error_message(error)
+                if part
+            )
+            for detail in details
+            if isinstance(detail, dict)
+        ]
+        return "; ".join(reason for reason in reasons if reason) or None
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_RESOLVE_CACHED_OR_NEW)
