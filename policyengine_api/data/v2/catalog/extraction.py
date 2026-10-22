@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import math
 import re
-from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 from importlib import metadata as importlib_metadata
-from typing import TYPE_CHECKING, Any, NamedTuple, Protocol
-from urllib.parse import urlsplit
+from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from policyengine_api.data.v2.catalog.errors import CatalogExtractionError
@@ -22,6 +19,7 @@ from policyengine_api.data.v2.catalog.records import (
     ModelRecord,
     ModelVersionRecord,
     NormalizedCatalog,
+    OmittedRegionSummary,
     ParameterNodeRecord,
     ParameterRecord,
     ParameterValueRecord,
@@ -29,8 +27,12 @@ from policyengine_api.data.v2.catalog.records import (
     VariableRecord,
 )
 from policyengine_api.data.v2.catalog.region_references import (
-    MAX_REGION_FILTER_VALUE_LENGTH,
-    SUPPORTED_REGION_TYPES,
+    RegionReference,
+    load_region_references,
+)
+from policyengine_api.data.v2.catalog.region_scoping import (
+    ScopedRegion,
+    scope_regions,
 )
 
 if TYPE_CHECKING:
@@ -86,40 +88,6 @@ def _optional_text(
         msg = f"{field_name} exceeds {maximum} characters"
         raise CatalogExtractionError(msg)
     return value
-
-
-def _serialize_region_filter_value(value: object, *, region_code: str) -> str:
-    """Keep scalar text or encode flat membership values in the existing column.
-
-    Since PolicyEngine 6.2.7, the England filter names all nine English regions. The
-    catalog's existing text column can retain that complete list as a JSON
-    array without changing its schema or the representation of scalar filters.
-    """
-    scalar_types = (str, int, float, bool)
-    if isinstance(value, scalar_types):
-        serialized = str(value)
-    elif (
-        isinstance(value, (list, tuple))
-        and value
-        and all(isinstance(item, scalar_types) for item in value)
-    ):
-        try:
-            serialized = json.dumps(
-                value, ensure_ascii=False, separators=(",", ":"), allow_nan=False
-            )
-        except ValueError as error:
-            msg = f"region {region_code!r} has an unsupported filter value"
-            raise CatalogExtractionError(msg) from error
-    else:
-        msg = f"region {region_code!r} has an unsupported filter value"
-        raise CatalogExtractionError(msg)
-    if len(serialized) > MAX_REGION_FILTER_VALUE_LENGTH:
-        msg = (
-            f"region {region_code!r} filter value exceeds "
-            f"{MAX_REGION_FILTER_VALUE_LENGTH} characters"
-        )
-        raise CatalogExtractionError(msg)
-    return serialized
 
 
 def _type_name(value: object) -> str | None:
@@ -219,17 +187,6 @@ def _optional_aware_datetime(value: object, *, field_name: str) -> datetime | No
     if value is None:
         return None
     return _aware_datetime(value, field_name=field_name)
-
-
-def _dataset_name_from_path(path: str) -> str:
-    without_revision = path.split("@", maxsplit=1)[0]
-    parsed_path = urlsplit(without_revision).path or without_revision
-    filename = parsed_path.rstrip("/").rsplit("/", maxsplit=1)[-1]
-    for suffix in (".hdf5", ".parquet", ".csv", ".h5"):
-        if filename.endswith(suffix):
-            filename = filename[: -len(suffix)]
-            break
-    return _required_text(filename, field_name="dataset name", maximum=255)
 
 
 def _dataset_year(name: str) -> int:
@@ -477,18 +434,6 @@ def _public_named_records(
     return tuple(normalized)
 
 
-class _RegionDatasetSelection(NamedTuple):
-    """The logical input datasets a country's regions select.
-
-    Names every selected dataset, each region code's dataset, and how many
-    regions of each type fall back to the reviewed default dataset.
-    """
-
-    dataset_names: set[str]
-    region_dataset_names: dict[str, str]
-    fallback_counts: Counter[str]
-
-
 def _verified_model_name(country_id: str, source_model: object) -> str:
     """Return the public model's name once it matches the country's model."""
     expected_model_name = f"policyengine-{country_id}"
@@ -580,184 +525,39 @@ def _normalize_parameter_nodes(
     return tuple(normalized_nodes)
 
 
-def _verified_default_dataset(
-    country_id: str,
-    release_manifest: object,
-) -> tuple[str, object]:
-    """Return the reviewed default dataset and the manifest's URI for it.
-
-    The manifest's default dataset must be the reviewed one.
-    """
+def _verified_default_dataset(country_id: str, release_manifest: object) -> str:
+    """Return the reviewed default dataset once the manifest names it as its default."""
     reviewed_default = REVIEWED_DEFAULT_DATASETS[country_id]
     manifest_default = getattr(release_manifest, "default_dataset", None)
     if manifest_default != reviewed_default:
         msg = f"{country_id} default dataset does not match the reviewed selection"
         raise CatalogExtractionError(msg)
-    return reviewed_default, getattr(release_manifest, "default_dataset_uri", None)
-
-
-def _verified_source_regions(country_id: str, source: object) -> tuple[Any, ...]:
-    """Return the country's public regions once their codes are unique and complete.
-
-    The registry must belong to the country, and its codes must be unique and
-    include the national region.
-    """
-    registry = getattr(source, "region_registry", None)
-    if registry is None or getattr(registry, "country_id", None) != country_id:
-        msg = f"{country_id} public region registry is absent"
-        raise CatalogExtractionError(msg)
-
-    source_regions = tuple(registry)
-    region_codes = [getattr(region, "code", None) for region in source_regions]
-    duplicate_region_codes = sorted(
-        code for code, count in Counter(region_codes).items() if count > 1
-    )
-    if duplicate_region_codes:
-        msg = f"duplicate region natural keys: {duplicate_region_codes[:3]}"
-        raise CatalogExtractionError(msg)
-    if country_id not in region_codes:
-        msg = f"{country_id} national region is absent"
-        raise CatalogExtractionError(msg)
-    return source_regions
-
-
-def _select_region_datasets(
-    country_id: str,
-    source_regions: tuple[Any, ...],
-    *,
-    reviewed_default: str,
-    default_dataset_uri: object,
-) -> _RegionDatasetSelection:
-    """Choose each region's logical input dataset.
-
-    A subnational region with a dataset path uses that dataset: US states and
-    districts, and the UK constituencies and local authorities that .py routes
-    to its local-area release. Every other region, such as a UK country that
-    filters the national file, uses the reviewed default, and the national
-    region may only name it. A US subnational region without a path is
-    counted as a fallback.
-    """
-    selected_dataset_names: set[str] = {reviewed_default}
-    region_dataset_names: dict[str, str] = {}
-    fallback_counts: Counter[str] = Counter()
-    for region in source_regions:
-        code = _required_text(
-            getattr(region, "code", None),
-            field_name="region code",
-            maximum=255,
-        )
-        region_type = _required_text(
-            getattr(region, "region_type", None),
-            field_name=f"region {code} type",
-            maximum=64,
-        )
-        if region_type not in SUPPORTED_REGION_TYPES:
-            msg = f"region {code!r} has unsupported type {region_type!r}"
-            raise CatalogExtractionError(msg)
-        dataset_path = getattr(region, "dataset_path", None)
-        if region_type != "national" and dataset_path:
-            dataset_name = _dataset_name_from_path(dataset_path)
-            selected_dataset_names.add(dataset_name)
-        else:
-            dataset_name = reviewed_default
-            if country_id == "us" and region_type != "national" and not dataset_path:
-                fallback_counts[region_type] += 1
-        if region_type == "national" and dataset_path not in {
-            None,
-            default_dataset_uri,
-        }:
-            msg = f"{country_id} national region does not use the reviewed dataset"
-            raise CatalogExtractionError(msg)
-        region_dataset_names[code] = dataset_name
-    return _RegionDatasetSelection(
-        dataset_names=selected_dataset_names,
-        region_dataset_names=region_dataset_names,
-        fallback_counts=fallback_counts,
-    )
-
-
-def _region_filter(strategy: object, code: str) -> tuple[str, str, str]:
-    """Return a filtered region's strategy type, filter field and filter value."""
-    strategy_type = _required_text(
-        getattr(strategy, "strategy_type", None),
-        field_name=f"region {code} filter strategy",
-        maximum=64,
-    )
-    filter_field = _required_text(
-        getattr(strategy, "variable_name", None),
-        field_name=f"region {code} filter field",
-        maximum=128,
-    )
-    filter_value = _serialize_region_filter_value(
-        getattr(strategy, "variable_value", None), region_code=code
-    )
-    additional_filters = getattr(strategy, "additional_filters", {})
-    if additional_filters:
-        msg = f"region {code!r} has unsupported additional filters"
-        raise CatalogExtractionError(msg)
-    return strategy_type, filter_field, filter_value
-
-
-class _SourceRegion(Protocol):
-    """The attributes of a PolicyEngine.py region that _normalize_region reads directly.
-
-    It reads every other region attribute through getattr, with a default.
-    """
-
-    @property
-    def code(self) -> object: ...
-
-    @property
-    def region_type(self) -> object: ...
+    return reviewed_default
 
 
 def _normalize_region(
-    source_region: _SourceRegion,
+    scoped_region: ScopedRegion,
     *,
     model_version_id: UUID,
-    region_dataset_ids: Mapping[str, UUID],
+    dataset_ids: Mapping[str, UUID],
 ) -> RegionRecord:
-    """Normalize one public region, with its filter and default dataset."""
-    code = str(source_region.code)
-    strategy = getattr(source_region, "scoping_strategy", None)
-    requires_filter = bool(getattr(source_region, "requires_filter", False))
-    if requires_filter:
-        strategy_type, filter_field, filter_value = _region_filter(strategy, code)
-    else:
-        strategy_type = None
-        filter_field = None
-        filter_value = None
-
+    """Build one region's record from its reference, dataset and filter."""
+    reference = scoped_region.reference
+    requires_filter = scoped_region.filter_strategy is not None
     return RegionRecord(
-        id=_identifier("region", model_version_id, code),
+        id=_identifier("region", model_version_id, reference.code),
         model_version_id=model_version_id,
-        default_dataset_id=region_dataset_ids[code],
-        code=code,
-        label=_required_text(
-            getattr(source_region, "label", None),
-            field_name=f"region {code} label",
-            maximum=255,
-        ),
-        region_type=str(source_region.region_type),
+        default_dataset_id=dataset_ids[scoped_region.dataset_name],
+        code=reference.code,
+        label=reference.label,
+        region_type=reference.region_type,
         requires_filter=requires_filter,
-        filter_field=filter_field,
-        filter_value=filter_value,
-        filter_strategy=strategy_type,
-        parent_code=_optional_text(
-            getattr(source_region, "parent_code", None),
-            field_name=f"region {code} parent_code",
-            maximum=255,
-        ),
-        state_code=_optional_text(
-            getattr(source_region, "state_code", None),
-            field_name=f"region {code} state_code",
-            maximum=16,
-        ),
-        state_name=_optional_text(
-            getattr(source_region, "state_name", None),
-            field_name=f"region {code} state_name",
-            maximum=128,
-        ),
+        filter_field=scoped_region.filter_field,
+        filter_value=reference.filter_value if requires_filter else None,
+        filter_strategy=scoped_region.filter_strategy,
+        parent_code=reference.parent_code,
+        state_code=reference.state_code,
+        state_name=reference.state_name,
     )
 
 
@@ -767,6 +567,7 @@ def _normalize_country(
     source: object,
     policyengine_version: str,
     expected_country_package_version: str,
+    region_references: tuple[RegionReference, ...],
 ) -> CountryCatalog:
     source_model = getattr(source, "model", None)
     model_name = _verified_model_name(country_id, source_model)
@@ -799,15 +600,12 @@ def _normalize_country(
         )
     )
 
-    reviewed_default, default_dataset_uri = _verified_default_dataset(
-        country_id, release_manifest
-    )
-    source_regions = _verified_source_regions(country_id, source)
-    dataset_selection = _select_region_datasets(
+    reviewed_default = _verified_default_dataset(country_id, release_manifest)
+    scoping = scope_regions(
         country_id,
-        source_regions,
+        region_references,
+        release_manifest,
         reviewed_default=reviewed_default,
-        default_dataset_uri=default_dataset_uri,
     )
 
     datasets = tuple(
@@ -818,20 +616,16 @@ def _normalize_country(
             description=f"PolicyEngine.py logical input dataset {name}",
             year=_dataset_year(name),
         )
-        for name in sorted(dataset_selection.dataset_names)
+        for name in sorted(scoping.dataset_names)
     )
     dataset_ids = {dataset.name: dataset.id for dataset in datasets}
-    region_dataset_ids = {
-        code: dataset_ids[name]
-        for code, name in dataset_selection.region_dataset_names.items()
-    }
     regions = [
         _normalize_region(
-            source_region,
+            scoped_region,
             model_version_id=model_version_id,
-            region_dataset_ids=region_dataset_ids,
+            dataset_ids=dataset_ids,
         )
-        for source_region in source_regions
+        for scoped_region in scoping.regions
     ]
 
     return CountryCatalog(
@@ -863,7 +657,11 @@ def _normalize_country(
         regions=tuple(sorted(regions, key=lambda record: record.code)),
         fallback_summaries=tuple(
             FallbackSummary(region_type=region_type, count=count)
-            for region_type, count in sorted(dataset_selection.fallback_counts.items())
+            for region_type, count in scoping.fallback_counts.items()
+        ),
+        omitted_region_summaries=tuple(
+            OmittedRegionSummary(region_type=region_type, count=count)
+            for region_type, count in scoping.omitted_counts.items()
         ),
     )
 
@@ -873,9 +671,14 @@ def extract_catalog(
     bundle: Mapping[str, Any],
     policyengine_version: str,
     models: Mapping[str, object],
+    region_references: Mapping[str, Sequence[RegionReference]],
     installed_version: Callable[[str], str] = importlib_metadata.version,
 ) -> NormalizedCatalog:
-    """Validate and normalize supplied PolicyEngine.py public objects."""
+    """Validate and normalize supplied PolicyEngine.py public objects.
+
+    Regions come from the supplied reference files, scoped by each country's
+    certified data release.
+    """
     dependencies = _verify_bundle(
         bundle=bundle,
         policyengine_version=policyengine_version,
@@ -884,6 +687,12 @@ def extract_catalog(
     missing = [country for country in SUPPORTED_COUNTRIES if country not in models]
     if missing:
         msg = f"PolicyEngine.py public models are absent for: {', '.join(missing)}"
+        raise CatalogExtractionError(msg)
+    missing = [
+        country for country in SUPPORTED_COUNTRIES if country not in region_references
+    ]
+    if missing:
+        msg = f"region references are absent for: {', '.join(missing)}"
         raise CatalogExtractionError(msg)
 
     package_map = bundle["packages"]
@@ -895,6 +704,7 @@ def extract_catalog(
             expected_country_package_version=package_map[f"policyengine-{country_id}"][
                 "version"
             ],
+            region_references=tuple(region_references[country_id]),
         )
         for country_id in SUPPORTED_COUNTRIES
     )
@@ -906,7 +716,10 @@ def extract_catalog(
 
 
 def extract_installed_catalog() -> NormalizedCatalog:
-    """Load and normalize the installed PolicyEngine.py certified catalog."""
+    """Load and normalize the installed PolicyEngine.py certified catalog.
+
+    Regions come from the Public API's checked-in reference files.
+    """
     import policyengine
     from policyengine.bundle import (
         get_current_bundle,
@@ -919,5 +732,9 @@ def extract_installed_catalog() -> NormalizedCatalog:
         models={
             "us": policyengine.us.model,
             "uk": policyengine.uk.model,
+        },
+        region_references={
+            country_id: load_region_references(country_id)
+            for country_id in SUPPORTED_COUNTRIES
         },
     )

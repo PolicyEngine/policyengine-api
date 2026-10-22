@@ -128,9 +128,20 @@ class RegionRecord:
 
 @dataclass(frozen=True, slots=True)
 class FallbackSummary:
-    """How many US sub-national regions of one type fell back to the default dataset.
+    """How many sub-national regions of one type fell back to the default dataset.
 
-    These regions had no dataset path of their own.
+    The certified data release names no dataset for their type.
+    """
+
+    region_type: str
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class OmittedRegionSummary:
+    """How many reference regions of one type publication left out.
+
+    No scoping rule can select their households yet, such as US places.
     """
 
     region_type: str
@@ -166,6 +177,7 @@ class CountryCatalog:
     datasets: tuple[DatasetRecord, ...]
     regions: tuple[RegionRecord, ...]
     fallback_summaries: tuple[FallbackSummary, ...]
+    omitted_region_summaries: tuple[OmittedRegionSummary, ...] = ()
 
     def parameter_value_batches(
         self,

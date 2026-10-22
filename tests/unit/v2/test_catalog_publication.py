@@ -251,6 +251,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         entity_counts={"parameters": 12},
         fallback_summaries=(("us", "state", 3),),
         elapsed_seconds=2.3456,
+        omitted_region_summaries=(("us", "place", 333),),
     ).as_dict()
 
     assert evidence == {
@@ -260,6 +261,9 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         "entity_counts": {"parameters": 12},
         "fallback_summaries": [
             {"country_id": "us", "region_type": "state", "count": 3}
+        ],
+        "omitted_region_summaries": [
+            {"country_id": "us", "region_type": "place", "count": 333}
         ],
         "elapsed_seconds": 2.346,
     }

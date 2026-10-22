@@ -137,6 +137,11 @@ def publish_catalog(
         entity_counts=catalog.entity_counts(),
         fallback_summaries=fallback_summaries,
         elapsed_seconds=time.monotonic() - started,
+        omitted_region_summaries=tuple(
+            (country.country_id, summary.region_type, summary.count)
+            for country in catalog.countries
+            for summary in country.omitted_region_summaries
+        ),
     )
 
 

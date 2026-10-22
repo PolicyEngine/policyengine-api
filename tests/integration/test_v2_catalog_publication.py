@@ -121,6 +121,7 @@ def test_publish_and_republish_preserve_complete_catalog(
     second = publish_catalog(publication_engine, catalog)
 
     assert first.as_dict()["outcome"] == "ok"
+    assert first.omitted_region_summaries == (("us", "place", 1),)
     assert second.policyengine_version == first.policyengine_version
     assert (
         _counts(publication_engine)
@@ -134,7 +135,7 @@ def test_publish_and_republish_preserve_complete_catalog(
             "parameter_values": 4,
             "datasets": 3,
             "dataset_versions": 0,
-            "regions": 5,
+            "regions": 6,
             "simulations": 0,
             "reports": 0,
             "report_runs": 0,
@@ -163,9 +164,10 @@ def test_publish_and_republish_preserve_complete_catalog(
         storage_path is None and not output for _, storage_path, output in datasets
     )
     assert dict(region_defaults) == {
+        "congressional_district/CA-01": "populace_us_2024_acs_local",
+        "constituency/E14001063": "microcosm_uk_2024_25",
         "country/england": "microcosm_uk_2024_25",
-        "place/CA-44000": "populace_us_2024",
-        "state/ca": "populace_us_ca_2024",
+        "state/ca": "populace_us_2024_acs_local",
         "uk": "microcosm_uk_2024_25",
         "us": "populace_us_2024",
     }
@@ -335,7 +337,7 @@ def test_new_version_is_additive_and_concurrent_retries_serialize(
         "parameter_values": 8,
         "datasets": 6,
         "dataset_versions": 0,
-        "regions": 10,
+        "regions": 12,
         "simulations": 0,
         "reports": 0,
         "report_runs": 0,

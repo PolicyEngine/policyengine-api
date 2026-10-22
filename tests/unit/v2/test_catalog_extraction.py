@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ast
-import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
@@ -22,6 +22,7 @@ from tests.fixtures.v2_catalog import (
     bundle,
     installed_version,
     normalized_catalog,
+    region_references,
     source_models,
 )
 
@@ -39,7 +40,7 @@ def test_extracts_canonical_policyengine_catalog_and_dataset_defaults() -> None:
 
     assert {dataset.name for dataset in us.datasets} == {
         "populace_us_2024",
-        "populace_us_ca_2024",
+        "populace_us_2024_acs_local",
     }
     assert {dataset.name for dataset in uk.datasets} == {"microcosm_uk_2024_25"}
     assert all(
@@ -52,74 +53,104 @@ def test_extracts_canonical_policyengine_catalog_and_dataset_defaults() -> None:
         region.code: us_datasets[region.default_dataset_id] for region in us.regions
     }
     assert us_defaults == {
-        "place/CA-44000": "populace_us_2024",
-        "state/ca": "populace_us_ca_2024",
+        "congressional_district/CA-01": "populace_us_2024_acs_local",
+        "state/ca": "populace_us_2024_acs_local",
         "us": "populace_us_2024",
     }
+    assert us.fallback_summaries == ()
     assert [
-        (summary.region_type, summary.count) for summary in us.fallback_summaries
+        (summary.region_type, summary.count) for summary in us.omitted_region_summaries
     ] == [("place", 1)]
+    assert uk.omitted_region_summaries == ()
     assert all(region.default_dataset_id == uk.datasets[0].id for region in uk.regions)
 
 
-UK_DENSE_URI = "hf://policyengine/uk/microcosm_uk_2024_25_dense.h5@fixture"
+def test_regions_take_labels_from_references_and_filters_from_scoping_rules() -> None:
+    catalog = normalized_catalog()
+    regions = {
+        region.code: (
+            region.label,
+            region.region_type,
+            region.parent_code,
+            region.requires_filter,
+            region.filter_strategy,
+            region.filter_field,
+            region.filter_value,
+            region.state_code,
+            region.state_name,
+        )
+        for country_id in ("us", "uk")
+        for region in catalog.country(country_id).regions
+    }
 
-
-def _uk_area_region(code: str, region_type: str, filter_field: str) -> SimpleNamespace:
-    """Return a UK area region routed to the local-area dataset, as .py 6.10 does."""
-    return SimpleNamespace(
-        code=code,
-        label=code.split("/", maxsplit=1)[1],
-        region_type=region_type,
-        parent_code="uk",
-        dataset_path=UK_DENSE_URI,
-        scoping_strategy=SimpleNamespace(
-            strategy_type="row_filter",
-            variable_name=filter_field,
-            variable_value=code.split("/", maxsplit=1)[1],
-            additional_filters={},
+    assert regions == {
+        "us": ("United States", "national", None, False, None, None, None, None, None),
+        "state/ca": (
+            "California",
+            "state",
+            "us",
+            True,
+            "row_filter",
+            "state_fips",
+            "6",
+            "CA",
+            "California",
         ),
-        requires_filter=True,
-        state_code=None,
-        state_name=None,
-    )
+        "congressional_district/CA-01": (
+            "California's 1st congressional district",
+            "congressional_district",
+            "state/ca",
+            True,
+            "row_filter",
+            "congressional_district_geoid",
+            "601",
+            "CA",
+            "California",
+        ),
+        "uk": ("United Kingdom", "national", None, False, None, None, None, None, None),
+        "country/england": (
+            "England",
+            "country",
+            "uk",
+            True,
+            "row_filter",
+            "region",
+            '["NORTH_EAST","LONDON"]',
+            None,
+            None,
+        ),
+        "constituency/E14001063": (
+            "Aldershot",
+            "constituency",
+            "country/england",
+            True,
+            "weight_replacement",
+            "parliamentary_constituency_weights",
+            "E14001063",
+            None,
+            None,
+        ),
+    }
 
 
-def test_uk_area_regions_use_the_dataset_their_path_names() -> None:
+def test_sub_national_regions_without_a_release_dataset_use_the_default() -> None:
     models = source_models()
-    models["uk"].region_registry.extend(
-        [
-            _uk_area_region(
-                "constituency/E14001063", "constituency", "constituency_code_oa"
-            ),
-            _uk_area_region(
-                "local_authority/E07000092", "local_authority", "la_code_oa"
-            ),
-        ]
-    )
+    del models["us"].release_manifest.region_datasets["state"]
+    del models["us"].release_manifest.region_datasets["congressional_district"]
 
-    uk = extract_catalog(
+    us = extract_catalog(
+        region_references=region_references(),
         bundle=bundle(),
         policyengine_version=POLICYENGINE_VERSION,
         models=models,
         installed_version=installed_version,
-    ).country("uk")
+    ).country("us")
 
-    assert {dataset.name for dataset in uk.datasets} == {
-        "microcosm_uk_2024_25",
-        "microcosm_uk_2024_25_dense",
-    }
-    uk_datasets = {dataset.id: dataset.name for dataset in uk.datasets}
-    assert {
-        region.code: uk_datasets[region.default_dataset_id] for region in uk.regions
-    } == {
-        "uk": "microcosm_uk_2024_25",
-        "country/england": "microcosm_uk_2024_25",
-        "constituency/E14001063": "microcosm_uk_2024_25_dense",
-        "local_authority/E07000092": "microcosm_uk_2024_25_dense",
-    }
-    # A UK country filters the national dataset by design; it is no fallback.
-    assert uk.fallback_summaries == ()
+    assert {dataset.name for dataset in us.datasets} == {"populace_us_2024"}
+    assert all(region.default_dataset_id == us.datasets[0].id for region in us.regions)
+    assert [
+        (summary.region_type, summary.count) for summary in us.fallback_summaries
+    ] == [("congressional_district", 1), ("state", 1)]
 
 
 def test_durable_ids_are_deterministic_and_stable_at_the_intended_scope() -> None:
@@ -179,62 +210,56 @@ def test_normalizes_supported_json_scalars_dates_and_containers() -> None:
     assert normalize_json_value(float("-inf")) == "-Infinity"
 
 
-@pytest.mark.parametrize("value", [("NORTH_EAST", "LONDON"), ["NORTH_EAST", "LONDON"]])
-def test_serializes_region_membership_filters_in_the_existing_text_field(
-    value: object,
-) -> None:
-    models = source_models()
-    models["uk"].region_registry[1].scoping_strategy.variable_value = value
+@pytest.mark.parametrize("value", ['["NORTH_EAST","LONDON"]', "ENGLAND", "6"])
+def test_keeps_reference_filter_values_as_text(value: str) -> None:
+    references = region_references()
+    england = references["uk"][1]
+    references["uk"] = (
+        references["uk"][0],
+        replace(england, filter_value=value),
+        references["uk"][2],
+    )
 
     catalog = extract_catalog(
+        region_references=references,
         bundle=bundle(),
         policyengine_version=POLICYENGINE_VERSION,
-        models=models,
+        models=source_models(),
         installed_version=installed_version,
     )
-    england = next(
+    england_record = next(
         region
         for region in catalog.country("uk").regions
         if region.code == "country/england"
     )
 
-    assert isinstance(england.filter_value, str)
-    assert json.loads(england.filter_value) == ["NORTH_EAST", "LONDON"]
-
-
-@pytest.mark.parametrize("value", ["ENGLAND", 6, True, 1.5])
-def test_preserves_existing_scalar_region_filter_serialization(value: object) -> None:
-    models = source_models()
-    models["uk"].region_registry[1].scoping_strategy.variable_value = value
-
-    catalog = extract_catalog(
-        bundle=bundle(),
-        policyengine_version=POLICYENGINE_VERSION,
-        models=models,
-        installed_version=installed_version,
-    )
-    england = next(
-        region
-        for region in catalog.country("uk").regions
-        if region.code == "country/england"
-    )
-
-    assert england.filter_value == str(value)
+    assert england_record.filter_value == value
 
 
 @pytest.mark.parametrize(
     "value",
-    [[], [["LONDON"]], [None], [object()], [float("nan")], ["x" * 256], "x" * 256],
+    ["[]", '[["LONDON"]]', "[null]", '[{"a": 1}]', "[NaN]", "[", '{"a": 1}'],
 )
-def test_rejects_invalid_or_oversized_region_membership_values(value: object) -> None:
-    models = source_models()
-    models["uk"].region_registry[1].scoping_strategy.variable_value = value
+def test_rejects_filter_value_lists_that_are_not_flat_json_scalars(
+    value: str,
+) -> None:
+    references = region_references()
+    england = references["uk"][1]
+    references["uk"] = (
+        references["uk"][0],
+        replace(england, filter_value=value),
+        references["uk"][2],
+    )
 
-    with pytest.raises(CatalogExtractionError, match="filter value"):
+    with pytest.raises(
+        CatalogExtractionError,
+        match=r"^region 'country/england' has an unsupported filter value$",
+    ):
         extract_catalog(
+            region_references=references,
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
-            models=models,
+            models=source_models(),
             installed_version=installed_version,
         )
 
@@ -250,6 +275,7 @@ def test_rejects_missing_or_mismatched_manifest_dependencies() -> None:
     del missing["packages"]["policyengine-core"]
     with pytest.raises(CatalogExtractionError, match="omits policyengine-core"):
         extract_catalog(
+            region_references=region_references(),
             bundle=missing,
             policyengine_version=POLICYENGINE_VERSION,
             models=source_models(),
@@ -258,6 +284,7 @@ def test_rejects_missing_or_mismatched_manifest_dependencies() -> None:
 
     with pytest.raises(CatalogExtractionError, match="does not match"):
         extract_catalog(
+            region_references=region_references(),
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
             models=source_models(),
@@ -271,6 +298,7 @@ def test_rejects_missing_or_mismatched_manifest_dependencies() -> None:
 
     with pytest.raises(CatalogExtractionError, match="is absent"):
         extract_catalog(
+            region_references=region_references(),
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
             models=source_models(),
@@ -282,6 +310,7 @@ def test_rejects_missing_or_mismatched_manifest_dependencies() -> None:
 def test_rejects_placeholder_policyengine_versions(version: str) -> None:
     with pytest.raises(CatalogExtractionError, match="placeholder"):
         extract_catalog(
+            region_references=region_references(),
             bundle=bundle(policyengine_version=version),
             policyengine_version=version,
             models=source_models(policyengine_version=version),
@@ -294,6 +323,7 @@ def test_rejects_incomplete_public_model_catalogs() -> None:
     del models["uk"]
     with pytest.raises(CatalogExtractionError, match="absent for: uk"):
         extract_catalog(
+            region_references=region_references(),
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
             models=models,
@@ -304,6 +334,7 @@ def test_rejects_incomplete_public_model_catalogs() -> None:
     models["us"].release_manifest.default_dataset = "unreviewed_us_2025"
     with pytest.raises(CatalogExtractionError, match="reviewed selection"):
         extract_catalog(
+            region_references=region_references(),
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
             models=models,
@@ -321,6 +352,7 @@ def test_rejects_inconsistent_country_model_identity(identity_source: str) -> No
 
     with pytest.raises(CatalogExtractionError, match="identity does not match"):
         extract_catalog(
+            region_references=region_references(),
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
             models=models,
@@ -335,6 +367,7 @@ def test_ignores_only_the_unnamed_structural_parameter_root() -> None:
     )
 
     catalog = extract_catalog(
+        region_references=region_references(),
         bundle=bundle(),
         policyengine_version=POLICYENGINE_VERSION,
         models=models,
@@ -352,6 +385,7 @@ def test_uses_and_validates_public_name_indexed_mappings() -> None:
     models["uk"].variables_by_name["wrong_name"] = variable
     with pytest.raises(CatalogExtractionError, match="does not match record name"):
         extract_catalog(
+            region_references=region_references(),
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
             models=models,
@@ -359,24 +393,15 @@ def test_uses_and_validates_public_name_indexed_mappings() -> None:
         )
 
 
-def test_rejects_duplicate_keys_invalid_intervals_and_unknown_region_types() -> None:
+def test_rejects_unindexed_mappings_and_invalid_parameter_intervals() -> None:
     duplicate = source_models()
     duplicate["us"].parameters_by_name = []
     with pytest.raises(CatalogExtractionError, match="name-indexed mapping"):
         extract_catalog(
+            region_references=region_references(),
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
             models=duplicate,
-            installed_version=installed_version,
-        )
-
-    unknown_region = source_models()
-    unknown_region["us"].region_registry[1].region_type = "province"
-    with pytest.raises(CatalogExtractionError, match="unsupported type"):
-        extract_catalog(
-            bundle=bundle(),
-            policyengine_version=POLICYENGINE_VERSION,
-            models=unknown_region,
             installed_version=installed_version,
         )
 
@@ -386,6 +411,7 @@ def test_rejects_duplicate_keys_invalid_intervals_and_unknown_region_types() -> 
     ].end_date = datetime(2026, 1, 1, tzinfo=UTC)
     with pytest.raises(CatalogExtractionError, match="canonical inclusive intervals"):
         extract_catalog(
+            region_references=region_references(),
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
             models=invalid_interval,
@@ -399,6 +425,7 @@ def test_rejects_parameter_values_that_are_not_oldest_to_newest() -> None:
     parameter.parameter_values.reverse()
     with pytest.raises(CatalogExtractionError, match="oldest to newest"):
         extract_catalog(
+            region_references=region_references(),
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
             models=models,
@@ -419,6 +446,7 @@ def test_collapses_equal_parameter_values_at_the_same_effective_date() -> None:
     )
 
     catalog = extract_catalog(
+        region_references=region_references(),
         bundle=bundle(),
         policyengine_version=POLICYENGINE_VERSION,
         models=models,
@@ -446,6 +474,7 @@ def test_rejects_conflicting_parameter_values_at_the_same_effective_date() -> No
 
     with pytest.raises(CatalogExtractionError, match="conflicting values"):
         extract_catalog(
+            region_references=region_references(),
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
             models=models,
@@ -467,6 +496,7 @@ def test_rejects_repeated_parameter_values_with_inconsistent_intervals() -> None
 
     with pytest.raises(CatalogExtractionError, match="inconsistent intervals"):
         extract_catalog(
+            region_references=region_references(),
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
             models=models,
@@ -491,6 +521,7 @@ def test_preserves_consecutive_day_parameter_value_intervals() -> None:
     ]
 
     catalog = extract_catalog(
+        region_references=region_references(),
         bundle=bundle(),
         policyengine_version=POLICYENGINE_VERSION,
         models=models,

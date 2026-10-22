@@ -111,8 +111,11 @@ class Region(TimestampedModel, table=True):
     """A region in one model version, unique by code within that version.
 
     Its default dataset must belong to the same version. Filtered regions
-    (``requires_filter``) also name the variable and value that select their
-    households.
+    (``requires_filter``) also name how they select their households: a
+    ``row_filter`` keeps the households whose ``filter_field`` column matches
+    ``filter_value``; a ``weight_replacement`` filter reweights every household
+    with row ``filter_value`` of the weight matrix ``filter_field`` names in the
+    certified data release.
     """
 
     __tablename__ = "regions"
