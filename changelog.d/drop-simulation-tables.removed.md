@@ -1,0 +1,1 @@
+Dropped the Public API's copies of the 15 simulation-domain v2 tables, their 8 PostgreSQL enum types and the retired `country` and `label` columns of the simulation and report associations; the simulation service owns those tables in its own schema.

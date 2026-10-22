@@ -69,7 +69,7 @@ from policyengine_api.data.v2.models import V2_METADATA
 import sys
 after = set(pathlib.Path.cwd().iterdir())
 assert before == after
-assert len(V2_METADATA.tables) == 39
+assert len(V2_METADATA.tables) == 24
 assert "policyengine_api.data.v2.catalog.initialization" not in sys.modules
 assert "policyengine_api.data.v2.policy_migration_qualification" not in sys.modules
 assert "policyengine_api.data.v2.household_migration_qualification" not in sys.modules

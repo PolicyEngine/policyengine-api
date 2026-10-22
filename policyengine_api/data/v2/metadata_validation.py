@@ -2,9 +2,9 @@
 
 from collections.abc import Iterable
 
-# These names belong only to the existing v1 database domain. Names that are
-# intentionally shared between v1 and v2, such as `simulations` and
-# `user_policies`, are excluded from this targeted rejection set.
+# These names belong only to the existing v1 database domain. Names that v1
+# and v2 both use, such as `user_policies`, are excluded from this targeted
+# rejection set.
 V1_ONLY_TABLES = frozenset(
     {
         "analysis",
@@ -35,18 +35,44 @@ PROHIBITED_V2_TABLES = frozenset(
 )
 
 
+# The simulation service owns these tables in its own ``simulation`` schema.
+# A v2 revision dropped the Public API's copies, and its metadata must not
+# declare them again.
+SIMULATION_SERVICE_TABLES = frozenset(
+    {
+        "aggregates",
+        "budget_summary",
+        "change_aggregates",
+        "congressional_district_impacts",
+        "constituency_impacts",
+        "decile_impacts",
+        "household_jobs",
+        "inequality",
+        "intra_decile_impacts",
+        "local_authority_impacts",
+        "poverty",
+        "program_statistics",
+        "report_runs",
+        "reports",
+        "simulations",
+    }
+)
+
+
 class V2MetadataValidationError(RuntimeError):
     """Raised when v2 metadata contains a specifically rejected table."""
 
 
 def validate_v2_metadata_table_names(table_names: Iterable[str]) -> None:
-    """Reject known v1-only and explicitly prohibited v2 table names."""
+    """Reject known v1-only, simulation-service and prohibited v2 table names."""
     actual = frozenset(table_names)
     prohibited = sorted(actual & PROHIBITED_V2_TABLES)
     v1_only = sorted(actual & V1_ONLY_TABLES)
-    if prohibited or v1_only:
+    simulation_service = sorted(actual & SIMULATION_SERVICE_TABLES)
+    if prohibited or v1_only or simulation_service:
         msg = (
             "API v2-alpha metadata contains rejected tables: "
-            f"prohibited={prohibited}, v1_only={v1_only}"
+            f"prohibited={prohibited}, v1_only={v1_only}, "
+            f"simulation_service={simulation_service}"
         )
         raise V2MetadataValidationError(msg)
