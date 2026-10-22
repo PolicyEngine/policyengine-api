@@ -34,7 +34,10 @@ from policyengine_api.services.v2.metadata.database_session import (
     MetadataDatabaseSession,
 )
 from policyengine_api.services.v2.metadata.services import V2MetadataService
-from policyengine_api.services.v2.metadata.types import ParameterValueFilter
+from policyengine_api.services.v2.metadata.types import (
+    MetadataEntity,
+    ParameterValueFilter,
+)
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
@@ -74,6 +77,16 @@ def _insert_country(
                 if time_periods is None
                 else time_periods
             ),
+            catalog_format=country.model_version.catalog_format,
+            entities=[
+                {
+                    "key": entity.key,
+                    "plural": entity.plural,
+                    "is_person": entity.is_person,
+                }
+                for entity in country.model_version.entities
+            ],
+            basic_inputs=list(country.model_version.basic_inputs),
         )
     )
     session.add_all(
@@ -89,6 +102,19 @@ def _insert_country(
             default_value=record.default_value,
             adds=record.adds,
             subtracts=record.subtracts,
+            is_input_variable=record.is_input_variable,
+            hidden_input=record.hidden_input,
+            module_name=record.module_name,
+            adds_parameter_path=record.adds_parameter_path,
+            subtracts_parameter_path=record.subtracts_parameter_path,
+            enum_values=(
+                None
+                if record.enum_values is None
+                else [
+                    {"value": enum_value.value, "label": enum_value.label}
+                    for enum_value in record.enum_values
+                ]
+            ),
         )
         for record in country.variables
     )
@@ -111,6 +137,8 @@ def _insert_country(
             description=record.description,
             data_type=record.data_type,
             unit=record.unit,
+            economy=record.economy,
+            household=record.household,
         )
         for record in country.parameters
     )
@@ -560,6 +588,115 @@ def test_economy_options_require_a_national_region_and_dataset(
         _service(catalog_session).get_economy_options("us")
 
 
+def _recorded_statements(session: Session, read):
+    statements: list[str] = []
+
+    def record_statement(_connection, _cursor, statement, *_args) -> None:
+        statements.append(statement.lower())
+
+    bind = session.get_bind()
+    event.listen(bind, "before_cursor_execute", record_statement)
+    try:
+        result = read()
+    finally:
+        event.remove(bind, "before_cursor_execute", record_statement)
+    return result, statements
+
+
+def test_model_catalog_holds_only_the_small_parts_of_a_catalog_version(
+    catalog_session: Session,
+) -> None:
+    result, statements = _recorded_statements(
+        catalog_session, lambda: _service(catalog_session).get_model_catalog("us")
+    )
+    us_catalog = normalized_catalog().country("us")
+
+    assert result.policyengine_version == POLICYENGINE_VERSION
+    assert result.catalog_format == 2
+    assert result.model.name == "policyengine-us"
+    assert (
+        result.model_version.current_law_id == us_catalog.model_version.current_law_id
+    )
+    assert result.entities == [
+        MetadataEntity(key="person", plural="people", is_person=True),
+        MetadataEntity(key="household", plural="households", is_person=False),
+    ]
+    assert result.basic_inputs == ["employment_income"]
+    assert [region.code for region in result.regions] == sorted(
+        region.code for region in us_catalog.regions
+    )
+    assert [dataset.name for dataset in result.datasets] == sorted(
+        dataset.name for dataset in us_catalog.datasets
+    )
+    assert [option.name for option in result.economy_options.region] == [
+        region.code for region in result.regions
+    ]
+    assert [option.name for option in result.economy_options.time_period] == list(
+        us_catalog.model_version.metadata_time_periods
+    )
+    assert [option.label for option in result.economy_options.datasets] == ["Microcosm"]
+    assert len(statements) == 3
+    for table in ("variables", "parameters", "parameter_values", "parameter_nodes"):
+        assert all(f"from {table}" not in statement for statement in statements)
+
+
+def test_model_catalog_without_regions_offers_no_economy_calculation(
+    catalog_session: Session,
+) -> None:
+    # A household-only country publishes no regions or datasets; its catalog
+    # still serves entities and basic inputs, with empty economy choices.
+    model_version = _us_model_version(catalog_session)
+    for region in catalog_session.exec(
+        select(Region).where(Region.tax_benefit_model_version_id == model_version.id)
+    ).all():
+        catalog_session.delete(region)
+    catalog_session.flush()
+    for dataset in catalog_session.exec(
+        select(Dataset).where(Dataset.tax_benefit_model_version_id == model_version.id)
+    ).all():
+        catalog_session.delete(dataset)
+    catalog_session.commit()
+
+    result = _service(catalog_session).get_model_catalog("us")
+
+    assert result.regions == []
+    assert result.datasets == []
+    assert result.economy_options.region == []
+    assert result.economy_options.time_period == []
+    assert result.economy_options.datasets == []
+    assert result.basic_inputs == ["employment_income"]
+
+
+def test_model_catalog_published_before_format_2_has_empty_new_fields(
+    catalog_session: Session,
+) -> None:
+    model_version = _us_model_version(catalog_session)
+    model_version.catalog_format = None
+    model_version.entities = None
+    model_version.basic_inputs = None
+    catalog_session.add(model_version)
+    catalog_session.commit()
+
+    result = _service(catalog_session).get_model_catalog("us")
+
+    assert result.catalog_format is None
+    assert result.entities == []
+    assert result.basic_inputs == []
+
+
+def test_model_catalog_with_regions_requires_the_national_region(
+    catalog_session: Session,
+) -> None:
+    national_region = catalog_session.exec(
+        select(Region).where(Region.code == "us")
+    ).one()
+    catalog_session.delete(national_region)
+    catalog_session.commit()
+
+    with pytest.raises(MetadataCatalogUnavailableError, match="national v2 region"):
+        _service(catalog_session).get_model_catalog("us")
+
+
 def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
     project_package = Path(__file__).parents[3] / "policyengine_api"
     connector_directory = (
@@ -624,6 +761,7 @@ def test_resource_entrypoints_are_defined_in_the_service_module() -> None:
         "get_region",
         "get_region_by_code",
         "get_economy_options",
+        "get_model_catalog",
     }
 
     for method_name in method_names:

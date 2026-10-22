@@ -39,6 +39,7 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
             "metadata",
             "datasets",
             "economy-options",
+            "model-catalog",
             "parameter-values",
             "parameters",
             "regions",

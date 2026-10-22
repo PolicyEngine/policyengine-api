@@ -27,6 +27,21 @@ package-derived `DatasetVersion` rows or simulation/report output datasets and
 does not modify `Simulation`, `Report`, or `ReportRun` rows or their dataset
 references.
 
+## Loading a catalog version on demand
+
+`GET /v2/model-catalog?country_id=<us|uk>[&policyengine_version=<version>]`
+returns only the small parts of one catalog version: the model and model
+version (with the current-law policy id and the years offered), the entities
+(`key`, `plural`, `is_person`), the basic inputs, every region and logical
+input dataset, and the economy choices. A catalog without regions, such as a
+household-only country's, has empty region, dataset and economy-choice lists
+rather than an error. A version published before catalog format 2 has a null
+`catalog_format` and empty entities and basic inputs. The result names the
+selected PolicyEngine.py version, so a client that starts without a version
+learns the running one and requests every other part for that exact version.
+The query uses the shared `CatalogQuery` model: unknown and repeated
+parameters are rejected.
+
 ## Response caching
 
 Every successful metadata response carries a strong `ETag`, a hash of its

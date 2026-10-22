@@ -14,6 +14,7 @@ from policyengine_api.services.v2.metadata.database_connectors.reads import (
 from policyengine_api.services.v2.metadata.database_connectors.reads_datasets import (
     read_dataset,
     read_datasets,
+    read_input_datasets,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_tree import (  # noqa: E501  # a dotted module path cannot be wrapped
     read_parameter_children,
@@ -37,6 +38,7 @@ from policyengine_api.services.v2.metadata.transformations import (
     metadata_dataset,
     metadata_economy_options,
     metadata_model,
+    metadata_model_catalog,
     metadata_model_selection,
     metadata_model_version,
     metadata_parameter,
@@ -53,6 +55,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataDetailResult,
     MetadataEconomyOptionsResult,
     MetadataModel,
+    MetadataModelCatalogResult,
     MetadataModelSelectionResult,
     MetadataModelVersionDetail,
     MetadataPageResult,
@@ -540,4 +543,51 @@ class V2MetadataService:
         )
         return metadata_economy_options(
             selected, regions=regions, national_dataset=dataset
+        )
+
+    def get_model_catalog(
+        self, country_id: str, policyengine_version: str | None = None
+    ) -> MetadataModelCatalogResult:
+        """Return the small parts of the selected catalog version.
+
+        They are the model and model version, entities, basic inputs, every
+        region and logical input dataset, and the economy choices. A catalog
+        without regions offers no economy calculation, so its choices are
+        empty; one with regions raises MetadataCatalogUnavailableError when it
+        lacks the national region, its default dataset or the model-version
+        options, as get_economy_options does.
+        """
+        selected = self._select_catalog(country_id, policyengine_version)
+        session = self._database_session.session
+        regions = read_regions(session, model_version_id=selected.model_version.id)
+        datasets = read_input_datasets(
+            session, model_version_id=selected.model_version.id
+        )
+        national_dataset = None
+        if regions:
+            national_region = next(
+                (region for region in regions if region.code == country_id), None
+            )
+            national_dataset = validate_economy_options(
+                selected,
+                country_id=country_id,
+                regions=regions,
+                national_dataset=(
+                    next(
+                        (
+                            dataset
+                            for dataset in datasets
+                            if dataset.id == national_region.default_dataset_id
+                        ),
+                        None,
+                    )
+                    if national_region is not None
+                    else None
+                ),
+            )
+        return metadata_model_catalog(
+            selected,
+            regions=regions,
+            datasets=datasets,
+            national_dataset=national_dataset,
         )

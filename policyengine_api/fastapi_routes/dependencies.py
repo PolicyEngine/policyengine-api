@@ -38,6 +38,7 @@ if TYPE_CHECKING:
         MetadataDetailResult,
         MetadataEconomyOptionsResult,
         MetadataModel,
+        MetadataModelCatalogResult,
         MetadataModelSelectionResult,
         MetadataModelVersionDetail,
         MetadataPageResult,
@@ -308,6 +309,20 @@ class V2MetadataResourceReader(Protocol):
 
         Raise ``MetadataCatalogUnavailableError`` when the national region, its
         dataset or the model version's options are missing from the catalog.
+        """
+        ...
+
+    def get_model_catalog(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> MetadataModelCatalogResult:
+        """Return the small parts of the selected catalog version.
+
+        These are the model and model version, entities, basic inputs, regions,
+        logical input datasets and economy choices, which are empty for a
+        catalog without regions. Raise ``MetadataCatalogUnavailableError`` when
+        a catalog with regions lacks what ``get_economy_options`` needs.
         """
         ...
 

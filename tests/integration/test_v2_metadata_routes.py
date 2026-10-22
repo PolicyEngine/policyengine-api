@@ -360,3 +360,53 @@ def test_postgres_parameter_collection_remains_available_without_values(
     assert parameters.status_code == values.status_code == 200
     assert parameters.json()["result"]["items"]
     assert values.json()["result"]["items"] == []
+
+
+@pytest.mark.parametrize("country_id", ["us", "uk"])
+def test_postgres_model_catalog_serves_the_small_parts_of_a_version(
+    published_engine: Engine,
+    country_id: str,
+) -> None:
+    client = _client(published_engine)
+    country = normalized_catalog().country(country_id)
+
+    running = client.get("/v2/model-catalog", params={"country_id": country_id})
+    named = client.get(
+        "/v2/model-catalog",
+        params={"country_id": country_id, "policyengine_version": POLICYENGINE_VERSION},
+    )
+
+    assert running.status_code == 200
+    assert running.headers["cache-control"] == "public, max-age=300"
+    assert named.headers["cache-control"] == "public, max-age=86400"
+    assert running.headers["etag"] == named.headers["etag"]
+    result = running.json()["result"]
+    assert result["policyengine_version"] == POLICYENGINE_VERSION
+    assert result["catalog_format"] == country.model_version.catalog_format
+    assert result["entities"] == [
+        {
+            "key": entity.key,
+            "plural": entity.plural,
+            "is_person": entity.is_person,
+        }
+        for entity in country.model_version.entities
+    ]
+    assert result["basic_inputs"] == list(country.model_version.basic_inputs)
+    assert [region["code"] for region in result["regions"]] == sorted(
+        region.code for region in country.regions
+    )
+    assert [dataset["name"] for dataset in result["datasets"]] == sorted(
+        dataset.name for dataset in country.datasets
+    )
+    assert [option["name"] for option in result["economy_options"]["region"]] == [
+        region["code"] for region in result["regions"]
+    ]
+    assert "variables" not in result
+    assert "parameters" not in result
+
+    revalidated = client.get(
+        "/v2/model-catalog",
+        params={"country_id": country_id},
+        headers={"If-None-Match": running.headers["etag"]},
+    )
+    assert revalidated.status_code == 304

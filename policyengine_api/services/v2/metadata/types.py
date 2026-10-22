@@ -239,3 +239,48 @@ class MetadataEconomyOptionsResult(StrictResponseModel):
     region: list[MetadataRegionOption]
     time_period: list[MetadataTimePeriodOption]
     datasets: list[MetadataDatasetOption]
+
+
+class MetadataEntity(StrictResponseModel):
+    """A kind of member a household holds, such as a person or a tax unit.
+
+    plural is the key the household's members of this kind are listed under,
+    and is_person marks the entity every household input about a person uses.
+    """
+
+    key: str
+    plural: str
+    is_person: bool
+
+
+class MetadataEconomyOptions(StrictResponseModel):
+    """The region, year and dataset choices for an economy calculation.
+
+    Every list is empty for a catalog without regions, such as a
+    household-only country's, which offers no economy calculation.
+    """
+
+    region: list[MetadataRegionOption]
+    time_period: list[MetadataTimePeriodOption]
+    datasets: list[MetadataDatasetOption]
+
+
+class MetadataModelCatalogResult(StrictResponseModel):
+    """The small parts of one catalog version, read when a client starts.
+
+    policyengine_version names the selected catalog version, so a client can
+    request its other parts for that exact version. catalog_format is null,
+    and entities and basic_inputs are empty, for a version published before
+    catalog format 2. Variables, parameters and their values are served by
+    their own routes.
+    """
+
+    policyengine_version: str
+    catalog_format: int | None
+    model: MetadataModel
+    model_version: MetadataModelVersionDetail
+    entities: list[MetadataEntity]
+    basic_inputs: list[str]
+    regions: list[MetadataRegion]
+    datasets: list[MetadataDataset]
+    economy_options: MetadataEconomyOptions

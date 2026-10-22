@@ -29,8 +29,11 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataDataset,
     MetadataDatasetOption,
     MetadataDetailResult,
+    MetadataEconomyOptions,
     MetadataEconomyOptionsResult,
+    MetadataEntity,
     MetadataModel,
+    MetadataModelCatalogResult,
     MetadataModelSelectionResult,
     MetadataModelVersionDetail,
     MetadataPageResult,
@@ -193,6 +196,31 @@ def _resource_results() -> tuple[dict[str, object], dict[str, object]]:
             "list_regions": page([region]),
             "get_region_by_code": detail(region),
             "get_region": detail(region),
+            "get_model_catalog": MetadataModelCatalogResult(
+                policyengine_version=version,
+                catalog_format=2,
+                model=model,
+                model_version=model_version,
+                entities=[
+                    MetadataEntity(key="person", plural="people", is_person=True)
+                ],
+                basic_inputs=["employment_income"],
+                regions=[region],
+                datasets=[dataset],
+                economy_options=MetadataEconomyOptions(
+                    region=[
+                        MetadataRegionOption(
+                            name="us", label="United States", type="national"
+                        )
+                    ],
+                    time_period=[MetadataTimePeriodOption(name=2026, label="2026")],
+                    datasets=[
+                        MetadataDatasetOption(
+                            name="populace_us_2024", label="Microcosm"
+                        )
+                    ],
+                ),
+            ),
             "get_economy_options": MetadataEconomyOptionsResult(
                 policyengine_version=version,
                 current_law_id=2,
@@ -521,6 +549,7 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/datasets",
         "/v2/datasets/{dataset_id}",
         "/v2/economy-options",
+        "/v2/model-catalog",
         "/v2/parameters",
         "/v2/parameters/children",
         "/v2/parameters/{parameter_id}",
@@ -605,6 +634,7 @@ def _every_resource_path(ids: dict[str, object]) -> list[str]:
         "/v2/regions/by-code/us?country_id=us",
         f"/v2/regions/{ids['region_id']}?country_id=us",
         "/v2/economy-options?country_id=us",
+        "/v2/model-catalog?country_id=us",
     ]
 
 
@@ -675,3 +705,77 @@ def test_failed_reads_carry_no_cache_headers() -> None:
     assert response.status_code == 404
     assert "etag" not in response.headers
     assert "cache-control" not in response.headers
+
+
+def test_model_catalog_route_serves_the_small_parts_of_the_selected_version() -> None:
+    results, _ids = _resource_results()
+    reader = ResourceReader(results)
+
+    response = _client(lambda: reader).get(
+        "/v2/model-catalog", params={"country_id": "US"}
+    )
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["policyengine_version"] == "4.20.3"
+    assert result["catalog_format"] == 2
+    assert result["entities"] == [
+        {"key": "person", "plural": "people", "is_person": True}
+    ]
+    assert result["basic_inputs"] == ["employment_income"]
+    assert [region["code"] for region in result["regions"]] == ["us"]
+    assert result["economy_options"]["datasets"][0]["default"] is True
+    assert reader.calls == [("get_model_catalog", ("us", None), {})]
+    assert reader.closed
+
+
+def test_model_catalog_route_names_an_explicit_version_for_a_day() -> None:
+    results, _ids = _resource_results()
+    reader = ResourceReader(results)
+
+    response = _client(lambda: reader).get(
+        "/v2/model-catalog",
+        params={"country_id": "uk", "policyengine_version": "4.20.3"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    assert reader.calls == [("get_model_catalog", ("uk", "4.20.3"), {})]
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "",
+        "country_id=ca",
+        "country_id=us&country_id=uk",
+        "country_id=us&limit=10",
+        "country_id=us&policyengine_version=latest",
+    ],
+)
+def test_model_catalog_route_rejects_invalid_queries(query: str) -> None:
+    calls = []
+
+    def factory():
+        calls.append("called")
+        results, _ids = _resource_results()
+        return ResourceReader(results)
+
+    response = _client(factory).get(f"/v2/model-catalog?{query}")
+
+    assert response.status_code == 422
+    assert response.json()["status"] == "error"
+    assert calls == []
+
+
+def test_model_catalog_route_declares_its_query_in_openapi() -> None:
+    results, _ids = _resource_results()
+    schema = _client(lambda: ResourceReader(results)).get("/v2/openapi.json").json()
+
+    operation = schema["paths"]["/v2/model-catalog"]["get"]
+    parameters = {parameter["name"]: parameter for parameter in operation["parameters"]}
+    assert set(parameters) == {"country_id", "policyengine_version"}
+    assert parameters["country_id"]["required"] is True
+    assert parameters["policyengine_version"]["required"] is False
+    success = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    assert success == {"$ref": "#/components/schemas/MetadataModelCatalogResponse"}

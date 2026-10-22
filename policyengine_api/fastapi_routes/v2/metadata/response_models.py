@@ -10,6 +10,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataDetailResult,
     MetadataEconomyOptionsResult,
     MetadataModel,
+    MetadataModelCatalogResult,
     MetadataModelSelectionResult,
     MetadataModelVersionDetail,
     MetadataPageResult,
@@ -139,3 +140,9 @@ class MetadataEconomyOptionsResponse(
     MetadataResourceSuccessResponse[MetadataEconomyOptionsResult]
 ):
     """Success response holding the options for configuring an economy comparison."""
+
+
+class MetadataModelCatalogResponse(
+    MetadataResourceSuccessResponse[MetadataModelCatalogResult]
+):
+    """Success response holding the small parts of one catalog version."""
