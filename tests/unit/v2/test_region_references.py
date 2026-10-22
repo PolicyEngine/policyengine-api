@@ -298,6 +298,25 @@ def test_rejects_an_inconsistent_reference_file(change, message: str) -> None:
         parse_region_references("us", rows)
 
 
+def test_names_the_missing_ancestor_further_up_a_regions_chain() -> None:
+    rows = [
+        _row("us", "national"),
+        _row(
+            "congressional_district/CA-01",
+            "congressional_district",
+            parent_code="state/ca",
+        ),
+        _row("state/ca", "state", parent_code="state/zz"),
+    ]
+
+    with pytest.raises(
+        CatalogExtractionError,
+        match=r"^region 'congressional_district/CA-01' descends from 'state/ca', "
+        r"whose parent 'state/zz' is unknown$",
+    ):
+        parse_region_references("us", rows)
+
+
 def test_rejects_a_file_whose_columns_differ(tmp_path: Path) -> None:
     (tmp_path / "us.csv").write_text(
         "code,label,region_type\nus,United States,national\n", encoding="utf-8"
