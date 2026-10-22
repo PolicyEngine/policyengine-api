@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from fastapi.routing import APIRoute
@@ -87,6 +88,26 @@ and it changes whenever the API deploys a new one.
 """
 
 
+DEPENDS_ON_UTC_DAY = "depends_on_utc_day"
+"""The ``request.state`` attribute a route sets when its result depends on the day.
+
+Such a response, for example current values on the request's UTC day, may be
+reused only until the next UTC midnight, whatever version it names.
+"""
+
+
+def utc_now() -> datetime:
+    """Return the current time in UTC; tests replace it to fix the clock."""
+    return datetime.now(UTC)
+
+
+def _seconds_until_next_utc_day(moment: datetime) -> int:
+    next_day = (moment + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    return max(int((next_day - moment).total_seconds()), 0)
+
+
 class CacheableMetadataRoute(APIRoute):
     """A metadata route whose successful responses carry caching headers.
 
@@ -112,8 +133,10 @@ def with_cache_headers(request: Request, response: Response) -> Response:
     The ETag is a hash of the exact body, so it changes with any change to the
     content, including the catalog format. A request naming its catalog with
     ``policyengine_version`` may be reused for a day, one that takes the
-    running version for five minutes. A request whose ``If-None-Match`` names
-    the ETag gets a 304 with no body.
+    running version for five minutes, and one whose route marked it as
+    depending on the day (``DEPENDS_ON_UTC_DAY``) no later than the next UTC
+    midnight. A request whose ``If-None-Match`` names the ETag gets a 304 with
+    no body.
     """
     entity_tag = f'"{hashlib.sha256(response.body).hexdigest()[:32]}"'
     max_age = (
@@ -121,6 +144,8 @@ def with_cache_headers(request: Request, response: Response) -> Response:
         if "policyengine_version" in request.query_params
         else RUNNING_VERSION_MAX_AGE_SECONDS
     )
+    if getattr(request.state, DEPENDS_ON_UTC_DAY, False):
+        max_age = min(max_age, _seconds_until_next_utc_day(utc_now()))
     headers = {"Cache-Control": f"public, max-age={max_age}", "ETag": entity_tag}
     if _names_entity_tag(request.headers.get("if-none-match"), entity_tag):
         return Response(status_code=304, headers=headers)

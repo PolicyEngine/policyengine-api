@@ -5,11 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.metadata.common import (
+    DEPENDS_ON_UTC_DAY,
     ERROR_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
@@ -133,8 +134,11 @@ def build_v2_metadata_parameter_router(
         summary="List canonical values from a selected PolicyEngine.py catalog",
     )
     def list_parameter_values(
+        request: Request,
         query: ParameterValueCollectionQueryDependency,
     ) -> MetadataParameterValuePageResponse | JSONResponse:
+        # Current values are those in effect on the request's UTC day.
+        setattr(request.state, DEPENDS_ON_UTC_DAY, query.current)
         return read_resource(
             dependencies,
             MetadataParameterValuePageResponse,
