@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy.exc import InterfaceError, OperationalError, ProgrammingError
 
+from policyengine_api import startup_country_check
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.services.v2.countries.validators import (
     CountryListMismatchError,
@@ -23,6 +24,16 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 V2_RUNTIME_SECRET_RESOURCE = "projects/example/secrets/v2-runtime/versions/latest"
+
+
+@pytest.fixture(autouse=True)
+def enabled_startup_check_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Re-enable the check's logger, which Alembic's logging setup disables.
+
+    Tests that run Alembic commands load its logging configuration, which
+    disables every logger that already exists, including this module's.
+    """
+    monkeypatch.setattr(startup_country_check.logger, "disabled", False)
 
 
 class FakeCountryListVerifier:
