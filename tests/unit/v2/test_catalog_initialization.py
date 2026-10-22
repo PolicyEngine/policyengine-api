@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from policyengine_api.data.v2.catalog import initialization
+from policyengine_api.data.v2.catalog.errors import CatalogExtractionError
 from policyengine_api.data.v2.catalog.publication import PublicationEvidence
 from policyengine_api.data.v2.catalog.region_data_verification import (
     RegionDataVerificationError,
@@ -16,6 +17,7 @@ from policyengine_api.data.v2.settings import (
     V2_DATA_WRITE_DATABASE_URL,
     V2_SUPABASE_ENVIRONMENT,
     V2_SUPABASE_PROJECT_REF,
+    V2ConfigurationError,
 )
 from tests.fixtures.v2_catalog import (
     DEPENDENCY_VERSIONS,
@@ -159,7 +161,7 @@ def test_uk_verification_requires_the_hugging_face_token_before_reading(
     monkeypatch.setattr(initialization, "verify_region_data", refuse)
 
     with pytest.raises(
-        RegionDataVerificationError,
+        V2ConfigurationError,
         match=r"^HUGGING_FACE_TOKEN must be set to read the certified uk data, "
         r"whose repository is private$",
     ):
@@ -270,3 +272,27 @@ def test_initializer_is_not_imported_by_application_startup_modules() -> None:
             module.startswith("policyengine_api.data.v2.catalog.initialization")
             for module in imported
         )
+
+
+def test_region_data_errors_are_not_reported_as_extraction_errors() -> None:
+    # Extraction errors are raised before any database access; verification
+    # runs after reading the stored versions and reads certified data over the
+    # network.
+    assert not issubclass(RegionDataVerificationError, CatalogExtractionError)
+
+
+def test_main_reports_a_missing_hugging_face_token_with_its_message(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def verify_without_token():
+        initialization.verify_installed_region_data(normalized_catalog(), ("uk",), {})
+
+    monkeypatch.setattr(initialization, "initialize_catalog", verify_without_token)
+
+    assert initialization.main() == 1
+    failure = capsys.readouterr()
+    assert '"type": "V2ConfigurationError"' in failure.err
+    assert "HUGGING_FACE_TOKEN must be set to read the certified uk data" in (
+        failure.err
+    )
