@@ -13,6 +13,7 @@ from policyengine_api.data.v2.catalog.publication_reconciliation import (
     assert_canonical_value_uniqueness,
     assert_country_matches,
     count_region_differences,
+    count_stored_regions,
     publish_new_country,
     version_exists,
 )
@@ -128,15 +129,7 @@ def publish_catalog(
         if checkpoint is not None:
             checkpoint("after_copy", connection)
 
-        # A stored catalog version never changes. Its regions stay as they
-        # were published even when the reference files differ now; every
-        # other table must still match exactly.
-        existing: set[str] = set()
-        for country in catalog.countries:
-            if version_exists(connection, country):
-                assert_country_matches(connection, country, include_regions=False)
-                _log_kept_regions(connection, country)
-                existing.add(country.country_id)
+        existing, kept_region_summaries = _check_stored_versions(connection, catalog)
 
         for country in catalog.countries:
             if country.country_id not in existing:
@@ -157,31 +150,85 @@ def publish_catalog(
         if checkpoint is not None:
             checkpoint("after_validation", connection)
 
+    return _evidence(catalog, kept_region_summaries, started=started)
+
+
+def _check_stored_versions(
+    connection: Connection,
+    catalog: NormalizedCatalog,
+) -> tuple[set[str], tuple[tuple[str, str, int, int], ...]]:
+    """Compare each stored catalog version and return its countries and kept regions.
+
+    A stored catalog version never changes. Its regions stay as they were
+    published even when the reference files differ now; every other table
+    must still match exactly.
+    """
+    existing: set[str] = set()
+    kept_region_summaries: list[tuple[str, str, int, int]] = []
+    for country in catalog.countries:
+        if version_exists(connection, country):
+            assert_country_matches(connection, country, include_regions=False)
+            kept = _kept_region_summary(connection, country)
+            if kept is not None:
+                kept_region_summaries.append(kept)
+            existing.add(country.country_id)
+    return existing, tuple(kept_region_summaries)
+
+
+def _evidence(
+    catalog: NormalizedCatalog,
+    kept_region_summaries: tuple[tuple[str, str, int, int], ...],
+    *,
+    started: float,
+) -> PublicationEvidence:
+    """Describe what is stored after publication.
+
+    Every table of a stored version matches the staged catalog except regions
+    that were kept: for those countries the evidence counts the stored region
+    rows and reports none of the staged fallbacks or omissions, which describe
+    rows that were not published.
+    """
+    kept_countries = {country_id for country_id, *_counts in kept_region_summaries}
+    entity_counts = catalog.entity_counts()
+    entity_counts["regions"] += sum(
+        stored - staged for _country, _version, stored, staged in kept_region_summaries
+    )
     fallback_summaries = tuple(
         (country.country_id, summary.region_type, summary.count)
         for country in catalog.countries
+        if country.country_id not in kept_countries
         for summary in country.fallback_summaries
     )
     _log_fallback_warning(fallback_summaries)
     return PublicationEvidence(
         policyengine_version=catalog.policyengine_version,
         dependency_versions=catalog.dependency_versions,
-        entity_counts=catalog.entity_counts(),
+        entity_counts=entity_counts,
         fallback_summaries=fallback_summaries,
         elapsed_seconds=time.monotonic() - started,
         omitted_region_summaries=tuple(
             (country.country_id, summary.region_type, summary.count)
             for country in catalog.countries
+            if country.country_id not in kept_countries
             for summary in country.omitted_region_summaries
         ),
+        kept_region_summaries=kept_region_summaries,
     )
 
 
-def _log_kept_regions(connection: Connection, country: CountryCatalog) -> None:
-    """Log, with counts only, how a stored version's regions differ from the staged."""
+def _kept_region_summary(
+    connection: Connection,
+    country: CountryCatalog,
+) -> tuple[str, str, int, int] | None:
+    """Return and log how a stored version's kept regions differ from the staged.
+
+    The summary is the country, the version and the stored and staged region
+    counts; there is none when the regions are the same. The log names counts
+    only.
+    """
     staged_not_stored, stored_not_staged = count_region_differences(connection, country)
     if not staged_not_stored and not stored_not_staged:
-        return
+        return None
     # The seed command configures no logging handler, so the details are in the
     # message itself; the attributes serve structured handlers.
     LOGGER.warning(
@@ -199,6 +246,12 @@ def _log_kept_regions(connection: Connection, country: CountryCatalog) -> None:
                 "stored_region_rows_not_staged": stored_not_staged,
             }
         },
+    )
+    return (
+        country.country_id,
+        country.model_version.version,
+        count_stored_regions(connection, country),
+        len(country.regions),
     )
 
 
