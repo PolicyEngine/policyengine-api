@@ -16,10 +16,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, TypeVar
 
-from policyengine_api.data.v2.catalog.errors import (
-    CatalogExtractionError,
-    CertifiedDataReadError,
-)
+from policyengine_api.data.v2.catalog.errors import CertifiedDataReadError
 from policyengine_api.data.v2.catalog.region_scoping import (
     ROW_FILTER,
     WEIGHT_REPLACEMENT,
@@ -51,8 +48,13 @@ MAX_LISTED_REGIONS = 3
 _Result = TypeVar("_Result")
 
 
-class RegionDataVerificationError(CatalogExtractionError):
-    """Raised when the certified data cannot select a region's households."""
+class RegionDataVerificationError(RuntimeError):
+    """Raised when certified data cannot select a region's households.
+
+    Also raised when an artifact cannot be read for that check. Verification
+    runs after the stored catalog versions are read and before anything is
+    published; its messages name only artifacts, columns, codes and counts.
+    """
 
 
 class CertifiedDataInspector(Protocol):

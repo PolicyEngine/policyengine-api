@@ -60,7 +60,7 @@ def verify_installed_region_data(
 
     The artifacts are read from Hugging Face with ``HUGGING_FACE_TOKEN``.
     Countries whose certified data repository is private need it, so their
-    check fails before any read when it is unset.
+    check fails with a configuration error before any read when it is unset.
     """
     token = (os.environ if environ is None else environ).get(
         HUGGING_FACE_CREDENTIAL_VARIABLE
@@ -73,7 +73,7 @@ def verify_installed_region_data(
             f"{HUGGING_FACE_CREDENTIAL_VARIABLE} must be set to read the certified "
             f"{', '.join(needing_token)} data, whose repository is private"
         )
-        raise RegionDataVerificationError(msg)
+        raise V2ConfigurationError(msg)
     verify_region_data(
         catalog,
         HuggingFaceDataInspector(token=token or None),
@@ -123,6 +123,7 @@ def _error_payload(error: Exception) -> dict[str, object]:
     safe_errors = (
         V2ConfigurationError,
         CatalogExtractionError,
+        RegionDataVerificationError,
         CatalogPublicationError,
     )
     message = (
