@@ -9,6 +9,7 @@ import pytest
 from flask import Flask
 
 from policyengine_api import spm
+from policyengine_api.libs.simulation_entrypoint import ModalSimulationExecution
 from policyengine_api.routes import economy_routes
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
@@ -16,6 +17,7 @@ from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from tests.fixtures.libs.simulation_entrypoint import MOCK_LOCAL_AREA_BREAKDOWN_RESULT
 
 
 @pytest.fixture(params=[False, True], ids=["annual", "budget-window"])
@@ -426,7 +428,13 @@ def economy_service_http(monkeypatch):
     """
     namespace = CacheNamespace("test", "api")
     gateway = Mock()
-    gateway.resolve_app_name.return_value = ("policyengine-simulation-test", "2.0.0")
+    # Like the real client, keep the requested model version.
+    gateway.resolve_app_name.side_effect = (
+        lambda _country, version=None, policyengine_version=None: (
+            "policyengine-simulation-test",
+            version or policyengine_version,
+        )
+    )
     gateway.get_execution_id.return_value = "submitted-job"
     policies = Mock()
     policies.get_policy_json.return_value = {}
@@ -532,3 +540,65 @@ def test_annual_route_returns_502_when_the_simulation_api_refuses_a_breakdown(
         "result": None,
     }
     assert gateway.run.call_args.args[0]["breakdown"] == "local_areas"
+
+
+def test_annual_route_stores_and_returns_a_completed_breakdown_unchanged(
+    economy_service_http,
+):
+    """A finished breakdown job is polled once, stored, and then read back.
+
+    The second request polls the job (``_handle_execution_state``); the third
+    reads the stored record (``_handle_completed_impact``) without polling.
+    """
+    client, gateway = economy_service_http
+    breakdown_query = [*UK_ANNUAL_QUERY, ("breakdown", "local_areas")]
+    gateway.get_execution_by_id.return_value = ModalSimulationExecution(
+        job_id="submitted-job",
+        status="complete",
+        result=MOCK_LOCAL_AREA_BREAKDOWN_RESULT,
+        resolved_app_name="policyengine-simulation-test",
+    )
+    gateway.get_execution_status.side_effect = lambda execution: execution.status
+    gateway.get_execution_result.side_effect = lambda execution: execution.result
+
+    submitted = client.get(UK_ANNUAL_PATH, query_string=breakdown_query)
+    polled = client.get(UK_ANNUAL_PATH, query_string=breakdown_query)
+    stored = client.get(UK_ANNUAL_PATH, query_string=breakdown_query)
+
+    assert submitted.status_code == 200
+    assert submitted.get_json()["status"] == "computing"
+    for response in (polled, stored):
+        assert response.status_code == 200, response.get_json()
+        body = response.get_json()
+        assert body["status"] == "ok"
+        result = body["result"]
+        # The breakdown's own fields come back unchanged; the service adds
+        # only the bundle identity it adds to every economy result.
+        assert {
+            key: result[key] for key in MOCK_LOCAL_AREA_BREAKDOWN_RESULT
+        } == MOCK_LOCAL_AREA_BREAKDOWN_RESULT
+        assert set(result) - set(MOCK_LOCAL_AREA_BREAKDOWN_RESULT) == {
+            "policyengine_bundle",
+            "resolved_app_name",
+        }
+    assert polled.get_json()["result"] == stored.get_json()["result"]
+    gateway.get_execution_by_id.assert_called_once_with("submitted-job")
+
+    records = economy_routes.economy_service._reform_impacts.get_recent_reform_impacts(
+        5
+    )
+    assert len(records) == 1
+    assert records[0].status == "ok"
+    assert records[0].options_json == {"breakdown": "local_areas"}
+    assert records[0].options_hash.startswith("[breakdown=local_areas&")
+    assert records[0].reform_impact_json == stored.get_json()["result"]
+
+    # The national request for the same report finds no stored result: it
+    # submits its own job instead of reading the breakdown.
+    national = client.get(UK_ANNUAL_PATH, query_string=UK_ANNUAL_QUERY)
+
+    assert national.get_json()["status"] == "computing"
+    assert [call.args[0].get("breakdown") for call in gateway.run.call_args_list] == [
+        "local_areas",
+        None,
+    ]
