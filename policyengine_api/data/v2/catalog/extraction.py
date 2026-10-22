@@ -7,10 +7,9 @@ from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
 from typing import TYPE_CHECKING, Any
 
+from policyengine_api.data.v2.catalog.errors import CatalogExtractionError
 from policyengine_api.data.v2.catalog.extraction_regions import (
     DATASET_YEAR_PATTERN,
-    MAX_REGION_FILTER_VALUE_LENGTH,
-    SUPPORTED_REGION_TYPES,
     dataset_year,
     normalize_region,
     release_default_dataset,
@@ -19,7 +18,6 @@ from policyengine_api.data.v2.catalog.extraction_regions import (
 )
 from policyengine_api.data.v2.catalog.extraction_values import (
     JSON_VALUE_NORMALIZERS,
-    CatalogExtractionError,
     catalog_identifier,
     normalize_json_value,
     optional_text,
@@ -42,6 +40,10 @@ from policyengine_api.data.v2.catalog.records import (
     ModelRecord,
     ModelVersionRecord,
     NormalizedCatalog,
+)
+from policyengine_api.data.v2.catalog.region_references import (
+    MAX_REGION_FILTER_VALUE_LENGTH,
+    SUPPORTED_REGION_TYPES,
 )
 from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
 

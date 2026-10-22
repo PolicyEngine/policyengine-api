@@ -15,28 +15,16 @@ from policyengine_api.data.v2.catalog.extraction_values import (
     required_text,
 )
 from policyengine_api.data.v2.catalog.records import RegionRecord
+from policyengine_api.data.v2.catalog.region_references import (
+    MAX_REGION_FILTER_VALUE_LENGTH,
+    SUPPORTED_REGION_TYPES,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from uuid import UUID
 
-SUPPORTED_REGION_TYPES = frozenset(
-    {
-        "national",
-        "country",
-        "state",
-        "congressional_district",
-        "constituency",
-        "local_authority",
-        "city",
-        "place",
-    }
-)
 DATASET_YEAR_PATTERN = re.compile(r"(?:19|20)\d{2}")
-
-
-# The catalog's region filter_value column holds at most this many characters.
-MAX_REGION_FILTER_VALUE_LENGTH = 255
 
 
 def _serialize_region_filter_value(value: object, *, region_code: str) -> str:
