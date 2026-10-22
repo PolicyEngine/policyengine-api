@@ -241,7 +241,6 @@ runtime-evaluated-base-classes = [
     "policyengine_api.data.v2.models.base.IdentifiedModel",
     "policyengine_api.data.v2.models.base.TimestampedModel",
     "policyengine_api.data.v2.models.comparison_runs.Stage12RunTimestamps",
-    "policyengine_api.data.v2.models.reports.GeographicImpactBase",
     "policyengine_api.fastapi_routes.v2.households.document_models.HouseholdEntityRecord",
     "policyengine_api.fastapi_routes.v2.households.document_models.StrictHouseholdDocumentModel",
     "policyengine_api.fastapi_routes.v2.households.response_models.HouseholdSuccessResponse",

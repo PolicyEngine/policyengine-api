@@ -11,14 +11,11 @@ from policyengine_api.data.v2.models.metadata import TaxBenefitModel
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import UserPolicy
-    from policyengine_api.data.v2.models.households import HouseholdJob
     from policyengine_api.data.v2.models.metadata import (
         ParameterValue,
         TaxBenefitModelVersion,
     )
     from policyengine_api.data.v2.models.policy_mappings import LegacyPolicyMapping
-    from policyengine_api.data.v2.models.reports import Report
-    from policyengine_api.data.v2.models.simulations import Simulation
 
 
 class Policy(TimestampedModel, table=True):
@@ -86,9 +83,6 @@ class Policy(TimestampedModel, table=True):
         back_populates="policy",
         cascade_delete=True,
     )
-    simulations: list["Simulation"] = Relationship(back_populates="policy")
-    household_jobs: list["HouseholdJob"] = Relationship(back_populates="policy")
-    reports: list["Report"] = Relationship(back_populates="policy")
     user_associations: list["UserPolicy"] = Relationship(
         back_populates="policy",
     )
@@ -110,5 +104,3 @@ class Dynamic(TimestampedModel, table=True):
         back_populates="dynamic",
         cascade_delete=True,
     )
-    simulations: list["Simulation"] = Relationship(back_populates="dynamic")
-    household_jobs: list["HouseholdJob"] = Relationship(back_populates="dynamic")

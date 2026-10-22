@@ -16,8 +16,6 @@ from policyengine_api.data.v2.models.base import (
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.policies import Dynamic, Policy
-    from policyengine_api.data.v2.models.reports import Report
-    from policyengine_api.data.v2.models.simulations import Simulation
 
 
 class RegionType(StrEnum):
@@ -56,7 +54,6 @@ class TaxBenefitModel(TimestampedModel, table=True):
         back_populates="tax_benefit_model"
     )
     policies: list["Policy"] = Relationship(back_populates="tax_benefit_model")
-    reports: list["Report"] = Relationship(back_populates="tax_benefit_model")
 
 
 class TaxBenefitModelVersion(IdentifiedModel, table=True):
@@ -98,9 +95,6 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
     parameter_nodes: list["ParameterNode"] = Relationship(
         back_populates="tax_benefit_model_version",
         cascade_delete=True,
-    )
-    simulations: list["Simulation"] = Relationship(
-        back_populates="tax_benefit_model_version"
     )
     datasets: list["Dataset"] = Relationship(back_populates="tax_benefit_model_version")
     regions: list["Region"] = Relationship(back_populates="tax_benefit_model_version")
@@ -161,8 +155,6 @@ class Region(TimestampedModel, table=True):
         back_populates="default_for_regions",
         sa_relationship_kwargs={"viewonly": True},
     )
-    simulations: list["Simulation"] = Relationship(back_populates="region")
-    reports: list["Report"] = Relationship(back_populates="region")
 
 
 class Dataset(TimestampedModel, table=True):
@@ -215,15 +207,6 @@ class Dataset(TimestampedModel, table=True):
         back_populates="default_dataset",
         sa_relationship_kwargs={"viewonly": True},
     )
-    input_simulations: list["Simulation"] = Relationship(
-        back_populates="dataset",
-        sa_relationship_kwargs={"foreign_keys": "Simulation.dataset_id"},
-    )
-    output_simulations: list["Simulation"] = Relationship(
-        back_populates="output_dataset",
-        sa_relationship_kwargs={"foreign_keys": "Simulation.output_dataset_id"},
-    )
-    reports: list["Report"] = Relationship(back_populates="dataset")
 
 
 class DatasetVersion(IdentifiedModel, table=True):

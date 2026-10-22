@@ -17,8 +17,8 @@ SQLModel.metadata.naming_convention = {
 }
 
 # Import in dependency order so every reviewed table registers exactly once.
-# retired_tables declares, without models, the columns a later revision drops;
-# see its docstring.
+# retired_tables declares, without models, the tables and columns a later
+# revision drops; see its docstring.
 from policyengine_api.data.v2.models import (  # noqa: E402
     retired_tables as retired_tables,
 )
@@ -41,8 +41,6 @@ from policyengine_api.data.v2.models.household_mappings import (  # noqa: E402
 )
 from policyengine_api.data.v2.models.households import (  # noqa: E402
     Household,
-    HouseholdJob,
-    HouseholdJobStatus,
 )
 from policyengine_api.data.v2.models.metadata import (  # noqa: E402
     Dataset,
@@ -65,31 +63,6 @@ from policyengine_api.data.v2.models.policy_mappings import (  # noqa: E402
     LegacyUserMapping,
     LegacyUserPolicyMapping,
 )
-from policyengine_api.data.v2.models.reports import (  # noqa: E402
-    AggregateOutput,
-    AggregateType,
-    BudgetSummary,
-    ChangeAggregate,
-    CongressionalDistrictImpact,
-    ConstituencyImpact,
-    DecileImpact,
-    DecileType,
-    Inequality,
-    IntraDecileImpact,
-    LocalAuthorityImpact,
-    OutputStatus,
-    Poverty,
-    ProgramStatistics,
-    Report,
-    ReportRun,
-    ReportRunStatus,
-    ReportRunTrigger,
-)
-from policyengine_api.data.v2.models.simulations import (  # noqa: E402
-    Simulation,
-    SimulationStatus,
-    SimulationType,
-)
 from policyengine_api.data.v2.models.users import (  # noqa: E402
     User,
     UserIdentity,
@@ -101,43 +74,20 @@ validate_v2_metadata_table_names(V2_METADATA.tables)
 
 __all__ = [
     "V2_METADATA",
-    "AggregateOutput",
-    "AggregateType",
-    "BudgetSummary",
-    "ChangeAggregate",
-    "CongressionalDistrictImpact",
-    "ConstituencyImpact",
     "Dataset",
     "DatasetVersion",
-    "DecileImpact",
-    "DecileType",
     "Dynamic",
     "Household",
-    "HouseholdJob",
-    "HouseholdJobStatus",
-    "Inequality",
-    "IntraDecileImpact",
     "LegacyHouseholdMapping",
     "LegacyPolicyMapping",
     "LegacyUserMapping",
     "LegacyUserPolicyMapping",
-    "LocalAuthorityImpact",
-    "OutputStatus",
     "Parameter",
     "ParameterNode",
     "ParameterValue",
     "Policy",
-    "Poverty",
-    "ProgramStatistics",
     "Region",
     "RegionType",
-    "Report",
-    "ReportRun",
-    "ReportRunStatus",
-    "ReportRunTrigger",
-    "Simulation",
-    "SimulationStatus",
-    "SimulationType",
     "Stage12AggregationStatus",
     "Stage12ComparisonReport",
     "Stage12ComparisonSimulation",
