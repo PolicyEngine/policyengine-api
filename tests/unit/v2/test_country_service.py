@@ -1,7 +1,8 @@
-"""SQLite-backed coverage for the v2 countries read service."""
+"""SQLite-backed coverage for the v2 countries service: the list and the check."""
 
 from __future__ import annotations
 
+import pytest
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine
 
@@ -11,6 +12,10 @@ from policyengine_api.services.v2.countries.database_session import (
 )
 from policyengine_api.services.v2.countries.services import V2CountryService
 from policyengine_api.services.v2.countries.types import CountryRead
+from policyengine_api.services.v2.countries.validators import (
+    CountryListMismatchError,
+)
+from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
 from tests.fixtures.v2_countries import add_listed_countries
 
 
@@ -47,3 +52,34 @@ def test_an_empty_countries_table_lists_no_countries() -> None:
     )
 
     assert service.list_countries() == []
+
+
+def test_rows_for_exactly_the_listed_countries_pass_verification() -> None:
+    service = _service_with_countries()
+
+    service.verify_countries_match_code_list(SUPPORTED_COUNTRY_IDS)
+
+
+def test_a_row_for_an_unlisted_country_fails_verification() -> None:
+    service = _service_with_countries(
+        Country(id="ca", household_enabled=True, society_wide_enabled=False)
+    )
+
+    with pytest.raises(CountryListMismatchError) as raised:
+        service.verify_countries_match_code_list(SUPPORTED_COUNTRY_IDS)
+
+    assert raised.value.rows_not_listed == ("ca",)
+    assert raised.value.listed_without_row == ()
+
+
+def test_an_empty_countries_table_fails_verification() -> None:
+    engine = create_engine("sqlite://")
+    V2_METADATA.create_all(engine)
+    service = V2CountryService(
+        CountryDatabaseSession(sessionmaker(engine, class_=Session))
+    )
+
+    with pytest.raises(CountryListMismatchError) as raised:
+        service.verify_countries_match_code_list(SUPPORTED_COUNTRY_IDS)
+
+    assert raised.value.listed_without_row == tuple(sorted(SUPPORTED_COUNTRY_IDS))

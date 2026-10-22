@@ -7,7 +7,8 @@ a country starts here.
 
 The v2 ``countries`` table records what each country supports, and must hold
 one row for each listed country and no other: a v2 Alembic revision inserts
-the row when a country is added.
+the row when a country is added. The application refuses to start when they
+differ (``policyengine_api.startup_country_check``).
 
 The module imports nothing from the package, so modules that the query
 models import, such as the catalog package, can import it too.
