@@ -213,12 +213,32 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
     assert all("VALUES" not in statement for statement in compiled_inserts)
 
     catalog = normalized_catalog()
-    comparisons = publication_reconciliation._comparison_pairs(catalog.country("us"))
-    assert all(
-        isinstance(statement, sa.sql.Select) and not isinstance(statement, TextClause)
-        for pair in comparisons
-        for statement in pair
+    format_1_comparisons, format_2_comparisons = (
+        publication_reconciliation._comparison_pairs(
+            catalog.country("us"), with_format_2=with_format_2
+        )
+        for with_format_2 in (False, True)
     )
+    for comparisons in (format_1_comparisons, format_2_comparisons):
+        assert all(
+            isinstance(statement, sa.sql.Select)
+            and not isinstance(statement, TextClause)
+            for pair in comparisons
+            for statement in pair
+        )
+        assert all(
+            len(staged.selected_columns) == len(stored.selected_columns)
+            for staged, stored in comparisons
+        )
+    # Format 2 compares model versions, variables and parameters on more fields;
+    # the pairs are model versions, variables, parameter nodes, parameters,
+    # parameter values, datasets and regions.
+    assert [
+        len(format_2[0].selected_columns) - len(format_1[0].selected_columns)
+        for format_1, format_2 in zip(
+            format_1_comparisons, format_2_comparisons, strict=True
+        )
+    ] == [3, 6, 0, 2, 0, 0, 0]
 
     class Result:
         def scalar_one(self):
