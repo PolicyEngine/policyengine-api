@@ -288,6 +288,22 @@ def test_parses_a_valid_minimal_file() -> None:
             lambda rows: rows[1].update(label=""),
             r"^region 'state/ca' label must be a non-empty string$",
         ),
+        (
+            lambda rows: rows[1].update(code=""),
+            r"^us region reference file has an invalid code ''$",
+        ),
+        (
+            lambda rows: rows[1].update(code="state/ca "),
+            r"^us region reference file has an invalid code 'state/ca '$",
+        ),
+        (
+            lambda rows: rows[1].update(code="state/" + "c" * 250),
+            r"^us region reference file has an invalid code 'state/c+'$",
+        ),
+        (
+            lambda rows: rows.append(_row("usa", "national")),
+            r"^national region 'usa' must be named 'us'$",
+        ),
     ],
 )
 def test_rejects_an_inconsistent_reference_file(change, message: str) -> None:
