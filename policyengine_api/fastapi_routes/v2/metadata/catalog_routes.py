@@ -5,13 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     ERROR_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
+    read_whole_version_resource,
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataCatalogParametersResponse,
@@ -60,9 +61,10 @@ def build_v2_model_catalog_router(
     )
     def get_model_catalog(
         query: CatalogQueryDependency,
-    ) -> MetadataModelCatalogResponse | JSONResponse:
-        return read_resource(
+    ) -> MetadataModelCatalogResponse | Response:
+        return read_whole_version_resource(
             dependencies,
+            ("model-catalog", query.country_id, query.policyengine_version),
             MetadataModelCatalogResponse,
             lambda reader: reader.get_model_catalog(
                 query.country_id, query.policyengine_version
@@ -83,9 +85,10 @@ def build_v2_model_catalog_router(
     )
     def get_catalog_variables(
         query: CatalogQueryDependency,
-    ) -> MetadataCatalogVariablesResponse | JSONResponse:
-        return read_resource(
+    ) -> MetadataCatalogVariablesResponse | Response:
+        return read_whole_version_resource(
             dependencies,
+            ("model-catalog/variables", query.country_id, query.policyengine_version),
             MetadataCatalogVariablesResponse,
             lambda reader: reader.get_catalog_variables(
                 query.country_id, query.policyengine_version

@@ -20,6 +20,9 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes import dependencies as route_dependencies
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+    MetadataResponseCache,
+)
 from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
@@ -286,7 +289,7 @@ def _resource_results() -> tuple[dict[str, object], dict[str, object]]:
     )
 
 
-def _client(factory) -> TestClient:
+def _client(factory, *, response_cache=None) -> TestClient:
     flask_app = Flask(__name__)
 
     @flask_app.get("/<country_id>/metadata")
@@ -305,6 +308,7 @@ def _client(factory) -> TestClient:
         metadata_reader_factory=lambda: None,
         specification_provider=dict,
         v2_metadata_reader_factory=factory,
+        v2_metadata_response_cache=response_cache,
     )
     settings = RouteImplementationSettings(
         health=RouteImplementation.FLASK_FALLBACK,
@@ -1049,3 +1053,56 @@ def test_parameter_collections_declare_their_name_filters_in_openapi() -> None:
         "current",
     }
     assert values["parameter_name"]["required"] is False
+
+
+def test_whole_version_responses_are_read_once_per_process_and_version() -> None:
+    results, _ids = _resource_results()
+    readers: list[ResourceReader] = []
+
+    def factory() -> ResourceReader:
+        readers.append(ResourceReader(results))
+        return readers[-1]
+
+    client = _client(factory, response_cache=MetadataResponseCache())
+    paths = [
+        "/v2/model-catalog?country_id=us",
+        "/v2/model-catalog/variables?country_id=us",
+        "/v2/model-catalog/variables?country_id=us&policyengine_version=4.20.3",
+        "/v2/model-catalog/variables?country_id=uk",
+    ]
+
+    first_responses = [client.get(path) for path in paths]
+    repeated_responses = [client.get(path) for path in paths]
+
+    assert len(readers) == len(paths)
+    for first, repeated in zip(first_responses, repeated_responses, strict=True):
+        assert repeated.status_code == 200
+        assert repeated.content == first.content
+        assert repeated.headers["etag"] == first.headers["etag"]
+        assert repeated.headers["cache-control"] == first.headers["cache-control"]
+    assert all(reader.closed for reader in readers)
+
+
+def test_failed_whole_version_reads_are_retried() -> None:
+    results, _ids = _resource_results()
+    readers = [
+        ResourceReader(results, error=MetadataCatalogUnavailableError("down")),
+        ResourceReader(results),
+    ]
+    client = _client(lambda: readers.pop(0), response_cache=MetadataResponseCache())
+
+    failed = client.get("/v2/model-catalog/variables?country_id=us")
+    recovered = client.get("/v2/model-catalog/variables?country_id=us")
+
+    assert failed.status_code == 503
+    assert "etag" not in failed.headers
+    assert recovered.status_code == 200
+    assert readers == []
+
+
+def test_default_dependencies_share_one_response_cache() -> None:
+    first = route_dependencies.NativeRouteDependencies.defaults()
+    second = route_dependencies.NativeRouteDependencies.defaults()
+
+    assert isinstance(first.v2_metadata_response_cache, MetadataResponseCache)
+    assert first.v2_metadata_response_cache is second.v2_metadata_response_cache
