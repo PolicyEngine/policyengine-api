@@ -57,7 +57,7 @@ Before it publishes a new catalog version, the step reads, through one
 authenticated Hugging Face file system, the HDF5 metadata of the certified
 artifacts that version's region filters use: the UK dataset and weight
 matrices in the private UK data repository, and the public US dataset. It
-downloads no household data.
+downloads only the 1 MB blocks that hold that metadata, not whole files.
 
 The simulation-entry Cloud Run service does not receive this credential. It
 submits requests to Modal and does not download model data.

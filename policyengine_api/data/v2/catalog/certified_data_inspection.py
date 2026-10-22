@@ -1,8 +1,9 @@
 """Read household column names and weight-matrix sizes from certified HDF5 files.
 
 The artifacts are read from Hugging Face at their pinned revisions through
-ranged requests, so only the HDF5 metadata and the small column-name arrays
-are downloaded, never the households themselves.
+ranged requests. Only the 1 MB blocks holding the HDF5 metadata and the
+column-name arrays are downloaded, a small part of each file; the household
+arrays themselves are never read.
 """
 
 from __future__ import annotations
