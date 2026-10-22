@@ -3,11 +3,6 @@
 Every association names its target through a nullable v2 reference, a
 nullable country-scoped v1 (legacy) reference, or both; a database check
 requires at least one.
-
-The simulation and report association tables still have the pre-Stage 12A
-``country`` and ``label`` columns, which a later revision drops. These models
-don't declare them, so nothing reads or writes them; ``retired_tables``
-declares them on the tables only so the metadata matches the schema.
 """
 
 from datetime import datetime

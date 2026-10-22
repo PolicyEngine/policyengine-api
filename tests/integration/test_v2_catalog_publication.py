@@ -25,7 +25,6 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
-from policyengine_api.data.v2.privileges import CATALOG_WRITER_ROLE
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from tests.fixtures.v2_catalog import normalized_catalog
 
@@ -78,9 +77,6 @@ def _counts(engine: Engine) -> dict[str, int]:
                 "datasets",
                 "dataset_versions",
                 "regions",
-                "simulations",
-                "reports",
-                "report_runs",
             )
         }
 
@@ -132,9 +128,6 @@ def test_publish_and_republish_preserve_complete_catalog(
             "datasets": 3,
             "dataset_versions": 0,
             "regions": 5,
-            "simulations": 0,
-            "reports": 0,
-            "report_runs": 0,
         }
     )
     assert _identifiers(publication_engine) == first_ids
@@ -257,29 +250,6 @@ def test_republish_preserves_existing_dataset_version_records(
         assert session.get(Dataset, protected_ids[1]) is not None
 
 
-def test_catalog_writer_publishes_without_access_to_simulation_tables(
-    publication_engine: Engine,
-    v2_engine_as_role,
-) -> None:
-    # A later v2 revision drops simulations, reports and report_runs while
-    # this release serves traffic, so publication must work without them.
-    with publication_engine.begin() as connection:
-        connection.execute(
-            text(
-                "REVOKE ALL ON simulations, reports, report_runs "
-                f"FROM {CATALOG_WRITER_ROLE}"
-            )
-        )
-    catalog_writer_engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
-    try:
-        evidence = publish_catalog(catalog_writer_engine, normalized_catalog())
-    finally:
-        catalog_writer_engine.dispose()
-
-    assert evidence.as_dict()["outcome"] == "ok"
-    assert _counts(publication_engine)["tax_benefit_models"] == 2
-
-
 def test_new_version_is_additive_and_concurrent_retries_serialize(
     publication_engine: Engine,
 ) -> None:
@@ -309,7 +279,4 @@ def test_new_version_is_additive_and_concurrent_retries_serialize(
         "datasets": 6,
         "dataset_versions": 0,
         "regions": 10,
-        "simulations": 0,
-        "reports": 0,
-        "report_runs": 0,
     }

@@ -129,7 +129,6 @@ def test_direct_sqlalchemy_categories_are_complete_and_documented() -> None:
         "typed_json_and_text",
         "named_constraints_and_indexes",
         "ambiguous_foreign_key_relationships",
-        "retired_table_declarations",
     }
     assert all(DIRECT_SQLALCHEMY_EXCEPTIONS.values())
 
