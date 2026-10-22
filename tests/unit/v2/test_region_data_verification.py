@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from policyengine_api.data.v2.catalog.errors import CertifiedDataReadError
 from policyengine_api.data.v2.catalog.region_data_verification import (
     WEIGHT_MATRIX_ROW_LOOKUPS,
     RegionDataVerificationError,
@@ -212,3 +213,16 @@ def test_row_lookups_list_every_reference_code_in_matrix_order() -> None:
     assert len(local_authorities) == len(set(local_authorities)) == 361
     assert constituencies[0] == "E14001063"
     assert local_authorities[0] == "E06000001"
+
+
+def test_reports_an_artifact_structure_error_with_its_own_message() -> None:
+    inspector = FakeInspector(
+        failure=CertifiedDataReadError("household group holds no data frame")
+    )
+
+    with pytest.raises(
+        RegionDataVerificationError,
+        match=r"^the certified artifact populace_us_2024_acs_local cannot be "
+        r"checked: household group holds no data frame$",
+    ):
+        _verify(inspector, countries=("us",))
