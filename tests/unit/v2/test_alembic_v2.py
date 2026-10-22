@@ -54,7 +54,8 @@ POOLER_URL = (
     f"{PROJECT_REF}:test-password@aws-0-us-east-2.pooler.supabase.com:5432/"
     "postgres?sslmode=require"
 )
-# The Stage 12A revision; the saved-policy rename follows it.
+# The saved-policy rename and its parent, the Stage 12A revision.
+SAVED_POLICY_RENAME_REVISION = "fa7fa1035444"
 SAVED_POLICY_RENAME_PARENT_REVISION = "fbb7488ebe8a"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
@@ -743,31 +744,25 @@ def test_v2_environment_commits_after_persistent_target_qualification() -> None:
     assert "validate_v2_head_schema(connection, target_metadata)" in env_source
 
 
-def _revision_source(revision_id: str) -> str:
-    (path,) = (REPO / "migrations/v2/versions").glob(f"{revision_id}_*.py")
-    return path.read_text(encoding="utf-8")
-
-
 def test_saved_policy_rename_revision_renames_the_table_in_place() -> None:
     """The rename keeps every saved reform: no table is created or dropped.
 
     Autogeneration replaces a renamed table with a new empty one; the revision
     records its corrections, and every other operation is generated.
     """
-    revision = _revision_source(V2_ALEMBIC_HEAD_REVISION)
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    rename = script.get_revision(SAVED_POLICY_RENAME_REVISION)
+    revision = Path(rename.path).read_text(encoding="utf-8")
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")
     ]
     downgrade = revision[revision.index("def downgrade()") :]
 
-    assert V2_ALEMBIC_HEAD_REVISION != SAVED_POLICY_RENAME_PARENT_REVISION
+    assert rename.down_revision == SAVED_POLICY_RENAME_PARENT_REVISION
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
     )
-    assert (
-        f'down_revision: Union[str, None] = "{SAVED_POLICY_RENAME_PARENT_REVISION}"'
-    ) in revision
     assert 'op.rename_table("user_policies", "user_policy_associations")' in upgrade
     assert 'op.rename_table("user_policy_associations", "user_policies")' in downgrade
     for body in (upgrade, downgrade):

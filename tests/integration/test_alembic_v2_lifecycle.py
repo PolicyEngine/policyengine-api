@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import psycopg
 import pytest
 import sqlalchemy as sa
 from alembic import command
@@ -968,26 +969,6 @@ def test_stage_12a_reshape_refuses_retained_dormant_association_rows() -> None:
         engine.dispose()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=sa.exc.ProgrammingError,
-    reason=(
-        "Head has no view named user_policies yet. Autogeneration cannot "
-        "create one, and a hand-written view needs a human migration decision "
-        "(see the saved-policy table rename in the Alembic migrations skill); "
-        "until then the release running during a deploy cannot find the table."
-    ),
-)
-def test_previous_release_still_finds_user_policies() -> None:
-    """The release running during the deploy reads saved policies by the old name."""
-    engine = create_engine(_disposable_url())
-    try:
-        with engine.connect() as connection:
-            connection.execute(text("SELECT count(*) FROM user_policies")).scalar_one()
-    finally:
-        engine.dispose()
-
-
 def _constraint_names(engine, table_name: str) -> set[str]:
     with engine.connect() as connection:
         return set(
@@ -1201,7 +1182,9 @@ def _saved_policy_references(connection, saved: dict) -> tuple:
     return (mapped, *report_references)
 
 
-def _references_after_deleting_saved_policy(engine, saved: dict) -> tuple:
+def _references_after_deleting_saved_policy(
+    engine, table_name: str, saved: dict
+) -> tuple:
     """Delete the saved policy in a rolled-back transaction; return the references.
 
     The v1 mapping cascades away and the report's keys are set to null.
@@ -1210,12 +1193,36 @@ def _references_after_deleting_saved_policy(engine, saved: dict) -> tuple:
         transaction = connection.begin()
         try:
             connection.execute(
-                text("DELETE FROM user_policy_associations WHERE id = :id"),
-                {"id": saved["saved_policy_id"]},
+                sa.delete(sa.table(table_name, sa.column("id"))).where(
+                    sa.column("id") == saved["saved_policy_id"]
+                )
             )
             return _saved_policy_references(connection, saved)
         finally:
             transaction.rollback()
+
+
+def _probe_privileges(connection, table_name: str) -> dict[str, bool]:
+    """Return which of three privileges the probe role holds, one at a time.
+
+    ``has_table_privilege`` with a list of privileges is true when any one is
+    held, so each is checked separately.
+    """
+    return {
+        privilege: connection.execute(
+            text("SELECT has_table_privilege(:role, :table, :privilege)"),
+            {
+                "role": RENAME_PRIVILEGE_PROBE_ROLE,
+                "table": f"public.{table_name}",
+                "privilege": privilege,
+            },
+        ).scalar_one()
+        for privilege in ("SELECT", "UPDATE", "INSERT")
+    }
+
+
+GRANTED_TO_PROBE = {"SELECT": True, "UPDATE": True, "INSERT": False}
+CLEARED_REFERENCES = (None, None, None)
 
 
 def _drop_rename_privilege_probe(engine) -> None:
@@ -1270,23 +1277,19 @@ def test_saved_policy_rename_keeps_rows_references_and_privileges() -> None:
                 connection, "user_policy_associations", saved_policy_id
             )
             references = _saved_policy_references(connection, saved)
-            granted = connection.execute(
-                text(
-                    f"SELECT has_table_privilege('{RENAME_PRIVILEGE_PROBE_ROLE}', "
-                    "'public.user_policy_associations', 'SELECT, UPDATE')"
-                )
-            ).scalar_one()
+            privileges = _probe_privileges(connection, "user_policy_associations")
         assert after == before
         assert references == (saved_policy_id, saved_policy_id, saved_policy_id)
-        assert granted
+        assert privileges == GRANTED_TO_PROBE
         assert (
             _schema_names(engine, "user_policy_associations")
             == SAVED_POLICY_SCHEMA_NAMES_AT_HEAD
         )
-        assert _references_after_deleting_saved_policy(engine, saved) == (
-            None,
-            None,
-            None,
+        assert (
+            _references_after_deleting_saved_policy(
+                engine, "user_policy_associations", saved
+            )
+            == CLEARED_REFERENCES
         )
 
         command.downgrade(config, SAVED_POLICY_RENAME_PARENT_REVISION)
@@ -1296,12 +1299,76 @@ def test_saved_policy_rename_keeps_rows_references_and_privileges() -> None:
         with engine.connect() as connection:
             restored = _saved_policy_row(connection, "user_policies", saved_policy_id)
             restored_references = _saved_policy_references(connection, saved)
+            restored_privileges = _probe_privileges(connection, "user_policies")
         assert restored == before
         assert restored_references == references
+        assert restored_privileges == GRANTED_TO_PROBE
         assert _schema_names(engine, "user_policies") == names_at_parent
+        assert (
+            _references_after_deleting_saved_policy(engine, "user_policies", saved)
+            == CLEARED_REFERENCES
+        )
     finally:
         command.upgrade(config, "head")
         if saved is not None:
             _delete_saved_policy_rows(engine, parent, saved)
         _drop_rename_privilege_probe(engine)
+        engine.dispose()
+
+
+class OldTableNameMissingError(Exception):
+    """Raised when head has no relation named ``user_policies`` to read from."""
+
+
+def _saved_policy_row_by_old_name(connection, saved_policy_id: UUID) -> dict:
+    """Read a saved policy as the previous release does, under the old name.
+
+    Only the missing relation is turned into ``OldTableNameMissingError``, so
+    any other failure in the test is reported as a failure.
+    """
+    try:
+        return _saved_policy_row(connection, "user_policies", saved_policy_id)
+    except sa.exc.ProgrammingError as error:
+        if isinstance(error.orig, psycopg.errors.UndefinedTable):
+            raise OldTableNameMissingError from error
+        raise
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=OldTableNameMissingError,
+    reason=(
+        "Head has no view named user_policies yet. Autogeneration cannot "
+        "create one, and a hand-written view needs a human migration decision "
+        "(see the saved-policy table rename in the Alembic migrations skill); "
+        "until then the release running during a deploy cannot find the table."
+    ),
+)
+def test_previous_release_still_finds_user_policies() -> None:
+    """The release running during the deploy reads saved policies by the old name.
+
+    A saved policy stored before the rename must still be found under
+    ``user_policies`` at head, as the previous release's statements name it.
+    """
+    config = _config()
+    engine = create_engine(_disposable_url())
+    parent = sa.MetaData()
+    saved = None
+    try:
+        command.downgrade(config, SAVED_POLICY_RENAME_PARENT_REVISION)
+        parent.reflect(engine)
+        with engine.begin() as connection:
+            saved = _saved_policy_with_references(connection, parent)
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            stored = _saved_policy_row(
+                connection, "user_policy_associations", saved["saved_policy_id"]
+            )
+        with engine.connect() as connection:
+            found = _saved_policy_row_by_old_name(connection, saved["saved_policy_id"])
+        assert found == stored
+    finally:
+        command.upgrade(config, "head")
+        if saved is not None:
+            _delete_saved_policy_rows(engine, parent, saved)
         engine.dispose()
