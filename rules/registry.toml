@@ -274,6 +274,31 @@ job = "test"
 invocation = "make test"
 
 [[rule]]
+id = "api.data.sqlalchemy-and-alembic-only"
+category = "runtime-layers"
+statement = "Code connects to relational databases only through SQLAlchemy engines, connections and sessions, never by calling a database driver directly, and changes persistent schema only through Alembic revisions."
+rationale = "docs/engineering/skills/alembic-migrations.md#database-access-through-sqlalchemy-and-alembic"
+scope = ["policyengine_api/**/*.py", "scripts/**/*.py", "migrations/*/env.py", ".github/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/data/test_database_access_boundaries.py::test_non_test_code_reaches_database_drivers_only_where_declared",
+  "tests/unit/data/test_database_access_boundaries.py::test_non_test_code_changes_schema_only_through_alembic",
+  "tests/unit/data/test_database_access_boundaries.py::test_publication_staging_tables_are_temporary_and_dropped_at_commit",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.data.sqlalchemy-and-alembic-only/bad_database_access.py"
+good_fixture = "rules/fixtures/api.data.sqlalchemy-and-alembic-only/good_database_access.py"
+test = "tests/unit/data/test_database_access_boundaries.py::test_rule_proof_sqlalchemy_and_alembic_only"
+
+[[rule]]
 id = "api.legacy.removed-layers-stay-removed"
 category = "runtime-layers"
 statement = "Removed legacy persistence layers, the temporary DAO module and the legacy endpoints package stay removed."
