@@ -196,6 +196,12 @@ def _remove_every_artifact_revision(
     manifest.data_package.version = None
 
 
+def _drop_the_region_dataset_attribute(
+    models: dict[str, SimpleNamespace], _references: References
+) -> None:
+    del models["us"].release_manifest.region_datasets
+
+
 def _remove_every_artifact_repository(
     models: dict[str, SimpleNamespace], _references: References
 ) -> None:
@@ -206,6 +212,10 @@ def _remove_every_artifact_repository(
     ("break_sources", "message"),
     [
         (_remove_the_dataset_map, "^us release manifest has no dataset map$"),
+        (
+            _drop_the_region_dataset_attribute,
+            "^us release manifest lacks datasets, region_datasets or data_package$",
+        ),
         (
             _remove_the_reviewed_default_dataset,
             "^us release does not certify populace_us_2024$",
