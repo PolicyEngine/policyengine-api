@@ -45,6 +45,9 @@ RUN_OUTPUT_TABLES = frozenset(
     }
 )
 
+# Retired at Stage 12A; a later revision drops them.
+RETIRED_ASSOCIATION_COLUMNS = frozenset({"country", "label"})
+
 
 def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
     expected_modules = {
@@ -87,6 +90,17 @@ def test_every_metadata_table_has_one_mapped_model() -> None:
     assert V2_METADATA is not V1Base.metadata
     assert model_table_names == metadata_table_names
     assert len(_v2_mappers()) == len(metadata_table_names)
+
+
+def test_association_models_do_not_map_the_retired_columns() -> None:
+    for model in (UserSimulationAssociation, UserReportAssociation):
+        table = V2_METADATA.tables[model.__tablename__]
+        # Declared on the table, so the metadata matches the schema...
+        assert set(table.c.keys()) >= RETIRED_ASSOCIATION_COLUMNS
+        assert all(table.c[name].nullable for name in RETIRED_ASSOCIATION_COLUMNS)
+        # ...but neither mapped nor a model field.
+        assert RETIRED_ASSOCIATION_COLUMNS.isdisjoint(sa.inspect(model).columns.keys())
+        assert RETIRED_ASSOCIATION_COLUMNS.isdisjoint(model.model_fields)
 
 
 def test_every_table_has_named_primary_foreign_and_relational_constraints() -> None:
@@ -601,10 +615,6 @@ def test_simulation_and_report_associations_have_no_cross_service_keys() -> None
     simulations = V2_METADATA.tables["user_simulation_associations"]
     reports = V2_METADATA.tables["user_report_associations"]
 
-    # The retired columns stay, nullable, for the previous Public API revision.
-    for table in (simulations, reports):
-        assert table.c.country.nullable
-        assert table.c.label.nullable
     assert {
         foreign_key.target_fullname for foreign_key in simulations.foreign_keys
     } == {"users.id"}

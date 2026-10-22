@@ -39,6 +39,11 @@ DIRECT_SQLALCHEMY_EXCEPTIONS = MappingProxyType(
             "Concurrent report idempotency requires a savepoint and bounded "
             "IntegrityError recovery around the database uniqueness constraint."
         ),
+        "retired_table_declarations": (
+            "Columns a later revision drops stay declared as plain SQLAlchemy "
+            "columns that no model maps, so the metadata matches the schema "
+            "while nothing reads or writes them."
+        ),
     }
 )
 

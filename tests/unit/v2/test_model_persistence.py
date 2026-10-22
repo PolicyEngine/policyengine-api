@@ -1,5 +1,6 @@
 """Canonical SQLModel persistence and bounded SQLAlchemy escape-hatch tests."""
 
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -21,6 +22,8 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     User,
     UserPolicy,
+    UserReportAssociation,
+    UserSimulationAssociation,
 )
 from policyengine_api.data.v2.models.base import DIRECT_SQLALCHEMY_EXCEPTIONS
 
@@ -36,6 +39,38 @@ def _relational_sqlite_engine():
 
     V2_METADATA.create_all(engine)
     return engine
+
+
+# A later revision drops these tables and columns while this release serves
+# traffic, so no statement this release runs may name them.
+RETIRED_SIMULATION_TABLE_REFERENCE = re.compile(
+    r"\b(household_jobs|simulations|reports|report_runs|aggregates|"
+    r"change_aggregates|budget_summary|decile_impacts|intra_decile_impacts|"
+    r"inequality|poverty|program_statistics|congressional_district_impacts|"
+    r"constituency_impacts|local_authority_impacts)\b"
+)
+RETIRED_COLUMN_TABLE_REFERENCE = re.compile(
+    r"\buser_(simulation|report)_associations\b"
+)
+RETIRED_COLUMN_REFERENCE = re.compile(r"\b(country|label)\b")
+
+
+def _record_statements(engine) -> list[str]:
+    statements: list[str] = []
+
+    @sa.event.listens_for(engine, "before_cursor_execute")
+    def record(_connection, _cursor, statement, *_arguments) -> None:
+        statements.append(statement)
+
+    return statements
+
+
+def _assert_no_retired_schema_references(statements: list[str]) -> None:
+    assert statements
+    for statement in statements:
+        assert not RETIRED_SIMULATION_TABLE_REFERENCE.search(statement), statement
+        if RETIRED_COLUMN_TABLE_REFERENCE.search(statement):
+            assert not RETIRED_COLUMN_REFERENCE.search(statement), statement
 
 
 def _policy_graph(*, content_hash: str = "a" * 64):
@@ -95,6 +130,7 @@ def test_direct_sqlalchemy_categories_are_complete_and_documented() -> None:
         "named_constraints_and_indexes",
         "ambiguous_foreign_key_relationships",
         "transaction_conflict_recovery",
+        "retired_table_declarations",
     }
     assert all(DIRECT_SQLALCHEMY_EXCEPTIONS.values())
 
@@ -445,3 +481,39 @@ def test_v2_models_do_not_create_a_parallel_sqlalchemy_orm_layer() -> None:
     assert "mapped_column" not in model_sources
     assert "sqlalchemy.orm.Session" not in model_sources
     assert "class_=sqlalchemy" not in model_sources
+
+
+@pytest.mark.parametrize(
+    ("association_model", "legacy_reference"),
+    [
+        (UserSimulationAssociation, "legacy_simulation_id"),
+        (UserReportAssociation, "legacy_report_id"),
+    ],
+)
+def test_simulation_and_report_associations_omit_retired_columns(
+    association_model: type[UserSimulationAssociation | UserReportAssociation],
+    legacy_reference: str,
+) -> None:
+    engine = _relational_sqlite_engine()
+    with Session(engine) as session:
+        user = User(primary_country="us")
+        session.add(user)
+        session.flush()
+        statements = _record_statements(engine)
+
+        association = association_model(
+            user_id=user.id, country_id="us", **{legacy_reference: 615}
+        )
+        session.add(association)
+        session.flush()
+        session.expire_all()
+        stored = session.exec(
+            select(association_model).where(association_model.id == association.id)
+        ).one()
+        stored.name = "Renamed"
+        session.flush()
+        session.delete(stored)
+        session.flush()
+
+    _assert_no_retired_schema_references(statements)
+    engine.dispose()
