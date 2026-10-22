@@ -168,6 +168,8 @@ files = [
     "policyengine_api/services/v2",
     "policyengine_api/libs/user_auth.py",
     "policyengine_api/libs/auth0_management.py",
+    "policyengine_api/startup_country_check.py",
+    "policyengine_api/supported_countries.py",
 ]
 explicit_package_bases = true
 follow_imports = "silent"

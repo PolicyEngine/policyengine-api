@@ -417,4 +417,8 @@ The table must list exactly the countries in
 `policyengine_api/supported_countries.py`: the Public API refuses to start
 when they differ (`policyengine_api/startup_country_check.py`). Listing
 another country later needs a revision that inserts its row, and the same
-human migration decision.
+human migration decision. The deploy runs that revision before it starts
+the new release, so instances of the previous release that start afterwards,
+and a rollback to it, refuse to start until the revision is downgraded. The
+module docstring of `supported_countries.py` lists the other checks a new
+country must widen.

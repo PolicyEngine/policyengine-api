@@ -11,10 +11,14 @@ The check runs only where a v2 runtime database is selected: on Cloud Run
 resource is configured. A local or test startup without v2 configuration
 opens no connection.
 
-A disagreement, a missing table, a missing privilege or unusable v2
-configuration stops startup. A database that cannot be reached is logged and
-startup continues: the v1 routes do not read the v2 database, and their
-copies into it already continue without it.
+Startup stops when the database answers and its answer disagrees with the
+list: different countries, a missing table, or no privilege to read it.
+When the check cannot get an answer, it logs why and startup continues: the
+v1 routes do not read the v2 database, and their copies into it already
+continue without it. That covers a database that cannot be reached or
+refuses the credentials, and v2 configuration that cannot be used, including
+a secret that cannot be resolved; the readiness check already reports the
+last as not ready, and recovers once the secret resolves.
 """
 
 from __future__ import annotations
@@ -23,11 +27,12 @@ import logging
 import os
 from typing import TYPE_CHECKING, Protocol
 
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import InterfaceError, OperationalError
 
 from policyengine_api.data.v2.settings import (
     V2_RUNTIME_DATABASE_URL,
     V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE,
+    V2ConfigurationError,
 )
 from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
 
@@ -75,10 +80,11 @@ def check_countries_table_at_startup(
 ) -> None:
     """Raise unless the countries table names exactly the countries in code.
 
-    Raises ``CountryListMismatchError`` on a disagreement, SQLAlchemy's
+    Raises ``CountryListMismatchError`` on a disagreement and SQLAlchemy's
     ``ProgrammingError`` when the table or the privilege to read it is
-    missing, and ``V2ConfigurationError`` for unusable v2 configuration. An
-    unreachable database is logged, without its error detail, and skipped.
+    missing. Unusable v2 configuration is logged with its message, which
+    never contains a secret, and a database connection failure by its error
+    type only, as its detail can name the host; both skip the check.
     """
     values = os.environ if environ is None else environ
     if not v2_runtime_database_selected(values):
@@ -86,11 +92,15 @@ def check_countries_table_at_startup(
     factory = verifier_factory or _default_country_list_verifier
     try:
         factory().verify_countries_match_code_list(SUPPORTED_COUNTRY_IDS)
-    except OperationalError as error:
-        # The error's detail can name the database host, so only its type is
-        # logged.
+    except V2ConfigurationError as error:
+        logger.warning(
+            "Skipped the countries table check at startup: the v2 runtime "
+            "configuration cannot be used (%s)",
+            error,
+        )
+    except (OperationalError, InterfaceError) as error:
         logger.warning(
             "Skipped the countries table check at startup: the v2 database "
-            "could not be reached (%s)",
+            "could not be queried (%s)",
             type(error).__name__,
         )
