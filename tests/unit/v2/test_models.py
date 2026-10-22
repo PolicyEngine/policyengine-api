@@ -6,19 +6,18 @@ from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v1_models import V1Base
+from policyengine_api.data.v2 import models as v2_models
 from policyengine_api.data.v2.models import (
     V2_METADATA,
     DatasetVersion,
     Dynamic,
     Household,
-    HouseholdJob,
     LegacyHouseholdMapping,
     LegacyPolicyMapping,
     LegacyUserMapping,
     LegacyUserPolicyMapping,
     ParameterValue,
     Policy,
-    Simulation,
     TaxBenefitModelVersion,
     User,
     UserHouseholdAssociation,
@@ -45,6 +44,42 @@ RUN_OUTPUT_TABLES = frozenset(
     }
 )
 
+# The simulation service owns these tables in its own schema. The v2 metadata
+# still declares them, so it matches the schema until a later revision drops
+# them, but no model maps them: nothing this release runs reads or writes them.
+RETIRED_SIMULATION_TABLES = frozenset(
+    {"household_jobs", "simulations", "reports", "report_runs", *RUN_OUTPUT_TABLES}
+)
+# Retired at Stage 12A; dropped by the same later revision.
+RETIRED_ASSOCIATION_COLUMNS = frozenset({"country", "label"})
+REMOVED_SIMULATION_MODEL_NAMES = frozenset(
+    {
+        "AggregateOutput",
+        "AggregateType",
+        "BudgetSummary",
+        "ChangeAggregate",
+        "CongressionalDistrictImpact",
+        "ConstituencyImpact",
+        "DecileImpact",
+        "DecileType",
+        "HouseholdJob",
+        "HouseholdJobStatus",
+        "Inequality",
+        "IntraDecileImpact",
+        "LocalAuthorityImpact",
+        "OutputStatus",
+        "Poverty",
+        "ProgramStatistics",
+        "Report",
+        "ReportRun",
+        "ReportRunStatus",
+        "ReportRunTrigger",
+        "Simulation",
+        "SimulationStatus",
+        "SimulationType",
+    }
+)
+
 
 def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
     expected_modules = {
@@ -53,9 +88,7 @@ def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
         Policy: "policies",
         Dynamic: "policies",
         Household: "households",
-        HouseholdJob: "households",
         LegacyHouseholdMapping: "household_mappings",
-        Simulation: "simulations",
         UserHouseholdAssociation: "associations",
         UserPolicy: "associations",
         LegacyPolicyMapping: "policy_mappings",
@@ -80,13 +113,47 @@ def _v2_mappers():
     )
 
 
-def test_every_metadata_table_has_one_mapped_model() -> None:
+def test_every_kept_metadata_table_has_one_mapped_model() -> None:
     metadata_table_names = set(V2_METADATA.tables)
     model_table_names = {mapper.local_table.name for mapper in _v2_mappers()}
 
     assert V2_METADATA is not V1Base.metadata
-    assert model_table_names == metadata_table_names
-    assert len(_v2_mappers()) == len(metadata_table_names)
+    assert metadata_table_names >= RETIRED_SIMULATION_TABLES
+    assert model_table_names == metadata_table_names - RETIRED_SIMULATION_TABLES
+    assert len(_v2_mappers()) == len(model_table_names)
+
+
+def test_models_package_exports_no_simulation_domain_model() -> None:
+    exported_names = set(v2_models.__all__) | set(vars(v2_models))
+
+    assert REMOVED_SIMULATION_MODEL_NAMES.isdisjoint(exported_names)
+
+
+def test_kept_models_have_no_relationship_to_a_retired_table() -> None:
+    related_tables = {
+        f"{mapper.class_.__name__}.{relationship.key}": (
+            relationship.mapper.local_table.name
+        )
+        for mapper in _v2_mappers()
+        for relationship in mapper.relationships
+    }
+
+    assert not {
+        relationship: table_name
+        for relationship, table_name in related_tables.items()
+        if table_name in RETIRED_SIMULATION_TABLES
+    }
+
+
+def test_association_models_do_not_map_the_retired_columns() -> None:
+    for model in (UserSimulationAssociation, UserReportAssociation):
+        table = V2_METADATA.tables[model.__tablename__]
+        # Declared on the table, so the metadata matches the schema...
+        assert set(table.c.keys()) >= RETIRED_ASSOCIATION_COLUMNS
+        assert all(table.c[name].nullable for name in RETIRED_ASSOCIATION_COLUMNS)
+        # ...but neither mapped nor a model field.
+        assert RETIRED_ASSOCIATION_COLUMNS.isdisjoint(sa.inspect(model).columns.keys())
+        assert RETIRED_ASSOCIATION_COLUMNS.isdisjoint(model.model_fields)
 
 
 def test_every_table_has_named_primary_foreign_and_relational_constraints() -> None:
@@ -298,48 +365,6 @@ def test_all_datetime_columns_are_timezone_aware() -> None:
     assert all(column.type.timezone for column in datetime_columns)
 
 
-def test_report_definition_and_run_columns_are_separated() -> None:
-    report = V2_METADATA.tables["reports"]
-    report_run = V2_METADATA.tables["report_runs"]
-
-    assert report.c.type.nullable
-    assert {
-        "country",
-        "type",
-        "tax_benefit_model_id",
-        "policy_id",
-        "baseline_simulation_id",
-        "reform_simulation_id",
-        "household_id",
-        "dataset_id",
-        "region_id",
-        "year",
-        "inputs",
-    }.issubset(report.c.keys())
-    assert {
-        "country_package_version",
-        "policyengine_version",
-        "status",
-        "trigger",
-        "idempotency_key",
-        "started_at",
-        "completed_at",
-        "error_message",
-        "markdown",
-    }.issubset(report_run.c.keys())
-    assert {
-        "country_package_version",
-        "policyengine_version",
-        "status",
-        "error_message",
-        "markdown",
-    }.isdisjoint(report.c.keys())
-    assert not report_run.c.country_package_version.nullable
-    assert not report_run.c.policyengine_version.nullable
-    assert isinstance(report_run.c.idempotency_key.type, sa.Uuid)
-    assert report_run.c.idempotency_key.type.as_uuid
-
-
 def test_standard_users_require_a_supported_primary_country() -> None:
     users = V2_METADATA.tables["users"]
 
@@ -414,53 +439,6 @@ def test_regions_have_one_same_model_version_default_logical_dataset() -> None:
     }
 
 
-def test_reports_and_simulations_snapshot_selected_datasets() -> None:
-    reports = V2_METADATA.tables["reports"]
-    simulations = V2_METADATA.tables["simulations"]
-
-    for table in (reports, simulations):
-        dataset_foreign_key = next(iter(table.c.dataset_id.foreign_keys))
-        assert dataset_foreign_key.target_fullname == "datasets.id"
-        assert dataset_foreign_key.ondelete in {"RESTRICT", "SET NULL"}
-
-
-def test_stage9_adds_no_dataset_version_relationship_to_run_tables() -> None:
-    for table_name in ("simulations", "reports", "report_runs"):
-        assert "dataset_version_id" not in V2_METADATA.tables[table_name].c
-
-
-def test_run_outputs_reference_report_runs_not_base_reports() -> None:
-    for table_name in RUN_OUTPUT_TABLES:
-        table = V2_METADATA.tables[table_name]
-        assert "report_run_id" in table.c
-        assert not table.c.report_run_id.nullable
-        assert "report_id" not in table.c
-        foreign_key = next(iter(table.c.report_run_id.foreign_keys))
-        assert foreign_key.target_fullname == "report_runs.id"
-        assert foreign_key.ondelete == "CASCADE"
-
-
-def test_report_rerun_constraints_allow_same_versions_but_deduplicate_requests() -> (
-    None
-):
-    report_runs = V2_METADATA.tables["report_runs"]
-    unique_column_sets = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in report_runs.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
-
-    assert ("report_id", "idempotency_key") in unique_column_sets
-    assert (
-        "report_id",
-        "country_package_version",
-        "policyengine_version",
-    ) not in unique_column_sets
-    assert "ix_report_runs_current_output" in {
-        index.name for index in report_runs.indexes
-    }
-
-
 def test_named_checks_and_required_indexes_cover_core_invariants() -> None:
     constraint_names = {
         constraint.name
@@ -473,15 +451,11 @@ def test_named_checks_and_required_indexes_cover_core_invariants() -> None:
 
     assert {
         "ck_regions_required_filter_values",
-        "ck_simulations_type_input",
         "ck_users_primary_country",
-        "ck_report_runs_terminal_completion",
         "ck_parameter_values_single_owner",
     }.issubset(constraint_names)
     assert {
         "ix_users_email",
-        "ix_simulations_status_created_at",
-        "ix_report_runs_current_output",
         "uq_parameter_values_canonical_parameter_start_date",
     }.issubset(index_names)
 
@@ -601,10 +575,6 @@ def test_simulation_and_report_associations_have_no_cross_service_keys() -> None
     simulations = V2_METADATA.tables["user_simulation_associations"]
     reports = V2_METADATA.tables["user_report_associations"]
 
-    # The retired columns stay, nullable, for the previous Public API revision.
-    for table in (simulations, reports):
-        assert table.c.country.nullable
-        assert table.c.label.nullable
     assert {
         foreign_key.target_fullname for foreign_key in simulations.foreign_keys
     } == {"users.id"}
@@ -619,7 +589,6 @@ def test_simulation_and_report_associations_have_no_cross_service_keys() -> None
         assert isinstance(postgres_type, postgresql.JSONB)
     assert set(sa.inspect(UserSimulationAssociation).relationships.keys()) == {"user"}
     assert set(sa.inspect(UserReportAssociation).relationships.keys()) == {"user"}
-    assert "user_associations" not in sa.inspect(Simulation).relationships
 
 
 def test_user_policy_records_v3_reform_fields() -> None:

@@ -93,23 +93,23 @@ def _access(
 TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Alembic's revision record; the catalog writer checks the schema revision.
     "alembic_version": _access(catalog_writer=READ),
-    # Simulation-domain result tables, unused by the managed roles.
+    # Simulation-domain tables, which the simulation service owns in its own
+    # schema. No managed role uses them, and a later revision drops them.
     "aggregates": _access(),
     "budget_summary": _access(),
     "change_aggregates": _access(),
     "congressional_district_impacts": _access(),
     "constituency_impacts": _access(),
     "decile_impacts": _access(),
-    "dynamics": _access(),
     "household_jobs": _access(),
     "inequality": _access(),
     "intra_decile_impacts": _access(),
     "local_authority_impacts": _access(),
     "poverty": _access(),
     "program_statistics": _access(),
-    "report_runs": _access(catalog_writer=READ),
-    "reports": _access(catalog_writer=READ),
-    "simulations": _access(catalog_writer=READ),
+    "report_runs": _access(),
+    "reports": _access(),
+    "simulations": _access(),
     # Metadata catalog: the catalog writer publishes it, the Public API reads it.
     "dataset_versions": _access(catalog_writer=READ),
     "datasets": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
@@ -129,6 +129,8 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "legacy_household_mappings": _access(runtime=READ_INSERT_UPDATE),
     "legacy_policy_mappings": _access(runtime=READ_INSERT_UPDATE),
     "policies": _access(runtime=READ_INSERT),
+    # Named parameter values a simulation can apply; no managed role uses them.
+    "dynamics": _access(),
     # Stage 10 saved-policy mirror.
     "legacy_user_mappings": _access(runtime=READ_WRITE),
     "legacy_user_policy_mappings": _access(runtime=READ_WRITE),

@@ -311,7 +311,8 @@ from the final SQLModel metadata. It has no post-generation corrections.
   kept: `country` becomes nullable and nothing reads or writes either column.
   The previous Public API revision still maps them, so dropping them would
   break it during the deploy window or an application rollback (see
-  "Rollback").
+  "Rollback"). A later release stopped mapping them: they stay declared on the
+  tables, unmapped, only until a revision drops them.
 
 The models drop the `user_associations` relationships from v2 simulations and
 reports. `V2_ALEMBIC_HEAD_REVISION` is `fbb7488ebe8a`.

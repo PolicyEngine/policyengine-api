@@ -22,13 +22,10 @@ from policyengine_api.data.v2.catalog.publication import (
 from policyengine_api.data.v2.models import (
     Dataset,
     DatasetVersion,
-    Region,
-    Report,
-    ReportRun,
-    Simulation,
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.data.v2.privileges import CATALOG_WRITER_ROLE
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from tests.fixtures.v2_catalog import normalized_catalog
 
@@ -216,7 +213,7 @@ def test_same_version_with_changed_content_fails_without_mutation(
     assert _counts(publication_engine) == before_counts
 
 
-def test_republish_preserves_existing_run_and_dataset_version_records(
+def test_republish_preserves_existing_dataset_version_records(
     publication_engine: Engine,
 ) -> None:
     catalog = normalized_catalog()
@@ -229,18 +226,6 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
         model_version = session.exec(
             select(TaxBenefitModelVersion).where(
                 TaxBenefitModelVersion.model_id == model.id
-            )
-        ).one()
-        input_dataset = session.exec(
-            select(Dataset).where(
-                Dataset.tax_benefit_model_version_id == model_version.id,
-                Dataset.name == "populace_us_2024",
-            )
-        ).one()
-        region = session.exec(
-            select(Region).where(
-                Region.tax_benefit_model_version_id == model_version.id,
-                Region.code == "us",
             )
         ).one()
         output_dataset = Dataset(
@@ -259,52 +244,40 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
             dataset_id=output_dataset.id,
             tax_benefit_model_id=model.id,
         )
-        simulation = Simulation(
-            dataset_id=input_dataset.id,
-            output_dataset_id=output_dataset.id,
-            tax_benefit_model_version_id=model_version.id,
-            region_id=region.id,
-        )
-        report = Report(
-            label="Existing report",
-            country="us",
-            tax_benefit_model_id=model.id,
-            dataset_id=input_dataset.id,
-            region_id=region.id,
-        )
-        session.add_all((dataset_version, simulation, report))
-        session.flush()
-        report_run = ReportRun(
-            report_id=report.id,
-            country_package_version="existing-country-version",
-            policyengine_version="existing-policyengine-version",
-        )
-        session.add(report_run)
+        session.add(dataset_version)
         session.commit()
-        protected_ids = (
-            dataset_version.id,
-            simulation.id,
-            report.id,
-            report_run.id,
-            simulation.dataset_id,
-            simulation.output_dataset_id,
-            report.dataset_id,
-        )
+        protected_ids = (dataset_version.id, output_dataset.id)
 
     publish_catalog(publication_engine, catalog)
 
     with Session(publication_engine) as session:
         persisted_dataset_version = session.get(DatasetVersion, protected_ids[0])
-        persisted_simulation = session.get(Simulation, protected_ids[1])
-        persisted_report = session.get(Report, protected_ids[2])
-        persisted_report_run = session.get(ReportRun, protected_ids[3])
         assert persisted_dataset_version is not None
-        assert persisted_simulation is not None
-        assert persisted_report is not None
-        assert persisted_report_run is not None
-        assert persisted_simulation.dataset_id == protected_ids[4]
-        assert persisted_simulation.output_dataset_id == protected_ids[5]
-        assert persisted_report.dataset_id == protected_ids[6]
+        assert persisted_dataset_version.dataset_id == protected_ids[1]
+        assert session.get(Dataset, protected_ids[1]) is not None
+
+
+def test_catalog_writer_publishes_without_access_to_simulation_tables(
+    publication_engine: Engine,
+    v2_engine_as_role,
+) -> None:
+    # A later v2 revision drops simulations, reports and report_runs while
+    # this release serves traffic, so publication must work without them.
+    with publication_engine.begin() as connection:
+        connection.execute(
+            text(
+                "REVOKE ALL ON simulations, reports, report_runs "
+                f"FROM {CATALOG_WRITER_ROLE}"
+            )
+        )
+    catalog_writer_engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
+    try:
+        evidence = publish_catalog(catalog_writer_engine, normalized_catalog())
+    finally:
+        catalog_writer_engine.dispose()
+
+    assert evidence.as_dict()["outcome"] == "ok"
+    assert _counts(publication_engine)["tax_benefit_models"] == 2
 
 
 def test_new_version_is_additive_and_concurrent_retries_serialize(

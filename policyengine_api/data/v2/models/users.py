@@ -23,7 +23,6 @@ if TYPE_CHECKING:
         UserReportAssociation,
         UserSimulationAssociation,
     )
-    from policyengine_api.data.v2.models.reports import Report
 
 
 class UserType(StrEnum):
@@ -37,8 +36,7 @@ class User(IdentifiedModel, table=True):
     """A v2 user account, unique by email when one is given.
 
     A ``standard`` user always has a primary country. Deleting a user deletes
-    their sign-in identities and saved associations; reports they own are kept
-    without an owner.
+    their sign-in identities and saved associations.
     """
 
     __tablename__ = "users"
@@ -70,7 +68,6 @@ class User(IdentifiedModel, table=True):
         sa_column_kwargs={"server_default": UserType.STANDARD.value},
     )
 
-    reports: list["Report"] = Relationship(back_populates="user")
     identities: list["UserIdentity"] = Relationship(
         back_populates="user",
         cascade_delete=True,
