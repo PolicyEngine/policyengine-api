@@ -3,6 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from policyengine_api import constants
+from policyengine_api.constants import get_economy_impact_cache_version
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import (
@@ -197,3 +199,58 @@ def test_reform_impact_service_deletes_only_matching_computing_rows(
 
 def test_reform_impact_transitions_return_none_for_missing_execution(service):
     assert service.set_error_reform_impact("missing-job", message="missing") is None
+
+
+def test_impact_cached_under_previous_economy_schema_version_is_not_matched(
+    service,
+):
+    # Economy results cached under schema version 3 can hold decile relative
+    # changes as percentages (x100) from the simulation API
+    # (PolicyEngine/policyengine-sim-api#827). A lookup built from the
+    # current cache version must not find them.
+    current_cache_version = get_economy_impact_cache_version(SCOPE.country_id)
+    with pytest.MonkeyPatch.context() as schema_version_patch:
+        schema_version_patch.setitem(
+            constants.RUNTIME_CACHE_SCHEMA_VERSIONS, "economy_impact", 3
+        )
+        percentage_decile_cache_version = get_economy_impact_cache_version(
+            SCOPE.country_id
+        )
+
+    options_hash = "decile-hash"
+    stale_identity = ReformImpactIdentity(
+        scope=SCOPE,
+        api_version=percentage_decile_cache_version,
+        options_hash=options_hash,
+    )
+    service.set_reform_impact(
+        stale_identity,
+        ReformImpactExecution(
+            execution_id="percentage-decile-job",
+            start_time=datetime(2026, 7, 1),
+        ),
+        options={"hash": options_hash},
+        status="computing",
+        reform_impact_json={},
+    )
+    service.set_complete_reform_impact(
+        "percentage-decile-job",
+        reform_impact_json={"decile": {"relative": {"1": 1.5}}},
+    )
+
+    current_identity = ReformImpactIdentity(
+        scope=SCOPE,
+        api_version=current_cache_version,
+        options_hash=options_hash,
+    )
+
+    assert [
+        impact.execution_id for impact in service.get_all_reform_impacts(stale_identity)
+    ] == ["percentage-decile-job"]
+    assert service.get_all_reform_impacts(current_identity) == []
+    assert (
+        service.get_all_reform_impacts_by_options_hash_prefix(
+            current_identity, f"{options_hash}%"
+        )
+        == []
+    )
