@@ -106,8 +106,8 @@ def _comparison_pairs(
     country: CountryCatalog,
     *,
     with_format_2: bool,
-) -> tuple[tuple[Select, Select], ...]:
-    """Return the staged and stored rows of each compared table.
+) -> tuple[tuple[str, Select, Select], ...]:
+    """Return each compared table's name with its staged and stored rows.
 
     Without ``with_format_2``, catalog format 2's fields are left out: a
     version published before format 2 keeps them empty, and publication never
@@ -294,12 +294,12 @@ def _comparison_pairs(
     )
 
     return (
-        (staged_model_version, actual_model_version),
-        (staged_variables, actual_variables),
-        (staged_parameter_nodes, actual_parameter_nodes),
-        (staged_parameters, actual_parameters),
-        (staged_parameter_values, actual_parameter_values),
-        (staged_datasets, actual_datasets),
+        ("model version", staged_model_version, actual_model_version),
+        ("variables", staged_variables, actual_variables),
+        ("parameter nodes", staged_parameter_nodes, actual_parameter_nodes),
+        ("parameters", staged_parameters, actual_parameters),
+        ("parameter values", staged_parameter_values, actual_parameter_values),
+        ("datasets", staged_datasets, actual_datasets),
     )
 
 
@@ -371,10 +371,11 @@ def assert_country_matches(
     """Raise CatalogPublicationError if the stored version differs from the staged one.
 
     Rows are compared as sets in both directions, so a missing row and an extra
-    row both fail. Without ``include_regions``, region rows are not compared:
-    they come from the Public API's reference files, which may change while
-    the PolicyEngine.py version stays the same. A version published before
-    catalog format 2 is compared without format 2's fields.
+    row both fail; the error names the first table that differs, never its
+    rows. Without ``include_regions``, region rows are not compared: they come
+    from the Public API's reference files, which may change while the
+    PolicyEngine.py version stays the same. A version published before catalog
+    format 2 is compared without format 2's fields.
     """
     stored = stored_version(connection, country)
     pairs = _comparison_pairs(
@@ -382,10 +383,14 @@ def assert_country_matches(
         with_format_2=stored is not None and stored.catalog_format is not None,
     )
     if include_regions:
-        pairs = (*pairs, _region_comparison_pair(country))
-    for staged, actual in pairs:
+        pairs = (*pairs, ("regions", *_region_comparison_pair(country)))
+    for table_name, staged, actual in pairs:
         if _sets_differ(connection, staged, actual):
-            msg = f"persisted {country.country_id} catalog differs from PolicyEngine.py"
+            msg = (
+                f"the stored {country.country_id} catalog version "
+                f"{country.model_version.version} differs from the staged catalog "
+                f"in its {table_name}"
+            )
             raise CatalogPublicationError(msg)
 
 

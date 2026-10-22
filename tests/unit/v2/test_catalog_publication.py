@@ -234,23 +234,29 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
         catalog.country("us")
     )
     for comparisons in (format_1_comparisons, format_2_comparisons):
-        pairs = (*comparisons, region_pair)
+        assert [table_name for table_name, _staged, _stored in comparisons] == [
+            "model version",
+            "variables",
+            "parameter nodes",
+            "parameters",
+            "parameter values",
+            "datasets",
+        ]
+        pairs = (*comparisons, ("regions", *region_pair))
         assert all(
             isinstance(statement, sa.sql.Select)
             and not isinstance(statement, TextClause)
-            for pair in pairs
+            for _table_name, *pair in pairs
             for statement in pair
         )
         assert all(
             len(staged.selected_columns) == len(stored.selected_columns)
-            for staged, stored in pairs
+            for _table_name, staged, stored in pairs
         )
-    # Format 2 compares model versions, variables and parameters on more fields;
-    # the pairs are model versions, variables, parameter nodes, parameters,
-    # parameter values and datasets. Regions are compared separately, on the
-    # same fields in both formats.
+    # Format 2 compares model versions, variables and parameters on more fields.
+    # Regions are compared separately, on the same fields in both formats.
     assert [
-        len(format_2[0].selected_columns) - len(format_1[0].selected_columns)
+        len(format_2[1].selected_columns) - len(format_1[1].selected_columns)
         for format_1, format_2 in zip(
             format_1_comparisons, format_2_comparisons, strict=True
         )
