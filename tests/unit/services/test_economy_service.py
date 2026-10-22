@@ -3276,6 +3276,21 @@ class TestEconomicImpactSetupOptions:
             # Rejected before the worker's SPM capability is fetched.
             gateway.get_spm_capability.assert_not_called()
 
+        def test__given_unsupported_region__names_every_accepted_region(self):
+            with pytest.raises(ValueError, match="breakdown=local_areas") as raised:
+                EconomyService(
+                    simulation_entrypoint_=MagicMock()
+                )._build_economic_impact_setup_options(
+                    uk_breakdown_request(region="country/france"),
+                    time_period=MOCK_TIME_PERIOD,
+                )
+
+            assert str(raised.value) == (
+                "breakdown=local_areas needs region uk or a UK country, one of "
+                "uk, country/england, country/scotland, country/wales, "
+                "country/ni, country/northern_ireland; not 'country/france'"
+            )
+
         def test__given_unknown_breakdown_option__rejects_it(self):
             request = replace(
                 uk_breakdown_request(), options={"breakdown": "constituencies"}

@@ -294,6 +294,14 @@ UK_COUNTRY_REGIONS = (
 # UK regions whose metadata name differs from the code .py's UK region
 # registry uses, mapped to that code.
 UK_REGION_REGISTRY_CODES = {"country/ni": "country/northern_ireland"}
+# The regions a UK local-area breakdown can cover, in the order messages and
+# the query description list them: the UK, each UK country the metadata
+# publishes, and .py's own code for a country the metadata names differently.
+LOCAL_AREA_BREAKDOWN_REGIONS = (
+    "uk",
+    *(name for name, _label in UK_COUNTRY_REGIONS),
+    *UK_REGION_REGISTRY_CODES.values(),
+)
 
 # Modal simulation API status values
 MODAL_EXECUTION_STATUS_SUBMITTED = "submitted"

@@ -25,6 +25,7 @@ from pydantic import (
     model_validator,
 )
 
+from policyengine_api.constants import LOCAL_AREA_BREAKDOWN_REGIONS
 from policyengine_api.data.v2.catalog.catalog_selection import (
     validate_policyengine_version,
 )
@@ -173,9 +174,9 @@ class AnnualEconomyQuery(EconomyQuery):
         default=None,
         description=(
             "local_areas computes only the UK constituency and local-authority "
-            "impacts, in a run separate from the national result. UK only, "
-            "with region uk or one UK country (country/england, country/scotland, "
-            "country/wales or country/ni), and not with target=cliff"
+            "impacts, in a run separate from the national result. UK only, with "
+            f"region one of: {', '.join(LOCAL_AREA_BREAKDOWN_REGIONS)}; "
+            "not with target=cliff"
         ),
     )
 

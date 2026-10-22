@@ -19,8 +19,8 @@ from policyengine_api.constants import (
     EXECUTION_STATUSES_FAILURE,
     EXECUTION_STATUSES_PENDING,
     EXECUTION_STATUSES_SUCCESS,
+    LOCAL_AREA_BREAKDOWN_REGIONS,
     POLICYENGINE_VERSION,
-    UK_COUNTRY_REGIONS,
     UK_REGION_REGISTRY_CODES,
     get_economy_impact_cache_version,
 )
@@ -119,15 +119,6 @@ LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES = frozenset({400, 422})
 # telemetry envelope forbids extra fields, so the run is marked here rather
 # than by a new field; geography_type and geography_code still name its region.
 LOCAL_AREA_BREAKDOWN_SIMULATION_KIND = "local_area_breakdown"
-# The regions a breakdown can cover: the UK, each UK country the metadata
-# publishes, and .py's own code for a country the metadata names differently.
-LOCAL_AREA_BREAKDOWN_REGIONS = frozenset(
-    {
-        "uk",
-        *(name for name, _label in UK_COUNTRY_REGIONS),
-        *UK_REGION_REGISTRY_CODES.values(),
-    }
-)
 BUDGET_WINDOW_CLAIM_ATTEMPTS = 3
 REFORM_IMPACT_START_CLAIM_ATTEMPTS = 3
 # A budget-window progress message names this many computing years and counts
@@ -1099,10 +1090,9 @@ class EconomyService:
             raise ValueError(msg)
         region = impact_request.region
         if region not in LOCAL_AREA_BREAKDOWN_REGIONS:
-            countries = ", ".join(name for name, _label in UK_COUNTRY_REGIONS)
             msg = (
-                "breakdown=local_areas needs region uk or a UK country "
-                f"({countries}), not {region!r}"
+                "breakdown=local_areas needs region uk or a UK country, one of "
+                f"{', '.join(LOCAL_AREA_BREAKDOWN_REGIONS)}; not {region!r}"
             )
             raise ValueError(msg)
         if impact_request.target == "cliff":
