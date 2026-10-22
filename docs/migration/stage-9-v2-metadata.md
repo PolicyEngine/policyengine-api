@@ -173,8 +173,8 @@ confirms existing simulation and report record counts are unchanged.
 A failed attempt rolls back all catalog changes. Retry the same artifact only
 after correcting the external failure. A matching retry preserves identifiers,
 content, and row counts. Different normalized content under the same
-PolicyEngine.py version fails for operator review; it is never silently
-replaced. Regions are the exception: they come from the Public API's reference
+PolicyEngine.py version fails for operator review, with an error naming the
+first table that differs; it is never silently replaced. Regions are the exception: they come from the Public API's reference
 files, so a stored version keeps the regions it was published with (see
 "Source and regional dataset behavior"). A later PolicyEngine.py version adds a catalog version without
 deleting or modifying earlier versioned rows, including their logical datasets,
