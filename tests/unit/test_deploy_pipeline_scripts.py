@@ -227,7 +227,7 @@ def test_restore_rolls_back_then_checks_health(tmp_path: Path) -> None:
 
     result = _run(
         "restore_cloud_run_revision.sh",
-        "https://stable.example/readiness-check",
+        "https://stable.example/health",
         env={
             "CLOUD_RUN_SCRIPTS_DIR": str(scripts),
             "CLOUD_RUN_TARGET_REVISION": "rev-1",
@@ -237,7 +237,7 @@ def test_restore_rolls_back_then_checks_health(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert _lines(log) == [
         "set_cloud_run_revision.sh  target=rev-1",
-        "health_check.sh https://stable.example/readiness-check target=rev-1",
+        "health_check.sh https://stable.example/health target=rev-1",
     ]
 
 
@@ -246,7 +246,7 @@ def test_restore_skips_health_check_when_rollback_fails(tmp_path: Path) -> None:
 
     result = _run(
         "restore_cloud_run_revision.sh",
-        "https://stable.example/readiness-check",
+        "https://stable.example/health",
         env={"CLOUD_RUN_SCRIPTS_DIR": str(scripts)},
     )
 

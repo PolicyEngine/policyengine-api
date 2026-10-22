@@ -13,7 +13,7 @@ its existing behavior when settings are omitted and rejects explicit SPM setting
 with `SPM_SETTINGS_UNSUPPORTED`, whatever its version. A bundle whose US model
 does implement the constructor but ships no certified `measurements.spm`
 configuration fails closed with `SPM_CONFIGURATION_UNAVAILABLE`: such a
-deployment also fails `/readiness-check`, so the release checks report the
+deployment also fails `/health`, so the release checks report the
 condition rather than leaving it to individual requests. Other countries retain their
 behavior and reject US-only SPM settings.
 
@@ -131,7 +131,7 @@ whose measurement configuration this build cannot resolve — no certified
 configuration for a model that implements the constructor, a manifest this API
 cannot read, or an artifact that will not load — fails every US calculation with
 a configuration code, whatever the caller sent, and also fails
-`/readiness-check`: it is meant to stop a deployment rather than to be met on a
+`/health`: it is meant to stop a deployment rather than to be met on a
 request. `GET /us/metadata` still answers, reporting `spm.available` false.
 
 A country receipt this API cannot read in full is the same class of failure and
