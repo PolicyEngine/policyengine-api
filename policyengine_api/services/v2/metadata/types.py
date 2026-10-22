@@ -136,8 +136,12 @@ class MetadataDataset(StrictResponseModel):
 class MetadataRegion(StrictResponseModel):
     """A region the model can simulate, such as a country, state or constituency.
 
-    When requires_filter is true, the region is simulated by filtering its
-    default dataset on filter_field and filter_value.
+    When requires_filter is true, filter_strategy says how the region selects
+    households of its default dataset. With "row_filter", it keeps the
+    households whose filter_field column equals filter_value (or is in it,
+    when filter_value is a JSON list). With "weight_replacement", it keeps
+    every household and gives each the weight in row filter_value of the
+    weight matrix that filter_field names in the certified data release.
     """
 
     id: UUID
