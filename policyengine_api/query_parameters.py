@@ -214,6 +214,10 @@ class PaginationQuery(StrictQueryParameters):
     limit: Limit = DEFAULT_QUERY_LIMIT
 
 
+class CountryListQuery(StrictQueryParameters):
+    """Query contract for the countries list, which takes no parameters."""
+
+
 class PolicyCreateQuery(CatalogQuery):
     """Query contract for native immutable policy creation."""
 
