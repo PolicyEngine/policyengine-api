@@ -51,6 +51,38 @@ MOCK_SIMULATION_RESULT = {
     "inequality_impact": {"baseline": 0.45, "reform": 0.42},
     **worker_result_fields(years=["2025"]),
 }
+# The simulation API's LocalAreaBreakdownOutput for a breakdown=local_areas run.
+MOCK_LOCAL_AREA_BREAKDOWN_RESULT = {
+    "kind": "local_areas",
+    "model_version": "2.132.6",
+    "policyengine_version": "6.10.0",
+    "dataset": "microcosm_uk_2024_25_dense",
+    "data_version": "microcosm-uk-2024-25-dense-test-release",
+    "constituency_impact": [
+        {
+            "constituency_code": "E14001063",
+            "constituency_name": "Aldershot",
+            "x": 10,
+            "y": 20,
+            "average_household_income_change": 120.0,
+            "relative_household_income_change": 0.003,
+            "population": 41000.0,
+            "disclosure_tier": "reported",
+        }
+    ],
+    "local_authority_impact": [
+        {
+            "local_authority_code": "E07000092",
+            "local_authority_name": "Rushmoor",
+            "x": 3,
+            "y": 7,
+            "average_household_income_change": 110.0,
+            "relative_household_income_change": 0.0028,
+            "population": 39000.0,
+            "disclosure_tier": "approximate",
+        }
+    ],
+}
 MOCK_POLICYENGINE_BUNDLE = {
     "model_version": "1.459.0",
     "policyengine_version": "3.4.0",

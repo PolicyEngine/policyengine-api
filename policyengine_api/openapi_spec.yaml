@@ -879,7 +879,7 @@ paths:
         # Query parameters are generated from policyengine_api.query_parameters.
       responses:
         200:
-          description: Annual economic impact, progress, or persisted error state. Canonical completed results include actual baseline/reform receipts containing the selected SPM configuration. While computing, the optional stage fields come from the simulation entrypoint and appear only when its worker reports stages.
+          description: Annual economic impact, progress, or persisted error state. Canonical completed results include actual baseline/reform receipts containing the selected SPM configuration. While computing, the optional stage fields come from the simulation entrypoint and appear only when its worker reports stages. With breakdown=local_areas, a completed result is the simulation API's local-area breakdown instead, with kind local_areas, the constituency_impact and local_authority_impact lists, and the dataset and version fields.
           content:
             application/json:
               schema:
@@ -945,6 +945,21 @@ paths:
                     type: string
                   message:
                     type: string
+        502:
+          description: The calculation failed, or the simulation API refused a breakdown=local_areas request it cannot run. The message gives the reason.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [error]
+                  message:
+                    type: string
+                  result:
+                    type: object
+                    nullable: true
   /{country_id}/economy/{policy_id}/over/{baseline_policy_id}/budget-window:
     get:
       summary: Calculate budget-window economic impacts

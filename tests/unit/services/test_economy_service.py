@@ -84,6 +84,25 @@ def setup_options_for(country_id: str, region: str) -> EconomicImpactSetupOption
     )
 
 
+def uk_breakdown_request(
+    *,
+    country_id: str = "uk",
+    region: str = "uk",
+    target: Literal["general", "cliff"] = "general",
+) -> EconomicImpactRequest:
+    """Return an annual request for the UK local-area breakdown."""
+    return EconomicImpactRequest(
+        country_id=country_id,
+        policy_id=MOCK_POLICY_ID,
+        baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+        region=region,
+        dataset="default",
+        options={"breakdown": "local_areas"},
+        api_version=MOCK_API_VERSION,
+        target=target,
+    )
+
+
 class EconomyServiceHarness(NamedTuple):
     """The service under test, its call parameters and the mocks it talks to."""
 
@@ -1282,6 +1301,169 @@ class TestEconomyService:
             sim_params = mock_simulation_entrypoint.run.call_args[0][0]
             assert sim_params["_metadata"]["model_version"] == "2.7.8"
 
+        @pytest.mark.usefixtures(
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+            "mock_reform_impacts_service",
+        )
+        def test__given_local_area_breakdown__submits_breakdown_to_simulation_api(
+            self,
+            economy_service,
+            mock_country_package_versions,
+            mock_simulation_entrypoint,
+        ):
+            mock_country_package_versions["uk"] = "2.7.8"
+
+            result = economy_service.get_economic_impact(
+                uk_breakdown_request(), time_period=MOCK_TIME_PERIOD
+            )
+
+            assert result.status == ImpactStatus.COMPUTING
+            sim_params = mock_simulation_entrypoint.run.call_args.args[0]
+            assert sim_params["breakdown"] == "local_areas"
+            assert sim_params["country"] == "uk"
+            assert sim_params["region"] == "uk"
+            assert sim_params["include_cliffs"] is False
+
+        @pytest.mark.usefixtures(
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
+        @pytest.mark.parametrize("status_code", [400, 422])
+        def test__given_simulation_api_refuses_breakdown__returns_error_without_storing(
+            self,
+            economy_service,
+            mock_country_package_versions,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            status_code,
+        ):
+            mock_country_package_versions["uk"] = "2.7.8"
+            mock_simulation_entrypoint.run.side_effect = make_http_status_error(
+                status_code,
+                {"detail": "policyengine 6.7.5 does not support local-area breakdowns"},
+            )
+
+            result = economy_service.get_economic_impact(
+                uk_breakdown_request(), time_period=MOCK_TIME_PERIOD
+            )
+
+            assert result.status == ImpactStatus.ERROR
+            assert result.data is None
+            assert result.message == (
+                "The simulation API refused the local-area breakdown request "
+                f"(HTTP {status_code}): "
+                "policyengine 6.7.5 does not support local-area breakdowns"
+            )
+            # Nothing is stored, so a later request submits again once the
+            # simulation API can run the breakdown.
+            mock_reform_impacts_service.set_reform_impact.assert_not_called()
+            mock_reform_impacts_service.set_error_reform_impact.assert_not_called()
+            claim = mock_reform_impacts_service.claim_reform_impact_start
+            mock_reform_impacts_service.release_reform_impact_start.assert_called_once_with(
+                **claim.call_args.kwargs
+            )
+
+        @pytest.mark.usefixtures(
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+            "mock_reform_impacts_service",
+        )
+        def test__given_request_validation_errors_for_breakdown__names_each_field(
+            self,
+            economy_service,
+            mock_country_package_versions,
+            mock_simulation_entrypoint,
+        ):
+            mock_country_package_versions["uk"] = "2.7.8"
+            mock_simulation_entrypoint.run.side_effect = make_http_status_error(
+                422,
+                {
+                    "detail": [
+                        {
+                            "type": "extra_forbidden",
+                            "loc": ["body", "breakdown"],
+                            "msg": "Extra inputs are not permitted",
+                            "input": "local_areas",
+                        }
+                    ]
+                },
+            )
+
+            result = economy_service.get_economic_impact(
+                uk_breakdown_request(), time_period=MOCK_TIME_PERIOD
+            )
+
+            assert result.status == ImpactStatus.ERROR
+            assert result.message == (
+                "The simulation API refused the local-area breakdown request "
+                "(HTTP 422): body.breakdown: Extra inputs are not permitted"
+            )
+
+        @pytest.mark.usefixtures(
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
+        @pytest.mark.parametrize("status_code", [401, 403, 429, 500, 503])
+        def test__given_other_simulation_api_failure_for_breakdown__raises(
+            self,
+            economy_service,
+            mock_country_package_versions,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            status_code,
+        ):
+            mock_country_package_versions["uk"] = "2.7.8"
+            mock_simulation_entrypoint.run.side_effect = make_http_status_error(
+                status_code, {"detail": "gateway unavailable"}
+            )
+
+            with pytest.raises(httpx.HTTPStatusError):
+                economy_service.get_economic_impact(
+                    uk_breakdown_request(), time_period=MOCK_TIME_PERIOD
+                )
+
+            mock_reform_impacts_service.release_reform_impact_start.assert_called_once()
+
+        @pytest.mark.usefixtures(
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
+        def test__given_simulation_api_refuses_national_request__raises(
+            self,
+            economy_service,
+            mock_country_package_versions,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+        ):
+            mock_country_package_versions["uk"] = "2.7.8"
+            mock_simulation_entrypoint.run.side_effect = make_http_status_error(
+                400, {"detail": "invalid request"}
+            )
+
+            with pytest.raises(httpx.HTTPStatusError):
+                economy_service.get_economic_impact(
+                    replace(uk_breakdown_request(), options={}),
+                    time_period=MOCK_TIME_PERIOD,
+                )
+
+            mock_reform_impacts_service.release_reform_impact_start.assert_called_once()
+
     class TestGetBudgetWindowEconomicImpact:
         @pytest.fixture
         def economy_service(
@@ -1864,9 +2046,7 @@ class TestEconomyService:
         ):
             error = make_http_status_error(400, payload)
 
-            message = economy_service._build_budget_window_submission_error_message(
-                error
-            )
+            message = economy_service._build_submission_error_message(error)
 
             assert message == expected_message
 
@@ -1875,9 +2055,7 @@ class TestEconomyService:
         ):
             error = make_http_status_error(400, text="plain validation failed")
 
-            message = economy_service._build_budget_window_submission_error_message(
-                error
-            )
+            message = economy_service._build_submission_error_message(error)
 
             assert message == "plain validation failed"
 
@@ -1886,9 +2064,7 @@ class TestEconomyService:
         ):
             error = make_http_status_error(400, text="")
 
-            message = economy_service._build_budget_window_submission_error_message(
-                error
-            )
+            message = economy_service._build_submission_error_message(error)
 
             assert message == str(error)
 
@@ -2750,6 +2926,39 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["region"] == "congressional_district/CA-37"
             assert "data" not in sim_options
 
+        def test__given_local_area_breakdown__sends_breakdown(self):
+            setup_options = setup_options_for("uk", "country/scotland")
+            setup_options.options = {"breakdown": "local_areas"}
+
+            sim_options = (
+                EconomyService()
+                ._setup_sim_options(
+                    setup_options,
+                    reform_policy=self.test_reform_policy,
+                    baseline_policy=self.test_current_law_baseline_policy,
+                    time_period=2026,
+                )
+                .model_dump(mode="json")
+            )
+
+            assert sim_options["breakdown"] == "local_areas"
+            assert sim_options["region"] == "country/scotland"
+
+        @pytest.mark.parametrize("mode", ["python", "json"])
+        def test__given_no_breakdown__sends_no_breakdown_field(self, mode):
+            sim_options = (
+                EconomyService()
+                ._setup_sim_options(
+                    setup_options_for("uk", "uk"),
+                    reform_policy=self.test_reform_policy,
+                    baseline_policy=self.test_current_law_baseline_policy,
+                    time_period=2026,
+                )
+                .model_dump(mode=mode)
+            )
+
+            assert "breakdown" not in sim_options
+
     class TestSetupRegion:
         """Tests for _setup_region method.
 
@@ -2861,6 +3070,85 @@ class TestEconomicImpactSetupOptions:
                         api_version=MOCK_API_VERSION,
                     ),
                     time_period=MOCK_TIME_PERIOD,
+                )
+
+    class TestLocalAreaBreakdownSelection:
+        @pytest.mark.parametrize(
+            "region",
+            [
+                "uk",
+                "country/england",
+                "country/scotland",
+                "country/wales",
+                "country/ni",
+            ],
+        )
+        def test__given_uk_or_uk_country__accepts_breakdown(self, region):
+            gateway = MagicMock()
+
+            setup_options = EconomyService(
+                simulation_entrypoint_=gateway
+            )._build_economic_impact_setup_options(
+                uk_breakdown_request(region=region), time_period=MOCK_TIME_PERIOD
+            )
+
+            assert setup_options.options == {"breakdown": "local_areas"}
+            assert setup_options.region == region
+            assert setup_options.options_hash.startswith(
+                "[breakdown=local_areas&dataset=default&"
+            )
+
+        @pytest.mark.parametrize(
+            ("country_id", "region", "target", "message"),
+            [
+                ("us", "us", "general", "only available for UK"),
+                ("us", "state/ca", "general", "only available for UK"),
+                (
+                    "uk",
+                    "constituency/Aldershot",
+                    "general",
+                    "region uk or a UK country",
+                ),
+                (
+                    "uk",
+                    "local_authority/E07000092",
+                    "general",
+                    "region uk or a UK country",
+                ),
+                ("uk", "scotland", "general", "region uk or a UK country"),
+                ("uk", "country/", "general", "region uk or a UK country"),
+                ("uk", "uk", "cliff", "target=cliff"),
+                ("uk", "country/wales", "cliff", "target=cliff"),
+            ],
+        )
+        def test__given_unsupported_request__rejects_breakdown(
+            self, country_id, region, target, message
+        ):
+            gateway = MagicMock()
+
+            with pytest.raises(ValueError, match=message):
+                EconomyService(
+                    simulation_entrypoint_=gateway
+                )._build_economic_impact_setup_options(
+                    uk_breakdown_request(
+                        country_id=country_id, region=region, target=target
+                    ),
+                    time_period=MOCK_TIME_PERIOD,
+                )
+
+            # Rejected before the worker's SPM capability is fetched.
+            gateway.get_spm_capability.assert_not_called()
+
+        def test__given_unknown_breakdown_option__rejects_it(self):
+            request = replace(
+                uk_breakdown_request(), options={"breakdown": "constituencies"}
+            )
+
+            with pytest.raises(ValueError, match="Unknown breakdown: 'constituencies'"):
+                EconomyService(
+                    simulation_entrypoint_=MagicMock()
+                )._build_economic_impact_setup_options(
+                    request, time_period=MOCK_TIME_PERIOD
                 )
 
     class TestValidateUsRegion:

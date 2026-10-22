@@ -17,6 +17,7 @@ from policyengine_api.runtime_cache.reform_impacts import (
     ReformImpactCache,
     ReformImpactIdentity,
     ReformImpactScope,
+    _like_matches,
     reform_impact_id,
 )
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
@@ -382,6 +383,139 @@ def test_budget_window_poll_reports_running_years(
     }
     mock_simulation_entrypoint.get_budget_window_batch_by_id.assert_called_once_with(
         "batch-7"
+    )
+
+
+UK_BUNDLE_HASH_FIELDS = (
+    f"dataset=default&model_version={MOCK_MODEL_VERSION}"
+    f"&policyengine_version={MOCK_POLICYENGINE_VERSION}"
+)
+UK_NATIONAL_LOOKUP_HASH = f"[{UK_BUNDLE_HASH_FIELDS}]"
+UK_BREAKDOWN_LOOKUP_HASH = f"[breakdown=local_areas&{UK_BUNDLE_HASH_FIELDS}]"
+
+
+def _stored_options_hash(lookup_hash: str) -> str:
+    """Return the hash a submission stores once its worker app is resolved."""
+    return f"{lookup_hash[:-1]}&runtime_app_name={MOCK_RESOLVED_APP_NAME}]"
+
+
+@pytest.fixture
+def uk_package_versions(mock_country_package_versions):
+    """Give the UK the mocked country model version the US fixtures use."""
+    mock_country_package_versions["uk"] = MOCK_MODEL_VERSION
+
+
+def _uk_request(options: dict, region: str = "uk") -> EconomicImpactRequest:
+    return EconomicImpactRequest(
+        country_id="uk",
+        policy_id=MOCK_POLICY_ID,
+        baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+        region=region,
+        dataset="default",
+        options=options,
+        api_version=MOCK_API_VERSION,
+    )
+
+
+def _submitted_payload_fields(payload: dict) -> dict:
+    """Return a submitted payload without its metadata and telemetry."""
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in {"_metadata", "_telemetry"}
+    }
+
+
+@pytest.mark.usefixtures("uk_package_versions")
+def test_uk_breakdown_submission_has_its_own_hash_and_sends_breakdown(
+    economy_service, mock_simulation_entrypoint
+):
+    result = economy_service.get_economic_impact(
+        _uk_request({"breakdown": "local_areas"}), time_period="2026"
+    )
+
+    assert result == EconomicImpactResult.computing()
+    payload = mock_simulation_entrypoint.run.call_args.args[0]
+    assert _submitted_payload_fields(payload) == {
+        "spm": None,
+        "country": "uk",
+        "scope": "macro",
+        "reform": {"sample_param": {"2024-01-01.2100-12-31": 15}},
+        "baseline": {},
+        "time_period": "2026",
+        "include_cliffs": False,
+        "region": "uk",
+        "model_version": MOCK_MODEL_VERSION,
+        "policyengine_version": MOCK_POLICYENGINE_VERSION,
+        "breakdown": "local_areas",
+    }
+    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    assert [impact.options_hash for impact in stored] == [
+        _stored_options_hash(UK_BREAKDOWN_LOOKUP_HASH)
+    ]
+    assert stored[0].options_json == {"breakdown": "local_areas"}
+
+
+@pytest.mark.usefixtures("uk_package_versions")
+def test_uk_national_submission_sends_no_breakdown_and_keeps_its_hash(
+    economy_service, mock_simulation_entrypoint
+):
+    economy_service.get_economic_impact(_uk_request({}), time_period="2026")
+
+    payload = mock_simulation_entrypoint.run.call_args.args[0]
+    assert "breakdown" not in payload
+    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    assert [impact.options_hash for impact in stored] == [
+        _stored_options_hash(UK_NATIONAL_LOOKUP_HASH)
+    ]
+
+
+@pytest.mark.usefixtures("uk_package_versions")
+def test_national_and_breakdown_hashes_never_match_each_others_lookup(
+    economy_service,
+):
+    national, breakdown = (
+        economy_service._build_economic_impact_setup_options(
+            _uk_request(options), time_period="2026"
+        ).options_hash
+        for options in ({}, {"breakdown": "local_areas"})
+    )
+    assert (national, breakdown) == (
+        UK_NATIONAL_LOOKUP_HASH,
+        UK_BREAKDOWN_LOOKUP_HASH,
+    )
+
+    for lookup_hash, other_hash in ((national, breakdown), (breakdown, national)):
+        pattern = economy_service._build_options_hash_lookup_pattern(lookup_hash)
+        assert _like_matches(_stored_options_hash(lookup_hash), pattern)
+        assert not _like_matches(other_hash, pattern)
+        assert not _like_matches(_stored_options_hash(other_hash), pattern)
+
+
+@pytest.mark.usefixtures("uk_package_versions")
+def test_a_breakdown_request_never_reuses_the_national_job(
+    economy_service, mock_simulation_entrypoint
+):
+    mock_simulation_entrypoint.get_execution_id.side_effect = [
+        "national-job",
+        "breakdown-job",
+    ]
+    economy_service.get_economic_impact(_uk_request({}), time_period="2026")
+    economy_service.get_economic_impact(
+        _uk_request({"breakdown": "local_areas"}), time_period="2026"
+    )
+    # A repeated breakdown request polls the breakdown job it already started.
+    economy_service.get_economic_impact(
+        _uk_request({"breakdown": "local_areas"}), time_period="2026"
+    )
+
+    submitted = [
+        call.args[0].get("breakdown")
+        for call in mock_simulation_entrypoint.run.call_args_list
+    ]
+    assert submitted == [None, "local_areas"]
+    mock_simulation_entrypoint.get_execution_by_id.assert_called_once_with(
+        "breakdown-job"
     )
 
 

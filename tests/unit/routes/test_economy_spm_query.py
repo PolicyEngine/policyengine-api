@@ -4,12 +4,18 @@ import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import httpx
 import pytest
 from flask import Flask
 
 from policyengine_api import spm
 from policyengine_api.routes import economy_routes
+from policyengine_api.runtime_cache.core import CacheNamespace
+from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
+from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
+from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.economy_service import EconomyService
+from policyengine_api.services.reform_impacts_service import ReformImpactsService
 
 
 @pytest.fixture(params=[False, True], ids=["annual", "budget-window"])
@@ -398,3 +404,109 @@ def test_budget_window_route_rejects_a_breakdown(uk_economy_http):
     assert response.status_code == 400
     assert "breakdown" in response.get_json()["message"]
     dispatch.assert_not_called()
+
+
+def _rejection(status_code: int, payload: dict) -> httpx.HTTPStatusError:
+    request = httpx.Request(
+        "POST", "https://simulation.test/simulate/economy/comparison"
+    )
+    return httpx.HTTPStatusError(
+        f"Client error '{status_code}'",
+        request=request,
+        response=httpx.Response(status_code, json=payload, request=request),
+    )
+
+
+@pytest.fixture
+def economy_service_http(monkeypatch):
+    """Return a Flask client whose economy routes use a real economy service.
+
+    The service keeps its caches in memory and talks to a mocked simulation
+    API, so a request runs every check and the submission itself.
+    """
+    namespace = CacheNamespace("test", "api")
+    gateway = Mock()
+    gateway.resolve_app_name.return_value = ("policyengine-simulation-test", "2.0.0")
+    gateway.get_execution_id.return_value = "submitted-job"
+    policies = Mock()
+    policies.get_policy_json.return_value = {}
+    service = EconomyService(
+        policy_service_=policies,
+        reform_impacts_service_=ReformImpactsService(
+            ReformImpactCache(InMemoryCacheBackend(), namespace)
+        ),
+        budget_window_cache_=BudgetWindowCache(InMemoryCacheBackend(), namespace),
+        simulation_entrypoint_=gateway,
+    )
+    monkeypatch.setattr(economy_routes, "economy_service", service)
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(economy_routes.economy_bp)
+    return app.test_client(), gateway
+
+
+@pytest.mark.parametrize(
+    ("path", "query", "message"),
+    [
+        (
+            "/us/economy/123/over/456",
+            [("region", "us"), ("time_period", "2026")],
+            "only available for UK",
+        ),
+        (
+            UK_ANNUAL_PATH,
+            [("region", "constituency/Aldershot"), ("time_period", "2026")],
+            "region uk or a UK country",
+        ),
+        (
+            UK_ANNUAL_PATH,
+            [("region", "local_authority/E07000092"), ("time_period", "2026")],
+            "region uk or a UK country",
+        ),
+        (
+            UK_ANNUAL_PATH,
+            [*UK_ANNUAL_QUERY, ("target", "cliff")],
+            "target=cliff",
+        ),
+    ],
+    ids=["us", "constituency", "local-authority", "cliff"],
+)
+def test_annual_route_rejects_an_unsupported_breakdown_with_400(
+    economy_service_http, path, query, message
+):
+    client, gateway = economy_service_http
+
+    response = client.get(path, query_string=[*query, ("breakdown", "local_areas")])
+
+    assert response.status_code == 400
+    assert message in response.get_json()["message"]
+    gateway.run.assert_not_called()
+
+
+def test_annual_route_returns_502_when_the_simulation_api_refuses_a_breakdown(
+    economy_service_http,
+):
+    client, gateway = economy_service_http
+    gateway.run.side_effect = _rejection(
+        400, {"detail": "policyengine 6.7.5 does not support local-area breakdowns"}
+    )
+
+    response = client.get(
+        UK_ANNUAL_PATH,
+        query_string=[
+            ("region", "country/scotland"),
+            ("time_period", "2026"),
+            ("breakdown", "local_areas"),
+        ],
+    )
+
+    assert response.status_code == 502
+    assert response.get_json() == {
+        "status": "error",
+        "message": (
+            "The simulation API refused the local-area breakdown request "
+            "(HTTP 400): policyengine 6.7.5 does not support local-area breakdowns"
+        ),
+        "result": None,
+    }
+    assert gateway.run.call_args.args[0]["breakdown"] == "local_areas"

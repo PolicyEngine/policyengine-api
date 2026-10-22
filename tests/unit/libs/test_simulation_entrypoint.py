@@ -720,6 +720,79 @@ class TestSimulationAPIModal:
             assert "data_version" not in posted_payload
 
         @pytest.mark.usefixtures("mock_modal_logger")
+        @pytest.mark.parametrize(
+            ("breakdown", "expected_gateway_keys"),
+            [
+                (
+                    "local_areas",
+                    {
+                        "country",
+                        "scope",
+                        "reform",
+                        "baseline",
+                        "time_period",
+                        "region",
+                        "include_cliffs",
+                        "version",
+                        "policyengine_version",
+                        "breakdown",
+                        "_metadata",
+                        "_telemetry",
+                    },
+                ),
+                (
+                    None,
+                    {
+                        "country",
+                        "scope",
+                        "reform",
+                        "baseline",
+                        "time_period",
+                        "region",
+                        "include_cliffs",
+                        "version",
+                        "policyengine_version",
+                        "_metadata",
+                        "_telemetry",
+                    },
+                ),
+            ],
+            ids=["local-area-breakdown", "national"],
+        )
+        def test__given_uk_payload__then_posts_breakdown_only_when_set(
+            self,
+            mock_httpx_client,
+            breakdown,
+            expected_gateway_keys,
+        ):
+            mock_httpx_client.post.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data=MOCK_SUBMIT_RESPONSE_SUCCESS,
+            )
+            payload = {
+                "country": "uk",
+                "scope": "macro",
+                "reform": {},
+                "baseline": {},
+                "time_period": "2026",
+                "region": "country/scotland",
+                "include_cliffs": False,
+                "model_version": "2.132.6",
+                "policyengine_version": "6.10.0",
+                "spm": None,
+                "breakdown": breakdown,
+                "_metadata": {"dataset": "default"},
+                "_telemetry": {"capture_mode": "disabled"},
+            }
+            api = SimulationAPIModal()
+
+            api.run(payload)
+
+            posted_payload = mock_httpx_client.post.call_args.kwargs["json"]
+            assert set(posted_payload) == expected_gateway_keys
+            assert posted_payload.get("breakdown") == breakdown
+
+        @pytest.mark.usefixtures("mock_modal_logger")
         def test__given_http_error__then_raises_exception(
             self,
             mock_httpx_client,
