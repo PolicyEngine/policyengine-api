@@ -133,7 +133,7 @@ def test_rule_proof_runtime_privileges_declared() -> None:
     reads ``legacy_policy_mappings``, which the runtime role had no grant on.
     """
     runtime_before_3977 = dict.fromkeys(TABLE_ACCESS, NO_ACCESS) | {
-        "user_policies": READ_WRITE
+        "user_policy_associations": READ_WRITE
     }
     table_by_model = _table_by_model()
 

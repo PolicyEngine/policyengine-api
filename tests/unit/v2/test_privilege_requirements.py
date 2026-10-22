@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 TABLE_BY_MODEL = {
     "User": "users",
-    "UserPolicy": "user_policies",
+    "UserPolicy": "user_policy_associations",
     "LegacyPolicyMapping": "legacy_policy_mappings",
 }
 
@@ -72,8 +72,8 @@ def test_mutation_modules_also_need_select(tmp_path: Path) -> None:
     )
 
     assert _needed(path) == {
-        ("user_policies", TablePrivilege.INSERT),
-        ("user_policies", TablePrivilege.SELECT),
+        ("user_policy_associations", TablePrivilege.INSERT),
+        ("user_policy_associations", TablePrivilege.SELECT),
     }
 
 
@@ -169,5 +169,5 @@ def test_a_lock_with_of_needs_update_on_the_named_table_only(tmp_path: Path) -> 
         """,
     )
 
-    assert ("user_policies", TablePrivilege.UPDATE) in _needed(path)
+    assert ("user_policy_associations", TablePrivilege.UPDATE) in _needed(path)
     assert ("users", TablePrivilege.UPDATE) not in _needed(path)

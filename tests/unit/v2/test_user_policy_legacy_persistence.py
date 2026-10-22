@@ -44,13 +44,15 @@ SELECT_MAPPING = (
 SELECT_MAPPING_FOR_UPDATE = f"{SELECT_MAPPING} FOR UPDATE"
 MAPPING_LOOKUP = {"country_id_1": "us", "legacy_user_policy_id_1": 10}
 SELECT_MAPPED_ASSOCIATION = (
-    "SELECT user_policies.id, user_policies.created_at, user_policies.updated_at, "
-    "user_policies.user_id, user_policies.policy_id, "
-    "user_policies.legacy_policy_id, user_policies.country_id, "
-    "user_policies.name, user_policies.description, user_policies.baseline, "
-    "user_policies.provenance \nFROM user_policies \n"
-    "WHERE user_policies.id = %(id_1)s::UUID AND "
-    "user_policies.country_id = %(country_id_1)s::VARCHAR"
+    "SELECT user_policy_associations.id, user_policy_associations.created_at, "
+    "user_policy_associations.updated_at, user_policy_associations.user_id, "
+    "user_policy_associations.policy_id, "
+    "user_policy_associations.legacy_policy_id, "
+    "user_policy_associations.country_id, user_policy_associations.name, "
+    "user_policy_associations.description, user_policy_associations.baseline, "
+    "user_policy_associations.provenance \nFROM user_policy_associations \n"
+    "WHERE user_policy_associations.id = %(id_1)s::UUID AND "
+    "user_policy_associations.country_id = %(country_id_1)s::VARCHAR"
 )
 INSERT_MAPPING = (
     "INSERT INTO legacy_user_policy_mappings (id, created_at, updated_at, "

@@ -1,7 +1,7 @@
 """Good fixture: a runtime read of only the tables the runtime role is granted.
 
-The user-policy lookup reads ``user_policies``, which the runtime role holds
-SELECT on, and nothing else.
+The user-policy lookup reads ``user_policy_associations``, which the runtime
+role holds SELECT on, and nothing else.
 """
 
 from __future__ import annotations

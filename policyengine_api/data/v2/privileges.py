@@ -135,7 +135,7 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Users and their saved work (Stage 12A).
     "user_household_associations": _access(runtime=READ_WRITE),
     "user_identities": _access(runtime=READ_WRITE),
-    "user_policies": _access(runtime=READ_WRITE),
+    "user_policy_associations": _access(runtime=READ_WRITE),
     "user_report_associations": _access(runtime=READ_WRITE),
     "user_simulation_associations": _access(runtime=READ_WRITE),
     "users": _access(runtime=READ_WRITE),
