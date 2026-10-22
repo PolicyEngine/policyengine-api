@@ -226,11 +226,43 @@ def test_same_version_with_changed_content_fails_without_mutation(
         countries=(changed_us, catalog.country("uk")),
     )
 
-    with pytest.raises(CatalogPublicationError, match="differs"):
+    with pytest.raises(
+        CatalogPublicationError,
+        match=r"^the stored us catalog version 5\.0\.4 differs from the staged "
+        r"catalog in its variables$",
+    ):
         publish_catalog(publication_engine, changed)
 
     assert _identifiers(publication_engine) == before_ids
     assert _counts(publication_engine) == before_counts
+
+
+def test_stored_version_with_a_different_dataset_names_the_datasets(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+    publish_catalog(publication_engine, catalog)
+    uk = catalog.country("uk")
+    changed = replace(
+        catalog,
+        countries=(
+            catalog.country("us"),
+            replace(
+                uk,
+                datasets=tuple(
+                    replace(dataset, description="Another dataset selection")
+                    for dataset in uk.datasets
+                ),
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        CatalogPublicationError,
+        match=r"^the stored uk catalog version 5\.0\.4 differs from the staged "
+        r"catalog in its datasets$",
+    ):
+        publish_catalog(publication_engine, changed)
 
 
 def _region_rows(engine: Engine) -> list[tuple[object, ...]]:

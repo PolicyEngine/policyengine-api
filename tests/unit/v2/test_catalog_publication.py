@@ -215,10 +215,20 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
 
     catalog = normalized_catalog()
     comparisons = publication_reconciliation._comparison_pairs(catalog.country("us"))
+    assert [table_name for table_name, _staged, _stored in comparisons] == [
+        "model version",
+        "variables",
+        "parameter nodes",
+        "parameters",
+        "parameter values",
+        "datasets",
+    ]
+    statements = [
+        statement for _table_name, *pair in comparisons for statement in pair
+    ] + list(publication_reconciliation._region_comparison_pair(catalog.country("us")))
     assert all(
         isinstance(statement, sa.sql.Select) and not isinstance(statement, TextClause)
-        for pair in comparisons
-        for statement in pair
+        for statement in statements
     )
 
     class Result:
