@@ -6,7 +6,6 @@ from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v1_models import V1Base
-from policyengine_api.data.v2 import models as v2_models
 from policyengine_api.data.v2.metadata_validation import SIMULATION_SERVICE_TABLES
 from policyengine_api.data.v2.models import (
     V2_METADATA,
@@ -31,33 +30,6 @@ from policyengine_api.data.v2.models import (
 
 # Retired at Stage 12A and dropped with the simulation-domain tables.
 RETIRED_ASSOCIATION_COLUMNS = frozenset({"country", "label"})
-REMOVED_SIMULATION_MODEL_NAMES = frozenset(
-    {
-        "AggregateOutput",
-        "AggregateType",
-        "BudgetSummary",
-        "ChangeAggregate",
-        "CongressionalDistrictImpact",
-        "ConstituencyImpact",
-        "DecileImpact",
-        "DecileType",
-        "HouseholdJob",
-        "HouseholdJobStatus",
-        "Inequality",
-        "IntraDecileImpact",
-        "LocalAuthorityImpact",
-        "OutputStatus",
-        "Poverty",
-        "ProgramStatistics",
-        "Report",
-        "ReportRun",
-        "ReportRunStatus",
-        "ReportRunTrigger",
-        "Simulation",
-        "SimulationStatus",
-        "SimulationType",
-    }
-)
 
 
 def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
@@ -100,12 +72,6 @@ def test_every_metadata_table_has_one_mapped_model() -> None:
     assert SIMULATION_SERVICE_TABLES.isdisjoint(metadata_table_names)
     assert model_table_names == metadata_table_names
     assert len(_v2_mappers()) == len(metadata_table_names)
-
-
-def test_models_package_exports_no_simulation_domain_model() -> None:
-    exported_names = set(v2_models.__all__) | set(vars(v2_models))
-
-    assert REMOVED_SIMULATION_MODEL_NAMES.isdisjoint(exported_names)
 
 
 def test_kept_models_have_no_relationship_to_a_simulation_service_table() -> None:

@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 59 | 0 | 1 | 13 | 73 |
+| mechanical | 60 | 0 | 1 | 13 | 74 |
 | metric | 1 | 0 | 0 | 0 | 1 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 60 of 75 rules.
+**Blocking:** 61 of 76 rules.
 
 ## Gaps
 
@@ -207,6 +207,7 @@ flowchart LR
 | `api.reports.v1-persistence-only` | The existing report route and service import only v1 persistence. | mechanical | enforced | yes | pytest `tests/unit/v2/test_report_v1_runtime_selection.py` | `pr.yml:test` | **unproven** |
 | `api.stage12.comparison-tables-isolated` | Serving routes and services never read the Stage 12 comparison tables, and production tables never depend on them. | mechanical | enforced | yes | pytest `tests/unit/v2/test_stage12_comparison_isolation.py` | `pr.yml:test` | **unproven** |
 | `api.stage12.retirement-owned` | Retiring the Stage 12 comparison schema stays owned by a named follow-up change in the Stage 12 worker contract. | mechanical | enforced | yes | pytest `tests/unit/v2/test_stage12_comparison_isolation.py` | `pr.yml:test` | **unproven** |
+| `api.v2.simulation-tables-stay-removed` | Public API code never imports the removed simulation-domain models (household jobs, simulations, reports, report runs and their outputs), and the v2 metadata never declares their tables, which the simulation service owns in its own schema. | mechanical | enforced | yes | pytest `tests/unit/v2/test_metadata_validation.py`, `tests/unit/v2/test_simulation_domain_boundaries.py` | `pr.yml:test` | yes |
 | `api.v2.single-orm-layer` | v2 models never create a parallel SQLAlchemy ORM layer alongside SQLModel. | mechanical | enforced | yes | pytest `tests/unit/v2/test_model_persistence.py` | `pr.yml:test` | **unproven** |
 
 ```mermaid
@@ -221,6 +222,8 @@ flowchart LR
   r_api_stage12_comparison_tables_isolated("api.stage12.comparison-tables-isolated (enforced)")
   e_pytest_tests_unit_v2_test_stage12_comparison_isolation_py["pytest tests/unit/v2/test_stage12_comparison_isolation.py"]
   r_api_stage12_retirement_owned("api.stage12.retirement-owned (enforced)")
+  r_api_v2_simulation_tables_stay_removed("api.v2.simulation-tables-stay-removed (enforced)")
+  e_pytest_tests_unit_v2_test_metadata_validation_py__tests_unit_v2_test_simulation_domain_boundaries_py["pytest tests/unit/v2/test_metadata_validation.py, tests/unit/v2/test_simulation_domain_boundaries.py"]
   r_api_v2_single_orm_layer("api.v2.single-orm-layer (enforced)")
   e_pytest_tests_unit_v2_test_model_persistence_py["pytest tests/unit/v2/test_model_persistence.py"]
   r_api_catalog_extractor_import_isolation --> e_pytest_tests_unit_v2_test_catalog_extraction_py
@@ -232,6 +235,8 @@ flowchart LR
   r_api_stage12_comparison_tables_isolated --> e_pytest_tests_unit_v2_test_stage12_comparison_isolation_py
   e_pytest_tests_unit_v2_test_stage12_comparison_isolation_py --> j_CI_pr_yml_test
   r_api_stage12_retirement_owned --> e_pytest_tests_unit_v2_test_stage12_comparison_isolation_py
+  r_api_v2_simulation_tables_stay_removed --> e_pytest_tests_unit_v2_test_metadata_validation_py__tests_unit_v2_test_simulation_domain_boundaries_py
+  e_pytest_tests_unit_v2_test_metadata_validation_py__tests_unit_v2_test_simulation_domain_boundaries_py --> j_CI_pr_yml_test
   r_api_v2_single_orm_layer --> e_pytest_tests_unit_v2_test_model_persistence_py
   e_pytest_tests_unit_v2_test_model_persistence_py --> j_CI_pr_yml_test
 ```
