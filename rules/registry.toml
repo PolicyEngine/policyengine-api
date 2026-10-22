@@ -44,6 +44,10 @@ id = "ci"
 title = "CI workflows and scripts"
 
 [[category]]
+id = "dependencies"
+title = "Dependencies and uv.lock"
+
+[[category]]
 id = "process"
 title = "Process and repository hygiene"
 
@@ -1043,6 +1047,156 @@ invocation = "run_quality_guards.py"
 bad_fixture = "scripts/rules/tests/fixtures/ci_scripts/shellcheck/bad_script.sh"
 good_fixture = "scripts/rules/tests/fixtures/ci_scripts/shellcheck/good_script.sh"
 test = "scripts/rules/tests/test_ci_scripts.py::TestCiScriptsProof::test_rule_proof_shellcheck"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+# --- Dependencies and uv.lock ---------------------------------------------
+
+[[rule]]
+id = "api.dependencies.lock-committed"
+category = "dependencies"
+statement = "Every directory with a pyproject.toml has a committed uv.lock beside it, and a pull request CI job runs uv lock --check for it."
+rationale = "docs/engineering/skills/dependencies.md#we-use-uvlock"
+scope = ["pyproject.toml", "uv.lock"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "locked-installs"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "uv lock --check"
+[rule.proof]
+bad_fixture = "scripts/rules/tests/fixtures/locked_installs/lock_bad"
+good_fixture = "scripts/rules/tests/fixtures/locked_installs/lock_good"
+test = "scripts/rules/tests/test_locked_installs.py::TestLockCommittedProof::test_rule_proof_lock_committed"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
+id = "api.dependencies.install-from-lock"
+category = "dependencies"
+statement = "Every install of Python packages in a workflow, a shell script, a Makefile, a Dockerfile or a Modal image installs exactly what uv.lock pins (uv sync --frozen, uv run --frozen), unless it is a registered exception."
+rationale = "docs/engineering/skills/dependencies.md#we-install-from-uvlock"
+scope = [".github/workflows/*.yml", ".github/**/*.sh", "Makefile", "**/Dockerfile"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "locked-installs"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "scripts/rules/tests/fixtures/locked_installs/install_bad"
+good_fixture = "scripts/rules/tests/fixtures/locked_installs/install_good"
+test = "scripts/rules/tests/test_locked_installs.py::TestLockedInstallsProof::test_rule_proof_install_from_lock"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule.exception]]
+path = ".github/workflows/pr.yml"
+match = 'pip install "shellcheck-py=='
+category = "pinned-tool"
+reason = "shellcheck is a command-line tool the ci-scripts guard runs; it is not a dependency of the project."
+
+[[rule.exception]]
+path = ".github/workflows/push.yml"
+match = 'pip install "shellcheck-py=='
+category = "pinned-tool"
+reason = "shellcheck is a command-line tool the ci-scripts guard runs; it is not a dependency of the project."
+
+[[rule.exception]]
+path = ".github/scripts/install_locked_ruff.sh"
+match = 'pip install "ruff=='
+category = "pinned-tool"
+reason = "Installs the ruff version uv.lock pins, read from uv.lock, without installing the whole project for the lint job."
+
+[[rule.exception]]
+path = ".github/workflows/migrate-v1-cloud-sql.yml"
+match = 'pip install -e ".[dev]"'
+reason = "The migration scripts run with the bare python setup-python provides, against the production and staging Cloud SQL databases; moving them to uv run --frozen has not been tested against those databases."
+removal = "the job installs with uv sync --frozen and runs its scripts through uv run --frozen, after a run against the staging database succeeds"
+
+[[rule.exception]]
+path = ".github/workflows/process-v1-household-mirror-event.yml"
+match = 'pip install -e ".[dev]"'
+reason = "The operator script runs with the bare python setup-python provides, against the production and staging databases; moving it to uv run --frozen has not been tested against those databases."
+removal = "the job installs with uv sync --frozen and runs its script through uv run --frozen, after a run against the staging database succeeds"
+
+[[rule.exception]]
+path = ".github/workflows/update-policyengine-bundle.yaml"
+match = "pip install requests uv"
+reason = "The bundle updater changes uv.lock, so it runs before a matching lock exists; it installs uv itself and requests for its inline Python with setup-python's interpreter."
+removal = "the workflow installs uv with astral-sh/setup-uv at a pinned version and runs its Python through uv run --frozen"
+
+[[rule.exception]]
+path = ".github/scripts/verify_observability_collector.sh"
+match = "uv run --no-project --with grpcio --with opentelemetry-proto"
+reason = "The collector check runs in the deploy job without installing the project; grpcio and opentelemetry-proto are locked only as transitive dependencies of the project."
+removal = "the deploy job syncs the project with uv sync --frozen and the check runs through uv run --frozen"
+
+[[rule.exception]]
+path = "docker/Dockerfile"
+match = 'pip install "policyengine[models]=='
+reason = "The image packages the PolicyEngine .py bundle for interactive use, not this project; uv.lock locks this project. The bundle updater keeps the pin equal to pyproject.toml's, but ipython and the bundle's own dependencies are not pinned."
+removal = "the image installs from uv.lock (uv sync --frozen, or uv export --frozen piped to pip install --no-deps), or is removed"
+
+[[rule]]
+id = "api.dependencies.test-from-lock"
+category = "dependencies"
+statement = "Every test command in a workflow, a shell script, a Makefile or a Dockerfile runs inside the uv.lock environment, through uv run --frozen."
+rationale = "docs/engineering/skills/dependencies.md#we-test-from-uvlock"
+scope = [".github/workflows/*.yml", ".github/**/*.sh", "Makefile", "**/Dockerfile"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "locked-installs"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "scripts/rules/tests/fixtures/locked_installs/test_bad"
+good_fixture = "scripts/rules/tests/fixtures/locked_installs/test_good"
+test = "scripts/rules/tests/test_locked_installs.py::TestTestFromLockProof::test_rule_proof_test_from_lock"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
+id = "api.dependencies.scheduled-relock"
+category = "dependencies"
+statement = "A workflow on a schedule relocks every uv.lock with upgrades and opens or updates a pull request with the result."
+rationale = "docs/engineering/skills/dependencies.md#we-relock-on-a-schedule"
+scope = [".github/workflows/*.yml"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "locked-installs"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "scripts/rules/tests/fixtures/locked_installs/relock_bad"
+good_fixture = "scripts/rules/tests/fixtures/locked_installs/relock_good"
+test = "scripts/rules/tests/test_locked_installs.py::TestScheduledRelockProof::test_rule_proof_scheduled_relock"
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
 invocation = "unittest discover -s scripts/rules/tests"
