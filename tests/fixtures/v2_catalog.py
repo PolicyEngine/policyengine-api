@@ -221,6 +221,12 @@ def _model_source(
         default_value=0.0,
         adds=None,
         subtracts=None,
+        is_input_variable=True,
+        hidden_input=False,
+        module_name="household.income.employment_income",
+        adds_parameter_path=None,
+        subtracts_parameter_path=None,
+        enum_values=None,
     )
     parameter_node = SimpleNamespace(
         name="gov.example",
@@ -233,6 +239,8 @@ def _model_source(
         description="An example rate",
         data_type=float,
         unit="/1",
+        economy=True,
+        household=False,
         parameter_values=[
             SimpleNamespace(
                 value=0.1,
@@ -265,6 +273,11 @@ def _model_source(
         region_datasets=region_datasets,
         data_package=data_package,
     )
+    version_holder.entities = [
+        SimpleNamespace(key="person", plural="people", is_person=True),
+        SimpleNamespace(key="household", plural="households", is_person=False),
+    ]
+    version_holder.basic_inputs = ["employment_income"]
     version_holder.variables = [variable]
     version_holder.parameter_nodes = [parameter_node]
     version_holder.parameters = [parameter]
