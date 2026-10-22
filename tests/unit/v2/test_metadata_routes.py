@@ -1106,3 +1106,52 @@ def test_default_dependencies_share_one_response_cache() -> None:
 
     assert isinstance(first.v2_metadata_response_cache, MetadataResponseCache)
     assert first.v2_metadata_response_cache is second.v2_metadata_response_cache
+
+
+@pytest.mark.parametrize(
+    ("now", "query", "expected_cache_control"),
+    [
+        (
+            datetime(2026, 12, 31, 23, 0, tzinfo=UTC),
+            "&policyengine_version=4.20.3&current=true",
+            "public, max-age=3600",
+        ),
+        (
+            datetime(2026, 12, 31, 23, 58, tzinfo=UTC),
+            "&current=true",
+            "public, max-age=120",
+        ),
+        (
+            datetime(2026, 6, 1, 12, 0, tzinfo=UTC),
+            "&current=true",
+            "public, max-age=300",
+        ),
+        (
+            datetime(2026, 12, 31, 23, 0, tzinfo=UTC),
+            "&policyengine_version=4.20.3&current=false",
+            "public, max-age=86400",
+        ),
+        (
+            datetime(2026, 12, 31, 23, 0, tzinfo=UTC),
+            "&policyengine_version=4.20.3",
+            "public, max-age=86400",
+        ),
+    ],
+)
+def test_current_parameter_values_are_reused_only_until_the_next_utc_day(
+    monkeypatch: pytest.MonkeyPatch,
+    now: datetime,
+    query: str,
+    expected_cache_control: str,
+) -> None:
+    from policyengine_api.fastapi_routes.v2.metadata import common
+
+    monkeypatch.setattr(common, "utc_now", lambda: now)
+    results, _ids = _resource_results()
+
+    response = _client(lambda: ResourceReader(results)).get(
+        f"/v2/parameter-values?country_id=us{query}"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == expected_cache_control

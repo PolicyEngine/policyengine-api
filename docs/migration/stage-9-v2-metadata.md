@@ -80,12 +80,16 @@ from the read and unknown parameters were ignored.
 Every successful metadata response carries a strong `ETag`, a hash of its
 exact body, and `Cache-Control: public`. A request that names its catalog with
 `policyengine_version` may be reused for a day (`max-age=86400`): a published
-catalog version never changes, so only a change to the route's response format
-can change such a response, and the `ETag` lets a client revalidate after the
-day. A request without it selects the running version, which changes on
-deploy, and may be reused for five minutes (`max-age=300`). A request whose
-`If-None-Match` names the current `ETag` (strong or weak form, alone or in a
-list) gets HTTP 304 with no body. Error responses carry neither header.
+catalog version never changes, so such a response changes only with the
+route's response format or with the day it is read on, and the `ETag` lets a
+client revalidate after the day. A request without it selects the running
+version, which changes on deploy, and may be reused for five minutes
+(`max-age=300`). A response that depends on the request's UTC day, which is
+`GET /v2/parameter-values?current=true` (the values in effect today), may be
+reused only until the next UTC midnight, whichever lifetime would otherwise
+apply. A request whose `If-None-Match` names the current `ETag` (strong or
+weak form, alone or in a list) gets HTTP 304 with no body. Error responses
+carry neither header.
 
 Each API process also keeps the serialized bodies of `/v2/model-catalog` and
 `/v2/model-catalog/variables` once built, for up to eight route, country and
