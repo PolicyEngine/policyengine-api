@@ -157,9 +157,81 @@ def _remove_a_country_from_the_references(
     del references["uk"]
 
 
+def _remove_the_dataset_map(
+    models: dict[str, SimpleNamespace], _references: References
+) -> None:
+    models["us"].release_manifest.datasets = None
+
+
+def _remove_the_reviewed_default_dataset(
+    models: dict[str, SimpleNamespace], _references: References
+) -> None:
+    del models["us"].release_manifest.datasets["populace_us_2024"]
+
+
+def _remove_the_region_dataset_map(
+    models: dict[str, SimpleNamespace], _references: References
+) -> None:
+    models["us"].release_manifest.region_datasets = None
+
+
+def _remove_a_region_dataset_path(
+    models: dict[str, SimpleNamespace], _references: References
+) -> None:
+    models["us"].release_manifest.region_datasets["state"].path_template = None
+
+
+def _remove_an_artifact_path(
+    models: dict[str, SimpleNamespace], _references: References
+) -> None:
+    models["us"].release_manifest.datasets["populace_us_2024"].path = None
+
+
+def _remove_every_artifact_revision(
+    models: dict[str, SimpleNamespace], _references: References
+) -> None:
+    manifest = models["us"].release_manifest
+    manifest.datasets["populace_us_2024"].revision = None
+    manifest.data_package.release_manifest_revision = None
+    manifest.data_package.version = None
+
+
+def _remove_every_artifact_repository(
+    models: dict[str, SimpleNamespace], _references: References
+) -> None:
+    models["us"].release_manifest.data_package.repo_id = None
+
+
 @pytest.mark.parametrize(
     ("break_sources", "message"),
     [
+        (_remove_the_dataset_map, "^us release manifest has no dataset map$"),
+        (
+            _remove_the_reviewed_default_dataset,
+            "^us release does not certify populace_us_2024$",
+        ),
+        (
+            _remove_the_region_dataset_map,
+            "^us release manifest has no region dataset map$",
+        ),
+        (
+            _remove_a_region_dataset_path,
+            "^us state region dataset must be a non-empty string$",
+        ),
+        (
+            _remove_an_artifact_path,
+            "^us release artifact populace_us_2024 path must be a non-empty string$",
+        ),
+        (
+            _remove_every_artifact_revision,
+            "^us release artifact populace_us_2024 revision must be a non-empty "
+            "string$",
+        ),
+        (
+            _remove_every_artifact_repository,
+            "^us release artifact populace_us_2024 repository must be a non-empty "
+            "string$",
+        ),
         (
             _point_national_region_at_another_dataset,
             "^uk national region does not use the reviewed dataset$",

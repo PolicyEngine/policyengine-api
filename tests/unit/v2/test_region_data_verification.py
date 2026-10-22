@@ -226,3 +226,18 @@ def test_reports_an_artifact_structure_error_with_its_own_message() -> None:
         r"checked: household group holds no data frame$",
     ):
         _verify(inspector, countries=("us",))
+
+
+def test_passes_on_a_verification_error_the_inspector_raises() -> None:
+    inspector = FakeInspector(failure=RegionDataVerificationError("already explained"))
+
+    with pytest.raises(RegionDataVerificationError, match=r"^already explained$"):
+        _verify(inspector, countries=("us",))
+
+
+def test_reads_the_checked_in_row_lookups_by_default() -> None:
+    inspector = FakeInspector(matrix_rows={"parliamentary_constituency_weights": 650})
+
+    verify_region_data(normalized_catalog(), inspector, countries=("uk",))
+
+    assert ("rows", "parliamentary_constituency_weights") in inspector.reads
