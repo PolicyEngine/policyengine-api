@@ -43,8 +43,10 @@ def build_core_health_router(
     """
     router = APIRouter()
 
-    @router.get(
+    # HEAD is accepted too: uptime monitors and `curl -I` send it.
+    @router.api_route(
         "/health",
+        methods=["GET", "HEAD"],
         response_model=HealthResponse,
         responses={
             503: {

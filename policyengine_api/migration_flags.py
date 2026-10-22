@@ -44,6 +44,9 @@ DEFAULT_DB_SOURCE = "cloud_sql"
 DEFAULT_SIM_ENTRYPOINT = "old_gateway_direct"
 DEFAULT_SIM_COMPUTE_BACKEND = "old_gateway"
 
+# Removed paths ("/", the liveness and readiness checks, "/specification")
+# keep their groups, so requests that still arrive for them are labelled in
+# the request logs.
 ROUTE_GROUP_BY_PATH = {
     "": "home",
     "/": "home",
