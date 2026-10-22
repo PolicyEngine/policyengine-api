@@ -68,7 +68,11 @@ from policyengine_api.services.budget_window_cache import (
     BudgetWindowCache,
     BudgetWindowCacheState,
 )
-from policyengine_api.services.economic_impact_request import EconomicImpactRequest
+from policyengine_api.services.economic_impact_request import (
+    LOCAL_AREA_BREAKDOWN,
+    EconomicImpactRequest,
+    LocalAreaBreakdown,
+)
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactExecution,
@@ -107,7 +111,6 @@ BUDGET_WINDOW_MAX_ACTIVE_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_ACTIVE_YE
 BUDGET_WINDOW_MAX_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_YEARS
 BUDGET_WINDOW_MAX_END_YEAR = budget_window_utils.BUDGET_WINDOW_MAX_END_YEAR
 BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES = {400, 422}
-LOCAL_AREA_BREAKDOWN = "local_areas"
 # Statuses with which the simulation API refuses a breakdown it cannot run:
 # 400 from a gateway whose routed .py release does not declare breakdowns, and
 # 422 from an entry deployment that does not know the field.
@@ -165,7 +168,7 @@ class SimulationOptions(BaseModel):
     model_version: str | None = None
     policyengine_version: str | None = None
     # Left out of the payload unless set, so national submissions are unchanged.
-    breakdown: Literal["local_areas"] | None = Field(
+    breakdown: LocalAreaBreakdown | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
 
@@ -1096,7 +1099,7 @@ class EconomyService:
         self,
         error: httpx.HTTPStatusError,
         *,
-        breakdown: str | None,
+        breakdown: LocalAreaBreakdown | None,
     ) -> EconomicImpactResult | None:
         """Return an error result when the simulation API refuses a breakdown.
 
