@@ -1,0 +1,65 @@
+name: Telemetry error issues
+
+# Each day at 00:45 US Eastern, report the previous Eastern calendar day's
+# error groups from the central telemetry log bucket as GitHub issues. 00:45
+# is never skipped or repeated when the clocks change, and it avoids the
+# delays GitHub has for schedules at the start of an hour.
+on:
+  schedule:
+    - cron: "45 0 * * *"
+      timezone: "America/New_York"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Query and group errors without changing any issue"
+        type: boolean
+        default: true
+      report_date:
+        description: "Eastern calendar day to report, as YYYY-MM-DD (default: the previous day)"
+        type: string
+        default: ""
+
+concurrency:
+  group: telemetry-error-issues
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync telemetry error issues
+    if: github.repository == 'PolicyEngine/policyengine-api'
+    runs-on: ubuntu-latest
+    # Deployments to this environment are limited to master, which keeps other
+    # branches from authenticating as its service account.
+    environment: telemetry-error-issues
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Require master branch
+        if: github.ref != 'refs/heads/master'
+        run: exit 1
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.TELEMETRY_ERROR_ISSUES_SERVICE_ACCOUNT }}
+          token_format: access_token
+          create_credentials_file: false
+      - name: Sync telemetry error issues
+        env:
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          TELEMETRY_ERROR_FINGERPRINT_KEY: ${{ secrets.TELEMETRY_ERROR_FINGERPRINT_KEY }}
+          OBSERVABILITY_PROJECT_ID: ${{ vars.OBSERVABILITY_PROJECT_ID }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          REPORT_DATE: ${{ inputs.report_date }}
+        run: bash .github/scripts/sync_telemetry_error_issues.sh
