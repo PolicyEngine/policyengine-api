@@ -465,11 +465,16 @@ def economy_service_http(monkeypatch):
         ),
         (
             UK_ANNUAL_PATH,
+            [("region", "country/france"), ("time_period", "2026")],
+            "region uk or a UK country",
+        ),
+        (
+            UK_ANNUAL_PATH,
             [*UK_ANNUAL_QUERY, ("target", "cliff")],
             "target=cliff",
         ),
     ],
-    ids=["us", "constituency", "local-authority", "cliff"],
+    ids=["us", "constituency", "local-authority", "france", "cliff"],
 )
 def test_annual_route_rejects_an_unsupported_breakdown_with_400(
     economy_service_http, path, query, message
@@ -480,6 +485,23 @@ def test_annual_route_rejects_an_unsupported_breakdown_with_400(
 
     assert response.status_code == 400
     assert message in response.get_json()["message"]
+    gateway.run.assert_not_called()
+
+
+def test_annual_route_rejects_a_blank_country_breakdown_with_400(
+    economy_service_http,
+):
+    client, gateway = economy_service_http
+
+    # A raw query string, so %20 reaches Flask encoded and is decoded to a space.
+    response = client.get(
+        UK_ANNUAL_PATH,
+        query_string="region=country/%20&time_period=2026&breakdown=local_areas",
+    )
+
+    assert response.status_code == 400
+    assert "region uk or a UK country" in response.get_json()["message"]
+    assert "'country/ '" in response.get_json()["message"]
     gateway.run.assert_not_called()
 
 

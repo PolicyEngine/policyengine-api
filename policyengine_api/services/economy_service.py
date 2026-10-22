@@ -20,6 +20,8 @@ from policyengine_api.constants import (
     EXECUTION_STATUSES_PENDING,
     EXECUTION_STATUSES_SUCCESS,
     POLICYENGINE_VERSION,
+    UK_COUNTRY_REGIONS,
+    UK_REGION_REGISTRY_CODES,
     get_economy_impact_cache_version,
 )
 from policyengine_api.data.congressional_districts import (
@@ -110,9 +112,15 @@ LOCAL_AREA_BREAKDOWN = "local_areas"
 # 400 from a gateway whose routed .py release does not declare breakdowns, and
 # 422 from an entry deployment that does not know the field.
 LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES = frozenset({400, 422})
-UK_COUNTRY_REGION_PREFIX = "country/"
-# UK regions whose public metadata name differs from .py's region registry code.
-UK_REGISTRY_REGION_CODES = {"country/ni": "country/northern_ireland"}
+# The regions a breakdown can cover: the UK, each UK country the metadata
+# publishes, and .py's own code for a country the metadata names differently.
+LOCAL_AREA_BREAKDOWN_REGIONS = frozenset(
+    {
+        "uk",
+        *(name for name, _label in UK_COUNTRY_REGIONS),
+        *UK_REGION_REGISTRY_CODES.values(),
+    }
+)
 BUDGET_WINDOW_CLAIM_ATTEMPTS = 3
 REFORM_IMPACT_START_CLAIM_ATTEMPTS = 3
 # A budget-window progress message names this many computing years and counts
@@ -1056,10 +1064,12 @@ class EconomyService:
     def _validate_breakdown(impact_request: EconomicImpactRequest) -> None:
         """Reject a local-area breakdown the simulation API has no run for.
 
-        The breakdown covers the whole UK or one UK country, so it needs region
-        ``uk`` or ``country/*``: a constituency or local authority is already a
-        single area. It computes no cliff impacts, so ``target=cliff`` is
-        refused too. Raise ValueError, which the route returns as 400.
+        The breakdown covers the whole UK or one UK country, so the region must
+        be exactly one of ``LOCAL_AREA_BREAKDOWN_REGIONS``: a constituency or
+        local authority is already a single area, and any other spelling would
+        fail in the simulation API instead. It computes no cliff impacts, so
+        ``target=cliff`` is refused too. Raise ValueError, which the route
+        returns as 400.
         """
         breakdown = impact_request.options.get("breakdown")
         if breakdown is None:
@@ -1071,14 +1081,11 @@ class EconomyService:
             msg = "breakdown=local_areas is only available for UK economy calculations"
             raise ValueError(msg)
         region = impact_request.region
-        country_name = region.removeprefix(UK_COUNTRY_REGION_PREFIX)
-        is_uk_country = (
-            country_name != region and bool(country_name) and "/" not in country_name
-        )
-        if region != "uk" and not is_uk_country:
+        if region not in LOCAL_AREA_BREAKDOWN_REGIONS:
+            countries = ", ".join(name for name, _label in UK_COUNTRY_REGIONS)
             msg = (
                 "breakdown=local_areas needs region uk or a UK country "
-                f"(country/...), not {region!r}"
+                f"({countries}), not {region!r}"
             )
             raise ValueError(msg)
         if impact_request.target == "cliff":
@@ -1970,7 +1977,7 @@ class EconomyService:
             self._validate_us_region(region)
 
         if country_id == "uk":
-            return UK_REGISTRY_REGION_CODES.get(region, region)
+            return UK_REGION_REGISTRY_CODES.get(region, region)
         return region
 
     def _validate_us_region(self, region: str) -> None:

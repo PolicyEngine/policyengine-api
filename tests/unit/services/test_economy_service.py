@@ -1335,6 +1335,35 @@ class TestEconomyService:
             "mock_datetime",
             "mock_submission_claim_id",
         )
+        @pytest.mark.parametrize(
+            "region", ["constituency/Aldershot", "country/france", "country/ "]
+        )
+        def test__given_invalid_breakdown__refuses_it_before_any_cache_read(
+            self,
+            economy_service,
+            mock_country_package_versions,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            region,
+        ):
+            mock_country_package_versions["uk"] = "2.7.8"
+
+            with pytest.raises(ValueError, match="region uk or a UK country"):
+                economy_service.get_economic_impact(
+                    uk_breakdown_request(region=region), time_period=MOCK_TIME_PERIOD
+                )
+
+            assert mock_reform_impacts_service.mock_calls == []
+            mock_simulation_entrypoint.resolve_app_name.assert_not_called()
+            mock_simulation_entrypoint.run.assert_not_called()
+
+        @pytest.mark.usefixtures(
+            "mock_policyengine_version",
+            "mock_policy_service",
+            "mock_logger",
+            "mock_datetime",
+            "mock_submission_claim_id",
+        )
         @pytest.mark.parametrize("status_code", [400, 422])
         def test__given_simulation_api_refuses_breakdown__returns_error_without_storing(
             self,
@@ -3118,6 +3147,7 @@ class TestEconomicImpactSetupOptions:
                 "country/scotland",
                 "country/wales",
                 "country/ni",
+                "country/northern_ireland",
             ],
         )
         def test__given_uk_or_uk_country__accepts_breakdown(self, region):
@@ -3154,6 +3184,15 @@ class TestEconomicImpactSetupOptions:
                 ),
                 ("uk", "scotland", "general", "region uk or a UK country"),
                 ("uk", "country/", "general", "region uk or a UK country"),
+                # A query value of country/%20 reaches the service decoded.
+                ("uk", "country/ ", "general", "region uk or a UK country"),
+                ("uk", "country/%20", "general", "region uk or a UK country"),
+                ("uk", "country/NI", "general", "region uk or a UK country"),
+                ("uk", "country/france", "general", "region uk or a UK country"),
+                ("uk", "Country/scotland", "general", "region uk or a UK country"),
+                ("uk", "country/scotland ", "general", "region uk or a UK country"),
+                ("uk", "UK", "general", "region uk or a UK country"),
+                ("uk", " uk", "general", "region uk or a UK country"),
                 ("uk", "uk", "cliff", "target=cliff"),
                 ("uk", "country/wales", "cliff", "target=cliff"),
             ],

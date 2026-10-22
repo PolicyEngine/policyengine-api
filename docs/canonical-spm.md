@@ -329,9 +329,11 @@ parser.
 local-authority impacts only. It is a calculation option, so the request has
 its own options hash and its own cached result. Any other value returns HTTP
 400, and requests without `breakdown` keep their existing options hash. It is
-accepted only for the UK, with `region` `uk` or a UK country (`country/*`),
-and not with `target=cliff`; other requests return HTTP 400 before anything is
-submitted. The API sends `"breakdown": "local_areas"` to the simulation API,
+accepted only for the UK, with `region` exactly `uk` or one UK country
+(`country/england`, `country/scotland`, `country/wales` or `country/ni`, or
+.py's `country/northern_ireland`), and not with `target=cliff`; other
+requests, including other spellings of those regions, return HTTP 400 before
+anything is read from the cache or submitted. The API sends `"breakdown": "local_areas"` to the simulation API,
 which computes the impacts in a run separate from the national result, and
 returns its result (`kind: "local_areas"`) like any other economy result. If
 the simulation API refuses the request with HTTP 400 or 422, because the

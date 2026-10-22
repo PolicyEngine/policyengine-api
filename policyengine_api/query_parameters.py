@@ -173,7 +173,8 @@ class AnnualEconomyQuery(EconomyQuery):
         description=(
             "local_areas computes only the UK constituency and local-authority "
             "impacts, in a run separate from the national result. UK only, "
-            "with region uk or country/*, and not with target=cliff"
+            "with region uk or one UK country (country/england, country/scotland, "
+            "country/wales or country/ni), and not with target=cliff"
         ),
     )
 

@@ -284,6 +284,17 @@ REGION_PREFIXES = {
     ],
 }
 
+# The UK country regions the metadata publishes, as (region name, label).
+UK_COUNTRY_REGIONS = (
+    ("country/england", "England"),
+    ("country/scotland", "Scotland"),
+    ("country/wales", "Wales"),
+    ("country/ni", "Northern Ireland"),
+)
+# UK regions whose metadata name differs from the code .py's UK region
+# registry uses, mapped to that code.
+UK_REGION_REGISTRY_CODES = {"country/ni": "country/northern_ireland"}
+
 # Modal simulation API status values
 MODAL_EXECUTION_STATUS_SUBMITTED = "submitted"
 MODAL_EXECUTION_STATUS_RUNNING = "running"
