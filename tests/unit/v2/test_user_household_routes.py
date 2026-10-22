@@ -9,6 +9,9 @@ import pytest
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
+from policyengine_api.services.v2.associations.validators import (
+    AssociationReferenceConflictError,
+)
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
 )
@@ -141,17 +144,26 @@ def test_list_and_patch_use_the_session_user_and_legacy_fields() -> None:
         f"/v2/user-households/{ASSOCIATION_ID}?country_id=us",
         json={"legacy_household_id": 124},
     )
-    reassigned = client.patch(
-        f"/v2/user-households/{ASSOCIATION_ID}?country_id=us",
-        json={"household_id": str(HOUSEHOLD_ID)},
-    )
     user_filter = client.get(f"/v2/user-households?country_id=us&user_id={OWNER_ID}")
+    invalid_patches = [
+        client.patch(
+            f"/v2/user-households/{ASSOCIATION_ID}?country_id=us",
+            json=body,
+        )
+        for body in (
+            {"household_id": None},
+            {"household_id": "not-a-uuid"},
+            {"user_id": str(OWNER_ID)},
+            {"legacy_household_id": None},
+            {},
+        )
+    ]
 
     assert page.status_code == 200
     assert page.json()["result"]["has_more"] is True
     assert patched.status_code == 200
-    assert reassigned.status_code == 422
     assert user_filter.status_code == 422
+    assert [response.status_code for response in invalid_patches] == [422] * 5
     assert service.calls[0] == (
         "list_user_households",
         {
@@ -166,6 +178,22 @@ def test_list_and_patch_use_the_session_user_and_legacy_fields() -> None:
     )
     assert service.calls[1][1]["association_input"].legacy_household_id == 124
     assert len(service.calls) == 2
+
+
+def test_patch_repoints_to_a_v2_household_reference() -> None:
+    client, service, flask_calls = _client()
+
+    repointed = client.patch(
+        f"/v2/user-households/{ASSOCIATION_ID}?country_id=us",
+        json={"household_id": str(HOUSEHOLD_ID)},
+    )
+
+    assert repointed.status_code == 200
+    assert service.calls[0][0] == "patch_user_household"
+    association_input = service.calls[0][1]["association_input"]
+    assert association_input.household_id == HOUSEHOLD_ID
+    assert association_input.model_fields_set == {"household_id"}
+    assert flask_calls["count"] == 0
 
 
 @pytest.mark.parametrize(
@@ -194,6 +222,37 @@ def test_failures_map_to_secret_safe_typed_errors(
     assert response.json()["status"] == "error"
     assert "secret" not in response.text
     assert "credential" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("error", "status", "message"),
+    [
+        (AssociationCountryConflictError("different country"), 400, "country"),
+        (
+            AssociationReferenceConflictError("household_id mismatch"),
+            400,
+            "mismatch",
+        ),
+        (AssociationHouseholdNotFoundError("household was not found"), 404, "not"),
+        (UserHouseholdNotFoundError("association was not found"), 404, "not"),
+        (LegacyReferenceNotFoundError("v1 household 9 was not found"), 422, "v1"),
+    ],
+)
+def test_repoint_failures_map_to_typed_errors(
+    error: Exception, status: int, message: str
+) -> None:
+    service = RecordingService(_result)
+    service.error = error
+    client, _service, _flask_calls = _client(service)
+
+    response = client.patch(
+        f"/v2/user-households/{ASSOCIATION_ID}?country_id=us",
+        json={"household_id": str(HOUSEHOLD_ID), "legacy_household_id": 9},
+    )
+
+    assert response.status_code == status
+    assert response.json()["status"] == "error"
+    assert message in response.json()["message"].lower()
 
 
 def test_patch_preflight_and_native_routes_avoid_cloud_sql_and_flask(
@@ -241,7 +300,9 @@ def test_openapi_publishes_signed_in_household_contract() -> None:
     patch = schema["paths"]["/v2/user-households/{association_id}"]["patch"]
     patch_ref = patch["requestBody"]["content"]["application/json"]["schema"]["$ref"]
     patch_schema = schema["components"]["schemas"][patch_ref.rsplit("/", 1)[-1]]
+    assert patch_schema["additionalProperties"] is False
     assert set(patch_schema["properties"]) == {
+        "household_id",
         "legacy_household_id",
         "name",
         "description",
