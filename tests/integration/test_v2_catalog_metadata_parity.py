@@ -18,6 +18,8 @@ import pytest
 from policyengine_api.data.v2.catalog.extraction import normalize_model_metadata
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
+
     from policyengine_api.data.v2.catalog.extraction import ModelMetadata
 
 pytestmark = pytest.mark.skipif(
@@ -49,6 +51,20 @@ def _report(mismatches: list[str]) -> str:
     return f"{len(mismatches)} mismatches, first {min(len(mismatches), 20)}:\n{shown}"
 
 
+def _typed_enum_values(
+    values: Iterable[Mapping[str, Any]],
+) -> list[tuple[str, Any, str]]:
+    """Return each enum value with its label and the label's type name.
+
+    Comparing the type name as well keeps 1, 1.0 and True apart, which ``==``
+    treats as equal.
+    """
+    return [
+        (value["value"], value["label"], type(value["label"]).__name__)
+        for value in values
+    ]
+
+
 def test_entities_and_basic_inputs_match_v1(
     country_pair: tuple[ModelMetadata, Any],
 ) -> None:
@@ -75,11 +91,16 @@ def test_variable_flags_modules_enum_labels_and_parts_match_v1(
     for variable in metadata.variables:
         v1_variable = v1_variables[variable.name]
         enum_values = (
-            [
+            _typed_enum_values(
                 {"value": item.value, "label": item.label}
                 for item in variable.enum_values
-            ]
+            )
             if variable.enum_values is not None
+            else None
+        )
+        v1_enum_values = (
+            _typed_enum_values(v1_variable["possibleValues"])
+            if "possibleValues" in v1_variable
             else None
         )
         comparisons = {
@@ -89,7 +110,7 @@ def test_variable_flags_modules_enum_labels_and_parts_match_v1(
             ),
             "hidden_input": (variable.hidden_input, v1_variable["hidden_input"]),
             "module_name": (variable.module_name, v1_variable["moduleName"]),
-            "enum_values": (enum_values, v1_variable.get("possibleValues")),
+            "enum_values": (enum_values, v1_enum_values),
             "adds_parameter_path": (
                 variable.adds_parameter_path,
                 v1_variable["adds"] if isinstance(v1_variable["adds"], str) else None,
