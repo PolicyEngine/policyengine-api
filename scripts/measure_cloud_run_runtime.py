@@ -38,7 +38,7 @@ except ImportError:  # direct execution: python scripts/measure_cloud_run_runtim
 
 METADATA_PATH = "/us/metadata"
 CALCULATE_PATH = "/us/calculate"
-READINESS_PATH = "/readiness-check"
+READINESS_PATH = "/health"
 
 OUTCOME_OK = "ok"
 OUTCOME_HTTP_4XX = "http_4xx"
@@ -269,7 +269,7 @@ def main() -> int:
         "--readiness-timeout",
         type=float,
         default=420.0,
-        help="seconds to wait for /readiness-check (cold imports take ~3 min)",
+        help="seconds to wait for /health (cold imports take ~3 min)",
     )
     args = parser.parse_args()
 

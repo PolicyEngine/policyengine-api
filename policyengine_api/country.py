@@ -27,9 +27,8 @@ from policyengine_core.simulations import Simulation
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from policyengine_core.types import ArrayLike
 
-from policyengine_api.constants import (
-    get_bundle_default_dataset_option,
-)
+from policyengine_api import constants
+from policyengine_api.constants import get_bundle_default_dataset_option
 from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
 )
@@ -42,6 +41,7 @@ from policyengine_api.spm import (
     spm_metadata,
 )
 from policyengine_api.utils import get_safe_json
+from policyengine_api.utils.get_current_law import get_current_law_policy_id
 
 logger = logging.getLogger(__name__)
 
@@ -157,13 +157,7 @@ class PolicyEngineCountry:
                 "entities": self.build_entities(),
                 "variableModules": self.tax_benefit_system.variable_module_metadata,
                 "economy_options": self.build_microsimulation_options(),
-                "current_law_id": {
-                    "uk": 1,
-                    "us": 2,
-                    "ca": 3,
-                    "ng": 4,
-                    "il": 5,
-                }[self.country_id],
+                "current_law_id": get_current_law_policy_id(self.country_id),
                 "basicInputs": self.tax_benefit_system.basic_inputs,
                 "modelled_policies": self.tax_benefit_system.modelled_policies,
                 "spm": spm_metadata(self.country_id),
@@ -316,39 +310,6 @@ class PolicyEngineCountry:
                 {"name": 2022, "label": "2022"},
             ]
             datasets = [get_bundle_default_dataset_option("us")]
-            options["region"] = region
-            options["time_period"] = time_period
-            options["datasets"] = datasets
-        elif self.country_id == "ca":
-            region = [
-                {"name": "ca", "label": "Canada"},
-            ]
-            time_period = [
-                {"name": 2023, "label": "2023"},
-            ]
-            datasets = [{}]
-            options["region"] = region
-            options["time_period"] = time_period
-            options["datasets"] = datasets
-        elif self.country_id == "ng":
-            region = [
-                {"name": "ng", "label": "Nigeria"},
-            ]
-            time_period = [
-                {"name": 2023, "label": "2023"},
-            ]
-            datasets = [{}]
-            options["region"] = region
-            options["time_period"] = time_period
-            options["datasets"] = datasets
-        elif self.country_id == "il":
-            region = [
-                {"name": "il", "label": "Israel"},
-            ]
-            time_period = [
-                {"name": 2023, "label": "2023"},
-            ]
-            datasets = [{}]
             options["region"] = region
             options["time_period"] = time_period
             options["datasets"] = datasets
@@ -747,10 +708,10 @@ def get_requested_computations(
     return requested_computation_data
 
 
+# One loaded model for each country in the one country list.
 COUNTRIES = {
-    "uk": PolicyEngineCountry("policyengine_uk", "uk"),
-    "us": PolicyEngineCountry("policyengine_us", "us"),
-    "ca": PolicyEngineCountry("policyengine_canada", "ca"),
-    "ng": PolicyEngineCountry("policyengine_ng", "ng"),
-    "il": PolicyEngineCountry("policyengine_il", "il"),
+    country_id: PolicyEngineCountry(package_name, country_id)
+    for country_id, package_name in zip(
+        constants.COUNTRIES, constants.COUNTRY_PACKAGE_NAMES, strict=True
+    )
 }

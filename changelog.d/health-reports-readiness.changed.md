@@ -1,0 +1,1 @@
+`/health` now answers 503 `{"status": "not_ready"}` until the startup warmup has finished and while the runtime configuration is invalid, and 200 `{"status": "healthy"}` after. The Cloud Run startup probe and the deployment health checks poll it instead of `/readiness-check`, and `/liveness-check` and `/readiness-check` are removed.

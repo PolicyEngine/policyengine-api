@@ -11,7 +11,7 @@ def test_baseline_summary_computes_error_rate_and_latency():
         capture_migration_baseline.ProbeResult(
             name="health",
             method="GET",
-            path="/readiness-check",
+            path="/health",
             status_code=200,
             latency_ms=10.0,
             ok=True,
@@ -81,9 +81,7 @@ def test_run_probes_uses_lightweight_baseline_routes(monkeypatch):
 
     assert [(result.method, result.path) for result in results] == requests
     assert requests == [
-        ("GET", "/liveness-check"),
-        ("GET", "/readiness-check"),
-        ("GET", "/specification"),
+        ("GET", "/health"),
         ("GET", "/us/metadata"),
         ("GET", "/uk/metadata"),
     ]
@@ -113,9 +111,9 @@ def test_run_probes_treats_unexpected_4xx_as_failure(monkeypatch):
         capture_migration_baseline.run_probes("https://api.test", 1)
     )
 
-    assert summary["request_count"] == 5
-    assert summary["failure_count"] == 5
-    assert summary["status_counts"] == {"404": 5}
+    assert summary["request_count"] == 3
+    assert summary["failure_count"] == 3
+    assert summary["status_counts"] == {"404": 3}
 
 
 def test_run_simulation_gateway_probe_records_completion(monkeypatch):

@@ -187,7 +187,6 @@ uv run pytest \
   tests/unit/services/test_policy_mirroring.py \
   tests/unit/services/test_user_policy_mirroring.py \
   tests/unit/routes/test_policy_dual_write_routes.py \
-  tests/unit/routes/test_user_policy_dual_write_routes.py \
   tests/unit/test_migration_flags.py \
   tests/unit/test_readiness.py \
   tests/contract -q
@@ -221,8 +220,7 @@ uv run pytest \
   tests/contract/test_v1_route_contracts.py \
   tests/unit/services/test_policy_service.py \
   tests/unit/services/test_user_policy_service.py \
-  tests/unit/routes/test_policy_dual_write_routes.py \
-  tests/unit/routes/test_user_policy_dual_write_routes.py -q
+  tests/unit/routes/test_policy_dual_write_routes.py -q
 ```
 
 Finally regenerate and validate migration contracts:

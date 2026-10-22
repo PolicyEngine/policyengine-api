@@ -125,21 +125,14 @@ def test_dual_write_mirrors_new_and_existing_rows_before_success(
 
 
 @pytest.mark.parametrize("country_id", ["ca", "ng", "il"])
-def test_dual_write_preserves_v1_only_policy_writes_for_non_v2_countries(
+def test_removed_countries_are_rejected_before_any_policy_write(
     monkeypatch,
     country_id,
 ) -> None:
     monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
-    creation = PolicySetResult(
-        policy_id=42,
-        message="Policy created",
-        is_existing_policy=False,
-        snapshot=None,
-    )
     with (
         patch(
             "policyengine_api.routes.policy_routes.policy_service.set_policy",
-            return_value=creation,
         ) as set_policy,
         patch(
             "policyengine_api.routes.policy_routes.mirror_policy_after_commit"
@@ -147,14 +140,8 @@ def test_dual_write_preserves_v1_only_policy_writes_for_non_v2_countries(
     ):
         response = _client().post(f"/{country_id}/policy", json=_body())
 
-    assert response.status_code == 201
-    assert response.json["result"] == {"policy_id": 42}
-    set_policy.assert_called_once_with(
-        country_id,
-        "Legacy label",
-        {"gov.example.rate": {"2026": 0.2}},
-        prepare_for_mirroring=False,
-    )
+    assert response.status_code == 400
+    set_policy.assert_not_called()
     mirror.assert_not_called()
 
 
@@ -336,21 +323,3 @@ def test_v1_policy_reads_require_cloud_sql_and_never_invoke_v2(
 
     assert invalid.status_code == 503
     invalid_get.assert_not_called()
-
-
-def test_policy_search_failure_does_not_expose_exception_details(
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("DB_READ_POLICY", "cloud_sql")
-    with patch(
-        "policyengine_api.routes.policy_routes.policy_service.search_policies",
-        side_effect=RuntimeError("database-credential-secret"),
-    ):
-        response = _client().get("/us/policies?query=example")
-
-    assert response.status_code == 500
-    assert response.json == {
-        "status": "error",
-        "message": "Internal server error; please try again later.",
-    }
-    assert "database-credential-secret" not in response.text

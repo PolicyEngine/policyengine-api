@@ -633,7 +633,7 @@ def _resolve_certified_selection(
     except (AttributeError, ImportError, ValueError, TypeError, OSError) as error:
         # A country package installed without its Simulation raises AttributeError
         # here. The capability probe already reads that as "no canonical model";
-        # letting it escape instead would make /readiness-check raise rather than
+        # letting it escape instead would make /health raise rather than
         # report not-ready, and every US request a 500 rather than a typed 400.
         error_code = "SPM_CONFIGURATION_UNAVAILABLE"
         raise SPMValidationError(error_code, error_message(error)) from error

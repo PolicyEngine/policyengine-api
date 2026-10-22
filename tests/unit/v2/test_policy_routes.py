@@ -110,7 +110,6 @@ def _client(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
-        specification_provider=dict,
         v2_policy_service_factory=lambda: service,
     )
     settings = RouteImplementationSettings(

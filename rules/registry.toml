@@ -383,7 +383,7 @@ kind = "pytest"
 nodes = [
   "tests/unit/services/test_orm_service_boundaries.py::test_migrated_services_use_sessions_and_mapped_models",
   "tests/unit/services/test_local_data_service_boundaries.py::test_local_service_public_methods_do_not_accept_persistence",
-  "tests/unit/services/test_local_data_service_boundaries.py::test_reform_impact_route_does_not_manage_sessions",
+  "tests/unit/services/test_local_data_service_boundaries.py::test_flask_routes_do_not_manage_sessions",
   "tests/unit/services/test_local_data_service_boundaries.py::test_economy_service_delegates_persistence_without_opening_sessions",
 ]
 [[rule.ci]]

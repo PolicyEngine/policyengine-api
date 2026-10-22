@@ -26,9 +26,6 @@ pytestmark = pytest.mark.skipif(
 _COUNTRY_PACKAGES = {
     "us": "policyengine_us",
     "uk": "policyengine_uk",
-    "ca": "policyengine_canada",
-    "ng": "policyengine_ng",
-    "il": "policyengine_il",
 }
 
 
