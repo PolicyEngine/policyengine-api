@@ -339,7 +339,11 @@ returns its result (`kind: "local_areas"`) like any other economy result. If
 the simulation API refuses the request with HTTP 400 or 422, because the
 deployed simulation API or the .py release it routes to cannot run breakdowns,
 the route returns HTTP 502 with the simulation API's reason and stores
-nothing, so a later request tries again.
+nothing, so a later request tries again. A breakdown job that fails (for
+example by running out of time or memory on the local-area dataset), or that
+completes without `kind: "local_areas"`, also returns HTTP 502 and is not kept:
+its record is deleted, so the next request submits a new job. A failed
+national job is still stored and returned again for the cache lifetime.
 
 Before cache access or submission,
 the API validates the selected worker application's `canonical-spm-v1` capability

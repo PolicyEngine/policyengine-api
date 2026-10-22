@@ -1567,8 +1567,14 @@ class EconomyService:
         Modal statuses (complete, failed, running, submitted).
         """
         if execution_state in EXECUTION_STATUSES_SUCCESS:
+            raw_result = self._simulation_gateway.get_execution_result(execution)
+            kind_error = self._breakdown_result_kind_error(setup_options, raw_result)
+            if kind_error is not None:
+                return self._discard_failed_breakdown(
+                    setup_options, reform_impact, kind_error
+                )
             result = self._with_policyengine_bundle(
-                result=self._simulation_gateway.get_execution_result(execution),
+                result=raw_result,
                 setup_options=setup_options,
                 execution=execution,
             )
@@ -1599,6 +1605,10 @@ class EconomyService:
                 error_message = (
                     f"Simulation entrypoint execution failed: {execution.error}"
                 )
+            if setup_options.options.get("breakdown") is not None:
+                return self._discard_failed_breakdown(
+                    setup_options, reform_impact, error_message
+                )
 
             self._set_reform_impact_error(
                 setup_options=setup_options,
@@ -1622,6 +1632,51 @@ class EconomyService:
 
         msg = f"Unexpected sim API execution state: {execution_state}"
         raise ValueError(msg)
+
+    @staticmethod
+    def _breakdown_result_kind_error(
+        setup_options: EconomicImpactSetupOptions, result: object
+    ) -> str | None:
+        """Return why a breakdown job's result cannot be stored, if it cannot.
+
+        A breakdown request needs the simulation API's local-area result
+        (``kind: local_areas``). Any other result, such as a national one from
+        a release that ignored the field, must never be stored under the
+        breakdown's options hash. Return None for a valid result and for every
+        request without a breakdown.
+        """
+        if setup_options.options.get("breakdown") is None:
+            return None
+        kind = result.get("kind") if isinstance(result, dict) else None
+        if kind == LOCAL_AREA_BREAKDOWN:
+            return None
+        return (
+            f"The simulation API returned a result of kind {kind!r} for a "
+            "local-area breakdown request, which needs kind "
+            f"{LOCAL_AREA_BREAKDOWN!r}; the result was not stored"
+        )
+
+    def _discard_failed_breakdown(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+        reform_impact: ReformImpact,
+        message: str,
+    ) -> EconomicImpactResult:
+        """Return a failed breakdown job's error without keeping its record.
+
+        A breakdown runs on the large local-area dataset, where a timeout or
+        memory failure may not repeat. Storing the failure would replay it for
+        the cache lifetime, so the job's computing record is deleted instead
+        and the next request submits a new job. No submission claim is held at
+        this point: it was released once the job was handed off. Failures of
+        requests without a breakdown are still stored and replayed.
+        """
+        options_hash = reform_impact.options_hash or setup_options.options_hash
+        if options_hash is not None:
+            self._reform_impacts.delete_reform_impact(
+                self._reform_impact_scope(setup_options), options_hash
+            )
+        return EconomicImpactResult.error(message=message)
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_COMPLETED)

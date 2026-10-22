@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from policyengine_api.libs.simulation_entrypoint import ModalSimulationExecution
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import (
@@ -28,6 +29,7 @@ from policyengine_api.services.economy_service import (
     RuntimeBundleIdentity,
 )
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from tests.fixtures.libs.simulation_entrypoint import MOCK_LOCAL_AREA_BREAKDOWN_RESULT
 from tests.fixtures.services.economy_service import (
     MOCK_API_VERSION,
     MOCK_BASELINE_POLICY_ID,
@@ -565,6 +567,117 @@ def test_a_breakdown_request_never_reuses_the_national_job(
     mock_simulation_entrypoint.get_execution_by_id.assert_called_once_with(
         "breakdown-job"
     )
+
+
+def _finish_jobs_with(
+    simulation_entrypoint, *, status: str, result=None, error=None
+) -> None:
+    """Make every polled job report this status, result and error."""
+    simulation_entrypoint.get_execution_by_id.side_effect = lambda job_id: (
+        ModalSimulationExecution(
+            job_id=job_id,
+            status=status,
+            result=result,
+            error=error,
+            resolved_app_name=MOCK_RESOLVED_APP_NAME,
+        )
+    )
+    simulation_entrypoint.get_execution_status.side_effect = lambda execution: (
+        execution.status
+    )
+    simulation_entrypoint.get_execution_result.side_effect = lambda execution: (
+        execution.result
+    )
+
+
+@pytest.mark.usefixtures("uk_package_versions")
+def test_a_failed_breakdown_job_is_not_replayed_and_the_next_request_resubmits(
+    economy_service, mock_simulation_entrypoint
+):
+    mock_simulation_entrypoint.get_execution_id.side_effect = [
+        "first-breakdown-job",
+        "second-breakdown-job",
+    ]
+    _finish_jobs_with(
+        mock_simulation_entrypoint, status="failed", error="out of memory"
+    )
+    request = _uk_request({"breakdown": "local_areas"})
+
+    economy_service.get_economic_impact(request, time_period="2026")
+    failed = economy_service.get_economic_impact(request, time_period="2026")
+    retried = economy_service.get_economic_impact(request, time_period="2026")
+
+    assert failed == EconomicImpactResult.error(
+        "Simulation entrypoint execution failed: out of memory"
+    )
+    # The failure is not kept for replay: the retry submits a new job.
+    assert retried == EconomicImpactResult.computing()
+    assert mock_simulation_entrypoint.run.call_count == 2
+    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    assert [(impact.execution_id, impact.status) for impact in stored] == [
+        ("second-breakdown-job", "computing")
+    ]
+
+
+@pytest.mark.usefixtures("uk_package_versions")
+def test_a_failed_national_job_is_still_replayed(
+    economy_service, mock_simulation_entrypoint
+):
+    _finish_jobs_with(
+        mock_simulation_entrypoint, status="failed", error="out of memory"
+    )
+    request = _uk_request({})
+
+    economy_service.get_economic_impact(request, time_period="2026")
+    failed = economy_service.get_economic_impact(request, time_period="2026")
+    replayed = economy_service.get_economic_impact(request, time_period="2026")
+
+    expected = EconomicImpactResult.error(
+        "Simulation entrypoint execution failed: out of memory"
+    )
+    assert failed == expected
+    assert replayed == expected
+    mock_simulation_entrypoint.run.assert_called_once()
+    mock_simulation_entrypoint.get_execution_by_id.assert_called_once()
+    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    assert [impact.status for impact in stored] == ["error"]
+
+
+@pytest.mark.usefixtures("uk_package_versions")
+@pytest.mark.parametrize(
+    ("result", "reported_kind"),
+    [
+        ({"budget": {"budgetary_impact": 1.0}}, "None"),
+        ({**MOCK_LOCAL_AREA_BREAKDOWN_RESULT, "kind": "national"}, "'national'"),
+        (None, "None"),
+    ],
+    ids=["national-result", "other-kind", "no-result"],
+)
+def test_a_breakdown_job_without_a_local_areas_result_is_not_stored(
+    economy_service, mock_simulation_entrypoint, result, reported_kind
+):
+    mock_simulation_entrypoint.get_execution_id.side_effect = [
+        "first-breakdown-job",
+        "second-breakdown-job",
+    ]
+    _finish_jobs_with(mock_simulation_entrypoint, status="complete", result=result)
+    request = _uk_request({"breakdown": "local_areas"})
+
+    economy_service.get_economic_impact(request, time_period="2026")
+    completed = economy_service.get_economic_impact(request, time_period="2026")
+    retried = economy_service.get_economic_impact(request, time_period="2026")
+
+    assert completed == EconomicImpactResult.error(
+        "The simulation API returned a result of kind "
+        f"{reported_kind} for a local-area breakdown request, which needs kind "
+        "'local_areas'; the result was not stored"
+    )
+    assert retried == EconomicImpactResult.computing()
+    assert mock_simulation_entrypoint.run.call_count == 2
+    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    assert [(impact.execution_id, impact.status) for impact in stored] == [
+        ("second-breakdown-job", "computing")
+    ]
 
 
 @pytest.mark.parametrize(
