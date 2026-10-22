@@ -14,6 +14,7 @@ from scripts.rules.locked_installs import (
     RELOCK_RULE,
     REPO_ROOT,
     TEST_RULE,
+    classify_command,
     install_violations,
     lock_violations,
     relock_violations,
@@ -255,6 +256,29 @@ removal = "when the image installs with uv sync --frozen"
         (exception,) = registry.rules[0].exceptions
         self.assertEqual(exception.match, "pip install requests")
         self.assertIsNone(exception.expires)
+
+
+class TestCommandClassification(unittest.TestCase):
+    """Each kind of install command is classified as locked, pinned or neither."""
+
+    def test_each_install_command_kind_is_classified(self) -> None:
+        expected_classifications = {
+            "uv pip install requests==2.32.3": (False, True),
+            "uv pip install requests": (False, False),
+            "uv sync --frozen": (True, False),
+            "uv sync": (False, False),
+            "uv run --with pytest==8.3.5 pytest": (False, True),
+            "uv run --no-sync pytest": None,
+            "uv run --frozen pytest": (True, False),
+            "uv run pytest": (False, False),
+            "uvx ruff==0.15.12 check .": (False, True),
+            "pip install towncrier": (False, False),
+            "poetry install": (False, False),
+            "echo hello": None,
+        }
+        for command, expected_classification in expected_classifications.items():
+            with self.subTest(command=command):
+                self.assertEqual(classify_command(command), expected_classification)
 
 
 class TestRepository(unittest.TestCase):
