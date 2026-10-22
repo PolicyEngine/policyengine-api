@@ -71,3 +71,10 @@ ROUTE_IMPL_METADATA=fastapi_native
 Record the tested staging and production revision names, the production
 observation window, and any rollback action in the tracking issue or pull
 request.
+
+## Later removals
+
+`GET /specification` and the `GET /` landing page are removed: only the API
+documentation used them, and `/v2/openapi.json` documents the v2 resources.
+`ROUTE_IMPL_SPECIFICATION` no longer selects a route, but the deployment
+pipeline still requires and verifies it until the Flask fallback is removed.

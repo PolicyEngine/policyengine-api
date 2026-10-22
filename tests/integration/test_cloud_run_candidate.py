@@ -36,14 +36,13 @@ def test_cloud_run_candidate_metadata_and_policy(
     assert policy_payload["result"]["id"] == current_law_id
 
 
-def test_cloud_run_candidate_stage6_read_route_contracts(api_client):
-    specification_response = api_client.get("/specification")
-    assert specification_response.status_code == 200, specification_response.text
-    specification = specification_response.json()
-    assert specification["openapi"] == "3.0.0"
-    assert specification["info"]["title"] == "PolicyEngine API"
-    assert specification["info"]["version"]
+def test_cloud_run_candidate_serves_no_legacy_documentation_routes(api_client):
+    for path in ("/", "/specification", "/simulations"):
+        response = api_client.get(path)
+        assert response.status_code == 404, (path, response.text)
 
+
+def test_cloud_run_candidate_stage6_read_route_contracts(api_client):
     uk_metadata_response = api_client.get(
         "/uk/metadata",
         headers={"X-PolicyEngine-Request-Id": "stage6-uk-metadata"},

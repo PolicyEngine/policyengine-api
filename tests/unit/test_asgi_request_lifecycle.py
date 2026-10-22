@@ -39,7 +39,6 @@ def _native_health_app(runtime: Mock, readiness_probe=lambda: True):
             readiness_probe=lambda: True,
             gateway_client_factory=lambda: None,
             metadata_reader_factory=lambda: None,
-            specification_provider=dict,
         ),
         readiness_probe=readiness_probe,
     )

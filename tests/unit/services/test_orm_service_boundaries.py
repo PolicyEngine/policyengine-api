@@ -9,7 +9,7 @@ SERVICE_ROOT = Path(__file__).parents[3] / "policyengine_api" / "services"
 
 @pytest.mark.parametrize(
     "module_name",
-    ["household_service.py", "policy_service.py", "user_service.py"],
+    ["household_service.py", "policy_service.py"],
 )
 def test_migrated_services_do_not_issue_queries_directly(module_name):
     source = (SERVICE_ROOT / module_name).read_text(encoding="utf-8")
@@ -19,7 +19,7 @@ def test_migrated_services_do_not_issue_queries_directly(module_name):
 
 @pytest.mark.parametrize(
     "module_name",
-    ["household_service.py", "policy_service.py", "user_service.py"],
+    ["household_service.py", "policy_service.py"],
 )
 def test_migrated_services_use_sessions_and_mapped_models(module_name):
     source = (SERVICE_ROOT / module_name).read_text(encoding="utf-8")
