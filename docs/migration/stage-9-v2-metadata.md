@@ -110,11 +110,13 @@ publishes entities, basic inputs and these flags:
 | Parameter | `economy`, `household` |
 
 Bracket schedules are parameter nodes with their stored label, or none when
-the package stores none. Extraction stops if the public model publishes no
-entities or basic inputs, has other than one person entity, names a basic
-input or a parameter path that is not published, gives enum labels that do
-not match the variable's possible values or are not JSON scalars, or gives a
-flag that is not a boolean. An opt-in test
+the package stores none. An empty basic-input list is stored as empty.
+Extraction stops before reading any record if the installed PolicyEngine.py
+does not publish these fields, as 6.7.5 does not, and names each missing
+field. It also stops if the model has other than one person entity, names a
+basic input or a parameter path that is not published, gives enum labels that
+do not match the variable's possible values or are not JSON scalars, or gives
+a flag that is not a boolean. An opt-in test
 (`tests/integration/test_v2_catalog_metadata_parity.py`, run by the v2
 integration check) compares every format 2 field for the US and the UK with
 what `/{country}/metadata` builds.

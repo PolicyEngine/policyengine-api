@@ -217,6 +217,24 @@ def _remove_basic_inputs(models: dict[str, SimpleNamespace]) -> None:
     del models["us"].basic_inputs
 
 
+def _make_entities_null(models: dict[str, SimpleNamespace]) -> None:
+    models["us"].entities = None
+
+
+def _make_basic_inputs_text(models: dict[str, SimpleNamespace]) -> None:
+    models["us"].basic_inputs = "employment_income"
+
+
+def _remove_variable_enum_values(models: dict[str, SimpleNamespace]) -> None:
+    del models["us"].variables[0].enum_values
+
+
+def _make_enum_label_nan(models: dict[str, SimpleNamespace]) -> None:
+    variable = models["us"].variables[0]
+    variable.possible_values = ["SINGLE"]
+    variable.enum_values = [SimpleNamespace(value="SINGLE", label=float("nan"))]
+
+
 def _name_unknown_basic_input(models: dict[str, SimpleNamespace]) -> None:
     models["us"].basic_inputs = ["employment_income", "unpublished_input"]
 
@@ -259,6 +277,10 @@ def _make_economy_flag_missing(models: dict[str, SimpleNamespace]) -> None:
     del models["us"].parameters[0].economy
 
 
+def _make_economy_flag_null(models: dict[str, SimpleNamespace]) -> None:
+    models["us"].parameters[0].economy = None
+
+
 def _make_household_flag_text(models: dict[str, SimpleNamespace]) -> None:
     models["us"].parameters[0].household = "false"
 
@@ -268,9 +290,10 @@ def _make_household_flag_text(models: dict[str, SimpleNamespace]) -> None:
     [
         (
             _remove_entities,
-            "^us public model publishes no entities; catalog format 2 needs "
-            "PolicyEngine.py's public entity records$",
+            "^the installed PolicyEngine.py does not publish catalog format 2's "
+            "fields for us: model version entities$",
         ),
+        (_make_entities_null, "^us public model entities must be a sequence$"),
         (_make_entity_flag_text, "^us entity person is_person must be a boolean$"),
         (
             _remove_person_entity,
@@ -279,8 +302,22 @@ def _make_household_flag_text(models: dict[str, SimpleNamespace]) -> None:
         (_repeat_entity_key, "^us entity key 'household' is repeated$"),
         (
             _remove_basic_inputs,
-            "^us public model publishes no basic inputs; catalog format 2 needs "
-            "PolicyEngine.py's public basic inputs$",
+            "^the installed PolicyEngine.py does not publish catalog format 2's "
+            "fields for us: model version basic_inputs$",
+        ),
+        (
+            _make_basic_inputs_text,
+            "^us public model basic_inputs must be a sequence$",
+        ),
+        (
+            _remove_variable_enum_values,
+            "^the installed PolicyEngine.py does not publish catalog format 2's "
+            "fields for us: variable enum_values$",
+        ),
+        (
+            _make_enum_label_nan,
+            "^variable employment_income enum label for SINGLE is not "
+            "JSON-compatible: NaN is not JSON-compatible$",
         ),
         (
             _name_unknown_basic_input,
@@ -318,6 +355,11 @@ def _make_household_flag_text(models: dict[str, SimpleNamespace]) -> None:
         ),
         (
             _make_economy_flag_missing,
+            "^the installed PolicyEngine.py does not publish catalog format 2's "
+            "fields for us: parameter economy$",
+        ),
+        (
+            _make_economy_flag_null,
             "^parameter gov.example.rate economy must be a boolean$",
         ),
         (
@@ -335,3 +377,41 @@ def test_inconsistent_format_2_metadata_fails_with_a_specific_message(
 
     with pytest.raises(CatalogExtractionError, match=message):
         _extract(models)
+
+
+def test_a_release_without_format_2_fields_fails_naming_each_missing_field() -> None:
+    """An older PolicyEngine.py fails before any record is checked, naming what lacks.
+
+    PolicyEngine.py 6.7.5, for example, publishes none of these fields.
+    """
+    models = source_models()
+    model = models["us"]
+    del model.entities, model.basic_inputs
+    for variable in model.variables:
+        for field_name in (
+            "is_input_variable",
+            "hidden_input",
+            "module_name",
+            "adds_parameter_path",
+            "subtracts_parameter_path",
+            "enum_values",
+        ):
+            delattr(variable, field_name)
+    for parameter in model.parameters:
+        del parameter.economy, parameter.household
+
+    with pytest.raises(
+        CatalogExtractionError,
+        match=r"^the installed PolicyEngine.py does not publish catalog format 2's "
+        r"fields for us: model version entities, basic_inputs; variable "
+        r"is_input_variable, hidden_input, module_name, adds_parameter_path, "
+        r"subtracts_parameter_path, enum_values; parameter economy, household$",
+    ):
+        _extract(models)
+
+
+def test_an_empty_basic_input_list_is_stored_empty() -> None:
+    models = source_models()
+    models["us"].basic_inputs = []
+
+    assert _extract(models).country("us").model_version.basic_inputs == ()
