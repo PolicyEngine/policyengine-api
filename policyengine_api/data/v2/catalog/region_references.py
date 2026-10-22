@@ -187,19 +187,27 @@ def _check_ancestry(
     parents = {reference.code: reference.parent_code for reference in references}
     for reference in references:
         visited = {reference.code}
+        child = reference.code
         ancestor = reference.parent_code
         while ancestor is not None and ancestor != country_id:
             if ancestor not in parents:
-                msg = (
-                    f"region {reference.code!r} names an unknown parent "
-                    f"{reference.parent_code!r}"
+                raise CatalogExtractionError(
+                    _unknown_ancestor_message(reference.code, child, ancestor)
                 )
-                raise CatalogExtractionError(msg)
             if ancestor in visited:
                 msg = f"region {reference.code!r} has a parent cycle"
                 raise CatalogExtractionError(msg)
             visited.add(ancestor)
-            ancestor = parents[ancestor]
+            child, ancestor = ancestor, parents[ancestor]
+
+
+def _unknown_ancestor_message(code: str, child: str, ancestor: str) -> str:
+    """Name the missing region and, if it is further up, the region it parents."""
+    if child == code:
+        return f"region {code!r} names an unknown parent {ancestor!r}"
+    return (
+        f"region {code!r} descends from {child!r}, whose parent {ancestor!r} is unknown"
+    )
 
 
 def parse_region_references(
