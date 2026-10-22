@@ -179,8 +179,15 @@ def _log_kept_regions(connection: Connection, country: CountryCatalog) -> None:
     staged_not_stored, stored_not_staged = count_region_differences(connection, country)
     if not staged_not_stored and not stored_not_staged:
         return
+    # The seed command configures no logging handler, so the details are in the
+    # message itself; the attributes serve structured handlers.
     LOGGER.warning(
-        "kept_published_catalog_regions",
+        "kept the published regions of the stored %s catalog version %s: %d staged "
+        "region rows are not stored and %d stored region rows are not staged",
+        country.country_id,
+        country.model_version.version,
+        staged_not_stored,
+        stored_not_staged,
         extra={
             "policyengine_attributes": {
                 "country_id": country.country_id,

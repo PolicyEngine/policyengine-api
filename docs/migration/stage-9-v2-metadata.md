@@ -141,9 +141,9 @@ reviewed dataset selection even when publication otherwise succeeds.
 A catalog version is identified by its country and PolicyEngine.py version and
 never changes once published. When the command republishes a stored version
 whose staged regions differ from the stored ones, it keeps the stored regions
-unchanged, logs `kept_published_catalog_regions` with the country, the version
-and the counts of staged region rows the stored version lacks and of stored
-rows not staged, and continues. Every other table must still match exactly.
+unchanged, prints a warning with the country, the version and the counts of
+staged region rows the stored version lacks and of stored rows not staged, and
+continues. Every other table must still match exactly.
 Region reference changes therefore take effect in the next catalog version
 that is published.
 

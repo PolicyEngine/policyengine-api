@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -297,3 +298,52 @@ def test_fallback_summary_emits_one_non_secret_warning() -> None:
     rendered_message = message_template % (logged_summaries,)
     assert "regional dataset fallback summary" in rendered_message
     assert "postgresql://" not in rendered_message
+
+
+def _kept_region_records(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    differences: tuple[int, int],
+) -> list[logging.LogRecord]:
+    monkeypatch.setattr(
+        publication,
+        "count_region_differences",
+        lambda _connection, _country: differences,
+    )
+    # An earlier test's Alembic logging setup may have disabled existing loggers.
+    monkeypatch.setattr(publication.LOGGER, "disabled", False)
+    with caplog.at_level(logging.WARNING, logger=publication.LOGGER.name):
+        publication._log_kept_regions(object(), normalized_catalog().country("us"))
+    return [
+        record for record in caplog.records if record.name == publication.LOGGER.name
+    ]
+
+
+def test_kept_region_warning_prints_country_version_and_counts_without_logging_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    [record] = _kept_region_records(monkeypatch, caplog, (1, 2))
+
+    # The seed command configures no logging, so Python's last-resort handler
+    # prints the record; this is the text the job output shows.
+    assert logging.lastResort is not None
+    assert logging.lastResort.format(record) == (
+        "kept the published regions of the stored us catalog version 5.0.4: "
+        "1 staged region rows are not stored and 2 stored region rows are not "
+        "staged"
+    )
+    assert record.levelno == logging.WARNING
+    assert record.policyengine_attributes == {
+        "country_id": "us",
+        "policyengine_version": "5.0.4",
+        "staged_region_rows_not_stored": 1,
+        "stored_region_rows_not_staged": 2,
+    }
+
+
+def test_matching_kept_regions_log_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    assert _kept_region_records(monkeypatch, caplog, (0, 0)) == []
