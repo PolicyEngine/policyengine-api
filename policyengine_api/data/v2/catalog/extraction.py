@@ -13,8 +13,6 @@ from policyengine_api.data.v2.catalog.extraction_regions import (
     dataset_year,
     normalize_region,
     release_default_dataset,
-    select_region_datasets,
-    verified_source_regions,
 )
 from policyengine_api.data.v2.catalog.extraction_values import (
     JSON_VALUE_NORMALIZERS,
@@ -40,11 +38,13 @@ from policyengine_api.data.v2.catalog.records import (
     ModelRecord,
     ModelVersionRecord,
     NormalizedCatalog,
+    OmittedRegionSummary,
 )
 from policyengine_api.data.v2.catalog.region_references import (
-    MAX_REGION_FILTER_VALUE_LENGTH,
-    SUPPORTED_REGION_TYPES,
+    RegionReference,
+    load_region_references,
 )
+from policyengine_api.data.v2.catalog.region_scoping import scope_regions
 from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
 
 if TYPE_CHECKING:
@@ -60,12 +60,10 @@ __all__ = [
     "CURRENT_LAW_IDS",
     "DATASET_YEAR_PATTERN",
     "JSON_VALUE_NORMALIZERS",
-    "MAX_REGION_FILTER_VALUE_LENGTH",
     "METADATA_TIME_PERIODS",
     "PLACEHOLDER_VERSIONS",
     "REQUIRED_DEPENDENCIES",
     "SUPPORTED_COUNTRIES",
-    "SUPPORTED_REGION_TYPES",
     "VARIABLE_TEXT_LIMITS",
     "CatalogExtractionError",
     "ModelMetadata",
@@ -389,6 +387,7 @@ def _normalize_country(
     source: object,
     policyengine_version: str,
     expected_country_package_version: str,
+    region_references: tuple[RegionReference, ...],
 ) -> CountryCatalog:
     source_model = getattr(source, "model", None)
     model_name = _verified_model_name(country_id, source_model)
@@ -407,15 +406,11 @@ def _normalize_country(
         country_id, source, model_version_id=model_version_id
     )
 
-    default_dataset, default_dataset_uri = release_default_dataset(
-        country_id, release_manifest
-    )
-    source_regions = verified_source_regions(country_id, source)
-    dataset_selection = select_region_datasets(
+    scoping = scope_regions(
         country_id,
-        source_regions,
-        default_dataset=default_dataset,
-        default_dataset_uri=default_dataset_uri,
+        region_references,
+        release_manifest,
+        default_dataset=release_default_dataset(country_id, release_manifest),
     )
 
     datasets = tuple(
@@ -426,20 +421,16 @@ def _normalize_country(
             description=f"PolicyEngine.py logical input dataset {name}",
             year=dataset_year(name),
         )
-        for name in sorted(dataset_selection.dataset_names)
+        for name in sorted(scoping.dataset_names)
     )
     dataset_ids = {dataset.name: dataset.id for dataset in datasets}
-    region_dataset_ids = {
-        code: dataset_ids[name]
-        for code, name in dataset_selection.region_dataset_names.items()
-    }
     regions = [
         normalize_region(
-            source_region,
+            scoped_region,
             model_version_id=model_version_id,
-            region_dataset_ids=region_dataset_ids,
+            dataset_ids=dataset_ids,
         )
-        for source_region in source_regions
+        for scoped_region in scoping.regions
     ]
 
     return CountryCatalog(
@@ -474,7 +465,11 @@ def _normalize_country(
         regions=tuple(sorted(regions, key=lambda record: record.code)),
         fallback_summaries=tuple(
             FallbackSummary(region_type=region_type, count=count)
-            for region_type, count in sorted(dataset_selection.fallback_counts.items())
+            for region_type, count in scoping.fallback_counts.items()
+        ),
+        omitted_region_summaries=tuple(
+            OmittedRegionSummary(region_type=region_type, count=count)
+            for region_type, count in scoping.omitted_counts.items()
         ),
     )
 
@@ -484,9 +479,14 @@ def extract_catalog(
     bundle: Mapping[str, Any],
     policyengine_version: str,
     models: Mapping[str, object],
+    region_references: Mapping[str, Sequence[RegionReference]],
     installed_version: Callable[[str], str] = importlib_metadata.version,
 ) -> NormalizedCatalog:
-    """Validate and normalize supplied PolicyEngine.py public objects."""
+    """Validate and normalize supplied PolicyEngine.py public objects.
+
+    Regions come from the supplied reference files, scoped by each country's
+    certified data release.
+    """
     dependencies = _verify_bundle(
         bundle=bundle,
         policyengine_version=policyengine_version,
@@ -495,6 +495,12 @@ def extract_catalog(
     missing = [country for country in SUPPORTED_COUNTRIES if country not in models]
     if missing:
         msg = f"PolicyEngine.py public models are absent for: {', '.join(missing)}"
+        raise CatalogExtractionError(msg)
+    missing = [
+        country for country in SUPPORTED_COUNTRIES if country not in region_references
+    ]
+    if missing:
+        msg = f"region references are absent for: {', '.join(missing)}"
         raise CatalogExtractionError(msg)
 
     package_map = bundle["packages"]
@@ -506,6 +512,7 @@ def extract_catalog(
             expected_country_package_version=package_map[f"policyengine-{country_id}"][
                 "version"
             ],
+            region_references=tuple(region_references[country_id]),
         )
         for country_id in SUPPORTED_COUNTRIES
     )
@@ -517,7 +524,10 @@ def extract_catalog(
 
 
 def extract_installed_catalog() -> NormalizedCatalog:
-    """Load and normalize the installed PolicyEngine.py certified catalog."""
+    """Load and normalize the installed PolicyEngine.py certified catalog.
+
+    Regions come from the Public API's checked-in reference files.
+    """
     import policyengine
     from policyengine.bundle import (
         get_current_bundle,
@@ -529,6 +539,10 @@ def extract_installed_catalog() -> NormalizedCatalog:
         policyengine_version=policyengine_version,
         models={
             country_id: getattr(policyengine, country_id).model
+            for country_id in SUPPORTED_COUNTRIES
+        },
+        region_references={
+            country_id: load_region_references(country_id)
             for country_id in SUPPORTED_COUNTRIES
         },
     )

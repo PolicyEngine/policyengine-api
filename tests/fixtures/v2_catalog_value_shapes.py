@@ -25,10 +25,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from policyengine_api.data.v2.catalog.extraction import extract_catalog
+from policyengine_api.data.v2.catalog.region_references import RegionReference
 from tests.fixtures.v2_catalog import (
     POLICYENGINE_VERSION,
     bundle,
     installed_version,
+    region_references,
     source_models,
 )
 
@@ -290,42 +292,6 @@ REGION_FILTER_VALUES = {
     ("uk", "country/wales"): "WALES",
     ("uk", "constituency/W07000081"): "W07000081",
 }
-US_ACS_LOCAL_URI = "hf://policyengine/us/populace_us_2024_acs_local.h5@fixture"
-UK_DENSE_URI = "hf://policyengine/uk/microcosm_uk_2024_25_dense.h5@fixture"
-
-
-@dataclass(frozen=True, kw_only=True)
-class _FilteredRegion:
-    """A region that selects its households with one row filter."""
-
-    code: str
-    label: str
-    region_type: str
-    parent_code: str
-    filter_field: str
-    filter_value: object
-    dataset_path: str | None = None
-    state_code: str | None = None
-    state_name: str | None = None
-
-    def source(self) -> SimpleNamespace:
-        """Return the region as the public region registry holds it."""
-        return SimpleNamespace(
-            code=self.code,
-            label=self.label,
-            region_type=self.region_type,
-            parent_code=self.parent_code,
-            dataset_path=self.dataset_path,
-            scoping_strategy=SimpleNamespace(
-                strategy_type="row_filter",
-                variable_name=self.filter_field,
-                variable_value=self.filter_value,
-                additional_filters={},
-            ),
-            requires_filter=True,
-            state_code=self.state_code,
-            state_name=self.state_name,
-        )
 
 
 def _variables() -> list[SimpleNamespace]:
@@ -409,51 +375,34 @@ def value_shape_catalog() -> NormalizedCatalog:
         parameter = case.source()
         us_model.parameters.append(parameter)
         us_model.parameters_by_name[parameter.name] = parameter
-    us_model.region_registry.append(
-        _FilteredRegion(
-            code="congressional_district/CA-01",
-            label="California's 1st congressional district",
-            region_type="congressional_district",
-            parent_code="state/ca",
-            filter_field="congressional_district_geoid",
-            filter_value=601,
-            dataset_path=US_ACS_LOCAL_URI,
-            state_code="CA",
-            state_name="California",
-        ).source()
-    )
-
-    uk_model = models["uk"]
-    england = next(
-        region
-        for region in uk_model.region_registry
-        if region.code == "country/england"
-    )
-    england.scoping_strategy.variable_value = ("NORTH_EAST", "LONDON")
-    uk_model.region_registry.extend(
-        [
-            _FilteredRegion(
-                code="country/wales",
-                label="Wales",
-                region_type="country",
-                parent_code="uk",
-                filter_field="country",
-                filter_value="WALES",
-            ).source(),
-            _FilteredRegion(
-                code="constituency/W07000081",
-                label="Ynys Môn",
-                region_type="constituency",
-                parent_code="uk",
-                filter_field="constituency_code_oa",
-                filter_value="W07000081",
-                dataset_path=UK_DENSE_URI,
-            ).source(),
-        ]
+    references = region_references()
+    references["uk"] = (
+        *references["uk"],
+        RegionReference(
+            code="country/wales",
+            label="Wales",
+            region_type="country",
+            parent_code="uk",
+            state_code=None,
+            state_name=None,
+            filter_value="WALES",
+            v1_code="country/wales",
+        ),
+        RegionReference(
+            code="constituency/W07000081",
+            label="Ynys Môn",
+            region_type="constituency",
+            parent_code="country/wales",
+            state_code=None,
+            state_name=None,
+            filter_value="W07000081",
+            v1_code=None,
+        ),
     )
     return extract_catalog(
         bundle=bundle(),
         policyengine_version=POLICYENGINE_VERSION,
         models=models,
         installed_version=installed_version,
+        region_references=references,
     )

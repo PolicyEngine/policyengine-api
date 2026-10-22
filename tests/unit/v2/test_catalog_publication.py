@@ -279,6 +279,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         entity_counts={"parameters": 12},
         fallback_summaries=(("us", "state", 3),),
         elapsed_seconds=2.3456,
+        omitted_region_summaries=(("us", "place", 333),),
         parameter_trees_written=(("policyengine-uk", "6.7.5", 2_430),),
         parameter_search_files_written=(("policyengine-uk", "6.7.5", 412_000, 61_000),),
     ).as_dict()
@@ -290,6 +291,9 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         "entity_counts": {"parameters": 12},
         "fallback_summaries": [
             {"country_id": "us", "region_type": "state", "count": 3}
+        ],
+        "omitted_region_summaries": [
+            {"country_id": "us", "region_type": "place", "count": 333}
         ],
         "parameter_trees_written": [
             {

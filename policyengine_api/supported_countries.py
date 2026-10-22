@@ -24,6 +24,11 @@ pair v1 records with their v2 copies (``legacy_policy_mappings``,
 v1 ``household_mirror_events`` table, which the v1 household insert writes
 in its own transaction.
 
+Catalog publication also needs the country's checked-in region reference file
+(``policyengine_api/data/v2/catalog/region_reference_files``) and its region
+scoping rules (``REGION_SCOPING_RULES`` in
+``policyengine_api.data.v2.catalog.region_scoping``).
+
 The module imports nothing from the package, so modules that the query
 models import, such as the catalog package, can import it too.
 """
