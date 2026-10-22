@@ -4,7 +4,7 @@ import pytest
 
 from policyengine_api.data.v2.metadata_validation import (
     PROHIBITED_V2_TABLES,
-    SIMULATION_SERVICE_TABLES,
+    SIMULATION_DOMAIN_TABLES,
     V1_ONLY_TABLES,
     V2MetadataValidationError,
     validate_v2_metadata_table_names,
@@ -40,10 +40,10 @@ def test_rejection_sets_do_not_block_current_metadata() -> None:
 
     assert table_names.isdisjoint(PROHIBITED_V2_TABLES)
     assert table_names.isdisjoint(V1_ONLY_TABLES)
-    assert table_names.isdisjoint(SIMULATION_SERVICE_TABLES)
+    assert table_names.isdisjoint(SIMULATION_DOMAIN_TABLES)
 
 
-def test_simulation_service_tables_are_the_fifteen_dropped_tables() -> None:
+def test_simulation_domain_tables_are_the_fifteen_dropped_tables() -> None:
     dropped_tables = {
         "aggregates",
         "budget_summary",
@@ -62,7 +62,7 @@ def test_simulation_service_tables_are_the_fifteen_dropped_tables() -> None:
         "simulations",
     }
 
-    assert dropped_tables == SIMULATION_SERVICE_TABLES
+    assert dropped_tables == SIMULATION_DOMAIN_TABLES
 
 
 def test_new_table_name_requires_no_allowlist_update() -> None:

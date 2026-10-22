@@ -577,7 +577,7 @@ invocation = "make test"
 [[rule]]
 id = "api.v2.simulation-tables-stay-removed"
 category = "isolation"
-statement = "Public API code never imports the removed simulation-domain models (household jobs, simulations, reports, report runs and their outputs), and the v2 metadata never declares their tables, which the simulation service owns in its own schema."
+statement = "Public API code never imports the removed simulation-domain models (household jobs, simulations, reports, report runs and their outputs), and the v2 metadata never declares the tables a v2 revision dropped with them."
 rationale = "docs/engineering/skills/alembic-migrations.md#simulation-domain-table-removal"
 scope = ["policyengine_api/**/*.py", "scripts/**/*.py", "tests/**/*.py", "migrations/v2/env.py"]
 tier = "mechanical"
@@ -587,7 +587,7 @@ autofix = false
 kind = "pytest"
 nodes = [
   "tests/unit/v2/test_simulation_domain_boundaries.py::test_no_module_imports_a_removed_simulation_model",
-  "tests/unit/v2/test_simulation_domain_boundaries.py::test_v2_metadata_declares_no_simulation_service_table",
+  "tests/unit/v2/test_simulation_domain_boundaries.py::test_v2_metadata_declares_no_dropped_simulation_table",
   "tests/unit/v2/test_simulation_domain_boundaries.py::test_models_package_exports_no_simulation_domain_model",
   "tests/unit/v2/test_metadata_validation.py::test_known_rejected_tables_are_identified",
 ]
