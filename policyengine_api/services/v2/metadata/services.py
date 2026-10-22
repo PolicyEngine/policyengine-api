@@ -20,6 +20,7 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_t
     read_parameter_children,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameters import (
+    read_current_law_values_by_parameter_name,
     read_parameter,
     read_parameter_value,
     read_parameter_values,
@@ -31,10 +32,12 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_regions imp
     read_regions,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_variables import (
+    read_all_variables,
     read_variable,
     read_variables,
 )
 from policyengine_api.services.v2.metadata.transformations import (
+    metadata_catalog_variables,
     metadata_dataset,
     metadata_economy_options,
     metadata_model,
@@ -48,9 +51,11 @@ from policyengine_api.services.v2.metadata.transformations import (
     metadata_variable,
     page_result,
     parameter_value_selection,
+    part_parameter_paths,
 )
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogVariablesResult,
     MetadataDataset,
     MetadataDetailResult,
     MetadataEconomyOptionsResult,
@@ -590,4 +595,26 @@ class V2MetadataService:
             regions=regions,
             datasets=datasets,
             national_dataset=national_dataset,
+        )
+
+    def get_catalog_variables(
+        self, country_id: str, policyengine_version: str | None = None
+    ) -> MetadataCatalogVariablesResult:
+        """Return every variable of the selected catalog version, in name order.
+
+        It also returns the current-law values of each parameter a variable's
+        adds or subtracts names, so a client can pick the list for any year.
+        """
+        selected = self._select_catalog(country_id, policyengine_version)
+        session = self._database_session.session
+        variables = read_all_variables(
+            session, model_version_id=selected.model_version.id
+        )
+        part_values = read_current_law_values_by_parameter_name(
+            session,
+            model_version_id=selected.model_version.id,
+            parameter_names=part_parameter_paths(variables),
+        )
+        return metadata_catalog_variables(
+            selected, variables=variables, part_values=part_values
         )

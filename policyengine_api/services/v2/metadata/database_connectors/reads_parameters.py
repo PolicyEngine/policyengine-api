@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import sqlalchemy as sa
 from sqlmodel import Session, col, select
@@ -11,6 +11,7 @@ from policyengine_api.data.v2.models import Parameter, ParameterValue
 from policyengine_api.services.v2.metadata.database_connectors.reads import read_rows
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from uuid import UUID
 
     from policyengine_api.services.v2.metadata.types import ParameterValueSelection
@@ -131,3 +132,33 @@ def read_parameter_value(
         ),
     )
     return rows[0] if rows else None
+
+
+def read_current_law_values_by_parameter_name(
+    session: Session, *, model_version_id: UUID, parameter_names: Collection[str]
+) -> list[Any]:
+    """Return the current-law values of the named parameters of a model version.
+
+    Each row has the parameter's name, the value's value_json, start_date and
+    end_date. Values tied to a policy or dynamic are excluded. Rows are ordered
+    by parameter name, then start date.
+    """
+    if not parameter_names:
+        return []
+    return read_rows(
+        session,
+        select(
+            col(Parameter.name),
+            col(ParameterValue.value_json),
+            col(ParameterValue.start_date),
+            col(ParameterValue.end_date),
+        )
+        .join(Parameter, col(Parameter.id) == col(ParameterValue.parameter_id))
+        .where(
+            col(Parameter.tax_benefit_model_version_id) == model_version_id,
+            col(Parameter.name).in_(sorted(parameter_names)),
+            col(ParameterValue.policy_id).is_(None),
+            col(ParameterValue.dynamic_id).is_(None),
+        )
+        .order_by(col(Parameter.name), col(ParameterValue.start_date)),
+    )

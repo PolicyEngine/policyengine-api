@@ -35,7 +35,9 @@ from policyengine_api.services.v2.metadata.database_session import (
 )
 from policyengine_api.services.v2.metadata.services import V2MetadataService
 from policyengine_api.services.v2.metadata.types import (
+    MetadataDatedValue,
     MetadataEntity,
+    MetadataEnumValue,
     ParameterValueFilter,
 )
 from policyengine_api.services.v2.metadata.validators import (
@@ -697,6 +699,150 @@ def test_model_catalog_with_regions_requires_the_national_region(
         _service(catalog_session).get_model_catalog("us")
 
 
+def _add_variable_with_parameter_named_parts(session: Session) -> None:
+    model_version = _us_model_version(session)
+    parts = Parameter(
+        id=uuid4(),
+        tax_benefit_model_version_id=model_version.id,
+        name="gov.example.parts",
+        label="Income parts",
+        description=None,
+        data_type="list",
+        unit=None,
+        economy=False,
+        household=True,
+    )
+    session.add(parts)
+    session.add_all(
+        [
+            ParameterValue(
+                id=uuid4(),
+                parameter_id=parts.id,
+                value_json=["employment_income", "pension_income"],
+                start_date=datetime(2026, 1, 1, tzinfo=UTC),
+                end_date=None,
+            ),
+            ParameterValue(
+                id=uuid4(),
+                parameter_id=parts.id,
+                value_json=["employment_income"],
+                start_date=datetime(2024, 1, 1, tzinfo=UTC),
+                end_date=datetime(2025, 12, 31, tzinfo=UTC),
+            ),
+            ParameterValue(
+                id=uuid4(),
+                parameter_id=parts.id,
+                value_json=["reform_only_income"],
+                start_date=datetime(2027, 1, 1, tzinfo=UTC),
+                end_date=None,
+                policy_id=uuid4(),
+            ),
+        ]
+    )
+    session.add(
+        Variable(
+            id=uuid4(),
+            tax_benefit_model_version_id=model_version.id,
+            name="total_income",
+            label="Total income",
+            entity="person",
+            description=None,
+            data_type="float",
+            possible_values=["LOW", "HIGH"],
+            default_value=0,
+            adds=["employment_income"],
+            subtracts=None,
+            is_input_variable=False,
+            hidden_input=True,
+            module_name="household.income.total_income",
+            adds_parameter_path="gov.example.parts",
+            subtracts_parameter_path="gov.example.unpublished_parts",
+            enum_values=[
+                {"value": "LOW", "label": "Low"},
+                {"value": "HIGH", "label": 2},
+            ],
+        )
+    )
+    session.commit()
+
+
+def test_catalog_variables_hold_every_variable_with_its_format_2_fields(
+    catalog_session: Session,
+) -> None:
+    _add_variable_with_parameter_named_parts(catalog_session)
+
+    result, statements = _recorded_statements(
+        catalog_session,
+        lambda: _service(catalog_session).get_catalog_variables("us"),
+    )
+
+    assert result.policyengine_version == POLICYENGINE_VERSION
+    assert result.catalog_format == 2
+    assert [variable.name for variable in result.variables] == [
+        "employment_income",
+        "total_income",
+    ]
+    employment_income, total_income = result.variables
+    assert employment_income.is_input_variable is True
+    assert employment_income.hidden_input is False
+    assert employment_income.module_name == "household.income.employment_income"
+    assert employment_income.adds_parameter_path is None
+    assert total_income.hidden_input is True
+    assert total_income.adds_parameter_path == "gov.example.parts"
+    assert total_income.subtracts_parameter_path == "gov.example.unpublished_parts"
+    assert total_income.enum_values == [
+        MetadataEnumValue(value="LOW", label="Low"),
+        MetadataEnumValue(value="HIGH", label=2),
+    ]
+    assert len(statements) == 3
+
+
+def test_catalog_variables_carry_the_dated_values_of_parameter_named_parts(
+    catalog_session: Session,
+) -> None:
+    _add_variable_with_parameter_named_parts(catalog_session)
+
+    result = _service(catalog_session).get_catalog_variables("us")
+
+    assert result.part_parameter_values == {
+        "gov.example.parts": [
+            MetadataDatedValue(
+                start_date=datetime(2024, 1, 1, tzinfo=UTC),
+                end_date=datetime(2025, 12, 31, tzinfo=UTC),
+                value=["employment_income"],
+            ),
+            MetadataDatedValue(
+                start_date=datetime(2026, 1, 1, tzinfo=UTC),
+                end_date=None,
+                value=["employment_income", "pension_income"],
+            ),
+        ],
+        "gov.example.unpublished_parts": [],
+    }
+
+
+def test_catalog_variables_without_parameter_named_parts_read_no_values(
+    catalog_session: Session,
+) -> None:
+    result, statements = _recorded_statements(
+        catalog_session,
+        lambda: _service(catalog_session).get_catalog_variables("uk"),
+    )
+
+    assert [variable.name for variable in result.variables] == ["employment_income"]
+    assert result.part_parameter_values == {}
+    assert len(statements) == 2
+    assert all("parameter_values" not in statement for statement in statements)
+
+
+def test_variable_pages_carry_the_format_2_fields(catalog_session: Session) -> None:
+    variable = _service(catalog_session).list_variables("us").items[0]
+
+    assert variable.is_input_variable is True
+    assert variable.module_name == "household.income.employment_income"
+    assert variable.enum_values is None
+
+
 def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
     project_package = Path(__file__).parents[3] / "policyengine_api"
     connector_directory = (
@@ -762,6 +908,7 @@ def test_resource_entrypoints_are_defined_in_the_service_module() -> None:
         "get_region_by_code",
         "get_economy_options",
         "get_model_catalog",
+        "get_catalog_variables",
     }
 
     for method_name in method_names:

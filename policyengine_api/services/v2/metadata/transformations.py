@@ -8,11 +8,14 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from policyengine_api.dataset_display import get_dataset_display_label
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogVariablesResult,
     MetadataDataset,
     MetadataDatasetOption,
+    MetadataDatedValue,
     MetadataEconomyOptions,
     MetadataEconomyOptionsResult,
     MetadataEntity,
+    MetadataEnumValue,
     MetadataModel,
     MetadataModelCatalogResult,
     MetadataModelSelectionResult,
@@ -106,6 +109,57 @@ def metadata_variable(variable: Variable) -> MetadataVariable:
         default_value=variable.default_value,
         adds=variable.adds,
         subtracts=variable.subtracts,
+        is_input_variable=variable.is_input_variable,
+        hidden_input=variable.hidden_input,
+        module_name=variable.module_name,
+        adds_parameter_path=variable.adds_parameter_path,
+        subtracts_parameter_path=variable.subtracts_parameter_path,
+        enum_values=(
+            None
+            if variable.enum_values is None
+            else [
+                MetadataEnumValue.model_validate(enum_value)
+                for enum_value in variable.enum_values
+            ]
+        ),
+    )
+
+
+def part_parameter_paths(variables: list[Variable]) -> set[str]:
+    """Return every parameter path the variables' adds or subtracts names."""
+    return {
+        path
+        for variable in variables
+        for path in (variable.adds_parameter_path, variable.subtracts_parameter_path)
+        if path is not None
+    }
+
+
+def metadata_catalog_variables(
+    selected: SelectedCatalog, *, variables: list[Variable], part_values: list[Any]
+) -> MetadataCatalogVariablesResult:
+    """Build every variable of the selected version and its part parameters' values.
+
+    part_values holds rows of read_current_law_values_by_parameter_name, in
+    parameter-name and start-date order. Each path a variable names gets an
+    entry, empty when no row carries its name.
+    """
+    values_by_path: dict[str, list[MetadataDatedValue]] = {
+        path: [] for path in sorted(part_parameter_paths(variables))
+    }
+    for row in part_values:
+        values_by_path.setdefault(row.name, []).append(
+            MetadataDatedValue(
+                start_date=as_utc(row.start_date),
+                end_date=None if row.end_date is None else as_utc(row.end_date),
+                value=row.value_json,
+            )
+        )
+    return MetadataCatalogVariablesResult(
+        policyengine_version=selected.policyengine_version,
+        catalog_format=selected.model_version.catalog_format,
+        variables=[metadata_variable(variable) for variable in variables],
+        part_parameter_values=values_by_path,
     )
 
 
@@ -130,6 +184,18 @@ def metadata_parameter_value(value: ParameterValue) -> MetadataCanonicalParamete
         start_date=value.start_date,
         end_date=value.end_date,
     )
+
+
+def as_utc(moment: datetime) -> datetime:
+    """Return moment in UTC, treating a naive time as UTC.
+
+    The database may return times in its session's time zone (or, in SQLite,
+    without one); serving them in UTC keeps a response's bytes, and so its
+    ETag, the same whatever that setting is.
+    """
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=UTC)
+    return moment.astimezone(UTC)
 
 
 def utc_day_start(selected_time: datetime) -> datetime:

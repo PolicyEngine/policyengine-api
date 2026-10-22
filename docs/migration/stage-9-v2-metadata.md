@@ -42,6 +42,18 @@ learns the running one and requests every other part for that exact version.
 The query uses the shared `CatalogQuery` model: unknown and repeated
 parameters are rejected.
 
+`GET /v2/model-catalog/variables` (same query) returns every variable of the
+version in name order, in one response, with the catalog format 2 fields:
+`is_input_variable`, `hidden_input`, `module_name`, `adds_parameter_path`,
+`subtracts_parameter_path` and `enum_values` (each value's name and its label,
+in the type the country package declares). Where a variable's `adds` or
+`subtracts` list comes from a parameter, `part_parameter_values` maps that
+parameter's path to its current-law values in start-date order
+(`start_date`, `end_date`, `value`), so a client picks the list for the year
+it shows instead of the list resolved on 2025-01-01; a path whose parameter
+the version lacks maps to an empty list. `GET /v2/variables` pages carry the
+same variable fields.
+
 ## Response caching
 
 Every successful metadata response carries a strong `ETag`, a hash of its

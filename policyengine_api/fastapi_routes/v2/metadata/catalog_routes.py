@@ -14,6 +14,7 @@ from policyengine_api.fastapi_routes.v2.metadata.common import (
     read_resource,
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
+    MetadataCatalogVariablesResponse,
     MetadataModelCatalogResponse,
 )
 from policyengine_api.query_parameters import CatalogQuery
@@ -60,6 +61,29 @@ def build_v2_model_catalog_router(
             dependencies,
             MetadataModelCatalogResponse,
             lambda reader: reader.get_model_catalog(
+                query.country_id, query.policyengine_version
+            ),
+        )
+
+    @router.get(
+        "/model-catalog/variables",
+        response_model=MetadataCatalogVariablesResponse,
+        summary="Get every variable of one PolicyEngine.py catalog version",
+        description=(
+            "Returns all of the selected catalog version's variables in name "
+            "order, in one response. Where a variable's adds or subtracts list "
+            "comes from a parameter, part_parameter_values carries that "
+            "parameter's current-law values by date, so a client can pick the "
+            "list for any year."
+        ),
+    )
+    def get_catalog_variables(
+        query: CatalogQueryDependency,
+    ) -> MetadataCatalogVariablesResponse | JSONResponse:
+        return read_resource(
+            dependencies,
+            MetadataCatalogVariablesResponse,
+            lambda reader: reader.get_catalog_variables(
                 query.country_id, query.policyengine_version
             ),
         )
