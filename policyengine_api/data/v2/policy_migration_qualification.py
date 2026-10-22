@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING, Protocol
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import Connection, Engine, func, inspect, select
+from sqlalchemy import Connection, Engine, func, inspect, select, table
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.pool import NullPool
 from sqlmodel import create_engine
 
-from policyengine_api.data.v2.models import ParameterValue, Policy, UserPolicy
+from policyengine_api.data.v2.models import ParameterValue, Policy
 from policyengine_api.data.v2.settings import (
     V2ConfigurationError,
     V2DatabaseSettings,
@@ -26,6 +26,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Mapping
 
 POLICY_MIGRATION_REVISION = "711ec2f0a5a5"
+# The saved-policy table's name while the policy revision is pending. A later
+# revision renames it to ``user_policy_associations``, so counting through
+# the current model would query a table such a database does not have yet.
+SAVED_POLICY_TABLE_AT_POLICY_REVISION = "user_policies"
 V2_ALEMBIC_CONFIG = "alembic-v2.ini"
 
 
@@ -123,8 +127,15 @@ def read_policy_data_counts(
         if table_exists("parameter_values")
         else 0,
         user_policies=(
-            int(executor.scalar(select(func.count()).select_from(UserPolicy)) or 0)
-            if table_exists("user_policies")
+            int(
+                executor.scalar(
+                    select(func.count()).select_from(
+                        table(SAVED_POLICY_TABLE_AT_POLICY_REVISION)
+                    )
+                )
+                or 0
+            )
+            if table_exists(SAVED_POLICY_TABLE_AT_POLICY_REVISION)
             else 0
         ),
     )
