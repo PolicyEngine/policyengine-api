@@ -56,6 +56,7 @@ __all__ = [
     "CatalogPublicationError",
     "PublicationEvidence",
     "publish_catalog",
+    "unpublished_countries",
 ]
 
 
@@ -85,6 +86,22 @@ def _protected_row_counts(connection: Connection) -> tuple[int, int, int, int]:
         connection.execute(sa.select(sa.func.count()).select_from(table)).scalar_one()
         for table in PROTECTED_TABLES
     )
+
+
+def unpublished_countries(
+    engine: Engine, catalog: NormalizedCatalog
+) -> tuple[str, ...]:
+    """Return the countries whose catalog version is not stored yet, in catalog order.
+
+    A read outside publication's transaction: a version another publisher adds
+    meanwhile is still compared with the staged one when this one publishes.
+    """
+    with engine.connect() as connection:
+        return tuple(
+            country.country_id
+            for country in catalog.countries
+            if not version_exists(connection, country)
+        )
 
 
 def publish_catalog(

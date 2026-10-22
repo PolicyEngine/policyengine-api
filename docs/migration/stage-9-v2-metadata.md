@@ -64,8 +64,12 @@ must execute in this order:
    Alembic chain, confirms all heads are current, and detects ungenerated model
    changes.
 3. Remove the migration URL from the command environment.
-4. Supply only `V2_DATA_WRITE_DATABASE_URL` and the same target identity, then
-   run `uv run python scripts/publish_v2_metadata_catalog.py`.
+4. Supply only `V2_DATA_WRITE_DATABASE_URL`, the same target identity and
+   `HUGGING_FACE_TOKEN` (from the organization secret
+   `PE_UK_PRIVATE_HF_READ_TOKEN`), then run
+   `uv run python scripts/publish_v2_metadata_catalog.py`. Before publishing a
+   catalog version that is not stored yet, the command reads the certified data
+   artifacts its regions' filters use and stops if one cannot select a region.
 5. Require the command to finish successfully and retain its non-secret JSON
    evidence before creating the candidate revision.
 6. Deploy the Cloud Run candidate with the target identity and
@@ -101,17 +105,42 @@ does not reorder, deduplicate, or repair package output. A value superseded on
 the immediately following day therefore has equal start and end dates and is a
 valid one-day interval.
 
-The US national region uses `populace_us_2024`. A US state,
-congressional-district, or place region uses its PolicyEngine.py regional
-alternative when one is available. Until a later reviewed change removes the
-fallback, a subnational region without such an alternative uses
-`populace_us_2024`. The command emits one summary warning containing only the
-affected region types and counts. UK regions use the
-`enhanced_frs_2024_25` default certified by PolicyEngine.py 5.0.4.
+Regions come from the Public API's checked-in reference files, one per country
+(`policyengine_api/data/v2/catalog/region_reference_files/`), not from
+PolicyEngine.py's region registry. Each row lists a region's code, label, type,
+parent, US state, the value that selects its households, and the v1 identifier
+it replaces. A scoping rule per country and region type gives each region its
+dataset from the certified data release and its filter:
 
-Review the fallback summary on every new PolicyEngine.py release. A changed
-count may identify an upstream catalog change that needs a reviewed dataset
-selection even when publication otherwise succeeds.
+| Regions | Dataset | Filter |
+| --- | --- | --- |
+| US national | the release's national dataset (`populace_us_2024`) | none |
+| US states and congressional districts | the release's state and district dataset | `row_filter` on `state_fips` or `congressional_district_geoid` |
+| UK national | `enhanced_frs_2024_25` | none |
+| UK nations | `enhanced_frs_2024_25` | `row_filter` on `region` |
+| UK constituencies and local authorities | `enhanced_frs_2024_25` | `weight_replacement`: field `parliamentary_constituency_weights` or `local_authority_weights`, value the ONS code |
+
+A weight matrix must come from the same release as the dataset it reweights.
+If the release names no dataset for a sub-national type, its regions use the
+default dataset and the command emits one summary warning with the affected
+region types and counts. Region types without a rule, such as US places until
+the data can select them, are left out and counted in the evidence's
+`omitted_region_summaries`.
+
+Before a new catalog version is published, the command reads the HDF5 metadata
+of each artifact the filters use, with ranged requests at the pinned revision:
+publication stops if a row filter's column is missing from its dataset's
+household columns, or if a weight matrix's row count differs from its row
+lookup (`constituencies_2024.csv`, `local_authorities_2021.csv`) or the lookup
+lacks a region's code.
+
+Review the fallback and omitted-region summaries on every new PolicyEngine.py
+release. A changed count may identify an upstream catalog change that needs a
+reviewed dataset selection even when publication otherwise succeeds.
+
+A catalog version is immutable: republishing a stored PolicyEngine.py version
+whose regions differ from the stored ones fails. Region reference changes
+therefore reach the catalog with the next PolicyEngine.py version.
 
 ## Validation evidence and retry
 
@@ -120,7 +149,7 @@ Successful JSON evidence contains:
 - the canonical PolicyEngine.py version;
 - the dependency versions derived from its packaged manifest;
 - catalog entity counts;
-- US fallback counts;
+- fallback counts and omitted-region counts by country and region type;
 - elapsed publication time; and
 - a success outcome.
 

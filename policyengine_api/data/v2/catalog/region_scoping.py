@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.catalog.errors import CatalogExtractionError
+from policyengine_api.data.v2.catalog.records import CertifiedArtifact
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.catalog.region_references import RegionReference
@@ -56,18 +57,6 @@ REGION_SCOPING_RULES: Mapping[tuple[str, str], RegionScopingRule] = {
         NATIONAL_DATASET_ROLE, WEIGHT_REPLACEMENT, "local_authority_weights"
     ),
 }
-
-
-@dataclass(frozen=True, slots=True)
-class CertifiedArtifact:
-    """One artifact of a country's certified data release, pinned to a revision."""
-
-    name: str
-    repo_id: str
-    repo_type: str
-    path: str
-    revision: str
-    sha256: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -311,3 +300,21 @@ def scope_regions(
         fallback_counts=dict(sorted(fallback_counts.items())),
         omitted_counts=dict(sorted(Counter(omitted.values()).items())),
     )
+
+
+def filtered_artifacts(scoping: RegionScoping) -> tuple[CertifiedArtifact, ...]:
+    """Return, by name, the artifacts the regions' filters read.
+
+    Those are the datasets of row-filtered regions and the weight matrices of
+    weight-replacement regions.
+    """
+    names = {
+        region.dataset_name
+        for region in scoping.regions
+        if region.filter_strategy == ROW_FILTER
+    } | {
+        region.filter_field
+        for region in scoping.regions
+        if region.filter_strategy == WEIGHT_REPLACEMENT and region.filter_field
+    }
+    return tuple(scoping.certified_artifacts[name] for name in sorted(names))
