@@ -26,6 +26,8 @@ HOUSEHOLD_TABLE = "household"
 # real names live only in pickled attributes.
 VALUE_BLOCK_PREFIX = "values_block_"
 TABLE_INDEX_COLUMN = "index"
+# Each year of a weight matrix is one array of regions by households.
+WEIGHT_MATRIX_DIMENSIONS = 2
 
 _Result = TypeVar("_Result")
 
@@ -110,7 +112,7 @@ def weight_matrix_rows_in_hdf5(h5: h5py.File) -> int:
     for name, entry in h5.items():
         if not isinstance(entry, h5py.Dataset):
             continue
-        if len(entry.shape) != 2:  # noqa: PLR2004  # regions by households
+        if len(entry.shape) != WEIGHT_MATRIX_DIMENSIONS:
             msg = f"the weight matrix entry {name} is not two-dimensional"
             raise CertifiedDataReadError(msg)
         row_counts.add(entry.shape[0])
