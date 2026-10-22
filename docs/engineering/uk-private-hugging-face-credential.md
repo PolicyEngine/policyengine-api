@@ -51,6 +51,14 @@ Cloud Run candidate resolver verifies that the exact deployed revision binds
 `HUGGING_FACE_TOKEN` to `pe-uk-private-hf-read-token:latest`, without printing
 the credential.
 
+The v2 catalog publication step of `.github/workflows/seed-v2-database.yml`
+also receives the organization secret as `HUGGING_FACE_TOKEN`, step-scoped.
+Before it publishes a new catalog version, the step reads, through one
+authenticated Hugging Face file system, the HDF5 metadata of the certified
+artifacts that version's region filters use: the UK dataset and weight
+matrices in the private UK data repository, and the public US dataset. It
+downloads only the 1 MB blocks that hold that metadata, not whole files.
+
 The simulation-entry Cloud Run service does not receive this credential. It
 submits requests to Modal and does not download model data.
 

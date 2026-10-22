@@ -171,3 +171,12 @@ def test_stage_9_deployment_shell_script_is_syntax_valid() -> None:
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_only_catalog_publication_receives_the_hugging_face_read_token() -> None:
+    workflow = _read(".github/workflows/seed-v2-database.yml")
+    publication = _step(workflow, "Seed and validate the v2 metadata catalog")
+    token = "HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}"
+
+    assert token in publication
+    assert workflow.count("HUGGING_FACE_TOKEN") == 1

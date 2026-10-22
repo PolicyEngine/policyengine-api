@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.catalog.extraction import extract_catalog
+from policyengine_api.data.v2.catalog.region_references import RegionReference
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.catalog.records import NormalizedCatalog
@@ -20,49 +20,139 @@ DEPENDENCY_VERSIONS = {
 }
 
 
-class RegionRegistry(list):
-    """Small iterable with the public registry's country identifier."""
+def region_references() -> dict[str, tuple[RegionReference, ...]]:
+    """Return small US and UK reference files.
 
-    def __init__(self, country_id: str, regions: list[SimpleNamespace]):
-        super().__init__(regions)
-        self.country_id = country_id
+    The US place has no filter rule, so publication leaves it out.
+    """
+    return {
+        "us": (
+            RegionReference(
+                code="us",
+                label="United States",
+                region_type="national",
+                parent_code=None,
+                state_code=None,
+                state_name=None,
+                filter_value=None,
+                v1_code="us",
+            ),
+            RegionReference(
+                code="state/ca",
+                label="California",
+                region_type="state",
+                parent_code="us",
+                state_code="CA",
+                state_name="California",
+                filter_value="6",
+                v1_code="state/ca",
+            ),
+            RegionReference(
+                code="congressional_district/CA-01",
+                label="California's 1st congressional district",
+                region_type="congressional_district",
+                parent_code="state/ca",
+                state_code="CA",
+                state_name="California",
+                filter_value="601",
+                v1_code="congressional_district/CA-01",
+            ),
+            RegionReference(
+                code="place/CA-44000",
+                label="Los Angeles",
+                region_type="place",
+                parent_code="state/ca",
+                state_code="CA",
+                state_name="California",
+                filter_value=None,
+                v1_code="place/CA-44000",
+            ),
+        ),
+        "uk": (
+            RegionReference(
+                code="uk",
+                label="United Kingdom",
+                region_type="national",
+                parent_code=None,
+                state_code=None,
+                state_name=None,
+                filter_value=None,
+                v1_code="uk",
+            ),
+            RegionReference(
+                code="country/england",
+                label="England",
+                region_type="country",
+                parent_code="uk",
+                state_code=None,
+                state_name=None,
+                filter_value='["NORTH_EAST","LONDON"]',
+                v1_code="country/england",
+            ),
+            RegionReference(
+                code="constituency/E14001063",
+                label="Aldershot",
+                region_type="constituency",
+                parent_code="country/england",
+                state_code=None,
+                state_name=None,
+                filter_value="E14001063",
+                v1_code="constituency/Aldershot",
+            ),
+        ),
+    }
 
 
-def _strategy(field: str, value: str | int) -> SimpleNamespace:
+def _certified_artifact(path: str, *, revision: str = "fixture") -> SimpleNamespace:
     return SimpleNamespace(
-        strategy_type="row_filter",
-        variable_name=field,
-        variable_value=value,
-        additional_filters={},
+        path=path,
+        revision=revision,
+        sha256="0" * 64,
+        repo_id=None,
+        repo_type=None,
     )
 
 
-@dataclass(frozen=True, kw_only=True)
-class _Region:
-    """One public region; ``source`` gives the mutable object the registry holds."""
-
-    code: str
-    label: str
-    region_type: str
-    parent_code: str | None = None
-    dataset_path: str | None = None
-    strategy: SimpleNamespace | None = None
-    state_code: str | None = None
-    state_name: str | None = None
-
-    def source(self) -> SimpleNamespace:
-        """Return the region as a registry entry; it needs a filter if scoped."""
-        return SimpleNamespace(
-            code=self.code,
-            label=self.label,
-            region_type=self.region_type,
-            parent_code=self.parent_code,
-            dataset_path=self.dataset_path,
-            scoping_strategy=self.strategy,
-            requires_filter=self.strategy is not None,
-            state_code=self.state_code,
-            state_name=self.state_name,
+def _release_contents(country_id: str) -> tuple[dict, dict, SimpleNamespace]:
+    """Return a country's certified datasets, region datasets and data package."""
+    if country_id == "us":
+        datasets = {
+            "populace_us_2024": _certified_artifact("populace_us_2024.h5"),
+            "populace_us_2024_acs_local": _certified_artifact(
+                "populace_us_2024_acs_local.h5"
+            ),
+        }
+        region_datasets = {
+            "national": SimpleNamespace(path_template="populace_us_2024.h5"),
+            "state": SimpleNamespace(path_template="populace_us_2024_acs_local.h5"),
+            "congressional_district": SimpleNamespace(
+                path_template="populace_us_2024_acs_local.h5"
+            ),
+        }
+        data_package = SimpleNamespace(
+            repo_id="policyengine/populace-us",
+            repo_type="dataset",
+            version="0.1.0",
+            release_manifest_revision="fixture",
         )
+        return datasets, region_datasets, data_package
+    datasets = {
+        "enhanced_frs_2024_25": _certified_artifact("enhanced_frs_2024_25.h5"),
+        "parliamentary_constituency_weights": _certified_artifact(
+            "parliamentary_constituency_weights.h5"
+        ),
+        "local_authority_weights": _certified_artifact("local_authority_weights.h5"),
+    }
+    region_datasets = {
+        "national": SimpleNamespace(path_template="enhanced_frs_2024_25.h5"),
+    }
+    data_package = SimpleNamespace(
+        repo_id="example-org/example-uk-data",
+        repo_type="model",
+        version="1.0.0",
+        release_manifest_revision="fixture",
+    )
+    return datasets, region_datasets, data_package
 
 
 def bundle(*, policyengine_version: str = POLICYENGINE_VERSION) -> dict:
@@ -88,7 +178,6 @@ def _model_source(
     country_id: str,
     country_package_version: str,
     policyengine_version: str,
-    regions: list[SimpleNamespace],
 ) -> SimpleNamespace:
     model_name = f"policyengine-{country_id}"
     default_dataset = {
@@ -141,13 +230,16 @@ def _model_source(
         name=model_name,
         version=country_package_version,
     )
+    datasets, region_datasets, data_package = _release_contents(country_id)
     version_holder.release_manifest = SimpleNamespace(
         country_id=country_id,
         policyengine_version=policyengine_version,
         default_dataset=default_dataset,
         default_dataset_uri=default_uri,
+        datasets=datasets,
+        region_datasets=region_datasets,
+        data_package=data_package,
     )
-    version_holder.region_registry = RegionRegistry(country_id, regions)
     version_holder.variables = [variable]
     version_holder.parameter_nodes = [parameter_node]
     version_holder.parameters = [parameter]
@@ -162,60 +254,13 @@ def source_models(
     policyengine_version: str = POLICYENGINE_VERSION,
 ) -> dict[str, SimpleNamespace]:
     """Return US and UK public-model fixtures."""
-    us_default_uri = "hf://policyengine/us/populace_us_2024.h5@fixture"
-    uk_default_uri = "hf://policyengine/uk/enhanced_frs_2024_25.h5@fixture"
     return {
-        "us": _model_source(
-            country_id="us",
-            country_package_version=DEPENDENCY_VERSIONS["policyengine-us"],
+        country_id: _model_source(
+            country_id=country_id,
+            country_package_version=DEPENDENCY_VERSIONS[f"policyengine-{country_id}"],
             policyengine_version=policyengine_version,
-            regions=[
-                _Region(
-                    code="us",
-                    label="United States",
-                    region_type="national",
-                    dataset_path=us_default_uri,
-                ).source(),
-                _Region(
-                    code="state/ca",
-                    label="California",
-                    region_type="state",
-                    parent_code="us",
-                    dataset_path="hf://policyengine/us/populace_us_ca_2024.h5@fixture",
-                    strategy=_strategy("state_fips", 6),
-                    state_code="CA",
-                    state_name="California",
-                ).source(),
-                _Region(
-                    code="place/CA-44000",
-                    label="Los Angeles",
-                    region_type="place",
-                    parent_code="state/ca",
-                    state_code="CA",
-                    state_name="California",
-                ).source(),
-            ],
-        ),
-        "uk": _model_source(
-            country_id="uk",
-            country_package_version=DEPENDENCY_VERSIONS["policyengine-uk"],
-            policyengine_version=policyengine_version,
-            regions=[
-                _Region(
-                    code="uk",
-                    label="United Kingdom",
-                    region_type="national",
-                    dataset_path=uk_default_uri,
-                ).source(),
-                _Region(
-                    code="country/england",
-                    label="England",
-                    region_type="country",
-                    parent_code="uk",
-                    strategy=_strategy("country", "ENGLAND"),
-                ).source(),
-            ],
-        ),
+        )
+        for country_id in ("us", "uk")
     }
 
 
@@ -234,4 +279,5 @@ def normalized_catalog(
         policyengine_version=policyengine_version,
         models=source_models(policyengine_version=policyengine_version),
         installed_version=installed_version,
+        region_references=region_references(),
     )

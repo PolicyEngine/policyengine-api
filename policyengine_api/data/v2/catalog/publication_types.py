@@ -18,6 +18,10 @@ class PublicationEvidence:
     entity_counts: dict[str, int]
     fallback_summaries: tuple[tuple[str, str, int], ...]
     elapsed_seconds: float
+    omitted_region_summaries: tuple[tuple[str, str, int], ...] = ()
+    # Stored catalog versions whose region rows were kept although the staged
+    # regions differ: country, version, stored and staged region counts.
+    kept_region_summaries: tuple[tuple[str, str, int, int], ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         """Return the evidence as the JSON object printed after a publication."""
@@ -33,6 +37,23 @@ class PublicationEvidence:
                     "count": count,
                 }
                 for country_id, region_type, count in self.fallback_summaries
+            ],
+            "omitted_region_summaries": [
+                {
+                    "country_id": country_id,
+                    "region_type": region_type,
+                    "count": count,
+                }
+                for country_id, region_type, count in self.omitted_region_summaries
+            ],
+            "kept_regions": [
+                {
+                    "country_id": country_id,
+                    "policyengine_version": version,
+                    "stored_regions": stored,
+                    "staged_regions": staged,
+                }
+                for country_id, version, stored, staged in self.kept_region_summaries
             ],
             "elapsed_seconds": round(self.elapsed_seconds, 3),
         }

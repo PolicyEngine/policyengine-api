@@ -127,10 +127,36 @@ class RegionRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class FallbackSummary:
-    """How many US sub-national regions of one type fell back to the default dataset.
+class CertifiedArtifact:
+    """One artifact of a country's certified data release, pinned to a revision.
 
-    These regions had no dataset path of their own.
+    ``repo_type`` is the Hugging Face repository type, ``model`` or ``dataset``.
+    """
+
+    name: str
+    repo_id: str
+    repo_type: str
+    path: str
+    revision: str
+    sha256: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class FallbackSummary:
+    """How many sub-national regions of one type fell back to the default dataset.
+
+    The certified data release names no dataset for their type.
+    """
+
+    region_type: str
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class OmittedRegionSummary:
+    """How many reference regions of one type publication left out.
+
+    No scoping rule can select their households yet, such as US places.
     """
 
     region_type: str
@@ -166,6 +192,10 @@ class CountryCatalog:
     datasets: tuple[DatasetRecord, ...]
     regions: tuple[RegionRecord, ...]
     fallback_summaries: tuple[FallbackSummary, ...]
+    omitted_region_summaries: tuple[OmittedRegionSummary, ...] = ()
+    # The release artifacts the regions' filters read: the datasets of row
+    # filters and the weight matrices of weight-replacement filters.
+    certified_artifacts: tuple[CertifiedArtifact, ...] = ()
 
     def parameter_value_batches(
         self,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import Counter
 from importlib import metadata as importlib_metadata
 
 import pytest
@@ -46,7 +47,7 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "parameters": 104_171,
         "parameter_values": 1_194_357,
         "datasets": 3,
-        "regions": 826,
+        "regions": 1_503,
     }
 
     for country_id in ("us", "uk"):
@@ -99,7 +100,8 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
     # Since 6.7.5, US state and congressional-district regions use the
     # ACS-local dataset again, on the PolicyEngine/microcosm#1263 rebuild
     # (PolicyEngine/policyengine.py#649, ending #604's national-file filter).
-    # The national region uses the national dataset, and places fall back to it.
+    # The national region uses the national dataset. Regions come from the
+    # checked-in reference files; US places cannot run yet and are left out.
     us_catalog = catalog.country("us")
     us_dataset_names = {dataset.id: dataset.name for dataset in us_catalog.datasets}
     region_type_datasets: dict[str, set[str]] = {}
@@ -111,11 +113,29 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "national": {"populace_us_2024"},
         "state": {"populace_us_2024_acs_local"},
         "congressional_district": {"populace_us_2024_acs_local"},
-        "place": {"populace_us_2024"},
     }
+    assert us_catalog.fallback_summaries == ()
     assert [
         (summary.region_type, summary.count)
-        for summary in us_catalog.fallback_summaries
-    ] == [
-        ("place", 333),
-    ]
+        for summary in us_catalog.omitted_region_summaries
+    ] == [("place", 333)]
+
+    uk_catalog = catalog.country("uk")
+    uk_types = Counter(region.region_type for region in uk_catalog.regions)
+    assert uk_types == {
+        "national": 1,
+        "country": 4,
+        "constituency": 650,
+        "local_authority": 360,
+    }
+    uk_regions = {region.code: region for region in uk_catalog.regions}
+    aldershot = uk_regions["constituency/E14001063"]
+    assert (
+        aldershot.filter_strategy,
+        aldershot.filter_field,
+        aldershot.filter_value,
+    ) == ("weight_replacement", "parliamentary_constituency_weights", "E14001063")
+    assert uk_regions["uk"].label == "United Kingdom"
+    assert {region.code: region.label for region in us_catalog.regions}["us"] == (
+        "United States"
+    )
