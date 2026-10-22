@@ -282,7 +282,7 @@ def test_stored_version_keeps_its_published_regions_and_logs_the_difference(
     monkeypatch.setattr(
         publication_module.LOGGER,
         "warning",
-        lambda message, *args, **kwargs: warnings.append((message, kwargs)),
+        lambda message, *args, **kwargs: warnings.append((message % args, kwargs)),
     )
 
     evidence = publish_catalog(publication_engine, _with_changed_us_regions(catalog))
@@ -292,11 +292,16 @@ def test_stored_version_keeps_its_published_regions_and_logs_the_difference(
     assert _identifiers(publication_engine) == before_ids
     assert _counts(publication_engine) == before_counts
     notices = [
-        keywords["extra"]
+        (message, keywords["extra"])
         for message, keywords in warnings
-        if message == "kept_published_catalog_regions"
+        if message.startswith("kept the published regions")
     ]
-    assert [notice["policyengine_attributes"] for notice in notices] == [
+    assert [message for message, _extra in notices] == [
+        "kept the published regions of the stored us catalog version "
+        f"{catalog.policyengine_version}: 1 staged region rows are not stored and "
+        "2 stored region rows are not staged"
+    ]
+    assert [extra["policyengine_attributes"] for _message, extra in notices] == [
         {
             "country_id": "us",
             "policyengine_version": catalog.policyengine_version,
