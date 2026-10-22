@@ -5,11 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from uuid import UUID
 
     from policyengine_api.json_types import JSONObject
     from policyengine_api.services.v2.metadata.types import (
         MetadataCanonicalParameterValue,
+        MetadataCatalogParametersResult,
         MetadataCatalogVariablesResult,
         MetadataDataset,
         MetadataDetailResult,
@@ -272,5 +274,19 @@ class V2MetadataResourceReader(Protocol):
 
         It also carries the current-law values of each parameter a variable's
         adds or subtracts names.
+        """
+        ...
+
+    def get_catalog_parameters(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+        *,
+        names: Sequence[str],
+    ) -> MetadataCatalogParametersResult:
+        """Return the named parameters of the selected version, in name order.
+
+        Each carries its current-law values; the result also carries the
+        stored labels of their ancestor nodes and the names the version lacks.
         """
         ...

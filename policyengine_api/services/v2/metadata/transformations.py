@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from policyengine_api.dataset_display import get_dataset_display_label
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogParameter,
+    MetadataCatalogParametersResult,
     MetadataCatalogVariablesResult,
     MetadataDataset,
     MetadataDatasetOption,
@@ -144,23 +146,37 @@ def metadata_catalog_variables(
     parameter-name and start-date order. Each path a variable names gets an
     entry, empty when no row carries its name.
     """
-    values_by_path: dict[str, list[MetadataDatedValue]] = {
-        path: [] for path in sorted(part_parameter_paths(variables))
-    }
-    for row in part_values:
-        values_by_path.setdefault(row.name, []).append(
-            MetadataDatedValue(
-                start_date=as_utc(row.start_date),
-                end_date=None if row.end_date is None else as_utc(row.end_date),
-                value=row.value_json,
-            )
-        )
+    values_by_path = _dated_values_by_parameter_name(
+        part_values, parameter_names=part_parameter_paths(variables)
+    )
     return MetadataCatalogVariablesResult(
         policyengine_version=selected.policyengine_version,
         catalog_format=selected.model_version.catalog_format,
         variables=[metadata_variable(variable) for variable in variables],
         part_parameter_values=values_by_path,
     )
+
+
+def _dated_values_by_parameter_name(
+    value_rows: list[Any], *, parameter_names: set[str]
+) -> dict[str, list[MetadataDatedValue]]:
+    """Group value rows by parameter name, with an empty list for each other name.
+
+    value_rows holds rows of read_current_law_values_by_parameter_name, in
+    parameter-name and start-date order.
+    """
+    values_by_name: dict[str, list[MetadataDatedValue]] = {
+        name: [] for name in sorted(parameter_names)
+    }
+    for row in value_rows:
+        values_by_name.setdefault(row.name, []).append(
+            MetadataDatedValue(
+                start_date=as_utc(row.start_date),
+                end_date=None if row.end_date is None else as_utc(row.end_date),
+                value=row.value_json,
+            )
+        )
+    return values_by_name
 
 
 def metadata_parameter(parameter: Parameter) -> MetadataParameterSummary:
@@ -172,6 +188,54 @@ def metadata_parameter(parameter: Parameter) -> MetadataParameterSummary:
         description=parameter.description,
         data_type=parameter.data_type,
         unit=parameter.unit,
+        economy=parameter.economy,
+        household=parameter.household,
+    )
+
+
+def ancestor_paths(parameter_name: str) -> list[str]:
+    """Return the paths of every node above parameter_name, from the root down.
+
+    A dot separates a child, and so does the ``[`` of a bracket index:
+    ``gov.tax.rates[0].rate`` has the ancestors ``gov``, ``gov.tax``,
+    ``gov.tax.rates`` and ``gov.tax.rates[0]``.
+    """
+    return [
+        parameter_name[:position]
+        for position, character in enumerate(parameter_name)
+        if character in ".[" and position > 0
+    ]
+
+
+def metadata_catalog_parameters(
+    selected: SelectedCatalog,
+    *,
+    requested_names: set[str],
+    parameters: list[Parameter],
+    value_rows: list[Any],
+    node_rows: list[Any],
+) -> MetadataCatalogParametersResult:
+    """Build the requested parameters with their values and ancestor labels.
+
+    value_rows holds rows of read_current_law_values_by_parameter_name and
+    node_rows rows of read_parameter_node_labels.
+    """
+    values_by_name = _dated_values_by_parameter_name(
+        value_rows, parameter_names={parameter.name for parameter in parameters}
+    )
+    found_names = {parameter.name for parameter in parameters}
+    return MetadataCatalogParametersResult(
+        policyengine_version=selected.policyengine_version,
+        catalog_format=selected.model_version.catalog_format,
+        parameters=[
+            MetadataCatalogParameter(
+                **metadata_parameter(parameter).model_dump(),
+                values=values_by_name[parameter.name],
+            )
+            for parameter in parameters
+        ],
+        node_labels={row.name: row.label for row in node_rows},
+        missing_names=sorted(requested_names - found_names),
     )
 
 

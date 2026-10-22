@@ -16,6 +16,9 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_datasets im
     read_datasets,
     read_input_datasets,
 )
+from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_nodes import (  # noqa: E501  # a dotted module path cannot be wrapped
+    read_parameter_node_labels,
+)
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_tree import (  # noqa: E501  # a dotted module path cannot be wrapped
     read_parameter_children,
 )
@@ -25,6 +28,7 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_parameters 
     read_parameter_value,
     read_parameter_values,
     read_parameters,
+    read_parameters_by_name,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_regions import (
     read_input_dataset,
@@ -37,6 +41,8 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_variables i
     read_variables,
 )
 from policyengine_api.services.v2.metadata.transformations import (
+    ancestor_paths,
+    metadata_catalog_parameters,
     metadata_catalog_variables,
     metadata_dataset,
     metadata_economy_options,
@@ -55,6 +61,7 @@ from policyengine_api.services.v2.metadata.transformations import (
 )
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogParametersResult,
     MetadataCatalogVariablesResult,
     MetadataDataset,
     MetadataDetailResult,
@@ -77,6 +84,7 @@ from policyengine_api.services.v2.metadata.validators import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from uuid import UUID
 
     from policyengine_api.services.v2.metadata.database_session import (
@@ -617,4 +625,43 @@ class V2MetadataService:
         )
         return metadata_catalog_variables(
             selected, variables=variables, part_values=part_values
+        )
+
+    def get_catalog_parameters(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+        *,
+        names: Sequence[str],
+    ) -> MetadataCatalogParametersResult:
+        """Return the named parameters of the selected version, in name order.
+
+        Each carries its current-law values, and the result carries the stored
+        labels of their ancestor nodes and the requested names the version
+        lacks. Repeated names count once.
+        """
+        selected = self._select_catalog(country_id, policyengine_version)
+        session = self._database_session.session
+        model_version_id = selected.model_version.id
+        requested_names = set(names)
+        parameters = read_parameters_by_name(
+            session, model_version_id=model_version_id, parameter_names=requested_names
+        )
+        found_names = {parameter.name for parameter in parameters}
+        value_rows = read_current_law_values_by_parameter_name(
+            session, model_version_id=model_version_id, parameter_names=found_names
+        )
+        node_rows = read_parameter_node_labels(
+            session,
+            model_version_id=model_version_id,
+            node_names={
+                ancestor for name in found_names for ancestor in ancestor_paths(name)
+            },
+        )
+        return metadata_catalog_parameters(
+            selected,
+            requested_names=requested_names,
+            parameters=parameters,
+            value_rows=value_rows,
+            node_rows=node_rows,
         )

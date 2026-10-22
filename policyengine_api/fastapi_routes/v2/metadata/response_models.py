@@ -6,6 +6,7 @@ from typing import Generic, Literal, TypeVar
 
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogParametersResult,
     MetadataCatalogVariablesResult,
     MetadataDataset,
     MetadataDetailResult,
@@ -153,3 +154,9 @@ class MetadataCatalogVariablesResponse(
     MetadataResourceSuccessResponse[MetadataCatalogVariablesResult]
 ):
     """Success response holding every variable of one catalog version."""
+
+
+class MetadataCatalogParametersResponse(
+    MetadataResourceSuccessResponse[MetadataCatalogParametersResult]
+):
+    """Success response holding parameters fetched by name, with their values."""

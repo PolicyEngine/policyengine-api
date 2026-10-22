@@ -53,6 +53,26 @@ def read_parameters(
     )
 
 
+def read_parameters_by_name(
+    session: Session, *, model_version_id: UUID, parameter_names: Collection[str]
+) -> list[Parameter]:
+    """Return the named parameters of a model version in name order.
+
+    Names the version has no parameter for are absent.
+    """
+    if not parameter_names:
+        return []
+    return read_rows(
+        session,
+        select(Parameter)
+        .where(
+            col(Parameter.tax_benefit_model_version_id) == model_version_id,
+            col(Parameter.name).in_(sorted(parameter_names)),
+        )
+        .order_by(col(Parameter.name)),
+    )
+
+
 def read_parameter(
     session: Session, *, model_version_id: UUID, parameter_id: UUID
 ) -> Parameter | None:
