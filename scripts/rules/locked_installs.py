@@ -118,20 +118,27 @@ def _tracked_files(root: Path) -> list[str]:
 
 
 def _file_kind(path: str) -> str | None:
+    """Return the first kind whose naming test ``path`` passes, or None."""
     name = Path(path).name
-    if path.startswith(WORKFLOW_DIRECTORIES) and name.endswith((".yml", ".yaml")):
-        return "workflow"
-    if path.startswith(".github/actions/") and name in {"action.yml", "action.yaml"}:
-        return "action"
-    if name.endswith(".sh"):
-        return "shell"
-    if name in MAKEFILE_NAMES or name.endswith(".mk"):
-        return "makefile"
-    if "dockerfile" in name.lower() and not name.endswith(".dockerignore"):
-        return "dockerfile"
-    if name.endswith(".py") and "tests" not in Path(path).parts:
-        return "python"
-    return None
+    kind_tests = (
+        (
+            "workflow",
+            path.startswith(WORKFLOW_DIRECTORIES) and name.endswith((".yml", ".yaml")),
+        ),
+        (
+            "action",
+            path.startswith(".github/actions/")
+            and name in {"action.yml", "action.yaml"},
+        ),
+        ("shell", name.endswith(".sh")),
+        ("makefile", name in MAKEFILE_NAMES or name.endswith(".mk")),
+        (
+            "dockerfile",
+            "dockerfile" in name.lower() and not name.endswith(".dockerignore"),
+        ),
+        ("python", name.endswith(".py") and "tests" not in Path(path).parts),
+    )
+    return next((kind for kind, matches in kind_tests if matches), None)
 
 
 def scanned_files(root: Path = REPO_ROOT) -> dict[str, str]:
@@ -206,6 +213,15 @@ def _pinned(command: str) -> bool:
     )
 
 
+def _classify_uv_run(command: str) -> tuple[bool, bool] | None:
+    """Classify ``uv run``: extra packages bypass the lock; --no-sync installs none."""
+    if _EXTRA_PACKAGES_FLAG.search(command):
+        return False, _pinned(command)
+    if _NO_SYNC_FLAG.search(command):
+        return None
+    return bool(_LOCK_FLAG.search(command)), False
+
+
 def classify_command(command: str) -> tuple[bool, bool] | None:
     """Return ``(locked, pinned)`` for a command that installs packages, else None."""
     if _UV_PIP.search(command):
@@ -213,11 +229,7 @@ def classify_command(command: str) -> tuple[bool, bool] | None:
     if _UV_SYNC.search(command):
         return bool(_LOCK_FLAG.search(command)), False
     if _UV_RUN.search(command):
-        if _EXTRA_PACKAGES_FLAG.search(command):
-            return False, _pinned(command)
-        if _NO_SYNC_FLAG.search(command):
-            return None
-        return bool(_LOCK_FLAG.search(command)), False
+        return _classify_uv_run(command)
     if _TOOL_INSTALL.search(command) or _PIP_INSTALL.search(command):
         return False, _pinned(command)
     if _OTHER_INSTALL.search(command):
