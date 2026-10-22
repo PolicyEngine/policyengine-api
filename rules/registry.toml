@@ -574,6 +574,32 @@ workflow = ".github/workflows/pr.yml"
 job = "test"
 invocation = "make test"
 
+[[rule]]
+id = "api.v2.simulation-tables-stay-removed"
+category = "isolation"
+statement = "Public API code never imports the removed simulation-domain models (household jobs, simulations, reports, report runs and their outputs), and the v2 metadata never declares their tables, which the simulation service owns in its own schema."
+rationale = "docs/engineering/skills/alembic-migrations.md#simulation-domain-table-removal"
+scope = ["policyengine_api/**/*.py", "scripts/**/*.py", "tests/**/*.py", "migrations/v2/env.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/v2/test_simulation_domain_boundaries.py::test_no_module_imports_a_removed_simulation_model",
+  "tests/unit/v2/test_simulation_domain_boundaries.py::test_v2_metadata_declares_no_simulation_service_table",
+  "tests/unit/v2/test_simulation_domain_boundaries.py::test_models_package_exports_no_simulation_domain_model",
+  "tests/unit/v2/test_metadata_validation.py::test_known_rejected_tables_are_identified",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.simulation-tables-stay-removed/bad_import.py"
+good_fixture = "rules/fixtures/api.v2.simulation-tables-stay-removed/good_import.py"
+test = "tests/unit/v2/test_simulation_domain_boundaries.py::test_rule_proof_simulation_tables_stay_removed"
+
 # --- Migration and schema --------------------------------------------------
 
 [[rule]]

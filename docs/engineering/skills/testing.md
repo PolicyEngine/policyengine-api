@@ -55,10 +55,11 @@ python -m pytest tests/unit/test_cloud_run_deploy_scripts.py tests/unit/test_cap
 For v2 platform foundation work, run the smallest applicable group while
 iterating, then all groups before qualification.
 
-SQLModel schema, lazy configuration, and import effects:
+SQLModel schema, the removed simulation-domain models, lazy configuration, and
+import effects:
 
 ```bash
-uv run pytest tests/unit/v2/test_models.py tests/unit/v2/test_model_persistence.py tests/unit/v2/test_settings.py tests/unit/v2/test_import_side_effects.py -q
+uv run pytest tests/unit/v2/test_models.py tests/unit/v2/test_model_persistence.py tests/unit/v2/test_simulation_domain_boundaries.py tests/unit/v2/test_settings.py tests/unit/v2/test_import_side_effects.py -q
 ```
 
 The generated-only v2 Alembic chain and disposable Postgres lifecycle:
