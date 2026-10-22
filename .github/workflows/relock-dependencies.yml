@@ -1,0 +1,72 @@
+name: Relock dependencies
+
+# Once a day, relock uv.lock to the newest versions pyproject.toml allows and
+# propose the result as a pull request, whose CI tests it. The PolicyEngine .py
+# bundle and the packages its extras pin are held at their locked versions:
+# update-policyengine-bundle.yaml moves them. When the relock changes nothing,
+# no pull request is opened.
+
+on:
+  schedule:
+    # Every day at 07:00 UTC.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: relock-dependencies-${{ github.ref_name }}
+  cancel-in-progress: false
+
+# The workflow token only reads; the policyengine App's token pushes the
+# branch and writes the issue and pull request, so pull_request CI runs.
+permissions:
+  contents: read
+
+jobs:
+  relock:
+    name: Relock dependencies
+    if: github.repository == 'PolicyEngine/policyengine-api'
+    runs-on: ubuntu-latest
+    env:
+      # A scheduled run relocks master and proposes it from the fixed branch. A
+      # manual run on another branch relocks that branch and proposes it to
+      # that branch from a branch of its own.
+      BASE_BRANCH: ${{ github.ref_name }}
+      RELOCK_BRANCH: ${{ github.ref_name == 'master' && 'auto/relock-dependencies' || format('auto/relock-dependencies-{0}', github.ref_name) }}
+      # The Public API runs on Python 3.12; .python-version names a newer one.
+      RELOCK_PYTHON: "3.12"
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The same uv version as push.yml's versioning job, which locks releases.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.4"
+
+      - name: Relock uv.lock, holding the PolicyEngine bundle
+        id: relock
+        env:
+          RELOCK_SUMMARY_FILE: ${{ runner.temp }}/relock-summary.md
+        run: bash .github/scripts/relock_dependencies.sh
+
+      - name: Open or update the relock pull request
+        if: steps.relock.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELOCK_SUMMARY_FILE: ${{ runner.temp }}/relock-summary.md
+        run: bash .github/scripts/open_relock_pull_request.sh
