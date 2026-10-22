@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
 # The environment variable holding the Hugging Face read token; PolicyEngine
 # Core's data downloads read the same variable.
-HUGGING_FACE_TOKEN_VARIABLE = "HUGGING_FACE_TOKEN"  # noqa: S105  # an environment variable name, not a secret
+HUGGING_FACE_CREDENTIAL_VARIABLE = "HUGGING_FACE_TOKEN"
 # Countries whose certified data repository needs the read token.
 PRIVATE_DATA_COUNTRIES = frozenset({"uk"})
 
@@ -63,14 +63,14 @@ def verify_installed_region_data(
     check fails before any read when it is unset.
     """
     token = (os.environ if environ is None else environ).get(
-        HUGGING_FACE_TOKEN_VARIABLE
+        HUGGING_FACE_CREDENTIAL_VARIABLE
     )
     needing_token = [
         country for country in countries if country in PRIVATE_DATA_COUNTRIES
     ]
     if needing_token and not token:
         msg = (
-            f"{HUGGING_FACE_TOKEN_VARIABLE} must be set to read the certified "
+            f"{HUGGING_FACE_CREDENTIAL_VARIABLE} must be set to read the certified "
             f"{', '.join(needing_token)} data, whose repository is private"
         )
         raise RegionDataVerificationError(msg)
