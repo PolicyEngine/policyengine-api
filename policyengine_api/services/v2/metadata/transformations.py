@@ -286,6 +286,7 @@ def parameter_value_selection(
     return ParameterValueSelection(
         parameter_id=value_filter.parameter_id,
         selected_day=selected_day,
+        parameter_names=value_filter.parameter_names,
     )
 
 

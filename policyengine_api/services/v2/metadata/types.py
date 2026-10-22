@@ -12,27 +12,42 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 
 
 @dataclass(frozen=True)
+class ParameterFilter:
+    """Which parameters a listing keeps.
+
+    ``search`` keeps parameters whose name, label or description contains it,
+    ignoring case, and ``names`` the parameters with those exact names.
+    """
+
+    search: str | None = None
+    names: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
 class ParameterValueFilter:
     """Which current-law parameter values a listing keeps.
 
-    ``parameter_id`` keeps one parameter's values, and ``current`` keeps the
-    values in effect on the UTC day of ``now`` (today when ``now`` is None).
+    ``parameter_id`` keeps one parameter's values, ``parameter_names`` the
+    values of the parameters with those exact names, and ``current`` the values
+    in effect on the UTC day of ``now`` (today when ``now`` is None).
     """
 
     parameter_id: UUID | None = None
     current: bool = False
     now: datetime | None = None
+    parameter_names: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
 class ParameterValueSelection:
-    """The parameter and effective day a parameter-value read is narrowed to.
+    """The parameters and effective day a parameter-value read is narrowed to.
 
-    None for either leaves the read unnarrowed by it.
+    None for any of them leaves the read unnarrowed by it.
     """
 
     parameter_id: UUID | None
     selected_day: datetime | None
+    parameter_names: tuple[str, ...] | None = None
 
 
 class StrictResponseModel(BaseModel):

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from starlette.responses import JSONResponse
 
+from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     ERROR_RESPONSES,
     CacheableMetadataRoute,
@@ -21,7 +21,14 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataParameterValueDetailResponse,
     MetadataParameterValuePageResponse,
 )
-from policyengine_api.services.v2.metadata.types import ParameterValueFilter
+from policyengine_api.query_parameters import (
+    ParameterCollectionQuery,
+    ParameterValueCollectionQuery,
+)
+from policyengine_api.services.v2.metadata.types import (
+    ParameterFilter,
+    ParameterValueFilter,
+)
 
 if TYPE_CHECKING:
     from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
@@ -30,16 +37,13 @@ Offset = Annotated[int, Query(ge=0)]
 Limit = Annotated[int, Query(ge=1, le=500)]
 
 
-@dataclass(frozen=True)
-class ParameterValueListingQuery:
-    """The query parameters of the canonical parameter-value listing route."""
-
-    country_id: str
-    policyengine_version: str | None = None
-    parameter_id: UUID | None = None
-    current: bool = False
-    offset: Offset = 0
-    limit: Limit = 100
+ParameterCollectionQueryDependency = Annotated[
+    ParameterCollectionQuery, Depends(query_dependency(ParameterCollectionQuery))
+]
+ParameterValueCollectionQueryDependency = Annotated[
+    ParameterValueCollectionQuery,
+    Depends(query_dependency(ParameterValueCollectionQuery)),
+]
 
 
 def build_v2_metadata_parameter_router(
@@ -62,21 +66,20 @@ def build_v2_metadata_parameter_router(
         summary="List parameters from a selected PolicyEngine.py catalog",
     )
     def list_parameters(
-        country_id: str,
-        policyengine_version: str | None = None,
-        offset: Offset = 0,
-        limit: Limit = 100,
-        search: str | None = None,
+        query: ParameterCollectionQueryDependency,
     ) -> MetadataParameterPageResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataParameterPageResponse,
             lambda reader: reader.list_parameters(
-                country_id,
-                policyengine_version,
-                offset=offset,
-                limit=limit,
-                search=search,
+                query.country_id,
+                query.policyengine_version,
+                offset=query.offset,
+                limit=query.limit,
+                parameter_filter=ParameterFilter(
+                    search=query.search,
+                    names=None if query.name is None else tuple(query.name),
+                ),
             ),
         )
 
@@ -130,7 +133,7 @@ def build_v2_metadata_parameter_router(
         summary="List canonical values from a selected PolicyEngine.py catalog",
     )
     def list_parameter_values(
-        query: Annotated[ParameterValueListingQuery, Depends()],
+        query: ParameterValueCollectionQueryDependency,
     ) -> MetadataParameterValuePageResponse | JSONResponse:
         return read_resource(
             dependencies,
@@ -141,6 +144,11 @@ def build_v2_metadata_parameter_router(
                 value_filter=ParameterValueFilter(
                     parameter_id=query.parameter_id,
                     current=query.current,
+                    parameter_names=(
+                        None
+                        if query.parameter_name is None
+                        else tuple(query.parameter_name)
+                    ),
                 ),
                 offset=query.offset,
                 limit=query.limit,

@@ -1,0 +1,1 @@
+/v2/parameters accepts repeated name keys and /v2/parameter-values repeated parameter_name keys to page only those parameters. Both read their query through the shared query models, so unknown or repeated parameters, an unsupported country_id and a malformed policyengine_version now return 422.

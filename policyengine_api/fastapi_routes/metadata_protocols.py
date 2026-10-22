@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         MetadataParameterSummary,
         MetadataRegion,
         MetadataVariable,
+        ParameterFilter,
         ParameterValueFilter,
     )
 
@@ -130,11 +131,12 @@ class V2MetadataResourceReader(Protocol):
         *,
         offset: int = 0,
         limit: int = 100,
-        search: str | None = None,
+        parameter_filter: ParameterFilter | None = None,
     ) -> MetadataPageResult[MetadataParameterSummary]:
-        """Return parameters in name order, optionally filtered by ``search``.
+        """Return parameters in name order, optionally filtered.
 
-        ``search`` is a case-insensitive substring of the name, label or description.
+        The filter's ``search`` is a case-insensitive substring of the name,
+        label or description; its ``names`` keep only those exact names.
         """
         ...
 
@@ -171,9 +173,10 @@ class V2MetadataResourceReader(Protocol):
         offset: int = 0,
         limit: int = 100,
     ) -> MetadataPageResult[MetadataCanonicalParameterValue]:
-        """Return canonical values, optionally for one parameter.
+        """Return canonical values, optionally for one or several parameters.
 
-        With the filter's ``current``, only values in effect on the UTC day of its
+        The filter's ``parameter_id`` or ``parameter_names`` select parameters.
+        With its ``current``, only values in effect on the UTC day of its
         ``now`` (default: the present) are returned.
         """
         ...
