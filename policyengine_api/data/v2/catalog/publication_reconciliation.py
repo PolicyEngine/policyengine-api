@@ -76,10 +76,45 @@ def _versioned_table_from(table: sa.Table) -> sa.Join:
     )
 
 
+def stored_catalog_format(
+    connection: Connection, country: CountryCatalog
+) -> int | None:
+    """Return the catalog format this country's stored version was published with.
+
+    None means it was published before catalog format 2, so its format 2
+    fields are empty.
+    """
+    statement = (
+        sa.select(MODEL_VERSIONS.c.catalog_format)
+        .select_from(
+            MODEL_VERSIONS.join(
+                MODELS,
+                MODELS.c.id == MODEL_VERSIONS.c.model_id,
+            )
+        )
+        .where(
+            MODELS.c.name == country.model.name,
+            MODEL_VERSIONS.c.version == country.model_version.version,
+        )
+    )
+    return connection.execute(statement).scalar_one_or_none()
+
+
 def _comparison_pairs(
     country: CountryCatalog,
+    *,
+    with_format_2: bool,
 ) -> tuple[tuple[str, Select, Select], ...]:
-    """Return each compared table's name with its staged and stored rows."""
+    """Return each compared table's name with its staged and stored rows.
+
+    Without ``with_format_2``, catalog format 2's fields are left out: a
+    version published before format 2 keeps them empty, and publication never
+    rewrites a stored version.
+    """
+
+    def format_2(*columns: sa.ColumnElement) -> tuple[sa.ColumnElement, ...]:
+        return columns if with_format_2 else ()
+
     staged_country = STAGE_CATALOG_MODELS.c.country_id == country.country_id
     selected_version = sa.and_(
         MODELS.c.name == country.model.name,
@@ -90,12 +125,22 @@ def _comparison_pairs(
         STAGE_CATALOG_MODELS.c.version_description,
         STAGE_CATALOG_MODELS.c.current_law_id,
         STAGE_CATALOG_MODELS.c.metadata_time_periods,
+        *format_2(
+            STAGE_CATALOG_MODELS.c.catalog_format,
+            STAGE_CATALOG_MODELS.c.entities,
+            STAGE_CATALOG_MODELS.c.basic_inputs,
+        ),
     ).where(staged_country)
     actual_model_version = (
         sa.select(
             MODEL_VERSIONS.c.description,
             MODEL_VERSIONS.c.current_law_id,
             sa.cast(MODEL_VERSIONS.c.metadata_time_periods, JSONB),
+            *format_2(
+                MODEL_VERSIONS.c.catalog_format,
+                sa.cast(MODEL_VERSIONS.c.entities, JSONB),
+                sa.cast(MODEL_VERSIONS.c.basic_inputs, JSONB),
+            ),
         )
         .select_from(
             MODEL_VERSIONS.join(
@@ -116,6 +161,14 @@ def _comparison_pairs(
         STAGE_CATALOG_VARIABLES.c.default_value,
         STAGE_CATALOG_VARIABLES.c.adds,
         STAGE_CATALOG_VARIABLES.c.subtracts,
+        *format_2(
+            STAGE_CATALOG_VARIABLES.c.is_input_variable,
+            STAGE_CATALOG_VARIABLES.c.hidden_input,
+            STAGE_CATALOG_VARIABLES.c.module_name,
+            STAGE_CATALOG_VARIABLES.c.adds_parameter_path,
+            STAGE_CATALOG_VARIABLES.c.subtracts_parameter_path,
+            STAGE_CATALOG_VARIABLES.c.enum_values,
+        ),
     ).where(STAGE_CATALOG_VARIABLES.c.country_id == country.country_id)
     actual_variables = (
         sa.select(
@@ -128,6 +181,14 @@ def _comparison_pairs(
             sa.cast(VARIABLES.c.default_value, JSONB),
             sa.cast(VARIABLES.c.adds, JSONB),
             sa.cast(VARIABLES.c.subtracts, JSONB),
+            *format_2(
+                VARIABLES.c.is_input_variable,
+                VARIABLES.c.hidden_input,
+                VARIABLES.c.module_name,
+                VARIABLES.c.adds_parameter_path,
+                VARIABLES.c.subtracts_parameter_path,
+                sa.cast(VARIABLES.c.enum_values, JSONB),
+            ),
         )
         .select_from(_versioned_table_from(VARIABLES))
         .where(selected_version)
@@ -154,6 +215,10 @@ def _comparison_pairs(
         STAGE_CATALOG_PARAMETERS.c.description,
         STAGE_CATALOG_PARAMETERS.c.data_type,
         STAGE_CATALOG_PARAMETERS.c.unit,
+        *format_2(
+            STAGE_CATALOG_PARAMETERS.c.economy,
+            STAGE_CATALOG_PARAMETERS.c.household,
+        ),
     ).where(STAGE_CATALOG_PARAMETERS.c.country_id == country.country_id)
     actual_parameters = (
         sa.select(
@@ -162,6 +227,7 @@ def _comparison_pairs(
             PARAMETERS.c.description,
             PARAMETERS.c.data_type,
             PARAMETERS.c.unit,
+            *format_2(PARAMETERS.c.economy, PARAMETERS.c.household),
         )
         .select_from(_versioned_table_from(PARAMETERS))
         .where(selected_version)
@@ -302,9 +368,11 @@ def assert_country_matches(
     row both fail; the error names the first table that differs, never its
     rows. Without ``include_regions``, region rows are not compared: they come
     from the Public API's reference files, which may change while the
-    PolicyEngine.py version stays the same.
+    PolicyEngine.py version stays the same. A version published before catalog
+    format 2 is compared without format 2's fields.
     """
-    pairs = _comparison_pairs(country)
+    stored_format = stored_catalog_format(connection, country)
+    pairs = _comparison_pairs(country, with_format_2=stored_format is not None)
     if include_regions:
         pairs = (*pairs, ("regions", *_region_comparison_pair(country)))
     for table_name, staged, actual in pairs:
@@ -367,6 +435,9 @@ INSERT_MODEL_VERSION = sa.insert(MODEL_VERSIONS).from_select(
         "description",
         "current_law_id",
         "metadata_time_periods",
+        "catalog_format",
+        "entities",
+        "basic_inputs",
     ],
     sa.select(
         STAGE_CATALOG_MODELS.c.version_id,
@@ -378,6 +449,12 @@ INSERT_MODEL_VERSION = sa.insert(MODEL_VERSIONS).from_select(
         sa.cast(
             STAGE_CATALOG_MODELS.c.metadata_time_periods,
             MODEL_VERSIONS.c.metadata_time_periods.type,
+        ),
+        STAGE_CATALOG_MODELS.c.catalog_format,
+        sa.cast(STAGE_CATALOG_MODELS.c.entities, MODEL_VERSIONS.c.entities.type),
+        sa.cast(
+            STAGE_CATALOG_MODELS.c.basic_inputs,
+            MODEL_VERSIONS.c.basic_inputs.type,
         ),
     )
     .select_from(
@@ -442,6 +519,12 @@ INSERT_VARIABLES = sa.insert(VARIABLES).from_select(
         "default_value",
         "adds",
         "subtracts",
+        "is_input_variable",
+        "hidden_input",
+        "module_name",
+        "adds_parameter_path",
+        "subtracts_parameter_path",
+        "enum_values",
         "tax_benefit_model_version_id",
     ],
     sa.select(
@@ -464,6 +547,15 @@ INSERT_VARIABLES = sa.insert(VARIABLES).from_select(
         sa.cast(
             STAGE_CATALOG_VARIABLES.c.subtracts,
             VARIABLES.c.subtracts.type,
+        ),
+        STAGE_CATALOG_VARIABLES.c.is_input_variable,
+        STAGE_CATALOG_VARIABLES.c.hidden_input,
+        STAGE_CATALOG_VARIABLES.c.module_name,
+        STAGE_CATALOG_VARIABLES.c.adds_parameter_path,
+        STAGE_CATALOG_VARIABLES.c.subtracts_parameter_path,
+        sa.cast(
+            STAGE_CATALOG_VARIABLES.c.enum_values,
+            VARIABLES.c.enum_values.type,
         ),
         MODEL_VERSIONS.c.id,
     )
@@ -528,6 +620,8 @@ INSERT_PARAMETERS = sa.insert(PARAMETERS).from_select(
         "description",
         "data_type",
         "unit",
+        "economy",
+        "household",
         "tax_benefit_model_version_id",
     ],
     sa.select(
@@ -538,6 +632,8 @@ INSERT_PARAMETERS = sa.insert(PARAMETERS).from_select(
         STAGE_CATALOG_PARAMETERS.c.description,
         STAGE_CATALOG_PARAMETERS.c.data_type,
         STAGE_CATALOG_PARAMETERS.c.unit,
+        STAGE_CATALOG_PARAMETERS.c.economy,
+        STAGE_CATALOG_PARAMETERS.c.household,
         MODEL_VERSIONS.c.id,
     )
     .select_from(

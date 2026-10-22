@@ -99,6 +99,32 @@ metadata time-period options are stored on the model-version snapshot.
 PolicyEngine Core and country-package versions are derived diagnostic evidence
 and are not separately persisted.
 
+Catalog format 2 adds the metadata the app's v3 workspace reads, taken only
+from PolicyEngine.py's public records, which carry it from the release that
+publishes entities, basic inputs and these flags:
+
+| Record | Fields |
+| --- | --- |
+| Model version | `catalog_format` (2), `entities` (`key`, `plural`, `is_person`, in the package's order), `basic_inputs` (the household builder's default fields) |
+| Variable | `is_input_variable`, `hidden_input`, `module_name`, `adds_parameter_path` and `subtracts_parameter_path` (the parameter whose dated value lists the variables summed; `adds` and `subtracts` keep the list PolicyEngine.py resolved), `enum_values` (`value` and declared `label`, in order) |
+| Parameter | `economy`, `household` |
+
+Bracket schedules are parameter nodes with their stored label, or none when
+the package stores none. Extraction stops if the public model publishes no
+entities or basic inputs, has other than one person entity, names a basic
+input or a parameter path that is not published, gives enum labels that do
+not match the variable's possible values or are not JSON scalars, or gives a
+flag that is not a boolean. An opt-in test
+(`tests/integration/test_v2_catalog_metadata_parity.py`, run by the v2
+integration check) compares every format 2 field for the US and the UK with
+what `/{country}/metadata` builds.
+
+Publication never rewrites a stored version. A version published before
+format 2 has a null `catalog_format` and null format 2 fields, and later
+publications of the same PolicyEngine.py version compare it without those
+fields. The first PolicyEngine.py version published after format 2 deploys
+carries them.
+
 Parameter extraction requires the PolicyEngine.py public history contract from
 5.0.4 and later: values are ordered from oldest to newest, bounded `end_date`
 values are inclusive and fall one day before the following `start_date`, and

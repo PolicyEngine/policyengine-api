@@ -550,3 +550,131 @@ def test_new_version_is_additive_and_concurrent_retries_serialize(
         "reports": 0,
         "report_runs": 0,
     }
+
+
+def _format_2_values(engine: Engine) -> dict[str, object]:
+    """Return the US version's stored catalog format 2 fields."""
+    with engine.connect() as connection:
+        version = connection.execute(
+            text(
+                "SELECT version.catalog_format, version.entities, version.basic_inputs "
+                "FROM tax_benefit_model_versions AS version "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = 'policyengine-us'"
+            )
+        ).one()
+        variable = connection.execute(
+            text(
+                "SELECT is_input_variable, hidden_input, module_name, "
+                "adds_parameter_path, subtracts_parameter_path, enum_values "
+                "FROM variables WHERE name = 'employment_income' "
+                "AND tax_benefit_model_version_id = ("
+                "SELECT version.id FROM tax_benefit_model_versions AS version "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = 'policyengine-us')"
+            )
+        ).one()
+        parameter = connection.execute(
+            text(
+                "SELECT economy, household FROM parameters "
+                "WHERE name = 'gov.example.rate' "
+                "AND tax_benefit_model_version_id = ("
+                "SELECT version.id FROM tax_benefit_model_versions AS version "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = 'policyengine-us')"
+            )
+        ).one()
+    return {
+        "version": tuple(version),
+        "variable": tuple(variable),
+        "parameter": tuple(parameter),
+    }
+
+
+def _clear_format_2_fields(engine: Engine) -> None:
+    """Make every stored version look as if published before catalog format 2."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE tax_benefit_model_versions SET catalog_format = NULL, "
+                "entities = NULL, basic_inputs = NULL"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE variables SET is_input_variable = NULL, hidden_input = NULL, "
+                "module_name = NULL, adds_parameter_path = NULL, "
+                "subtracts_parameter_path = NULL, enum_values = NULL"
+            )
+        )
+        connection.execute(
+            text("UPDATE parameters SET economy = NULL, household = NULL")
+        )
+
+
+def test_publication_stores_catalog_format_2_fields(
+    publication_engine: Engine,
+) -> None:
+    publish_catalog(publication_engine, normalized_catalog())
+
+    assert _format_2_values(publication_engine) == {
+        "version": (
+            2,
+            [
+                {"key": "person", "plural": "people", "is_person": True},
+                {"key": "household", "plural": "households", "is_person": False},
+            ],
+            ["employment_income"],
+        ),
+        "variable": (
+            True,
+            False,
+            "household.income.employment_income",
+            None,
+            None,
+            None,
+        ),
+        "parameter": (True, False),
+    }
+
+
+def test_version_stored_before_format_2_keeps_its_fields_empty_on_republish(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+    publish_catalog(publication_engine, catalog)
+    _clear_format_2_fields(publication_engine)
+    before_ids = _identifiers(publication_engine)
+
+    result = publish_catalog(publication_engine, catalog)
+
+    assert result.as_dict()["outcome"] == "ok"
+    assert _identifiers(publication_engine) == before_ids
+    assert _format_2_values(publication_engine) == {
+        "version": (None, None, None),
+        "variable": (None, None, None, None, None, None),
+        "parameter": (None, None),
+    }
+
+
+def test_version_stored_with_format_2_fails_when_a_format_2_field_changes(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+    publish_catalog(publication_engine, catalog)
+    before_counts = _counts(publication_engine)
+    us = catalog.country("us")
+    changed_parameter = replace(us.parameters[0], household=True)
+    changed = replace(
+        catalog,
+        countries=(
+            replace(us, parameters=(changed_parameter,)),
+            catalog.country("uk"),
+        ),
+    )
+
+    with pytest.raises(CatalogPublicationError, match="differs"):
+        publish_catalog(publication_engine, changed)
+
+    assert _counts(publication_engine) == before_counts
+    assert _format_2_values(publication_engine)["parameter"] == (True, False)
