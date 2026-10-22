@@ -114,7 +114,9 @@ class MetadataVariable(StrictResponseModel):
 class MetadataParameterSummary(StrictResponseModel):
     """A policy parameter, described without its values.
 
-    Its current-law values are listed by GET /v2/parameter-values.
+    Its current-law values are listed by GET /v2/parameter-values. economy and
+    household say whether a reform of an economy or of a household may change
+    it; they are null in versions published before catalog format 2.
     """
 
     id: UUID
@@ -123,6 +125,8 @@ class MetadataParameterSummary(StrictResponseModel):
     description: str | None
     data_type: str | None
     unit: str | None
+    economy: bool | None = None
+    household: bool | None = None
 
 
 class MetadataCanonicalParameterValue(StrictResponseModel):
@@ -332,3 +336,26 @@ class MetadataCatalogVariablesResult(StrictResponseModel):
     catalog_format: int | None
     variables: list[MetadataVariable]
     part_parameter_values: dict[str, list[MetadataDatedValue]]
+
+
+class MetadataCatalogParameter(MetadataParameterSummary):
+    """A parameter with its current-law values in start-date order."""
+
+    values: list[MetadataDatedValue]
+
+
+class MetadataCatalogParametersResult(StrictResponseModel):
+    """Requested parameters of one catalog version, in name order.
+
+    node_labels maps each ancestor of a requested parameter that the version
+    stores as a parameter node to the node's stored label (null when it has
+    none), for breadcrumbs; a bracket index such as ``rates[0]`` counts as a
+    child of its schedule ``rates``. missing_names lists requested names the
+    version has no parameter for.
+    """
+
+    policyengine_version: str
+    catalog_format: int | None
+    parameters: list[MetadataCatalogParameter]
+    node_labels: dict[str, str | None]
+    missing_names: list[str]

@@ -1,7 +1,7 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 91,
+    "request_count": 92,
     "route_group_count": 9,
     "sim_flow_count": 3,
     "workflow_count": 16
@@ -1647,6 +1647,22 @@
             "result.catalog_format",
             "result.variables",
             "result.part_parameter_values"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/model-catalog/parameters?country_id=us&name=gov.irs.income.bracket.rates.1",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.policyengine_version",
+            "result.catalog_format",
+            "result.parameters",
+            "result.node_labels",
+            "result.missing_names"
           ]
         }
       ]

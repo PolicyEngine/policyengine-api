@@ -26,6 +26,8 @@ from policyengine_api.migration_flags import (
 )
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogParameter,
+    MetadataCatalogParametersResult,
     MetadataCatalogVariablesResult,
     MetadataDataset,
     MetadataDatasetOption,
@@ -198,6 +200,24 @@ def _resource_results() -> tuple[dict[str, object], dict[str, object]]:
             "list_regions": page([region]),
             "get_region_by_code": detail(region),
             "get_region": detail(region),
+            "get_catalog_parameters": MetadataCatalogParametersResult(
+                policyengine_version=version,
+                catalog_format=2,
+                parameters=[
+                    MetadataCatalogParameter(
+                        **parameter.model_dump(),
+                        values=[
+                            MetadataDatedValue(
+                                start_date=datetime(2025, 1, 1, tzinfo=UTC),
+                                end_date=None,
+                                value=0.1,
+                            )
+                        ],
+                    )
+                ],
+                node_labels={"gov.example": "Example policy"},
+                missing_names=["gov.removed"],
+            ),
             "get_catalog_variables": MetadataCatalogVariablesResult(
                 policyengine_version=version,
                 catalog_format=2,
@@ -567,6 +587,7 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/economy-options",
         "/v2/model-catalog",
         "/v2/model-catalog/variables",
+        "/v2/model-catalog/parameters",
         "/v2/parameters",
         "/v2/parameters/children",
         "/v2/parameters/{parameter_id}",
@@ -653,6 +674,7 @@ def _every_resource_path(ids: dict[str, object]) -> list[str]:
         "/v2/economy-options?country_id=us",
         "/v2/model-catalog?country_id=us",
         "/v2/model-catalog/variables?country_id=us",
+        "/v2/model-catalog/parameters?country_id=us&name=gov.example.rate",
     ]
 
 
@@ -841,3 +863,68 @@ def test_catalog_variables_route_rejects_paging_and_unknown_queries(
     )
 
     assert response.status_code == 422
+
+
+def test_catalog_parameters_route_fetches_several_parameters_by_name() -> None:
+    results, _ids = _resource_results()
+    reader = ResourceReader(results)
+
+    response = _client(lambda: reader).get(
+        "/v2/model-catalog/parameters"
+        "?country_id=us&policyengine_version=4.20.3"
+        "&name=gov.example.rate&name=gov.removed"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    result = response.json()["result"]
+    assert result["parameters"][0]["name"] == "gov.example.rate"
+    assert result["parameters"][0]["values"] == [
+        {"start_date": "2025-01-01T00:00:00Z", "end_date": None, "value": 0.1}
+    ]
+    assert result["node_labels"] == {"gov.example": "Example policy"}
+    assert result["missing_names"] == ["gov.removed"]
+    assert reader.calls == [
+        (
+            "get_catalog_parameters",
+            ("us", "4.20.3"),
+            {"names": ["gov.example.rate", "gov.removed"]},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "country_id=us",
+        "country_id=us&name=",
+        "country_id=us&name=gov.example.rate&offset=0",
+        "country_id=us&" + "&".join(f"name=gov.p{index}" for index in range(101)),
+    ],
+)
+def test_catalog_parameters_route_rejects_invalid_name_lists(query: str) -> None:
+    calls = []
+
+    def factory():
+        calls.append("called")
+        results, _ids = _resource_results()
+        return ResourceReader(results)
+
+    response = _client(factory).get(f"/v2/model-catalog/parameters?{query}")
+
+    assert response.status_code == 422
+    assert calls == []
+
+
+def test_catalog_parameters_route_declares_a_repeated_name_in_openapi() -> None:
+    results, _ids = _resource_results()
+    schema = _client(lambda: ResourceReader(results)).get("/v2/openapi.json").json()
+
+    operation = schema["paths"]["/v2/model-catalog/parameters"]["get"]
+    parameters = {parameter["name"]: parameter for parameter in operation["parameters"]}
+    assert set(parameters) == {"country_id", "policyengine_version", "name"}
+    assert parameters["name"]["required"] is True
+    name_schema = parameters["name"]["schema"]
+    assert name_schema["type"] == "array"
+    assert name_schema["minItems"] == 1
+    assert name_schema["maxItems"] == 100

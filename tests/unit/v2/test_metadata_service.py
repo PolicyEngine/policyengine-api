@@ -34,6 +34,7 @@ from policyengine_api.services.v2.metadata.database_session import (
     MetadataDatabaseSession,
 )
 from policyengine_api.services.v2.metadata.services import V2MetadataService
+from policyengine_api.services.v2.metadata.transformations import ancestor_paths
 from policyengine_api.services.v2.metadata.types import (
     MetadataDatedValue,
     MetadataEntity,
@@ -843,6 +844,142 @@ def test_variable_pages_carry_the_format_2_fields(catalog_session: Session) -> N
     assert variable.enum_values is None
 
 
+def _add_bracket_schedule(session: Session) -> None:
+    model_version = _us_model_version(session)
+    session.add_all(
+        [
+            ParameterNode(
+                id=uuid4(),
+                tax_benefit_model_version_id=model_version.id,
+                name="gov.example.rates",
+                label="Example rates",
+                description=None,
+            ),
+            ParameterNode(
+                id=uuid4(),
+                tax_benefit_model_version_id=model_version.id,
+                name="gov.example.rates[0]",
+                label=None,
+                description=None,
+            ),
+        ]
+    )
+    bracket_rate = Parameter(
+        id=uuid4(),
+        tax_benefit_model_version_id=model_version.id,
+        name="gov.example.rates[0].rate",
+        label="Rate",
+        description=None,
+        data_type="float",
+        unit="/1",
+        economy=True,
+        household=True,
+    )
+    session.add(bracket_rate)
+    session.add(
+        ParameterValue(
+            id=uuid4(),
+            parameter_id=bracket_rate.id,
+            value_json=0.2,
+            start_date=datetime(2025, 1, 1, tzinfo=UTC),
+            end_date=None,
+        )
+    )
+    session.commit()
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("gov", []),
+        ("gov.example.rate", ["gov", "gov.example"]),
+        (
+            "gov.example.rates[0].rate",
+            ["gov", "gov.example", "gov.example.rates", "gov.example.rates[0]"],
+        ),
+        ("gov.example.rates[10]", ["gov", "gov.example", "gov.example.rates"]),
+    ],
+)
+def test_ancestor_paths_treat_a_bracket_index_as_a_child(
+    name: str, expected: list[str]
+) -> None:
+    assert ancestor_paths(name) == expected
+
+
+def test_named_parameters_load_with_values_and_ancestor_labels_in_one_read(
+    catalog_session: Session,
+) -> None:
+    _add_bracket_schedule(catalog_session)
+
+    result, statements = _recorded_statements(
+        catalog_session,
+        lambda: _service(catalog_session).get_catalog_parameters(
+            "us",
+            names=["gov.example.rates[0].rate", "gov.example.rate", "gov.example.rate"],
+        ),
+    )
+
+    assert result.policyengine_version == POLICYENGINE_VERSION
+    assert result.catalog_format == 2
+    assert [parameter.name for parameter in result.parameters] == [
+        "gov.example.rate",
+        "gov.example.rates[0].rate",
+    ]
+    example_rate, bracket_rate = result.parameters
+    assert (example_rate.economy, example_rate.household) == (True, False)
+    assert [value.value for value in example_rate.values] == [0.1, 0.2]
+    assert example_rate.values[0].start_date == datetime(2025, 1, 1, tzinfo=UTC)
+    assert example_rate.values[0].end_date == datetime(2025, 12, 31, tzinfo=UTC)
+    assert [value.value for value in bracket_rate.values] == [0.2]
+    assert result.node_labels == {
+        "gov.example": "Example policy",
+        "gov.example.rates": "Example rates",
+        "gov.example.rates[0]": None,
+    }
+    assert result.missing_names == []
+    assert len(statements) == 4
+
+
+def test_named_parameters_list_names_the_version_lacks(
+    catalog_session: Session,
+) -> None:
+    result = _service(catalog_session).get_catalog_parameters(
+        "uk", names=["gov.example.rate", "gov.removed.amount"]
+    )
+
+    assert [parameter.name for parameter in result.parameters] == ["gov.example.rate"]
+    assert result.missing_names == ["gov.removed.amount"]
+
+
+def test_named_parameters_exclude_policy_and_dynamic_values(
+    catalog_session: Session,
+) -> None:
+    model_version = _us_model_version(catalog_session)
+    parameter = catalog_session.exec(
+        select(Parameter).where(
+            Parameter.tax_benefit_model_version_id == model_version.id,
+            Parameter.name == "gov.example.rate",
+        )
+    ).one()
+    catalog_session.add(
+        ParameterValue(
+            id=uuid4(),
+            parameter_id=parameter.id,
+            value_json=0.9,
+            start_date=datetime(2027, 1, 1, tzinfo=UTC),
+            end_date=None,
+            policy_id=uuid4(),
+        )
+    )
+    catalog_session.commit()
+
+    result = _service(catalog_session).get_catalog_parameters(
+        "us", names=["gov.example.rate"]
+    )
+
+    assert [value.value for value in result.parameters[0].values] == [0.1, 0.2]
+
+
 def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
     project_package = Path(__file__).parents[3] / "policyengine_api"
     connector_directory = (
@@ -852,6 +989,7 @@ def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
         project_package / "data" / "v2" / "catalog" / "catalog_selection.py",
         connector_directory / "reads.py",
         connector_directory / "reads_datasets.py",
+        connector_directory / "reads_parameter_nodes.py",
         connector_directory / "reads_parameter_tree.py",
         connector_directory / "reads_parameters.py",
         connector_directory / "reads_regions.py",
@@ -909,6 +1047,7 @@ def test_resource_entrypoints_are_defined_in_the_service_module() -> None:
         "get_economy_options",
         "get_model_catalog",
         "get_catalog_variables",
+        "get_catalog_parameters",
     }
 
     for method_name in method_names:

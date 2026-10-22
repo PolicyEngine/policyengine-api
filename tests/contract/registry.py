@@ -702,6 +702,24 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                 ),
                 route_group="metadata",
             ),
+            ContractRequest(
+                method="GET",
+                path=(
+                    "/v2/model-catalog/parameters?country_id=us"
+                    "&name=gov.irs.income.bracket.rates.1"
+                ),
+                expected_status=200,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result.policyengine_version",
+                    "result.catalog_format",
+                    "result.parameters",
+                    "result.node_labels",
+                    "result.missing_names",
+                ),
+                route_group="metadata",
+            ),
         ),
     ),
     WorkflowContract(

@@ -54,6 +54,18 @@ it shows instead of the list resolved on 2025-01-01; a path whose parameter
 the version lacks maps to an empty list. `GET /v2/variables` pages carry the
 same variable fields.
 
+`GET /v2/model-catalog/parameters` takes the same query plus one or more
+`name` keys (at most 100, each an exact parameter path) and returns those
+parameters in name order, each with its `economy` and `household` flags and its
+current-law values in start-date order, in one response: a client showing or
+editing a reform loads all of its parameters at once. `node_labels` maps each
+ancestor of a returned parameter that the version stores as a parameter node
+to its stored label (null when it has none), for breadcrumbs; a bracket index
+such as `rates[0]` counts as a child of its schedule `rates`. `missing_names`
+lists requested names the version has no parameter for, so a reform saved
+against an older version still opens. `GET /v2/parameters` pages and details
+carry the same `economy` and `household` flags.
+
 ## Response caching
 
 Every successful metadata response carries a strong `ETag`, a hash of its

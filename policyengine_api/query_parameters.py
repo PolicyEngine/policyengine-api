@@ -232,6 +232,23 @@ class PaginationQuery(StrictQueryParameters):
     limit: Limit = DEFAULT_QUERY_LIMIT
 
 
+MAXIMUM_PARAMETER_NAMES = 100
+ParameterName = Annotated[
+    str,
+    Field(min_length=1, max_length=512, description="Exact parameter path"),
+]
+
+
+class CatalogParameterQuery(CatalogQuery):
+    """Query contract for fetching several parameters of a catalog by name."""
+
+    name: list[ParameterName] = Field(
+        min_length=1,
+        max_length=MAXIMUM_PARAMETER_NAMES,
+        description="Exact parameter paths; repeat the key for each one",
+    )
+
+
 class PolicyCreateQuery(CatalogQuery):
     """Query contract for native immutable policy creation."""
 

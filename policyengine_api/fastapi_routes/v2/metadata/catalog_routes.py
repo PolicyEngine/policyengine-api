@@ -14,16 +14,20 @@ from policyengine_api.fastapi_routes.v2.metadata.common import (
     read_resource,
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
+    MetadataCatalogParametersResponse,
     MetadataCatalogVariablesResponse,
     MetadataModelCatalogResponse,
 )
-from policyengine_api.query_parameters import CatalogQuery
+from policyengine_api.query_parameters import CatalogParameterQuery, CatalogQuery
 
 if TYPE_CHECKING:
     from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 
 CatalogQueryDependency = Annotated[
     CatalogQuery, Depends(query_dependency(CatalogQuery))
+]
+CatalogParameterQueryDependency = Annotated[
+    CatalogParameterQuery, Depends(query_dependency(CatalogParameterQuery))
 ]
 
 
@@ -85,6 +89,30 @@ def build_v2_model_catalog_router(
             MetadataCatalogVariablesResponse,
             lambda reader: reader.get_catalog_variables(
                 query.country_id, query.policyengine_version
+            ),
+        )
+
+    @router.get(
+        "/model-catalog/parameters",
+        response_model=MetadataCatalogParametersResponse,
+        summary="Get several parameters of one catalog version by name",
+        description=(
+            "Returns the named parameters (repeat name for each, at most 100) "
+            "in name order, each with its economy and household flags and its "
+            "current-law values by date, plus the stored labels of their "
+            "ancestor nodes for breadcrumbs and the requested names the "
+            "version has no parameter for. A client showing or editing a "
+            "reform loads all of its parameters in this one request."
+        ),
+    )
+    def get_catalog_parameters(
+        query: CatalogParameterQueryDependency,
+    ) -> MetadataCatalogParametersResponse | JSONResponse:
+        return read_resource(
+            dependencies,
+            MetadataCatalogParametersResponse,
+            lambda reader: reader.get_catalog_parameters(
+                query.country_id, query.policyengine_version, names=query.name
             ),
         )
 

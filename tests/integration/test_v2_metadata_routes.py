@@ -508,3 +508,38 @@ def test_postgres_catalog_variables_carry_part_parameter_values_by_date(
         "employment_income"
     ]
     assert uk.json()["result"]["part_parameter_values"] == {}
+
+
+def test_postgres_catalog_parameters_load_values_and_breadcrumb_labels(
+    published_engine: Engine,
+) -> None:
+    client = _client(published_engine)
+
+    response = client.get(
+        "/v2/model-catalog/parameters",
+        params=[
+            ("country_id", "us"),
+            ("policyengine_version", POLICYENGINE_VERSION),
+            ("name", "gov.example.rate"),
+            ("name", "gov.removed.amount"),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    result = response.json()["result"]
+    assert [parameter["name"] for parameter in result["parameters"]] == [
+        "gov.example.rate"
+    ]
+    parameter = result["parameters"][0]
+    assert (parameter["economy"], parameter["household"]) == (True, False)
+    assert parameter["values"] == [
+        {
+            "start_date": "2025-01-01T00:00:00Z",
+            "end_date": "2025-12-31T00:00:00Z",
+            "value": 0.1,
+        },
+        {"start_date": "2026-01-01T00:00:00Z", "end_date": None, "value": 0.2},
+    ]
+    assert result["node_labels"] == {"gov.example": "Example policy"}
+    assert result["missing_names"] == ["gov.removed.amount"]

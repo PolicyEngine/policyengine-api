@@ -8,7 +8,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | ---: |
 | route group count | 9 |
 | workflow count | 16 |
-| request count | 91 |
+| request count | 92 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -217,6 +217,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `GET` | `/v2/economy-options?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.current_law_id`, `result.region`, `result.time_period`, `result.datasets` |
 | `GET` | `/v2/model-catalog?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.catalog_format`, `result.entities`, `result.basic_inputs`, `result.regions`, `result.datasets`, `result.economy_options` |
 | `GET` | `/v2/model-catalog/variables?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.catalog_format`, `result.variables`, `result.part_parameter_values` |
+| `GET` | `/v2/model-catalog/parameters?country_id=us&name=gov.irs.income.bracket.rates.1` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.catalog_format`, `result.parameters`, `result.node_labels`, `result.missing_names` |
 
 ### `simulation_submit_poll`
 
