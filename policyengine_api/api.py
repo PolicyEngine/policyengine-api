@@ -50,9 +50,6 @@ log_timing("Policy routes import completed")
 from policyengine_api.routes.metadata_routes import metadata_bp
 
 log_timing("Metadata routes import completed")
-from policyengine_api.routes.user_profile_routes import user_profile_bp
-
-log_timing("User profile routes import completed")
 from policyengine_api.routes.reform_impact_routes import reform_impact_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
@@ -128,9 +125,6 @@ log_timing("Policy routes registered")
 # Routes for economy microsimulation
 app.register_blueprint(economy_bp)
 log_timing("Economy routes registered")
-
-app.register_blueprint(user_profile_bp)
-log_timing("User profile routes registered")
 
 app.register_blueprint(reform_impact_bp)
 log_timing("Simulations endpoint registered")
