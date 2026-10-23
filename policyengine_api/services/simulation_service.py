@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Simulation, SimulationRun
+from policyengine_api.services.final_results import changes_stored_result
 from policyengine_api.spm import validate_spm_calculation_provenance
 from policyengine_api.utils.population_identity import (
     canonical_numeric_household_id,
@@ -19,6 +20,10 @@ from policyengine_api.utils.population_identity import (
 
 class InvalidSimulationIdError(Exception):
     """Raised when a simulation ID is not a non-negative integer."""
+
+
+class SimulationAlreadyCompleteError(Exception):
+    """Raised when an update would change the result of a complete simulation."""
 
 
 @dataclass(frozen=True)
@@ -83,6 +88,24 @@ class SimulationService:
         except ValueError:
             return True
         return False
+
+    @classmethod
+    def _has_final_result(cls, session: Session, simulation: Simulation) -> bool:
+        """Whether the simulation holds a complete result that updates cannot change.
+
+        Stale SPM output is not final: it is reset to pending and run again. Nor is
+        a result whose rerun the server has started and not yet finished.
+        """
+        if simulation.status != "complete" or cls._has_stale_spm_output(
+            simulation.output
+        ):
+            return False
+        if simulation.active_run_id is None:
+            return True
+        active_run = session.scalar(
+            select(SimulationRun).where(SimulationRun.id == simulation.active_run_id)
+        )
+        return active_run is None or active_run.status not in {"pending", "running"}
 
     def ensure_simulation_dual_write_state(
         self,
@@ -293,8 +316,11 @@ class SimulationService:
         """Apply the given status, output or error message and sync the run history.
 
         Return None when nothing was given. The simulation is restamped with the current
-        country package version. Raise ValueError for output with legacy ``spm_config``
-        or an invalid SPM receipt, and LookupError if the simulation does not exist.
+        country package version. A complete result is final: an update that only
+        repeats it returns the simulation unchanged, and one that would change it
+        raises SimulationAlreadyCompleteError. Raise ValueError for output with legacy
+        ``spm_config`` or an invalid SPM receipt, and LookupError if the simulation
+        does not exist.
         """
         values = {
             key: value
@@ -331,6 +357,14 @@ class SimulationService:
             if simulation is None:
                 msg = f"Simulation #{simulation_id} not found"
                 raise LookupError(msg)
+            if self._has_final_result(session, simulation):
+                if changes_stored_result(simulation, values):
+                    msg = (
+                        f"Simulation #{simulation_id} is complete; "
+                        "its result cannot be changed"
+                    )
+                    raise SimulationAlreadyCompleteError(msg)
+                return simulation
             for key, value in values.items():
                 setattr(simulation, key, value)
             simulation.api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)

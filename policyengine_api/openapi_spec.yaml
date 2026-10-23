@@ -623,6 +623,8 @@ paths:
         derived from that receipt and belongs to the linked household; this
         operation does not select a measurement. Top-level spm is
         rejected, including null, with HTTP 400 SPM_SETTINGS_UNSUPPORTED.
+        A complete result is final: an update that repeats it returns the record
+        unchanged, and one that would change it is rejected with HTTP 409.
       parameters:
         - name: country_id
           in: path
@@ -644,6 +646,9 @@ paths:
           content: *simulation_error_content
         404:
           description: The simulation does not exist in the selected country.
+          content: *simulation_error_content
+        409:
+          description: The simulation is complete, and the update would change its result.
           content: *simulation_error_content
   /{country_id}/simulation/{simulation_id}:
     get:
@@ -760,6 +765,9 @@ paths:
         Update a report output status, result, or error message. Completed US
         economy outputs require compact v2 comparison provenance. Each receipt
         contains the complete resolved configuration; a sibling spm_config is rejected.
+        A complete result under the current cache version is final: an update
+        that repeats it returns the record unchanged, and one that would change
+        it is rejected with HTTP 409.
       parameters:
         - name: country_id
           in: path
@@ -809,6 +817,8 @@ paths:
                       finished_at:
                         type: string
                         nullable: true
+        "409":
+          description: The report is complete, and the update would change its result.
   /{country_id}/report/{report_id}:
     get:
       summary: Get a report output

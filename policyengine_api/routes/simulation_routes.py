@@ -6,11 +6,14 @@ import logging
 import jsonschema
 import pydantic
 from flask import Blueprint, Response, current_app, request
-from werkzeug.exceptions import BadRequest, HTTPException, NotFound
+from werkzeug.exceptions import BadRequest, Conflict, HTTPException, NotFound
 
 from policyengine_api.data.v1_models import Simulation
 from policyengine_api.response_factory import _make_error_response
-from policyengine_api.services.simulation_service import SimulationService
+from policyengine_api.services.simulation_service import (
+    SimulationAlreadyCompleteError,
+    SimulationService,
+)
 from policyengine_api.spm import SPMValidationError
 from policyengine_api.utils.payload_validators import validate_country
 
@@ -194,6 +197,9 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
 def update_simulation(country_id: str) -> Response:
     """Update a simulation record with results or error.
 
+    A complete result is final: repeating it answers 200 with the record
+    unchanged, and changing it answers 409.
+
     Args:
         country_id (str): The country ID.
 
@@ -257,6 +263,13 @@ def update_simulation(country_id: str) -> Response:
     except LookupError:
         msg = f"Simulation #{simulation_id} not found."
         raise NotFound(msg) from None
+    except SimulationAlreadyCompleteError as error:
+        current_app.logger.warning(
+            "Refused to change complete simulation #%s for country %s",
+            simulation_id,
+            country_id,
+        )
+        raise Conflict(str(error)) from None
     except HTTPException:
         # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
         # through without being logged as "Unexpected error".

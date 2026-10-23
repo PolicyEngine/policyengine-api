@@ -1,0 +1,1 @@
+`PATCH /{country_id}/simulation` and `PATCH /{country_id}/report` no longer change a complete result: an update that repeats it returns the record unchanged, and one that would change it answers 409. Stale SPM simulation output, reports under an outdated cache version and server-started reruns can still be completed.

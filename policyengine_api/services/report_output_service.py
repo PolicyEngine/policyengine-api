@@ -12,6 +12,7 @@ from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun, Simulation
 from policyengine_api.json_types import JSONObject, JSONValue
+from policyengine_api.services.final_results import changes_stored_result
 from policyengine_api.services.report_run_service import (
     NewReportOutputRun,
     ReportRunService,
@@ -93,6 +94,10 @@ def _canonicalize_society_wide_spm_output(
 
 class InvalidReportOutputIdError(Exception):
     """Raised when a report output ID is not a non-negative integer."""
+
+
+class ReportOutputAlreadyCompleteError(Exception):
+    """Raised when an update would change the result of a complete report output."""
 
 
 @dataclass(frozen=True)
@@ -717,9 +722,12 @@ class ReportOutputService:
     ) -> ReportOutputView | None:
         """Apply the given status, output or error message and sync the run history.
 
-        Return None when nothing was given. Raise LookupError if the report does not
-        exist, and ValueError when marking it running without an active run or
-        completing a US economy report whose SPM provenance is invalid.
+        Return None when nothing was given. A complete result under the current cache
+        version is final: an update that only repeats it leaves the report unchanged,
+        and one that would change it raises ReportOutputAlreadyCompleteError. Raise
+        LookupError if the report does not exist, and ValueError when marking it
+        running without an active run or completing a US economy report whose SPM
+        provenance is invalid.
         """
         values = {
             key: value
@@ -749,22 +757,33 @@ class ReportOutputService:
             )
             return self._build_view(session, report_output)
 
-    def _update_report_output(
-        self,
-        session: Session,
-        report_output: ReportOutput,
-        values: dict,
-        *,
-        requested_status: str | None,
+    def _has_final_result(self, session: Session, report_output: ReportOutput) -> bool:
+        """Whether the report holds a complete, current result updates cannot change.
+
+        A report under an outdated cache version is not served: reads resolve to its
+        current equivalent, so its stored result is not final. Nor is a result whose
+        rerun the server has started and not yet finished.
+        """
+        if report_output.status != "complete" or not self._is_current_report_output(
+            report_output
+        ):
+            return False
+        if report_output.active_run_id is None:
+            return True
+        return not any(
+            run.id == report_output.active_run_id
+            and run.status in {"pending", "running"}
+            for run in self._list_runs_descending(session, report_output.id)
+        )
+
+    @staticmethod
+    def _canonicalize_completed_output(
+        report_output: ReportOutput, values: dict
     ) -> None:
-        if requested_status == "running":
-            runs = self._list_runs_descending(session, report_output.id)
-            if not self._has_mutable_running_run(report_output, runs):
-                msg = (
-                    "Cannot mark report output running without an active pending "
-                    "or running report run"
-                )
-                raise ValueError(msg)
+        """Replace a completed US economy output in ``values`` with its canonical form.
+
+        Raise ValueError when its SPM provenance is invalid.
+        """
         effective_status = values.get("status", report_output.status)
         effective_output = values.get("output", report_output.output)
         if (
@@ -783,6 +802,39 @@ class ReportOutputService:
                     f"{error_message(error)}"
                 )
                 raise ValueError(msg) from error
+
+    def _require_unchanged_final_result(
+        self, report_output: ReportOutput, values: dict
+    ) -> None:
+        proposed = dict(values)
+        if "output" in proposed:
+            self._canonicalize_completed_output(report_output, proposed)
+        if changes_stored_result(report_output, proposed):
+            msg = (
+                f"Report #{report_output.id} is complete; its result cannot be changed"
+            )
+            raise ReportOutputAlreadyCompleteError(msg)
+
+    def _update_report_output(
+        self,
+        session: Session,
+        report_output: ReportOutput,
+        values: dict,
+        *,
+        requested_status: str | None,
+    ) -> None:
+        if self._has_final_result(session, report_output):
+            self._require_unchanged_final_result(report_output, values)
+            return
+        if requested_status == "running":
+            runs = self._list_runs_descending(session, report_output.id)
+            if not self._has_mutable_running_run(report_output, runs):
+                msg = (
+                    "Cannot mark report output running without an active pending "
+                    "or running report run"
+                )
+                raise ValueError(msg)
+        self._canonicalize_completed_output(report_output, values)
         for field, value in values.items():
             setattr(report_output, field, value)
         self._ensure_report_output_dual_write_state(
