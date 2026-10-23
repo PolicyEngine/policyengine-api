@@ -1,3 +1,20 @@
+## [5.8.0] - 2026-10-23
+
+### Added
+
+- The annual economy route accepts `breakdown=local_areas`, which requests the UK constituency and local-authority impacts in a run separate from the national result. It is accepted only for the UK, with region `uk` or one UK country (`country/england`, `country/scotland`, `country/wales`, `country/ni`, or `country/northern_ireland`, the code .py uses), and not with `target=cliff`; other requests return 400. The option gets its own options hash and cached result, and is sent to the simulation API only when set, so requests without it are unchanged. If the simulation API refuses a breakdown with 400 or 422, the route returns 502 with the reason instead of a generic 500. A breakdown job that fails, or that completes without `kind: "local_areas"`, returns 502; its error is kept for two minutes instead of 30 days, and after that the next request submits a new job.
+
+### Changed
+
+- With .py 6.10.0, the UK default dataset is `microcosm_uk_2024_25`: the v2 catalog extractor accepts it as the reviewed UK default, and the metadata labels it "Microcosm", as it does the US Microcosm dataset, instead of the generic "Certified dataset". When the simulation API refuses a budget-window submission with a request-validation (422) body, the error message now names each field and its problem (for example `body.window_size: Input should be less than or equal to 75`) instead of quoting the raw error list, as breakdown refusals do.
+- After the .py 6.10.0 update, UK national and country economy results (`region=uk` or `country/*`) no longer include `constituency_impact` or `local_authority_impact`, because .py runs them on a national dataset with no area codes. Clients get those impacts with a separate request that adds `breakdown=local_areas`.
+- Update the PolicyEngine bundle to 6.10.0.
+
+### Fixed
+
+- UK economy requests for Northern Ireland (`country/ni` in the Public API metadata) now send `country/northern_ireland`, the name .py's UK region registry uses, to the simulation API. The cached result keeps the `country/ni` region. The v2 catalog gives UK constituency and local-authority regions the local-area dataset .py 6.10.0 routes them to (`microcosm_uk_2024_25_dense`) and lists that dataset, instead of the national file, which has no area codes. The UK metadata now offers Ards and North Down (`N09000011`), the 11th Northern Ireland district, which the local-authority list lacked, so it lists 361 local authorities. The four unitary authorities created in April 2023 (Cumberland, Westmorland and Furness, North Yorkshire and Somerset) now have their own hex positions instead of the shared (0, 0) placeholder. The list's codes, names and positions now match .py 6.10.0's packaged 2023 list.
+
+
 ## [5.7.1] - 2026-10-23
 
 ### Fixed
