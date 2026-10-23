@@ -1,0 +1,1 @@
+After the .py 6.10.0 update, UK national and country economy results (`region=uk` or `country/*`) no longer include `constituency_impact` or `local_authority_impact`, because .py runs them on a national dataset with no area codes. Clients get those impacts with a separate request that adds `breakdown=local_areas`.

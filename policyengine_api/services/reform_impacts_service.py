@@ -169,12 +169,15 @@ class ReformImpactsService:
         *,
         message: str,
         error_code: str | None = None,
+        keep_seconds: int | None = None,
     ) -> CachedReformImpact | None:
         """Mark this execution's cached impact as failed.
 
         An ``error_code`` records a typed, terminal failure and clears the worker
-        handle. Return the updated impact, or None if it is missing or the write
-        failed.
+        handle. ``keep_seconds`` keeps the failed record for that long instead of
+        the usual 30 days; after it expires, a lookup no longer finds it. Only
+        this execution's record changes. Return the updated impact, or None if it
+        is missing or the write failed.
         """
         return self._cache.update(
             execution_id,
@@ -182,6 +185,7 @@ class ReformImpactsService:
             message=message,
             error_code=error_code,
             clear_execution_id=error_code is not None,
+            record_ttl_seconds=keep_seconds,
             end_time=self._now(),
         )
 

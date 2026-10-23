@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 DATASET_FAMILY_DISPLAY_LABELS = (
+    # US Microcosm datasets are named populace_*; UK ones microcosm_*.
     ("populace_", "Microcosm"),
+    ("microcosm_", "Microcosm"),
     ("enhanced_frs_", "Enhanced FRS"),
 )
 DEFAULT_DATASET_DISPLAY_LABEL = "Certified dataset"

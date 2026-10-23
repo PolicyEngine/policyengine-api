@@ -13,6 +13,8 @@ from werkzeug.datastructures import MultiDict
 
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.query_parameters import (
+    AnnualEconomyQuery,
+    BudgetWindowEconomyQuery,
     CountryQuery,
     DuplicateScalarQueryParameterError,
     HouseholdCollectionQuery,
@@ -126,6 +128,72 @@ def test_duplicate_scalar_is_rejected_and_explicit_list_is_preserved() -> None:
         ],
     )
     assert parsed.policy_ids == [first_id, second_id]
+
+
+UK_ANNUAL_ECONOMY_QUERY = [("region", "uk"), ("time_period", "2026")]
+
+
+def test_annual_economy_query_parses_a_local_area_breakdown() -> None:
+    parsed = parse_query_items(
+        AnnualEconomyQuery,
+        [*UK_ANNUAL_ECONOMY_QUERY, ("breakdown", "local_areas")],
+    )
+
+    assert parsed.breakdown == "local_areas"
+    assert parsed.calculation_options() == {"breakdown": "local_areas"}
+
+
+def test_annual_economy_query_without_breakdown_keeps_its_options_unchanged() -> None:
+    """An omitted breakdown adds no option, so existing options hashes still match."""
+    parsed = parse_query_items(AnnualEconomyQuery, UK_ANNUAL_ECONOMY_QUERY)
+
+    assert parsed.breakdown is None
+    assert parsed.calculation_options() == {}
+
+
+@pytest.mark.parametrize("value", ["", "constituencies", "LOCAL_AREAS", "true"])
+def test_annual_economy_query_rejects_an_unknown_breakdown(value: str) -> None:
+    with pytest.raises(ValidationError) as raised:
+        parse_query_items(
+            AnnualEconomyQuery,
+            [*UK_ANNUAL_ECONOMY_QUERY, ("breakdown", value)],
+        )
+
+    error = raised.value.errors()[0]
+    assert error["loc"] == ("breakdown",)
+    assert error["type"] == "literal_error"
+
+
+def test_annual_economy_query_rejects_a_repeated_breakdown() -> None:
+    with pytest.raises(
+        DuplicateScalarQueryParameterError,
+        match=r"breakdown.*must not be repeated",
+    ):
+        parse_query_items(
+            AnnualEconomyQuery,
+            [
+                *UK_ANNUAL_ECONOMY_QUERY,
+                ("breakdown", "local_areas"),
+                ("breakdown", "local_areas"),
+            ],
+        )
+
+
+def test_budget_window_economy_query_rejects_a_breakdown() -> None:
+    with pytest.raises(ValidationError) as raised:
+        parse_query_items(
+            BudgetWindowEconomyQuery,
+            [
+                ("region", "uk"),
+                ("start_year", "2026"),
+                ("window_size", "2"),
+                ("breakdown", "local_areas"),
+            ],
+        )
+
+    error = raised.value.errors()[0]
+    assert error["loc"] == ("breakdown",)
+    assert error["type"] == "extra_forbidden"
 
 
 def test_multidict_adapter_preserves_the_canonical_contract() -> None:

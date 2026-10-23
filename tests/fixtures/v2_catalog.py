@@ -93,7 +93,7 @@ def _model_source(
     model_name = f"policyengine-{country_id}"
     default_dataset = {
         "us": "populace_us_2024",
-        "uk": "enhanced_frs_2024_25",
+        "uk": "microcosm_uk_2024_25",
     }[country_id]
     default_uri = f"hf://policyengine/{country_id}/{default_dataset}.h5@fixture"
     version_holder = SimpleNamespace()
@@ -163,7 +163,7 @@ def source_models(
 ) -> dict[str, SimpleNamespace]:
     """Return US and UK public-model fixtures."""
     us_default_uri = "hf://policyengine/us/populace_us_2024.h5@fixture"
-    uk_default_uri = "hf://policyengine/uk/enhanced_frs_2024_25.h5@fixture"
+    uk_default_uri = "hf://policyengine/uk/microcosm_uk_2024_25.h5@fixture"
     return {
         "us": _model_source(
             country_id="us",

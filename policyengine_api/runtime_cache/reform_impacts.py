@@ -364,11 +364,15 @@ class ReformImpactCache:
         impact: CachedReformImpact,
         *,
         record_execution_id: str | None = None,
+        record_ttl_seconds: int | None = None,
     ) -> bool:
         """Store an impact and index it by scope and recency in one transaction.
 
-        Each index keeps only the newest 1,000 entries. Return False if the
-        write failed; raise ValueError when there is no record identifier.
+        Each index keeps only the newest 1,000 entries. ``record_ttl_seconds``
+        gives this record a shorter lifetime than the usual 30 days; the
+        indexes keep theirs, and an index entry whose record has expired is
+        skipped when read. Return False if the write failed; raise ValueError
+        when there is no record identifier.
         """
         # Terminal errors clear the worker handle in the payload while keeping
         # the original record key and lookup indexes stable.
@@ -388,7 +392,7 @@ class ReformImpactCache:
                         REFORM_IMPACT_SCHEMA_VERSION,
                         _impact_to_wire(impact),
                     ),
-                    ex=ttl_seconds,
+                    ex=record_ttl_seconds or ttl_seconds,
                 )
                 for index in indexes:
                     pipeline.zadd(index, {record_key: self._score(impact)})
@@ -506,12 +510,14 @@ class ReformImpactCache:
         execution_id: str,
         *,
         clear_execution_id: bool = False,
+        record_ttl_seconds: int | None = None,
         **changes: Any,  # noqa: ANN401  # forwarded unchanged to dataclasses.replace
     ) -> CachedReformImpact | None:
         """Apply field changes to a cached impact and rewrite it under the same key.
 
-        ``clear_execution_id`` drops the worker handle without moving the record.
-        Return the updated impact, or None if it is missing or the write failed.
+        ``clear_execution_id`` drops the worker handle without moving the record,
+        and ``record_ttl_seconds`` shortens its lifetime (see ``set``). Return the
+        updated impact, or None if it is missing or the write failed.
         """
         impact = self.get_by_execution_id(execution_id)
         if impact is None:
@@ -519,7 +525,12 @@ class ReformImpactCache:
         if clear_execution_id:
             changes["execution_id"] = None
         updated = replace(impact, **changes)
-        return updated if self.set(updated, record_execution_id=execution_id) else None
+        stored = self.set(
+            updated,
+            record_execution_id=execution_id,
+            record_ttl_seconds=record_ttl_seconds,
+        )
+        return updated if stored else None
 
     def delete_matching_computing(
         self,

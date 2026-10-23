@@ -119,7 +119,7 @@ def _catalog_counts(engine: Engine) -> tuple[int, ...]:
 
 @pytest.mark.parametrize(
     ("country_id", "current_law_id", "dataset_label"),
-    [("us", 2, "Microcosm"), ("uk", 1, "Enhanced FRS")],
+    [("us", 2, "Microcosm"), ("uk", 1, "Microcosm")],
 )
 def test_postgres_resource_collections_are_separate_and_read_only(
     published_engine: Engine,

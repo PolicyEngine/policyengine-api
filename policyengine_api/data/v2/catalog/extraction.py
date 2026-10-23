@@ -39,7 +39,7 @@ REQUIRED_DEPENDENCIES = (
 )
 REVIEWED_DEFAULT_DATASETS = {
     "us": "populace_us_2024",
-    "uk": "enhanced_frs_2024_25",
+    "uk": "microcosm_uk_2024_25",
 }
 CURRENT_LAW_IDS = {"us": 2, "uk": 1}
 METADATA_TIME_PERIODS = {
@@ -645,8 +645,12 @@ def _select_region_datasets(
 ) -> _RegionDatasetSelection:
     """Choose each region's logical input dataset.
 
-    A US subnational region with a dataset path uses that dataset; every other
-    region uses the reviewed default, and the national region may only name it.
+    A subnational region with a dataset path uses that dataset: US states and
+    districts, and the UK constituencies and local authorities that .py routes
+    to its local-area release. Every other region, such as a UK country that
+    filters the national file, uses the reviewed default, and the national
+    region may only name it. A US subnational region without a path is
+    counted as a fallback.
     """
     selected_dataset_names: set[str] = {reviewed_default}
     region_dataset_names: dict[str, str] = {}
@@ -666,7 +670,7 @@ def _select_region_datasets(
             msg = f"region {code!r} has unsupported type {region_type!r}"
             raise CatalogExtractionError(msg)
         dataset_path = getattr(region, "dataset_path", None)
-        if country_id == "us" and region_type != "national" and dataset_path:
+        if region_type != "national" and dataset_path:
             dataset_name = _dataset_name_from_path(dataset_path)
             selected_dataset_names.add(dataset_name)
         else:

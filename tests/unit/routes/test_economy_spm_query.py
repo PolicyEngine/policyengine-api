@@ -4,12 +4,20 @@ import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import httpx
 import pytest
 from flask import Flask
 
 from policyengine_api import spm
+from policyengine_api.libs.simulation_entrypoint import ModalSimulationExecution
 from policyengine_api.routes import economy_routes
+from policyengine_api.runtime_cache.core import CacheNamespace
+from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
+from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
+from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.economy_service import EconomyService
+from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from tests.fixtures.libs.simulation_entrypoint import MOCK_LOCAL_AREA_BREAKDOWN_RESULT
 
 
 @pytest.fixture(params=[False, True], ids=["annual", "budget-window"])
@@ -289,3 +297,308 @@ def test_a_rejected_economy_query_parameter_quotes_no_validator_internals(econom
     message = response.get_json()["message"]
     assert not any(part in message for part in PYDANTIC_INTERNALS)
     dispatch.assert_not_called()
+
+
+UK_ANNUAL_PATH = "/uk/economy/123/over/456"
+UK_ANNUAL_QUERY = [("region", "uk"), ("time_period", "2026")]
+UK_BUDGET_WINDOW_QUERY = [
+    ("region", "uk"),
+    ("start_year", "2026"),
+    ("window_size", "2"),
+]
+
+
+@pytest.fixture
+def uk_economy_http(monkeypatch):
+    """Return a real Flask client for the UK economy routes and their service mock.
+
+    The mock stands in for both service methods, so a test sees exactly what
+    the route parsed, and no request reaches the cache or the simulation API.
+    """
+    dispatch = Mock(
+        return_value=SimpleNamespace(
+            cache_status=None,
+            run_progress=None,
+            to_dict=lambda: {
+                "status": "computing",
+                "message": None,
+                "data": None,
+                "progress": 0,
+                "completed_years": [],
+                "computing_years": [],
+                "queued_years": [],
+                "error": None,
+            },
+        )
+    )
+    for method in ("get_economic_impact", "get_budget_window_economic_impact"):
+        monkeypatch.setattr(economy_routes.economy_service, method, dispatch)
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(economy_routes.economy_bp)
+    return app.test_client(), dispatch
+
+
+def test_annual_route_passes_a_local_area_breakdown_to_the_service(uk_economy_http):
+    client, dispatch = uk_economy_http
+
+    response = client.get(
+        UK_ANNUAL_PATH,
+        query_string=[*UK_ANNUAL_QUERY, ("breakdown", "local_areas")],
+    )
+
+    assert response.status_code == 200, response.get_json()
+    impact_request = dispatch.call_args.kwargs["impact_request"]
+    assert impact_request.options == {"breakdown": "local_areas"}
+    assert impact_request.region == "uk"
+    assert impact_request.target == "general"
+
+
+def test_annual_route_without_breakdown_passes_no_breakdown_option(uk_economy_http):
+    client, dispatch = uk_economy_http
+
+    response = client.get(UK_ANNUAL_PATH, query_string=UK_ANNUAL_QUERY)
+
+    assert response.status_code == 200, response.get_json()
+    assert dispatch.call_args.kwargs["impact_request"].options == {}
+
+
+def test_annual_route_rejects_a_repeated_breakdown(uk_economy_http):
+    client, dispatch = uk_economy_http
+
+    response = client.get(
+        UK_ANNUAL_PATH,
+        query_string=[
+            *UK_ANNUAL_QUERY,
+            ("breakdown", "local_areas"),
+            ("breakdown", "local_areas"),
+        ],
+    )
+
+    assert response.status_code == 400
+    assert "'breakdown' must not be repeated" in response.get_json()["message"]
+    dispatch.assert_not_called()
+
+
+def test_annual_route_rejects_an_unknown_breakdown(uk_economy_http):
+    client, dispatch = uk_economy_http
+
+    response = client.get(
+        UK_ANNUAL_PATH,
+        query_string=[*UK_ANNUAL_QUERY, ("breakdown", "constituencies")],
+    )
+
+    assert response.status_code == 400
+    message = response.get_json()["message"]
+    assert message.startswith("breakdown: Input should be 'local_areas'")
+    assert not any(part in message for part in PYDANTIC_INTERNALS)
+    dispatch.assert_not_called()
+
+
+def test_budget_window_route_rejects_a_breakdown(uk_economy_http):
+    client, dispatch = uk_economy_http
+
+    response = client.get(
+        UK_ANNUAL_PATH + "/budget-window",
+        query_string=[*UK_BUDGET_WINDOW_QUERY, ("breakdown", "local_areas")],
+    )
+
+    assert response.status_code == 400
+    assert "breakdown" in response.get_json()["message"]
+    dispatch.assert_not_called()
+
+
+def _rejection(status_code: int, payload: dict) -> httpx.HTTPStatusError:
+    request = httpx.Request(
+        "POST", "https://simulation.test/simulate/economy/comparison"
+    )
+    return httpx.HTTPStatusError(
+        f"Client error '{status_code}'",
+        request=request,
+        response=httpx.Response(status_code, json=payload, request=request),
+    )
+
+
+@pytest.fixture
+def economy_service_http(monkeypatch):
+    """Return a Flask client whose economy routes use a real economy service.
+
+    The service keeps its caches in memory and talks to a mocked simulation
+    API, so a request runs every check and the submission itself.
+    """
+    namespace = CacheNamespace("test", "api")
+    gateway = Mock()
+    # Like the real client, keep the requested model version.
+    gateway.resolve_app_name.side_effect = (
+        lambda _country, version=None, policyengine_version=None: (
+            "policyengine-simulation-test",
+            version or policyengine_version,
+        )
+    )
+    gateway.get_execution_id.return_value = "submitted-job"
+    policies = Mock()
+    policies.get_policy_json.return_value = {}
+    service = EconomyService(
+        policy_service_=policies,
+        reform_impacts_service_=ReformImpactsService(
+            ReformImpactCache(InMemoryCacheBackend(), namespace)
+        ),
+        budget_window_cache_=BudgetWindowCache(InMemoryCacheBackend(), namespace),
+        simulation_entrypoint_=gateway,
+    )
+    monkeypatch.setattr(economy_routes, "economy_service", service)
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(economy_routes.economy_bp)
+    return app.test_client(), gateway
+
+
+@pytest.mark.parametrize(
+    ("path", "query", "message"),
+    [
+        (
+            "/us/economy/123/over/456",
+            [("region", "us"), ("time_period", "2026")],
+            "only available for UK",
+        ),
+        (
+            UK_ANNUAL_PATH,
+            [("region", "constituency/Aldershot"), ("time_period", "2026")],
+            "region uk or a UK country",
+        ),
+        (
+            UK_ANNUAL_PATH,
+            [("region", "local_authority/E07000092"), ("time_period", "2026")],
+            "region uk or a UK country",
+        ),
+        (
+            UK_ANNUAL_PATH,
+            [("region", "country/france"), ("time_period", "2026")],
+            "region uk or a UK country",
+        ),
+        (
+            UK_ANNUAL_PATH,
+            [*UK_ANNUAL_QUERY, ("target", "cliff")],
+            "target=cliff",
+        ),
+    ],
+    ids=["us", "constituency", "local-authority", "france", "cliff"],
+)
+def test_annual_route_rejects_an_unsupported_breakdown_with_400(
+    economy_service_http, path, query, message
+):
+    client, gateway = economy_service_http
+
+    response = client.get(path, query_string=[*query, ("breakdown", "local_areas")])
+
+    assert response.status_code == 400
+    assert message in response.get_json()["message"]
+    gateway.run.assert_not_called()
+
+
+def test_annual_route_rejects_a_blank_country_breakdown_with_400(
+    economy_service_http,
+):
+    client, gateway = economy_service_http
+
+    # A raw query string, so %20 reaches Flask encoded and is decoded to a space.
+    response = client.get(
+        UK_ANNUAL_PATH,
+        query_string="region=country/%20&time_period=2026&breakdown=local_areas",
+    )
+
+    assert response.status_code == 400
+    assert "region uk or a UK country" in response.get_json()["message"]
+    assert "'country/ '" in response.get_json()["message"]
+    gateway.run.assert_not_called()
+
+
+def test_annual_route_returns_502_when_the_simulation_api_refuses_a_breakdown(
+    economy_service_http,
+):
+    client, gateway = economy_service_http
+    gateway.run.side_effect = _rejection(
+        400, {"detail": "policyengine 6.7.5 does not support local-area breakdowns"}
+    )
+
+    response = client.get(
+        UK_ANNUAL_PATH,
+        query_string=[
+            ("region", "country/scotland"),
+            ("time_period", "2026"),
+            ("breakdown", "local_areas"),
+        ],
+    )
+
+    assert response.status_code == 502
+    assert response.get_json() == {
+        "status": "error",
+        "message": (
+            "The simulation API refused the local-area breakdown request "
+            "(HTTP 400): policyengine 6.7.5 does not support local-area breakdowns"
+        ),
+        "result": None,
+    }
+    assert gateway.run.call_args.args[0]["breakdown"] == "local_areas"
+
+
+def test_annual_route_stores_and_returns_a_completed_breakdown_unchanged(
+    economy_service_http,
+):
+    """A finished breakdown job is polled once, stored, and then read back.
+
+    The second request polls the job (``_handle_execution_state``); the third
+    reads the stored record (``_handle_completed_impact``) without polling.
+    """
+    client, gateway = economy_service_http
+    breakdown_query = [*UK_ANNUAL_QUERY, ("breakdown", "local_areas")]
+    gateway.get_execution_by_id.return_value = ModalSimulationExecution(
+        job_id="submitted-job",
+        status="complete",
+        result=MOCK_LOCAL_AREA_BREAKDOWN_RESULT,
+        resolved_app_name="policyengine-simulation-test",
+    )
+    gateway.get_execution_status.side_effect = lambda execution: execution.status
+    gateway.get_execution_result.side_effect = lambda execution: execution.result
+
+    submitted = client.get(UK_ANNUAL_PATH, query_string=breakdown_query)
+    polled = client.get(UK_ANNUAL_PATH, query_string=breakdown_query)
+    stored = client.get(UK_ANNUAL_PATH, query_string=breakdown_query)
+
+    assert submitted.status_code == 200
+    assert submitted.get_json()["status"] == "computing"
+    for response in (polled, stored):
+        assert response.status_code == 200, response.get_json()
+        body = response.get_json()
+        assert body["status"] == "ok"
+        result = body["result"]
+        # The breakdown's own fields come back unchanged; the service adds
+        # only the bundle identity it adds to every economy result.
+        assert {
+            key: result[key] for key in MOCK_LOCAL_AREA_BREAKDOWN_RESULT
+        } == MOCK_LOCAL_AREA_BREAKDOWN_RESULT
+        assert set(result) - set(MOCK_LOCAL_AREA_BREAKDOWN_RESULT) == {
+            "policyengine_bundle",
+            "resolved_app_name",
+        }
+    assert polled.get_json()["result"] == stored.get_json()["result"]
+    gateway.get_execution_by_id.assert_called_once_with("submitted-job")
+
+    records = economy_routes.economy_service._reform_impacts.get_recent_reform_impacts(
+        5
+    )
+    assert len(records) == 1
+    assert records[0].status == "ok"
+    assert records[0].options_json == {"breakdown": "local_areas"}
+    assert records[0].options_hash.startswith("[breakdown=local_areas&")
+    assert records[0].reform_impact_json == stored.get_json()["result"]
+
+    # The national request for the same report finds no stored result: it
+    # submits its own job instead of reading the breakdown.
+    national = client.get(UK_ANNUAL_PATH, query_string=UK_ANNUAL_QUERY)
+
+    assert national.get_json()["status"] == "computing"
+    assert [call.args[0].get("breakdown") for call in gateway.run.call_args_list] == [
+        "local_areas",
+        None,
+    ]

@@ -3,6 +3,12 @@
 from dataclasses import dataclass
 from typing import Literal
 
+# The one breakdown the annual economy route can request: the UK
+# constituency and local-authority impacts, computed apart from the national
+# result. The query model, the simulation payload and the service share it.
+LocalAreaBreakdown = Literal["local_areas"]
+LOCAL_AREA_BREAKDOWN: LocalAreaBreakdown = "local_areas"
+
 
 @dataclass(frozen=True)
 class EconomicImpactRequest:

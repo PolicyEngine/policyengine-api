@@ -28,6 +28,7 @@ from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from policyengine_core.types import ArrayLike
 
 from policyengine_api.constants import (
+    UK_COUNTRY_REGIONS,
     get_bundle_default_dataset_option,
 )
 from policyengine_api.data.congressional_districts import (
@@ -203,10 +204,10 @@ class PolicyEngineCountry:
             constituency_names = constituency_names.sort_values("name")
             region = [
                 {"name": "uk", "label": "the UK", "type": "national"},
-                {"name": "country/england", "label": "England", "type": "country"},
-                {"name": "country/scotland", "label": "Scotland", "type": "country"},
-                {"name": "country/wales", "label": "Wales", "type": "country"},
-                {"name": "country/ni", "label": "Northern Ireland", "type": "country"},
+                *(
+                    {"name": name, "label": label, "type": "country"}
+                    for name, label in UK_COUNTRY_REGIONS
+                ),
             ]
             region.extend(
                 {

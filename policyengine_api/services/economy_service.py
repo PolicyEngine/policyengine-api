@@ -19,7 +19,9 @@ from policyengine_api.constants import (
     EXECUTION_STATUSES_FAILURE,
     EXECUTION_STATUSES_PENDING,
     EXECUTION_STATUSES_SUCCESS,
+    LOCAL_AREA_BREAKDOWN_REGIONS,
     POLICYENGINE_VERSION,
+    UK_REGION_REGISTRY_CODES,
     get_economy_impact_cache_version,
 )
 from policyengine_api.data.congressional_districts import (
@@ -66,7 +68,11 @@ from policyengine_api.services.budget_window_cache import (
     BudgetWindowCache,
     BudgetWindowCacheState,
 )
-from policyengine_api.services.economic_impact_request import EconomicImpactRequest
+from policyengine_api.services.economic_impact_request import (
+    LOCAL_AREA_BREAKDOWN,
+    EconomicImpactRequest,
+    LocalAreaBreakdown,
+)
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactExecution,
@@ -105,6 +111,23 @@ BUDGET_WINDOW_MAX_ACTIVE_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_ACTIVE_YE
 BUDGET_WINDOW_MAX_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_YEARS
 BUDGET_WINDOW_MAX_END_YEAR = budget_window_utils.BUDGET_WINDOW_MAX_END_YEAR
 BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES = {400, 422}
+# Statuses with which the simulation API refuses a breakdown it cannot run:
+# 400 from a gateway whose routed .py release does not declare breakdowns, and
+# 422 from an entry deployment that does not know the field.
+LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES = frozenset({400, 422})
+# How long a failed breakdown's error is returned before the next request may
+# submit a new job. Short, so the app's Retry works soon, but long enough that
+# a client retrying on every 502 does not start a run on the large local-area
+# dataset each time.
+LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS = 120
+LOCAL_AREA_BREAKDOWN_RETRY_NOTE = (
+    "A new local-area breakdown can be requested "
+    f"{LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS // 60} minutes after this failure."
+)
+# The telemetry simulation_kind of a breakdown run. The simulation API's
+# telemetry envelope forbids extra fields, so the run is marked here rather
+# than by a new field; geography_type and geography_code still name its region.
+LOCAL_AREA_BREAKDOWN_SIMULATION_KIND = "local_area_breakdown"
 BUDGET_WINDOW_CLAIM_ATTEMPTS = 3
 REFORM_IMPACT_START_CLAIM_ATTEMPTS = 3
 # A budget-window progress message names this many computing years and counts
@@ -148,6 +171,10 @@ class SimulationOptions(BaseModel):
     region: str
     model_version: str | None = None
     policyengine_version: str | None = None
+    # Left out of the payload unless set, so national submissions are unchanged.
+    breakdown: LocalAreaBreakdown | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class EconomicImpactSetupOptions(BaseModel):
@@ -685,7 +712,7 @@ class EconomyService:
                 in BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES
             ):
                 failed_result = BudgetWindowEconomicImpactResult.failed(
-                    self._build_budget_window_submission_error_message(error),
+                    self._build_submission_error_message(error),
                     queued_years=budget_window_setup.years,
                     cache_status="miss",
                 )
@@ -844,15 +871,23 @@ class EconomyService:
 
         return self._simulation_gateway.run_budget_window_batch(sim_params)
 
-    def _build_budget_window_submission_error_message(
-        self, error: httpx.HTTPStatusError
-    ) -> str:
+    def _build_submission_error_message(self, error: httpx.HTTPStatusError) -> str:
+        """Return the reason in a simulation API refusal.
+
+        A request-validation body (``detail`` as a list) names each field and
+        its problem, without echoing the rejected input. Otherwise the first
+        of ``detail``, ``message`` or ``error``, then the response text, then
+        the exception text.
+        """
         try:
             response_json = error.response.json()
         except ValueError:
             response_json = None
 
         if isinstance(response_json, dict):
+            field_reasons = self._validation_field_reasons(response_json.get("detail"))
+            if field_reasons:
+                return field_reasons
             for key in ("detail", "message", "error"):
                 value = response_json.get(key)
                 if value:
@@ -991,6 +1026,7 @@ class EconomyService:
         if impact_request.dataset != "default":
             msg = "Custom datasets are not supported for economy calculations"
             raise ValueError(msg)
+        self._validate_breakdown(impact_request)
         resolved_spm = validate_worker_spm(
             country_id,
             options.get("spm"),
@@ -1040,6 +1076,86 @@ class EconomyService:
                 "options_hash": options_hash,
             }
         )
+
+    @staticmethod
+    def _validate_breakdown(impact_request: EconomicImpactRequest) -> None:
+        """Reject a local-area breakdown the simulation API has no run for.
+
+        The breakdown covers the whole UK or one UK country, so the region must
+        be exactly one of ``LOCAL_AREA_BREAKDOWN_REGIONS``: a constituency or
+        local authority is already a single area, and any other spelling would
+        fail in the simulation API instead. It computes no cliff impacts, so
+        ``target=cliff`` is refused too. Raise ValueError, which the route
+        returns as 400.
+        """
+        breakdown = impact_request.options.get("breakdown")
+        if breakdown is None:
+            return
+        if breakdown != LOCAL_AREA_BREAKDOWN:
+            msg = f"Unknown breakdown: {breakdown!r}"
+            raise ValueError(msg)
+        if impact_request.country_id != "uk":
+            msg = "breakdown=local_areas is only available for UK economy calculations"
+            raise ValueError(msg)
+        region = impact_request.region
+        if region not in LOCAL_AREA_BREAKDOWN_REGIONS:
+            msg = (
+                "breakdown=local_areas needs region uk or a UK country, one of "
+                f"{', '.join(LOCAL_AREA_BREAKDOWN_REGIONS)}; not {region!r}"
+            )
+            raise ValueError(msg)
+        if impact_request.target == "cliff":
+            msg = "breakdown=local_areas cannot be combined with target=cliff"
+            raise ValueError(msg)
+
+    def _breakdown_refusal(
+        self,
+        error: httpx.HTTPStatusError,
+        *,
+        breakdown: LocalAreaBreakdown | None,
+    ) -> EconomicImpactResult | None:
+        """Return an error result when the simulation API refuses a breakdown.
+
+        This API checks a breakdown request before submitting it, so a 400 or
+        422 means the deployed simulation API, or the .py release it routes to,
+        cannot run breakdowns yet. The route returns the result as 502 with the
+        simulation API's reason. Nothing is stored, so a later request submits
+        again and succeeds once the simulation API can run it.
+
+        Return None for any other status, and for every request without a
+        breakdown, so the caller re-raises those errors unchanged.
+        """
+        status_code = error.response.status_code
+        if (
+            breakdown is None
+            or status_code not in LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES
+        ):
+            return None
+        return EconomicImpactResult.error(
+            message=(
+                "The simulation API refused the local-area breakdown request "
+                f"(HTTP {status_code}): {self._build_submission_error_message(error)}"
+            )
+        )
+
+    @staticmethod
+    def _validation_field_reasons(details: object) -> str | None:
+        """Join each ``loc: msg`` of a request-validation ``detail`` list."""
+        if not isinstance(details, list):
+            return None
+        reasons = [
+            ": ".join(
+                part
+                for part in (
+                    ".".join(str(item) for item in detail.get("loc", [])),
+                    str(detail.get("msg", "")),
+                )
+                if part
+            )
+            for detail in details
+            if isinstance(detail, dict)
+        ]
+        return "; ".join(reason for reason in reasons if reason) or None
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_RESOLVE_CACHED_OR_NEW)
@@ -1441,7 +1557,7 @@ class EconomyService:
         self,
         setup_options: EconomicImpactSetupOptions,
         execution_state: str,
-        reform_impact: ReformImpact,
+        reform_impact: CachedReformImpact,
         execution: ModalSimulationExecution | None = None,
     ) -> EconomicImpactResult:
         """Map an execution's state to the impact status and result to return.
@@ -1450,8 +1566,14 @@ class EconomyService:
         Modal statuses (complete, failed, running, submitted).
         """
         if execution_state in EXECUTION_STATUSES_SUCCESS:
+            raw_result = self._simulation_gateway.get_execution_result(execution)
+            kind_error = self._breakdown_result_kind_error(setup_options, raw_result)
+            if kind_error is not None:
+                return self._record_breakdown_failure(
+                    setup_options, reform_impact, kind_error
+                )
             result = self._with_policyengine_bundle(
-                result=self._simulation_gateway.get_execution_result(execution),
+                result=raw_result,
                 setup_options=setup_options,
                 execution=execution,
             )
@@ -1482,6 +1604,10 @@ class EconomyService:
                 error_message = (
                     f"Simulation entrypoint execution failed: {execution.error}"
                 )
+            if setup_options.options.get("breakdown") is not None:
+                return self._record_breakdown_failure(
+                    setup_options, reform_impact, error_message
+                )
 
             self._set_reform_impact_error(
                 setup_options=setup_options,
@@ -1505,6 +1631,57 @@ class EconomyService:
 
         msg = f"Unexpected sim API execution state: {execution_state}"
         raise ValueError(msg)
+
+    @staticmethod
+    def _breakdown_result_kind_error(
+        setup_options: EconomicImpactSetupOptions, result: object
+    ) -> str | None:
+        """Return why a breakdown job's result cannot be stored, if it cannot.
+
+        A breakdown request needs the simulation API's local-area result
+        (``kind: local_areas``). Any other result, such as a national one from
+        a release that ignored the field, must never be stored under the
+        breakdown's options hash. Return None for a valid result and for every
+        request without a breakdown.
+        """
+        if setup_options.options.get("breakdown") is None:
+            return None
+        kind = result.get("kind") if isinstance(result, dict) else None
+        if kind == LOCAL_AREA_BREAKDOWN:
+            return None
+        return (
+            f"The simulation API returned a result of kind {kind!r} for a "
+            "local-area breakdown request, which needs kind "
+            f"{LOCAL_AREA_BREAKDOWN!r}; the result was not stored"
+        )
+
+    def _record_breakdown_failure(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+        reform_impact: CachedReformImpact,
+        reason: str,
+    ) -> EconomicImpactResult:
+        """Keep a failed breakdown job's error for two minutes, then let it go.
+
+        A breakdown runs on the large local-area dataset, where a timeout or
+        memory failure may not repeat, so its failure is not kept for the usual
+        30 days. This job's own record, found by its execution ID, becomes an
+        error that expires after ``LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS``.
+        Until then every request gets the same error, which says when to try
+        again; after it, the next request finds no record and submits a new
+        job. No other job's record is read or changed, and no submission claim
+        is held at this point: it was released once the job was handed off.
+        Failures of requests without a breakdown are stored as before.
+        """
+        message = f"{reason}. {LOCAL_AREA_BREAKDOWN_RETRY_NOTE}"
+        if reform_impact.execution_id:
+            self._set_reform_impact_error(
+                setup_options=setup_options,
+                message=message,
+                execution_id=reform_impact.execution_id,
+                keep_seconds=LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS,
+            )
+        return EconomicImpactResult.error(message=message)
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_COMPLETED)
@@ -1670,7 +1847,13 @@ class EconomyService:
         if sim_params.get("time_period") is not None:
             sim_params["time_period"] = str(sim_params["time_period"])
 
-        entrypoint_execution = self._simulation_gateway.run(sim_params)
+        try:
+            entrypoint_execution = self._simulation_gateway.run(sim_params)
+        except httpx.HTTPStatusError as error:
+            refusal = self._breakdown_refusal(error, breakdown=sim_config.breakdown)
+            if refusal is None:
+                raise
+            return refusal
         try:
             execution_id = self._simulation_gateway.get_execution_id(
                 entrypoint_execution
@@ -1723,6 +1906,7 @@ class EconomyService:
                 ),
                 "model_version": setup_options.model_version,
                 "policyengine_version": setup_options.policyengine_version,
+                "breakdown": setup_options.options.get("breakdown"),
             }
         )
 
@@ -1853,15 +2037,19 @@ class EconomyService:
         return response
 
     def _setup_region(self, country_id: str, region: str) -> str:
-        """Validate the region for the given country.
+        """Validate the region and return the code the simulation API expects.
 
         Assumes region has already been normalized (e.g., "ca" -> "state/ca").
-        Raises ValueError for invalid regions.
+        Raises ValueError for invalid regions. The UK metadata names Northern
+        Ireland ``country/ni``, but .py's UK region registry names it
+        ``country/northern_ireland``, so the payload uses the registry's name.
         """
         # For US regions, validate (skip validation for national "us")
         if country_id == "us" and region != "us":
             self._validate_us_region(region)
 
+        if country_id == "uk":
+            return UK_REGION_REGISTRY_CODES.get(region, region)
         return region
 
     def _validate_us_region(self, region: str) -> None:
@@ -1897,6 +2085,8 @@ class EconomyService:
                 region=setup_options.region,
             )
         )
+        if setup_options.options.get("breakdown") is not None:
+            simulation_kind = LOCAL_AREA_BREAKDOWN_SIMULATION_KIND
 
         return {
             "submission_claim_id": setup_options.submission_claim_id,
@@ -2001,13 +2191,24 @@ class EconomyService:
         message: str,
         execution_id: str,
         error_code: str | None = None,
+        keep_seconds: int | None = None,
     ) -> None:
-        """Record the impact as "error" with its message; log and re-raise errors."""
+        """Record the impact as "error" with its message; log and re-raise errors.
+
+        ``keep_seconds`` keeps the error for that long instead of the usual
+        30 days.
+        """
+        # Optional fields are passed only when set, as before keep_seconds existed.
+        optional_fields: dict[str, Any] = {}
+        if error_code is not None:
+            optional_fields["error_code"] = error_code
+        if keep_seconds is not None:
+            optional_fields["keep_seconds"] = keep_seconds
         try:
             self._reform_impacts.set_error_reform_impact(
                 execution_id=execution_id,
                 message=message,
-                **({"error_code": error_code} if error_code is not None else {}),
+                **optional_fields,
             )
         except Exception as e:
             logger.log_struct(

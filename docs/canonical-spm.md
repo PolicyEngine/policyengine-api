@@ -319,10 +319,34 @@ HTTP 400. An omitted `spm` inherits the certified default measurement, while a
 misspelled parameter is rejected. `region` is required;
 annual requests require `time_period`, while budget-window requests require
 `start_year` and `window_size` (1–75, ending no later than 2099). Years use four
-digits. Optional fields are `version` (installed country model version) and
-`target` (`general`, or annual-only `cliff`). Omitted `spm` inherits certified
-bundle defaults. The served `/specification` generates these query declarations
-from the same typed models as the Flask parser.
+digits. Optional fields are `version` (installed country model version),
+`target` (`general`, or annual-only `cliff`) and the annual-only `breakdown`.
+Omitted `spm` inherits certified bundle defaults. The served `/specification`
+generates these query declarations from the same typed models as the Flask
+parser.
+
+`breakdown=local_areas` asks the annual route for the UK constituency and
+local-authority impacts only. It is a calculation option, so the request has
+its own options hash and its own cached result. Any other value returns HTTP
+400, and requests without `breakdown` keep their existing options hash. It is
+accepted only for the UK, with `region` exactly `uk` or one UK country
+(`country/england`, `country/scotland`, `country/wales` or `country/ni`, or
+.py's `country/northern_ireland`), and not with `target=cliff`; other
+requests, including other spellings of those regions, return HTTP 400 before
+anything is read from the cache or submitted. The API sends `"breakdown": "local_areas"` to the simulation API,
+which computes the impacts in a run separate from the national result, and
+returns its result (`kind: "local_areas"`) like any other economy result. If
+the simulation API refuses the request with HTTP 400 or 422, because the
+deployed simulation API or the .py release it routes to cannot run breakdowns,
+the route returns HTTP 502 with the simulation API's reason and stores
+nothing, so a later request tries again. A breakdown job that fails (for
+example by running out of time or memory on the local-area dataset), or that
+completes without `kind: "local_areas"`, also returns HTTP 502. Its result is
+not stored. Its error is kept for two minutes on that job's own record, so
+every request in that time gets the same error, which says when a new
+breakdown can be requested; then the record expires and the next request
+submits a new job. Other jobs' records are not changed. A failed national job
+is still stored and returned again for the cache lifetime of 30 days.
 
 Before cache access or submission,
 the API validates the selected worker application's `canonical-spm-v1` capability

@@ -25,9 +25,11 @@ from pydantic import (
     model_validator,
 )
 
+from policyengine_api.constants import LOCAL_AREA_BREAKDOWN_REGIONS
 from policyengine_api.data.v2.catalog.catalog_selection import (
     validate_policyengine_version,
 )
+from policyengine_api.services.economic_impact_request import LocalAreaBreakdown
 from policyengine_api.spm import SPMSelection
 from policyengine_api.utils.budget_window import (
     BUDGET_WINDOW_MAX_END_YEAR,
@@ -168,6 +170,22 @@ class AnnualEconomyQuery(EconomyQuery):
 
     time_period: EconomyYear
     target: Literal["general", "cliff"] = "general"
+    breakdown: LocalAreaBreakdown | None = Field(
+        default=None,
+        description=(
+            "local_areas computes only the UK constituency and local-authority "
+            "impacts, in a run separate from the national result. UK only, with "
+            f"region one of: {', '.join(LOCAL_AREA_BREAKDOWN_REGIONS)}; "
+            "not with target=cliff"
+        ),
+    )
+
+    def calculation_options(self) -> dict[str, Any]:
+        """Add ``breakdown`` only when requested, so other options hashes stay put."""
+        options = super().calculation_options()
+        if self.breakdown is not None:
+            options["breakdown"] = self.breakdown
+        return options
 
 
 class BudgetWindowEconomyQuery(EconomyQuery):
