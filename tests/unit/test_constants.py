@@ -9,12 +9,15 @@ from policyengine_api.constants import (
     POLICYENGINE_CORE_VERSION,
     POLICYENGINE_VERSION,
     REGION_PREFIXES,
+    RUNTIME_CACHE_SCHEMA_VERSIONS,
+    RUNTIME_CACHE_VERSION_LENGTH,
     UK_REGION_TYPES,
     US_REGION_TYPES,
     _bundle_dataset_display_label,
     _load_policyengine_bundle,
     _normalize_distribution_name,
     _resolve_distribution_version,
+    get_economy_impact_cache_version,
     get_py_manifest,
 )
 
@@ -111,6 +114,24 @@ class TestRegionPrefixes:
 
         def test__has_exactly_three_prefixes(self):
             assert len(REGION_PREFIXES["us"]) == 3
+
+
+class TestEconomyImpactCacheVersion:
+    # Since its move to .py 4.x, the simulation API returned decile.relative
+    # and the UK wealth_decile.relative as percentages (x100) instead of
+    # fractions (PolicyEngine/policyengine-sim-api#827). Economy results
+    # cached under schema version 3 can hold those values, and the cache key
+    # does not change when the simulation API's code does, so version 4 makes
+    # every economy cache lookup miss them and recompute.
+    def test__economy_impact_schema_version_is_4(self):
+        assert RUNTIME_CACHE_SCHEMA_VERSIONS["economy_impact"] == 4
+
+    @pytest.mark.parametrize("country_id", ["us", "uk"])
+    def test__economy_impact_cache_version_carries_schema_version_4(self, country_id):
+        cache_version = get_economy_impact_cache_version(country_id)
+
+        assert cache_version.startswith("e4")
+        assert len(cache_version) == RUNTIME_CACHE_VERSION_LENGTH
 
 
 class TestDistributionVersionHelpers:
