@@ -194,7 +194,13 @@ POLICYENGINE_CORE_VERSION = _bundle_package_versions.get(
 ) or _resolve_distribution_version(_dist_versions, "policyengine-core", "policyengine")
 
 RUNTIME_CACHE_SCHEMA_VERSIONS = {
-    "economy_impact": 3,
+    # 4: economy results cached under 3 can hold decile.relative and the UK
+    # wealth_decile.relative as percentages (x100) instead of fractions, from
+    # the simulation API (PolicyEngine/policyengine-sim-api#827). Economy cache
+    # keys do not change when only the simulation API's code changes, so this
+    # version was raised to stop serving those results. The budget-window
+    # cache key uses the same version.
+    "economy_impact": 4,
     "report_output": 3,
 }
 # Runtime cache versions are stored in legacy VARCHAR(10) columns, and keep at
