@@ -6,26 +6,13 @@ an update may only repeat it (a retried write, or a second browser finishing
 the same calculation) and never change it.
 """
 
-import json
 from collections.abc import Mapping
 
 
-def _comparable_output(value: object) -> object:
-    """Return stored output as JSON data, decoding a legacy JSON-string value."""
-    if isinstance(value, str):
-        try:
-            return json.loads(value)
-        except ValueError:
-            return value
-    return value
-
-
 def changes_stored_result(record: object, values: Mapping[str, object]) -> bool:
-    """Whether applying ``values`` would change any of those fields on ``record``."""
-    for field, value in values.items():
-        stored = getattr(record, field)
-        if field == "output":
-            stored = _comparable_output(stored)
-        if stored != value:
-            return True
-    return False
+    """Whether applying ``values`` would change any of those fields on ``record``.
+
+    ``values`` holds decoded JSON, as stored, so a retry in either encoding of the
+    same output is a repeat.
+    """
+    return any(getattr(record, field) != value for field, value in values.items())

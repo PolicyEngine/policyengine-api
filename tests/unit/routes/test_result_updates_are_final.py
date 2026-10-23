@@ -5,12 +5,19 @@ credential: the browser that ran a calculation stores its result, and records
 are shared, since identical requests reuse one record. So once a record holds
 a complete result, an update may only repeat it (a retried write, or a second
 browser finishing the same calculation) and never change it. Changing it
-answers 409 and leaves the record as it was.
+answers 409 and leaves the record and its runs as they were.
 
-Two results are not final, because the server, not a caller, decided they run
-again: stale SPM output on a simulation, a report stored under an outdated
-cache version, and either record while a rerun the server started is pending
-or running.
+These are not final:
+
+- a complete record without output, which holds no result;
+- a simulation's stale SPM output, which the server resets and runs again;
+- a simulation result from an older country model, which a browser that runs
+  the calculation again replaces with the installed model's;
+- a report while a rerun the server started is pending or running.
+
+An update to a report stored under an outdated cache version goes to its
+current equivalent, the record reads serve for that ID, and the rule applies
+there.
 """
 
 import json
@@ -25,6 +32,7 @@ from hypothesis import HealthCheck, event, given, settings
 from hypothesis import strategies as st
 from sqlalchemy import select
 
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.v1_models import (
     ReportOutput,
     ReportOutputRun,
@@ -38,10 +46,6 @@ from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.services.report_run_service import (
     NewReportOutputRun,
     ReportRunService,
-)
-from policyengine_api.services.simulation_run_service import (
-    NewSimulationRun,
-    SimulationRunService,
 )
 from policyengine_api.services.simulation_service import SimulationService
 
@@ -147,14 +151,47 @@ def _stored(session_factory, model, record_id):
         }
 
 
-def _run_rows(session_factory, model, foreign_key, record_id):
+_RUNS = {
+    Simulation: (SimulationRun, "simulation_id"),
+    ReportOutput: (ReportOutputRun, "report_output_id"),
+}
+
+
+def _snapshot(session_factory, model, record_id):
+    """Return every column of the record and of each of its runs."""
+    run_model, foreign_key = _RUNS[model]
     with session_factory() as session:
-        return [
-            (run.id, run.status, run.output, run.error_message)
-            for run in session.scalars(
-                select(model).where(getattr(model, foreign_key) == record_id)
+        record = session.get(model, record_id)
+        runs = session.scalars(
+            select(run_model)
+            .where(getattr(run_model, foreign_key) == record_id)
+            .order_by(run_model.run_sequence)
+        )
+        return (
+            {
+                column.name: getattr(record, column.name)
+                for column in model.__table__.columns
+            },
+            [
+                tuple(
+                    getattr(run, column.name) for column in run_model.__table__.columns
+                )
+                for run in runs
+            ],
+        )
+
+
+def _current_report_for(session_factory, report_id):
+    """Return the ID of the current report with an outdated report's inputs."""
+    with session_factory() as session:
+        outdated = session.get(ReportOutput, report_id)
+        return session.scalar(
+            select(ReportOutput.id).where(
+                ReportOutput.id != report_id,
+                ReportOutput.simulation_1_id == outdated.simulation_1_id,
+                ReportOutput.year == outdated.year,
             )
-        ]
+        )
 
 
 # Simulations
@@ -174,10 +211,7 @@ def test_anonymous_patch_cannot_change_a_complete_simulation(
         ).status_code
         == 200
     )
-    before = _stored(orm_session_factory, Simulation, simulation_id)
-    runs_before = _run_rows(
-        orm_session_factory, SimulationRun, "simulation_id", simulation_id
-    )
+    before = _snapshot(orm_session_factory, Simulation, simulation_id)
 
     for attack in (
         {"status": "complete", "output": FORGED_RESULT},
@@ -192,13 +226,7 @@ def test_anonymous_patch_cannot_change_a_complete_simulation(
         body = response.get_json()
         assert body["status"] == "error"
         assert "is complete; its result cannot be changed" in body["message"]
-        assert _stored(orm_session_factory, Simulation, simulation_id) == before
-        assert (
-            _run_rows(
-                orm_session_factory, SimulationRun, "simulation_id", simulation_id
-            )
-            == runs_before
-        )
+        assert _snapshot(orm_session_factory, Simulation, simulation_id) == before
 
     read = client.get(f"/us/simulation/{simulation_id}").get_json()["result"]
     assert json.loads(read["output"]) == HOUSEHOLD_RESULT
@@ -217,6 +245,7 @@ def test_calculation_path_completes_and_may_repeat_its_result(
         output=json.dumps(HOUSEHOLD_RESULT),
     )
     stored = _stored(orm_session_factory, Simulation, simulation_id)
+    snapshot = _snapshot(orm_session_factory, Simulation, simulation_id)
     # A retry, or a second browser that ran the same calculation, sends the
     # same result again; either JSON encoding of it is a repeat.
     repeats = [
@@ -236,7 +265,7 @@ def test_calculation_path_completes_and_may_repeat_its_result(
     for repeat in repeats:
         assert repeat.status_code == 200
         assert json.loads(repeat.get_json()["result"]["output"]) == HOUSEHOLD_RESULT
-    assert _stored(orm_session_factory, Simulation, simulation_id) == stored
+    assert _snapshot(orm_session_factory, Simulation, simulation_id) == snapshot
 
 
 def test_failed_simulation_can_be_calculated_again(client, orm_session_factory):
@@ -282,26 +311,51 @@ def test_stale_spm_simulation_output_is_not_final(client, orm_session_factory):
     )
 
 
-def test_server_started_simulation_rerun_is_not_final(client, orm_session_factory):
+def _complete_simulation_from_model(client, session_factory, version):
     simulation_id = _new_simulation(client)
     _patch(
         client, "simulation", simulation_id, status="complete", output=HOUSEHOLD_RESULT
     )
-    with orm_session_factory.begin() as session:
-        rerun = SimulationRunService().create_simulation_run(
-            session, simulation_id, NewSimulationRun(trigger_type="rerun")
-        )
-        session.get(Simulation, simulation_id).active_run_id = rerun.id
+    with session_factory.begin() as session:
+        session.get(Simulation, simulation_id).api_version = version
+    return simulation_id
+
+
+@pytest.mark.parametrize("version", ["0.0.1", "historical"])
+def test_result_from_an_older_model_can_be_calculated_again(
+    client, orm_session_factory, version
+):
+    simulation_id = _complete_simulation_from_model(
+        client, orm_session_factory, version
+    )
 
     response = _patch(
         client, "simulation", simulation_id, status="complete", output=FORGED_RESULT
     )
 
     assert response.status_code == 200
-    assert (
-        _stored(orm_session_factory, Simulation, simulation_id)["output"]
-        == FORGED_RESULT
+    stored = _stored(orm_session_factory, Simulation, simulation_id)
+    assert stored["output"] == FORGED_RESULT
+    assert stored["api_version"] == COUNTRY_PACKAGE_VERSIONS["us"]
+
+
+def test_result_from_a_newer_model_is_final(client, orm_session_factory):
+    # An older revision, such as a rollback, cannot replace a newer model's result.
+    simulation_id = _complete_simulation_from_model(
+        client, orm_session_factory, "99999.0.0"
     )
+    before = _snapshot(orm_session_factory, Simulation, simulation_id)
+
+    changed = _patch(
+        client, "simulation", simulation_id, status="complete", output=FORGED_RESULT
+    )
+    repeated = _patch(
+        client, "simulation", simulation_id, status="complete", output=HOUSEHOLD_RESULT
+    )
+
+    assert changed.status_code == 409
+    assert repeated.status_code == 200
+    assert _snapshot(orm_session_factory, Simulation, simulation_id) == before
 
 
 # Reports
@@ -319,10 +373,7 @@ def test_anonymous_patch_cannot_change_a_complete_report(client, orm_session_fac
         ).status_code
         == 200
     )
-    before = _stored(orm_session_factory, ReportOutput, report_id)
-    runs_before = _run_rows(
-        orm_session_factory, ReportOutputRun, "report_output_id", report_id
-    )
+    before = _snapshot(orm_session_factory, ReportOutput, report_id)
 
     for attack in (
         {"status": "complete", "output": {"household": 2}},
@@ -338,19 +389,13 @@ def test_anonymous_patch_cannot_change_a_complete_report(client, orm_session_fac
             "is complete; its result cannot be changed"
             in (response.get_json()["message"])
         )
-        assert _stored(orm_session_factory, ReportOutput, report_id) == before
-        assert (
-            _run_rows(
-                orm_session_factory, ReportOutputRun, "report_output_id", report_id
-            )
-            == runs_before
-        )
+        assert _snapshot(orm_session_factory, ReportOutput, report_id) == before
 
     repeat = _patch(
         client, "report", report_id, status="complete", output={"household": 1}
     )
     assert repeat.status_code == 200
-    assert _stored(orm_session_factory, ReportOutput, report_id) == before
+    assert _snapshot(orm_session_factory, ReportOutput, report_id) == before
 
 
 def test_completed_us_economy_report_compares_its_canonical_result(
@@ -380,22 +425,54 @@ def test_completed_us_economy_report_compares_its_canonical_result(
     )
 
 
-def test_report_under_an_outdated_cache_version_is_not_final(
-    client, orm_session_factory
-):
+def _outdated_complete_report(client, session_factory):
     report_id = _new_report(client)
     _patch(client, "report", report_id, status="complete", output={"household": 1})
-    with orm_session_factory.begin() as session:
+    with session_factory.begin() as session:
         session.get(ReportOutput, report_id).api_version = "outdated"
+    return report_id
+
+
+def test_update_to_an_outdated_report_id_completes_its_current_equivalent(
+    client, orm_session_factory
+):
+    outdated_id = _outdated_complete_report(client, orm_session_factory)
+    outdated_before = _snapshot(orm_session_factory, ReportOutput, outdated_id)
+    # Reads serve the current equivalent, still pending, under the requested ID.
+    read = client.get(f"/us/report/{outdated_id}").get_json()["result"]
+    current_id = _current_report_for(orm_session_factory, outdated_id)
 
     response = _patch(
-        client, "report", report_id, status="complete", output={"household": 2}
+        client, "report", outdated_id, status="complete", output={"household": 2}
     )
 
+    assert read["id"] == outdated_id
+    assert read["status"] == "pending"
     assert response.status_code == 200
-    assert _stored(orm_session_factory, ReportOutput, report_id)["output"] == {
+    assert response.get_json()["result"]["id"] == outdated_id
+    assert _stored(orm_session_factory, ReportOutput, current_id)["output"] == {
         "household": 2
     }
+    assert _snapshot(orm_session_factory, ReportOutput, outdated_id) == outdated_before
+    reread = client.get(f"/us/report/{outdated_id}").get_json()["result"]
+    assert reread["status"] == "complete"
+    assert json.loads(reread["output"]) == {"household": 2}
+
+
+def test_outdated_report_id_cannot_reopen_its_complete_current_equivalent(
+    client, orm_session_factory
+):
+    outdated_id = _outdated_complete_report(client, orm_session_factory)
+    _patch(client, "report", outdated_id, status="complete", output={"household": 2})
+    current_id = _current_report_for(orm_session_factory, outdated_id)
+    before = _snapshot(orm_session_factory, ReportOutput, current_id)
+
+    response = _patch(
+        client, "report", outdated_id, status="complete", output={"household": 3}
+    )
+
+    assert response.status_code == 409
+    assert _snapshot(orm_session_factory, ReportOutput, current_id) == before
 
 
 def test_server_started_report_rerun_is_not_final(client, orm_session_factory):
@@ -419,6 +496,75 @@ def test_server_started_report_rerun_is_not_final(client, orm_session_factory):
     }
 
 
+# Malformed updates
+
+
+@pytest.mark.parametrize("resource", ["simulation", "report"])
+def test_completion_needs_an_output(client, orm_session_factory, resource):
+    record_id = (
+        _new_simulation(client) if resource == "simulation" else _new_report(client)
+    )
+    model = Simulation if resource == "simulation" else ReportOutput
+    before = _snapshot(orm_session_factory, model, record_id)
+
+    responses = [
+        _patch(client, resource, record_id, status="complete", output=output)
+        for output in ("null", None)
+    ]
+
+    assert [response.status_code for response in responses] == [400, 400]
+    assert _snapshot(orm_session_factory, model, record_id) == before
+
+
+@pytest.mark.parametrize("resource", ["simulation", "report"])
+@pytest.mark.parametrize("record_id", ["1", 1.0, True, None])
+def test_update_needs_an_integer_id(client, resource, record_id):
+    response = _patch(
+        client, resource, record_id, status="complete", output={"value": 1}
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["message"].endswith("id must be an integer")
+
+
+@pytest.mark.parametrize("resource", ["simulation", "report"])
+def test_complete_record_without_output_can_be_completed(
+    client, orm_session_factory, resource
+):
+    record_id = (
+        _new_simulation(client) if resource == "simulation" else _new_report(client)
+    )
+    model = Simulation if resource == "simulation" else ReportOutput
+    with orm_session_factory.begin() as session:
+        session.get(model, record_id).status = "complete"
+
+    response = _patch(
+        client, resource, record_id, status="complete", output={"value": 1}
+    )
+
+    assert response.status_code == 200
+    assert _stored(orm_session_factory, model, record_id)["output"] == {"value": 1}
+
+
+@pytest.mark.parametrize("resource", ["simulation", "report"])
+def test_json_string_output_repeats_as_itself(client, orm_session_factory, resource):
+    record_id = (
+        _new_simulation(client) if resource == "simulation" else _new_report(client)
+    )
+    model = Simulation if resource == "simulation" else ReportOutput
+    output = json.dumps("1")
+
+    completed = _patch(client, resource, record_id, status="complete", output=output)
+    snapshot = _snapshot(orm_session_factory, model, record_id)
+    repeated = _patch(client, resource, record_id, status="complete", output=output)
+    changed = _patch(client, resource, record_id, status="complete", output=1)
+
+    assert (completed.status_code, repeated.status_code) == (200, 200)
+    assert changed.status_code == 409
+    assert _stored(orm_session_factory, model, record_id)["output"] == "1"
+    assert _snapshot(orm_session_factory, model, record_id) == snapshot
+
+
 # Properties over every update sequence
 
 
@@ -426,9 +572,13 @@ _OUTPUTS = (
     {"value": 1},
     {"value": 2},
     {"nested": {"values": [1, 2.5, None]}},
+    [1, 2],
+    "1",
+    1,
 )
 _output_values = st.one_of(
     st.none(),
+    st.just("null"),
     st.sampled_from(_OUTPUTS),
     st.sampled_from(_OUTPUTS).map(json.dumps),
 )
@@ -477,11 +627,13 @@ def _expected_response(model, update, *, running_allowed):
     values = {key: value for key, value in update.items() if value is not None}
     if "output" in values:
         values["output"] = _decoded(values["output"])
+        if values["output"] is None:
+            del values["output"]
     if values.get("status") == "complete" and "output" not in values:
         return 400, model
     if not values:
         return 400, model
-    if model["status"] == "complete":
+    if model["status"] == "complete" and model["output"] is not None:
         changed = any(model[field] != value for field, value in values.items())
         return (409 if changed else 200), model
     if values.get("status") == "running" and not running_allowed(model):
@@ -517,14 +669,15 @@ def _check_update_sequence(client, session_factory, resource, record_id, updates
             model, update, running_allowed=resource.running_allowed
         )
         stored = _stored(session_factory, resource.model, record_id)
+        snapshot = _snapshot(session_factory, resource.model, record_id)
 
         assert response.status_code == expected_code, (update, response.get_json())
         assert {field: stored[field] for field in model} == model
         if completed_record is not None:
-            # Once complete, nothing an update sends changes the record.
-            assert stored == completed_record
+            # Once complete, nothing an update sends changes the record or its runs.
+            assert snapshot == completed_record
         elif stored["status"] == "complete":
-            completed_record = stored
+            completed_record = snapshot
             event(f"{resource.path} completed")
 
 

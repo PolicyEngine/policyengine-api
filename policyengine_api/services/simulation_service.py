@@ -4,6 +4,7 @@ import json
 import uuid
 from dataclasses import dataclass
 
+from packaging.version import InvalidVersion, Version
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -89,23 +90,35 @@ class SimulationService:
             return True
         return False
 
+    @staticmethod
+    def _computed_by_older_model(simulation: Simulation) -> bool:
+        """Whether the stored result came from an older country model than this one.
+
+        A version that cannot be compared counts as older when it differs.
+        """
+        stored = simulation.api_version
+        installed = COUNTRY_PACKAGE_VERSIONS.get(simulation.country_id)
+        try:
+            return Version(str(stored)) < Version(str(installed))
+        except InvalidVersion:
+            return stored != installed
+
     @classmethod
-    def _has_final_result(cls, session: Session, simulation: Simulation) -> bool:
+    def _has_final_result(cls, simulation: Simulation) -> bool:
         """Whether the simulation holds a complete result that updates cannot change.
 
-        Stale SPM output is not final: it is reset to pending and run again. Nor is
-        a result whose rerun the server has started and not yet finished.
+        A complete result from the installed country model, or a newer one, is
+        final. A complete record without output holds no result. Stale SPM output
+        is not final: it is reset to pending and run again. Nor is a result from an
+        older model, which a browser that runs the calculation again replaces with
+        the installed model's.
         """
-        if simulation.status != "complete" or cls._has_stale_spm_output(
-            simulation.output
-        ):
-            return False
-        if simulation.active_run_id is None:
-            return True
-        active_run = session.scalar(
-            select(SimulationRun).where(SimulationRun.id == simulation.active_run_id)
+        return (
+            simulation.status == "complete"
+            and simulation.output is not None
+            and not cls._has_stale_spm_output(simulation.output)
+            and not cls._computed_by_older_model(simulation)
         )
-        return active_run is None or active_run.status not in {"pending", "running"}
 
     def ensure_simulation_dual_write_state(
         self,
@@ -305,22 +318,17 @@ class SimulationService:
         with self._sessions() as session:
             return self._select_simulation(session, simulation_id, country_id)
 
-    def update_simulation(
-        self,
-        country_id: str,
-        simulation_id: int,
-        status: str | None = None,
-        output: dict | list | str | None = None,
-        error_message: str | None = None,
-    ) -> Simulation | None:
-        """Apply the given status, output or error message and sync the run history.
+    @staticmethod
+    def _update_values(
+        status: str | None,
+        output: dict | list | str | None,
+        error_message: str | None,
+    ) -> dict:
+        """Return the fields an update sets, with output decoded and its SPM checked.
 
-        Return None when nothing was given. The simulation is restamped with the current
-        country package version. A complete result is final: an update that only
-        repeats it returns the simulation unchanged, and one that would change it
-        raises SimulationAlreadyCompleteError. Raise ValueError for output with legacy
-        ``spm_config`` or an invalid SPM receipt, and LookupError if the simulation
-        does not exist.
+        Null fields, and output that decodes to null, set nothing. Raise ValueError
+        for a completion without output, output with legacy ``spm_config`` or an
+        invalid SPM receipt.
         """
         values = {
             key: value
@@ -331,10 +339,13 @@ class SimulationService:
             }.items()
             if value is not None
         }
-        if not values:
-            return None
         if isinstance(values.get("output"), str):
             values["output"] = json.loads(values["output"])
+            if values["output"] is None:
+                del values["output"]
+        if values.get("status") == "complete" and "output" not in values:
+            msg = "output is required when status is 'complete'"
+            raise ValueError(msg)
         output_value = values.get("output")
         if isinstance(output_value, dict) and "spm_config" in output_value:
             msg = "Completed simulation output must not include legacy spm_config"
@@ -347,6 +358,29 @@ class SimulationService:
                 **output_value,
                 "spm_provenance": receipt.model_dump(mode="json", by_alias=True),
             }
+        return values
+
+    def update_simulation(
+        self,
+        country_id: str,
+        simulation_id: int,
+        status: str | None = None,
+        output: dict | list | str | None = None,
+        error_message: str | None = None,
+    ) -> Simulation | None:
+        """Apply the given status, output or error message and sync the run history.
+
+        Return None when nothing was given; a JSON-encoded null output counts as
+        none. An applied update restamps the simulation with the installed country
+        package version. A complete result from the installed model is final: an
+        update that only repeats it returns the simulation unchanged, and one that
+        would change it raises SimulationAlreadyCompleteError. Raise ValueError for
+        a completion without output, output with legacy ``spm_config`` or an
+        invalid SPM receipt, and LookupError if the simulation does not exist.
+        """
+        values = self._update_values(status, output, error_message)
+        if not values:
+            return None
         with self._sessions.begin() as session:
             simulation = self._select_simulation(
                 session,
@@ -357,7 +391,7 @@ class SimulationService:
             if simulation is None:
                 msg = f"Simulation #{simulation_id} not found"
                 raise LookupError(msg)
-            if self._has_final_result(session, simulation):
+            if self._has_final_result(simulation):
                 if changes_stored_result(simulation, values):
                     msg = (
                         f"Simulation #{simulation_id} is complete; "

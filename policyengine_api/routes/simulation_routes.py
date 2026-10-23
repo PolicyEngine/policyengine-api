@@ -83,6 +83,23 @@ def _require_simulation_identity(
         raise BadRequest(msg)
 
 
+def _require_simulation_update(
+    simulation_id: object,
+    status: object,
+    output: object,
+) -> None:
+    """Raise BadRequest for the first invalid field of a simulation update."""
+    if isinstance(simulation_id, bool) or not isinstance(simulation_id, int):
+        msg = "id must be an integer"
+        raise BadRequest(msg)
+    if status is not None and status not in ["pending", "complete", "error"]:
+        msg = "status must be 'pending', 'complete', or 'error'"
+        raise BadRequest(msg)
+    if status == "complete" and output is None:
+        msg = "output is required when status is 'complete'"
+        raise BadRequest(msg)
+
+
 @simulation_bp.route("/<country_id>/simulation", methods=["POST"])
 @validate_country
 def create_simulation(country_id: str) -> Response:
@@ -225,15 +242,7 @@ def update_simulation(country_id: str) -> Response:
     error_message = payload.get("error_message")
     logger.debug("Updating simulation #%s for country %s", simulation_id, country_id)
 
-    # Validate status if provided
-    if status is not None and status not in ["pending", "complete", "error"]:
-        msg = "status must be 'pending', 'complete', or 'error'"
-        raise BadRequest(msg)
-
-    # Validate that complete status has output
-    if status == "complete" and output is None:
-        msg = "output is required when status is 'complete'"
-        raise BadRequest(msg)
+    _require_simulation_update(simulation_id, status, output)
 
     try:
         simulation = _require_updated_simulation(

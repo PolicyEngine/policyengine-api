@@ -616,15 +616,17 @@ paths:
       description: >-
         Update the record selected by body id within the path country. Supply at
         least one non-null status, output or error_message; complete status requires
-        non-null output. Null update fields are ignored, and omitted fields retain
-        their values. The installed country model version and current run state
-        are updated with the record. Preserve the full household calculation
+        non-null output, and id must be an integer. Null update fields, and output
+        that decodes to null, are ignored; omitted fields retain their values. An
+        applied update records the installed country model version and the current
+        run state. Preserve the full household calculation
         envelope, including spm_provenance, inside output. Its SPM selection is
         derived from that receipt and belongs to the linked household; this
         operation does not select a measurement. Top-level spm is
         rejected, including null, with HTTP 400 SPM_SETTINGS_UNSUPPORTED.
-        A complete result is final: an update that repeats it returns the record
-        unchanged, and one that would change it is rejected with HTTP 409.
+        A complete result from the installed country model, or a newer one, is
+        final: an update that repeats it returns the record unchanged, and one that
+        would change it is rejected with HTTP 409.
       parameters:
         - name: country_id
           in: path
@@ -642,7 +644,7 @@ paths:
           description: Updated simulation record.
           content: *simulation_record_content
         400:
-          description: Invalid update, no fields to update, or independent SPM selection.
+          description: Invalid update or id, no fields to update, or independent SPM selection.
           content: *simulation_error_content
         404:
           description: The simulation does not exist in the selected country.
@@ -765,7 +767,9 @@ paths:
         Update a report output status, result, or error message. Completed US
         economy outputs require compact v2 comparison provenance. Each receipt
         contains the complete resolved configuration; a sibling spm_config is rejected.
-        A complete result under the current cache version is final: an update
+        The id must be an integer. An id stored under an outdated cache version
+        updates its current equivalent, the record reads serve for it, and the
+        response keeps the requested id. A complete result is final: an update
         that repeats it returns the record unchanged, and one that would change
         it is rejected with HTTP 409.
       parameters:
@@ -819,6 +823,20 @@ paths:
                         nullable: true
         "409":
           description: The report is complete, and the update would change its result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, message, result]
+                properties:
+                  status:
+                    type: string
+                    enum: [error]
+                  message:
+                    type: string
+                  result:
+                    type: object
+                    nullable: true
   /{country_id}/report/{report_id}:
     get:
       summary: Get a report output

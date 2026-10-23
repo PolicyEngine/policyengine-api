@@ -200,6 +200,10 @@ def update_report_output(country_id: str) -> Response:
     error_message = payload.get("error_message")
     logger.debug("Updating report #%s for country %s", report_id, country_id)
 
+    if isinstance(report_id, bool) or not isinstance(report_id, int):
+        msg = "id must be an integer"
+        raise BadRequest(msg)
+
     # Validate status if provided
     if status is not None and status not in [
         "pending",

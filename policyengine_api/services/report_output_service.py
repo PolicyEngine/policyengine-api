@@ -712,22 +712,16 @@ class ReportOutputService:
                 response_id=response_id,
             )
 
-    def update_report_output(
-        self,
-        country_id: str,
-        report_id: int,
-        status: str | None = None,
-        output: dict | list | str | None = None,
-        error_message: str | None = None,
-    ) -> ReportOutputView | None:
-        """Apply the given status, output or error message and sync the run history.
+    @staticmethod
+    def _update_values(
+        status: str | None,
+        output: dict | list | str | None,
+        error_message: str | None,
+    ) -> dict:
+        """Return the fields an update sets, with output decoded.
 
-        Return None when nothing was given. A complete result under the current cache
-        version is final: an update that only repeats it leaves the report unchanged,
-        and one that would change it raises ReportOutputAlreadyCompleteError. Raise
-        LookupError if the report does not exist, and ValueError when marking it
-        running without an active run or completing a US economy report whose SPM
-        provenance is invalid.
+        Null fields, and output that decodes to null, set nothing. Raise ValueError
+        for a completion without output.
         """
         values = {
             key: value
@@ -738,35 +732,68 @@ class ReportOutputService:
             }.items()
             if value is not None
         }
-        if not values:
-            return None
         if isinstance(values.get("output"), str):
             values["output"] = json.loads(values["output"])
+            if values["output"] is None:
+                del values["output"]
+        if values.get("status") == "complete" and "output" not in values:
+            msg = "output is required when status is 'complete'"
+            raise ValueError(msg)
+        return values
+
+    def update_report_output(
+        self,
+        country_id: str,
+        report_id: int,
+        status: str | None = None,
+        output: dict | list | str | None = None,
+        error_message: str | None = None,
+    ) -> ReportOutputView | None:
+        """Apply the given status, output or error message and sync the run history.
+
+        Return None when nothing was given; a JSON-encoded null output counts as
+        none. A report stored under an outdated cache version is updated as its
+        current equivalent, the record reads serve for that ID, with the requested
+        ID kept as ``response_id``. A complete result is final: an update that only
+        repeats it leaves the report unchanged, and one that would change it raises
+        ReportOutputAlreadyCompleteError. Raise LookupError if the report does not
+        exist, and ValueError for a completion without output, when marking it
+        running without an active run, or when completing a US economy report
+        whose SPM provenance is invalid.
+        """
+        values = self._update_values(status, output, error_message)
+        if not values:
+            return None
         with self._sessions.begin() as session:
-            report_output = self._select_report_output(
+            requested = self._select_report_output(
                 session, report_id, country_id, for_update=True
             )
-            if report_output is None:
+            if requested is None:
                 msg = f"Report output #{report_id} not found"
                 raise LookupError(msg)
+            report_output, response_id = requested, None
+            if not self._is_current_report_output(requested):
+                report_output = self._get_or_create_current_report_output(
+                    session, requested
+                )
+                response_id = report_id
             self._update_report_output(
                 session,
                 report_output,
                 values,
                 requested_status=status,
             )
-            return self._build_view(session, report_output)
+            return self._build_view(session, report_output, response_id=response_id)
 
     def _has_final_result(self, session: Session, report_output: ReportOutput) -> bool:
-        """Whether the report holds a complete, current result updates cannot change.
+        """Whether the report holds a complete result that updates cannot change.
 
-        A report under an outdated cache version is not served: reads resolve to its
-        current equivalent, so its stored result is not final. Nor is a result whose
-        rerun the server has started and not yet finished.
+        A complete result is final unless the server has started a rerun of it that
+        is still pending or running. No production code starts one today; the run
+        service supports reruns, and its tests exercise them. A complete record
+        without output holds no result.
         """
-        if report_output.status != "complete" or not self._is_current_report_output(
-            report_output
-        ):
+        if report_output.status != "complete" or report_output.output is None:
             return False
         if report_output.active_run_id is None:
             return True

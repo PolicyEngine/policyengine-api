@@ -95,9 +95,16 @@ def _package_modules() -> dict[str, ast.Module]:
     }
 
 
-def _imported_names(module_name: str, tree: ast.Module) -> set[str]:
-    """Every module this one imports anywhere in its body, function-local included."""
-    package = module_name.rsplit(".", 1)[0]
+def _packages() -> set[str]:
+    return {_module_name(path) for path in PACKAGE_ROOT.rglob("__init__.py")}
+
+
+def _imported_names(
+    module_name: str, tree: ast.Module, *, is_package: bool = False
+) -> set[str]:
+    """Return every module this one imports, function-local imports included."""
+    # A relative import in a package's __init__ is relative to that package.
+    package = module_name if is_package else module_name.rsplit(".", 1)[0]
     imported: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -114,6 +121,7 @@ def _imported_names(module_name: str, tree: ast.Module) -> set[str]:
 
 def _http_reachable_modules() -> set[str]:
     modules = _package_modules()
+    packages = _packages()
     roots = {
         name
         for name in modules
@@ -129,7 +137,9 @@ def _http_reachable_modules() -> set[str]:
         if name in reachable or name not in modules:
             continue
         reachable.add(name)
-        for imported in _imported_names(name, modules[name]):
+        for imported in _imported_names(
+            name, modules[name], is_package=name in packages
+        ):
             # Importing a.b.c also runs a and a.b.
             parts = imported.split(".")
             pending.extend(".".join(parts[:end]) for end in range(1, len(parts) + 1))
@@ -137,14 +147,33 @@ def _http_reachable_modules() -> set[str]:
 
 
 def _imports_legacy_user_model(tree: ast.Module) -> set[str]:
-    return {
-        alias.name
+    """Return the v1 user-record models a module uses, by name or through its module."""
+    used: set[str] = set()
+    module_aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            for alias in node.names:
+                if module.endswith("v1_models") and alias.name in (
+                    LEGACY_USER_RECORD_MODELS
+                ):
+                    used.add(alias.name)
+                if alias.name == "v1_models":
+                    module_aliases.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            module_aliases.update(
+                alias.asname or alias.name
+                for alias in node.names
+                if alias.name.endswith(".v1_models")
+            )
+    used.update(
+        node.attr
         for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-        and (node.module or "").endswith("data.v1_models")
-        for alias in node.names
-        if alias.name in LEGACY_USER_RECORD_MODELS
-    }
+        if isinstance(node, ast.Attribute)
+        and node.attr in LEGACY_USER_RECORD_MODELS
+        and ast.unparse(node.value) in module_aliases
+    )
+    return used
 
 
 @pytest.fixture
@@ -257,6 +286,20 @@ def test_reachability_check_detects_a_route_that_imports_the_saved_policy_servic
         "policyengine_api.routes.example_routes", tree
     )
     assert _imports_legacy_user_model(tree) == {"UserProfile"}
+    by_module = ast.parse(
+        "from policyengine_api.data import v1_models\n"
+        "import policyengine_api.data.v1_models as models\n"
+        "v1_models.UserPolicy\n"
+        "models.UserPolicyMirrorEvent\n"
+    )
+    assert _imports_legacy_user_model(by_module) == {
+        "UserPolicy",
+        "UserPolicyMirrorEvent",
+    }
+    package_init = ast.parse("from .services import user_policy_service\n")
+    assert "policyengine_api.routes.services.user_policy_service" in (
+        _imported_names("policyengine_api.routes", package_init, is_package=True)
+    )
 
 
 _identifiers = st.one_of(
