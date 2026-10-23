@@ -1,3 +1,10 @@
+## [5.7.1] - 2026-10-23
+
+### Fixed
+
+- Raised the economy result cache schema version from 3 to 4, so economy results cached while the simulation API returned decile and UK wealth decile relative changes as percentages (x100) instead of fractions are no longer served, and are recomputed on the next request. Budget-window results share this cache version, so they are recomputed too.
+
+
 ## [5.7.0] - 2026-10-22
 
 ### Removed
