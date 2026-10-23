@@ -6,11 +6,12 @@ import logging
 import jsonschema
 import pydantic
 from flask import Blueprint, Response, current_app, request
-from werkzeug.exceptions import BadRequest, HTTPException, NotFound
+from werkzeug.exceptions import BadRequest, Conflict, HTTPException, NotFound
 
 from policyengine_api.constants import CURRENT_YEAR
 from policyengine_api.data.v1_models import ReportOutput
 from policyengine_api.services.report_output_service import (
+    ReportOutputAlreadyCompleteError,
     ReportOutputService,
     ReportOutputView,
 )
@@ -173,6 +174,9 @@ def get_report_output(country_id: str, report_id: int) -> Response:
 def update_report_output(country_id: str) -> Response:
     """Update a report output record with results or error.
 
+    A complete result under the current cache version is final: repeating it
+    answers 200 with the record unchanged, and changing it answers 409.
+
     Args:
         country_id (str): The country ID.
 
@@ -195,6 +199,10 @@ def update_report_output(country_id: str) -> Response:
     output = payload.get("output")
     error_message = payload.get("error_message")
     logger.debug("Updating report #%s for country %s", report_id, country_id)
+
+    if isinstance(report_id, bool) or not isinstance(report_id, int):
+        msg = "id must be an integer"
+        raise BadRequest(msg)
 
     # Validate status if provided
     if status is not None and status not in [
@@ -238,6 +246,13 @@ def update_report_output(country_id: str) -> Response:
     except LookupError:
         msg = f"Report #{report_id} not found."
         raise NotFound(msg) from None
+    except ReportOutputAlreadyCompleteError as error:
+        current_app.logger.warning(
+            "Refused to change complete report #%s for country %s",
+            report_id,
+            country_id,
+        )
+        raise Conflict(str(error)) from None
     except HTTPException:
         # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
         # through without being logged as "Unexpected error".

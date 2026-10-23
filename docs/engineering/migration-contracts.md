@@ -7,8 +7,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | Metric | Count |
 | --- | ---: |
 | route group count | 9 |
-| workflow count | 16 |
-| request count | 89 |
+| workflow count | 15 |
+| request count | 86 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -49,17 +49,6 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `POST` | `/v2/policies?country_id=us` | 201 | `policy` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.tax_benefit_model_id`, `result.item.parameter_values`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/policies/{policy_id}?country_id=us` | 200 | `policy` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.tax_benefit_model_id`, `result.item.parameter_values`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/policies?country_id=us` | 200 | `policy` | none | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
-
-### `saved_policy_v1_compatibility`
-
-- Current contract: `api_v1_compatible`
-- Future owner: PR 10: Policy Migration
-
-| Method | Path | Status | Route group | Required headers | Stable response fields |
-| --- | --- | ---: | --- | --- | --- |
-| `POST` | `/us/user-policy` | 201 | `policy` | none | `status`, `message`, `result.id`, `result.reform_id`, `result.reform_label`, `result.baseline_id`, `result.user_id` |
-| `GET` | `/us/user-policy/{user_id}` | 200 | `policy` | none | `status`, `message`, `result` |
-| `PUT` | `/us/user-policy` | 200 | `policy` | none | `status`, `message`, `result.id` |
 
 ### `user_policy_associations_v2`
 

@@ -6,11 +6,14 @@ import logging
 import jsonschema
 import pydantic
 from flask import Blueprint, Response, current_app, request
-from werkzeug.exceptions import BadRequest, HTTPException, NotFound
+from werkzeug.exceptions import BadRequest, Conflict, HTTPException, NotFound
 
 from policyengine_api.data.v1_models import Simulation
 from policyengine_api.response_factory import _make_error_response
-from policyengine_api.services.simulation_service import SimulationService
+from policyengine_api.services.simulation_service import (
+    SimulationAlreadyCompleteError,
+    SimulationService,
+)
 from policyengine_api.spm import SPMValidationError
 from policyengine_api.utils.payload_validators import validate_country
 
@@ -77,6 +80,23 @@ def _require_simulation_identity(
         raise BadRequest(msg)
     if not isinstance(policy_id, int):
         msg = "policy_id must be an integer"
+        raise BadRequest(msg)
+
+
+def _require_simulation_update(
+    simulation_id: object,
+    status: object,
+    output: object,
+) -> None:
+    """Raise BadRequest for the first invalid field of a simulation update."""
+    if isinstance(simulation_id, bool) or not isinstance(simulation_id, int):
+        msg = "id must be an integer"
+        raise BadRequest(msg)
+    if status is not None and status not in ["pending", "complete", "error"]:
+        msg = "status must be 'pending', 'complete', or 'error'"
+        raise BadRequest(msg)
+    if status == "complete" and output is None:
+        msg = "output is required when status is 'complete'"
         raise BadRequest(msg)
 
 
@@ -194,6 +214,9 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
 def update_simulation(country_id: str) -> Response:
     """Update a simulation record with results or error.
 
+    A complete result is final: repeating it answers 200 with the record
+    unchanged, and changing it answers 409.
+
     Args:
         country_id (str): The country ID.
 
@@ -219,15 +242,7 @@ def update_simulation(country_id: str) -> Response:
     error_message = payload.get("error_message")
     logger.debug("Updating simulation #%s for country %s", simulation_id, country_id)
 
-    # Validate status if provided
-    if status is not None and status not in ["pending", "complete", "error"]:
-        msg = "status must be 'pending', 'complete', or 'error'"
-        raise BadRequest(msg)
-
-    # Validate that complete status has output
-    if status == "complete" and output is None:
-        msg = "output is required when status is 'complete'"
-        raise BadRequest(msg)
+    _require_simulation_update(simulation_id, status, output)
 
     try:
         simulation = _require_updated_simulation(
@@ -257,6 +272,13 @@ def update_simulation(country_id: str) -> Response:
     except LookupError:
         msg = f"Simulation #{simulation_id} not found."
         raise NotFound(msg) from None
+    except SimulationAlreadyCompleteError as error:
+        current_app.logger.warning(
+            "Refused to change complete simulation #%s for country %s",
+            simulation_id,
+            country_id,
+        )
+        raise Conflict(str(error)) from None
     except HTTPException:
         # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
         # through without being logged as "Unexpected error".

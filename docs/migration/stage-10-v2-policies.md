@@ -207,3 +207,16 @@ The normal staging promotion still restores the previously serving Cloud Run
 revision when promotion or the stable-URL health check fails. It does not
 create persistent policy fixtures or change the configured write selection as
 part of each release.
+
+## Removal of the v1 saved-policy routes
+
+`POST /{country_id}/user-policy`, `GET /{country_id}/user-policy/{user_id}`
+and `PUT /{country_id}/user-policy` are removed. They read and changed saved
+policies by a caller-supplied `user_id` or record `id` with no credential, and
+only legacy.policyengine.org called them; Cloud Run request logs for the 30
+days to 2026-10-19 showed no saved-policy requests. No new v1 saved policies
+are created, so none are copied to v2. The saved-policy copying and v1
+saved-policy service modules stay until dual-write is deleted, and existing
+Cloud SQL `user_policies` rows are kept. Signed-in users keep their saved
+policies through `/v2/user-policies`, which takes the owner from the verified
+credential.

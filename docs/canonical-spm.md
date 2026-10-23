@@ -251,9 +251,13 @@ the full calculation envelope inside `output`, including its
 `spm_provenance`. A JSON-encoded output string is also accepted. This endpoint
 validates the one compact SPM receipt strictly before storage. Completed output
 that includes the former sibling `spm_config`, an old receipt or a rich receipt
-is rejected rather than translated. Null update fields are ignored. The legacy `api_version` input
-is ignored; writes record the installed country model version. Top-level `spm`,
-even null, returns HTTP 400 `SPM_SETTINGS_UNSUPPORTED` on POST and PATCH.
+is rejected rather than translated. Null update fields, and output that decodes
+to null, are ignored, and `id` must be an integer. The legacy `api_version` input
+is ignored; an applied write records the installed country model version. A
+complete result from the installed country model, or a newer one, is final: an
+update that repeats it writes nothing, and one that would change it returns HTTP
+409. Top-level `spm`, even null, returns HTTP 400 `SPM_SETTINGS_UNSUPPORTED` on
+POST and PATCH.
 
 POST, PATCH and `GET /us/simulation/{id}` return the simulation record inside
 `result`. Non-string JSON `output` and `simulation_spec_json` are returned as

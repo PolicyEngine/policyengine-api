@@ -1,0 +1,1 @@
+Removed the v1 user-profile routes (`/{country_id}/user-profile`) and saved-policy routes (`/{country_id}/user-policy`), which read and changed records by a caller-supplied user or record ID without a credential; signed-in users keep their saved work through the `/v2` routes, which take the owner from the verified credential.
