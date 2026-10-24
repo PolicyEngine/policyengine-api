@@ -25,7 +25,6 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
 )
 from policyengine_api.services.v2.households.types import (
-    HouseholdPage,
     HouseholdRead,
     NativeHouseholdCreation,
 )
@@ -99,16 +98,6 @@ class FakeHouseholdService:
         self.calls.append(("get_household", filters))
         self._raise()
         return _household_read(household_id=filters["household_id"])
-
-    def list_households(self, **filters) -> HouseholdPage:
-        self.calls.append(("list_households", filters))
-        self._raise()
-        return HouseholdPage(
-            items=(_household_read(),),
-            offset=filters["offset"],
-            limit=filters["limit"],
-            has_more=False,
-        )
 
 
 def _client(
@@ -452,34 +441,6 @@ def test_no_anonymous_v2_operation_returns_a_list_of_households() -> None:
     assert set(schema["paths"]["/v2/households"]) == {"post"}
 
 
-def test_list_passes_exact_year_filter_and_canonical_pagination() -> None:
-    service = FakeHouseholdService()
-    client, _flask_calls = _client(service)
-
-    response = client.get(
-        "/v2/households?country_id=us&default_year=2026&offset=2&limit=3"
-    )
-    search = client.get("/v2/households?country_id=us&search=age")
-    excessive = client.get("/v2/households?country_id=us&limit=501")
-
-    assert response.status_code == 200
-    assert response.json()["result"]["offset"] == 2
-    assert response.json()["result"]["limit"] == 3
-    assert service.calls == [
-        (
-            "list_households",
-            {
-                "country_id": "us",
-                "default_year": 2026,
-                "offset": 2,
-                "limit": 3,
-            },
-        )
-    ]
-    assert search.status_code == 422
-    assert excessive.status_code == 422
-
-
 @pytest.mark.parametrize(
     ("error", "status", "message"),
     [
@@ -540,7 +501,7 @@ def test_base_household_mutations_are_not_exposed(method: str) -> None:
     assert flask_calls["count"] == 0
 
 
-def test_openapi_publishes_query_body_item_page_and_error_schemas() -> None:
+def test_openapi_publishes_query_body_item_and_error_schemas() -> None:
     service = FakeHouseholdService()
     client, _flask_calls = _client(service)
     schema = client.get("/v2/openapi.json").json()
@@ -549,12 +510,11 @@ def test_openapi_publishes_query_body_item_page_and_error_schemas() -> None:
         "/v2/households",
         "/v2/households/{household_id}",
     }
-    collection = schema["paths"]["/v2/households"]["get"]
-    parameters = {item["name"]: item for item in collection["parameters"]}
+    detail = schema["paths"]["/v2/households/{household_id}"]["get"]
+    parameters = {item["name"]: item for item in detail["parameters"]}
+    assert set(parameters) == {"household_id", "country_id"}
+    assert parameters["household_id"]["schema"]["format"] == "uuid"
     assert parameters["country_id"]["required"] is True
-    assert parameters["default_year"]["schema"]["anyOf"][0]["minimum"] == 1900
-    assert parameters["offset"]["schema"]["default"] == 0
-    assert parameters["limit"]["schema"]["maximum"] == 500
 
     create = schema["paths"]["/v2/households"]["post"]
     assert {"200", "201", "400", "404", "409", "413", "422", "500", "503"} <= set(
@@ -608,8 +568,9 @@ def test_browser_preflight_and_cross_origin_errors_use_application_cors() -> Non
             "Access-Control-Request-Headers": "content-type",
         },
     )
-    error = client.get(
+    error = client.post(
         "/v2/households?country_id=us&search=age",
+        json=_body(),
         headers={"Origin": origin},
     )
 

@@ -23,7 +23,6 @@ if TYPE_CHECKING:
         LegacyReferenceChecker,
     )
     from policyengine_api.services.v2.households.types import (
-        HouseholdPage,
         HouseholdRead,
         NativeHouseholdCreation,
         NativeHouseholdCreationInput,
@@ -369,17 +368,6 @@ class V2HouseholdResourceService(Protocol):
 
         Raise ``HouseholdNotFoundError`` when no such household exists there.
         """
-        ...
-
-    def list_households(
-        self,
-        *,
-        country_id: str,
-        default_year: int | None,
-        offset: int,
-        limit: int,
-    ) -> HouseholdPage:
-        """Return a page of the country's households, optionally of one default year."""
         ...
 
 

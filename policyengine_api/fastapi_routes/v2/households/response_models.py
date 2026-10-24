@@ -15,10 +15,7 @@ from policyengine_api.fastapi_routes.v2.households.document_models import (
 from policyengine_api.query_parameters import CountryId, DefaultYear
 
 if TYPE_CHECKING:
-    from policyengine_api.services.v2.households.types import (
-        HouseholdPage,
-        HouseholdRead,
-    )
+    from policyengine_api.services.v2.households.types import HouseholdRead
 
 
 class StrictHouseholdAPIModel(BaseModel):
@@ -57,29 +54,6 @@ class HouseholdDetailResult(StrictHouseholdAPIModel):
     item: HouseholdItem
 
 
-class HouseholdPageResult(StrictHouseholdAPIModel):
-    """One page of households, oldest first.
-
-    ``offset`` and ``limit`` echo the request; when ``has_more`` is true, ask
-    for the next page with ``offset + limit``.
-    """
-
-    items: list[HouseholdItem]
-    offset: int
-    limit: int
-    has_more: bool
-
-    @classmethod
-    def from_page(cls, page: HouseholdPage) -> HouseholdPageResult:
-        """Build the response page from a service page, converting each item."""
-        return cls(
-            items=[HouseholdItem.from_read(item) for item in page.items],
-            offset=page.offset,
-            limit=page.limit,
-            has_more=page.has_more,
-        )
-
-
 ResultT = TypeVar("ResultT")
 
 
@@ -93,10 +67,6 @@ class HouseholdSuccessResponse(StrictHouseholdAPIModel, Generic[ResultT]):
 
 class HouseholdDetailResponse(HouseholdSuccessResponse[HouseholdDetailResult]):
     """Success response holding one household."""
-
-
-class HouseholdPageResponse(HouseholdSuccessResponse[HouseholdPageResult]):
-    """Success response holding one page of households."""
 
 
 HOUSEHOLD_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {

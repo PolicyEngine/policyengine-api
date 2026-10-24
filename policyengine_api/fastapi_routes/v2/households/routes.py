@@ -29,11 +29,8 @@ from policyengine_api.fastapi_routes.v2.households.response_models import (
     HouseholdDetailResponse,
     HouseholdDetailResult,
     HouseholdItem,
-    HouseholdPageResponse,
-    HouseholdPageResult,
 )
 from policyengine_api.query_parameters import (
-    HouseholdCollectionQuery,
     HouseholdCreateQuery,
     HouseholdDetailQuery,
 )
@@ -58,9 +55,6 @@ HouseholdCreateQueryDependency = Annotated[
 ]
 HouseholdDetailQueryDependency = Annotated[
     HouseholdDetailQuery, Depends(query_dependency(HouseholdDetailQuery))
-]
-HouseholdCollectionQueryDependency = Annotated[
-    HouseholdCollectionQuery, Depends(query_dependency(HouseholdCollectionQuery))
 ]
 
 
@@ -179,25 +173,6 @@ def build_v2_household_router(
             return HouseholdDetailResponse(
                 result=HouseholdDetailResult(item=HouseholdItem.from_read(item))
             )
-
-        return _household_operation(read)
-
-    @router.get(
-        "/households",
-        response_model=HouseholdPageResponse,
-        summary="List immutable households",
-    )
-    def get_households(
-        query: HouseholdCollectionQueryDependency,
-    ) -> HouseholdPageResponse | JSONResponse:
-        def read() -> HouseholdPageResponse:
-            page = service_factory().list_households(
-                country_id=query.country_id,
-                default_year=query.default_year,
-                offset=query.offset,
-                limit=query.limit,
-            )
-            return HouseholdPageResponse(result=HouseholdPageResult.from_page(page))
 
         return _household_operation(read)
 

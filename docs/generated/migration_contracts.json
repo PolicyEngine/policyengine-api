@@ -1,7 +1,7 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 89,
+    "request_count": 88,
     "route_group_count": 9,
     "sim_flow_count": 3,
     "workflow_count": 16
@@ -517,21 +517,6 @@
             "result.item.household_data",
             "result.item.created_at",
             "result.item.updated_at"
-          ]
-        },
-        {
-          "expected_status": 200,
-          "headers": [],
-          "method": "GET",
-          "path": "/v2/households?country_id=us",
-          "route_group": "household",
-          "stable_response_fields": [
-            "status",
-            "message",
-            "result.items",
-            "result.offset",
-            "result.limit",
-            "result.has_more"
           ]
         }
       ]

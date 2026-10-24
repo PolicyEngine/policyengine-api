@@ -14,7 +14,6 @@ from policyengine_core.periods import (  # type: ignore[import-untyped]
 from policyengine_api.services.v2.households.types import (
     CanonicalHouseholdContent,
     HouseholdCreationInput,
-    HouseholdPage,
     HouseholdRead,
     LegacyHouseholdSnapshot,
 )
@@ -133,20 +132,6 @@ def household_read(household: Household) -> HouseholdRead:
         household_data=dict(household.household_data),
         created_at=household.created_at,
         updated_at=household.updated_at,
-    )
-
-
-def household_page(rows: list[Household], *, offset: int, limit: int) -> HouseholdPage:
-    """Build a page from up to ``limit + 1`` rows.
-
-    The extra row is not returned; it only sets ``has_more``.
-    """
-    displayed = rows[:limit]
-    return HouseholdPage(
-        items=tuple(household_read(row) for row in displayed),
-        offset=offset,
-        limit=limit,
-        has_more=len(rows) > limit,
     )
 
 

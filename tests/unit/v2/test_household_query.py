@@ -9,10 +9,7 @@ import pytest
 from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import V2_METADATA, Household
-from policyengine_api.services.v2.households.services import (
-    read_complete_household,
-    read_household_page,
-)
+from policyengine_api.services.v2.households.services import read_complete_household
 from policyengine_api.services.v2.households.validators import HouseholdNotFoundError
 
 
@@ -70,40 +67,5 @@ def test_detail_is_complete_and_uses_country_as_resource_identity() -> None:
             assert item.default_year == 2026
             with pytest.raises(HouseholdNotFoundError):
                 read_complete_household(session, country_id="uk", household_id=first_id)
-    finally:
-        engine.dispose()
-
-
-def test_collection_orders_paginates_and_filters_exact_default_year() -> None:
-    engine, first_id, second_id, _other_id = _stored_households()
-    try:
-        with Session(engine) as session:
-            first_page = read_household_page(
-                session,
-                country_id="us",
-                default_year=None,
-                offset=0,
-                limit=1,
-            )
-            second_page = read_household_page(
-                session,
-                country_id="us",
-                default_year=None,
-                offset=1,
-                limit=1,
-            )
-            filtered = read_household_page(
-                session,
-                country_id="us",
-                default_year=2026,
-                offset=0,
-                limit=100,
-            )
-
-        assert [item.id for item in first_page.items] == [first_id]
-        assert first_page.has_more is True
-        assert [item.id for item in second_page.items] == [second_id]
-        assert second_page.has_more is False
-        assert [item.id for item in filtered.items] == [first_id]
     finally:
         engine.dispose()

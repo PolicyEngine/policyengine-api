@@ -8,7 +8,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | ---: |
 | route group count | 9 |
 | workflow count | 16 |
-| request count | 89 |
+| request count | 88 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -98,7 +98,6 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | --- | ---: | --- | --- | --- |
 | `POST` | `/v2/households?country_id=us` | 201 | `household` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.default_year`, `result.item.household_data`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/households/{household_id}?country_id=us` | 200 | `household` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.default_year`, `result.item.household_data`, `result.item.created_at`, `result.item.updated_at` |
-| `GET` | `/v2/households?country_id=us` | 200 | `household` | none | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
 
 ### `user_household_associations_v2`
 

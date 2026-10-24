@@ -339,20 +339,6 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                 ),
                 route_group="household",
             ),
-            ContractRequest(
-                method="GET",
-                path="/v2/households?country_id=us",
-                expected_status=200,
-                stable_response_fields=(
-                    "status",
-                    "message",
-                    "result.items",
-                    "result.offset",
-                    "result.limit",
-                    "result.has_more",
-                ),
-                route_group="household",
-            ),
         ),
     ),
     WorkflowContract(
