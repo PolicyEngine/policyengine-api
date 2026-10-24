@@ -9,16 +9,22 @@ from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
+from pydantic import BaseModel
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+from policyengine_api.fastapi_routes.v2.households.response_models import (
+    HouseholdDetailResponse,
+    HouseholdItem,
+)
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.migration_flags import (
     RouteImplementation,
@@ -383,61 +389,151 @@ def test_household_collection_path_never_returns_household_content() -> None:
     check()
 
 
-def _resolve(schema: dict[str, object], components: dict[str, object]) -> object:
-    reference = schema.get("$ref")
-    if isinstance(reference, str):
-        return components[reference.rsplit("/", 1)[-1]]
-    return schema
+# The signed-out header carries a UUID the caller generates, so it proves no
+# identity: an operation that accepts it alone is as open as one without security.
+_SELF_ASSERTED_SCHEMES = frozenset({"UnauthenticatedUser"})
+_HTTP_METHODS = frozenset(
+    {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+)
+_ELEMENT_KEYWORDS = (
+    "items",
+    "prefixItems",
+    "additionalProperties",
+    "patternProperties",
+)
 
 
-def _household_lists(
-    node: object, components: dict[str, object], seen: set[int]
-) -> list[object]:
-    """Return every array of HouseholdItem reachable from an OpenAPI schema node."""
-    if isinstance(node, list):
-        return [
-            found
-            for child in node
-            for found in _household_lists(child, components, seen)
-        ]
-    if not isinstance(node, dict):
-        return []
-    node = _resolve(node, components)
-    if not isinstance(node, dict) or id(node) in seen:
-        return []
-    seen.add(id(node))
-    found: list[object] = []
-    items = node.get("items")
-    if isinstance(items, dict) and items.get("$ref", "").endswith("/HouseholdItem"):
-        found.append(node)
-    for child in node.values():
-        found.extend(_household_lists(child, components, seen))
-    return found
+def _referenced_schemas(node: object, components: dict[str, object]) -> set[str]:
+    """Return the name of every component schema reachable from an OpenAPI node."""
+    names: set[str] = set()
+    pending = [node]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, list):
+            pending.extend(current)
+        elif isinstance(current, dict):
+            reference = current.get("$ref")
+            if isinstance(reference, str):
+                name = reference.rsplit("/", 1)[-1]
+                if name not in names:
+                    names.add(name)
+                    pending.append(components[name])
+            pending.extend(value for key, value in current.items() if key != "$ref")
+    return names
 
 
-def test_no_anonymous_v2_operation_returns_a_list_of_households() -> None:
-    service = FakeHouseholdService()
-    client, _flask_calls = _client(service)
-    schema = client.get("/v2/openapi.json").json()
-    components = schema["components"]["schemas"]
+def _holds_many_households(node: object, components: dict[str, object]) -> bool:
+    """Whether a schema has an array or map whose elements can hold a HouseholdItem.
 
-    exposed = {
+    Element schemas are followed through references and composition
+    (``anyOf``, ``allOf``, nested models), so ``list[HouseholdItem | None]``
+    and ``list[Wrapper]`` count as well as ``list[HouseholdItem]``.
+    """
+    pending = [node]
+    visited: set[str] = set()
+    while pending:
+        current = pending.pop()
+        if isinstance(current, list):
+            pending.extend(current)
+            continue
+        if not isinstance(current, dict):
+            continue
+        for keyword in _ELEMENT_KEYWORDS:
+            element = current.get(keyword)
+            if isinstance(element, dict | list) and "HouseholdItem" in (
+                _referenced_schemas(element, components)
+            ):
+                return True
+        reference = current.get("$ref")
+        if isinstance(reference, str):
+            name = reference.rsplit("/", 1)[-1]
+            if name not in visited:
+                visited.add(name)
+                pending.append(components[name])
+        pending.extend(value for key, value in current.items() if key != "$ref")
+    return False
+
+
+def _reachable_without_account(
+    operation: dict[str, object], schema: dict[str, object]
+) -> bool:
+    """Whether a security alternative needs nothing beyond the signed-out header."""
+    security = operation.get("security", schema.get("security")) or []
+    return not security or any(
+        set(alternative) <= _SELF_ASSERTED_SCHEMES for alternative in security
+    )
+
+
+def _open_household_collections(schema: dict[str, object]) -> set[tuple[str, str]]:
+    """Return operations that return many households to a caller with no account.
+
+    A route that returned only the caller's own households in full would also
+    match; it would need an explicit, reviewed exception here.
+    """
+    components = schema.get("components", {}).get("schemas", {})
+    return {
         (method.upper(), path)
         for path, operations in schema["paths"].items()
         for method, operation in operations.items()
-        if not operation.get("security")
-        and _household_lists(
-            [
-                response
-                for status, response in operation["responses"].items()
-                if status.startswith("2")
-            ],
-            components,
-            set(),
+        if method in _HTTP_METHODS
+        and _reachable_without_account(operation, schema)
+        and any(
+            _holds_many_households(response, components)
+            for status, response in operation.get("responses", {}).items()
+            if str(status).startswith("2")
         )
     }
 
-    assert exposed == set()
+
+class _WrappedHousehold(BaseModel):
+    household: HouseholdItem
+
+
+def test_open_household_collection_check_catches_each_list_and_credential_shape() -> (
+    None
+):
+    app = FastAPI()
+    signed_out = [{"UnauthenticatedUser": []}]
+    shapes = {
+        "/list": (list[HouseholdItem], None),
+        "/optional-items": (list[HouseholdItem | None], None),
+        "/map": (dict[str, HouseholdItem], None),
+        "/wrapped": (list[_WrappedHousehold], None),
+        "/signed-out-header": (list[HouseholdItem], signed_out),
+        "/token-or-header": (
+            list[HouseholdItem],
+            [{"UserAccessToken": []}, *signed_out],
+        ),
+        "/optional-token": (list[HouseholdItem], [{}, {"UserAccessToken": []}]),
+        "/token-only": (list[HouseholdItem], [{"UserAccessToken": []}]),
+        "/one-household": (HouseholdDetailResponse, None),
+    }
+    for path, (response_model, security) in shapes.items():
+        app.add_api_route(
+            path,
+            lambda: None,
+            methods=["GET"],
+            response_model=response_model,
+            openapi_extra=None if security is None else {"security": security},
+        )
+
+    assert _open_household_collections(app.openapi()) == {
+        ("GET", "/list"),
+        ("GET", "/optional-items"),
+        ("GET", "/map"),
+        ("GET", "/wrapped"),
+        ("GET", "/signed-out-header"),
+        ("GET", "/token-or-header"),
+        ("GET", "/optional-token"),
+    }
+
+
+def test_no_open_v2_operation_returns_many_households() -> None:
+    service = FakeHouseholdService()
+    client, _flask_calls = _client(service)
+    schema = client.get("/v2/openapi.json").json()
+
+    assert _open_household_collections(schema) == set()
     assert set(schema["paths"]["/v2/households"]) == {"post"}
 
 
