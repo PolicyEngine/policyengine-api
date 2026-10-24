@@ -15,7 +15,9 @@ from policyengine_api.fastapi_routes.v2.households.document_models import (
 from policyengine_api.query_parameters import CountryId, DefaultYear
 
 if TYPE_CHECKING:
-    from policyengine_api.services.v2.households.types import HouseholdRead
+    from policyengine_api.services.v2.households.types import (
+        HouseholdRead,
+    )
 
 
 class StrictHouseholdAPIModel(BaseModel):
