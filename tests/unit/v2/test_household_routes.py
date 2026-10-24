@@ -2,24 +2,35 @@
 
 from __future__ import annotations
 
+import string
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
+from pydantic import BaseModel
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+from policyengine_api.fastapi_routes.v2.households.response_models import (
+    HouseholdDetailResponse,
+    HouseholdItem,
+)
+from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
 )
 from policyengine_api.services.v2.households.types import (
-    HouseholdPage,
     HouseholdRead,
     NativeHouseholdCreation,
 )
@@ -93,16 +104,6 @@ class FakeHouseholdService:
         self.calls.append(("get_household", filters))
         self._raise()
         return _household_read(household_id=filters["household_id"])
-
-    def list_households(self, **filters) -> HouseholdPage:
-        self.calls.append(("list_households", filters))
-        self._raise()
-        return HouseholdPage(
-            items=(_household_read(),),
-            offset=filters["offset"],
-            limit=filters["limit"],
-            has_more=False,
-        )
 
 
 def _client(
@@ -268,32 +269,272 @@ def test_detail_is_country_scoped_and_returns_complete_content() -> None:
     assert flask_calls["count"] == 0
 
 
-def test_list_passes_exact_year_filter_and_canonical_pagination() -> None:
+class HouseholdListingService(FakeHouseholdService):
+    """A service that would return stored households to any route that asked."""
+
+    def list_households(self, **filters) -> SimpleNamespace:
+        self.calls.append(("list_households", filters))
+        return SimpleNamespace(
+            items=(_household_read(),),
+            offset=filters["offset"],
+            limit=filters["limit"],
+            has_more=True,
+        )
+
+
+def test_anonymous_household_collection_is_not_served() -> None:
+    service = HouseholdListingService()
+    client, flask_calls = _client(service)
+
+    response = client.get("/v2/households?country_id=us&offset=0&limit=500")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "status": "error",
+        "message": "API v2 resource 'households' was not found",
+    }
+    assert service.calls == []
+    assert flask_calls["count"] == 0
+
+
+_COLLECTION_PATHS = ("/v2/households", "/v2/households/", "/v2/%68ouseholds")
+_QUERY_TEXT = st.text(alphabet=string.printable, max_size=12)
+
+
+@st.composite
+def _collection_queries(draw: st.DrawFn) -> list[tuple[str, str]]:
+    country = draw(st.none() | st.sampled_from(["us", "uk", "US", "Uk"]) | _QUERY_TEXT)
+    offset = draw(st.none() | st.integers(min_value=-5, max_value=10**6))
+    limit = draw(st.none() | st.integers(min_value=-5, max_value=1_000))
+    default_year = draw(st.none() | st.integers(min_value=1_800, max_value=2_300))
+    pairs = [
+        (name, str(value))
+        for name, value in (
+            ("country_id", country),
+            ("offset", offset),
+            ("limit", limit),
+            ("default_year", default_year),
+        )
+        if value is not None
+    ]
+    extras = st.tuples(
+        st.sampled_from(["search", "user_id", "household_id", "page", "country_id"])
+        | st.text(alphabet=string.ascii_lowercase + "_", min_size=1, max_size=12),
+        _QUERY_TEXT,
+    )
+    pairs.extend(draw(st.lists(extras, max_size=3)))
+    return draw(st.permutations(pairs))
+
+
+_BEARER_TOKENS = st.text(
+    alphabet=string.ascii_letters + string.digits + "-_.", min_size=1, max_size=64
+)
+_CREDENTIAL_HEADERS = st.one_of(
+    st.just({}),
+    _BEARER_TOKENS.map(lambda token: {"Authorization": f"Bearer {token}"}),
+    st.uuids().map(lambda user: {UNAUTHENTICATED_USER_HEADER: str(user)}),
+    st.tuples(_BEARER_TOKENS, st.uuids()).map(
+        lambda pair: {
+            "Authorization": f"Bearer {pair[0]}",
+            UNAUTHENTICATED_USER_HEADER: str(pair[1]),
+        }
+    ),
+    st.uuids().map(
+        lambda user: {
+            "Origin": "https://policyengine.org",
+            UNAUTHENTICATED_USER_HEADER: str(user),
+        }
+    ),
+)
+
+
+def test_household_collection_path_never_returns_household_content() -> None:
+    """No query or credential on the collection path returns stored households.
+
+    The backing service would return a page to any route that asked, so the
+    property holds only if no collection route exists to ask it.
+    """
+    service = HouseholdListingService()
+    client, flask_calls = _client(service)
+
+    @settings(max_examples=150, deadline=None)
+    @given(
+        path=st.sampled_from(_COLLECTION_PATHS),
+        query=_collection_queries(),
+        headers=_CREDENTIAL_HEADERS,
+    )
+    @example(path="/v2/households", query=[("country_id", "us")], headers={})
+    @example(
+        path="/v2/households",
+        query=[("country_id", "uk"), ("offset", "500"), ("limit", "500")],
+        headers={"Authorization": "Bearer anything"},
+    )
+    @example(
+        path="/v2/households",
+        query=[("country_id", "us"), ("default_year", "2026")],
+        headers={UNAUTHENTICATED_USER_HEADER: str(uuid4())},
+    )
+    def check(path: str, query: list[tuple[str, str]], headers: dict[str, str]) -> None:
+        service.calls.clear()
+        response = client.get(f"{path}?{urlencode(query)}", headers=headers)
+
+        assert service.calls == []
+        assert "household_data" not in response.text
+        assert str(HOUSEHOLD_ID) not in response.text
+        assert "result" not in response.json()
+        assert flask_calls["count"] == 0
+        assert response.json()["status"] == "error"
+        assert response.status_code in {401, 404, 405}
+
+    check()
+
+
+# The signed-out header carries a UUID the caller generates, so it proves no
+# identity: an operation that accepts it alone is as open as one without security.
+_SELF_ASSERTED_SCHEMES = frozenset({"UnauthenticatedUser"})
+_HTTP_METHODS = frozenset(
+    {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+)
+_ELEMENT_KEYWORDS = (
+    "items",
+    "prefixItems",
+    "additionalProperties",
+    "patternProperties",
+)
+
+
+def _referenced_schemas(node: object, components: dict[str, object]) -> set[str]:
+    """Return the name of every component schema reachable from an OpenAPI node."""
+    names: set[str] = set()
+    pending = [node]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, list):
+            pending.extend(current)
+        elif isinstance(current, dict):
+            reference = current.get("$ref")
+            if isinstance(reference, str):
+                name = reference.rsplit("/", 1)[-1]
+                if name not in names:
+                    names.add(name)
+                    pending.append(components[name])
+            pending.extend(value for key, value in current.items() if key != "$ref")
+    return names
+
+
+def _holds_many_households(node: object, components: dict[str, object]) -> bool:
+    """Whether a schema has an array or map whose elements can hold a HouseholdItem.
+
+    Element schemas are followed through references and composition
+    (``anyOf``, ``allOf``, nested models), so ``list[HouseholdItem | None]``
+    and ``list[Wrapper]`` count as well as ``list[HouseholdItem]``.
+    """
+    pending = [node]
+    visited: set[str] = set()
+    while pending:
+        current = pending.pop()
+        if isinstance(current, list):
+            pending.extend(current)
+            continue
+        if not isinstance(current, dict):
+            continue
+        for keyword in _ELEMENT_KEYWORDS:
+            element = current.get(keyword)
+            if isinstance(element, dict | list) and "HouseholdItem" in (
+                _referenced_schemas(element, components)
+            ):
+                return True
+        reference = current.get("$ref")
+        if isinstance(reference, str):
+            name = reference.rsplit("/", 1)[-1]
+            if name not in visited:
+                visited.add(name)
+                pending.append(components[name])
+        pending.extend(value for key, value in current.items() if key != "$ref")
+    return False
+
+
+def _reachable_without_account(
+    operation: dict[str, object], schema: dict[str, object]
+) -> bool:
+    """Whether a security alternative needs nothing beyond the signed-out header."""
+    security = operation.get("security", schema.get("security")) or []
+    return not security or any(
+        set(alternative) <= _SELF_ASSERTED_SCHEMES for alternative in security
+    )
+
+
+def _open_household_collections(schema: dict[str, object]) -> set[tuple[str, str]]:
+    """Return operations that return many households to a caller with no account.
+
+    A route that returned only the caller's own households in full would also
+    match; it would need an explicit, reviewed exception here.
+    """
+    components = schema.get("components", {}).get("schemas", {})
+    return {
+        (method.upper(), path)
+        for path, operations in schema["paths"].items()
+        for method, operation in operations.items()
+        if method in _HTTP_METHODS
+        and _reachable_without_account(operation, schema)
+        and any(
+            _holds_many_households(response, components)
+            for status, response in operation.get("responses", {}).items()
+            if str(status).startswith("2")
+        )
+    }
+
+
+class _WrappedHousehold(BaseModel):
+    household: HouseholdItem
+
+
+def test_open_household_collection_check_catches_each_list_and_credential_shape() -> (
+    None
+):
+    app = FastAPI()
+    signed_out = [{"UnauthenticatedUser": []}]
+    shapes = {
+        "/list": (list[HouseholdItem], None),
+        "/optional-items": (list[HouseholdItem | None], None),
+        "/map": (dict[str, HouseholdItem], None),
+        "/wrapped": (list[_WrappedHousehold], None),
+        "/signed-out-header": (list[HouseholdItem], signed_out),
+        "/token-or-header": (
+            list[HouseholdItem],
+            [{"UserAccessToken": []}, *signed_out],
+        ),
+        "/optional-token": (list[HouseholdItem], [{}, {"UserAccessToken": []}]),
+        "/token-only": (list[HouseholdItem], [{"UserAccessToken": []}]),
+        "/one-household": (HouseholdDetailResponse, None),
+    }
+    for path, (response_model, security) in shapes.items():
+        app.add_api_route(
+            path,
+            lambda: None,
+            methods=["GET"],
+            response_model=response_model,
+            openapi_extra=None if security is None else {"security": security},
+        )
+
+    assert _open_household_collections(app.openapi()) == {
+        ("GET", "/list"),
+        ("GET", "/optional-items"),
+        ("GET", "/map"),
+        ("GET", "/wrapped"),
+        ("GET", "/signed-out-header"),
+        ("GET", "/token-or-header"),
+        ("GET", "/optional-token"),
+    }
+
+
+def test_no_open_v2_operation_returns_many_households() -> None:
     service = FakeHouseholdService()
     client, _flask_calls = _client(service)
+    schema = client.get("/v2/openapi.json").json()
 
-    response = client.get(
-        "/v2/households?country_id=us&default_year=2026&offset=2&limit=3"
-    )
-    search = client.get("/v2/households?country_id=us&search=age")
-    excessive = client.get("/v2/households?country_id=us&limit=501")
-
-    assert response.status_code == 200
-    assert response.json()["result"]["offset"] == 2
-    assert response.json()["result"]["limit"] == 3
-    assert service.calls == [
-        (
-            "list_households",
-            {
-                "country_id": "us",
-                "default_year": 2026,
-                "offset": 2,
-                "limit": 3,
-            },
-        )
-    ]
-    assert search.status_code == 422
-    assert excessive.status_code == 422
+    assert _open_household_collections(schema) == set()
+    assert set(schema["paths"]["/v2/households"]) == {"post"}
 
 
 @pytest.mark.parametrize(
@@ -356,7 +597,7 @@ def test_base_household_mutations_are_not_exposed(method: str) -> None:
     assert flask_calls["count"] == 0
 
 
-def test_openapi_publishes_query_body_item_page_and_error_schemas() -> None:
+def test_openapi_publishes_query_body_item_and_error_schemas() -> None:
     service = FakeHouseholdService()
     client, _flask_calls = _client(service)
     schema = client.get("/v2/openapi.json").json()
@@ -365,12 +606,11 @@ def test_openapi_publishes_query_body_item_page_and_error_schemas() -> None:
         "/v2/households",
         "/v2/households/{household_id}",
     }
-    collection = schema["paths"]["/v2/households"]["get"]
-    parameters = {item["name"]: item for item in collection["parameters"]}
+    detail = schema["paths"]["/v2/households/{household_id}"]["get"]
+    parameters = {item["name"]: item for item in detail["parameters"]}
+    assert set(parameters) == {"household_id", "country_id"}
+    assert parameters["household_id"]["schema"]["format"] == "uuid"
     assert parameters["country_id"]["required"] is True
-    assert parameters["default_year"]["schema"]["anyOf"][0]["minimum"] == 1900
-    assert parameters["offset"]["schema"]["default"] == 0
-    assert parameters["limit"]["schema"]["maximum"] == 500
 
     create = schema["paths"]["/v2/households"]["post"]
     assert {"200", "201", "400", "404", "409", "413", "422", "500", "503"} <= set(
@@ -424,8 +664,9 @@ def test_browser_preflight_and_cross_origin_errors_use_application_cors() -> Non
             "Access-Control-Request-Headers": "content-type",
         },
     )
-    error = client.get(
+    error = client.post(
         "/v2/households?country_id=us&search=age",
+        json=_body(),
         headers={"Origin": origin},
     )
 

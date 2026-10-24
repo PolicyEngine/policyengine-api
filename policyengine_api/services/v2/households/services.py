@@ -11,14 +11,12 @@ from policyengine_api.services.v2.households.database_connectors.creates import 
 from policyengine_api.services.v2.households.database_connectors.reads import (
     read_household_by_content_identity,
     read_household_row,
-    read_household_rows,
     read_legacy_household_mapping,
 )
 from policyengine_api.services.v2.households.transformations import (
     LEGACY_HOUSEHOLD_FINGERPRINT_VERSION,
     canonical_household_document,
     canonicalize_household,
-    household_page,
     household_read,
     legacy_household_fingerprint,
     stored_household_creation_input,
@@ -28,7 +26,6 @@ from policyengine_api.services.v2.households.types import (
     CanonicalHouseholdContent,
     HouseholdCreationInput,
     HouseholdCreationResult,
-    HouseholdPage,
     HouseholdRead,
     LegacyHouseholdPersistenceResult,
     LegacyHouseholdSnapshot,
@@ -124,28 +121,6 @@ def read_complete_household(
         msg = f"household {household_id} was not found"
         raise HouseholdNotFoundError(msg)
     return household_read(household)
-
-
-def read_household_page(
-    session: Session,
-    *,
-    country_id: str,
-    default_year: int | None,
-    offset: int,
-    limit: int,
-) -> HouseholdPage:
-    """Return a page of households, optionally filtered by default year."""
-    return household_page(
-        read_household_rows(
-            session,
-            country_id=country_id,
-            default_year=default_year,
-            offset=offset,
-            limit=limit,
-        ),
-        offset=offset,
-        limit=limit,
-    )
 
 
 def mirror_legacy_household_in_session(
@@ -254,24 +229,6 @@ class V2HouseholdService:
                 session,
                 country_id=country_id,
                 household_id=household_id,
-            )
-
-    def list_households(
-        self,
-        *,
-        country_id: str,
-        default_year: int | None,
-        offset: int,
-        limit: int,
-    ) -> HouseholdPage:
-        """Return a page of households, optionally filtered by default year."""
-        with self._database_session.read() as session:
-            return read_household_page(
-                session,
-                country_id=country_id,
-                default_year=default_year,
-                offset=offset,
-                limit=limit,
             )
 
     def mirror_legacy_household(

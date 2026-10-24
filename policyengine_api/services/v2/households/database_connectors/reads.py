@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlmodel import Session, col, select
+from sqlmodel import Session, select
 
 from policyengine_api.data.v2.models import Household, LegacyHouseholdMapping
 
@@ -34,30 +34,6 @@ def read_household_row(
             Household.country_id == country_id,
         )
     ).one_or_none()
-
-
-def read_household_rows(
-    session: Session,
-    *,
-    country_id: str,
-    default_year: int | None,
-    offset: int,
-    limit: int,
-) -> list[Household]:
-    """Return up to ``limit + 1`` households in creation order, starting at ``offset``.
-
-    The extra row lets the caller report whether another page exists.
-    """
-    statement = select(Household).where(Household.country_id == country_id)
-    if default_year is not None:
-        statement = statement.where(Household.default_year == default_year)
-    return list(
-        session.exec(
-            statement.order_by(col(Household.created_at), col(Household.id))
-            .offset(offset)
-            .limit(limit + 1)
-        ).all()
-    )
 
 
 def read_legacy_household_mapping(

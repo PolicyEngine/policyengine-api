@@ -261,12 +261,6 @@ class HouseholdDetailQuery(CountryQuery):
     """Query contract for country-scoped household detail reads."""
 
 
-class HouseholdCollectionQuery(CountryQuery, PaginationQuery):
-    """Query contract for an exact-filtered household collection."""
-
-    default_year: DefaultYear | None = None
-
-
 class UserHouseholdCreateQuery(CountryQuery):
     """Query contract for native user-household association creation."""
 

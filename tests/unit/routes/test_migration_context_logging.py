@@ -463,7 +463,7 @@ def test_v2_household_resources_log_actual_supabase_read_and_write_sources(
             ServedRequest(
                 request_id="request-read",
                 method="GET",
-                path="/v2/households",
+                path="/v2/households/00000000-0000-0000-0000-000000000010",
                 status_code=200,
                 started_at=None,
                 country_id="us",

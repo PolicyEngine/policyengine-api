@@ -17,7 +17,6 @@ from policyengine_api.query_parameters import (
     BudgetWindowEconomyQuery,
     CountryQuery,
     DuplicateScalarQueryParameterError,
-    HouseholdCollectionQuery,
     HouseholdCreateQuery,
     HouseholdDetailQuery,
     PolicyCollectionQuery,
@@ -48,9 +47,6 @@ ExplicitListQueryDependency = Annotated[
 ]
 PolicyCollectionQueryDependency = Annotated[
     PolicyCollectionQuery, Depends(query_dependency(PolicyCollectionQuery))
-]
-HouseholdCollectionQueryDependency = Annotated[
-    HouseholdCollectionQuery, Depends(query_dependency(HouseholdCollectionQuery))
 ]
 
 
@@ -311,15 +307,6 @@ def test_uuid_filter_is_materialized_as_uuid() -> None:
 def test_household_query_contracts_compose_canonical_fields() -> None:
     household_id = uuid4()
 
-    collection = parse_query_items(
-        HouseholdCollectionQuery,
-        [
-            ("country_id", "UK"),
-            ("default_year", "2026"),
-            ("offset", "2"),
-            ("limit", "25"),
-        ],
-    )
     associations = parse_query_items(
         UserHouseholdCollectionQuery,
         [
@@ -329,12 +316,6 @@ def test_household_query_contracts_compose_canonical_fields() -> None:
         ],
     )
 
-    assert collection.model_dump() == {
-        "country_id": "uk",
-        "offset": 2,
-        "limit": 25,
-        "default_year": 2026,
-    }
     assert associations.country_id == "us"
     assert associations.household_id == household_id
     assert associations.legacy_household_id == 123
@@ -352,17 +333,6 @@ def test_household_query_contracts_compose_canonical_fields() -> None:
         assert parse_query_items(query_type, [("country_id", "US")]).country_id == (
             "us"
         )
-
-
-@pytest.mark.parametrize("default_year", ["1899", "2201", "not-a-year"])
-def test_household_default_year_is_bounded(default_year: str) -> None:
-    with pytest.raises(ValidationError) as raised:
-        parse_query_items(
-            HouseholdCollectionQuery,
-            [("country_id", "us"), ("default_year", default_year)],
-        )
-
-    assert raised.value.errors()[0]["loc"] == ("default_year",)
 
 
 @pytest.mark.parametrize(
@@ -396,7 +366,7 @@ def test_user_association_collections_take_the_owner_from_the_session(
 
 @pytest.mark.parametrize(
     "model_type",
-    [HouseholdCollectionQuery, UserHouseholdCollectionQuery],
+    [HouseholdCreateQuery, HouseholdDetailQuery, UserHouseholdCollectionQuery],
 )
 def test_household_query_models_reject_unknown_and_duplicate_scalars(
     model_type: type[CountryQuery],
@@ -412,34 +382,6 @@ def test_household_query_models_reject_unknown_and_duplicate_scalars(
             model_type,
             [*required, ("country_id", "uk")],
         )
-
-
-def test_household_collection_openapi_matches_runtime_contract() -> None:
-    app = FastAPI()
-
-    @app.get("/households")
-    def households(
-        query: HouseholdCollectionQueryDependency,
-    ) -> dict[str, object]:
-        return query.model_dump(mode="json")
-
-    operation = (
-        TestClient(app).get("/openapi.json").json()["paths"]["/households"]["get"]
-    )
-    parameters = {item["name"]: item for item in operation["parameters"]}
-
-    assert set(parameters) == {"country_id", "default_year", "offset", "limit"}
-    assert parameters["country_id"]["required"] is True
-    assert parameters["default_year"]["required"] is False
-    year_schema = parameters["default_year"]["schema"]["anyOf"][0]
-    assert year_schema == {
-        "type": "integer",
-        "maximum": 2200,
-        "minimum": 1900,
-        "description": "Default year for values without explicit period keys",
-    }
-    assert parameters["offset"]["schema"]["default"] == 0
-    assert parameters["limit"]["schema"]["default"] == 100
 
 
 def _strict_query_subclasses(base: type) -> set[type]:

@@ -120,16 +120,6 @@ class HouseholdRead:
 
 
 @dataclass(frozen=True)
-class HouseholdPage:
-    """One page of households in creation order; ``has_more`` says if more follow."""
-
-    items: tuple[HouseholdRead, ...]
-    offset: int
-    limit: int
-    has_more: bool
-
-
-@dataclass(frozen=True)
 class NativeHouseholdCreation:
     """A created-or-found household, with ``created`` choosing 201 or 200."""
 
