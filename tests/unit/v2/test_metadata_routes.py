@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 from datetime import UTC, date, datetime
+from typing import get_type_hints
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -19,12 +20,17 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     UnsupportedPreviewCountryError,
 )
 from policyengine_api.data.v2.catalog.parameter_search_file import (
-    DraftabilityChange,
-    SearchNodeSource,
+    EditabilityChange,
+    EditabilityChangeEntry,
+    ParameterSearchFileDocument,
+    SearchFileLabelEntry,
+    SearchFileNodeEntry,
+    SearchFileParameterEntry,
     SearchParameterSource,
     build_parameter_search_file,
     encode_parameter_search_file,
 )
+from policyengine_api.data.v2.catalog.parameter_tree import TreeNodeSource
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes import dependencies as route_dependencies
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
@@ -33,6 +39,10 @@ from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataParameterSearchFileContent,
+    MetadataParameterSearchFileEditabilityChange,
+    MetadataParameterSearchFileLabel,
+    MetadataParameterSearchFileNode,
+    MetadataParameterSearchFileParameter,
 )
 from policyengine_api.migration_flags import (
     RouteImplementation,
@@ -1675,7 +1685,7 @@ def test_a_missing_parameter_tree_is_not_cached() -> None:
 
 
 SEARCH_FILE_PATH = "/v2/parameters/search-file"
-SEARCH_FILE_CONTENT = {
+SEARCH_FILE_CONTENT: ParameterSearchFileDocument = {
     "format": 1,
     "country_id": "us",
     "policyengine_version": "4.20.3",
@@ -1949,13 +1959,13 @@ def test_the_built_search_file_matches_the_declared_content_schema() -> None:
                 household=False,
             ),
         ],
-        nodes=[SearchNodeSource(name="gov.hmrc", label="HMRC")],
-        draftability=[
-            DraftabilityChange(
-                "gov.hmrc.stamp_duty.rate[1].rate", date(2015, 1, 1), draftable=True
+        nodes=[TreeNodeSource(name="gov.hmrc", label="HMRC")],
+        editability=[
+            EditabilityChange(
+                "gov.hmrc.stamp_duty.rate[1].rate", date(2015, 1, 1), editable=True
             ),
-            DraftabilityChange(
-                "gov.hmrc.stamp_duty.rate[1].rate", date(2020, 7, 8), draftable=False
+            EditabilityChange(
+                "gov.hmrc.stamp_duty.rate[1].rate", date(2020, 7, 8), editable=False
             ),
         ],
     )
@@ -1964,3 +1974,17 @@ def test_the_built_search_file_matches_the_declared_content_schema() -> None:
 
     assert content.model_dump(mode="json", exclude_unset=True) == search_file
     assert content.parameters[0].editable_changes is not None
+
+
+def test_the_search_file_shapes_match_the_declared_content_models() -> None:
+    """The builder's typed shapes and the OpenAPI models name the same fields."""
+    pairs = (
+        (ParameterSearchFileDocument, MetadataParameterSearchFileContent),
+        (SearchFileParameterEntry, MetadataParameterSearchFileParameter),
+        (EditabilityChangeEntry, MetadataParameterSearchFileEditabilityChange),
+        (SearchFileLabelEntry, MetadataParameterSearchFileLabel),
+        (SearchFileNodeEntry, MetadataParameterSearchFileNode),
+    )
+    for typed_shape, model in pairs:
+        assert set(get_type_hints(typed_shape)) == set(model.model_fields), model
+    assert SearchFileParameterEntry.__optional_keys__ == {"editable_changes"}
