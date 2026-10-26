@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING
 import sqlalchemy as sa
 from sqlalchemy import Connection, Engine
 
+from policyengine_api.data.v2.catalog.publication_parameter_search_file import (
+    assert_parameter_search_files_written,
+    write_parameter_search_files,
+)
 from policyengine_api.data.v2.catalog.publication_parameter_tree import (
     assert_parameter_trees_written,
     write_parameter_trees,
@@ -99,11 +103,12 @@ def publish_catalog(
 ) -> PublicationEvidence:
     """Publish one complete catalog atomically and return non-secret evidence.
 
-    In the same transaction it writes the parameter tree of each version in
-    the catalog that has none, built from the catalog: the versions it
-    publishes, and the installed version when an earlier release stored it with
-    catalog format 2 but without a tree. Other stored versions, and an
-    installed version stored before catalog format 2, keep having none.
+    In the same transaction it writes the parameter tree and the parameter
+    search file of each version in the catalog that has none, built from the
+    catalog: the versions it publishes, and the installed version when an
+    earlier release stored it with catalog format 2 but without them. Other
+    stored versions, and an installed version stored before catalog format 2,
+    keep having none.
     """
     started = time.monotonic()
     with engine.begin() as connection:
@@ -125,6 +130,9 @@ def publish_catalog(
             if country.country_id not in existing:
                 publish_new_country(connection, country)
         parameter_trees_written = write_parameter_trees(connection, catalog.countries)
+        parameter_search_files_written = write_parameter_search_files(
+            connection, catalog.countries
+        )
         if checkpoint is not None:
             checkpoint("after_reconciliation", connection)
 
@@ -132,6 +140,7 @@ def publish_catalog(
             assert_country_matches(connection, country)
         assert_canonical_value_uniqueness(connection)
         assert_parameter_trees_written(connection, catalog.countries)
+        assert_parameter_search_files_written(connection, catalog.countries)
         if _protected_row_counts(connection) != before:
             msg = "publication changed simulation, report, or dataset-version rows"
             raise CatalogPublicationError(msg)
@@ -151,6 +160,7 @@ def publish_catalog(
         fallback_summaries=fallback_summaries,
         elapsed_seconds=time.monotonic() - started,
         parameter_trees_written=parameter_trees_written,
+        parameter_search_files_written=parameter_search_files_written,
     )
 
 
