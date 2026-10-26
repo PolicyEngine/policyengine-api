@@ -259,18 +259,16 @@ def translate_legacy_policy(
     *,
     selected: SelectedCatalog,
     parameters: Mapping[str, Parameter],
-    country_package_versions: Mapping[str, str],
 ) -> ResolvedPolicyCreationInput:
     """Translate a v1 policy into policy content bound to the running catalog.
 
-    Raise LegacyPolicyTranslationError if the v1 policy was saved under another
-    country package version, names a parameter the catalog lacks, or has
-    invalid or conflicting periods.
+    The country package version the v1 policy was saved under is not compared:
+    the Public API simulates an old policy with the running package, so the copy
+    binds it to the running catalog the same way.
+
+    Raise LegacyPolicyTranslationError if the v1 policy names a parameter the
+    catalog lacks, or has invalid or conflicting periods.
     """
-    expected_api_version = country_package_versions.get(snapshot.country_id)
-    if expected_api_version is None or snapshot.api_version != expected_api_version:
-        msg = "legacy policy api_version does not match the running country package"
-        raise LegacyPolicyTranslationError(msg)
     policy_json = snapshot.policy_json
     if not isinstance(policy_json, dict):
         msg = "legacy policy_json must be an object"

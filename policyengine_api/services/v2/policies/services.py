@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
+from policyengine_api.constants import POLICYENGINE_VERSION
 from policyengine_api.services.v2.policies.database_connectors.creates import (
     create_legacy_policy_mapping,
     create_parameter_values,
@@ -53,7 +53,7 @@ from policyengine_api.services.v2.policies.validators import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable
     from uuid import UUID
 
     from sqlmodel import Session
@@ -190,13 +190,13 @@ def mirror_legacy_policy_in_session(
     snapshot: LegacyPolicySnapshot,
     *,
     running_policyengine_version: str = POLICYENGINE_VERSION,
-    country_package_versions: Mapping[str, str] = COUNTRY_PACKAGE_VERSIONS,
 ) -> LegacyPolicyPersistenceResult:
     """Copy one committed v1 policy into v2 and map its v1 id to the result.
 
-    The policy is translated against the running catalog. Replaying the same v1
-    policy is idempotent. Raise LegacyPolicyMappingIntegrityError if the v1 id is
-    already mapped with a different source hash or to a different v2 policy.
+    The policy is translated against the running catalog, whichever country
+    package version it was saved under. Replaying the same v1 policy is
+    idempotent. Raise LegacyPolicyMappingIntegrityError if the v1 id is already
+    mapped with a different source hash or to a different v2 policy.
     """
     existing = read_legacy_policy_mapping(
         session,
@@ -227,7 +227,6 @@ def mirror_legacy_policy_in_session(
         snapshot,
         selected=selected,
         parameters=parameters,
-        country_package_versions=country_package_versions,
     )
     policy_result = create_resolved_policy(session, policy_input)
     if existing is not None:

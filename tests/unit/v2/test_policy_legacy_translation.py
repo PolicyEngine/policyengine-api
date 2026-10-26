@@ -98,7 +98,6 @@ def _translate(
         snapshot,
         selected=selected,
         parameters=parameters,
-        country_package_versions={"us": "1.0.0"},
     )
 
 
@@ -262,11 +261,20 @@ def test_missing_paths_malformed_periods_and_conflicts_fail(
         engine.dispose()
 
 
-def test_country_package_version_must_match_running_release() -> None:
-    engine, session, _model, _version, _first, _second = _session_and_catalog()
+@pytest.mark.parametrize("saved_api_version", ["0.9.0", "1.633.2", "99.0.0"])
+def test_policy_saved_under_another_country_package_translates_to_running_catalog(
+    saved_api_version: str,
+) -> None:
+    engine, session, _model, version, first, second = _session_and_catalog()
     try:
-        with pytest.raises(LegacyPolicyTranslationError, match="api_version"):
-            _translate(session, _snapshot(api_version="0.9.0"))
+        translated = _translate(session, _snapshot(api_version=saved_api_version))
+
+        assert translated.tax_benefit_model_version_id == version.id
+        assert {value.parameter_id for value in translated.parameter_values} == {
+            first.id,
+            second.id,
+        }
+        assert translated == _translate(session, _snapshot())
     finally:
         session.close()
         engine.dispose()

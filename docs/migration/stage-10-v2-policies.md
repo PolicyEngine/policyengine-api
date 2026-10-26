@@ -129,7 +129,12 @@ failure, retained-event processing, idempotent retries, and source/destination
 rollback using the same MySQL and PostgreSQL engines as the deployed databases.
 
 Under this selection, a core-policy mutation commits Cloud SQL first and then
-completes its policy transaction in Supabase. A saved-policy mutation commits
+completes its policy transaction in Supabase. The copy binds the v1 policy to
+the running catalog whatever country package version the v1 row was saved
+under (its stored `api_version`), the same way the Public API simulates an old
+policy with the running country package. A policy is copied when every
+parameter path it sets exists in the running catalog and its periods and values
+are valid. A saved-policy mutation commits
 its source row, incremented revision, and complete event in one Cloud SQL
 transaction. The same request then processes that source's pending events in
 revision order and records `processed_at` only after the corresponding
@@ -177,7 +182,8 @@ The disposable and route-level tests verify that:
 
 - native policy and association create/read/list/update/delete operations use
   the initialized catalog and Supabase only;
-- both newly created and existing v1 policies receive durable mappings;
+- both newly created and existing v1 policies receive durable mappings,
+  including existing policies saved under an older country package version;
 - v1 saved-policy label updates change association `name`, while v1-only field
   updates change only the mapping fingerprint;
 - saved-policy event revisions are processed in ascending order, successful

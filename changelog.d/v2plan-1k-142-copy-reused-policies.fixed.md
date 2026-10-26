@@ -1,0 +1,1 @@
+Dual-write now copies a v1 policy to v2 whatever country package version it was saved under, as long as every parameter it sets exists in the running catalog. Before, every policy saved under an older release was refused, which included each `POST /{country}/policy` that matched an existing policy.
