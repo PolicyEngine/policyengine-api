@@ -125,9 +125,10 @@ def publish_catalog(
 ) -> PublicationEvidence:
     """Publish one complete catalog atomically and return non-secret evidence.
 
-    In the same transaction it writes the parameter tree of each catalog
-    version it publishes. A version stored before the tree existed keeps
-    having none.
+    In the same transaction it writes the parameter tree of each version in
+    the catalog that has none, built from the catalog: the versions it
+    publishes, and the installed version when an earlier release stored it
+    without a tree. Other stored versions keep having none.
     """
     started = time.monotonic()
     with engine.begin() as connection:
@@ -141,14 +142,10 @@ def publish_catalog(
 
         existing, kept_region_summaries = _check_stored_versions(connection, catalog)
 
-        published_version_ids = []
         for country in catalog.countries:
             if country.country_id not in existing:
                 publish_new_country(connection, country)
-                published_version_ids.append(country.model_version.id)
-        parameter_trees_written = write_parameter_trees(
-            connection, published_version_ids
-        )
+        parameter_trees_written = write_parameter_trees(connection, catalog.countries)
         if checkpoint is not None:
             checkpoint("after_reconciliation", connection)
 
@@ -159,7 +156,7 @@ def publish_catalog(
                 include_regions=country.country_id not in existing,
             )
         assert_canonical_value_uniqueness(connection)
-        assert_parameter_trees_written(connection, published_version_ids)
+        assert_parameter_trees_written(connection, catalog.countries)
         if _protected_row_counts(connection) != before:
             msg = "publication changed simulation, report, or dataset-version rows"
             raise CatalogPublicationError(msg)

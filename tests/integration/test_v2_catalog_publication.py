@@ -880,25 +880,51 @@ def test_publication_writes_each_new_version_parameter_tree(
     )
 
 
-def test_publication_writes_no_tree_for_a_version_stored_without_one(
+def _stored_tree_with_parameter_ids(
+    engine: Engine, model_name: str, version: str
+) -> list[tuple]:
+    with engine.connect() as connection:
+        return [
+            tuple(row)
+            for row in connection.execute(
+                text(
+                    "SELECT tree.parent_path, tree.path, tree.position, tree.label, "
+                    "tree.child_type, tree.child_count, tree.reform_position, "
+                    "tree.reform_child_count, tree.parameter_id, tree.economy, "
+                    "tree.household "
+                    "FROM parameter_tree_children AS tree "
+                    "JOIN tax_benefit_model_versions AS version "
+                    "ON version.id = tree.tax_benefit_model_version_id "
+                    "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                    "WHERE model.name = :model_name AND version.version = :version "
+                    "ORDER BY tree.parent_path, tree.position"
+                ),
+                {"model_name": model_name, "version": version},
+            )
+        ]
+
+
+def test_publication_gives_the_installed_stored_version_its_tree(
     publication_engine: Engine,
 ) -> None:
-    """A version stored before the tree existed keeps having none.
+    """The installed version, stored by a release without the tree, gets one.
 
-    Writing it would derive rows from what earlier releases stored, which the
-    migration rules leave to a human migration decision; only the versions a
-    publication publishes get a tree.
+    It is built from the installed packages' catalog, the same as a fresh
+    publication's; writing it again changes nothing.
     """
-    older = normalized_catalog(policyengine_version="1.0.0")
     catalog = normalized_catalog()
-    older_version = older.country("us").model_version.version
     current_version = catalog.country("us").model_version.version
-    publish_catalog(publication_engine, older)
-    _delete_tree(publication_engine, older_version)
-
-    evidence = publish_catalog(publication_engine, catalog)
+    publish_catalog(publication_engine, catalog)
+    fresh = {
+        country.model.name: _stored_tree_with_parameter_ids(
+            publication_engine, country.model.name, current_version
+        )
+        for country in catalog.countries
+    }
     _delete_tree(publication_engine, current_version)
     before_ids = _identifiers(publication_engine)
+
+    evidence = publish_catalog(publication_engine, catalog)
     again = publish_catalog(publication_engine, catalog)
 
     assert evidence.parameter_trees_written == tuple(
@@ -907,9 +933,38 @@ def test_publication_writes_no_tree_for_a_version_stored_without_one(
     )
     assert again.parameter_trees_written == ()
     for country in catalog.countries:
-        for version in (older_version, current_version):
-            assert _stored_tree(publication_engine, country.model.name, version) == []
+        assert (
+            _stored_tree_with_parameter_ids(
+                publication_engine, country.model.name, current_version
+            )
+            == fresh[country.model.name]
+        )
     assert _identifiers(publication_engine) == before_ids
+
+
+def test_publication_writes_no_tree_for_another_version_stored_without_one(
+    publication_engine: Engine,
+) -> None:
+    """A stored version that is not the installed one keeps having no tree.
+
+    Writing it would derive rows from what an earlier release stored, which
+    the migration rules leave to a human migration decision.
+    """
+    older = normalized_catalog(policyengine_version="1.0.0")
+    catalog = normalized_catalog()
+    older_version = older.country("us").model_version.version
+    publish_catalog(publication_engine, older)
+    _delete_tree(publication_engine, older_version)
+
+    evidence = publish_catalog(publication_engine, catalog)
+    again = publish_catalog(publication_engine, catalog)
+
+    assert {version for _model, version, _rows in evidence.parameter_trees_written} == {
+        catalog.country("us").model_version.version
+    }
+    assert again.parameter_trees_written == ()
+    for country in catalog.countries:
+        assert _stored_tree(publication_engine, country.model.name, older_version) == []
 
 
 def test_publication_fails_when_a_published_version_is_left_without_a_tree(

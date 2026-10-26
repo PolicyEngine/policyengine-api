@@ -325,18 +325,22 @@ parameter. These are the rules of the tree the app's newer interface builds
 from v1 metadata. Trees are written only for versions published with catalog
 format 2, so every parameter in a tree has both flags.
 
-In the same transaction, the command writes the tree of each catalog version
-it publishes, from the parameters and parameter nodes it has just stored. The
-evidence's `parameter_trees_written` lists each, with its model, version and
-row count, and publication fails if one is still without a tree when it
-finishes. A version that is already stored is left as it is.
+In the same transaction, the command writes the tree of each version in the
+catalog it publishes, which comes from the installed packages, when that
+version has none: the versions it publishes now, and the installed version when
+an earlier release stored it without a tree. The rows are built from the
+catalog's own parameter and node records; only the stored parameters' IDs are
+read, by name, so the rows reference them, after publication has checked that
+the stored rows match the catalog. This is a row-only, idempotent insert of
+package-derived rows, which the deployment-seeder passage of the Alembic skill
+allows. The evidence's `parameter_trees_written` lists each version written,
+with its model, version and row count, and publication fails if a version in
+the catalog is still without a tree when it finishes.
 
-Versions stored before the tree existed therefore have no tree. Writing one
-for them would derive rows from what earlier releases stored, a data
-migration that the Alembic skill's rules leave to a human migration decision,
-so it is not done. Such a version gets a tree only if a person decides on
-that migration; a new PolicyEngine.py version published after this change
-gets its tree when it is published.
+Other stored versions get no tree. Writing one for them would derive rows from
+what earlier releases stored, a data migration that the Alembic skill's rules
+leave to a human migration decision, so it is not done; such a version gets a
+tree only if a person decides on that migration.
 
 `/v2/parameters/children` lists one level with one indexed read:
 `parent_path` names the node ("" for the top level), and

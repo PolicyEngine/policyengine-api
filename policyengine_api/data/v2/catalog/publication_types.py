@@ -22,8 +22,8 @@ class PublicationEvidence:
     # Stored catalog versions whose region rows were kept although the staged
     # regions differ: country, version, stored and staged region counts.
     kept_region_summaries: tuple[tuple[str, str, int, int], ...] = ()
-    # Catalog versions published now, with their parameter tree: model,
-    # version and tree rows written. Empty when no version is published.
+    # The catalog's versions whose parameter tree this publication wrote:
+    # model, version and tree rows. Empty once each has its tree.
     parameter_trees_written: tuple[tuple[str, str, int], ...] = ()
 
     def as_dict(self) -> dict[str, object]:
