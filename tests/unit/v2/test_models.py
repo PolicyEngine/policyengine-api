@@ -752,3 +752,81 @@ def test_catalog_format_2_json_columns_have_typed_shapes() -> None:
         (CatalogEnumValue, EnumValueRecord),
     ):
         assert get_type_hints(typed_shape) == get_type_hints(record)
+
+
+def test_parameter_tree_children_have_one_row_per_path_in_listing_order() -> None:
+    """Each version's tree rows are unique by path and listed per parent by index.
+
+    The full listing and the listing of what a reform can change each read one
+    unique index (version, parent path, position); a parameter row references
+    its parameter, and both references are removed with their rows.
+    """
+    table = V2_METADATA.tables["parameter_tree_children"]
+
+    assert {column.name for column in table.columns} == {
+        "id",
+        "created_at",
+        "tax_benefit_model_version_id",
+        "parent_path",
+        "path",
+        "position",
+        "label",
+        "child_type",
+        "child_count",
+        "reform_position",
+        "reform_child_count",
+        "parameter_id",
+        "economy",
+        "household",
+    }
+    for column_name in ("parent_path", "path", "label"):
+        assert table.c[column_name].type.length == 512
+        assert not table.c[column_name].nullable
+    for column_name in (
+        "child_count",
+        "reform_position",
+        "reform_child_count",
+        "parameter_id",
+        "economy",
+        "household",
+    ):
+        assert table.c[column_name].nullable
+    unique_constraints = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in table.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert ("tax_benefit_model_version_id", "path") in unique_constraints
+    indexes = {
+        index.name: (tuple(column.name for column in index.columns), index.unique)
+        for index in table.indexes
+    }
+    assert indexes["ix_parameter_tree_children_listing"] == (
+        ("tax_benefit_model_version_id", "parent_path", "position"),
+        True,
+    )
+    assert indexes["ix_parameter_tree_children_reform_listing"] == (
+        ("tax_benefit_model_version_id", "parent_path", "reform_position"),
+        True,
+    )
+    assert indexes["ix_parameter_tree_children_parameter_id"] == (
+        ("parameter_id",),
+        False,
+    )
+    foreign_keys = {
+        foreign_key.parent.name: (foreign_key.column.table.name, foreign_key.ondelete)
+        for foreign_key in table.foreign_keys
+    }
+    assert foreign_keys == {
+        "tax_benefit_model_version_id": ("tax_benefit_model_versions", "CASCADE"),
+        "parameter_id": ("parameters", "CASCADE"),
+    }
+    checks = {
+        constraint.name
+        for constraint in table.constraints
+        if isinstance(constraint, sa.CheckConstraint)
+    }
+    assert checks == {
+        "ck_parameter_tree_children_child_type",
+        "ck_parameter_tree_children_parameter_reference",
+    }

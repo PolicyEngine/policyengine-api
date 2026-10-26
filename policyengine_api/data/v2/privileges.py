@@ -116,6 +116,8 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "dataset_versions": _access(catalog_writer=READ),
     "datasets": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
     "parameter_nodes": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
+    # Written with each catalog version, and for versions stored before it.
+    "parameter_tree_children": _access(runtime=READ, catalog_writer=READ_INSERT),
     # The Public API also inserts a v2 policy's own parameter values.
     "parameter_values": _access(runtime=READ_INSERT, catalog_writer=READ_INSERT_UPDATE),
     "parameters": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
