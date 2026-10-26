@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import Parameter, ParameterValue
 from policyengine_api.services.v2.metadata.database_connectors.reads import read_rows
+from policyengine_api.services.v2.metadata.types import CurrentLawValueRow
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -170,16 +171,15 @@ def read_parameter_value(
 
 def read_current_law_values_by_parameter_name(
     session: Session, *, model_version_id: UUID, parameter_names: Collection[str]
-) -> list[Any]:
+) -> list[CurrentLawValueRow]:
     """Return the current-law values of the named parameters of a model version.
 
-    Each row has the parameter's name, the value's value_json, start_date and
-    end_date. Values tied to a policy or dynamic are excluded. Rows are ordered
-    by parameter name, then start date.
+    Values tied to a policy or dynamic are excluded. Rows are ordered by
+    parameter name, then start date.
     """
     if not parameter_names:
         return []
-    return read_rows(
+    rows = read_rows(
         session,
         select(
             col(Parameter.name),
@@ -196,3 +196,4 @@ def read_current_law_values_by_parameter_name(
         )
         .order_by(col(Parameter.name), col(ParameterValue.start_date)),
     )
+    return [CurrentLawValueRow(*row) for row in rows]

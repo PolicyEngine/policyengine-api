@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import ParameterNode
 from policyengine_api.services.v2.metadata.database_connectors.reads import read_rows
+from policyengine_api.services.v2.metadata.types import ParameterNodeLabelRow
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -16,14 +17,14 @@ if TYPE_CHECKING:
 
 def read_parameter_node_labels(
     session: Session, *, model_version_id: UUID, node_names: Collection[str]
-) -> list[Any]:
+) -> list[ParameterNodeLabelRow]:
     """Return the name and stored label of each named node of a model version.
 
     Names the version has no node for are absent. Rows are in name order.
     """
     if not node_names:
         return []
-    return read_rows(
+    rows = read_rows(
         session,
         select(col(ParameterNode.name), col(ParameterNode.label))
         .where(
@@ -32,3 +33,4 @@ def read_parameter_node_labels(
         )
         .order_by(col(ParameterNode.name)),
     )
+    return [ParameterNodeLabelRow(*row) for row in rows]
