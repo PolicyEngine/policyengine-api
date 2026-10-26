@@ -146,7 +146,7 @@ check the declarations:
 - `api.v2.runtime-privileges-declared`: a unit test reads each connector
   module and fails when it needs a privilege its role isn't declared to hold.
 - `api.v2.runtime-privileges-tested-as-runtime-role`: the cross-database
-  integration tests run the v2 user and metadata services as
+  integration tests run the v2 user services and the parameter tree read as
   `policyengine_v2_runtime`, catalog publication as
   `policyengine_v2_catalog_writer`, and the comparison-run services as
   `policyengine_stage12_test`, holding only their declared privileges.

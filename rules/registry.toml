@@ -669,7 +669,7 @@ test = "tests/unit/v2/test_privilege_manifest.py::test_rule_proof_runtime_privil
 [[rule]]
 id = "api.v2.runtime-privileges-tested-as-runtime-role"
 category = "migration"
-statement = "The cross-database integration tests run the v2 user and metadata services as policyengine_v2_runtime, catalog publication as policyengine_v2_catalog_writer, and the comparison-run services as policyengine_stage12_<environment>, holding only their declared privileges, so a statement those privileges don't allow fails CI."
+statement = "The cross-database integration tests run the v2 user services and the parameter tree read as policyengine_v2_runtime, catalog publication as policyengine_v2_catalog_writer, and the comparison-run services as policyengine_stage12_<environment>, holding only their declared privileges, so a statement those privileges don't allow fails CI."
 rationale = "docs/engineering/skills/alembic-migrations.md#table-privileges"
 scope = ["tests/integration/conftest.py", "tests/integration/test_v2_user_identity_persistence.py", "tests/integration/test_v2_saved_policy_view.py", "tests/integration/test_v2_stage12_comparison_persistence.py", "tests/integration/test_v2_metadata_routes.py", "tests/integration/test_v2_catalog_publication.py"]
 tier = "mechanical"
