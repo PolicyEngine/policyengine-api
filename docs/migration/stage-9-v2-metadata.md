@@ -316,23 +316,27 @@ whose children are its brackets, labelled "Bracket 1", "Bracket 2" and so on),
 and labels take the form the app's newer interface shows in every view: the
 stored label with underscores as spaces and its first letter upper-cased, or,
 without one, the last part of the name in that form (so an unlabelled schedule
-`...rates.uk` is "Uk"). Each row also records its position among all its siblings and, if a
-reform can change it, among the siblings a reform can change: a parameter
+`...rates.uk` is "Uk"). Each row also records its position among all its
+siblings and, if a reform can change it, among the siblings a reform can
+change: a parameter
 under `gov` whose economy or household flag is set and whose path names
 neither `taxsim`, `gov.abolitions` nor `pycache`, and every node above such a
 parameter. These are the rules of the tree the app's newer interface builds
 from v1 metadata. A version stored before catalog format 2 has no flags, so
 only the path rules apply to it.
 
-In the same transaction, and on every run, the command writes the tree of
-every stored catalog version that has parameters but no tree: the versions it
-publishes and versions stored before the tree existed. This is a row-only,
-idempotent insert of rows derived from catalog rows already stored; it changes
-no other table, and a version that has its tree keeps it. The evidence's
-`parameter_trees_written` lists each version written, with its model, version
-and row count, and is empty once every stored version has its tree.
-Publication fails if a stored version with parameters is still without a tree
-when it finishes.
+In the same transaction, the command writes the tree of each catalog version
+it publishes, from the parameters and parameter nodes it has just stored. The
+evidence's `parameter_trees_written` lists each, with its model, version and
+row count, and publication fails if one is still without a tree when it
+finishes. A version that is already stored is left as it is.
+
+Versions stored before the tree existed therefore have no tree. Writing one
+for them would derive rows from what earlier releases stored, a data
+migration that the Alembic skill's rules leave to a human migration decision,
+so it is not done. Such a version gets a tree only if a person decides on
+that migration; a new PolicyEngine.py version published after this change
+gets its tree when it is published.
 
 `/v2/parameters/children` lists one level with one indexed read:
 `parent_path` names the node ("" for the top level), and
@@ -340,8 +344,8 @@ when it finishes.
 by label, with child counts that count only those. Without it, children are
 in path order, with a schedule's brackets in bracket order. A node carries
 its child count, a parameter its summary. An unknown parent path has no
-children. A catalog version whose tree has not been written returns 503,
-which means the publication step has not run since the version was stored.
+children. A catalog version without a tree returns 503 with a message that
+names the version and says it was published before the tree existed.
 
 ## Validation evidence and retry
 

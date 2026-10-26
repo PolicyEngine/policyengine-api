@@ -33,6 +33,7 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
+    ParameterTreeUnavailableError,
 )
 from policyengine_api.vary_headers import unique_vary_values
 
@@ -348,8 +349,14 @@ def run_metadata_read(
         MetadataResourceNotFoundError,
     ) as error:
         return v2_error_response(404, str(error))
-    except (V2ConfigurationError, MetadataCatalogUnavailableError):
-        return v2_error_response(503, "V2 metadata catalog is unavailable")
+    except (V2ConfigurationError, MetadataCatalogUnavailableError) as error:
+        # Only a missing parameter tree has a message written for callers.
+        message = (
+            str(error)
+            if isinstance(error, ParameterTreeUnavailableError)
+            else "V2 metadata catalog is unavailable"
+        )
+        return v2_error_response(503, message)
     except Exception:  # noqa: BLE001  # preview must return typed errors
         return v2_error_response(500, "V2 metadata query failed")
     finally:

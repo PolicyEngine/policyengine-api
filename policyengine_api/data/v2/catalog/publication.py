@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from sqlalchemy import Connection, Engine
 
 from policyengine_api.data.v2.catalog.publication_parameter_tree import (
-    assert_every_parameter_tree_written,
-    write_missing_parameter_trees,
+    assert_parameter_trees_written,
+    write_parameter_trees,
 )
 from policyengine_api.data.v2.catalog.publication_reconciliation import (
     assert_canonical_value_uniqueness,
@@ -125,9 +125,9 @@ def publish_catalog(
 ) -> PublicationEvidence:
     """Publish one complete catalog atomically and return non-secret evidence.
 
-    In the same transaction it writes the parameter tree of every stored
-    catalog version that has none: the versions published now, and versions
-    stored before the tree existed.
+    In the same transaction it writes the parameter tree of each catalog
+    version it publishes. A version stored before the tree existed keeps
+    having none.
     """
     started = time.monotonic()
     with engine.begin() as connection:
@@ -141,10 +141,14 @@ def publish_catalog(
 
         existing, kept_region_summaries = _check_stored_versions(connection, catalog)
 
+        published_version_ids = []
         for country in catalog.countries:
             if country.country_id not in existing:
                 publish_new_country(connection, country)
-        parameter_trees_written = write_missing_parameter_trees(connection)
+                published_version_ids.append(country.model_version.id)
+        parameter_trees_written = write_parameter_trees(
+            connection, published_version_ids
+        )
         if checkpoint is not None:
             checkpoint("after_reconciliation", connection)
 
@@ -155,7 +159,7 @@ def publish_catalog(
                 include_regions=country.country_id not in existing,
             )
         assert_canonical_value_uniqueness(connection)
-        assert_every_parameter_tree_written(connection)
+        assert_parameter_trees_written(connection, published_version_ids)
         if _protected_row_counts(connection) != before:
             msg = "publication changed simulation, report, or dataset-version rows"
             raise CatalogPublicationError(msg)

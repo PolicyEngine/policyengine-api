@@ -1,10 +1,13 @@
-"""Write the parameter tree of each stored catalog version that has none.
+"""Write the parameter tree of each catalog version a publication publishes.
 
-A version's tree rows are derived from its stored parameters and parameter
-nodes alone (``parameter_tree``), so a version published in the current
-transaction and a version stored before the tree existed are written the same
-way. Writing only inserts: a version that already has rows keeps them, and no
-other table changes.
+A version's tree rows are derived from the parameters and parameter nodes the
+publication has just stored for it (``parameter_tree``), in the same
+transaction. Writing only inserts rows for those versions; no other table
+changes.
+
+Versions stored before the tree existed get none here: deriving their rows
+from what earlier releases stored would be a data migration, which the
+migration rules leave to a human decision.
 """
 
 from __future__ import annotations
@@ -34,7 +37,7 @@ from policyengine_api.data.v2.models import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Sequence
     from uuid import UUID
 
     from sqlalchemy import Connection
@@ -46,24 +49,13 @@ PARAMETER_NODES = ParameterNode.__table__
 PARAMETER_TREE_CHILDREN = ParameterTreeChild.__table__
 
 
-def _versions_without_tree() -> sa.Select:
-    has_tree = sa.exists().where(
-        PARAMETER_TREE_CHILDREN.c.tax_benefit_model_version_id == MODEL_VERSIONS.c.id
-    )
-    has_parameters_or_nodes = sa.or_(
-        sa.exists().where(
-            PARAMETERS.c.tax_benefit_model_version_id == MODEL_VERSIONS.c.id
-        ),
-        sa.exists().where(
-            PARAMETER_NODES.c.tax_benefit_model_version_id == MODEL_VERSIONS.c.id
-        ),
-    )
+def _versions(version_ids: Sequence[UUID]) -> sa.Select:
     return (
         sa.select(MODEL_VERSIONS.c.id, MODELS.c.name, MODEL_VERSIONS.c.version)
         .select_from(
             MODEL_VERSIONS.join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
         )
-        .where(~has_tree, has_parameters_or_nodes)
+        .where(MODEL_VERSIONS.c.id.in_(version_ids))
         .order_by(MODELS.c.name, MODEL_VERSIONS.c.version)
     )
 
@@ -128,18 +120,20 @@ def _table_rows(
         yield tuple(values[name] for name in column_names)
 
 
-def write_missing_parameter_trees(
+def write_parameter_trees(
     connection: Connection,
+    version_ids: Sequence[UUID],
 ) -> tuple[tuple[str, str, int], ...]:
-    """Write the tree of every stored version that has parameters but no tree.
+    """Write the tree of each catalog version just published.
 
     Returns the model name, version and number of rows written for each
     version, in model and version order. Runs inside publication's
-    transaction and advisory lock.
+    transaction and advisory lock, after the versions' parameters and nodes
+    are stored.
     """
     written = []
     for version_id, model_name, version in connection.execute(
-        _versions_without_tree()
+        _versions(version_ids)
     ).all():
         rows = build_parameter_tree(
             nodes=_stored_nodes(connection, version_id),
@@ -154,12 +148,24 @@ def write_missing_parameter_trees(
     return tuple(written)
 
 
-def assert_every_parameter_tree_written(connection: Connection) -> None:
-    """Raise CatalogPublicationError if a version with parameters has no tree."""
-    missing = connection.execute(_versions_without_tree()).first()
-    if missing is not None:
-        msg = (
-            f"the stored catalog version {missing.version} of {missing.name} "
-            "has no parameter tree"
-        )
-        raise CatalogPublicationError(msg)
+def assert_parameter_trees_written(
+    connection: Connection,
+    version_ids: Sequence[UUID],
+) -> None:
+    """Raise CatalogPublicationError if a version just published has no tree."""
+    for version_id, model_name, version in connection.execute(
+        _versions(version_ids)
+    ).all():
+        has_tree = connection.execute(
+            sa.select(
+                sa.exists().where(
+                    PARAMETER_TREE_CHILDREN.c.tax_benefit_model_version_id == version_id
+                )
+            )
+        ).scalar_one()
+        if not has_tree:
+            msg = (
+                f"the published catalog version {version} of {model_name} "
+                "has no parameter tree"
+            )
+            raise CatalogPublicationError(msg)

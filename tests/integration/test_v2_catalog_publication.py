@@ -879,51 +879,46 @@ def test_publication_writes_each_new_version_parameter_tree(
     )
 
 
-def test_publication_writes_the_tree_of_stored_versions_that_have_none(
+def test_publication_writes_no_tree_for_a_version_stored_without_one(
     publication_engine: Engine,
 ) -> None:
-    older_version = "1.0.0"
-    older = normalized_catalog(policyengine_version=older_version)
+    """A version stored before the tree existed keeps having none.
+
+    Writing it would derive rows from what earlier releases stored, which the
+    migration rules leave to a human migration decision; only the versions a
+    publication publishes get a tree.
+    """
+    older = normalized_catalog(policyengine_version="1.0.0")
     catalog = normalized_catalog()
-    older_country_version = older.country("us").model_version.version
+    older_version = older.country("us").model_version.version
+    current_version = catalog.country("us").model_version.version
     publish_catalog(publication_engine, older)
-    publish_catalog(publication_engine, catalog)
-    current_country_version = catalog.country("us").model_version.version
-    _delete_tree(publication_engine, older_country_version)
-    _delete_tree(publication_engine, current_country_version)
-    before_ids = _identifiers(publication_engine)
-    before_counts = _counts(publication_engine)
+    _delete_tree(publication_engine, older_version)
 
     evidence = publish_catalog(publication_engine, catalog)
+    _delete_tree(publication_engine, current_version)
+    before_ids = _identifiers(publication_engine)
     again = publish_catalog(publication_engine, catalog)
 
-    assert {
-        (model_name, version)
-        for model_name, version, _rows in evidence.parameter_trees_written
-    } == {
-        (country.model.name, version)
-        for country in catalog.countries
-        for version in {older_country_version, current_country_version}
-    }
+    assert evidence.parameter_trees_written == tuple(
+        (country.model.name, current_version, len(FIXTURE_TREE))
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    )
     assert again.parameter_trees_written == ()
     for country in catalog.countries:
-        for version in (older_country_version, current_country_version):
-            assert (
-                _stored_tree(publication_engine, country.model.name, version)
-                == FIXTURE_TREE
-            )
+        for version in (older_version, current_version):
+            assert _stored_tree(publication_engine, country.model.name, version) == []
     assert _identifiers(publication_engine) == before_ids
-    assert _counts(publication_engine) == before_counts
 
 
-def test_publication_fails_when_a_stored_version_is_left_without_a_tree(
+def test_publication_fails_when_a_published_version_is_left_without_a_tree(
     publication_engine: Engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         publication_module,
-        "write_missing_parameter_trees",
-        lambda _connection: (),
+        "write_parameter_trees",
+        lambda _connection, _version_ids: (),
     )
 
     with pytest.raises(CatalogPublicationError, match="has no parameter tree"):

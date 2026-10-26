@@ -1560,17 +1560,18 @@ def test_parameter_children_route_rejects_invalid_queries(query: str) -> None:
 
 def test_parameter_children_route_reports_an_unwritten_tree_as_unavailable() -> None:
     results, _ids = _resource_results()
-    reader = ResourceReader(
-        results,
-        error=ParameterTreeUnavailableError("tree not written"),
+    message = (
+        "catalog version 6.7.5 has no parameter tree: a tree is written when a "
+        "catalog version is published, and this version was published before"
     )
+    reader = ResourceReader(results, error=ParameterTreeUnavailableError(message))
 
     response = _client(lambda: reader).get(
         "/v2/parameters/children", params={"country_id": "us"}
     )
 
     assert response.status_code == 503
-    assert response.json()["status"] == "error"
+    assert response.json() == {"status": "error", "message": message}
 
 
 def test_parameter_children_openapi_declares_the_query_contract() -> None:
