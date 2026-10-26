@@ -119,9 +119,12 @@ class MetadataVariable(StrictResponseModel):
     subtracted from this one. When the model takes that list from a
     parameter, adds_parameter_path or subtracts_parameter_path names the
     parameter, whose dated values give the list for each year (adds and
-    subtracts hold its value on 2025-01-01). The catalog format 2 fields
-    (is_input_variable, hidden_input, module_name, the two parameter paths
-    and enum_values) are null in versions published before that format.
+    subtracts hold its value on 2025-01-01). unit is the country package's
+    unit (for example ``currency-USD``) and definition_period the period a
+    value covers (``year``, ``month`` or ``eternity``). The catalog format 2
+    fields (is_input_variable, hidden_input, module_name, the two parameter
+    paths, enum_values, unit and definition_period) are null in versions
+    published before that format.
     """
 
     id: UUID
@@ -140,6 +143,8 @@ class MetadataVariable(StrictResponseModel):
     adds_parameter_path: str | None = None
     subtracts_parameter_path: str | None = None
     enum_values: list[MetadataEnumValue] | None = None
+    unit: str | None = None
+    definition_period: str | None = None
 
 
 class MetadataParameterSummary(StrictResponseModel):

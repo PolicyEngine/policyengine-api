@@ -77,10 +77,10 @@ class MetadataResponseCache:
     are kept under the exact version they were read from: a request without a
     version (the running version, fixed for the process) and one naming that
     version share one response. The most recently used ``capacity`` responses
-    are kept: the US variables body of the 6.10.0 catalog is 3,910,063 bytes
-    uncompressed, so the default of eight holds about 11 MB for both
+    are kept: the US variables body of the 6.10.0 catalog is 4,190,824 bytes
+    uncompressed, so the default of eight holds about 12 MB for both
     countries' two whole-version routes at two versions, and at most about
-    31 MB if every entry were that large. Requests that arrive while a read
+    34 MB if every entry were that large. Requests that arrive while a read
     for the same key is in progress wait for it, and all receive its outcome:
     the kept response, or a copy of its error response. A failed read is not
     kept, so the first request after it reads again.

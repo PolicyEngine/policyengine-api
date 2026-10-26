@@ -45,8 +45,10 @@ parameters are rejected.
 `GET /v2/model-catalog/variables` (same query) returns every variable of the
 version in name order, in one response, with the catalog format 2 fields:
 `is_input_variable`, `hidden_input`, `module_name`, `adds_parameter_path`,
-`subtracts_parameter_path` and `enum_values` (each value's name and its label,
-in the type the country package declares). Where a variable's `adds` or
+`subtracts_parameter_path`, `enum_values` (each value's name and its label,
+in the type the country package declares), `unit` (for example
+`currency-USD`) and `definition_period` (`year`, `month` or `eternity`), which
+the household builder uses for formatting and per-period labels. Where a variable's `adds` or
 `subtracts` list comes from a parameter, `part_parameter_values` maps that
 parameter's path to its current-law values in start-date order
 (`start_date`, `end_date`, `value`), so a client picks the list for the year
@@ -132,8 +134,8 @@ without that).
 Each API process also keeps the serialized bodies of `/v2/model-catalog` and
 `/v2/model-catalog/variables` once built, each with its `ETag` computed once,
 for up to eight route, country and version combinations (least recently used
-dropped first; the 6.10.0 US variables body is 3,910,063 bytes uncompressed,
-so eight entries hold about 11 MB for both countries' two routes at two
+dropped first; the 6.10.0 US variables body is 4,190,824 bytes uncompressed,
+so eight entries hold about 12 MB for both countries' two routes at two
 versions). A response is kept under the exact version it was read from,
 so a request without `policyengine_version` (the process's running version,
 which never changes while it runs) and one naming that version share it. Only

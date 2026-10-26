@@ -126,6 +126,8 @@ def metadata_variable(variable: Variable) -> MetadataVariable:
                 for enum_value in variable.enum_values
             ]
         ),
+        unit=variable.unit,
+        definition_period=variable.definition_period,
     )
 
 

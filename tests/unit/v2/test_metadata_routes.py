@@ -1420,3 +1420,15 @@ def test_cacheable_responses_and_their_304_carry_the_same_vary_once_each(
     assert _vary_value_counts(small) == expected
     assert _vary_value_counts(compressed) == expected
     assert _vary_value_counts(not_modified) == expected
+
+
+def test_openapi_declares_each_variables_unit_and_definition_period() -> None:
+    results, _ids = _resource_results()
+    schema = _client(lambda: ResourceReader(results)).get("/v2/openapi.json").json()
+
+    variable_properties = schema["components"]["schemas"]["MetadataVariable"][
+        "properties"
+    ]
+    for field in ("unit", "definition_period"):
+        assert {"type": "string"} in variable_properties[field]["anyOf"]
+        assert {"type": "null"} in variable_properties[field]["anyOf"]
