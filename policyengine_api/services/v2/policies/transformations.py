@@ -15,6 +15,7 @@ from policyengine_core.periods import (  # type: ignore[import-untyped]
 from policyengine_api.services.v2.policies.types import (
     CanonicalPolicyContent,
     LegacyPolicySnapshot,
+    LegacyPolicyTranslationReason,
     PolicyCreationInput,
     PolicyPage,
     PolicyParameterValueInput,
@@ -25,7 +26,6 @@ from policyengine_api.services.v2.policies.types import (
 from policyengine_api.services.v2.policies.validators import (
     MAXIMUM_POLICY_PARAMETER_VALUES,
     LegacyPolicyTranslationError,
-    LegacyPolicyTranslationReason,
     parameters_missing_from_model,
     validate_policy_catalog,
 )

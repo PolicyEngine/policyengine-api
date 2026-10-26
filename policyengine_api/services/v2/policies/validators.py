@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 from datetime import UTC, datetime
-from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -14,6 +13,7 @@ if TYPE_CHECKING:
     from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
     from policyengine_api.data.v2.models import LegacyPolicyMapping
     from policyengine_api.services.v2.policies.types import (
+        LegacyPolicyTranslationReason,
         PolicyCreationInput,
         ResolvedPolicyCreationInput,
     )
@@ -41,17 +41,6 @@ class PolicyContentHashCollisionError(PolicyCreationIntegrityError):
 
 class LegacyPolicyMappingIntegrityError(RuntimeError):
     """Raised when one immutable v1 identity maps inconsistently."""
-
-
-class LegacyPolicyTranslationReason(StrEnum):
-    """Why committed v1 content cannot be translated, as copy failure logs name it."""
-
-    MISSING_PARAMETERS = "missing_parameters"
-    INVALID_PARAMETER_VALUES = "invalid_parameter_values"
-    EMPTY_PARAMETER_VALUES = "empty_parameter_values"
-    INVALID_PERIOD = "invalid_period"
-    CONFLICTING_VALUES = "conflicting_values"
-    TOO_MANY_VALUES = "too_many_values"
 
 
 class LegacyPolicyTranslationError(ValueError):

@@ -21,11 +21,11 @@ from policyengine_api.services.policy_mirroring import (
 from policyengine_api.services.v2.policies.types import (
     LegacyPolicyPersistenceResult,
     LegacyPolicySnapshot,
+    LegacyPolicyTranslationReason,
 )
 from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyMappingIntegrityError,
     LegacyPolicyTranslationError,
-    LegacyPolicyTranslationReason,
     PolicyCatalogValidationError,
     PolicyContentHashCollisionError,
     PolicyCreationIntegrityError,

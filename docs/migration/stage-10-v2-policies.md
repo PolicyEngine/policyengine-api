@@ -181,7 +181,7 @@ Monitor structured events with metric names `v1_policy_mirror_operations` and
 | `failure_category` | `failure_reason` |
 | --- | --- |
 | `catalog_or_translation` | `missing_parameters` (the policy sets a parameter the running catalog lacks), `invalid_parameter_values`, `empty_parameter_values`, `invalid_period`, `conflicting_values`, `too_many_values` (more than 1,000 dated values), `catalog_absent` (no catalog for the running PolicyEngine.py version), `catalog_query_failed`, `catalog_version_not_found`, `catalog_mismatch` |
-| `integrity` | `mapping_conflict`, `saved_policy_mapping_conflict`, `content_hash_collision`, `stored_policy_integrity` |
+| `integrity` | `mapping_conflict`, `content_hash_collision`, `stored_policy_integrity`, `saved_policy_integrity` (any integrity check of a saved-policy copy) |
 | `database` | `database_error` |
 | `configuration` | `configuration` |
 | `unexpected` | `missing_reform_policy` (a saved policy's v1 reform could not be loaded), `unexpected` |

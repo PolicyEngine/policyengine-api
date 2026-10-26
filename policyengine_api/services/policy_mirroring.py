@@ -19,7 +19,6 @@ from policyengine_api.gcp_logging import logger
 from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyMappingIntegrityError,
     LegacyPolicyTranslationError,
-    LegacyPolicyTranslationReason,
     PolicyCatalogValidationError,
     PolicyContentHashCollisionError,
     PolicyCreationIntegrityError,
@@ -31,6 +30,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.policies.types import (
         LegacyPolicyPersistenceResult,
         LegacyPolicySnapshot,
+        LegacyPolicyTranslationReason,
     )
 
 
@@ -61,39 +61,12 @@ def _default_mirror_factory() -> LegacyPolicyMirror:
     return V2PolicyService(PolicyDatabaseSession(get_v2_session_factory()))
 
 
-def _failure_category(error: Exception) -> str:
-    if isinstance(error, V2ConfigurationError):
-        return "configuration"
-    if isinstance(
-        error,
-        (
-            MetadataCatalogUnavailableError,
-            MetadataCatalogVersionNotFoundError,
-            PolicyCatalogValidationError,
-            LegacyPolicyTranslationError,
-        ),
-    ):
-        return "catalog_or_translation"
-    if isinstance(
-        error,
-        (
-            LegacyPolicyMappingIntegrityError,
-            PolicyContentHashCollisionError,
-            PolicyCreationIntegrityError,
-        ),
-    ):
-        return "integrity"
-    if isinstance(error, SQLAlchemyError):
-        return "database"
-    return "unexpected"
-
-
 class PolicyCopyFailureReason(StrEnum):
-    """Fixed reason codes a failed policy or saved-policy copy logs.
+    """Fixed reason codes that failed policy and saved-policy copies log.
 
-    A translation failure logs its LegacyPolicyTranslationReason value instead,
-    such as ``missing_parameters``. Together the two sets are every value of a
-    copy record's ``failure_reason``.
+    A translation failure logs its LegacyPolicyTranslationReason instead, such
+    as ``missing_parameters``. The two sets together are every value of a copy
+    record's ``failure_reason``.
     """
 
     CONFIGURATION = "configuration"
@@ -102,54 +75,82 @@ class PolicyCopyFailureReason(StrEnum):
     CATALOG_VERSION_NOT_FOUND = "catalog_version_not_found"
     CATALOG_MISMATCH = "catalog_mismatch"
     MAPPING_CONFLICT = "mapping_conflict"
-    SAVED_POLICY_MAPPING_CONFLICT = "saved_policy_mapping_conflict"
     CONTENT_HASH_COLLISION = "content_hash_collision"
     STORED_POLICY_INTEGRITY = "stored_policy_integrity"
+    SAVED_POLICY_INTEGRITY = "saved_policy_integrity"
     MISSING_REFORM_POLICY = "missing_reform_policy"
+    MISSING_MIRROR_SNAPSHOT = "missing_mirror_snapshot"
+    MISSING_MIRROR_REVISION = "missing_mirror_revision"
     DATABASE_ERROR = "database_error"
     UNEXPECTED = "unexpected"
 
 
-def policy_copy_failure_reason(error: Exception) -> str:
-    """Return the fixed reason code a failed policy copy logs for this error.
+@dataclass(frozen=True)
+class PolicyCopyFailure:
+    """How a failed copy is logged: a broad category and a fixed reason."""
 
-    The code comes only from the error's type, and for a translation error its
-    fixed reason, so a log record never holds policy content or error text.
-    """
-    return _failure_reason_code(error).value
+    category: str
+    reason: PolicyCopyFailureReason | LegacyPolicyTranslationReason
 
 
 # Checked in order, so the hash collision is matched before its integrity base
 # class.
-_FAILURE_REASONS_BY_ERROR_TYPE: tuple[
-    tuple[type[Exception], PolicyCopyFailureReason], ...
-] = (
-    (V2ConfigurationError, PolicyCopyFailureReason.CONFIGURATION),
+_FAILURES_BY_ERROR_TYPE: tuple[tuple[type[Exception], PolicyCopyFailure], ...] = (
+    (
+        V2ConfigurationError,
+        PolicyCopyFailure("configuration", PolicyCopyFailureReason.CONFIGURATION),
+    ),
     (
         MetadataCatalogVersionNotFoundError,
-        PolicyCopyFailureReason.CATALOG_VERSION_NOT_FOUND,
+        PolicyCopyFailure(
+            "catalog_or_translation",
+            PolicyCopyFailureReason.CATALOG_VERSION_NOT_FOUND,
+        ),
     ),
-    (PolicyCatalogValidationError, PolicyCopyFailureReason.CATALOG_MISMATCH),
-    (LegacyPolicyMappingIntegrityError, PolicyCopyFailureReason.MAPPING_CONFLICT),
-    (PolicyContentHashCollisionError, PolicyCopyFailureReason.CONTENT_HASH_COLLISION),
-    (PolicyCreationIntegrityError, PolicyCopyFailureReason.STORED_POLICY_INTEGRITY),
-    (SQLAlchemyError, PolicyCopyFailureReason.DATABASE_ERROR),
+    (
+        PolicyCatalogValidationError,
+        PolicyCopyFailure(
+            "catalog_or_translation", PolicyCopyFailureReason.CATALOG_MISMATCH
+        ),
+    ),
+    (
+        LegacyPolicyMappingIntegrityError,
+        PolicyCopyFailure("integrity", PolicyCopyFailureReason.MAPPING_CONFLICT),
+    ),
+    (
+        PolicyContentHashCollisionError,
+        PolicyCopyFailure("integrity", PolicyCopyFailureReason.CONTENT_HASH_COLLISION),
+    ),
+    (
+        PolicyCreationIntegrityError,
+        PolicyCopyFailure("integrity", PolicyCopyFailureReason.STORED_POLICY_INTEGRITY),
+    ),
+    (
+        SQLAlchemyError,
+        PolicyCopyFailure("database", PolicyCopyFailureReason.DATABASE_ERROR),
+    ),
 )
 
 
-def _failure_reason_code(
-    error: Exception,
-) -> PolicyCopyFailureReason | LegacyPolicyTranslationReason:
+def classify_policy_copy_failure(error: Exception) -> PolicyCopyFailure:
+    """Return how a failed policy copy logs this error.
+
+    Both fields come only from the error's type, and for a translation error
+    its fixed reason, so a log record never holds policy content or error text.
+    """
     if isinstance(error, LegacyPolicyTranslationError):
-        return error.reason
+        return PolicyCopyFailure("catalog_or_translation", error.reason)
     if isinstance(error, MetadataCatalogUnavailableError):
-        if isinstance(error.__cause__, SQLAlchemyError):
-            return PolicyCopyFailureReason.CATALOG_QUERY_FAILED
-        return PolicyCopyFailureReason.CATALOG_ABSENT
-    for error_type, reason in _FAILURE_REASONS_BY_ERROR_TYPE:
+        reason = (
+            PolicyCopyFailureReason.CATALOG_QUERY_FAILED
+            if isinstance(error.__cause__, SQLAlchemyError)
+            else PolicyCopyFailureReason.CATALOG_ABSENT
+        )
+        return PolicyCopyFailure("catalog_or_translation", reason)
+    for error_type, failure in _FAILURES_BY_ERROR_TYPE:
         if isinstance(error, error_type):
-            return reason
-    return PolicyCopyFailureReason.UNEXPECTED
+            return failure
+    return PolicyCopyFailure("unexpected", PolicyCopyFailureReason.UNEXPECTED)
 
 
 @dataclass(frozen=True)
@@ -159,8 +160,7 @@ class _MirrorOutcome:
     outcome: str
     actual_write_sources: list[str]
     destination_policy_id: object | None = None
-    failure_category: str | None = None
-    failure_reason: str | None = None
+    failure: PolicyCopyFailure | None = None
     policy_created: bool | None = None
     mapping_created: bool | None = None
 
@@ -172,6 +172,7 @@ def _log_mirror_event(
     mirror_outcome: _MirrorOutcome,
 ) -> None:
     destination_policy_id = mirror_outcome.destination_policy_id
+    failure = mirror_outcome.failure
     # Metric logging must not change the mirror outcome.
     with contextlib.suppress(Exception):
         logger.log_struct(
@@ -190,8 +191,8 @@ def _log_mirror_event(
                     else None
                 ),
                 "outcome": mirror_outcome.outcome,
-                "failure_category": mirror_outcome.failure_category,
-                "failure_reason": mirror_outcome.failure_reason,
+                "failure_category": failure.category if failure else None,
+                "failure_reason": failure.reason.value if failure else None,
                 "policy_created": mirror_outcome.policy_created,
                 "mapping_created": mirror_outcome.mapping_created,
                 "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
@@ -222,8 +223,7 @@ def mirror_policy_after_commit(
             mirror_outcome=_MirrorOutcome(
                 outcome="error",
                 actual_write_sources=["cloud_sql"],
-                failure_category=_failure_category(error),
-                failure_reason=policy_copy_failure_reason(error),
+                failure=classify_policy_copy_failure(error),
             ),
         )
         msg = "The committed v1 policy could not be mirrored to v2"

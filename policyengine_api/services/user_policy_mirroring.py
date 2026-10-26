@@ -7,29 +7,16 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from sqlalchemy.exc import SQLAlchemyError
-
-from policyengine_api.data.v2.catalog.catalog_selection import (
-    MetadataCatalogUnavailableError,
-    MetadataCatalogVersionNotFoundError,
-)
-from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.gcp_logging import logger
 from policyengine_api.services.policy_mirroring import (
+    PolicyCopyFailure,
     PolicyCopyFailureReason,
-    policy_copy_failure_reason,
+    classify_policy_copy_failure,
 )
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.user_policy_service import (
     PendingUserPolicyMirrorEvent,
     UserPolicyService,
-)
-from policyengine_api.services.v2.policies.validators import (
-    LegacyPolicyMappingIntegrityError,
-    LegacyPolicyTranslationError,
-    PolicyCatalogValidationError,
-    PolicyContentHashCollisionError,
-    PolicyCreationIntegrityError,
 )
 from policyengine_api.services.v2.user_policies.validators import (
     LegacyUserPolicyIntegrityError,
@@ -80,40 +67,16 @@ def _default_mirror_factory() -> LegacyUserPolicyMirror:
     return V2UserPolicyService(UserPolicyDatabaseSession(get_v2_session_factory()))
 
 
-def _failure_category(error: Exception) -> str:
-    if isinstance(error, V2ConfigurationError):
-        return "configuration"
-    if isinstance(
-        error,
-        (
-            MetadataCatalogUnavailableError,
-            MetadataCatalogVersionNotFoundError,
-            PolicyCatalogValidationError,
-            LegacyPolicyTranslationError,
-        ),
-    ):
-        return "catalog_or_translation"
-    if isinstance(
-        error,
-        (
-            LegacyPolicyMappingIntegrityError,
-            LegacyUserPolicyIntegrityError,
-            PolicyContentHashCollisionError,
-            PolicyCreationIntegrityError,
-        ),
-    ):
-        return "integrity"
-    if isinstance(error, SQLAlchemyError):
-        return "database"
-    return "unexpected"
-
-
-def _failure_reason(error: Exception) -> str:
+def _classify_failure(error: Exception) -> PolicyCopyFailure:
     if isinstance(error, LegacyUserPolicyIntegrityError):
-        return PolicyCopyFailureReason.SAVED_POLICY_MAPPING_CONFLICT.value
+        return PolicyCopyFailure(
+            "integrity", PolicyCopyFailureReason.SAVED_POLICY_INTEGRITY
+        )
     if isinstance(error, ReformPolicyUnavailableError):
-        return PolicyCopyFailureReason.MISSING_REFORM_POLICY.value
-    return policy_copy_failure_reason(error)
+        return PolicyCopyFailure(
+            "unexpected", PolicyCopyFailureReason.MISSING_REFORM_POLICY
+        )
+    return classify_policy_copy_failure(error)
 
 
 @dataclass(frozen=True)
@@ -150,8 +113,7 @@ class _MirrorOutcome:
     outcome: str
     actual_write_sources: list[str]
     result: LegacyUserPolicyPersistenceResult | None = None
-    failure_category: str | None = None
-    failure_reason: str | None = None
+    failure: PolicyCopyFailure | None = None
 
 
 def _log_mirror_operation(
@@ -159,6 +121,7 @@ def _log_mirror_operation(
     mirror_outcome: _MirrorOutcome,
 ) -> None:
     result = mirror_outcome.result
+    failure = mirror_outcome.failure
     # Metric logging must not change the mirror outcome.
     with contextlib.suppress(Exception):
         logger.log_struct(
@@ -180,8 +143,8 @@ def _log_mirror_operation(
                     str(result.policy_id) if result is not None else None
                 ),
                 "outcome": mirror_outcome.outcome,
-                "failure_category": mirror_outcome.failure_category,
-                "failure_reason": mirror_outcome.failure_reason,
+                "failure_category": failure.category if failure else None,
+                "failure_reason": failure.reason.value if failure else None,
                 "association_created": (
                     result.association_created if result is not None else None
                 ),
@@ -249,8 +212,7 @@ def mirror_user_policy_after_commit(
             _MirrorOutcome(
                 outcome="error",
                 actual_write_sources=["cloud_sql"],
-                failure_category=_failure_category(error),
-                failure_reason=_failure_reason(error),
+                failure=_classify_failure(error),
             ),
         )
         msg = "The committed v1 saved policy could not be mirrored to v2"
@@ -385,8 +347,7 @@ def mirror_pending_user_policy_events_after_commit(
                     ["cloud_sql", "supabase"] if result is not None else ["cloud_sql"]
                 ),
                 result=result,
-                failure_category=_failure_category(failure),
-                failure_reason=_failure_reason(failure),
+                failure=_classify_failure(failure),
             ),
         )
         msg = "The committed v1 saved policy event could not be mirrored to v2"

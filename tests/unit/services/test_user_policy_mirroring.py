@@ -22,11 +22,13 @@ from policyengine_api.services.user_policy_service import (
     PendingUserPolicyMirrorEvent,
     UserPolicyService,
 )
-from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+from policyengine_api.services.v2.policies.types import (
+    LegacyPolicySnapshot,
+    LegacyPolicyTranslationReason,
+)
 from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyMappingIntegrityError,
     LegacyPolicyTranslationError,
-    LegacyPolicyTranslationReason,
 )
 from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicyPersistenceResult,
@@ -150,7 +152,7 @@ def test_logging_failure_does_not_change_successful_mirror_result() -> None:
         (
             LegacyUserPolicyIntegrityError("mapping conflict"),
             "integrity",
-            "saved_policy_mapping_conflict",
+            "saved_policy_integrity",
         ),
         (
             LegacyPolicyMappingIntegrityError("reform mapping conflict"),

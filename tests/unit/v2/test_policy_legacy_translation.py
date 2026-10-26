@@ -30,11 +30,13 @@ from policyengine_api.services.v2.policies.transformations import (
     parse_legacy_period,
     translate_legacy_policy,
 )
-from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+from policyengine_api.services.v2.policies.types import (
+    LegacyPolicySnapshot,
+    LegacyPolicyTranslationReason,
+)
 from policyengine_api.services.v2.policies.validators import (
     MAXIMUM_POLICY_PARAMETER_VALUES,
     LegacyPolicyTranslationError,
-    LegacyPolicyTranslationReason,
     parameters_missing_from_model,
 )
 from tests.fixtures.local_v1_database import create_test_v1_schema
