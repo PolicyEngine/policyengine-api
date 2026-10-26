@@ -878,3 +878,128 @@ def test_postgres_parameter_tree_reads_as_the_runtime_role(
     assert [(item.path, item.child_count) for item in result.items] == [
         ("gov.example", 1)
     ]
+
+
+def _catalog_shaped_like_policyengine_py_output():
+    """Return the fixture catalog with US records shaped like PolicyEngine.py's.
+
+    Bracket parameters carry the labels PolicyEngine.py generates, and a
+    breakdown parameter its parent's label with the key. One schedule has no
+    node row, as the locked PolicyEngine.py publishes; the other has one with
+    its label, as the release that publishes schedules will.
+    """
+    models = source_models()
+    us = models["us"]
+    nodes = [
+        SimpleNamespace(
+            name="gov.irs.deductions.standard.amount",
+            label="Standard deduction",
+            description=None,
+        ),
+        SimpleNamespace(
+            name="gov.aca.age_curves.ak",
+            label="ACA premium age curve factors - AK",
+            description=None,
+        ),
+    ]
+    labelled_parameters = [
+        (f"gov.aca.age_curves.{state}[{index}].{field}", f"{label} ({tier} {field})")
+        for state, label in (
+            ("al", "ACA premium age curve factors - AL"),
+            ("ak", "ACA premium age curve factors - AK"),
+        )
+        for index, tier in ((0, "tier 1"), (1, "tier 2"))
+        for field in ("amount", "threshold")
+    ] + [
+        ("gov.irs.deductions.standard.amount.SINGLE", "Standard deduction (Single)"),
+        ("gov.irs.deductions.standard.amount.JOINT", "Standard deduction (Joint)"),
+    ]
+    parameters = [
+        SimpleNamespace(
+            name=name,
+            label=label,
+            description=None,
+            data_type=float,
+            unit="currency-USD",
+            economy=True,
+            household=True,
+            parameter_values=[
+                SimpleNamespace(
+                    value=1.0,
+                    start_date=datetime(2025, 1, 1, tzinfo=UTC),
+                    end_date=None,
+                )
+            ],
+        )
+        for name, label in labelled_parameters
+    ]
+    us.parameter_nodes.extend(nodes)
+    us.parameters.extend(parameters)
+    us.parameter_nodes_by_name.update({node.name: node for node in nodes})
+    us.parameters_by_name.update(
+        {parameter.name: parameter for parameter in parameters}
+    )
+    return extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+        region_references=region_references(),
+    )
+
+
+def test_postgres_parameter_tree_from_records_shaped_like_policyengine_py(
+    published_engine: Engine,
+) -> None:
+    with published_engine.begin() as connection:
+        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
+    publish_catalog(published_engine, _catalog_shaped_like_policyengine_py_output())
+    client = _client(published_engine)
+
+    def level(parent_path: str) -> list[tuple]:
+        return _items(
+            client.get(
+                "/v2/parameters/children",
+                params={"country_id": "us", "parent_path": parent_path},
+            )
+        )
+
+    assert level("gov.aca.age_curves") == [
+        ("gov.aca.age_curves.ak", "ACA premium age curve factors - AK", "node", 2),
+        ("gov.aca.age_curves.al", "Al", "node", 2),
+    ]
+    assert level("gov.aca.age_curves.al") == [
+        ("gov.aca.age_curves.al[0]", "Bracket 1", "node", 2),
+        ("gov.aca.age_curves.al[1]", "Bracket 2", "node", 2),
+    ]
+    assert level("gov.aca.age_curves.al[1]") == [
+        (
+            "gov.aca.age_curves.al[1].amount",
+            "ACA premium age curve factors - AL (tier 2 amount)",
+            "parameter",
+            None,
+        ),
+        (
+            "gov.aca.age_curves.al[1].threshold",
+            "ACA premium age curve factors - AL (tier 2 threshold)",
+            "parameter",
+            None,
+        ),
+    ]
+    assert level("gov.irs.deductions.standard") == [
+        ("gov.irs.deductions.standard.amount", "Standard deduction", "node", 2),
+    ]
+    assert level("gov.irs.deductions.standard.amount") == [
+        (
+            "gov.irs.deductions.standard.amount.JOINT",
+            "Standard deduction (Joint)",
+            "parameter",
+            None,
+        ),
+        (
+            "gov.irs.deductions.standard.amount.SINGLE",
+            "Standard deduction (Single)",
+            "parameter",
+            None,
+        ),
+    ]

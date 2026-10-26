@@ -336,3 +336,67 @@ def test_schedules_without_a_stored_label_get_one_from_their_name() -> None:
     assert by_path[f"{UK_RATES}.uk"].label == "Uk"
     assert by_path["gov.aca.age_curves.al"].label == "Al"
     assert by_path[f"{UK_RATES}.uk[0]"].label == "Bracket 1"
+
+
+AGE_CURVE = "gov.aca.age_curves.al"
+STANDARD_DEDUCTION = "gov.irs.deductions.standard.amount"
+PY_SHAPED_PARAMETERS = (
+    # Bracket parameters labelled as PolicyEngine.py generates them.
+    (f"{AGE_CURVE}[0].amount", "ACA premium age curve factors - AL (tier 1 amount)"),
+    (
+        f"{AGE_CURVE}[0].threshold",
+        "ACA premium age curve factors - AL (tier 1 threshold)",
+    ),
+    (f"{AGE_CURVE}[1].amount", "ACA premium age curve factors - AL (tier 2 amount)"),
+    # Breakdown parameters labelled from their parent node's label.
+    (f"{STANDARD_DEDUCTION}.SINGLE", "Standard deduction (Single)"),
+    (f"{STANDARD_DEDUCTION}.JOINT", "Standard deduction (Joint)"),
+)
+
+
+def _py_shaped_tree(*, schedule_has_node_row: bool):
+    nodes = [TreeNodeSource(name=STANDARD_DEDUCTION, label="Standard deduction")]
+    if schedule_has_node_row:
+        nodes.append(
+            TreeNodeSource(name=AGE_CURVE, label="ACA premium age curve factors - AL")
+        )
+    return build_parameter_tree(
+        nodes=nodes,
+        parameters=[
+            _parameter(name, label=label) for name, label in PY_SHAPED_PARAMETERS
+        ],
+    )
+
+
+def test_a_tree_from_the_locked_policyengine_py_labels_its_schedule_by_name() -> None:
+    """The locked PolicyEngine.py stores no node row for a bracket schedule."""
+    rows = _py_shaped_tree(schedule_has_node_row=False)
+    by_path = _rows_by_path(rows)
+
+    assert by_path[AGE_CURVE].label == "Al"
+    assert [(row.label, row.child_count) for row in _children(rows, AGE_CURVE)] == [
+        ("Bracket 1", 2),
+        ("Bracket 2", 1),
+    ]
+    assert [row.label for row in _children(rows, f"{AGE_CURVE}[0]")] == [
+        "ACA premium age curve factors - AL (tier 1 amount)",
+        "ACA premium age curve factors - AL (tier 1 threshold)",
+    ]
+    assert by_path[STANDARD_DEDUCTION].label == "Standard deduction"
+    assert [row.label for row in _children(rows, STANDARD_DEDUCTION)] == [
+        "Standard deduction (Joint)",
+        "Standard deduction (Single)",
+    ]
+
+
+def test_a_tree_from_a_release_with_schedule_nodes_uses_the_schedule_label() -> None:
+    """A PolicyEngine.py release that publishes schedules stores their label."""
+    rows = _py_shaped_tree(schedule_has_node_row=True)
+
+    assert _rows_by_path(rows)[AGE_CURVE].label == (
+        "ACA premium age curve factors - AL"
+    )
+    assert [row.label for row in _children(rows, AGE_CURVE)] == [
+        "Bracket 1",
+        "Bracket 2",
+    ]
