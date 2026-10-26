@@ -609,7 +609,7 @@ def selection_for_geography(geography):
 
 
 @pytest.mark.parametrize("geography", ["national", "metro"])
-@pytest.mark.parametrize("year", [2021, 2036])
+@pytest.mark.parametrize("year", [2021, 2037])
 def test_real_http_tax_only_outside_artifact_years_is_lazy(
     real_http_client, geography, year
 ):
@@ -637,9 +637,9 @@ def test_real_http_tax_only_outside_artifact_years_is_lazy(
 def test_real_http_unsupported_spm_year_is_structured_only_when_calculated(
     real_http_client, geography, variable, axes
 ):
-    household = household_in_year(variable, 2036, axes=axes)
+    household = household_in_year(variable, 2037, axes=axes)
     if variable == "spm_unit_net_income":
-        household["spm_units"]["spm_unit"]["housing_assistance"] = {"2036": 1_000}
+        household["spm_units"]["spm_unit"]["housing_assistance"] = {"2037": 1_000}
     response = real_http_client.post(
         "/us/calculate",
         json={
@@ -651,7 +651,7 @@ def test_real_http_unsupported_spm_year_is_structured_only_when_calculated(
     assert response.json["status"] == "error"
     assert response.json["result"] is None
     assert response.json["errors"][0]["code"] == "SPM_YEAR_UNAVAILABLE"
-    assert "2036" in response.json["errors"][0]["message"]
+    assert "2037" in response.json["errors"][0]["message"]
 
 
 def test_uncertifiable_country_receipt_does_not_become_an_internal_failure(monkeypatch):
