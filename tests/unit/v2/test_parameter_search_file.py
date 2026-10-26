@@ -1,11 +1,12 @@
-"""Each catalog version's parameter search file, built from stored rows."""
+"""Each catalog version's parameter search file, built from catalog records."""
 
 from __future__ import annotations
 
 import gzip
 import hashlib
 import json
-from datetime import date
+from datetime import UTC, date, datetime
+from uuid import uuid4
 
 import pytest
 
@@ -14,11 +15,16 @@ from policyengine_api.data.v2.catalog.parameter_search_file import (
     EditabilityChange,
     ParameterSearchFileDocument,
     SearchParameterSource,
+    _parameter_editability,
     build_parameter_search_file,
     encode_parameter_search_file,
     is_editable_value,
 )
 from policyengine_api.data.v2.catalog.parameter_tree import TreeNodeSource
+from policyengine_api.data.v2.catalog.records import (
+    ParameterRecord,
+    ParameterValueRecord,
+)
 
 
 def _parameter(
@@ -334,3 +340,40 @@ def test_editable_values_follow_v3s_draft_editor(
 ) -> None:
     # v3's isDraftableValue: a number, a yes/no switch, or "Infinity"/"-Infinity".
     assert is_editable_value(value) is editable
+
+
+def test_a_null_value_between_numbers_changes_editability_twice() -> None:
+    parameter_id = uuid4()
+    values = (
+        (0.04, datetime(2015, 1, 1, tzinfo=UTC), datetime(2020, 12, 31, tzinfo=UTC)),
+        (None, datetime(2021, 1, 1, tzinfo=UTC), datetime(2022, 12, 31, tzinfo=UTC)),
+        (1.33, datetime(2023, 1, 1, tzinfo=UTC), None),
+    )
+    parameter = ParameterRecord(
+        id=parameter_id,
+        model_version_id=uuid4(),
+        name="gov.irs.credits.premium_tax_credit.phase_out.ending_rate[1].amount",
+        label=None,
+        description=None,
+        data_type="float",
+        unit="/1",
+        values=tuple(
+            ParameterValueRecord(
+                id=uuid4(),
+                parameter_id=parameter_id,
+                value_json=value,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            # Listed out of date order on purpose.
+            for value, start_date, end_date in reversed(values)
+        ),
+        economy=True,
+        household=True,
+    )
+
+    assert list(_parameter_editability(parameter)) == [
+        EditabilityChange(parameter.name, date(2015, 1, 1), editable=True),
+        EditabilityChange(parameter.name, date(2021, 1, 1), editable=False),
+        EditabilityChange(parameter.name, date(2023, 1, 1), editable=True),
+    ]
