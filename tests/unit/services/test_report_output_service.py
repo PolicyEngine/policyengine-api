@@ -486,3 +486,83 @@ def test_noop_and_missing_updates(service, orm_session_factory):
     assert service.update_report_output("us", report.id) is None
     with pytest.raises(LookupError, match="Report output #999 not found"):
         service.update_report_output("us", 999, status="pending")
+
+
+def create_outdated_uk_report(orm_session_factory, monkeypatch) -> int:
+    """Save a UK economy report under an older report-output cache version."""
+    baseline = create_simulation(
+        orm_session_factory,
+        country_id="uk",
+        policy_id=1,
+        population_id="uk",
+        population_type="geography",
+    )
+    reform = create_simulation(
+        orm_session_factory,
+        country_id="uk",
+        policy_id=2,
+        population_id="uk",
+        population_type="geography",
+    )
+    monkeypatch.setitem(constants.RUNTIME_CACHE_SCHEMA_VERSIONS, "report_output", 2)
+    outdated_cache_version = get_report_output_cache_version("uk")
+    monkeypatch.setitem(constants.RUNTIME_CACHE_SCHEMA_VERSIONS, "report_output", 3)
+    with orm_session_factory.begin() as session:
+        outdated = ReportOutput(
+            country_id="uk",
+            simulation_1_id=baseline.id,
+            simulation_2_id=reform.id,
+            api_version=outdated_cache_version,
+            status="complete",
+            output={"outdated": True},
+            year="2027",
+        )
+        session.add(outdated)
+        session.flush()
+        return outdated.id
+
+
+def test_update_with_outdated_id_completes_the_served_current_report(
+    service,
+    orm_session_factory,
+    monkeypatch,
+):
+    outdated_id = create_outdated_uk_report(orm_session_factory, monkeypatch)
+    served = service.resolve_report_output("uk", outdated_id)
+    current_id = served.report_output.id
+
+    view = service.update_report_output(
+        "uk", outdated_id, status="complete", output={"current": True}
+    )
+
+    assert view.response_id == outdated_id
+    assert view.report_output.id == current_id
+    assert view.report_output.status == "complete"
+    reopened = service.resolve_report_output("uk", outdated_id)
+    assert reopened.report_output.id == current_id
+    assert reopened.report_output.status == "complete"
+    assert reopened.report_output.output == {"current": True}
+    assert reopened.report_output.active_run_id is None
+    assert reopened.report_output.latest_successful_run_id is not None
+    with orm_session_factory() as session:
+        outdated = session.get(ReportOutput, outdated_id)
+        assert outdated.output == {"outdated": True}
+
+
+def test_update_with_outdated_id_creates_the_current_report_when_none_was_served(
+    service,
+    orm_session_factory,
+    monkeypatch,
+):
+    outdated_id = create_outdated_uk_report(orm_session_factory, monkeypatch)
+
+    view = service.update_report_output(
+        "uk", outdated_id, status="complete", output={"current": True}
+    )
+
+    assert view.response_id == outdated_id
+    assert view.report_output.id != outdated_id
+    assert view.report_output.api_version == get_report_output_cache_version("uk")
+    assert service.resolve_report_output("uk", outdated_id).report_output.output == {
+        "current": True
+    }
