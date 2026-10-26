@@ -550,30 +550,126 @@ def test_postgres_metadata_reads_send_no_transaction_statements(
 ) -> None:
     # Each metadata read is one statement on rows a published catalog never
     # changes, so the read session runs in autocommit mode: psycopg then sends
-    # no BEGIN before the reads and no ROLLBACK when the session closes.
+    # no BEGIN before the reads and no ROLLBACK when the session closes. The
+    # engine has one pooled connection, so the writer below must get the same
+    # connection back in the ordinary, transactional mode.
+    from psycopg.pq import TransactionStatus
+
     from policyengine_api.data.v2.database import build_v2_read_session_factory
 
+    del published_engine  # publishes the catalog this pooled engine reads
+    pooled_engine = create_engine(_disposable_url(), pool_size=1, max_overflow=0)
+    read_connections: list[object] = []
     autocommit_modes: list[bool] = []
 
     def record_mode(connection, _cursor, _statement, *_args) -> None:
-        autocommit_modes.append(connection.connection.dbapi_connection.autocommit)
+        dbapi_connection = connection.connection.dbapi_connection
+        read_connections.append(dbapi_connection)
+        autocommit_modes.append(dbapi_connection.autocommit)
 
-    event.listen(published_engine, "before_cursor_execute", record_mode)
     try:
+        event.listen(pooled_engine, "before_cursor_execute", record_mode)
         service = V2MetadataService(
-            MetadataDatabaseSession(build_v2_read_session_factory(published_engine)()),
+            MetadataDatabaseSession(build_v2_read_session_factory(pooled_engine)()),
             running_policyengine_version=POLICYENGINE_VERSION,
         )
         result = service.list_parameters("us")
         service.close()
+        event.remove(pooled_engine, "before_cursor_execute", record_mode)
+
+        with Session(pooled_engine) as writer:
+            writer_connection = writer.connection().connection.dbapi_connection
+            writer.execute(text("SELECT 1"))
+            writer_status = writer_connection.info.transaction_status
+            writer_autocommit = writer_connection.autocommit
     finally:
-        event.remove(published_engine, "before_cursor_execute", record_mode)
+        pooled_engine.dispose()
 
     assert [item.name for item in result.items] == ["gov.example.rate"]
     assert autocommit_modes
     assert all(autocommit_modes)
-    with published_engine.connect() as connection:
-        assert connection.connection.dbapi_connection.autocommit is False
+    assert {id(connection) for connection in read_connections} == {
+        id(writer_connection)
+    }
+    assert writer_autocommit is False
+    assert writer_status == TransactionStatus.INTRANS
+
+
+def test_postgres_production_metadata_reader_keeps_catalogs_and_responses(
+    published_engine: Engine,
+) -> None:
+    # The production combination: autocommit read sessions, the process's
+    # selected catalogs and its whole-version response cache.
+    from policyengine_api.data.v2.database import build_v2_read_session_factory
+    from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+        MetadataResponseCache,
+    )
+    from policyengine_api.services.v2.metadata.selected_catalogs import (
+        SelectedCatalogStore,
+    )
+
+    read_factory = build_v2_read_session_factory(published_engine)
+    selected_catalogs = SelectedCatalogStore()
+    statements: list[str] = []
+
+    def record_statement(_connection, _cursor, statement, *_args) -> None:
+        statements.append(statement)
+
+    dependencies = NativeRouteDependencies(
+        readiness_probe=lambda: True,
+        gateway_client_factory=lambda: None,
+        metadata_reader_factory=lambda: None,
+        specification_provider=dict,
+        v2_metadata_reader_factory=lambda: V2MetadataService(
+            MetadataDatabaseSession(read_factory()),
+            running_policyengine_version=POLICYENGINE_VERSION,
+            selected_catalogs=selected_catalogs,
+        ),
+        v2_metadata_response_cache=MetadataResponseCache(),
+    )
+    settings = RouteImplementationSettings(
+        health=RouteImplementation.FLASK_FALLBACK,
+        specification=RouteImplementation.FLASK_FALLBACK,
+        metadata=RouteImplementation.FLASK_FALLBACK,
+    )
+    client = TestClient(
+        create_asgi_app(
+            Flask(__name__), dependencies=dependencies, route_settings=settings
+        )
+    )
+    query = {"country_id": "us", "policyengine_version": POLICYENGINE_VERSION}
+
+    event.listen(published_engine, "before_cursor_execute", record_statement)
+    try:
+        first_variables = client.get(
+            "/v2/model-catalog/variables", params={"country_id": "us"}
+        )
+        statements_for_first = len(statements)
+        repeated_variables = client.get("/v2/model-catalog/variables", params=query)
+        statements_for_repeat = len(statements) - statements_for_first
+        parameters = client.get(
+            "/v2/parameters", params={"country_id": "us", "name": "gov.example.rate"}
+        )
+        statements_for_parameters = (
+            len(statements) - statements_for_first - statements_for_repeat
+        )
+    finally:
+        event.remove(published_engine, "before_cursor_execute", record_statement)
+
+    assert first_variables.status_code == 200
+    assert repeated_variables.content == first_variables.content
+    assert repeated_variables.headers["etag"] == first_variables.headers["etag"]
+    # The running version's selection and the variables read (the fixture's
+    # variables name no parameter-defined parts, so no value read); then
+    # nothing for the explicit request, which shares the kept response; then
+    # only the parameter read, the running version's selection being kept.
+    assert statements_for_first == 2
+    assert statements_for_repeat == 0
+    assert statements_for_parameters == 1
+    assert [item["name"] for item in parameters.json()["result"]["items"]] == [
+        "gov.example.rate"
+    ]
+    assert selected_catalogs.get(("us", None)) is not None
 
 
 @pytest.mark.parametrize(
