@@ -202,6 +202,8 @@ FORMAT_2_FIELDS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             "adds_parameter_path",
             "subtracts_parameter_path",
             "enum_values",
+            "unit",
+            "definition_period",
         ),
     ),
     ("parameter", "parameters_by_name", ("economy", "household")),
@@ -211,8 +213,8 @@ FORMAT_2_FIELDS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 def _require_format_2_fields(country_id: str, source: object) -> None:
     """Fail first, naming each field, when PolicyEngine.py does not publish them.
 
-    Releases without them, such as 6.7.5 and the locked 6.10.0, publish none of
-    catalog format 2's fields.
+    Older releases, such as 6.7.5 and the locked 6.10.0, publish only the
+    variables' unit and definition period of catalog format 2's fields.
     """
     missing: list[str] = []
     for record_name, mapping_attribute, field_names in FORMAT_2_FIELDS:

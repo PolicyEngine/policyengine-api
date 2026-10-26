@@ -150,6 +150,16 @@ def normalize_variable(
             maximum=512,
         ),
         enum_values=enum_values,
+        unit=optional_text(
+            getattr(source, "unit", None),
+            field_name=f"variable {name} unit",
+            maximum=128,
+        ),
+        definition_period=optional_text(
+            getattr(source, "definition_period", None),
+            field_name=f"variable {name} definition_period",
+            maximum=32,
+        ),
     )
 
 

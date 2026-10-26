@@ -350,6 +350,8 @@ def _variables() -> list[SimpleNamespace]:
                 SimpleNamespace(value="SINGLE", label="Single"),
                 SimpleNamespace(value="JOINT", label="Joint"),
             ],
+            unit=None,
+            definition_period="year",
         ),
         SimpleNamespace(
             name="is_blind",
@@ -367,6 +369,8 @@ def _variables() -> list[SimpleNamespace]:
             adds_parameter_path=None,
             subtracts_parameter_path=None,
             enum_values=None,
+            unit=None,
+            definition_period="year",
         ),
         SimpleNamespace(
             name="household_net_income",
@@ -384,6 +388,8 @@ def _variables() -> list[SimpleNamespace]:
             adds_parameter_path=None,
             subtracts_parameter_path=None,
             enum_values=None,
+            unit="currency-USD",
+            definition_period="year",
         ),
     ]
 
