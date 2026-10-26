@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 from starlette.responses import Response
 
+from policyengine_api.content_encoding import accepts_gzip
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     CACHE_HEADER_DESCRIPTIONS,
 )
@@ -26,7 +27,6 @@ if TYPE_CHECKING:
     )
 
 _GZIP_ETAG_SUFFIX: Final = "-gzip"
-_GZIP_CODINGS: Final = frozenset({"gzip", "x-gzip"})
 
 SEARCH_FILE_RESPONSE_HEADERS: Final[dict[str, dict[str, Any]]] = {
     **CACHE_HEADER_DESCRIPTIONS,
@@ -44,40 +44,16 @@ SEARCH_FILE_RESPONSE_HEADERS: Final[dict[str, dict[str, Any]]] = {
 }
 
 
-def _quality(parameters: str) -> float:
-    for parameter in parameters.split(";"):
-        name, _, value = parameter.strip().partition("=")
-        if name.strip().lower() == "q":
-            try:
-                return float(value)
-            except ValueError:
-                return 0.0
-    return 1.0
-
-
-def accepts_gzip(accept_encoding: str | None) -> bool:
-    """Return whether an Accept-Encoding value accepts gzip.
-
-    An explicit gzip entry decides; otherwise ``*`` does. A quality of 0
-    refuses the coding.
-    """
-    wildcard_quality: float | None = None
-    for entry in (accept_encoding or "").split(","):
-        coding, _, parameters = entry.partition(";")
-        name = coding.strip().lower()
-        if name in _GZIP_CODINGS:
-            return _quality(parameters) > 0
-        if name == "*":
-            wildcard_quality = _quality(parameters)
-    return wildcard_quality is not None and wildcard_quality > 0
-
-
 def parameter_search_file_response(
     search_file: MetadataParameterSearchFile,
     *,
     accept_encoding: str | None,
 ) -> Response:
-    """Return the file in the encoding the request accepts, with its ETag."""
+    """Return the file in the encoding the request accepts, with its ETag.
+
+    It decides with the application's gzip middleware's rule, and the gzip
+    form names its Content-Encoding, so the middleware never re-encodes it.
+    """
     if accepts_gzip(accept_encoding):
         return Response(
             content=search_file.compressed_content,

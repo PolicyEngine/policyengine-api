@@ -1988,3 +1988,45 @@ def test_the_search_file_shapes_match_the_declared_content_models() -> None:
     for typed_shape, model in pairs:
         assert set(get_type_hints(typed_shape)) == set(model.model_fields), model
     assert SearchFileParameterEntry.__optional_keys__ == {"editable_changes"}
+
+
+@pytest.mark.parametrize("accept_encoding", ["gzip;q=0", "identity"])
+def test_a_large_search_file_stays_uncompressed_for_a_client_refusing_gzip(
+    accept_encoding: str,
+) -> None:
+    content: ParameterSearchFileDocument = {
+        **SEARCH_FILE_CONTENT,
+        "parameters": [
+            {
+                "path": f"gov.example.rate_{index}",
+                "label": f"Rate {index}",
+                "unit": "/1",
+                "description": None,
+                "editable": True,
+            }
+            for index in range(200)
+        ],
+    }
+    encoded = encode_parameter_search_file(content)
+    stored = MetadataParameterSearchFile(
+        policyengine_version="4.20.3",
+        file_format=1,
+        compressed_content=encoded.compressed_content,
+        content_sha256=encoded.content_sha256,
+        uncompressed_size=encoded.uncompressed_size,
+        compressed_size=encoded.compressed_size,
+    )
+
+    response = _client(
+        lambda: ResourceReader({"get_parameter_search_file": stored})
+    ).get(
+        SEARCH_FILE_PATH,
+        params={"country_id": "us"},
+        headers={"Accept-Encoding": accept_encoding},
+    )
+
+    assert encoded.uncompressed_size > 1000
+    assert response.status_code == 200
+    assert "content-encoding" not in response.headers
+    assert response.headers["etag"] == f'"{encoded.content_sha256}"'
+    assert response.content == gzip.decompress(encoded.compressed_content)
