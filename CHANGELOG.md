@@ -1,3 +1,10 @@
+## [5.9.0] - 2026-10-26
+
+### Added
+
+- Added weighted-microdata rules to the registry, proven on the Simulation API's #767 household count: code in the package never aggregates a weight column as a value, never reads raw values from weighted microdata outside a designated module, and never reduces an unweighted label series. No current code uses microdata, so all three start enforced with no findings. A doc-only rule records that weights, values, labels and counts each allow different operations.
+
+
 ## [5.8.0] - 2026-10-23
 
 ### Added
