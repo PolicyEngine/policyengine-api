@@ -1,5 +1,7 @@
 """Structural contract tests for the complete reviewed v2 SQLModel schema."""
 
+from typing import Literal
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import configure_mappers
@@ -17,6 +19,7 @@ from policyengine_api.data.v2.models import (
     LegacyPolicyMapping,
     LegacyUserMapping,
     LegacyUserPolicyMapping,
+    ParameterTreeChild,
     ParameterValue,
     Policy,
     Simulation,
@@ -830,3 +833,13 @@ def test_parameter_tree_children_have_one_row_per_path_in_listing_order() -> Non
         "ck_parameter_tree_children_child_type",
         "ck_parameter_tree_children_parameter_reference",
     }
+
+
+def test_parameter_tree_child_type_is_typed_with_its_two_values() -> None:
+    """Reads of a tree row keep the child type's two values as a type."""
+    annotation = ParameterTreeChild.model_fields["child_type"].annotation
+
+    assert annotation == Literal["node", "parameter"]
+    column = V2_METADATA.tables["parameter_tree_children"].c["child_type"]
+    assert isinstance(column.type, AutoString)
+    assert column.type.length == 16

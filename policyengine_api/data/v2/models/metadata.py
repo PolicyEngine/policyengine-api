@@ -2,11 +2,12 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 from uuid import UUID
 
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship
+from sqlmodel.sql.sqltypes import AutoString
 from typing_extensions import TypedDict
 
 from policyengine_api.data.v2.models.base import (
@@ -518,7 +519,9 @@ class ParameterTreeChild(IdentifiedModel, table=True):
     path: str = Field(max_length=512)
     position: int
     label: str = Field(max_length=512)
-    child_type: str = Field(max_length=16)
+    # The column stays a plain string, kept to these two values by
+    # ck_parameter_tree_children_child_type.
+    child_type: Literal["node", "parameter"] = Field(sa_type=AutoString(length=16))
     child_count: int | None = None
     reform_position: int | None = None
     reform_child_count: int | None = None
