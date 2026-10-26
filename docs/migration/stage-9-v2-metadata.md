@@ -148,9 +148,9 @@ staged region rows the stored version lacks and of stored rows not staged, and
 continues. Its evidence then describes what is stored: the region count is the
 stored one, `kept_regions` lists the country, version, stored and staged region
 counts, and the fallback and omitted-region summaries leave that country out,
-since they describe staged regions that were not published. Every other table must still match exactly.
-Region reference changes therefore take effect in the next catalog version
-that is published.
+since they describe staged regions that were not published. Every other table
+must still match exactly. Region reference changes therefore take effect in the
+next catalog version that is published.
 
 ## Validation evidence and retry
 
@@ -181,9 +181,10 @@ A failed attempt rolls back all catalog changes. Retry the same artifact only
 after correcting the external failure. A matching retry preserves identifiers,
 content, and row counts. Different normalized content under the same
 PolicyEngine.py version fails for operator review, with an error naming the
-first table that differs; it is never silently replaced. Regions are the exception: they come from the Public API's reference
-files, so a stored version keeps the regions it was published with (see
-"Source and regional dataset behavior"). A later PolicyEngine.py version adds a catalog version without
+first table that differs; it is never silently replaced. Regions are the
+exception: they come from the Public API's reference files, so a stored version
+keeps the regions it was published with (see "Source and regional dataset
+behavior"). A later PolicyEngine.py version adds a catalog version without
 deleting or modifying earlier versioned rows, including their logical datasets,
 regions, model descriptions, current-law IDs, and time-period options.
 
