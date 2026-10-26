@@ -1087,7 +1087,10 @@ def test_whole_version_responses_are_read_once_per_process_and_version() -> None
     first_responses = [client.get(path) for path in paths]
     repeated_responses = [client.get(path) for path in paths]
 
-    assert len(readers) == len(paths)
+    # The explicit request names the running version (4.20.3), so it shares
+    # the response the request without a version read: three reads in all.
+    assert len(readers) == len(paths) - 1
+    assert first_responses[2].content == first_responses[1].content
     for first, repeated in zip(first_responses, repeated_responses, strict=True):
         assert repeated.status_code == 200
         assert repeated.content == first.content
@@ -1168,3 +1171,34 @@ def test_current_parameter_values_are_reused_only_until_the_next_utc_day(
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == expected_cache_control
+
+
+def test_a_kept_response_is_served_without_hashing_its_body_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from policyengine_api.fastapi_routes.v2.metadata import common, response_cache
+
+    hashed_bodies: list[int] = []
+    original_entity_tag = response_cache.body_entity_tag
+
+    def counting_entity_tag(body: bytes) -> str:
+        hashed_bodies.append(len(body))
+        return original_entity_tag(body)
+
+    monkeypatch.setattr(response_cache, "body_entity_tag", counting_entity_tag)
+    monkeypatch.setattr(common, "body_entity_tag", counting_entity_tag)
+    results, _ids = _resource_results()
+    client = _client(
+        lambda: ResourceReader(results), response_cache=MetadataResponseCache()
+    )
+
+    first = client.get("/v2/model-catalog/variables?country_id=us")
+    hashed_after_first = len(hashed_bodies)
+    second = client.get(
+        "/v2/model-catalog/variables?country_id=us&policyengine_version=4.20.3"
+    )
+
+    assert hashed_after_first == 1
+    assert len(hashed_bodies) == 1
+    assert second.headers["etag"] == first.headers["etag"]
+    assert second.content == first.content
