@@ -66,6 +66,19 @@ class ParameterNodeLabelRow(NamedTuple):
     label: str | None
 
 
+@dataclass(frozen=True)
+class ParameterTreeLevel:
+    """Which level of a catalog version's parameter tree a listing reads.
+
+    ``parent_path`` names the node whose direct children are listed ("" for
+    the top level); ``reform_changeable`` keeps only the children a reform can
+    change, sorted by label, with child counts that count only those.
+    """
+
+    parent_path: str = ""
+    reform_changeable: bool = False
+
+
 class StrictResponseModel(BaseModel):
     """Base for metadata results that rejects unknown fields and non-finite numbers."""
 

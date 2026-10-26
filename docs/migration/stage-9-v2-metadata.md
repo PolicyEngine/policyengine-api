@@ -332,6 +332,15 @@ and row count, and is empty once every stored version has its tree.
 Publication fails if a stored version with parameters is still without a tree
 when it finishes.
 
+`/v2/parameters/children` lists one level with one indexed read:
+`parent_path` names the node ("" for the top level), and
+`reform_changeable=true` keeps only the children a reform can change, sorted
+by label, with child counts that count only those. Without it, children are
+in path order, with a schedule's brackets in bracket order. A node carries
+its child count, a parameter its summary. An unknown parent path has no
+children. A catalog version whose tree has not been written returns 503,
+which means the publication step has not run since the version was stored.
+
 ## Validation evidence and retry
 
 Successful JSON evidence contains:
