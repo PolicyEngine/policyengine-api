@@ -48,9 +48,13 @@ class MetadataResponseCache:
     are kept under the exact version they were read from: a request without a
     version (the running version, fixed for the process) and one naming that
     version share one response. The most recently used ``capacity`` responses
-    are kept. Requests for a response being built wait for that build instead
-    of starting another, and a failed read (a v2 error response) is returned
-    but not kept, so the next request tries again.
+    are kept: the US variables body of the 6.10.0 catalog is 3,910,063 bytes
+    uncompressed, so the default of eight holds about 11 MB for both
+    countries' two whole-version routes at two versions, and at most about
+    31 MB if every entry were that large. Requests for a response being built
+    wait for that build, and its storage, instead of starting another, and a
+    failed read (a v2 error response) is returned but not kept, so the next
+    request tries again.
     """
 
     def __init__(self, *, capacity: int = DEFAULT_RESPONSE_CAPACITY) -> None:
@@ -99,15 +103,19 @@ class MetadataResponseCache:
         with self._lock:
             build_lock = self._build_locks.setdefault(build_key, threading.Lock())
         with build_lock:
-            kept = self._stored(route, country_id, requested_version)
-            if kept is not None:
-                return kept
-            built = build()
-            with self._lock:
-                self._build_locks.pop(build_key, None)
-            if not isinstance(built, BuiltResponse):
-                return built
-            return self._keep(route, country_id, requested_version, built)
+            try:
+                kept = self._stored(route, country_id, requested_version)
+                if kept is not None:
+                    return kept
+                built = build()
+                if not isinstance(built, BuiltResponse):
+                    return built
+                # Stored before the build lock is released, so a request
+                # waiting on it finds the response instead of reading again.
+                return self._keep(route, country_id, requested_version, built)
+            finally:
+                with self._lock:
+                    self._build_locks.pop(build_key, None)
 
     def _keep(
         self,

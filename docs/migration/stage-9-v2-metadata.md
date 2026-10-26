@@ -127,7 +127,9 @@ without that).
 Each API process also keeps the serialized bodies of `/v2/model-catalog` and
 `/v2/model-catalog/variables` once built, each with its `ETag` computed once,
 for up to eight route, country and version combinations (least recently used
-dropped first). A response is kept under the exact version it was read from,
+dropped first; the 6.10.0 US variables body is 3,910,063 bytes uncompressed,
+so eight entries hold about 11 MB for both countries' two routes at two
+versions). A response is kept under the exact version it was read from,
 so a request without `policyengine_version` (the process's running version,
 which never changes while it runs) and one naming that version share it. Only
 the first successful request per process reads the database; concurrent first
