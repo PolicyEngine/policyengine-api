@@ -18,10 +18,10 @@ if TYPE_CHECKING:
         UserPrincipal,
     )
     from policyengine_api.services.v2.policies.types import (
+        CheckedPolicyPage,
+        CheckedPolicyRead,
         NativePolicyCreation,
         NativePolicyCreationInput,
-        PolicyPage,
-        PolicyRead,
     )
     from policyengine_api.services.v2.user_accounts.types import (
         AccountDeletion,
@@ -73,7 +73,7 @@ class V2PolicyResourceService(Protocol):
         """
         ...
 
-    def get_policy(self, *, country_id: str, policy_id: UUID) -> PolicyRead:
+    def get_policy(self, *, country_id: str, policy_id: UUID) -> CheckedPolicyRead:
         """Return one policy of the country with its parameter values.
 
         Raise ``PolicyNotFoundError`` when no such policy exists in that country.
@@ -87,7 +87,7 @@ class V2PolicyResourceService(Protocol):
         tax_benefit_model_id: UUID | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> PolicyPage:
+    ) -> CheckedPolicyPage:
         """Return a page of the country's policies, optionally for one model."""
         ...
 

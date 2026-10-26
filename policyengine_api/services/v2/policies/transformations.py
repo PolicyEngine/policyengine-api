@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import fields as dataclass_fields
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -14,6 +15,7 @@ from policyengine_core.periods import (  # type: ignore[import-untyped]
 
 from policyengine_api.services.v2.policies.types import (
     CanonicalPolicyContent,
+    CheckedPolicyRead,
     LegacyPolicySnapshot,
     LegacyPolicyTranslationReason,
     PolicyCreationInput,
@@ -199,6 +201,19 @@ def policy_missing_parameters(
     return parameters_missing_from_model(
         (value.parameter_name for value in policy.parameter_values),
         running_parameter_names,
+    )
+
+
+def checked_policy_read(
+    policy: PolicyRead, missing_parameters: tuple[str, ...] | None
+) -> CheckedPolicyRead:
+    """Return the policy read with the result of its missing-parameter check."""
+    return CheckedPolicyRead(
+        **{
+            field.name: getattr(policy, field.name)
+            for field in dataclass_fields(PolicyRead)
+        },
+        missing_parameters=missing_parameters,
     )
 
 

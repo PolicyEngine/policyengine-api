@@ -175,9 +175,18 @@ class PolicyRead:
     created_at: datetime
     updated_at: datetime
     parameter_values: tuple[PolicyParameterValueRead, ...]
-    # The parameters the policy sets that the running catalog lacks; None
-    # when there is no catalog for the running PolicyEngine.py version.
-    missing_parameters: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
+class CheckedPolicyRead(PolicyRead):
+    """A stored policy checked against the running catalog, as routes return it.
+
+    ``missing_parameters`` lists the parameter names the policy sets that the
+    running catalog lacks, sorted; it is None only when the running
+    PolicyEngine.py version has no published catalog for the country.
+    """
+
+    missing_parameters: tuple[str, ...] | None
 
 
 @dataclass(frozen=True)
@@ -191,8 +200,18 @@ class PolicyPage:
 
 
 @dataclass(frozen=True)
+class CheckedPolicyPage:
+    """A page of policies, each checked against the running catalog."""
+
+    items: tuple[CheckedPolicyRead, ...]
+    offset: int
+    limit: int
+    has_more: bool
+
+
+@dataclass(frozen=True)
 class NativePolicyCreation:
     """Complete policy read plus whether this request inserted it."""
 
-    item: PolicyRead
+    item: CheckedPolicyRead
     created: bool

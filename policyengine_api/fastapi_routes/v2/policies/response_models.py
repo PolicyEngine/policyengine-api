@@ -11,7 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
 
 if TYPE_CHECKING:
-    from policyengine_api.services.v2.policies.types import PolicyPage, PolicyRead
+    from policyengine_api.services.v2.policies.types import (
+        CheckedPolicyPage,
+        CheckedPolicyRead,
+    )
 
 
 class StrictPolicyAPIModel(BaseModel):
@@ -67,7 +70,7 @@ class PolicyItem(StrictPolicyAPIModel):
     ]
 
     @classmethod
-    def from_read(cls, item: PolicyRead) -> PolicyItem:
+    def from_read(cls, item: CheckedPolicyRead) -> PolicyItem:
         """Build the response item by validating the service read record's fields."""
         return cls.model_validate(item)
 
@@ -91,7 +94,7 @@ class PolicyPageResult(StrictPolicyAPIModel):
     has_more: bool
 
     @classmethod
-    def from_page(cls, page: PolicyPage) -> PolicyPageResult:
+    def from_page(cls, page: CheckedPolicyPage) -> PolicyPageResult:
         """Build the response page from a service page, converting each item."""
         return cls(
             items=[PolicyItem.from_read(item) for item in page.items],

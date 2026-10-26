@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from policyengine_api.constants import POLICYENGINE_VERSION
@@ -29,6 +28,7 @@ from policyengine_api.services.v2.policies.database_connectors.reads import (
 from policyengine_api.services.v2.policies.transformations import (
     canonical_policy_document,
     canonicalize_policy,
+    checked_policy_read,
     policy_missing_parameters,
     policy_page,
     policy_parameter_values_by_policy,
@@ -38,6 +38,8 @@ from policyengine_api.services.v2.policies.transformations import (
 )
 from policyengine_api.services.v2.policies.types import (
     CanonicalPolicyContent,
+    CheckedPolicyPage,
+    CheckedPolicyRead,
     LegacyPolicyPersistenceResult,
     LegacyPolicySnapshot,
     NativePolicyCreation,
@@ -196,7 +198,7 @@ def with_missing_parameters(
     *,
     country_id: str,
     running_policyengine_version: str = POLICYENGINE_VERSION,
-) -> tuple[PolicyRead, ...]:
+) -> tuple[CheckedPolicyRead, ...]:
     """Return the policies with the parameters each sets that the running catalog lacks.
 
     Each policy's ``missing_parameters`` is None when the running PolicyEngine.py
@@ -210,7 +212,7 @@ def with_missing_parameters(
             running_policyengine_version=running_policyengine_version,
         )
     except MetadataCatalogNotPublishedError:
-        return tuple(replace(policy, missing_parameters=None) for policy in policies)
+        return tuple(checked_policy_read(policy, None) for policy in policies)
     running_model_version_id = selected.model_version.id
     names_to_check = {
         value.parameter_name
@@ -222,9 +224,9 @@ def with_missing_parameters(
         session, model_version_id=running_model_version_id, names=names_to_check
     )
     return tuple(
-        replace(
+        checked_policy_read(
             policy,
-            missing_parameters=policy_missing_parameters(
+            policy_missing_parameters(
                 policy,
                 running_model_version_id=running_model_version_id,
                 running_parameter_names=running_parameters,
@@ -372,7 +374,7 @@ class V2PolicyService:
             )
         return NativePolicyCreation(item=checked, created=persisted.created)
 
-    def get_policy(self, *, country_id: str, policy_id: UUID) -> PolicyRead:
+    def get_policy(self, *, country_id: str, policy_id: UUID) -> CheckedPolicyRead:
         """Return one policy of this country, or raise PolicyNotFoundError.
 
         Its ``missing_parameters`` are checked against the running catalog.
@@ -396,7 +398,7 @@ class V2PolicyService:
         tax_benefit_model_id: UUID | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> PolicyPage:
+    ) -> CheckedPolicyPage:
         """Return a page of policies, optionally for one tax-benefit model.
 
         Each policy's ``missing_parameters`` are checked against the running
@@ -416,7 +418,9 @@ class V2PolicyService:
                 country_id=country_id,
                 running_policyengine_version=self._running_policyengine_version,
             )
-        return replace(page, items=items)
+        return CheckedPolicyPage(
+            items=items, offset=page.offset, limit=page.limit, has_more=page.has_more
+        )
 
     def mirror_legacy_policy(
         self, snapshot: LegacyPolicySnapshot

@@ -23,10 +23,10 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
 )
 from policyengine_api.services.v2.policies.types import (
+    CheckedPolicyPage,
+    CheckedPolicyRead,
     NativePolicyCreation,
-    PolicyPage,
     PolicyParameterValueRead,
-    PolicyRead,
 )
 from policyengine_api.services.v2.policies.validators import (
     PolicyCatalogValidationError,
@@ -48,8 +48,8 @@ def _policy_read(
     policy_id: UUID = POLICY_ID,
     country_id: str = "us",
     missing_parameters: tuple[str, ...] | None = (),
-) -> PolicyRead:
-    return PolicyRead(
+) -> CheckedPolicyRead:
+    return CheckedPolicyRead(
         id=policy_id,
         country_id=country_id,
         tax_benefit_model_id=MODEL_ID,
@@ -86,18 +86,18 @@ class FakePolicyService:
         self._raise()
         return NativePolicyCreation(item=_policy_read(), created=self.created)
 
-    def get_policy(self, **filters) -> PolicyRead:
+    def get_policy(self, **filters) -> CheckedPolicyRead:
         self.calls.append(("get_policy", filters))
         self._raise()
         return _policy_read(
             policy_id=filters["policy_id"], missing_parameters=self.missing_parameters
         )
 
-    def list_policies(self, **filters) -> PolicyPage:
+    def list_policies(self, **filters) -> CheckedPolicyPage:
         self.calls.append(("list_policies", filters))
         self._raise()
-        return PolicyPage(
-            items=(_policy_read(),),
+        return CheckedPolicyPage(
+            items=(_policy_read(missing_parameters=self.missing_parameters),),
             offset=filters["offset"],
             limit=filters["limit"],
             has_more=False,
@@ -304,6 +304,19 @@ def test_detail_reports_the_parameters_the_running_model_lacks(
 
     assert response.status_code == 200
     assert response.json()["result"]["item"]["missing_parameters"] == reported
+
+
+def test_list_reports_each_policy_s_missing_parameters() -> None:
+    service = FakePolicyService()
+    service.missing_parameters = ("gov.example.removed_rate",)
+    client, _flask_calls = _client(service)
+
+    response = client.get("/v2/policies?country_id=us")
+
+    assert response.status_code == 200
+    assert [
+        item["missing_parameters"] for item in response.json()["result"]["items"]
+    ] == [["gov.example.removed_rate"]]
 
 
 def test_list_passes_exact_model_filter_and_canonical_pagination() -> None:

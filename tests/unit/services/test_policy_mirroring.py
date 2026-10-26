@@ -141,8 +141,11 @@ def test_failure_is_secret_safe_and_records_cloud_sql_as_only_completed_write(
 
 
 def _catalog_query_failure() -> MetadataCatalogUnavailableError:
-    # Raised without a chained database error: the type alone decides.
-    return MetadataCatalogUnavailableError("the v2 metadata catalog cannot be queried")
+    # As select_catalog raises it, with the database error chained; the type
+    # alone decides the reason, and neither message may reach the log.
+    error = MetadataCatalogUnavailableError("the v2 metadata catalog cannot be queried")
+    error.__cause__ = OperationalError("select secret", {}, Exception("credential"))
+    return error
 
 
 def _translation_failure(

@@ -31,8 +31,10 @@ from policyengine_api.services.v2.policies.database_session import (
 )
 from policyengine_api.services.v2.policies.services import V2PolicyService
 from policyengine_api.services.v2.policies.types import (
+    CheckedPolicyRead,
     NativePolicyCreationInput,
     PolicyCreationResult,
+    PolicyRead,
 )
 from tests.fixtures.recording_session import RecordingSession
 
@@ -239,3 +241,16 @@ def test_created_policy_on_an_earlier_catalog_names_what_the_running_one_lacks(
     )
 
     assert creation.item.missing_parameters == (REMOVED_PARAMETER,)
+
+
+def test_only_a_checked_read_carries_missing_parameters(
+    engine, stored_policies: dict[str, Policy]
+) -> None:
+    # A read that skipped the check cannot be mistaken for "catalog not
+    # published": only the checked type has the field.
+    policy = _service(engine).get_policy(
+        country_id="us", policy_id=stored_policies["running"].id
+    )
+
+    assert isinstance(policy, CheckedPolicyRead)
+    assert "missing_parameters" not in PolicyRead.__dataclass_fields__
