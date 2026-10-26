@@ -448,3 +448,43 @@ def test_an_empty_basic_input_list_is_stored_empty() -> None:
     models["us"].basic_inputs = []
 
     assert _extract(models).country("us").model_version.basic_inputs == ()
+
+
+FORMAT_2_VARIABLE_TEXT_FIELDS = (
+    "module_name",
+    "adds_parameter_path",
+    "subtracts_parameter_path",
+    "unit",
+    "definition_period",
+)
+
+
+def _variable_column_length(field_name: str) -> int:
+    from policyengine_api.data.v2.models import Variable
+
+    return Variable.__table__.c[field_name].type.length
+
+
+def test_variable_text_limits_are_the_variable_column_lengths() -> None:
+    """Extraction checks each format 2 text field against its column's length."""
+    from policyengine_api.data.v2.catalog.extraction import VARIABLE_TEXT_LIMITS
+
+    column_lengths = {
+        field_name: _variable_column_length(field_name)
+        for field_name in FORMAT_2_VARIABLE_TEXT_FIELDS
+    }
+
+    assert column_lengths == VARIABLE_TEXT_LIMITS
+
+
+@pytest.mark.parametrize("field_name", FORMAT_2_VARIABLE_TEXT_FIELDS)
+def test_an_over_long_format_2_text_field_stops_extraction(field_name: str) -> None:
+    length = _variable_column_length(field_name)
+    models = source_models()
+    setattr(models["us"].variables[0], field_name, "x" * (length + 1))
+
+    with pytest.raises(
+        CatalogExtractionError,
+        match=rf"^variable employment_income {field_name} exceeds {length} characters$",
+    ):
+        _extract(models)

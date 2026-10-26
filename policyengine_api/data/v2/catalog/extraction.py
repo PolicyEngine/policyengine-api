@@ -39,6 +39,7 @@ from policyengine_api.data.v2.catalog.region_scoping import (
     filtered_artifacts,
     scope_regions,
 )
+from policyengine_api.data.v2.models import Variable
 
 if TYPE_CHECKING:
     from policyengine_api.json_types import JSONValue
@@ -49,6 +50,29 @@ REQUIRED_DEPENDENCIES = (
     "policyengine-us",
     "policyengine-uk",
 )
+
+
+def _variable_column_length(column_name: str) -> int:
+    """Return the length limit of one text column of the v2 ``variables`` table."""
+    length = getattr(Variable.__table__.c[column_name].type, "length", None)
+    if not isinstance(length, int):
+        msg = f"variables.{column_name} has no length limit"
+        raise TypeError(msg)
+    return length
+
+
+# Catalog format 2's variable text fields, checked against the columns that
+# store them, so the two limits cannot drift apart.
+VARIABLE_TEXT_LIMITS: Mapping[str, int] = {
+    column_name: _variable_column_length(column_name)
+    for column_name in (
+        "module_name",
+        "adds_parameter_path",
+        "subtracts_parameter_path",
+        "unit",
+        "definition_period",
+    )
+}
 CURRENT_LAW_IDS = {"us": 2, "uk": 1}
 METADATA_TIME_PERIODS = {
     "us": tuple(range(2035, 2021, -1)),
@@ -347,28 +371,28 @@ def _normalize_variable(
         module_name=_optional_text(
             getattr(source, "module_name", None),
             field_name=f"variable {name} module_name",
-            maximum=512,
+            maximum=VARIABLE_TEXT_LIMITS["module_name"],
         ),
         adds_parameter_path=_optional_text(
             getattr(source, "adds_parameter_path", None),
             field_name=f"variable {name} adds_parameter_path",
-            maximum=512,
+            maximum=VARIABLE_TEXT_LIMITS["adds_parameter_path"],
         ),
         subtracts_parameter_path=_optional_text(
             getattr(source, "subtracts_parameter_path", None),
             field_name=f"variable {name} subtracts_parameter_path",
-            maximum=512,
+            maximum=VARIABLE_TEXT_LIMITS["subtracts_parameter_path"],
         ),
         enum_values=enum_values,
         unit=_optional_text(
             getattr(source, "unit", None),
             field_name=f"variable {name} unit",
-            maximum=128,
+            maximum=VARIABLE_TEXT_LIMITS["unit"],
         ),
         definition_period=_optional_text(
             getattr(source, "definition_period", None),
             field_name=f"variable {name} definition_period",
-            maximum=32,
+            maximum=VARIABLE_TEXT_LIMITS["definition_period"],
         ),
     )
 
