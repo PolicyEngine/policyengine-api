@@ -1426,6 +1426,8 @@ CATALOG_FORMAT_2_COLUMNS = {
         "adds_parameter_path",
         "subtracts_parameter_path",
         "enum_values",
+        "unit",
+        "definition_period",
     ),
     "parameters": ("economy", "household"),
 }
@@ -1517,7 +1519,7 @@ def test_catalog_format_2_columns_leave_earlier_versions_empty() -> None:
         with engine.connect() as connection:
             assert _format_2_values(connection, version_id) == [
                 (None, None, None),
-                (None, None, None, None, None, None),
+                (None, None, None, None, None, None, None, None),
                 (None, None),
             ]
 

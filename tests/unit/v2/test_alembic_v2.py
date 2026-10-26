@@ -844,6 +844,8 @@ def test_catalog_format_2_revision_adds_only_nullable_columns() -> None:
             "adds_parameter_path",
             "subtracts_parameter_path",
             "enum_values",
+            "unit",
+            "definition_period",
         ),
         "parameters": ("economy", "household"),
     }

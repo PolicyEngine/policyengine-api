@@ -699,6 +699,8 @@ def test_catalog_format_2_columns_are_nullable_for_earlier_versions() -> None:
             "adds_parameter_path": AutoString,
             "subtracts_parameter_path": AutoString,
             "enum_values": sa.JSON,
+            "unit": AutoString,
+            "definition_period": AutoString,
         },
         "parameters": {
             "economy": sa.Boolean,
@@ -721,6 +723,8 @@ def test_catalog_format_2_columns_are_nullable_for_earlier_versions() -> None:
         "subtracts_parameter_path",
     ):
         assert variables.c[column_name].type.length == 512
+    assert variables.c["unit"].type.length == 128
+    assert variables.c["definition_period"].type.length == 32
 
 
 def test_catalog_format_2_json_columns_have_typed_shapes() -> None:

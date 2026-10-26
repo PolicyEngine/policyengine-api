@@ -314,6 +314,10 @@ class Variable(IdentifiedModel, table=True):
     adds_parameter_path: str | None = Field(default=None, max_length=512)
     subtracts_parameter_path: str | None = Field(default=None, max_length=512)
     enum_values: list[CatalogEnumValue] | None = Field(default=None, sa_type=sa.JSON)
+    # The unit (for example ``currency-USD``) and the period a value covers
+    # (``year``, ``month`` or ``eternity``), as the country package declares.
+    unit: str | None = Field(default=None, max_length=128)
+    definition_period: str | None = Field(default=None, max_length=32)
     tax_benefit_model_version_id: UUID = Field(
         foreign_key="tax_benefit_model_versions.id",
         ondelete="CASCADE",
