@@ -71,8 +71,13 @@ def test_extracts_canonical_policyengine_catalog_and_dataset_defaults() -> None:
     } == {
         "uk": "microcosm_uk_2024_25",
         "country/england": "microcosm_uk_2024_25",
+        "country/northern_ireland": "microcosm_uk_2024_25",
         "constituency/E14001063": "microcosm_uk_2024_25_dense",
+        "local_authority/N09000011": "microcosm_uk_2024_25_dense",
     }
+    # UK nations filter the national dataset by design, and constituencies and
+    # local authorities use the dataset the release routes them to.
+    assert uk.fallback_summaries == ()
 
 
 def test_regions_take_labels_from_references_and_filters_from_scoping_rules() -> None:
@@ -137,6 +142,28 @@ def test_regions_take_labels_from_references_and_filters_from_scoping_rules() ->
             "row_filter",
             "constituency_code_oa",
             "E14001063",
+            None,
+            None,
+        ),
+        "country/northern_ireland": (
+            "Northern Ireland",
+            "country",
+            "uk",
+            True,
+            "row_filter",
+            "region",
+            "NORTHERN_IRELAND",
+            None,
+            None,
+        ),
+        "local_authority/N09000011": (
+            "Ards and North Down",
+            "local_authority",
+            "country/northern_ireland",
+            True,
+            "row_filter",
+            "la_code_oa",
+            "N09000011",
             None,
             None,
         ),

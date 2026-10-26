@@ -119,6 +119,12 @@ def _stop_routing_constituencies(
     del models["uk"].release_manifest.region_datasets["constituency"]
 
 
+def _stop_routing_local_authorities(
+    models: dict[str, SimpleNamespace], _references: References
+) -> None:
+    del models["uk"].release_manifest.region_datasets["local_authority"]
+
+
 def _drop_a_filter_value(
     _models: dict[str, SimpleNamespace], references: References
 ) -> None:
@@ -251,6 +257,11 @@ def _remove_every_artifact_repository(
             _stop_routing_constituencies,
             "^the uk release routes no dataset to constituency regions, so region "
             "'constituency/E14001063' cannot select its households$",
+        ),
+        (
+            _stop_routing_local_authorities,
+            "^the uk release routes no dataset to local_authority regions, so region "
+            "'local_authority/N09000011' cannot select its households$",
         ),
         (_drop_a_filter_value, "^region 'state/ca' has no filter value$"),
         (

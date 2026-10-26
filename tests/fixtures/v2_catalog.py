@@ -99,6 +99,26 @@ def region_references() -> dict[str, tuple[RegionReference, ...]]:
                 filter_value="E14001063",
                 v1_code="constituency/Aldershot",
             ),
+            RegionReference(
+                code="country/northern_ireland",
+                label="Northern Ireland",
+                region_type="country",
+                parent_code="uk",
+                state_code=None,
+                state_name=None,
+                filter_value="NORTHERN_IRELAND",
+                v1_code="country/ni",
+            ),
+            RegionReference(
+                code="local_authority/N09000011",
+                label="Ards and North Down",
+                region_type="local_authority",
+                parent_code="country/northern_ireland",
+                state_code=None,
+                state_name=None,
+                filter_value="N09000011",
+                v1_code="local_authority/Ards and North Down",
+            ),
         ),
     }
 
