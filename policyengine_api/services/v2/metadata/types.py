@@ -5,10 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, NamedTuple, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, JsonValue
+
+if TYPE_CHECKING:
+    from policyengine_api.data.v2.models import Parameter
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,30 @@ class ParameterValueSelection:
     parameter_id: UUID | None
     selected_day: datetime | None
     parameter_names: tuple[str, ...] | None = None
+
+
+class CurrentLawValueRow(NamedTuple):
+    """One current-law value of a parameter, read with the parameter's name."""
+
+    name: str
+    value_json: Any
+    start_date: datetime
+    end_date: datetime | None
+
+
+@dataclass(frozen=True)
+class FoundParameters:
+    """The stored parameters a by-name read found, and their names."""
+
+    parameters: list[Parameter]
+    names: set[str]
+
+
+class ParameterNodeLabelRow(NamedTuple):
+    """A parameter node's name and its stored label (None when it has none)."""
+
+    name: str
+    label: str | None
 
 
 class StrictResponseModel(BaseModel):

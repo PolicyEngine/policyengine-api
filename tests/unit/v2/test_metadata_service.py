@@ -39,10 +39,12 @@ from policyengine_api.services.v2.metadata.selected_catalogs import (
 from policyengine_api.services.v2.metadata.services import V2MetadataService
 from policyengine_api.services.v2.metadata.transformations import ancestor_paths
 from policyengine_api.services.v2.metadata.types import (
+    CurrentLawValueRow,
     MetadataDatedValue,
     MetadataEntity,
     MetadataEnumValue,
     ParameterFilter,
+    ParameterNodeLabelRow,
     ParameterValueFilter,
 )
 from policyengine_api.services.v2.metadata.validators import (
@@ -1083,6 +1085,36 @@ def test_each_country_and_version_keeps_its_own_selection(
     assert named_us.model_version.current_law_id == 7
     assert running_uk.model.name == "policyengine-uk"
     assert service.get_model_by_country("us", "9.9.9") == named_us
+
+
+def test_value_and_node_label_reads_return_typed_rows(
+    catalog_session: Session,
+) -> None:
+    from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_nodes import (  # noqa: E501
+        read_parameter_node_labels,
+    )
+    from policyengine_api.services.v2.metadata.database_connectors.reads_parameters import (  # noqa: E501
+        read_current_law_values_by_parameter_name,
+    )
+
+    model_version = _us_model_version(catalog_session)
+    values = read_current_law_values_by_parameter_name(
+        catalog_session,
+        model_version_id=model_version.id,
+        parameter_names={"gov.example.rate"},
+    )
+    labels = read_parameter_node_labels(
+        catalog_session,
+        model_version_id=model_version.id,
+        node_names={"gov.example", "gov.absent"},
+    )
+
+    assert [type(row) for row in values] == [CurrentLawValueRow, CurrentLawValueRow]
+    assert [(row.name, row.value_json) for row in values] == [
+        ("gov.example.rate", 0.1),
+        ("gov.example.rate", 0.2),
+    ]
+    assert labels == [ParameterNodeLabelRow(name="gov.example", label="Example policy")]
 
 
 def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:

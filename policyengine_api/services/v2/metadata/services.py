@@ -55,11 +55,13 @@ from policyengine_api.services.v2.metadata.transformations import (
     metadata_parameter_value,
     metadata_region,
     metadata_variable,
+    national_region,
     page_result,
     parameter_value_selection,
     part_parameter_paths,
 )
 from policyengine_api.services.v2.metadata.types import (
+    FoundParameters,
     MetadataCanonicalParameterValue,
     MetadataCatalogParametersResult,
     MetadataCatalogVariablesResult,
@@ -85,9 +87,10 @@ from policyengine_api.services.v2.metadata.validators import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from uuid import UUID
 
+    from policyengine_api.data.v2.models import Dataset, Region
     from policyengine_api.services.v2.metadata.database_session import (
         MetadataDatabaseSession,
     )
@@ -554,27 +557,17 @@ class V2MetadataService:
         region, its default input dataset, the current-law id or the years.
         """
         selected = self._select_catalog(country_id, policyengine_version)
-        regions = read_regions(
-            self._database_session.session,
-            model_version_id=selected.model_version.id,
-        )
-        national_region = next(
-            (region for region in regions if region.code == country_id), None
-        )
-        national_dataset = (
-            read_input_dataset(
-                self._database_session.session,
-                model_version_id=selected.model_version.id,
-                dataset_id=national_region.default_dataset_id,
-            )
-            if national_region is not None
-            else None
-        )
-        dataset = validate_economy_options(
+        session = self._database_session.session
+        regions = read_regions(session, model_version_id=selected.model_version.id)
+        dataset = _validated_national_dataset(
             selected,
             country_id=country_id,
             regions=regions,
-            national_dataset=national_dataset,
+            find_dataset=lambda dataset_id: read_input_dataset(
+                session,
+                model_version_id=selected.model_version.id,
+                dataset_id=dataset_id,
+            ),
         )
         return metadata_economy_options(
             selected, regions=regions, national_dataset=dataset
@@ -598,28 +591,19 @@ class V2MetadataService:
         datasets = read_input_datasets(
             session, model_version_id=selected.model_version.id
         )
-        national_dataset = None
-        if regions:
-            national_region = next(
-                (region for region in regions if region.code == country_id), None
-            )
-            national_dataset = validate_economy_options(
+        national_dataset = (
+            _validated_national_dataset(
                 selected,
                 country_id=country_id,
                 regions=regions,
-                national_dataset=(
-                    next(
-                        (
-                            dataset
-                            for dataset in datasets
-                            if dataset.id == national_region.default_dataset_id
-                        ),
-                        None,
-                    )
-                    if national_region is not None
-                    else None
+                find_dataset=lambda dataset_id: next(
+                    (dataset for dataset in datasets if dataset.id == dataset_id),
+                    None,
                 ),
             )
+            if regions
+            else None
+        )
         return metadata_model_catalog(
             selected,
             regions=regions,
@@ -640,13 +624,17 @@ class V2MetadataService:
         variables = read_all_variables(
             session, model_version_id=selected.model_version.id
         )
+        part_paths = part_parameter_paths(variables)
         part_values = read_current_law_values_by_parameter_name(
             session,
             model_version_id=selected.model_version.id,
-            parameter_names=part_parameter_paths(variables),
+            parameter_names=part_paths,
         )
         return metadata_catalog_variables(
-            selected, variables=variables, part_values=part_values
+            selected,
+            variables=variables,
+            part_paths=part_paths,
+            part_values=part_values,
         )
 
     def get_catalog_parameters(
@@ -669,21 +657,52 @@ class V2MetadataService:
         parameters = read_parameters_by_name(
             session, model_version_id=model_version_id, parameter_names=requested_names
         )
-        found_names = {parameter.name for parameter in parameters}
+        found_parameters = FoundParameters(
+            parameters=parameters,
+            names={parameter.name for parameter in parameters},
+        )
         value_rows = read_current_law_values_by_parameter_name(
-            session, model_version_id=model_version_id, parameter_names=found_names
+            session,
+            model_version_id=model_version_id,
+            parameter_names=found_parameters.names,
         )
         node_rows = read_parameter_node_labels(
             session,
             model_version_id=model_version_id,
             node_names={
-                ancestor for name in found_names for ancestor in ancestor_paths(name)
+                ancestor
+                for name in found_parameters.names
+                for ancestor in ancestor_paths(name)
             },
         )
         return metadata_catalog_parameters(
             selected,
             requested_names=requested_names,
-            parameters=parameters,
+            found_parameters=found_parameters,
             value_rows=value_rows,
             node_rows=node_rows,
         )
+
+
+def _validated_national_dataset(
+    selected: SelectedCatalog,
+    *,
+    country_id: str,
+    regions: list[Region],
+    find_dataset: Callable[[UUID], Dataset | None],
+) -> Dataset:
+    """Return the national region's default dataset, validated for economy choices.
+
+    find_dataset loads a dataset of the selected version by id. Raise
+    MetadataCatalogUnavailableError when the national region, its dataset or
+    the model-version options are missing.
+    """
+    region = national_region(regions, country_id)
+    return validate_economy_options(
+        selected,
+        country_id=country_id,
+        regions=regions,
+        national_dataset=(
+            None if region is None else find_dataset(region.default_dataset_id)
+        ),
+    )

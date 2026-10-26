@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from policyengine_api.dataset_display import get_dataset_display_label
 from policyengine_api.services.v2.metadata.types import (
+    CurrentLawValueRow,
+    FoundParameters,
     MetadataCanonicalParameterValue,
     MetadataCatalogParameter,
     MetadataCatalogParametersResult,
@@ -30,6 +32,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataRegionType,
     MetadataTimePeriodOption,
     MetadataVariable,
+    ParameterNodeLabelRow,
     ParameterValueSelection,
 )
 
@@ -138,16 +141,20 @@ def part_parameter_paths(variables: list[Variable]) -> set[str]:
 
 
 def metadata_catalog_variables(
-    selected: SelectedCatalog, *, variables: list[Variable], part_values: list[Any]
+    selected: SelectedCatalog,
+    *,
+    variables: list[Variable],
+    part_paths: set[str],
+    part_values: list[CurrentLawValueRow],
 ) -> MetadataCatalogVariablesResult:
     """Build every variable of the selected version and its part parameters' values.
 
-    part_values holds rows of read_current_law_values_by_parameter_name, in
-    parameter-name and start-date order. Each path a variable names gets an
-    entry, empty when no row carries its name.
+    part_paths holds part_parameter_paths of the variables, and part_values the
+    current-law values of those parameters in name and start-date order. Each
+    path gets an entry, empty when no value carries its name.
     """
     values_by_path = _dated_values_by_parameter_name(
-        part_values, parameter_names=part_parameter_paths(variables)
+        part_values, parameter_names=part_paths
     )
     return MetadataCatalogVariablesResult(
         policyengine_version=selected.policyengine_version,
@@ -158,12 +165,11 @@ def metadata_catalog_variables(
 
 
 def _dated_values_by_parameter_name(
-    value_rows: list[Any], *, parameter_names: set[str]
+    value_rows: list[CurrentLawValueRow], *, parameter_names: set[str]
 ) -> dict[str, list[MetadataDatedValue]]:
     """Group value rows by parameter name, with an empty list for each other name.
 
-    value_rows holds rows of read_current_law_values_by_parameter_name, in
-    parameter-name and start-date order.
+    value_rows are in parameter-name and start-date order.
     """
     values_by_name: dict[str, list[MetadataDatedValue]] = {
         name: [] for name in sorted(parameter_names)
@@ -211,19 +217,20 @@ def metadata_catalog_parameters(
     selected: SelectedCatalog,
     *,
     requested_names: set[str],
-    parameters: list[Parameter],
-    value_rows: list[Any],
-    node_rows: list[Any],
+    found_parameters: FoundParameters,
+    value_rows: list[CurrentLawValueRow],
+    node_rows: list[ParameterNodeLabelRow],
 ) -> MetadataCatalogParametersResult:
     """Build the requested parameters with their values and ancestor labels.
 
-    value_rows holds rows of read_current_law_values_by_parameter_name and
-    node_rows rows of read_parameter_node_labels.
+    value_rows are the found parameters' current-law values and node_rows the
+    stored labels of their ancestor nodes.
     """
+    parameters = found_parameters.parameters
+    found_names = found_parameters.names
     values_by_name = _dated_values_by_parameter_name(
-        value_rows, parameter_names={parameter.name for parameter in parameters}
+        value_rows, parameter_names=found_names
     )
-    found_names = {parameter.name for parameter in parameters}
     return MetadataCatalogParametersResult(
         policyengine_version=selected.policyengine_version,
         catalog_format=selected.model_version.catalog_format,
@@ -346,6 +353,11 @@ def metadata_parameter_children(rows: list[Any]) -> list[MetadataParameterChild]
             )
         )
     return items
+
+
+def national_region(regions: list[Region], country_id: str) -> Region | None:
+    """Return the country's national region (its code is the country ID), or None."""
+    return next((region for region in regions if region.code == country_id), None)
 
 
 def metadata_economy_options(
