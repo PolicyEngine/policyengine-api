@@ -54,9 +54,12 @@ PARAMETERS = Parameter.__table__
 PARAMETER_TREE_CHILDREN = ParameterTreeChild.__table__
 
 
-def _stored_version_id(connection: Connection, country: CountryCatalog) -> UUID:
-    return connection.execute(
-        sa.select(MODEL_VERSIONS.c.id)
+def _stored_version(
+    connection: Connection, country: CountryCatalog
+) -> tuple[UUID, int | None]:
+    """Return the stored version's ID and catalog format (None before format 2)."""
+    row = connection.execute(
+        sa.select(MODEL_VERSIONS.c.id, MODEL_VERSIONS.c.catalog_format)
         .select_from(
             MODEL_VERSIONS.join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
         )
@@ -64,7 +67,8 @@ def _stored_version_id(connection: Connection, country: CountryCatalog) -> UUID:
             MODELS.c.name == country.model.name,
             MODEL_VERSIONS.c.version == country.model_version.version,
         )
-    ).scalar_one()
+    ).one()
+    return row.id, row.catalog_format
 
 
 def _has_tree(connection: Connection, version_id: UUID) -> bool:
@@ -90,9 +94,14 @@ def _stored_parameter_ids(connection: Connection, version_id: UUID) -> dict[str,
     }
 
 
-def _catalog_tree(
+def catalog_parameter_tree(
     country: CountryCatalog, stored_parameter_ids: dict[str, UUID]
 ) -> tuple[ParameterTreeChildRow, ...]:
+    """Build a country version's tree from its catalog records.
+
+    Each parameter row references the stored parameter of the same name;
+    raise CatalogPublicationError if a catalog parameter has no stored row.
+    """
     missing = [
         parameter.name
         for parameter in country.parameters
@@ -154,16 +163,20 @@ def write_parameter_trees(
 ) -> tuple[tuple[str, str, int], ...]:
     """Write the tree of each catalog country's stored version that has none.
 
-    Returns the model name, version and number of rows written for each
+    A version stored before catalog format 2 gets none: its parameter rows
+    store no flags, so a tree built with the catalog's flags would not match
+    them. Returns the model name, version and number of rows written for each
     version, in model name order. Runs inside publication's transaction and
     advisory lock, after the countries' versions are stored and checked.
     """
     written = []
     for country in countries:
-        version_id = _stored_version_id(connection, country)
-        if _has_tree(connection, version_id):
+        version_id, catalog_format = _stored_version(connection, country)
+        if catalog_format is None or _has_tree(connection, version_id):
             continue
-        rows = _catalog_tree(country, _stored_parameter_ids(connection, version_id))
+        rows = catalog_parameter_tree(
+            country, _stored_parameter_ids(connection, version_id)
+        )
         count = copy_rows(
             connection,
             table=PARAMETER_TREE_CHILDREN,
@@ -177,9 +190,13 @@ def assert_parameter_trees_written(
     connection: Connection,
     countries: Sequence[CountryCatalog],
 ) -> None:
-    """Raise CatalogPublicationError if a catalog country's version has no tree."""
+    """Raise CatalogPublicationError if a catalog country's version has no tree.
+
+    Versions stored before catalog format 2 are exempt: they get no tree.
+    """
     for country in countries:
-        if not _has_tree(connection, _stored_version_id(connection, country)):
+        version_id, catalog_format = _stored_version(connection, country)
+        if catalog_format is not None and not _has_tree(connection, version_id):
             msg = (
                 f"the {country.country_id} catalog version "
                 f"{country.model_version.version} has no parameter tree"

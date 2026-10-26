@@ -942,6 +942,31 @@ def test_publication_gives_the_installed_stored_version_its_tree(
     assert _identifiers(publication_engine) == before_ids
 
 
+def test_an_installed_version_stored_before_format_2_gets_no_tree(
+    publication_engine: Engine,
+) -> None:
+    """A version stored before catalog format 2 stores no flags, so no tree.
+
+    Its tree would carry the installed catalog's flags, which its own
+    parameter rows do not store; it keeps returning the clear 503 instead, and
+    publication still succeeds.
+    """
+    catalog = normalized_catalog()
+    current_version = catalog.country("us").model_version.version
+    publish_catalog(publication_engine, catalog)
+    _clear_format_2_fields(publication_engine)
+    _delete_tree(publication_engine, current_version)
+
+    evidence = publish_catalog(publication_engine, catalog)
+
+    assert evidence.as_dict()["outcome"] == "ok"
+    assert evidence.parameter_trees_written == ()
+    for country in catalog.countries:
+        assert (
+            _stored_tree(publication_engine, country.model.name, current_version) == []
+        )
+
+
 def test_publication_writes_no_tree_for_another_version_stored_without_one(
     publication_engine: Engine,
 ) -> None:
