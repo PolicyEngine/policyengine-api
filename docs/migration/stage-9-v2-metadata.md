@@ -48,8 +48,9 @@ version in name order, in one response, with the catalog format 2 fields:
 `subtracts_parameter_path`, `enum_values` (each value's name and its label,
 in the type the country package declares), `unit` (for example
 `currency-USD`) and `definition_period` (`year`, `month` or `eternity`), which
-the household builder uses for formatting and per-period labels. Where a variable's `adds` or
-`subtracts` list comes from a parameter, `part_parameter_values` maps that
+the household builder and breakdown read (currency formatting, per-period
+labels and household validation). Where a variable's `adds` or `subtracts` list
+comes from a parameter, `part_parameter_values` maps that
 parameter's path to its current-law values in start-date order
 (`start_date`, `end_date`, `value`), so a client picks the list for the year
 it shows instead of the list resolved on 2025-01-01; a path whose parameter
