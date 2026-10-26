@@ -61,6 +61,19 @@ def _default_mirror_factory() -> LegacyPolicyMirror:
     return V2PolicyService(PolicyDatabaseSession(get_v2_session_factory()))
 
 
+class PolicyCopyFailureCategory(StrEnum):
+    """The broad kinds of failed copy, as a copy record's ``failure_category``."""
+
+    CONFIGURATION = "configuration"
+    CATALOG_OR_TRANSLATION = "catalog_or_translation"
+    INTEGRITY = "integrity"
+    DATABASE = "database"
+    UNEXPECTED = "unexpected"
+    # The route logs these when no copy could be attempted.
+    MISSING_MIRROR_SNAPSHOT = "missing_mirror_snapshot"
+    MISSING_MIRROR_REVISION = "missing_mirror_revision"
+
+
 class PolicyCopyFailureReason(StrEnum):
     """Fixed reason codes that failed policy and saved-policy copies log.
 
@@ -89,8 +102,22 @@ class PolicyCopyFailureReason(StrEnum):
 class PolicyCopyFailure:
     """How a failed copy is logged: a broad category and a fixed reason."""
 
-    category: str
+    category: PolicyCopyFailureCategory
     reason: PolicyCopyFailureReason | LegacyPolicyTranslationReason
+
+
+# What the route logs when it commits a v1 write but cannot attempt a copy.
+MISSING_MIRROR_SNAPSHOT_FAILURE = PolicyCopyFailure(
+    PolicyCopyFailureCategory.MISSING_MIRROR_SNAPSHOT,
+    PolicyCopyFailureReason.MISSING_MIRROR_SNAPSHOT,
+)
+MISSING_MIRROR_REVISION_FAILURE = PolicyCopyFailure(
+    PolicyCopyFailureCategory.MISSING_MIRROR_REVISION,
+    PolicyCopyFailureReason.MISSING_MIRROR_REVISION,
+)
+UNEXPECTED_FAILURE = PolicyCopyFailure(
+    PolicyCopyFailureCategory.UNEXPECTED, PolicyCopyFailureReason.UNEXPECTED
+)
 
 
 # Checked in order, so the hash collision is matched before its integrity base
@@ -98,36 +125,51 @@ class PolicyCopyFailure:
 _FAILURES_BY_ERROR_TYPE: tuple[tuple[type[Exception], PolicyCopyFailure], ...] = (
     (
         V2ConfigurationError,
-        PolicyCopyFailure("configuration", PolicyCopyFailureReason.CONFIGURATION),
+        PolicyCopyFailure(
+            PolicyCopyFailureCategory.CONFIGURATION,
+            PolicyCopyFailureReason.CONFIGURATION,
+        ),
     ),
     (
         MetadataCatalogVersionNotFoundError,
         PolicyCopyFailure(
-            "catalog_or_translation",
+            PolicyCopyFailureCategory.CATALOG_OR_TRANSLATION,
             PolicyCopyFailureReason.CATALOG_VERSION_NOT_FOUND,
         ),
     ),
     (
         PolicyCatalogValidationError,
         PolicyCopyFailure(
-            "catalog_or_translation", PolicyCopyFailureReason.CATALOG_MISMATCH
+            PolicyCopyFailureCategory.CATALOG_OR_TRANSLATION,
+            PolicyCopyFailureReason.CATALOG_MISMATCH,
         ),
     ),
     (
         LegacyPolicyMappingIntegrityError,
-        PolicyCopyFailure("integrity", PolicyCopyFailureReason.MAPPING_CONFLICT),
+        PolicyCopyFailure(
+            PolicyCopyFailureCategory.INTEGRITY,
+            PolicyCopyFailureReason.MAPPING_CONFLICT,
+        ),
     ),
     (
         PolicyContentHashCollisionError,
-        PolicyCopyFailure("integrity", PolicyCopyFailureReason.CONTENT_HASH_COLLISION),
+        PolicyCopyFailure(
+            PolicyCopyFailureCategory.INTEGRITY,
+            PolicyCopyFailureReason.CONTENT_HASH_COLLISION,
+        ),
     ),
     (
         PolicyCreationIntegrityError,
-        PolicyCopyFailure("integrity", PolicyCopyFailureReason.STORED_POLICY_INTEGRITY),
+        PolicyCopyFailure(
+            PolicyCopyFailureCategory.INTEGRITY,
+            PolicyCopyFailureReason.STORED_POLICY_INTEGRITY,
+        ),
     ),
     (
         SQLAlchemyError,
-        PolicyCopyFailure("database", PolicyCopyFailureReason.DATABASE_ERROR),
+        PolicyCopyFailure(
+            PolicyCopyFailureCategory.DATABASE, PolicyCopyFailureReason.DATABASE_ERROR
+        ),
     ),
 )
 
@@ -139,18 +181,22 @@ def classify_policy_copy_failure(error: Exception) -> PolicyCopyFailure:
     its fixed reason, so a log record never holds policy content or error text.
     """
     if isinstance(error, LegacyPolicyTranslationError):
-        return PolicyCopyFailure("catalog_or_translation", error.reason)
+        return PolicyCopyFailure(
+            PolicyCopyFailureCategory.CATALOG_OR_TRANSLATION, error.reason
+        )
     if isinstance(error, MetadataCatalogUnavailableError):
         reason = (
             PolicyCopyFailureReason.CATALOG_QUERY_FAILED
             if isinstance(error.__cause__, SQLAlchemyError)
             else PolicyCopyFailureReason.CATALOG_ABSENT
         )
-        return PolicyCopyFailure("catalog_or_translation", reason)
+        return PolicyCopyFailure(
+            PolicyCopyFailureCategory.CATALOG_OR_TRANSLATION, reason
+        )
     for error_type, failure in _FAILURES_BY_ERROR_TYPE:
         if isinstance(error, error_type):
             return failure
-    return PolicyCopyFailure("unexpected", PolicyCopyFailureReason.UNEXPECTED)
+    return UNEXPECTED_FAILURE
 
 
 @dataclass(frozen=True)
@@ -191,7 +237,7 @@ def _log_mirror_event(
                     else None
                 ),
                 "outcome": mirror_outcome.outcome,
-                "failure_category": failure.category if failure else None,
+                "failure_category": failure.category.value if failure else None,
                 "failure_reason": failure.reason.value if failure else None,
                 "policy_created": mirror_outcome.policy_created,
                 "mapping_created": mirror_outcome.mapping_created,

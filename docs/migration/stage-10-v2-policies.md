@@ -154,7 +154,10 @@ saved policy replays it, with earlier retained events first. A core policy
 whose copy failed is copied again the next time any request writes the same
 policy. A core policy that already has a copy returns that copy without being
 translated again, so writing it again after a PolicyEngine.py or country
-package upgrade does not fail. Destination revision and fingerprint checks make a replay safe if
+package upgrade does not fail. When two first copies of the same v1 policy run
+at once on revisions with different PolicyEngine.py versions, the mapping
+committed first is the copy; the other request's v2 policy commits without a
+mapping and its record reports `policy_created=false`. Destination revision and fingerprint checks make a replay safe if
 Supabase committed but the Cloud SQL processing marker did not. There is no
 background processor or reconciliation process.
 

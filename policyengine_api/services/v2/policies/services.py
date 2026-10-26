@@ -262,7 +262,10 @@ def mirror_legacy_policy_in_session(
         raise LegacyPolicyMappingIntegrityError(msg)
     # A concurrent copy mapped the policy first. As with a mapping found at the
     # start, the same source hash makes its v2 policy the copy, even when it was
-    # translated with another catalog version than this one.
+    # translated with another catalog version than this one. If this copy's
+    # translation differed, the v2 policy it inserted commits without a mapping,
+    # and the result's policy_created is false because it reports the mapped
+    # policy, not that one.
     verify_legacy_policy_mapping(
         concurrent, source_policy_hash=snapshot.source_policy_hash
     )

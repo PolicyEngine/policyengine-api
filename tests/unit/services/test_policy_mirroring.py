@@ -15,7 +15,10 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
 )
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.services.policy_mirroring import (
+    PolicyCopyFailureCategory,
+    PolicyCopyFailureReason,
     PolicyMirrorUnavailableError,
+    classify_policy_copy_failure,
     mirror_policy_after_commit,
 )
 from policyengine_api.services.v2.policies.types import (
@@ -244,3 +247,23 @@ def test_each_failed_copy_logs_a_fixed_reason_with_its_category(
     assert type(payload["failure_reason"]) is str
     assert "secret" not in repr(payload)
     assert "credential" not in repr(payload)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        V2ConfigurationError("secret url"),
+        MetadataCatalogUnavailableError("catalog absent"),
+        _translation_failure(LegacyPolicyTranslationReason.MISSING_PARAMETERS),
+        LegacyPolicyMappingIntegrityError("secret"),
+        PoolTimeoutError("pool timeout"),
+        RuntimeError("policy content secret"),
+    ],
+)
+def test_failure_category_and_reason_come_from_fixed_sets(error: Exception) -> None:
+    failure = classify_policy_copy_failure(error)
+
+    assert isinstance(failure.category, PolicyCopyFailureCategory)
+    assert isinstance(
+        failure.reason, (PolicyCopyFailureReason, LegacyPolicyTranslationReason)
+    )

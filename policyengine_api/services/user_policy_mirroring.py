@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Protocol
 from policyengine_api.gcp_logging import logger
 from policyengine_api.services.policy_mirroring import (
     PolicyCopyFailure,
+    PolicyCopyFailureCategory,
     PolicyCopyFailureReason,
     classify_policy_copy_failure,
 )
@@ -70,11 +71,13 @@ def _default_mirror_factory() -> LegacyUserPolicyMirror:
 def _classify_failure(error: Exception) -> PolicyCopyFailure:
     if isinstance(error, LegacyUserPolicyIntegrityError):
         return PolicyCopyFailure(
-            "integrity", PolicyCopyFailureReason.SAVED_POLICY_INTEGRITY
+            PolicyCopyFailureCategory.INTEGRITY,
+            PolicyCopyFailureReason.SAVED_POLICY_INTEGRITY,
         )
     if isinstance(error, ReformPolicyUnavailableError):
         return PolicyCopyFailure(
-            "unexpected", PolicyCopyFailureReason.MISSING_REFORM_POLICY
+            PolicyCopyFailureCategory.UNEXPECTED,
+            PolicyCopyFailureReason.MISSING_REFORM_POLICY,
         )
     return classify_policy_copy_failure(error)
 
@@ -143,7 +146,7 @@ def _log_mirror_operation(
                     str(result.policy_id) if result is not None else None
                 ),
                 "outcome": mirror_outcome.outcome,
-                "failure_category": failure.category if failure else None,
+                "failure_category": failure.category.value if failure else None,
                 "failure_reason": failure.reason.value if failure else None,
                 "association_created": (
                     result.association_created if result is not None else None
