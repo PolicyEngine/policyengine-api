@@ -1386,3 +1386,38 @@ def test_openapi_declares_caching_headers_and_not_modified_responses() -> None:
         assert "content" not in responses["304"]
         assert "policyengine_version" not in responses["400"]["description"]
         assert "path" in responses["400"]["description"]
+
+
+def _vary_value_counts(response) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in response.headers.get("vary", "").split(","):
+        if value.strip():
+            counts[value.strip().lower()] = counts.get(value.strip().lower(), 0) + 1
+    return counts
+
+
+@pytest.mark.parametrize("origin", [None, "https://app.policyengine.org"])
+def test_cacheable_responses_and_their_304_carry_the_same_vary_once_each(
+    origin: str | None,
+) -> None:
+    # Through the whole middleware stack (gzip, then CORS): a 304 must carry
+    # the Vary its 200 would, and each value appears once.
+    results, _ids = _resource_results()
+    client = _client(lambda: ResourceReader(results))
+    headers = {"Accept-Encoding": "gzip"}
+    if origin is not None:
+        headers["Origin"] = origin
+
+    small = client.get("/v2/tax-benefit-models?country_id=us", headers=headers)
+    compressed = client.get("/v2/model-catalog?country_id=us", headers=headers)
+    not_modified = client.get(
+        "/v2/model-catalog?country_id=us",
+        headers={**headers, "If-None-Match": compressed.headers["etag"]},
+    )
+
+    assert compressed.headers.get("content-encoding") == "gzip"
+    assert not_modified.status_code == 304
+    expected = {"origin": 1, "accept-encoding": 1}
+    assert _vary_value_counts(small) == expected
+    assert _vary_value_counts(compressed) == expected
+    assert _vary_value_counts(not_modified) == expected

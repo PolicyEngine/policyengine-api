@@ -34,6 +34,7 @@ from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
 )
+from policyengine_api.vary_headers import unique_vary_values
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -96,7 +97,10 @@ CACHE_HEADER_DESCRIPTIONS: dict[str, dict[str, Any]] = {
         "schema": {"type": "string"},
     },
     "Vary": {
-        "description": "Includes Origin, so caches keep responses apart by origin.",
+        "description": (
+            "Origin, Accept-Encoding: caches keep responses apart by origin "
+            "and by compression; a 304 carries the same value."
+        ),
         "schema": {"type": "string"},
     },
 }
@@ -206,7 +210,7 @@ def with_cache_headers(request: Request, response: Response) -> Response:
     running version for five minutes, and one whose route read for a UTC day
     (``UTC_DAY_READ``) no later than the midnight after that day. Every such
     response, and the 304 a request whose ``If-None-Match`` names the ETag
-    gets instead, varies by ``Origin``.
+    gets instead, varies by ``Origin`` and ``Accept-Encoding``.
     """
     entity_tag = response.headers.get("etag") or body_entity_tag(response.body)
     max_age = (
@@ -220,25 +224,30 @@ def with_cache_headers(request: Request, response: Response) -> Response:
     headers = {"Cache-Control": f"public, max-age={max_age}", "ETag": entity_tag}
     if _names_entity_tag(request.headers.get("if-none-match"), entity_tag):
         not_modified = Response(status_code=304, headers=headers)
-        not_modified.headers["Vary"] = _vary_with_origin(None)
+        not_modified.headers["Vary"] = _cacheable_vary(None)
         return not_modified
     response.headers.update(headers)
-    response.headers["Vary"] = _vary_with_origin(response.headers.get("vary"))
+    response.headers["Vary"] = _cacheable_vary(response.headers.get("vary"))
     return response
 
 
-def _vary_with_origin(existing: str | None) -> str:
-    """Return a Vary value that keeps ``existing`` and names Origin once.
+CACHEABLE_VARY_VALUES = ("Origin", "Accept-Encoding")
+"""What every cacheable metadata response, and its 304, varies by.
 
-    The API reflects every origin in Access-Control-Allow-Origin, and a request
-    without Origin gets no such header, so a shared cache must store responses
-    per Origin value or it could serve one to a cross-origin request that the
-    browser then rejects.
+The API reflects every origin in Access-Control-Allow-Origin, and a request
+without Origin gets no such header, so a shared cache must keep responses
+apart by Origin; gzip compresses the body for clients that accept it. A 304
+carries the Vary its 200 would.
+"""
+
+
+def _cacheable_vary(existing: str | None) -> str:
+    """Return ``existing`` with Origin and Accept-Encoding added if absent.
+
+    The CORS and gzip middleware may append them again; the application's
+    outermost middleware (UniqueVaryMiddleware) then lists each value once.
     """
-    values = [value.strip() for value in (existing or "").split(",") if value.strip()]
-    if not any(value.lower() == "origin" for value in values):
-        values.append("Origin")
-    return ", ".join(values)
+    return unique_vary_values(", ".join([existing or "", *CACHEABLE_VARY_VALUES]))
 
 
 def _names_entity_tag(if_none_match: str | None, entity_tag: str) -> bool:
