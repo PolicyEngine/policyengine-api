@@ -784,7 +784,7 @@ def _process_metadata_response_cache() -> MetadataResponseCache:
 
 def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     from policyengine_api.data.v2.database import (
-        get_v2_session_factory,
+        get_v2_read_session_factory,
     )
     from policyengine_api.services.v2.metadata.database_session import (
         MetadataDatabaseSession,
@@ -792,7 +792,7 @@ def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     from policyengine_api.services.v2.metadata.services import V2MetadataService
 
     return V2MetadataService(
-        MetadataDatabaseSession(get_v2_session_factory()()),
+        MetadataDatabaseSession(get_v2_read_session_factory()()),
         running_policyengine_version=_running_policyengine_version(),
     )
 

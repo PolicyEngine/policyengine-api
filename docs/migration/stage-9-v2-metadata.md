@@ -75,6 +75,18 @@ an unsupported `country_id` and a malformed `policyengine_version` are
 rejected with HTTP 422 before any read; before, the last two returned HTTP 400
 from the read and unknown parameters were ignored.
 
+## Database round trips per request
+
+Metadata reads use read-only sessions in autocommit mode on the shared v2
+pool (`get_v2_read_session_factory`): each read is one statement on rows a
+published catalog version never changes, so no transaction is needed, and the
+database receives no `BEGIN` before the reads and no `ROLLBACK` when the
+session closes. Measured with statement logging in a local database, a page of
+500 parameters or one parameter's values took five statements per request
+before (the pool's liveness check, `BEGIN`, the catalog selection, the read
+and `ROLLBACK`) and three after. The pool's liveness check
+(`pool_pre_ping`) is unchanged.
+
 ## Response caching
 
 Every successful metadata response carries a strong `ETag`, a hash of its

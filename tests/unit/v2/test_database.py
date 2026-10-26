@@ -125,3 +125,26 @@ def test_forked_process_state_builds_a_new_engine(
 
     assert child_engine is not parent_engine
     assert database._engine_state.engine_pid == parent_pid + 1
+
+
+def test_read_sessions_share_the_runtime_pool_without_transactions() -> None:
+    settings = load_v2_runtime_database_settings(_environment())
+
+    read_factory = database.get_v2_read_session_factory(settings)
+    runtime_engine = database.get_v2_engine(settings)
+
+    with read_factory() as session:
+        bind = session.get_bind()
+        assert bind.get_execution_options()["isolation_level"] == "AUTOCOMMIT"
+        assert bind.pool is runtime_engine.pool
+    assert database.get_v2_read_session_factory(settings) is read_factory
+    assert runtime_engine.get_execution_options().get("isolation_level") is None
+
+
+def test_read_session_factory_is_rebuilt_with_the_engine() -> None:
+    settings = load_v2_runtime_database_settings(_environment())
+    first = database.get_v2_read_session_factory(settings)
+
+    database.close_v2_database()
+
+    assert database.get_v2_read_session_factory(settings) is not first

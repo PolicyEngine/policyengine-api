@@ -517,7 +517,9 @@ def test_default_reader_uses_the_installed_policyengine_version(
         captured["version"] = running_policyengine_version
         return reader
 
-    monkeypatch.setattr(database, "get_v2_session_factory", lambda: lambda: session)
+    monkeypatch.setattr(
+        database, "get_v2_read_session_factory", lambda: lambda: session
+    )
     monkeypatch.setattr(metadata_services, "V2MetadataService", query_service)
     monkeypatch.setattr(
         route_dependencies.importlib_metadata,

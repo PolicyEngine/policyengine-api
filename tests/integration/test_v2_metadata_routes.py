@@ -12,7 +12,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session, select
@@ -543,3 +543,34 @@ def test_postgres_catalog_parameters_load_values_and_breadcrumb_labels(
     ]
     assert result["node_labels"] == {"gov.example": "Example policy"}
     assert result["missing_names"] == ["gov.removed.amount"]
+
+
+def test_postgres_metadata_reads_send_no_transaction_statements(
+    published_engine: Engine,
+) -> None:
+    # Each metadata read is one statement on rows a published catalog never
+    # changes, so the read session runs in autocommit mode: psycopg then sends
+    # no BEGIN before the reads and no ROLLBACK when the session closes.
+    from policyengine_api.data.v2.database import build_v2_read_session_factory
+
+    autocommit_modes: list[bool] = []
+
+    def record_mode(connection, _cursor, _statement, *_args) -> None:
+        autocommit_modes.append(connection.connection.dbapi_connection.autocommit)
+
+    event.listen(published_engine, "before_cursor_execute", record_mode)
+    try:
+        service = V2MetadataService(
+            MetadataDatabaseSession(build_v2_read_session_factory(published_engine)()),
+            running_policyengine_version=POLICYENGINE_VERSION,
+        )
+        result = service.list_parameters("us")
+        service.close()
+    finally:
+        event.remove(published_engine, "before_cursor_execute", record_mode)
+
+    assert [item.name for item in result.items] == ["gov.example.rate"]
+    assert autocommit_modes
+    assert all(autocommit_modes)
+    with published_engine.connect() as connection:
+        assert connection.connection.dbapi_connection.autocommit is False

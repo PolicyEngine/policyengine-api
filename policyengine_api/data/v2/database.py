@@ -28,7 +28,7 @@ DATABASE_TIMEOUT_SECONDS = 5
 
 @dataclass
 class _V2EngineState:
-    """The process-owned v2 engine and Session factory.
+    """The process-owned v2 engine and Session factories.
 
     ``engine_pid`` is the ID of the process that created the engine, and
     ``engine_url_fingerprint`` identifies its target. ``_state_lock`` guards
@@ -39,6 +39,7 @@ class _V2EngineState:
     engine_pid: int | None = None
     engine_url_fingerprint: tuple[object, ...] | None = None
     session_factory: sessionmaker[Session] | None = None
+    read_session_factory: sessionmaker[Session] | None = None
 
 
 _state_lock = Lock()
@@ -82,6 +83,22 @@ def build_v2_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
 
 
+def build_v2_read_session_factory(engine: Engine) -> sessionmaker[Session]:
+    """Build a factory of read-only Sessions that run without a transaction.
+
+    The sessions share ``engine``'s pool in autocommit mode, so psycopg sends
+    each statement on its own: no BEGIN before the first read and no ROLLBACK
+    when the session closes. Use them only for reads whose statements need no
+    common snapshot, such as reads of a published catalog version, which never
+    changes. The pool restores the ordinary mode when a connection returns.
+    """
+    return sessionmaker(
+        bind=engine.execution_options(isolation_level="AUTOCOMMIT"),
+        class_=Session,
+        expire_on_commit=False,
+    )
+
+
 def _discard_inherited_state(current_pid: int) -> None:
     """Drop pool state inherited through a process fork without touching parent FDs."""
     if _engine_state.engine is not None:
@@ -90,6 +107,7 @@ def _discard_inherited_state(current_pid: int) -> None:
     _engine_state.engine_pid = current_pid
     _engine_state.engine_url_fingerprint = None
     _engine_state.session_factory = None
+    _engine_state.read_session_factory = None
 
 
 def get_v2_engine(settings: V2DatabaseSettings | None = None) -> Engine:
@@ -130,6 +148,20 @@ def get_v2_session_factory(
         return _engine_state.session_factory
 
 
+def get_v2_read_session_factory(
+    settings: V2DatabaseSettings | None = None,
+) -> sessionmaker[Session]:
+    """Return the process-owned read-only Session factory without opening one.
+
+    See ``build_v2_read_session_factory``.
+    """
+    engine = get_v2_engine(settings)
+    with _state_lock:
+        if _engine_state.read_session_factory is None:
+            _engine_state.read_session_factory = build_v2_read_session_factory(engine)
+        return _engine_state.read_session_factory
+
+
 def close_v2_database() -> None:
     """Dispose this process's v2 pool and forget its lazy configuration."""
     with _state_lock:
@@ -139,6 +171,7 @@ def close_v2_database() -> None:
         _engine_state.engine_pid = None
         _engine_state.engine_url_fingerprint = None
         _engine_state.session_factory = None
+        _engine_state.read_session_factory = None
 
 
 atexit.register(close_v2_database)
