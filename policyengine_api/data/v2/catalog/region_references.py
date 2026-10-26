@@ -57,7 +57,7 @@ class RegionReference:
     ``filter_value`` is the text that selects the region's households: a FIPS
     number or district GEOID for US states and districts, the stored region
     names of a UK nation, or the ONS code of a UK constituency or local
-    authority (its row in the weight matrix). The national region and regions
+    authority (its area code in the local-area dataset). The national region and regions
     that cannot run yet have none. ``v1_code`` is the v1 region identifier this
     region replaces, if v1 had one.
     """

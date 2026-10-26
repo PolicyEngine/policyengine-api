@@ -42,7 +42,10 @@ def test_extracts_canonical_policyengine_catalog_and_dataset_defaults() -> None:
         "populace_us_2024",
         "populace_us_2024_acs_local",
     }
-    assert {dataset.name for dataset in uk.datasets} == {"microcosm_uk_2024_25"}
+    assert {dataset.name for dataset in uk.datasets} == {
+        "microcosm_uk_2024_25",
+        "microcosm_uk_2024_25_dense",
+    }
     assert all(
         not dataset.is_output_dataset for dataset in (*us.datasets, *uk.datasets)
     )
@@ -62,7 +65,14 @@ def test_extracts_canonical_policyengine_catalog_and_dataset_defaults() -> None:
         (summary.region_type, summary.count) for summary in us.omitted_region_summaries
     ] == [("place", 1)]
     assert uk.omitted_region_summaries == ()
-    assert all(region.default_dataset_id == uk.datasets[0].id for region in uk.regions)
+    uk_datasets = {dataset.id: dataset.name for dataset in uk.datasets}
+    assert {
+        region.code: uk_datasets[region.default_dataset_id] for region in uk.regions
+    } == {
+        "uk": "microcosm_uk_2024_25",
+        "country/england": "microcosm_uk_2024_25",
+        "constituency/E14001063": "microcosm_uk_2024_25_dense",
+    }
 
 
 def test_regions_take_labels_from_references_and_filters_from_scoping_rules() -> None:
@@ -124,8 +134,8 @@ def test_regions_take_labels_from_references_and_filters_from_scoping_rules() ->
             "constituency",
             "country/england",
             True,
-            "weight_replacement",
-            "parliamentary_constituency_weights",
+            "row_filter",
+            "constituency_code_oa",
             "E14001063",
             None,
             None,

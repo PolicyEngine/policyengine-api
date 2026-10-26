@@ -200,7 +200,10 @@ def test_main_reports_a_region_data_failure_with_its_message(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     def fail():
-        msg = "the weight matrix m has no row for 1 uk region (constituency/x)"
+        msg = (
+            "the certified dataset d has no household column c, which 1 uk region "
+            "filters on (constituency/x)"
+        )
         raise RegionDataVerificationError(msg)
 
     monkeypatch.setattr(initialization, "initialize_catalog", fail)
@@ -208,7 +211,7 @@ def test_main_reports_a_region_data_failure_with_its_message(
     assert initialization.main() == 1
     failure = capsys.readouterr()
     assert '"type": "RegionDataVerificationError"' in failure.err
-    assert "has no row for 1 uk region" in failure.err
+    assert "which 1 uk region filters on" in failure.err
 
 
 def test_extraction_failure_opens_no_engine() -> None:

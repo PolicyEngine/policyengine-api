@@ -127,18 +127,7 @@ def test_holds_each_region_filter_form() -> None:
     assert any(value.isdigit() for value in stored_forms)
     assert any(value.startswith("[") for value in stored_forms)
     assert any(value.isalpha() for value in stored_forms)
-    # UK constituencies reweight households; every other filtered region keeps
-    # the rows of its dataset that match its filter.
-    assert {
-        region.filter_strategy
-        for region in filtered
-        if region.region_type != "constituency"
-    } == {"row_filter"}
-    assert {
-        region.filter_strategy
-        for region in filtered
-        if region.region_type == "constituency"
-    } == {"weight_replacement"}
+    assert all(region.filter_strategy == "row_filter" for region in filtered)
     # Regions without a scoping rule, such as US places, are left out, so every
     # published sub-national region has a filter.
     assert not unfiltered_subnational

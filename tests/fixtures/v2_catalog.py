@@ -138,13 +138,18 @@ def _release_contents(country_id: str) -> tuple[dict, dict, SimpleNamespace]:
         return datasets, region_datasets, data_package
     datasets = {
         "microcosm_uk_2024_25": _certified_artifact("microcosm_uk_2024_25.h5"),
-        "parliamentary_constituency_weights": _certified_artifact(
-            "parliamentary_constituency_weights.h5"
+        "microcosm_uk_2024_25_dense": _certified_artifact(
+            "microcosm_uk_2024_25_dense.h5"
         ),
-        "local_authority_weights": _certified_artifact("local_authority_weights.h5"),
     }
+    # As in PolicyEngine.py 6.10.0, constituencies and local authorities are
+    # routed to the local-area dataset, which carries their codes.
     region_datasets = {
         "national": SimpleNamespace(path_template="microcosm_uk_2024_25.h5"),
+        "constituency": SimpleNamespace(path_template="microcosm_uk_2024_25_dense.h5"),
+        "local_authority": SimpleNamespace(
+            path_template="microcosm_uk_2024_25_dense.h5"
+        ),
     }
     data_package = SimpleNamespace(
         repo_id="example-org/example-uk-data",
