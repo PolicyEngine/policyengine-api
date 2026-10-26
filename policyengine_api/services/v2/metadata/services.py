@@ -358,8 +358,8 @@ class V2MetadataService:
         schedule is one node whose children are its brackets. With the level's
         ``reform_changeable``, only the children a reform can change are listed,
         sorted by label. Raise ParameterTreeUnavailableError when the version has
-        no tree, which is the case for versions published before the tree
-        existed.
+        no tree: catalog publication writes trees only for the versions it
+        publishes and for the installed version stored with catalog format 2.
         """
         selected_level = level if level is not None else ParameterTreeLevel()
         selected = self._select_paginated_catalog(
@@ -378,8 +378,8 @@ class V2MetadataService:
         ):
             msg = (
                 f"catalog version {selected.policyengine_version} has no parameter "
-                "tree: a tree is written when a catalog version is published, and "
-                "this version was published before"
+                "tree: catalog publication writes trees only for the versions it "
+                "publishes and for the installed version with catalog format 2"
             )
             raise ParameterTreeUnavailableError(msg)
         return page_result(

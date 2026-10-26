@@ -1561,8 +1561,9 @@ def test_parameter_children_route_rejects_invalid_queries(query: str) -> None:
 def test_parameter_children_route_reports_an_unwritten_tree_as_unavailable() -> None:
     results, _ids = _resource_results()
     message = (
-        "catalog version 6.7.5 has no parameter tree: a tree is written when a "
-        "catalog version is published, and this version was published before"
+        "catalog version 6.7.5 has no parameter tree: catalog publication writes "
+        "trees only for the versions it publishes and for the installed version "
+        "with catalog format 2"
     )
     reader = ResourceReader(results, error=ParameterTreeUnavailableError(message))
 

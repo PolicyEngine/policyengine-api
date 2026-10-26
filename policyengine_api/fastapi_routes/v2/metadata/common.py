@@ -66,8 +66,9 @@ PARAMETER_TREE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": (
             "The initialized v2 catalog is unavailable, or the catalog version "
-            "has no parameter tree because it was published before the tree "
-            "existed; the message then names the version."
+            "has no parameter tree (publication writes trees only for the "
+            "versions it publishes and for the installed version with catalog "
+            "format 2); the message then names the version."
         ),
     },
 }

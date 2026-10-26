@@ -704,7 +704,7 @@ def test_an_unwritten_parameter_tree_is_reported_as_unavailable(
         ParameterTreeUnavailableError,
         match=(
             f"catalog version {POLICYENGINE_VERSION} has no parameter tree: "
-            "a tree is written when a catalog version is published"
+            "catalog publication writes trees only for the versions it publishes"
         ),
     ):
         service.list_parameter_children("us")

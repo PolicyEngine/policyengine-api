@@ -1,9 +1,10 @@
 """Each catalog version's parameter tree, as rows of direct children.
 
-The tree is derived from a version's stored parameters and parameter nodes
-alone, and is written when a version is published. Every node and parameter
-of the version is one row, under the path of its parent (the empty string for
-top-level paths).
+The tree is built from a catalog version's parameter and node records: catalog
+publication builds it from the installed packages' catalog, for the versions it
+publishes and for the installed version when it is stored with catalog format 2
+but without a tree. Every node and parameter of the version is one row, under
+the path of its parent (the empty string for top-level paths).
 
 A ``[`` starts a child as a ``.`` does: a bracket schedule such as
 ``gov.hmrc.income_tax.rates.uk`` is one node whose children are its brackets
@@ -18,8 +19,8 @@ the app's newer interface builds from v1 metadata
 (``app/src/libs/buildParameterTree.ts``): a parameter under ``gov`` whose
 economy or household flag is set and whose path names neither ``taxsim``,
 ``gov.abolitions`` nor ``pycache``, and every node with such a parameter
-below it. Trees are written only for versions published with catalog format
-2, so every parameter has both flags.
+below it. Trees are written only for versions with catalog format 2, so every
+parameter has both flags.
 """
 
 from __future__ import annotations
@@ -44,7 +45,7 @@ ChildType = Literal["node", "parameter"]
 
 @dataclass(frozen=True, slots=True)
 class TreeNodeSource:
-    """A stored parameter node: its name and stored label."""
+    """A parameter node of a catalog version: its name and stored label."""
 
     name: str
     label: str | None
@@ -52,7 +53,7 @@ class TreeNodeSource:
 
 @dataclass(frozen=True, slots=True)
 class TreeParameterSource:
-    """A stored parameter: its ID, name, stored label and flags."""
+    """A parameter of a catalog version: its stored ID, name, label and flags."""
 
     id: UUID
     name: str
