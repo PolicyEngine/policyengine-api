@@ -1613,3 +1613,44 @@ def test_parameter_children_openapi_declares_exactly_its_error_responses() -> No
     assert "PolicyEngine.py version" in responses["422"]["description"]
     assert "parameter tree" in responses["503"]["description"]
     assert "parameter tree" not in parameter_responses["503"]["description"]
+
+
+def test_parameter_tree_responses_are_cached_like_other_metadata() -> None:
+    """A version's tree never changes, so it is cached as other metadata is."""
+    results, _ids = _resource_results()
+    client = _client(lambda: ResourceReader(results))
+    path = "/v2/parameters/children?country_id=us&parent_path=gov.example"
+
+    running = client.get(path, headers={"Origin": "https://app.policyengine.org"})
+    named = client.get(f"{path}&policyengine_version=4.20.3")
+    revalidated = client.get(
+        f"{path}&policyengine_version=4.20.3",
+        headers={"If-None-Match": named.headers["etag"]},
+    )
+
+    assert running.status_code == named.status_code == 200
+    assert running.headers["cache-control"] == "public, max-age=300"
+    assert named.headers["cache-control"] == "public, max-age=86400"
+    assert running.headers["etag"]
+    assert "origin" in _vary_values(running)
+    assert revalidated.status_code == 304
+    assert revalidated.content == b""
+    assert revalidated.headers["etag"] == named.headers["etag"]
+
+
+def test_a_missing_parameter_tree_is_not_cached() -> None:
+    results, _ids = _resource_results()
+    reader = ResourceReader(
+        results,
+        error=ParameterTreeUnavailableError("catalog version 4.20.3 has no tree"),
+    )
+
+    response = _client(lambda: reader).get(
+        "/v2/parameters/children",
+        params={"country_id": "us", "policyengine_version": "4.20.3"},
+    )
+
+    assert response.status_code == 503
+    assert "etag" not in response.headers
+    assert "cache-control" not in response.headers
+    assert "origin" not in _vary_values(response)
