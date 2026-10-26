@@ -195,7 +195,7 @@ class MetadataParameterSearchFileLabel(StrictResponseModel):
 
 
 class MetadataParameterSearchFileNode(StrictResponseModel):
-    """A node under ``gov`` that has a stored label."""
+    """``gov`` or a node under it that has a stored label."""
 
     path: str
     label: str
