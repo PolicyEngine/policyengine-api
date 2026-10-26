@@ -167,7 +167,8 @@
             "result.item.tax_benefit_model_id",
             "result.item.parameter_values",
             "result.item.created_at",
-            "result.item.updated_at"
+            "result.item.updated_at",
+            "result.item.missing_parameters"
           ]
         },
         {
@@ -184,7 +185,8 @@
             "result.item.tax_benefit_model_id",
             "result.item.parameter_values",
             "result.item.created_at",
-            "result.item.updated_at"
+            "result.item.updated_at",
+            "result.item.missing_parameters"
           ]
         },
         {

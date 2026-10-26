@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Protocol
 from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.catalog.catalog_selection import (
+    MetadataCatalogNotPublishedError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
 )
@@ -186,9 +187,9 @@ def classify_policy_copy_failure(error: Exception) -> PolicyCopyFailure:
         )
     if isinstance(error, MetadataCatalogUnavailableError):
         reason = (
-            PolicyCopyFailureReason.CATALOG_QUERY_FAILED
-            if isinstance(error.__cause__, SQLAlchemyError)
-            else PolicyCopyFailureReason.CATALOG_ABSENT
+            PolicyCopyFailureReason.CATALOG_ABSENT
+            if isinstance(error, MetadataCatalogNotPublishedError)
+            else PolicyCopyFailureReason.CATALOG_QUERY_FAILED
         )
         return PolicyCopyFailure(
             PolicyCopyFailureCategory.CATALOG_OR_TRANSLATION, reason

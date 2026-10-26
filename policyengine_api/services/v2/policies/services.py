@@ -5,11 +5,9 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from sqlalchemy.exc import SQLAlchemyError
-
 from policyengine_api.constants import POLICYENGINE_VERSION
 from policyengine_api.data.v2.catalog.catalog_selection import (
-    MetadataCatalogUnavailableError,
+    MetadataCatalogNotPublishedError,
 )
 from policyengine_api.services.v2.policies.database_connectors.creates import (
     create_legacy_policy_mapping,
@@ -211,9 +209,7 @@ def with_missing_parameters(
             country_id,
             running_policyengine_version=running_policyengine_version,
         )
-    except MetadataCatalogUnavailableError as error:
-        if isinstance(error.__cause__, SQLAlchemyError):
-            raise
+    except MetadataCatalogNotPublishedError:
         return tuple(replace(policy, missing_parameters=None) for policy in policies)
     running_model_version_id = selected.model_version.id
     names_to_check = {

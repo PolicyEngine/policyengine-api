@@ -10,6 +10,9 @@ import pytest
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine
 
+from policyengine_api.data.v2.catalog.catalog_selection import (
+    MetadataCatalogUnavailableError,
+)
 from policyengine_api.data.v2.models import (
     V2_METADATA,
     Parameter,
@@ -18,6 +21,7 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.services.v2.policies import services as policy_services
 from policyengine_api.services.v2.policies.database_connectors.reads import (
     PARAMETER_NAME_BATCH_SIZE,
     read_parameters_by_name,
@@ -26,6 +30,10 @@ from policyengine_api.services.v2.policies.database_session import (
     PolicyDatabaseSession,
 )
 from policyengine_api.services.v2.policies.services import V2PolicyService
+from policyengine_api.services.v2.policies.types import (
+    NativePolicyCreationInput,
+    PolicyCreationResult,
+)
 from tests.fixtures.recording_session import RecordingSession
 
 RUNNING_VERSION = "5.2.0"
@@ -185,3 +193,49 @@ def test_parameter_names_are_read_in_batches_of_bounded_size() -> None:
     assert len(statements) == 3
     assert all(len(batch) <= PARAMETER_NAME_BATCH_SIZE for batch in name_batches)
     assert sorted(name for batch in name_batches for name in batch) == sorted(names)
+
+
+def test_catalog_that_cannot_be_queried_fails_the_read(
+    engine, stored_policies: dict[str, Policy], monkeypatch
+) -> None:
+    def unreadable_catalog(*_args, **_kwargs):
+        msg = "the v2 metadata catalog cannot be queried"
+        raise MetadataCatalogUnavailableError(msg)
+
+    monkeypatch.setattr(policy_services, "read_policy_catalog", unreadable_catalog)
+
+    with pytest.raises(MetadataCatalogUnavailableError):
+        _service(engine).get_policy(
+            country_id="us", policy_id=stored_policies["earlier"].id
+        )
+
+
+def test_created_policy_on_an_earlier_catalog_names_what_the_running_one_lacks(
+    engine, stored_policies: dict[str, Policy], monkeypatch
+) -> None:
+    # Creation is replaced by the stored policy (its inserts need PostgreSQL);
+    # the read and check after it are the service's own.
+    stored = stored_policies["earlier"]
+    monkeypatch.setattr(
+        policy_services,
+        "resolve_policy_creation_input",
+        lambda _session, _content, **_selection: None,
+    )
+    monkeypatch.setattr(
+        policy_services,
+        "create_resolved_policy",
+        lambda _session, _resolved: PolicyCreationResult(
+            policy_id=stored.id, created=False
+        ),
+    )
+
+    creation = _service(engine).create_policy(
+        NativePolicyCreationInput(
+            country_id="us",
+            tax_benefit_model_id=stored.tax_benefit_model_id,
+            parameter_values=[],
+            policyengine_version=EARLIER_VERSION,
+        )
+    )
+
+    assert creation.item.missing_parameters == (REMOVED_PARAMETER,)

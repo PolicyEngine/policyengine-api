@@ -21,6 +21,14 @@ class MetadataCatalogUnavailableError(RuntimeError):
     """Raised when an initialized catalog cannot be read."""
 
 
+class MetadataCatalogNotPublishedError(MetadataCatalogUnavailableError):
+    """Raised when the running PolicyEngine.py version has no catalog for a country.
+
+    The catalog was queried and holds no such version, as opposed to a query
+    that failed.
+    """
+
+
 class UnsupportedPreviewCountryError(ValueError):
     """Raised when a country has no Stage 9 resource catalog."""
 
@@ -107,7 +115,7 @@ def select_catalog(
             f"the running PolicyEngine.py {selected_version} catalog "
             f"is absent for {country_id}"
         )
-        raise MetadataCatalogUnavailableError(msg)
+        raise MetadataCatalogNotPublishedError(msg)
     model, model_version = row
     return SelectedCatalog(
         country_id=country_id,

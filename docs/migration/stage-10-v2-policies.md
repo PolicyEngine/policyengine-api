@@ -190,8 +190,11 @@ tell its user and not run the policy:
 
 Both use the comparison the v2 copy uses (`parameters_missing_from_model`),
 and the v2 catalog of a release holds the same leaf parameters as that
-release's country model, so a policy reported with missing parameters is
-one the copy refuses as `missing_parameters`.
+release's country model. So a v1 policy reported with missing parameters
+is one a first copy under the running release refuses as
+`missing_parameters`. A policy copied before a release removed its
+parameter keeps that copy, since an existing copy is not translated again;
+it is still reported as missing on both routes.
 
 ## Monitoring
 

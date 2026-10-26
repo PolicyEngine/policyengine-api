@@ -10,6 +10,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from policyengine_api.data.v2.catalog.catalog_selection import (
+    MetadataCatalogNotPublishedError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
 )
@@ -140,9 +141,8 @@ def test_failure_is_secret_safe_and_records_cloud_sql_as_only_completed_write(
 
 
 def _catalog_query_failure() -> MetadataCatalogUnavailableError:
-    error = MetadataCatalogUnavailableError("the v2 metadata catalog cannot be queried")
-    error.__cause__ = OperationalError("select secret", {}, Exception("credential"))
-    return error
+    # Raised without a chained database error: the type alone decides.
+    return MetadataCatalogUnavailableError("the v2 metadata catalog cannot be queried")
 
 
 def _translation_failure(
@@ -167,7 +167,7 @@ def _translation_failure(
             id="catalog-query-failed",
         ),
         pytest.param(
-            MetadataCatalogUnavailableError("catalog absent secret"),
+            MetadataCatalogNotPublishedError("catalog absent secret"),
             "catalog_or_translation",
             "catalog_absent",
             id="catalog-absent",
