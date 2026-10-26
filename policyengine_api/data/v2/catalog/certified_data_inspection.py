@@ -1,4 +1,4 @@
-"""Read household column names and weight-matrix sizes from certified HDF5 files.
+"""Read household column names from certified HDF5 dataset files.
 
 The artifacts are read from Hugging Face at their pinned revisions through
 ranged requests. Only the 1 MB blocks holding the HDF5 metadata and the
@@ -27,8 +27,6 @@ HOUSEHOLD_TABLE = "household"
 # real names live only in pickled attributes.
 VALUE_BLOCK_PREFIX = "values_block_"
 TABLE_INDEX_COLUMN = "index"
-# Each year of a weight matrix is one array of regions by households.
-WEIGHT_MATRIX_DIMENSIONS = 2
 
 _Result = TypeVar("_Result")
 
@@ -103,32 +101,6 @@ def household_columns_in_hdf5(h5: h5py.File) -> frozenset[str]:
     return frozenset.intersection(*(_frame_columns(frame) for frame in frames))
 
 
-def weight_matrix_rows_in_hdf5(h5: h5py.File) -> int:
-    """Return the number of region rows of a weight matrix.
-
-    The file holds one two-dimensional array per year, of regions by
-    households, and every year must have the same regions.
-    """
-    row_counts: set[int] = set()
-    for name, entry in h5.items():
-        if not isinstance(entry, h5py.Dataset):
-            continue
-        if len(entry.shape) != WEIGHT_MATRIX_DIMENSIONS:
-            msg = f"the weight matrix entry {name} is not two-dimensional"
-            raise CertifiedDataReadError(msg)
-        row_counts.add(entry.shape[0])
-    if not row_counts:
-        msg = "the weight matrix has no year datasets"
-        raise CertifiedDataReadError(msg)
-    if len(row_counts) > 1:
-        msg = (
-            "the weight matrix years disagree on the number of regions: "
-            f"{sorted(row_counts)}"
-        )
-        raise CertifiedDataReadError(msg)
-    return row_counts.pop()
-
-
 def _hugging_face_file_system(token: str | None) -> ArtifactFileSystem:
     return HfFileSystem(token=token)
 
@@ -166,7 +138,3 @@ class HuggingFaceDataInspector:
     def household_columns(self, artifact: CertifiedArtifact) -> frozenset[str]:
         """Return the household column names of a dataset artifact."""
         return self._read(artifact, household_columns_in_hdf5)
-
-    def weight_matrix_row_count(self, artifact: CertifiedArtifact) -> int:
-        """Return how many region rows a weight-matrix artifact holds."""
-        return self._read(artifact, weight_matrix_rows_in_hdf5)

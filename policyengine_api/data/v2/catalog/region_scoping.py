@@ -1,11 +1,9 @@
 """Give each reference region its dataset and filter from the certified data release.
 
 A scoping rule per country and region type names the release's dataset role
-(a key of the release manifest's ``region_datasets``) and how the region
-selects its households: a row filter on one column of that dataset, or a
-weight-replacement filter whose field names the release's weight-matrix
-artifact and whose value is the region's row code in it. Region types without
-a rule cannot run yet, so publication leaves them out and counts them.
+(a key of the release manifest's ``region_datasets``) and the household column
+whose value selects the region's households in that dataset. Region types
+without a rule cannot run yet, so publication leaves them out and counts them.
 """
 
 from __future__ import annotations
@@ -23,7 +21,6 @@ if TYPE_CHECKING:
     from policyengine_api.data.v2.catalog.region_references import RegionReference
 
 ROW_FILTER = "row_filter"
-WEIGHT_REPLACEMENT = "weight_replacement"
 NATIONAL_DATASET_ROLE = "national"
 
 
@@ -31,13 +28,16 @@ NATIONAL_DATASET_ROLE = "national"
 class RegionScopingRule:
     """How regions of one type find their dataset and select their households.
 
-    ``filter_field`` is the dataset column of a row filter, or the release's
-    weight-matrix artifact name of a weight-replacement filter.
+    ``filter_field`` is the household column a row filter compares with the
+    region's filter value. When the release names no dataset for the role,
+    the regions use the default dataset, unless ``requires_release_dataset``:
+    then only the routed dataset carries the column, and scoping fails.
     """
 
     dataset_role: str
     filter_strategy: str | None = None
     filter_field: str | None = None
+    requires_release_dataset: bool = False
 
 
 REGION_SCOPING_RULES: Mapping[tuple[str, str], RegionScopingRule] = {
@@ -48,13 +48,19 @@ REGION_SCOPING_RULES: Mapping[tuple[str, str], RegionScopingRule] = {
     ),
     ("uk", "national"): RegionScopingRule(NATIONAL_DATASET_ROLE),
     ("uk", "country"): RegionScopingRule(NATIONAL_DATASET_ROLE, ROW_FILTER, "region"),
+    # The UK national file has no area codes; the release routes constituencies
+    # and local authorities to a local-area dataset that carries them.
     ("uk", "constituency"): RegionScopingRule(
-        NATIONAL_DATASET_ROLE,
-        WEIGHT_REPLACEMENT,
-        "parliamentary_constituency_weights",
+        "constituency",
+        ROW_FILTER,
+        "constituency_code_oa",
+        requires_release_dataset=True,
     ),
     ("uk", "local_authority"): RegionScopingRule(
-        NATIONAL_DATASET_ROLE, WEIGHT_REPLACEMENT, "local_authority_weights"
+        "local_authority",
+        ROW_FILTER,
+        "la_code_oa",
+        requires_release_dataset=True,
     ),
 }
 
@@ -226,34 +232,6 @@ def _reject_constant(constant: str) -> object:
     raise ValueError(msg)
 
 
-def _checked_weight_matrix(
-    country_id: str,
-    reference: RegionReference,
-    matrix_name: str,
-    dataset_name: str,
-    artifacts: Mapping[str, CertifiedArtifact],
-) -> None:
-    """Require the weight matrix from the same release as the dataset it reweights.
-
-    Weights attach to households by position, so only a matrix built with the
-    region's dataset lines up with its households.
-    """
-    matrix = artifacts.get(matrix_name)
-    if matrix is None:
-        msg = (
-            f"region {reference.code!r} reweights households with {matrix_name}, "
-            f"which the {country_id} release does not certify"
-        )
-        raise CatalogExtractionError(msg)
-    dataset = artifacts[dataset_name]
-    if (matrix.repo_id, matrix.revision) != (dataset.repo_id, dataset.revision):
-        msg = (
-            f"region {reference.code!r} reweights households with {matrix_name}, "
-            f"which is not certified in the release of {dataset_name}"
-        )
-        raise CatalogExtractionError(msg)
-
-
 def scope_regions(
     country_id: str,
     references: tuple[RegionReference, ...],
@@ -302,17 +280,16 @@ def scope_regions(
         _checked_filter_value(reference, rule)
         dataset_name = role_datasets.get(rule.dataset_role)
         if dataset_name is None:
+            if rule.requires_release_dataset:
+                msg = (
+                    f"the {country_id} release routes no dataset to "
+                    f"{rule.dataset_role} regions, so region {reference.code!r} "
+                    "cannot select its households"
+                )
+                raise CatalogExtractionError(msg)
             dataset_name = reviewed_default
             if rule.dataset_role != NATIONAL_DATASET_ROLE:
                 fallback_counts[reference.region_type] += 1
-        if rule.filter_strategy == WEIGHT_REPLACEMENT:
-            _checked_weight_matrix(
-                country_id,
-                reference,
-                rule.filter_field or "",
-                dataset_name,
-                artifacts,
-            )
         regions.append(
             ScopedRegion(
                 reference=reference,
@@ -333,18 +310,10 @@ def scope_regions(
 
 
 def filtered_artifacts(scoping: RegionScoping) -> tuple[CertifiedArtifact, ...]:
-    """Return, by name, the artifacts the regions' filters read.
-
-    Those are the datasets of row-filtered regions and the weight matrices of
-    weight-replacement regions.
-    """
+    """Return, by name, the datasets the regions' row filters read."""
     names = {
         region.dataset_name
         for region in scoping.regions
         if region.filter_strategy == ROW_FILTER
-    } | {
-        region.filter_field
-        for region in scoping.regions
-        if region.filter_strategy == WEIGHT_REPLACEMENT and region.filter_field
     }
     return tuple(scoping.certified_artifacts[name] for name in sorted(names))

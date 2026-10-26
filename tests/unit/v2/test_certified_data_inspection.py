@@ -1,4 +1,4 @@
-"""Reading column names and weight-matrix sizes from certified HDF5 artifacts."""
+"""Reading household column names from certified HDF5 datasets."""
 
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ from policyengine_api.data.v2.catalog.certified_data_inspection import (
     HuggingFaceDataInspector,
     household_columns_in_hdf5,
     huggingface_path,
-    weight_matrix_rows_in_hdf5,
 )
 from policyengine_api.data.v2.catalog.records import CertifiedArtifact
 
@@ -52,11 +51,6 @@ def _artifact(
 def _columns(path: Path) -> frozenset[str]:
     with h5py.File(path, "r") as h5:
         return household_columns_in_hdf5(h5)
-
-
-def _rows(path: Path) -> int:
-    with h5py.File(path, "r") as h5:
-        return weight_matrix_rows_in_hdf5(h5)
 
 
 def test_reads_columns_of_a_fixed_format_household_frame(tmp_path: Path) -> None:
@@ -139,47 +133,12 @@ def test_refuses_a_household_entry_that_is_not_a_group(tmp_path: Path) -> None:
         _columns(path)
 
 
-def test_counts_the_region_rows_of_a_weight_matrix(tmp_path: Path) -> None:
-    path = tmp_path / "matrix.h5"
-    with h5py.File(path, "w") as h5:
-        h5.create_dataset("2024", data=np.ones((3, 5)))
-        h5.create_dataset("2025", data=np.ones((3, 5)))
-        h5.create_group("metadata").create_dataset("note", data=np.ones(1))
-
-    assert _rows(path) == 3
-
-
 def test_default_file_system_is_hugging_face_with_the_token() -> None:
     inspector = HuggingFaceDataInspector(token="read-token")
 
     file_system = inspector._file_system
     assert isinstance(file_system, HfFileSystem)
     assert file_system.token == "read-token"
-
-
-@pytest.mark.parametrize(
-    ("shapes", "message"),
-    [
-        ({}, r"^the weight matrix has no year datasets$"),
-        ({"2024": (3,)}, r"^the weight matrix entry 2024 is not two-dimensional$"),
-        (
-            {"2024": (3, 5), "2025": (4, 5)},
-            r"^the weight matrix years disagree on the number of regions: \[3, 4\]$",
-        ),
-    ],
-)
-def test_refuses_an_inconsistent_weight_matrix(
-    tmp_path: Path,
-    shapes: dict[str, tuple[int, ...]],
-    message: str,
-) -> None:
-    path = tmp_path / "matrix.h5"
-    with h5py.File(path, "w") as h5:
-        for year, shape in shapes.items():
-            h5.create_dataset(year, data=np.ones(shape))
-
-    with pytest.raises(CertifiedDataReadError, match=message):
-        _rows(path)
 
 
 def test_names_dataset_and_model_repository_files_at_their_revision() -> None:
@@ -189,8 +148,8 @@ def test_names_dataset_and_model_repository_files_at_their_revision() -> None:
         "populace_us_2024_acs_local.h5"
     )
     assert huggingface_path(
-        _artifact(name="enhanced_frs_2024_25", repo_type="model", revision="1.58.1")
-    ) == ("policyengine/populace-us@1.58.1/enhanced_frs_2024_25.h5")
+        _artifact(name="microcosm_uk_2024_25", repo_type="model", revision="1.0.0")
+    ) == ("policyengine/populace-us@1.0.0/microcosm_uk_2024_25.h5")
     assert huggingface_path(_artifact(revision="refs/pr/1")).startswith(
         "datasets/policyengine/populace-us@refs%2Fpr%2F1/"
     )
@@ -214,15 +173,16 @@ def test_inspector_reads_artifacts_through_an_authenticated_file_system(
 ) -> None:
     dataset_path = tmp_path / "dataset.h5"
     HOUSEHOLDS.to_hdf(dataset_path, key="household", format="fixed")
-    matrix_path = tmp_path / "matrix.h5"
-    with h5py.File(matrix_path, "w") as h5:
-        h5.create_dataset("2025", data=np.ones((2, 2)))
+    local_area_path = tmp_path / "local_area.h5"
+    HOUSEHOLDS.assign(la_code_oa=["N09000011", "E07000110"]).to_hdf(
+        local_area_path, key="household", format="table", data_columns=True
+    )
     dataset = _artifact()
-    matrix = _artifact(name="parliamentary_constituency_weights", repo_type="model")
+    local_area = _artifact(name="microcosm_uk_2024_25_dense", repo_type="dataset")
     file_system = FakeFileSystem(
         {
             huggingface_path(dataset): dataset_path,
-            huggingface_path(matrix): matrix_path,
+            huggingface_path(local_area): local_area_path,
         }
     )
     tokens: list[str | None] = []
@@ -236,9 +196,12 @@ def test_inspector_reads_artifacts_through_an_authenticated_file_system(
     )
 
     assert "state_fips" in inspector.household_columns(dataset)
-    assert inspector.weight_matrix_row_count(matrix) == 2
+    assert "la_code_oa" in inspector.household_columns(local_area)
     assert tokens == ["read-token"]
-    assert file_system.opened == [huggingface_path(dataset), huggingface_path(matrix)]
+    assert file_system.opened == [
+        huggingface_path(dataset),
+        huggingface_path(local_area),
+    ]
 
 
 def test_imports_only_packages_the_project_depends_on_directly() -> None:

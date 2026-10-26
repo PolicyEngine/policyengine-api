@@ -139,9 +139,7 @@ class MetadataRegion(StrictResponseModel):
     When requires_filter is true, filter_strategy says how the region selects
     households of its default dataset. With "row_filter", it keeps the
     households whose filter_field column equals filter_value (or is in it,
-    when filter_value is a JSON list). With "weight_replacement", it keeps
-    every household and gives each the weight in row filter_value of the
-    weight matrix that filter_field names in the certified data release.
+    when filter_value is a JSON list).
     """
 
     id: UUID

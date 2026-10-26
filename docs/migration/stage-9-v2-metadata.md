@@ -118,26 +118,23 @@ dataset from the certified data release and its filter:
 | --- | --- | --- |
 | US national | the release's national dataset (`populace_us_2024`) | none |
 | US states and congressional districts | the release's state and district dataset | `row_filter` on `state_fips` or `congressional_district_geoid` |
-| UK national | `enhanced_frs_2024_25` | none |
-| UK nations | `enhanced_frs_2024_25` | `row_filter` on `region` |
-| UK constituencies and local authorities | `enhanced_frs_2024_25` | `weight_replacement`: field `parliamentary_constituency_weights` or `local_authority_weights`, value the ONS code |
+| UK national | the release's national dataset (`microcosm_uk_2024_25`) | none |
+| UK nations | the release's national dataset | `row_filter` on `region` |
+| UK constituencies and local authorities | the release's local-area dataset (`microcosm_uk_2024_25_dense`), which carries their codes | `row_filter` on `constituency_code_oa` or `la_code_oa`, value the ONS code |
 
-A weight matrix must come from the same release as the dataset it reweights.
-If the release names no dataset for a sub-national type, its regions use the
-default dataset and the command emits one summary warning with the affected
-region types and counts. Region types without a rule, such as US places until
-the data can select them, are left out and counted in the evidence's
+If the release names no dataset for a US state or district, those regions use
+the default dataset and the command emits one summary warning with the affected
+region types and counts. A UK constituency or local authority cannot fall back,
+since the national file has no area codes: a release that routes no dataset to
+their type stops publication. Region types without a rule, such as US places
+until the data can select them, are left out and counted in the evidence's
 `omitted_region_summaries`.
 
 Before a new catalog version is published, the command reads the HDF5 metadata
-of each artifact the filters use, with ranged requests at the pinned revision:
-publication stops if a row filter's column is missing from its dataset's
-household columns, or if a weight matrix's row count differs from its row
-lookup (`constituencies_2024.csv`, `local_authorities_2021.csv`) or the lookup
-lacks a region's code. The certified data release lists no lookup file, so these
-are the Public API's own copies of the lookups compute reads; on 2026-10-22 both
-copies were checked to be identical in content to the lookups the calculation
-workers download.
+of each dataset the row filters use, with ranged requests at the pinned
+revision, and stops if a filter's column is missing from its dataset's
+household columns. It does not check that a column holds rows for every
+region's value.
 
 Review the fallback and omitted-region summaries on every new PolicyEngine.py
 release. A changed count may identify an upstream catalog change that needs a

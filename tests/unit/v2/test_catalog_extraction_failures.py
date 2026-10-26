@@ -113,19 +113,10 @@ def _name_a_per_region_dataset_template(
     ].path_template = "populace_{state_code}.h5"
 
 
-def _remove_the_weight_matrix(
+def _stop_routing_constituencies(
     models: dict[str, SimpleNamespace], _references: References
 ) -> None:
-    del models["uk"].release_manifest.datasets["parliamentary_constituency_weights"]
-
-
-def _take_the_weight_matrix_from_another_release(
-    models: dict[str, SimpleNamespace], _references: References
-) -> None:
-    matrix = models["uk"].release_manifest.datasets[
-        "parliamentary_constituency_weights"
-    ]
-    matrix.revision = "another-release"
+    del models["uk"].release_manifest.region_datasets["constituency"]
 
 
 def _drop_a_filter_value(
@@ -257,16 +248,9 @@ def _remove_every_artifact_repository(
             r"'populace_\{state_code\}.h5', which the catalog does not support$",
         ),
         (
-            _remove_the_weight_matrix,
-            "^region 'constituency/E14001063' reweights households with "
-            "parliamentary_constituency_weights, which the uk release does not "
-            "certify$",
-        ),
-        (
-            _take_the_weight_matrix_from_another_release,
-            "^region 'constituency/E14001063' reweights households with "
-            "parliamentary_constituency_weights, which is not certified in the "
-            "release of microcosm_uk_2024_25$",
+            _stop_routing_constituencies,
+            "^the uk release routes no dataset to constituency regions, so region "
+            "'constituency/E14001063' cannot select its households$",
         ),
         (_drop_a_filter_value, "^region 'state/ca' has no filter value$"),
         (

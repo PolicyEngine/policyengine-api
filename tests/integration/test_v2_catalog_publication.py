@@ -135,7 +135,7 @@ def test_publish_and_republish_preserve_complete_catalog(
             "parameter_nodes": 2,
             "parameters": 2,
             "parameter_values": 4,
-            "datasets": 3,
+            "datasets": 4,
             "dataset_versions": 0,
             "regions": 6,
             "simulations": 0,
@@ -167,7 +167,7 @@ def test_publish_and_republish_preserve_complete_catalog(
     )
     assert dict(region_defaults) == {
         "congressional_district/CA-01": "populace_us_2024_acs_local",
-        "constituency/E14001063": "microcosm_uk_2024_25",
+        "constituency/E14001063": "microcosm_uk_2024_25_dense",
         "country/england": "microcosm_uk_2024_25",
         "state/ca": "populace_us_2024_acs_local",
         "uk": "microcosm_uk_2024_25",
@@ -541,7 +541,7 @@ def test_new_version_is_additive_and_concurrent_retries_serialize(
         "parameter_nodes": 4,
         "parameters": 4,
         "parameter_values": 8,
-        "datasets": 6,
+        "datasets": 8,
         "dataset_versions": 0,
         "regions": 12,
         "simulations": 0,

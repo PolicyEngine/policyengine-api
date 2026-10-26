@@ -193,8 +193,7 @@ class CountryCatalog:
     regions: tuple[RegionRecord, ...]
     fallback_summaries: tuple[FallbackSummary, ...]
     omitted_region_summaries: tuple[OmittedRegionSummary, ...] = ()
-    # The release artifacts the regions' filters read: the datasets of row
-    # filters and the weight matrices of weight-replacement filters.
+    # The release datasets the regions' row filters read.
     certified_artifacts: tuple[CertifiedArtifact, ...] = ()
 
     def parameter_value_batches(

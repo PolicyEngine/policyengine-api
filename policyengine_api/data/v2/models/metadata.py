@@ -113,9 +113,7 @@ class Region(TimestampedModel, table=True):
     Its default dataset must belong to the same version. Filtered regions
     (``requires_filter``) also name how they select their households: a
     ``row_filter`` keeps the households whose ``filter_field`` column matches
-    ``filter_value``; a ``weight_replacement`` filter reweights every household
-    with row ``filter_value`` of the weight matrix ``filter_field`` names in the
-    certified data release.
+    ``filter_value``.
     """
 
     __tablename__ = "regions"
