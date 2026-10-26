@@ -1273,3 +1273,22 @@ def test_every_metadata_route_declares_the_shared_catalog_query() -> None:
             country = parameters["country_id"]
             assert country["required"] is True, path
             assert country["schema"]["enum"] == ["us", "uk"], path
+
+
+def test_browser_scripts_can_read_a_metadata_response_entity_tag() -> None:
+    results, _ids = _resource_results()
+
+    response = _client(lambda: ResourceReader(results)).get(
+        "/v2/model-catalog?country_id=us",
+        headers={"Origin": "https://app.policyengine.org"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == (
+        "https://app.policyengine.org"
+    )
+    exposed_headers = {
+        value.strip().lower()
+        for value in response.headers["access-control-expose-headers"].split(",")
+    }
+    assert "etag" in exposed_headers

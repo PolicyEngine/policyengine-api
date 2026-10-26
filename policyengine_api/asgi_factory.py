@@ -480,6 +480,8 @@ def create_asgi_app(
             REQUEST_ID_HEADER,
             OBSERVABILITY_ID_HEADER,
             "WWW-Authenticate",
+            # v2 metadata responses carry an ETag a client may revalidate with.
+            "ETag",
         ],
         allow_credentials=False,
         max_age=600,

@@ -110,7 +110,9 @@ version, which changes on deploy, and may be reused for five minutes
 reused only until the next UTC midnight, whichever lifetime would otherwise
 apply. A request whose `If-None-Match` names the current `ETag` (strong or
 weak form, alone or in a list) gets HTTP 304 with no body. Error responses
-carry neither header.
+carry neither header. `ETag` is listed in `Access-Control-Expose-Headers`, so
+browser scripts on other origins can read it (`Cache-Control` is readable
+without that).
 
 Each API process also keeps the serialized bodies of `/v2/model-catalog` and
 `/v2/model-catalog/variables` once built, each with its `ETag` computed once,
