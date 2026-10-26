@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.query_parameters import CatalogQuery
 
-ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+PATH_COUNTRY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
         "model": V2ErrorResponse,
         "description": (
@@ -57,6 +57,10 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
             "version, returns 422."
         ),
     },
+}
+"""The extra response of the one metadata route that takes the country in its path."""
+
+ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {
         "model": V2ErrorResponse,
         "description": "The requested catalog resource is absent.",

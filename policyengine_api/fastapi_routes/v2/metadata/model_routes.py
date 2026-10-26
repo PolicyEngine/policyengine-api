@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     METADATA_RESPONSES,
+    PATH_COUNTRY_ERROR_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
 )
@@ -69,6 +70,7 @@ def build_v2_metadata_model_router(
     @router.get(
         "/tax-benefit-models/by-country/{country_id}",
         response_model=MetadataModelSelectionResponse,
+        responses=PATH_COUNTRY_ERROR_RESPONSES,
         summary="Get a country model and selected PolicyEngine.py version",
     )
     def get_model_by_country(
