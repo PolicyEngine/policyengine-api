@@ -1300,3 +1300,68 @@ def test_publication_fails_when_a_published_version_has_no_search_file(
         publish_catalog(publication_engine, normalized_catalog())
 
     assert _counts(publication_engine)["tax_benefit_model_versions"] == 0
+
+
+def test_the_catalog_writer_role_publishes_the_search_files(
+    publication_engine: Engine,
+    managed_v2_roles,
+    v2_engine_as_role,
+) -> None:
+    """Publication as the catalog writer writes each version's search file.
+
+    That needs the role's declared INSERT grant on the search files' table.
+    """
+    writer_engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
+    catalog = normalized_catalog()
+    try:
+        evidence = publish_catalog(writer_engine, catalog)
+    finally:
+        writer_engine.dispose()
+
+    assert [
+        (model_name, version)
+        for model_name, version, _uncompressed, _compressed in (
+            evidence.parameter_search_files_written
+        )
+    ] == [
+        (country.model.name, country.model_version.version)
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    ]
+    for country in catalog.countries:
+        version = country.model_version.version
+        assert _stored_search_file(
+            publication_engine, country.model.name, version
+        ) == _fixture_search_file(country.country_id, version)
+
+
+def test_one_publication_gives_the_installed_stored_version_its_tree_and_file(
+    publication_engine: Engine,
+) -> None:
+    """The installed version stored without either gets both in one run."""
+    catalog = normalized_catalog()
+    current_version = catalog.country("us").model_version.version
+    publish_catalog(publication_engine, catalog)
+    _delete_tree(publication_engine, current_version)
+    _delete_search_files(publication_engine, current_version)
+
+    evidence = publish_catalog(publication_engine, catalog)
+
+    model_names = [
+        country.model.name
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    ]
+    assert [model for model, _version, _rows in evidence.parameter_trees_written] == (
+        model_names
+    )
+    assert [
+        model
+        for model, _version, _raw, _size in evidence.parameter_search_files_written
+    ] == model_names
+    for country in catalog.countries:
+        assert (
+            _stored_tree(publication_engine, country.model.name, current_version)
+            == FIXTURE_TREE
+        )
+        assert _stored_search_file(
+            publication_engine, country.model.name, current_version
+        ) == _fixture_search_file(country.country_id, current_version)

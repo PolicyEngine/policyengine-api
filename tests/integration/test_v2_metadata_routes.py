@@ -1124,3 +1124,15 @@ def test_postgres_search_file_reads_as_the_runtime_role(
     assert json.loads(gzip.decompress(search_file.compressed_content)) == (
         country_search_file(normalized_catalog().country("us"))
     )
+
+
+def test_postgres_search_file_of_an_unknown_catalog_version_is_absent(
+    published_engine: Engine,
+) -> None:
+    response = _client(published_engine).get(
+        "/v2/parameters/search-file",
+        params={"country_id": "us", "policyengine_version": "99.0.0"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["status"] == "error"
