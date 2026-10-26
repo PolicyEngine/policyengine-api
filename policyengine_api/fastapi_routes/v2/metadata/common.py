@@ -61,6 +61,18 @@ PATH_COUNTRY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 """The extra response of the one metadata route that takes the country in its path."""
 
+PARAMETER_TREE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    503: {
+        "model": V2ErrorResponse,
+        "description": (
+            "The initialized v2 catalog is unavailable, or the catalog version "
+            "has no parameter tree because it was published before the tree "
+            "existed; the message then names the version."
+        ),
+    },
+}
+"""The parameter tree route's 503, which also covers a version without a tree."""
+
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {
         "model": V2ErrorResponse,
