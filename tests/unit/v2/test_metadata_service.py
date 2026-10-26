@@ -124,6 +124,8 @@ def _insert_country(
                     for enum_value in record.enum_values
                 ]
             ),
+            unit=record.unit,
+            definition_period=record.definition_period,
         )
         for record in country.variables
     )
@@ -1133,6 +1135,71 @@ def test_parameter_tree_leaves_carry_the_same_summary_as_parameter_pages(
 
     assert leaf.parameter == page_item
     assert (leaf.parameter.economy, leaf.parameter.household) == (True, False)
+
+
+def _uk_model_version(session: Session) -> TaxBenefitModelVersion:
+    return session.exec(
+        select(TaxBenefitModelVersion)
+        .join(TaxBenefitModel, TaxBenefitModel.id == TaxBenefitModelVersion.model_id)
+        .where(
+            TaxBenefitModel.name == "policyengine-uk",
+            TaxBenefitModelVersion.version == POLICYENGINE_VERSION,
+        )
+    ).one()
+
+
+def test_variables_carry_their_unit_and_definition_period(
+    catalog_session: Session,
+) -> None:
+    uk_version = _uk_model_version(catalog_session)
+    catalog_session.add_all(
+        [
+            Variable(
+                id=uuid4(),
+                tax_benefit_model_version_id=uk_version.id,
+                name="universal_credit",
+                entity="benunit",
+                data_type="float",
+                default_value=0,
+                unit="currency-GBP",
+                definition_period="month",
+            ),
+            # A variable published before catalog format 2 stored neither.
+            Variable(
+                id=uuid4(),
+                tax_benefit_model_version_id=uk_version.id,
+                name="age",
+                entity="person",
+                data_type="int",
+                default_value=0,
+            ),
+        ]
+    )
+    catalog_session.commit()
+    service = _service(catalog_session)
+
+    us_variables = service.get_catalog_variables("us").variables
+    uk_variables = {
+        variable.name: variable
+        for variable in service.get_catalog_variables("uk").variables
+    }
+    us_page = service.list_variables("us").items
+
+    assert [(item.unit, item.definition_period) for item in us_variables] == [
+        ("currency-USD", "year")
+    ]
+    assert (us_page[0].unit, us_page[0].definition_period) == (
+        "currency-USD",
+        "year",
+    )
+    assert (
+        uk_variables["universal_credit"].unit,
+        uk_variables["universal_credit"].definition_period,
+    ) == ("currency-GBP", "month")
+    assert (uk_variables["age"].unit, uk_variables["age"].definition_period) == (
+        None,
+        None,
+    )
 
 
 def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:

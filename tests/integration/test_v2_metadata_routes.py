@@ -488,6 +488,8 @@ def test_postgres_catalog_variables_carry_part_parameter_values_by_date(
     assert result["variables"][0]["module_name"] == (
         "household.income.employment_income"
     )
+    assert result["variables"][0]["unit"] == "currency-USD"
+    assert result["variables"][0]["definition_period"] == "year"
     assert result["variables"][1]["adds_parameter_path"] == "gov.example.parts"
     assert result["part_parameter_values"] == {
         "gov.example.parts": [
