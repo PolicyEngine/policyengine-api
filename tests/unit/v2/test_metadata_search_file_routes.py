@@ -8,6 +8,9 @@ from typing import get_type_hints
 
 import pytest
 
+from policyengine_api.data.v2.catalog.catalog_selection import (
+    MetadataCatalogVersionNotFoundError,
+)
 from policyengine_api.data.v2.catalog.parameter_search_file import (
     EditabilityChange,
     EditabilityChangeEntry,
@@ -384,3 +387,36 @@ def test_a_large_search_file_stays_uncompressed_for_a_client_refusing_gzip(
     assert "content-encoding" not in response.headers
     assert response.headers["etag"] == f'"{encoded.content_sha256}"'
     assert response.content == gzip.decompress(encoded.compressed_content)
+
+
+def test_browser_scripts_can_read_the_search_file_entity_tag() -> None:
+    response = metadata_route_client(_search_file_reader).get(
+        SEARCH_FILE_PATH,
+        params={"country_id": "us"},
+        headers={"Origin": "https://app.policyengine.org", "Accept-Encoding": "gzip"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == (
+        "https://app.policyengine.org"
+    )
+    exposed_headers = {
+        value.strip().lower()
+        for value in response.headers["access-control-expose-headers"].split(",")
+    }
+    assert "etag" in exposed_headers
+    assert response.headers["vary"] == "Origin, Accept-Encoding"
+
+
+def test_search_file_route_reports_an_unknown_catalog_version_as_absent() -> None:
+    reader = _search_file_reader(
+        error=MetadataCatalogVersionNotFoundError("catalog version 9.9.9 is absent")
+    )
+
+    response = metadata_route_client(lambda: reader).get(
+        SEARCH_FILE_PATH, params={"country_id": "us", "policyengine_version": "9.9.9"}
+    )
+
+    assert response.status_code == 404
+    assert "etag" not in response.headers
+    assert "cache-control" not in response.headers
