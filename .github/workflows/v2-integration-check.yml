@@ -48,6 +48,9 @@ jobs:
           --health-timeout=5s
           --health-retries=20
     env:
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
       ALEMBIC_DATABASE_URL: mysql+pymysql://root:policyengine_test@127.0.0.1:3306/policyengine_alembic_test
       V2_MIGRATION_DATABASE_URL: postgresql+psycopg://postgres:policyengine_v2_test@127.0.0.1:5432/policyengine_v2_alembic_test
       V2_ALEMBIC_DISPOSABLE_TEST: "1"
@@ -64,37 +67,37 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
       - name: Install locked dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --extra dev
       - name: Prepare the disposable v1 schema
-        run: uv run alembic -c alembic-v1.ini upgrade head
+        run: uv run --frozen --extra dev alembic -c alembic-v1.ini upgrade head
       - name: Prepare the disposable v2 schema
-        run: uv run alembic -c alembic-v2.ini upgrade head
+        run: uv run --frozen --extra dev alembic -c alembic-v2.ini upgrade head
       - name: Create the managed v2 roles and grant their declared privileges
-        run: uv run python scripts/reconcile_v2_privileges.py apply --create-missing-roles
+        run: uv run --frozen --extra dev python scripts/reconcile_v2_privileges.py apply --create-missing-roles
       - name: Verify the managed v2 roles hold their declared privileges
-        run: uv run python scripts/reconcile_v2_privileges.py verify
+        run: uv run --frozen --extra dev python scripts/reconcile_v2_privileges.py verify
       - name: Verify the installed PolicyEngine.py catalog interface
-        run: uv run coverage run --branch -m pytest -q tests/integration/test_v2_catalog_installed.py
+        run: uv run --frozen --extra dev coverage run --branch -m pytest -q tests/integration/test_v2_catalog_installed.py
         env:
           RUN_V2_CATALOG_COMPATIBILITY: "1"
       - name: Test v2 metadata publication and resource routes
-        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication.py tests/integration/test_v2_metadata_routes.py
+        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication.py tests/integration/test_v2_metadata_routes.py
       - name: Test v2 policy persistence and immediate v1 mirroring
-        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_policy_persistence.py tests/integration/test_v1_policy_dual_write.py tests/integration/test_mysql_policy_dual_write.py tests/integration/test_v2_user_policy_mirroring.py tests/integration/test_v1_user_policy_dual_write.py
+        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_policy_persistence.py tests/integration/test_v1_policy_dual_write.py tests/integration/test_mysql_policy_dual_write.py tests/integration/test_v2_user_policy_mirroring.py tests/integration/test_v1_user_policy_dual_write.py
       - name: Test signed-in identity provisioning and user associations
-        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_user_identity_persistence.py
+        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_user_identity_persistence.py
       - name: Test comparison-run persistence and privilege reconciliation as the managed roles
-        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_stage12_comparison_persistence.py tests/integration/test_v2_privilege_reconciliation.py
+        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_stage12_comparison_persistence.py tests/integration/test_v2_privilege_reconciliation.py
       - name: Test v2 household persistence and immediate v1 copying
-        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_household_persistence.py tests/integration/test_v1_household_dual_write.py tests/integration/test_mysql_household_spm_dual_write.py
+        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_household_persistence.py tests/integration/test_v1_household_dual_write.py tests/integration/test_mysql_household_spm_dual_write.py
       - name: Qualify production-scale v2 metadata publication
-        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication_qualification.py
+        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication_qualification.py
         env:
           RUN_V2_CATALOG_PUBLICATION_QUALIFICATION: "1"
       - name: Test real Redis cross-instance semantics
-        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_runtime_cache_redis.py
+        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_runtime_cache_redis.py
       - name: Export v2 integration coverage
-        run: uv run coverage xml -i -o coverage-v2.xml
+        run: uv run --frozen --extra dev coverage xml -i -o coverage-v2.xml
       - name: Upload v2 integration coverage to Codecov
         uses: codecov/codecov-action@v5
         with:

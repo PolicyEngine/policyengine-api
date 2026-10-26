@@ -190,6 +190,10 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -197,6 +201,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
       - name: Auth
         uses: google-github-actions/auth@v2
         with:
@@ -204,10 +210,10 @@ jobs:
           service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
       - name: Wait until PolicyEngine bundle version is available on PyPI
         run: .github/wait-for-pypi.sh
-      - name: Install dependencies
+      - name: Install locked dependencies
         run: make install
       - name: Run environment variable tests
-        run: pytest tests/env_variables/test_environment_variables.py
+        run: uv run --frozen --extra dev pytest tests/env_variables/test_environment_variables.py
         env:
           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
           # Compatibility name required by PolicyEngine Core. The GitHub
@@ -223,6 +229,10 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -230,6 +240,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
       - name: Update package lists
         run: sudo apt-get update
       - name: Install system dependencies
@@ -245,7 +257,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: policyengine-api
-      - name: Install dependencies
+      - name: Install locked dependencies
         run: make install
       - name: Test the API
         run: make test
