@@ -19,7 +19,8 @@ class PublicationEvidence:
     fallback_summaries: tuple[tuple[str, str, int], ...]
     elapsed_seconds: float
     # The catalog's versions whose parameter tree this publication wrote:
-    # model, version and tree rows. Empty once each has its tree.
+    # model, version and tree rows. Empty when none needed one: each already
+    # has its tree, or was stored before catalog format 2 and gets none.
     parameter_trees_written: tuple[tuple[str, str, int], ...] = ()
 
     def as_dict(self) -> dict[str, object]:
