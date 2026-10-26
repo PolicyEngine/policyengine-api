@@ -78,6 +78,15 @@ def build_v2_metadata_parameter_router(
         "/parameters/children",
         response_model=MetadataParameterChildPageResponse,
         summary="List one level of a catalog version's parameter tree",
+        description=(
+            "Lists the direct children of `parent_path` (the top level when "
+            "empty). With `reform_changeable=true`, only the children a reform "
+            "can change, sorted by label, with child counts that count only "
+            "those. Invalid query parameters return 422, including a malformed "
+            "policyengine_version, an unsupported country, and an unknown or "
+            "repeated parameter. A catalog version published before the tree "
+            "existed has no tree and returns 503 with a message naming it."
+        ),
     )
     def list_parameter_children(
         query: ParameterChildrenQueryDependency,

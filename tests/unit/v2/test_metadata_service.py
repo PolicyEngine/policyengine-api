@@ -667,6 +667,34 @@ def test_parameter_tree_levels_are_paged(catalog_session: Session) -> None:
     assert last.has_more is False
 
 
+def test_the_reform_changeable_level_is_paged_in_label_order(
+    catalog_session: Session,
+) -> None:
+    model_version = _model_version(catalog_session, "policyengine-us")
+    _add_parameters(
+        catalog_session,
+        model_version,
+        [
+            ("gov.paged.c_item", "Cherry", True, False),
+            ("gov.paged.a_item", "Banana", False, True),
+            ("gov.paged.b_item", "Apple", True, True),
+            ("gov.paged.d_item", "Date", False, False),
+        ],
+    )
+    catalog_session.commit()
+    _write_parameter_tree(catalog_session, model_version.id)
+    service = _service(catalog_session)
+    level = _level("gov.paged", reform_changeable=True)
+
+    first = service.list_parameter_children("us", level=level, offset=0, limit=2)
+    last = service.list_parameter_children("us", level=level, offset=2, limit=2)
+
+    assert [item.label for item in first.items] == ["Apple", "Banana"]
+    assert first.has_more is True
+    assert [item.label for item in last.items] == ["Cherry"]
+    assert last.has_more is False
+
+
 def test_an_unwritten_parameter_tree_is_reported_as_unavailable(
     catalog_session: Session,
 ) -> None:
