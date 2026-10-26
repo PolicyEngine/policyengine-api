@@ -2,9 +2,11 @@
 
 Publication writes the tree of each country version in the catalog it
 publishes, which is extracted from the installed packages: versions it
-publishes now, and the installed version when an earlier release stored it
-without a tree. The rows are built from the catalog's own parameter and node
-records (``parameter_tree``), never from rows an earlier release stored. Only
+publishes now, and the installed version when an earlier release stored it with
+catalog format 2 but without a tree. An installed version stored before catalog
+format 2 gets none, since its parameter rows store no flags. The rows are built
+from the catalog's own parameter and node records (``parameter_tree``), never
+from rows an earlier release stored. Only
 the stored parameters' IDs are read, by name, so tree rows reference the stored
 parameters; publication has already checked that those stored rows match the
 catalog. Writing only inserts rows for a version that has no tree; no other

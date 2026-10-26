@@ -127,8 +127,9 @@ def publish_catalog(
 
     In the same transaction it writes the parameter tree of each version in
     the catalog that has none, built from the catalog: the versions it
-    publishes, and the installed version when an earlier release stored it
-    without a tree. Other stored versions keep having none.
+    publishes, and the installed version when an earlier release stored it with
+    catalog format 2 but without a tree. Other stored versions, and an
+    installed version stored before catalog format 2, keep having none.
     """
     started = time.monotonic()
     with engine.begin() as connection:
