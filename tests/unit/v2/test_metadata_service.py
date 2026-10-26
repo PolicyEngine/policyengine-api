@@ -235,13 +235,15 @@ def _add_country_version(
     session.commit()
 
 
-def _us_model_version(session: Session) -> TaxBenefitModelVersion:
+def _model_version(
+    session: Session, model_name: str, version: str = POLICYENGINE_VERSION
+) -> TaxBenefitModelVersion:
     return session.exec(
         select(TaxBenefitModelVersion)
         .join(TaxBenefitModel, TaxBenefitModel.id == TaxBenefitModelVersion.model_id)
         .where(
-            TaxBenefitModel.name == "policyengine-us",
-            TaxBenefitModelVersion.version == POLICYENGINE_VERSION,
+            TaxBenefitModel.name == model_name,
+            TaxBenefitModelVersion.version == version,
         )
     ).one()
 
@@ -259,7 +261,7 @@ def _service(
 def test_resource_collection_uses_bounded_pagination_without_counting(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = _model_version(catalog_session, "policyengine-us")
     catalog_session.add(
         Variable(
             id=uuid4(),
@@ -351,7 +353,7 @@ def test_parameter_collection_does_not_query_or_embed_values(
 def test_parameter_values_are_separate_canonical_resources(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = _model_version(catalog_session, "policyengine-us")
     parameter = catalog_session.exec(
         select(Parameter).where(
             Parameter.tax_benefit_model_version_id == model_version.id,
@@ -412,7 +414,7 @@ def test_current_parameter_value_uses_inclusive_effective_dates(
 def test_parameter_children_are_loaded_one_level_at_a_time(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = _model_version(catalog_session, "policyengine-us")
     nested_node = ParameterNode(
         id=uuid4(),
         tax_benefit_model_version_id=model_version.id,
@@ -547,7 +549,7 @@ def test_version_selection_rejects_invalid_absent_and_unsupported_requests(
 def test_dataset_collection_excludes_outputs_and_storage_references(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = _model_version(catalog_session, "policyengine-us")
     output_id = uuid4()
     catalog_session.add(
         Dataset(
@@ -661,7 +663,7 @@ def test_model_catalog_without_regions_offers_no_economy_calculation(
 ) -> None:
     # A household-only country publishes no regions or datasets; its catalog
     # still serves entities and basic inputs, with empty economy choices.
-    model_version = _us_model_version(catalog_session)
+    model_version = _model_version(catalog_session, "policyengine-us")
     for region in catalog_session.exec(
         select(Region).where(Region.tax_benefit_model_version_id == model_version.id)
     ).all():
@@ -686,7 +688,7 @@ def test_model_catalog_without_regions_offers_no_economy_calculation(
 def test_model_catalog_published_before_format_2_has_empty_new_fields(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = _model_version(catalog_session, "policyengine-us")
     model_version.catalog_format = None
     model_version.entities = None
     model_version.basic_inputs = None
@@ -714,7 +716,7 @@ def test_model_catalog_with_regions_requires_the_national_region(
 
 
 def _add_variable_with_parameter_named_parts(session: Session) -> None:
-    model_version = _us_model_version(session)
+    model_version = _model_version(session, "policyengine-us")
     parts = Parameter(
         id=uuid4(),
         tax_benefit_model_version_id=model_version.id,
@@ -858,7 +860,7 @@ def test_variable_pages_carry_the_format_2_fields(catalog_session: Session) -> N
 
 
 def _add_bracket_schedule(session: Session) -> None:
-    model_version = _us_model_version(session)
+    model_version = _model_version(session, "policyengine-us")
     session.add_all(
         [
             ParameterNode(
@@ -967,7 +969,7 @@ def test_named_parameters_list_names_the_version_lacks(
 def test_named_parameters_exclude_policy_and_dynamic_values(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = _model_version(catalog_session, "policyengine-us")
     parameter = catalog_session.exec(
         select(Parameter).where(
             Parameter.tax_benefit_model_version_id == model_version.id,
@@ -1097,7 +1099,7 @@ def test_value_and_node_label_reads_return_typed_rows(
         reads_parameters,
     )
 
-    model_version = _us_model_version(catalog_session)
+    model_version = _model_version(catalog_session, "policyengine-us")
     values = reads_parameters.read_current_law_values_by_parameter_name(
         catalog_session,
         model_version_id=model_version.id,
@@ -1137,21 +1139,10 @@ def test_parameter_tree_leaves_carry_the_same_summary_as_parameter_pages(
     assert (leaf.parameter.economy, leaf.parameter.household) == (True, False)
 
 
-def _uk_model_version(session: Session) -> TaxBenefitModelVersion:
-    return session.exec(
-        select(TaxBenefitModelVersion)
-        .join(TaxBenefitModel, TaxBenefitModel.id == TaxBenefitModelVersion.model_id)
-        .where(
-            TaxBenefitModel.name == "policyengine-uk",
-            TaxBenefitModelVersion.version == POLICYENGINE_VERSION,
-        )
-    ).one()
-
-
 def test_variables_carry_their_unit_and_definition_period(
     catalog_session: Session,
 ) -> None:
-    uk_version = _uk_model_version(catalog_session)
+    uk_version = _model_version(catalog_session, "policyengine-uk")
     catalog_session.add_all(
         [
             Variable(
