@@ -249,7 +249,7 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
         for format_1, format_2 in zip(
             format_1_comparisons, format_2_comparisons, strict=True
         )
-    ] == [3, 6, 0, 2, 0, 0]
+    ] == [3, 8, 0, 2, 0, 0]
 
     class Result:
         def scalar_one(self):

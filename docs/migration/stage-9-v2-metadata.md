@@ -106,20 +106,20 @@ publishes entities, basic inputs and these flags:
 | Record | Fields |
 | --- | --- |
 | Model version | `catalog_format` (2), `entities` (`key`, `plural`, `is_person`, in the package's order), `basic_inputs` (the household builder's default fields) |
-| Variable | `is_input_variable`, `hidden_input`, `module_name`, `adds_parameter_path` and `subtracts_parameter_path` (the parameter whose dated value lists the variables summed; `adds` and `subtracts` keep the list PolicyEngine.py resolved), `enum_values` (`value` and declared `label`, in order) |
+| Variable | `is_input_variable`, `hidden_input`, `module_name`, `adds_parameter_path` and `subtracts_parameter_path` (the parameter whose dated value lists the variables summed; `adds` and `subtracts` keep the list PolicyEngine.py resolved), `enum_values` (`value` and declared `label`, in order), `unit` (for example `currency-USD`) and `definition_period` (`year`, `month` or `eternity`), which the household builder and breakdown read |
 | Parameter | `economy`, `household` |
 
-Bracket schedules are parameter nodes with their stored label, or none when
-the package stores none. An empty basic-input list is stored as empty.
-Extraction stops before reading any record if the installed PolicyEngine.py
-does not publish these fields, as neither 6.7.5 nor the locked 6.10.0 does,
-and names each missing field. It also stops if the model has other than one person entity, names a
-basic input or a parameter path that is not published, gives enum labels that
-do not match the variable's possible values or are not JSON scalars, or gives
-a flag that is not a boolean. An opt-in test
-(`tests/integration/test_v2_catalog_metadata_parity.py`, run by the v2
-integration check) compares every format 2 field for the US and the UK with
-what `/{country}/metadata` builds.
+Bracket schedules are parameter nodes with their stored label, or none when the
+package stores none. An empty basic-input list is stored as empty. Extraction
+stops before reading any record if the installed PolicyEngine.py does not
+publish these fields, and names each missing field: 6.7.5 and the locked 6.10.0
+publish only the variables' unit and definition period. It also stops if the
+model has other than one person entity, names a basic input or a parameter path
+that is not published, gives enum labels that do not match the variable's
+possible values or are not JSON scalars, or gives a flag that is not a boolean.
+An opt-in test (`tests/integration/test_v2_catalog_metadata_parity.py`, run by
+the v2 integration check) compares every format 2 field for the US and the UK
+with what `/{country}/metadata` builds.
 
 Publication never rewrites a stored version. A version published before
 format 2 has a null `catalog_format` and null format 2 fields, and later

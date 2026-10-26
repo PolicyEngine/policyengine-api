@@ -168,6 +168,8 @@ def _comparison_pairs(
             STAGE_CATALOG_VARIABLES.c.adds_parameter_path,
             STAGE_CATALOG_VARIABLES.c.subtracts_parameter_path,
             STAGE_CATALOG_VARIABLES.c.enum_values,
+            STAGE_CATALOG_VARIABLES.c.unit,
+            STAGE_CATALOG_VARIABLES.c.definition_period,
         ),
     ).where(STAGE_CATALOG_VARIABLES.c.country_id == country.country_id)
     actual_variables = (
@@ -188,6 +190,8 @@ def _comparison_pairs(
                 VARIABLES.c.adds_parameter_path,
                 VARIABLES.c.subtracts_parameter_path,
                 sa.cast(VARIABLES.c.enum_values, JSONB),
+                VARIABLES.c.unit,
+                VARIABLES.c.definition_period,
             ),
         )
         .select_from(_versioned_table_from(VARIABLES))
@@ -525,6 +529,8 @@ INSERT_VARIABLES = sa.insert(VARIABLES).from_select(
         "adds_parameter_path",
         "subtracts_parameter_path",
         "enum_values",
+        "unit",
+        "definition_period",
         "tax_benefit_model_version_id",
     ],
     sa.select(
@@ -557,6 +563,8 @@ INSERT_VARIABLES = sa.insert(VARIABLES).from_select(
             STAGE_CATALOG_VARIABLES.c.enum_values,
             VARIABLES.c.enum_values.type,
         ),
+        STAGE_CATALOG_VARIABLES.c.unit,
+        STAGE_CATALOG_VARIABLES.c.definition_period,
         MODEL_VERSIONS.c.id,
     )
     .select_from(
