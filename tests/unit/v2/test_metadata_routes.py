@@ -650,20 +650,15 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
 
     for path in metadata_paths:
         operation = schema["paths"][path]["get"]
-        assert set(operation["responses"]) >= {
-            "200",
-            "400",
-            "404",
-            "405",
-            "422",
-            "500",
-            "503",
-        }
+        error_statuses = ["404", "405", "422", "500", "503"]
+        if path == "/v2/tax-benefit-models/by-country/{country_id}":
+            error_statuses.append("400")
+        assert set(operation["responses"]) >= {"200", *error_statuses}
         success_schema = operation["responses"]["200"]["content"]["application/json"][
             "schema"
         ]
         assert success_schema["$ref"].startswith("#/components/schemas/Metadata")
-        for status in ("400", "404", "405", "422", "500", "503"):
+        for status in error_statuses:
             error_schema = operation["responses"][status]["content"][
                 "application/json"
             ]["schema"]
@@ -1384,8 +1379,12 @@ def test_openapi_declares_caching_headers_and_not_modified_responses() -> None:
         assert "$ref" in responses["200"]["content"]["application/json"]["schema"]
         assert set(responses["304"]["headers"]) == {"ETag", "Cache-Control", "Vary"}
         assert "content" not in responses["304"]
-        assert "policyengine_version" not in responses["400"]["description"]
-        assert "path" in responses["400"]["description"]
+        if path == "/v2/tax-benefit-models/by-country/{country_id}":
+            assert "path" in responses["400"]["description"]
+        else:
+            # Query parameters are validated first (422), so only a country
+            # given in the path can return 400.
+            assert "400" not in responses, path
 
 
 def _vary_value_counts(response) -> dict[str, int]:
