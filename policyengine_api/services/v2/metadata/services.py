@@ -91,6 +91,9 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.metadata.database_session import (
         MetadataDatabaseSession,
     )
+    from policyengine_api.services.v2.metadata.selected_catalogs import (
+        SelectedCatalogStore,
+    )
 
 
 class V2MetadataService:
@@ -107,12 +110,18 @@ class V2MetadataService:
         database_session: MetadataDatabaseSession,
         *,
         running_policyengine_version: str,
+        selected_catalogs: SelectedCatalogStore | None = None,
     ) -> None:
-        """Bind to a request's session and the running PolicyEngine.py version."""
+        """Bind to a request's session and the running PolicyEngine.py version.
+
+        With ``selected_catalogs``, a catalog version found once is taken from
+        that store instead of being queried again.
+        """
         self._database_session = database_session
         self._running_policyengine_version = validate_policyengine_version(
             running_policyengine_version
         )
+        self._selected_catalogs = selected_catalogs
 
     def close(self) -> None:
         """Close the request's database session."""
@@ -121,12 +130,20 @@ class V2MetadataService:
     def _select_catalog(
         self, country_id: str, policyengine_version: str | None
     ) -> SelectedCatalog:
-        return read_metadata_catalog(
+        key = (country_id, policyengine_version)
+        if self._selected_catalogs is not None:
+            kept = self._selected_catalogs.get(key)
+            if kept is not None:
+                return kept
+        selected = read_metadata_catalog(
             self._database_session.session,
             country_id=country_id,
             running_policyengine_version=self._running_policyengine_version,
             policyengine_version=policyengine_version,
         )
+        if self._selected_catalogs is not None:
+            self._selected_catalogs.keep(key, selected)
+        return selected
 
     def _select_paginated_catalog(
         self,

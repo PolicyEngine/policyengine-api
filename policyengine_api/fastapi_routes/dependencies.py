@@ -30,6 +30,9 @@ from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
 from policyengine_api.fastapi_routes.v2.user_auth import authenticate_account_request
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.readiness import is_ready
+from policyengine_api.services.v2.metadata.selected_catalogs import (
+    SelectedCatalogStore,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -91,6 +94,12 @@ def _running_policyengine_version() -> str:
 
 
 @lru_cache(maxsize=1)
+def _process_selected_catalogs() -> SelectedCatalogStore:
+    """Return the catalog versions this process's metadata reads have selected."""
+    return SelectedCatalogStore()
+
+
+@lru_cache(maxsize=1)
 def _process_metadata_response_cache() -> MetadataResponseCache:
     """Return the whole catalog-version responses this process keeps."""
     return MetadataResponseCache()
@@ -108,6 +117,7 @@ def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     return V2MetadataService(
         MetadataDatabaseSession(get_v2_read_session_factory()()),
         running_policyengine_version=_running_policyengine_version(),
+        selected_catalogs=_process_selected_catalogs(),
     )
 
 
