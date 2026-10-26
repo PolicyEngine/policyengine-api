@@ -81,11 +81,14 @@ Metadata reads use read-only sessions in autocommit mode on the shared v2
 pool (`get_v2_read_session_factory`): each read is one statement on rows a
 published catalog version never changes, so no transaction is needed, and the
 database receives no `BEGIN` before the reads and no `ROLLBACK` when the
-session closes. Measured with statement logging in a local database, a page of
-500 parameters or one parameter's values took five statements per request
-before (the pool's liveness check, `BEGIN`, the catalog selection, the read
-and `ROLLBACK`) and three after. The pool's liveness check
-(`pool_pre_ping`) is unchanged.
+session closes. Each process also keeps every catalog version a request has
+selected (`SelectedCatalogStore`), since a published version never changes, so
+later requests for the same country and version skip the selection query;
+failed selections are not kept. Measured with statement logging in a local
+database, a page of 500 parameters or one parameter's values took five
+statements per request before (the pool's liveness check, `BEGIN`, the catalog
+selection, the read and `ROLLBACK`) and two after (the liveness check and the
+read). The pool's liveness check (`pool_pre_ping`) is unchanged.
 
 ## Response caching
 

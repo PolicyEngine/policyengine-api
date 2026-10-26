@@ -1,1 +1,1 @@
-v2 metadata reads run in autocommit read-only sessions on the shared pool, so each request sends no BEGIN or ROLLBACK to the database (two fewer round trips per request).
+v2 metadata reads run in autocommit read-only sessions on the shared pool, and each process keeps the catalog versions it has selected, so a metadata request sends two statements to the database (the pool's liveness check and the read) instead of five.

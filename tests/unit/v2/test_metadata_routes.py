@@ -27,6 +27,9 @@ from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
 )
+from policyengine_api.services.v2.metadata.selected_catalogs import (
+    SelectedCatalogStore,
+)
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
     MetadataCatalogParameter,
@@ -512,9 +515,12 @@ def test_default_reader_uses_the_installed_policyengine_version(
     captured = {}
     reader = object()
 
-    def query_service(candidate_session, *, running_policyengine_version):
+    def query_service(
+        candidate_session, *, running_policyengine_version, selected_catalogs
+    ):
         captured["session"] = candidate_session.session
         captured["version"] = running_policyengine_version
+        captured["selected_catalogs"] = selected_catalogs
         return reader
 
     monkeypatch.setattr(
@@ -533,7 +539,12 @@ def test_default_reader_uses_the_installed_policyengine_version(
         route_dependencies._running_policyengine_version.cache_clear()
 
     assert result is reader
-    assert captured == {"session": session, "version": "5.2.0"}
+    assert captured["session"] is session
+    assert captured["version"] == "5.2.0"
+    assert isinstance(captured["selected_catalogs"], SelectedCatalogStore)
+    assert (
+        route_dependencies._process_selected_catalogs() is captured["selected_catalogs"]
+    )
 
 
 def test_default_factory_and_close_failures_preserve_success(

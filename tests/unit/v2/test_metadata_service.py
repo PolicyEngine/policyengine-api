@@ -33,6 +33,9 @@ from policyengine_api.data.v2.models import (
 from policyengine_api.services.v2.metadata.database_session import (
     MetadataDatabaseSession,
 )
+from policyengine_api.services.v2.metadata.selected_catalogs import (
+    SelectedCatalogStore,
+)
 from policyengine_api.services.v2.metadata.services import V2MetadataService
 from policyengine_api.services.v2.metadata.transformations import ancestor_paths
 from policyengine_api.services.v2.metadata.types import (
@@ -239,10 +242,13 @@ def _us_model_version(session: Session) -> TaxBenefitModelVersion:
     ).one()
 
 
-def _service(session: Session) -> V2MetadataService:
+def _service(
+    session: Session, *, selected_catalogs: SelectedCatalogStore | None = None
+) -> V2MetadataService:
     return V2MetadataService(
         MetadataDatabaseSession(session),
         running_policyengine_version=POLICYENGINE_VERSION,
+        selected_catalogs=selected_catalogs,
     )
 
 
@@ -1007,6 +1013,76 @@ def test_parameter_pages_and_values_can_be_narrowed_to_named_parameters(
     ]
     assert parameters.items[0].economy is True
     assert sorted(value.value for value in values.items) == [0.1, 0.2, 0.2]
+
+
+def test_a_kept_catalog_selection_saves_its_query_on_later_reads(
+    catalog_session: Session,
+) -> None:
+    store = SelectedCatalogStore()
+
+    first, first_statements = _recorded_statements(
+        catalog_session,
+        lambda: _service(catalog_session, selected_catalogs=store).list_parameters(
+            "us"
+        ),
+    )
+    second, second_statements = _recorded_statements(
+        catalog_session,
+        lambda: _service(catalog_session, selected_catalogs=store).list_parameters(
+            "us"
+        ),
+    )
+
+    assert second == first
+    assert len(first_statements) == 2
+    assert len(second_statements) == 1
+    assert "tax_benefit_model_versions" not in second_statements[0]
+
+
+def test_failed_catalog_selections_are_not_kept(catalog_session: Session) -> None:
+    store = SelectedCatalogStore()
+    service = _service(catalog_session, selected_catalogs=store)
+
+    for _attempt in range(2):
+        with pytest.raises(MetadataCatalogVersionNotFoundError):
+            service.list_parameters("us", "9.9.9")
+        with pytest.raises(UnsupportedPreviewCountryError):
+            service.list_parameters("ca")
+        with pytest.raises(InvalidPolicyEngineVersionError):
+            service.list_parameters("us", "not a version")
+
+    _add_country_version(
+        catalog_session,
+        policyengine_version="9.9.9",
+        current_law_id=7,
+        time_periods=[2027],
+    )
+    assert service.list_parameters("us", "9.9.9").policyengine_version == "9.9.9"
+
+
+def test_each_country_and_version_keeps_its_own_selection(
+    catalog_session: Session,
+) -> None:
+    store = SelectedCatalogStore()
+    _add_country_version(
+        catalog_session,
+        policyengine_version="9.9.9",
+        current_law_id=7,
+        time_periods=[2027],
+    )
+    service = _service(catalog_session, selected_catalogs=store)
+
+    running_us = service.get_model_by_country("us")
+    named_us = service.get_model_by_country("us", "9.9.9")
+    running_uk = service.get_model_by_country("uk")
+
+    assert (running_us.policyengine_version, named_us.policyengine_version) == (
+        POLICYENGINE_VERSION,
+        "9.9.9",
+    )
+    assert named_us.model_version.current_law_id == 7
+    assert running_uk.model.name == "policyengine-uk"
+    assert service.get_model_by_country("us", "9.9.9") == named_us
 
 
 def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
