@@ -126,7 +126,7 @@ unauthenticated: a standard user's row is never locked.
 | State | Outcome | What happens |
 | --- | --- | --- |
 | The identity has no user yet; the browser's unauthenticated user exists | `converted` | The `user_identities` row (issuer, subject, verified email) is inserted pointing at the browser's `users.id`; the user becomes `standard` with `primary_country = country_id`. The ID is unchanged, so every association stays owned. |
-| The identity already belongs to standard user S; the unauthenticated user exists | `merged` | Every row of `user_policies`, `user_household_associations`, `user_simulation_associations`, and `user_report_associations` owned by the unauthenticated user moves to S with its ID, contents, and timestamps unchanged; then the unauthenticated user is deleted. |
+| The identity already belongs to standard user S; the unauthenticated user exists | `merged` | Every row of `user_policy_associations`, `user_household_associations`, `user_simulation_associations`, and `user_report_associations` owned by the unauthenticated user moves to S with its ID, contents, and timestamps unchanged; then the unauthenticated user is deleted. |
 | No unauthenticated user with that ID | `none` | The identity's user is resolved, or provisioned, as on any request. |
 | The ID names a standard user (already converted, or anyone else's) | `none` | That user is never touched; the identity's user is resolved as on any request. |
 
@@ -194,8 +194,8 @@ Concurrency on Postgres:
     `legacy_household_id`; with `legacy_household_id`, both are stored, and
     it must be the copy of that v1 household when one exists.
   - `user-simulations` and `user-reports` accept only legacy IDs in 12A.
-- **Stage 10 mirror rows.** A `user_policies` row with a
-  `legacy_user_policy_mappings` entry returns 409 on PATCH and DELETE. The
+- **Stage 10 mirror rows.** A saved-policy row (`user_policy_associations`)
+  with a `legacy_user_policy_mappings` entry returns 409 on PATCH and DELETE. The
   mirror projection now also records `legacy_policy_id`.
 - **Request bounds.** Every `/v2/me*` and `/v2/user-*` write rejects a body
   over 256 KiB with 413. FastAPI reads and parses the whole JSON body before
@@ -324,7 +324,16 @@ from the final SQLModel metadata. It has no post-generation corrections.
   "Rollback").
 
 The models drop the `user_associations` relationships from v2 simulations and
-reports. `V2_ALEMBIC_HEAD_REVISION` is `fbb7488ebe8a`.
+reports. `V2_ALEMBIC_HEAD_REVISION` was `fbb7488ebe8a` when Stage 12A shipped.
+
+Revision `fa7fa1035444` later renamed `user_policies` to
+`user_policy_associations`, with its constraints and its convention-named
+indexes, matching the other association tables; the composite listing
+indexes keep their `ix_user_policies_*` names. The route `/v2/user-policies`,
+the `user_policy_id` columns and `legacy_user_policy_mappings` are unchanged.
+The bullet points above describe revision `fbb7488ebe8a`, when the table was
+still named `user_policies`. "Schema compatibility" below says what the
+rename means for earlier Public API releases.
 
 ### Reshape safety
 
@@ -347,15 +356,19 @@ and production and confirm both dormant tables are empty.
 
 ### Rollback
 
-Roll forward whenever possible. The schema lets the previous Public API
-revision run (see "Schema compatibility" below), but that revision serves
-`/v2/user-policies` and `/v2/user-households` without authentication: any
-caller can list a user's saved items by `user_id`, read, rename or delete one
-by record ID, and create rows for any user. Rolling the application back
-would therefore hand users' saved work to anyone.
+Roll forward whenever possible. Since revision `fa7fa1035444` (see
+"Schema compatibility" below), releases from before that revision use saved
+policies through the temporary view `user_policies` until a later revision
+drops it; after that, rolling the application back to such a release also
+needs revision `fa7fa1035444` downgraded, which keeps every row (see below).
+The release before Stage 12A also serves `/v2/user-policies` and `/v2/user-households`
+without authentication: any caller can list a user's saved items by
+`user_id`, read, rename or delete one by record ID, and create rows for any
+user. Rolling the application back would therefore hand users' saved work to
+anyone.
 
 - **Before any user-owned record exists, an application rollback is safe
-  without a database downgrade.** Signed-out saving needs no configuration, so
+  without a Stage 12A database downgrade.** Signed-out saving needs no configuration, so
   treat user-owned records as existing from the moment this revision serves
   traffic in an environment.
 - **Once any user-owned record exists, signed in or not, an application
@@ -389,17 +402,36 @@ would therefore hand users' saved work to anyone.
   `/v2/user-policies` and `/v2/user-households` responses require a non-null
   `policy_id` / `household_id`, so any response that includes a legacy-only
   row (a v1 reference with no v2 copy) fails with 500.
-- **A database downgrade is lossy.** It restores NOT NULL on `policy_id`,
-  `household_id`, `simulation_id`, `report_id`, `country`, and
-  `users.primary_country`, so it fails while legacy-only rows, any simulation
-  or report associations, or any unauthenticated user exist. Removing them
-  first deletes users' saved work.
+- **Downgrading the rename alone is not lossy.** Downgrading revision
+  `fa7fa1035444` drops the temporary view and renames
+  `user_policy_associations` back to `user_policies` with every row,
+  reference and table grant.
+- **A database downgrade of Stage 12A is lossy.** Downgrading revision
+  `fbb7488ebe8a` restores NOT NULL on `policy_id`, `household_id`,
+  `simulation_id`, `report_id`, `country`, and `users.primary_country`, so it
+  fails while legacy-only rows, any simulation or report associations, or any
+  unauthenticated user exist. Removing them first deletes users' saved work.
 
 ### Schema compatibility
 
-The revision is additive (expand-only) for everything the previous Public API
-revision maps: it drops no table or column, and it adds no required column
-without a server default to any table that revision writes. The only new
+**Since revision `fa7fa1035444`, earlier releases use saved policies through a
+temporary view.** That revision renames `user_policies` to
+`user_policy_associations` and creates a view named `user_policies` with every
+column of the renamed table, the approved hand-written exception described in
+`docs/engineering/skills/alembic-migrations.md` ("API v2 saved-policy table
+rename"). A single-table view is automatically updatable, and the runtime role
+holds on it what it holds on the table, so a release from before the rename
+keeps reading and writing saved policies, during a deploy and after a
+rollback: its `/v2/user-policies` routes, report creation that checks the saved
+policies a report names, the sign-in merge, and the Stage 10 saved-policy
+copy. `test_v2_saved_policy_view.py` runs those operations as the runtime role
+through the view. Once a later revision drops the view, such a release fails
+every statement on saved policies.
+
+The rest of this section describes revision `fbb7488ebe8a` alone. It was
+additive (expand-only) for everything the previous Public API revision maps:
+it drops no table or column, and it adds no required column without a server
+default to any table that revision writes. The only new
 required columns are `country_id` on the simulation and report associations,
 which that revision maps but never inserts into, and `users.user_type`, whose
 server default makes every user the previous revision creates (its Stage 10
@@ -412,7 +444,9 @@ row with a NULL `primary_country` does not fail there.
 
 The lifecycle test `test_stage_12a_schema_serves_the_previous_revision`
 exercises this rather than only comparing columns. It reflects the schema at
-the parent revision with SQLAlchemy and upgrades to head. Then, through the
+the parent revision with SQLAlchemy and upgrades to head. Since the rename,
+the parent's `user_policies` is head's temporary view of that name, so the
+parent's statements on saved policies run through the view. Then, through the
 reflected parent tables, it does the following for every table the parent
 revision maps:
 

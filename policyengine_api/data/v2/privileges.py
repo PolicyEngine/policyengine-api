@@ -10,7 +10,9 @@ tests run the services as these roles (rule
 ``api.v2.runtime-privileges-tested-as-runtime-role``).
 
 Every table in the v2 SQLModel metadata, plus ``alembic_version``, has an entry
-for every managed role, so "no access" is a decision, not an omission.
+for every managed role, so "no access" is a decision, not an omission. A
+temporary view under a renamed table's earlier name (``TEMPORARY_VIEW_TABLES``)
+is declared with its table's privileges.
 
 Roles and what decides their privileges:
 
@@ -135,13 +137,24 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Users and their saved work (Stage 12A).
     "user_household_associations": _access(runtime=READ_WRITE),
     "user_identities": _access(runtime=READ_WRITE),
-    "user_policies": _access(runtime=READ_WRITE),
+    "user_policy_associations": _access(runtime=READ_WRITE),
     "user_report_associations": _access(runtime=READ_WRITE),
     "user_simulation_associations": _access(runtime=READ_WRITE),
     "users": _access(runtime=READ_WRITE),
     # Temporary Stage 12 comparison-run tables.
     "stage12_evaluation_reports": _access(runtime=READ_WRITE, stage12=READ_WRITE),
     "stage12_evaluation_simulations": _access(runtime=READ_WRITE, stage12=READ_WRITE),
+}
+
+
+# Temporary views under a renamed table's earlier name, each mapped to the
+# table it shows. The Public API release that still serves during a deploy, or
+# after a rollback to it, reads and writes the table through the view, so every
+# role holds on the view what it holds on the table. A later revision drops
+# each view, and its entry here goes with it.
+TEMPORARY_VIEW_TABLES: Final[dict[str, str]] = {
+    # Revision fa7fa1035444 renamed user_policies to user_policy_associations.
+    "user_policies": "user_policy_associations",
 }
 
 
@@ -167,12 +180,23 @@ def stage12_role(deployment_environment: str) -> str:
 def declared_privileges(
     deployment_environment: str,
 ) -> dict[str, dict[str, frozenset[TablePrivilege]]]:
-    """Return each managed role's declared privileges, keyed by role then table."""
+    """Return each managed role's declared privileges, keyed by role then table.
+
+    Each temporary view is declared with its table's privileges.
+    """
     stage12 = stage12_role(deployment_environment)
+    access_by_relation = TABLE_ACCESS | {
+        view: TABLE_ACCESS[table] for view, table in TEMPORARY_VIEW_TABLES.items()
+    }
     return {
-        RUNTIME_ROLE: {table: access.runtime for table, access in TABLE_ACCESS.items()},
-        CATALOG_WRITER_ROLE: {
-            table: access.catalog_writer for table, access in TABLE_ACCESS.items()
+        RUNTIME_ROLE: {
+            relation: access.runtime for relation, access in access_by_relation.items()
         },
-        stage12: {table: access.stage12 for table, access in TABLE_ACCESS.items()},
+        CATALOG_WRITER_ROLE: {
+            relation: access.catalog_writer
+            for relation, access in access_by_relation.items()
+        },
+        stage12: {
+            relation: access.stage12 for relation, access in access_by_relation.items()
+        },
     }

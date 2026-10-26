@@ -105,8 +105,8 @@ def managed_v2_roles(disposable_v2_database_url: str) -> ManagedV2Roles:
         engine.dispose()
     if not plan.can_apply:
         pytest.fail(
-            "the disposable v2 database lacks declared roles or tables: "
-            f"{plan.missing_roles} {plan.missing_tables}"
+            "the disposable v2 database lacks declared roles, tables or views: "
+            f"{plan.missing_roles} {plan.missing_tables} {plan.missing_views}"
         )
     return ManagedV2Roles(
         deployment_environment=deployment_environment,

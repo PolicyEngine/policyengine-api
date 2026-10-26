@@ -54,6 +54,18 @@ POOLER_URL = (
     f"{PROJECT_REF}:test-password@aws-0-us-east-2.pooler.supabase.com:5432/"
     "postgres?sslmode=require"
 )
+# The saved-policy rename and its parent, the Stage 12A revision.
+SAVED_POLICY_RENAME_REVISION = "fa7fa1035444"
+SAVED_POLICY_RENAME_PARENT_REVISION = "fbb7488ebe8a"
+# The only hand-written statements in any v2 revision: the approved temporary
+# view under the saved-policy table's earlier name, and its removal on
+# downgrade.
+SAVED_POLICY_VIEW_CREATION = (
+    "CREATE VIEW user_policies AS SELECT id, created_at, updated_at, user_id, "
+    "policy_id, country_id, name, description, legacy_policy_id, baseline, "
+    "provenance FROM user_policy_associations"
+)
+SAVED_POLICY_VIEW_REMOVAL = "DROP VIEW user_policies"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -235,6 +247,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        SAVED_POLICY_RENAME_PARENT_REVISION,
         "91af4fc8d8c1",
         "60d6518b6a98",
         "439303be14fe",
@@ -495,7 +508,6 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
         / "migrations/v2/versions/fbb7488ebe8a_link_signed_in_users_to_v1_anchored_.py"
     ).read_text(encoding="utf-8")
 
-    assert V2_ALEMBIC_HEAD_REVISION == "fbb7488ebe8a"
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
@@ -739,3 +751,61 @@ def test_v2_environment_commits_after_persistent_target_qualification() -> None:
     assert "current_heads != previous_heads" in env_source
     assert "current_heads == script_heads" in env_source
     assert "validate_v2_head_schema(connection, target_metadata)" in env_source
+
+
+def _executed_statements(body: str) -> list[str]:
+    """Return the SQL each ``op.execute`` call in a revision body runs."""
+    return [
+        "".join(re.findall(r'"([^"]*)"', call))
+        for call in re.findall(r"op\.execute\((.*?)\)\n", body, flags=re.DOTALL)
+    ]
+
+
+def test_saved_policy_rename_revision_renames_the_table_in_place() -> None:
+    """The rename keeps every saved reform: no table is created or dropped.
+
+    Autogeneration replaces a renamed table with a new empty one; the revision
+    records its corrections, and every other operation is generated except the
+    approved temporary view under the old name, created after the rename and
+    dropped before the downgrade renames the table back.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    rename = script.get_revision(SAVED_POLICY_RENAME_REVISION)
+    revision = Path(rename.path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+    rename_up = 'op.rename_table("user_policies", "user_policy_associations")'
+    rename_down = 'op.rename_table("user_policy_associations", "user_policies")'
+
+    assert rename.down_revision == SAVED_POLICY_RENAME_PARENT_REVISION
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert rename_up in upgrade
+    assert rename_down in downgrade
+    for body in (upgrade, downgrade):
+        assert "op.create_table(" not in body
+        assert "op.drop_table(" not in body
+        assert "op.bulk_insert(" not in body
+        assert body.count("Approved hand-written exception:") == 1
+    assert _executed_statements(upgrade) == [SAVED_POLICY_VIEW_CREATION]
+    assert _executed_statements(downgrade) == [SAVED_POLICY_VIEW_REMOVAL]
+    assert upgrade.index(rename_up) < upgrade.index("op.execute(")
+    assert downgrade.index("op.execute(") < downgrade.index(rename_down)
+    assert upgrade.count("Post-generation correction:") == 1
+    assert downgrade.count("Post-generation correction:") == 1
+
+
+def test_no_other_v2_revision_runs_hand_written_sql() -> None:
+    """Only the saved-policy rename's approved view uses ``op.execute``."""
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    revisions_with_sql = {
+        revision.revision
+        for revision in script.walk_revisions()
+        if "op.execute(" in Path(revision.path).read_text(encoding="utf-8")
+    }
+
+    assert revisions_with_sql == {SAVED_POLICY_RENAME_REVISION}

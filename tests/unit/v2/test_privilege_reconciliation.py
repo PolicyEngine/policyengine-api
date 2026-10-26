@@ -11,6 +11,7 @@ from policyengine_api.data.v2 import privilege_reconciliation
 from policyengine_api.data.v2.privilege_reconciliation import (
     DefaultPrivilege,
     PrivilegeEntry,
+    PublicRelations,
     ReconciliationPlan,
     grant_statements,
     plan_reconciliation,
@@ -48,12 +49,16 @@ def _declared() -> dict[str, dict[str, frozenset[TablePrivilege]]]:
     }
 
 
+def _tables(names: set[str]) -> PublicRelations:
+    return PublicRelations(tables=frozenset(names), views=frozenset())
+
+
 def test_missing_declared_privileges_become_grants() -> None:
     plan = plan_reconciliation(
         _declared(),
         granted={RUNTIME: {"users": {"SELECT", "INSERT"}}},
         existing_roles={RUNTIME, STAGE12},
-        existing_tables={"users", "legacy_policy_mappings", "reports"},
+        existing_relations=_tables({"users", "legacy_policy_mappings", "reports"}),
     )
 
     assert plan.grants == (
@@ -78,7 +83,7 @@ def test_privileges_beyond_the_manifest_are_reported_not_granted_or_revoked() ->
             STAGE12: {"users": {"SELECT"}},
         },
         existing_roles={RUNTIME, STAGE12},
-        existing_tables={"users", "legacy_policy_mappings", "reports"},
+        existing_relations=_tables({"users", "legacy_policy_mappings", "reports"}),
     )
 
     assert plan.grants == ()
@@ -96,7 +101,9 @@ def test_privileges_on_tables_outside_the_manifest_are_reported() -> None:
         _declared(),
         granted={RUNTIME: {"scratch_table": {"SELECT"}}},
         existing_roles={RUNTIME, STAGE12},
-        existing_tables={"users", "legacy_policy_mappings", "reports", "scratch_table"},
+        existing_relations=_tables(
+            {"users", "legacy_policy_mappings", "reports", "scratch_table"}
+        ),
     )
 
     assert PrivilegeEntry(RUNTIME, "scratch_table", "SELECT") in plan.undeclared
@@ -107,7 +114,7 @@ def test_missing_roles_and_tables_are_recorded_and_block_the_plan() -> None:
         _declared(),
         granted={},
         existing_roles={RUNTIME},
-        existing_tables={"users", "reports"},
+        existing_relations=_tables({"users", "reports"}),
     )
 
     assert plan.missing_roles == (STAGE12,)
@@ -117,6 +124,71 @@ def test_missing_roles_and_tables_are_recorded_and_block_the_plan() -> None:
     assert all(
         entry.role != STAGE12 and entry.table != "legacy_policy_mappings"
         for entry in plan.grants
+    )
+
+
+def test_a_relation_of_the_other_kind_does_not_satisfy_a_declaration() -> None:
+    """A declared table must be a table, and a declared view must be a view.
+
+    Before the rename, ``user_policies`` is a table, which must not satisfy the
+    temporary view of that name; a view named like a declared table must not
+    satisfy the table either.
+    """
+    declared = {
+        RUNTIME: {"users": READ_WRITE, "user_policies": READ_WRITE, "reports": READ}
+    }
+
+    plan = plan_reconciliation(
+        declared,
+        granted={},
+        existing_roles={RUNTIME},
+        existing_relations=PublicRelations(
+            tables=frozenset({"user_policies", "reports"}), views=frozenset({"users"})
+        ),
+        declared_views={"user_policies"},
+    )
+
+    assert plan.missing_tables == ("users",)
+    assert plan.missing_views == ("user_policies",)
+    assert not plan.can_apply
+
+
+def test_declared_views_that_exist_as_views_are_granted() -> None:
+    declared = {RUNTIME: {"users": READ, "user_policies": READ_WRITE}}
+
+    plan = plan_reconciliation(
+        declared,
+        granted={},
+        existing_roles={RUNTIME},
+        existing_relations=PublicRelations(
+            tables=frozenset({"users"}), views=frozenset({"user_policies"})
+        ),
+        declared_views={"user_policies"},
+    )
+
+    assert plan.can_apply
+    assert plan.missing_tables == plan.missing_views == ()
+    assert {entry.table for entry in plan.grants} == {"users", "user_policies"}
+
+
+def test_summary_names_missing_views_separately_from_missing_tables() -> None:
+    plan = ReconciliationPlan(
+        grants=(),
+        undeclared=(),
+        missing_roles=(),
+        missing_tables=("users",),
+        missing_views=("user_policies",),
+    )
+
+    summary = render_summary(plan, (), deployment_environment="staging", applied=False)
+
+    assert (
+        "Declared tables missing from the database (nothing was granted): `users`"
+        in summary
+    )
+    assert (
+        "Declared views missing from the database (nothing was granted): "
+        "`user_policies`" in summary
     )
 
 
