@@ -421,7 +421,8 @@ class V2MetadataService:
         if search_file is None:
             msg = (
                 f"catalog version {selected.policyengine_version} has no parameter "
-                "search file"
+                "search file: a file is written when a catalog version is "
+                "published, and this version was published before"
             )
             raise ParameterSearchFileUnavailableError(msg)
         return search_file

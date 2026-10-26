@@ -33,6 +33,7 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
+    ParameterSearchFileUnavailableError,
     ParameterTreeUnavailableError,
 )
 from policyengine_api.vary_headers import unique_vary_values
@@ -73,6 +74,18 @@ PARAMETER_TREE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
 }
 """The parameter tree route's 503, which also covers a version without a tree."""
+
+PARAMETER_SEARCH_FILE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    503: {
+        "model": V2ErrorResponse,
+        "description": (
+            "The initialized v2 catalog is unavailable, or the catalog version "
+            "has no parameter search file because it was published before search "
+            "files existed; the message then names the version."
+        ),
+    },
+}
+"""The search file route's 503, which also covers a version without a file."""
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {
@@ -363,10 +376,14 @@ def run_metadata_read(
     ) as error:
         return v2_error_response(404, str(error))
     except (V2ConfigurationError, MetadataCatalogUnavailableError) as error:
-        # Only a missing parameter tree has a message written for callers.
+        # Only a missing parameter tree or search file has a message written
+        # for callers; it names the catalog version.
         message = (
             str(error)
-            if isinstance(error, ParameterTreeUnavailableError)
+            if isinstance(
+                error,
+                ParameterTreeUnavailableError | ParameterSearchFileUnavailableError,
+            )
             else "V2 metadata catalog is unavailable"
         )
         return v2_error_response(503, message)
