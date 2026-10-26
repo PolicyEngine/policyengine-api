@@ -1292,3 +1292,27 @@ def test_browser_scripts_can_read_a_metadata_response_entity_tag() -> None:
         for value in response.headers["access-control-expose-headers"].split(",")
     }
     assert "etag" in exposed_headers
+
+
+def test_current_values_read_just_before_midnight_expire_at_that_midnight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The read and the response headers must use the same day: values read for
+    # 31 December may not be reused into 1 January, even when the headers are
+    # written after midnight.
+    from policyengine_api.fastapi_routes.v2.metadata import common
+
+    read_instant = datetime(2026, 12, 31, 23, 59, 59, tzinfo=UTC)
+    instants = iter([read_instant, datetime(2027, 1, 1, 0, 0, 1, tzinfo=UTC)])
+    monkeypatch.setattr(common, "utc_now", lambda: next(instants))
+    results, _ids = _resource_results()
+    reader = ResourceReader(results)
+
+    response = _client(lambda: reader).get(
+        "/v2/parameter-values?country_id=us&policyengine_version=4.20.3&current=true"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=0"
+    _name, _args, kwargs = reader.calls[0]
+    assert kwargs["value_filter"].now == read_instant

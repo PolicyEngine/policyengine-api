@@ -103,11 +103,12 @@ and it changes whenever the API deploys a new one.
 """
 
 
-DEPENDS_ON_UTC_DAY = "depends_on_utc_day"
-"""The ``request.state`` attribute a route sets when its result depends on the day.
+UTC_DAY_READ = "utc_day_read"
+"""The ``request.state`` attribute holding the instant a day-dependent read used.
 
-Such a response, for example current values on the request's UTC day, may be
-reused only until the next UTC midnight, whatever version it names.
+A route whose result depends on the UTC day, such as current parameter values,
+sets it with ``take_utc_instant_for_read`` and reads with that same instant;
+its response may then be reused only until the next UTC midnight after it.
 """
 
 
@@ -116,11 +117,26 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def _seconds_until_next_utc_day(moment: datetime) -> int:
-    next_day = (moment + timedelta(days=1)).replace(
+def take_utc_instant_for_read(request: Request) -> datetime:
+    """Take the instant a day-dependent read uses, and record it on the request.
+
+    The read and its response's cache lifetime then use the same UTC day.
+    """
+    instant = utc_now()
+    setattr(request.state, UTC_DAY_READ, instant)
+    return instant
+
+
+def _seconds_left_in_utc_day(read_instant: datetime, now: datetime) -> int:
+    """Return the seconds from ``now`` to the UTC midnight after ``read_instant``.
+
+    Zero when that midnight has passed, so values read for one day are never
+    reused into the next.
+    """
+    next_midnight = (read_instant.astimezone(UTC) + timedelta(days=1)).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
-    return max(int((next_day - moment).total_seconds()), 0)
+    return max(int((next_midnight - now).total_seconds()), 0)
 
 
 class CacheableMetadataRoute(APIRoute):
@@ -148,10 +164,9 @@ def with_cache_headers(request: Request, response: Response) -> Response:
     The ETag is a hash of the exact body, so it changes with any change to the
     content, including the catalog format. A request naming its catalog with
     ``policyengine_version`` may be reused for a day, one that takes the
-    running version for five minutes, and one whose route marked it as
-    depending on the day (``DEPENDS_ON_UTC_DAY``) no later than the next UTC
-    midnight. A request whose ``If-None-Match`` names the ETag gets a 304 with
-    no body.
+    running version for five minutes, and one whose route read for a UTC day
+    (``UTC_DAY_READ``) no later than the midnight after that day. A request
+    whose ``If-None-Match`` names the ETag gets a 304 with no body.
     """
     entity_tag = response.headers.get("etag") or body_entity_tag(response.body)
     max_age = (
@@ -159,8 +174,9 @@ def with_cache_headers(request: Request, response: Response) -> Response:
         if "policyengine_version" in request.query_params
         else RUNNING_VERSION_MAX_AGE_SECONDS
     )
-    if getattr(request.state, DEPENDS_ON_UTC_DAY, False):
-        max_age = min(max_age, _seconds_until_next_utc_day(utc_now()))
+    read_instant = getattr(request.state, UTC_DAY_READ, None)
+    if read_instant is not None:
+        max_age = min(max_age, _seconds_left_in_utc_day(read_instant, utc_now()))
     headers = {"Cache-Control": f"public, max-age={max_age}", "ETag": entity_tag}
     if _names_entity_tag(request.headers.get("if-none-match"), entity_tag):
         return Response(status_code=304, headers=headers)

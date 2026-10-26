@@ -106,9 +106,11 @@ route's response format or with the day it is read on, and the `ETag` lets a
 client revalidate after the day. A request without it selects the running
 version, which changes on deploy, and may be reused for five minutes
 (`max-age=300`). A response that depends on the request's UTC day, which is
-`GET /v2/parameter-values?current=true` (the values in effect today), may be
-reused only until the next UTC midnight, whichever lifetime would otherwise
-apply. A request whose `If-None-Match` names the current `ETag` (strong or
+`GET /v2/parameter-values?current=true` (the values in effect today), takes
+the request's instant once: the read selects that day's values, and the
+response may be reused only until the UTC midnight after that instant,
+whichever lifetime would otherwise apply (`max-age=0` if its headers are
+written after that midnight). A request whose `If-None-Match` names the current `ETag` (strong or
 weak form, alone or in a list) gets HTTP 304 with no body. Error responses
 carry neither header. `ETag` is listed in `Access-Control-Expose-Headers`, so
 browser scripts on other origins can read it (`Cache-Control` is readable
