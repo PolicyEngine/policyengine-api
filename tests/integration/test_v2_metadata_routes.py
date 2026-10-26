@@ -1003,3 +1003,49 @@ def test_postgres_parameter_tree_from_records_shaped_like_policyengine_py(
             None,
         ),
     ]
+
+
+def test_postgres_a_version_stored_before_format_2_returns_the_tree_503(
+    published_engine: Engine,
+) -> None:
+    """A version stored before catalog format 2 gets no tree on republication.
+
+    Its parameter tree request returns 503 with the message naming it.
+    """
+    with published_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE tax_benefit_model_versions SET catalog_format = NULL, "
+                "entities = NULL, basic_inputs = NULL"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE variables SET is_input_variable = NULL, hidden_input = NULL, "
+                "module_name = NULL, adds_parameter_path = NULL, "
+                "subtracts_parameter_path = NULL, enum_values = NULL, "
+                "unit = NULL, definition_period = NULL"
+            )
+        )
+        connection.execute(
+            text("UPDATE parameters SET economy = NULL, household = NULL")
+        )
+        connection.execute(text("DELETE FROM parameter_tree_children"))
+    evidence = publish_catalog(published_engine, normalized_catalog())
+
+    response = _client(published_engine).get(
+        "/v2/parameters/children",
+        params={"country_id": "us", "policyengine_version": POLICYENGINE_VERSION},
+    )
+
+    assert evidence.parameter_trees_written == ()
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": (
+            f"catalog version {POLICYENGINE_VERSION} has no parameter tree: "
+            "catalog publication writes trees only for the versions it publishes "
+            "and for the installed version with catalog format 2"
+        ),
+    }
+    assert "cache-control" not in response.headers
