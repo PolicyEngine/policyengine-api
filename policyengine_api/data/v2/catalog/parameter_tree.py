@@ -1,15 +1,17 @@
 """Each catalog version's parameter tree, as rows of direct children.
 
 The tree is derived from a version's stored parameters and parameter nodes
-alone, so it can be written when a version is published and for any version
-stored before the tree existed. Every node and parameter of the version is one
-row, under the path of its parent (the empty string for top-level paths).
+alone, and is written when a version is published. Every node and parameter
+of the version is one row, under the path of its parent (the empty string for
+top-level paths).
 
 A ``[`` starts a child as a ``.`` does: a bracket schedule such as
 ``gov.hmrc.income_tax.rates.uk`` is one node whose children are its brackets
 ``uk[0]``, ``uk[1]`` and so on, labelled "Bracket 1", "Bracket 2"; a bracket's
-own children (``rate``, ``threshold``) are unchanged. A path with no stored
-label gets one generated from the last part of its name.
+own children (``rate``, ``threshold``) are unchanged. Labels take the form
+the app's newer interface (v3) shows, in every view: a stored label with its
+underscores as spaces and its first letter upper-cased, or, for a path with no
+stored label, the last part of its name in the same form.
 
 Each row also records whether a reform can change it, which mirrors the tree
 the app's newer interface builds from v1 metadata
@@ -95,16 +97,15 @@ def bracket_index(path: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def generated_label(path: str) -> str:
-    """Return a label made from the last part of a name, as v3 makes one."""
-    words = _NAME_PARTS.split(path)[-1].replace("_", " ")
-    return words[:1].upper() + words[1:]
-
-
-def _display_label(label: str) -> str:
+def display_label(label: str) -> str:
     """Return a label as v3 shows it: underscores as spaces, first letter upper."""
     words = label.replace("_", " ")
     return words[:1].upper() + words[1:]
+
+
+def generated_label(path: str) -> str:
+    """Return a label made from the last part of a name, as v3 makes one."""
+    return display_label(_NAME_PARTS.split(path)[-1])
 
 
 def _child_label(path: str, stored_label: str | None) -> str:
@@ -112,7 +113,7 @@ def _child_label(path: str, stored_label: str | None) -> str:
     if index is not None:
         return f"Bracket {index + 1}"
     if stored_label and stored_label.strip():
-        return stored_label
+        return display_label(stored_label)
     return generated_label(path)
 
 
@@ -147,7 +148,7 @@ def _reform_position_key(path: str, label: str) -> tuple[int, int, str, str]:
     index = bracket_index(path)
     if index is not None:
         return (0, index, "", "")
-    return (1, 0, _display_label(label).casefold(), path)
+    return (1, 0, label.casefold(), path)
 
 
 @dataclass(frozen=True, slots=True)

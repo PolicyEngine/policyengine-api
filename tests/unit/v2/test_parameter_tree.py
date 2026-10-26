@@ -270,9 +270,9 @@ def test_the_reform_view_is_sorted_by_label_as_v3_shows_it() -> None:
     ]
     assert [row.label for row in _reform_children(rows, "gov")] == [
         "Apple orchard",
-        "banana_split",
+        "Banana split",
         "C third",
-        "zebra crossing",
+        "Zebra crossing",
     ]
 
 
@@ -303,3 +303,36 @@ def test_every_row_has_its_parent_and_counts_match_the_rows() -> None:
     for parent in {row.parent_path for row in rows}:
         positions = [row.position for row in rows if row.parent_path == parent]
         assert sorted(positions) == list(range(len(positions)))
+
+
+def test_stored_labels_take_the_form_v3_shows_in_both_views() -> None:
+    rows = build_parameter_tree(
+        nodes=[
+            TreeNodeSource(
+                name="gov.transport", label="assumed uncapped single bus fare"
+            )
+        ],
+        parameters=[
+            _parameter("gov.transport.fare", label="ACA rating area NY (Child_only)"),
+        ],
+    )
+    by_path = _rows_by_path(rows)
+
+    assert by_path["gov.transport"].label == "Assumed uncapped single bus fare"
+    assert by_path["gov.transport.fare"].label == "ACA rating area NY (Child only)"
+    assert by_path["gov.transport"].reform_changeable is True
+
+
+def test_schedules_without_a_stored_label_get_one_from_their_name() -> None:
+    rows = build_parameter_tree(
+        nodes=[],
+        parameters=[
+            _parameter(f"{UK_RATES}.uk[0].rate"),
+            _parameter("gov.aca.age_curves.al[0].amount"),
+        ],
+    )
+    by_path = _rows_by_path(rows)
+
+    assert by_path[f"{UK_RATES}.uk"].label == "Uk"
+    assert by_path["gov.aca.age_curves.al"].label == "Al"
+    assert by_path[f"{UK_RATES}.uk[0]"].label == "Bracket 1"
