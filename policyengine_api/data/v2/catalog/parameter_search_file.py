@@ -30,10 +30,11 @@ import hashlib
 import json
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, TypedDict
 
 from policyengine_api.data.v2.catalog.parameter_tree import (
     REFORM_TREE_PREFIX,
+    TreeNodeSource,
     is_reform_changeable,
 )
 
@@ -69,15 +70,7 @@ class SearchParameterSource:
 
 
 @dataclass(frozen=True, slots=True)
-class SearchNodeSource:
-    """A stored parameter node: its name and stored label."""
-
-    name: str
-    label: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class DraftabilityChange:
+class EditabilityChange:
     """Whether a parameter's current-law value from ``start_date`` can be edited.
 
     A value can be edited in a draft when it is a number, a yes/no value or the
@@ -86,7 +79,56 @@ class DraftabilityChange:
 
     parameter_name: str
     start_date: date
-    draftable: bool
+    editable: bool
+
+
+class EditabilityChangeEntry(TypedDict):
+    """From ``start_date`` (an ISO date), whether a draft can edit the value."""
+
+    start_date: str
+    editable: bool
+
+
+class _SearchFileParameterFields(TypedDict):
+    path: str
+    label: str | None
+    unit: str | None
+    description: str | None
+    editable: bool
+
+
+class SearchFileParameterEntry(_SearchFileParameterFields, total=False):
+    """A parameter a reform can change, as the file lists it.
+
+    ``editable_changes`` is present only when editability changes over time.
+    """
+
+    editable_changes: list[EditabilityChangeEntry]
+
+
+class SearchFileLabelEntry(TypedDict):
+    """Another parameter under ``gov``: its path and stored label, or null."""
+
+    path: str
+    label: str | None
+
+
+class SearchFileNodeEntry(TypedDict):
+    """``gov`` or a node under it that has a stored label."""
+
+    path: str
+    label: str
+
+
+class ParameterSearchFileDocument(TypedDict):
+    """One catalog version's search file, each list ordered by path."""
+
+    format: int
+    country_id: str
+    policyengine_version: str
+    parameters: list[SearchFileParameterEntry]
+    other_parameters: list[SearchFileLabelEntry]
+    nodes: list[SearchFileNodeEntry]
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,27 +146,27 @@ class EncodedParameterSearchFile:
 
 
 def _editability(
-    changes: Iterable[DraftabilityChange],
-) -> dict[str, tuple[bool, list[dict[str, Any]]]]:
+    changes: Iterable[EditabilityChange],
+) -> dict[str, tuple[bool, list[EditabilityChangeEntry]]]:
     """Return each parameter's earliest editability and the later changes."""
-    by_parameter: defaultdict[str, list[DraftabilityChange]] = defaultdict(list)
+    by_parameter: defaultdict[str, list[EditabilityChange]] = defaultdict(list)
     for change in changes:
         by_parameter[change.parameter_name].append(change)
-    editability: dict[str, tuple[bool, list[dict[str, Any]]]] = {}
+    editability: dict[str, tuple[bool, list[EditabilityChangeEntry]]] = {}
     for name, parameter_changes in by_parameter.items():
         ordered = sorted(parameter_changes, key=lambda change: change.start_date)
-        earliest = ordered[0].draftable
-        later: list[dict[str, Any]] = []
+        earliest = ordered[0].editable
+        later: list[EditabilityChangeEntry] = []
         current = earliest
         for change in ordered[1:]:
-            if change.draftable != current:
+            if change.editable != current:
                 later.append(
                     {
                         "start_date": change.start_date.isoformat(),
-                        "editable": change.draftable,
+                        "editable": change.editable,
                     }
                 )
-                current = change.draftable
+                current = change.editable
         editability[name] = (earliest, later)
     return editability
 
@@ -143,9 +185,9 @@ def build_parameter_search_file(
     country_id: str,
     policyengine_version: str,
     parameters: Iterable[SearchParameterSource],
-    nodes: Iterable[SearchNodeSource],
-    draftability: Iterable[DraftabilityChange],
-) -> dict[str, Any]:
+    nodes: Iterable[TreeNodeSource],
+    editability: Iterable[EditabilityChange],
+) -> ParameterSearchFileDocument:
     """Return one catalog version's search file, ordered by path.
 
     ``parameters`` lists every parameter a reform can change with its search
@@ -154,9 +196,9 @@ def build_parameter_search_file(
     under it that has a stored label. A parameter without current-law values cannot be
     edited.
     """
-    editability = _editability(draftability)
-    changeable: list[dict[str, Any]] = []
-    others: list[dict[str, Any]] = []
+    editability_by_name = _editability(editability)
+    changeable: list[SearchFileParameterEntry] = []
+    others: list[SearchFileLabelEntry] = []
     for parameter in sorted(parameters, key=lambda parameter: parameter.name):
         if not parameter.name.startswith(REFORM_TREE_PREFIX):
             continue
@@ -166,8 +208,8 @@ def build_parameter_search_file(
         ):
             others.append({"path": parameter.name, "label": label})
             continue
-        editable, changes = editability.get(parameter.name, (False, []))
-        entry: dict[str, Any] = {
+        editable, changes = editability_by_name.get(parameter.name, (False, []))
+        entry: SearchFileParameterEntry = {
             "path": parameter.name,
             "label": label,
             "unit": parameter.unit,
@@ -177,10 +219,10 @@ def build_parameter_search_file(
         if changes:
             entry["editable_changes"] = changes
         changeable.append(entry)
-    labelled_nodes = [
+    labelled_nodes: list[SearchFileNodeEntry] = [
         {"path": node.name, "label": node.label}
         for node in sorted(nodes, key=lambda node: node.name)
-        if _is_gov_node(node.name) and _stored_label(node.label)
+        if _is_gov_node(node.name) and node.label is not None and node.label.strip()
     ]
     return {
         "format": PARAMETER_SEARCH_FILE_FORMAT,
@@ -193,7 +235,7 @@ def build_parameter_search_file(
 
 
 def encode_parameter_search_file(
-    search_file: dict[str, Any],
+    search_file: ParameterSearchFileDocument,
 ) -> EncodedParameterSearchFile:
     """Return the file as compact UTF-8 JSON, gzip-compressed, with its hash."""
     content = json.dumps(
@@ -208,7 +250,7 @@ def encode_parameter_search_file(
     )
 
 
-def is_draftable_value(value: object) -> bool:
+def is_editable_value(value: object) -> bool:
     """Return whether a draft can edit a value, as v3's draft editor decides.
 
     A number (an infinite threshold, stored as the text "Infinity" or
@@ -220,21 +262,21 @@ def is_draftable_value(value: object) -> bool:
     return isinstance(value, str) and value in _INFINITE_VALUES
 
 
-def _parameter_draftability(parameter: ParameterRecord) -> Iterator[DraftabilityChange]:
+def _parameter_editability(parameter: ParameterRecord) -> Iterator[EditabilityChange]:
     """Yield the parameter's first value's editability and each later change."""
     previous: bool | None = None
     for value in sorted(parameter.values, key=lambda value: value.start_date):
-        draftable = is_draftable_value(value.value_json)
-        if draftable != previous:
-            yield DraftabilityChange(
+        editable = is_editable_value(value.value_json)
+        if editable != previous:
+            yield EditabilityChange(
                 parameter_name=parameter.name,
                 start_date=value.start_date.date(),
-                draftable=draftable,
+                editable=editable,
             )
-            previous = draftable
+            previous = editable
 
 
-def country_search_file(country: CountryCatalog) -> dict[str, Any]:
+def country_search_file(country: CountryCatalog) -> ParameterSearchFileDocument:
     """Return the search file of a country's catalog version from its records."""
     return build_parameter_search_file(
         country_id=country.country_id,
@@ -251,12 +293,12 @@ def country_search_file(country: CountryCatalog) -> dict[str, Any]:
             for parameter in country.parameters
         ),
         nodes=(
-            SearchNodeSource(name=node.name, label=node.label)
+            TreeNodeSource(name=node.name, label=node.label)
             for node in country.parameter_nodes
         ),
-        draftability=(
+        editability=(
             change
             for parameter in country.parameters
-            for change in _parameter_draftability(parameter)
+            for change in _parameter_editability(parameter)
         ),
     )

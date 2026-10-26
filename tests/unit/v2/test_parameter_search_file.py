@@ -11,13 +11,14 @@ import pytest
 
 from policyengine_api.data.v2.catalog.parameter_search_file import (
     PARAMETER_SEARCH_FILE_FORMAT,
-    DraftabilityChange,
-    SearchNodeSource,
+    EditabilityChange,
+    ParameterSearchFileDocument,
     SearchParameterSource,
     build_parameter_search_file,
     encode_parameter_search_file,
-    is_draftable_value,
+    is_editable_value,
 )
+from policyengine_api.data.v2.catalog.parameter_tree import TreeNodeSource
 
 
 def _parameter(
@@ -39,10 +40,10 @@ def _parameter(
     )
 
 
-def _always_draftable(*names: str) -> list[DraftabilityChange]:
+def _always_editable(*names: str) -> list[EditabilityChange]:
     return [
-        DraftabilityChange(
-            parameter_name=name, start_date=date(2020, 1, 1), draftable=True
+        EditabilityChange(
+            parameter_name=name, start_date=date(2020, 1, 1), editable=True
         )
         for name in names
     ]
@@ -51,18 +52,18 @@ def _always_draftable(*names: str) -> list[DraftabilityChange]:
 def _file(
     parameters: list[SearchParameterSource],
     *,
-    nodes: list[SearchNodeSource] | None = None,
-    draftability: list[DraftabilityChange] | None = None,
-) -> dict:
+    nodes: list[TreeNodeSource] | None = None,
+    editability: list[EditabilityChange] | None = None,
+) -> ParameterSearchFileDocument:
     return build_parameter_search_file(
         country_id="uk",
         policyengine_version="6.10.0",
         parameters=parameters,
         nodes=nodes or [],
-        draftability=(
-            draftability
-            if draftability is not None
-            else _always_draftable(*(parameter.name for parameter in parameters))
+        editability=(
+            editability
+            if editability is not None
+            else _always_editable(*(parameter.name for parameter in parameters))
         ),
     )
 
@@ -167,14 +168,14 @@ def test_nodes_carry_their_stored_labels_only() -> None:
     search_file = _file(
         [_parameter("gov.hmrc.income_tax.rates.uk[0].rate")],
         nodes=[
-            SearchNodeSource(name="gov.hmrc", label="HMRC"),
-            SearchNodeSource(name="gov.hmrc.income_tax", label="Income Tax"),
-            SearchNodeSource(
+            TreeNodeSource(name="gov.hmrc", label="HMRC"),
+            TreeNodeSource(name="gov.hmrc.income_tax", label="Income Tax"),
+            TreeNodeSource(
                 name="gov.hmrc.income_tax.rates.uk", label="Income Tax main rates"
             ),
-            SearchNodeSource(name="gov.hmrc.income_tax.rates", label=None),
-            SearchNodeSource(name="gov.hmrc.income_tax.rates.uk[0]", label=" "),
-            SearchNodeSource(name="calibration", label="Calibration"),
+            TreeNodeSource(name="gov.hmrc.income_tax.rates", label=None),
+            TreeNodeSource(name="gov.hmrc.income_tax.rates.uk[0]", label=" "),
+            TreeNodeSource(name="calibration", label="Calibration"),
         ],
     )
 
@@ -191,8 +192,8 @@ def test_the_labelled_gov_node_itself_is_included() -> None:
     search_file = _file(
         [_parameter("gov.hmrc.vat.rate")],
         nodes=[
-            SearchNodeSource(name="gov", label="Government"),
-            SearchNodeSource(name="government_bonds", label="Bonds"),
+            TreeNodeSource(name="gov", label="Government"),
+            TreeNodeSource(name="government_bonds", label="Bonds"),
         ],
     )
 
@@ -206,9 +207,9 @@ def test_a_value_that_is_not_a_number_or_switch_cannot_be_edited() -> None:
             _parameter("gov.a.no_values"),
             _parameter("gov.a.threshold"),
         ],
-        draftability=[
-            DraftabilityChange("gov.a.programs", date(2020, 1, 1), draftable=False),
-            DraftabilityChange("gov.a.threshold", date(2020, 1, 1), draftable=True),
+        editability=[
+            EditabilityChange("gov.a.programs", date(2020, 1, 1), editable=False),
+            EditabilityChange("gov.a.threshold", date(2020, 1, 1), editable=True),
         ],
     )
 
@@ -231,26 +232,26 @@ def test_editability_that_changes_over_time_lists_the_dates_it_changes() -> None
                 "gov.hmrc.stamp_duty.residential.purchase.main.subsequent[1].rate"
             )
         ],
-        draftability=[
-            DraftabilityChange(
+        editability=[
+            EditabilityChange(
                 "gov.hmrc.stamp_duty.residential.purchase.main.subsequent[1].rate",
                 date(2003, 7, 10),
-                draftable=True,
+                editable=True,
             ),
-            DraftabilityChange(
+            EditabilityChange(
                 "gov.hmrc.stamp_duty.residential.purchase.main.subsequent[1].rate",
                 date(2015, 2, 12),
-                draftable=True,
+                editable=True,
             ),
-            DraftabilityChange(
+            EditabilityChange(
                 "gov.hmrc.stamp_duty.residential.purchase.main.subsequent[1].rate",
                 date(2020, 7, 8),
-                draftable=False,
+                editable=False,
             ),
-            DraftabilityChange(
+            EditabilityChange(
                 "gov.hmrc.stamp_duty.residential.purchase.main.subsequent[1].rate",
                 date(2021, 3, 31),
-                draftable=True,
+                editable=True,
             ),
         ],
     )
@@ -266,16 +267,16 @@ def test_editability_that_changes_over_time_lists_the_dates_it_changes() -> None
 def test_the_earliest_value_decides_editability_before_any_change() -> None:
     search_file = _file(
         [_parameter("gov.hmrc.income_tax.rates.scotland.rates[0].rate")],
-        draftability=[
-            DraftabilityChange(
+        editability=[
+            EditabilityChange(
                 "gov.hmrc.income_tax.rates.scotland.rates[0].rate",
                 date(2018, 4, 6),
-                draftable=True,
+                editable=True,
             ),
-            DraftabilityChange(
+            EditabilityChange(
                 "gov.hmrc.income_tax.rates.scotland.rates[0].rate",
                 date(2015, 1, 1),
-                draftable=False,
+                editable=False,
             ),
         ],
     )
@@ -288,7 +289,7 @@ def test_the_earliest_value_decides_editability_before_any_change() -> None:
 def test_the_encoded_file_is_compressed_json_with_its_content_hash() -> None:
     search_file = _file(
         [_parameter("gov.hmrc.vat.rate", label="VAT rate", unit="/1")],
-        nodes=[SearchNodeSource(name="gov.hmrc", label="HMRC")],
+        nodes=[TreeNodeSource(name="gov.hmrc", label="HMRC")],
     )
 
     encoded = encode_parameter_search_file(search_file)
@@ -314,7 +315,7 @@ def test_the_same_catalog_rows_always_encode_to_the_same_bytes() -> None:
 
 
 @pytest.mark.parametrize(
-    ("value", "draftable"),
+    ("value", "editable"),
     [
         (0.2, True),
         (0, True),
@@ -328,8 +329,8 @@ def test_the_same_catalog_rows_always_encode_to_the_same_bytes() -> None:
         ({"a": 1}, False),
     ],
 )
-def test_draftable_values_follow_v3s_draft_editor(
-    value: object, *, draftable: bool
+def test_editable_values_follow_v3s_draft_editor(
+    value: object, *, editable: bool
 ) -> None:
     # v3's isDraftableValue: a number, a yes/no switch, or "Infinity"/"-Infinity".
-    assert is_draftable_value(value) is draftable
+    assert is_editable_value(value) is editable
