@@ -154,60 +154,85 @@ def test_live_v2_catalog_parts_load_on_demand(api_client, country_id: str) -> No
     expected_version = _installed_policyengine_version()
     route_times: list[tuple[str, float, httpx.Response]] = []
 
-    catalog_response, seconds = _timed_get(
-        api_client, "/v2/model-catalog", params={"country_id": country_id}
+    def timed_get(label: str, path: str, **request_options: object) -> httpx.Response:
+        response, seconds = _timed_get(api_client, path, **request_options)
+        route_times.append((label, seconds, response))
+        return response
+
+    # The times are recorded even when an assertion fails, so every release
+    # keeps the measurements it reached.
+    try:
+        _check_catalog_parts(timed_get, country_id, expected_version)
+    finally:
+        _record_route_times(country_id, route_times)
+
+
+def _check_catalog_parts(timed_get, country_id: str, expected_version: str) -> None:
+    catalog = _assert_ok(
+        timed_get(
+            "/v2/model-catalog (running version)",
+            "/v2/model-catalog",
+            params={"country_id": country_id},
+        ),
+        expected_version,
     )
-    route_times.append(
-        ("/v2/model-catalog (running version)", seconds, catalog_response)
-    )
-    catalog = _assert_ok(catalog_response, expected_version)
     assert catalog["regions"]
     assert catalog["economy_options"]["region"]
     assert "variables" not in catalog
     pinned = {"country_id": country_id, "policyengine_version": expected_version}
 
-    variables_response, seconds = _timed_get(
-        api_client, "/v2/model-catalog/variables", params=pinned
+    variables_response = timed_get(
+        "/v2/model-catalog/variables", "/v2/model-catalog/variables", params=pinned
     )
-    route_times.append(("/v2/model-catalog/variables", seconds, variables_response))
-    repeated_variables, seconds = _timed_get(
-        api_client, "/v2/model-catalog/variables", params=pinned
-    )
-    route_times.append(
-        ("/v2/model-catalog/variables (repeated)", seconds, repeated_variables)
+    second_variables = timed_get(
+        "/v2/model-catalog/variables (second request; another instance may serve it)",
+        "/v2/model-catalog/variables",
+        params=pinned,
     )
     variables = _assert_ok(variables_response, expected_version)
     assert variables["variables"]
     assert variables_response.headers["cache-control"] == "public, max-age=86400"
-    assert repeated_variables.headers["etag"] == variables_response.headers["etag"]
-    revalidated, seconds = _timed_get(
-        api_client,
+    assert second_variables.headers["etag"] == variables_response.headers["etag"]
+    revalidated = timed_get(
+        "/v2/model-catalog/variables (revalidated)",
         "/v2/model-catalog/variables",
         params=pinned,
         headers={"If-None-Match": variables_response.headers["etag"]},
     )
-    route_times.append(
-        ("/v2/model-catalog/variables (revalidated)", seconds, revalidated)
-    )
     assert revalidated.status_code == 304
 
-    parameter_name = _assert_ok(
-        api_client.get("/v2/parameters", params={**pinned, "limit": 1}),
+    # The two existing routes measured slow in production on 2026-10-21.
+    page = _assert_ok(
+        timed_get(
+            "/v2/parameters (page of 500)",
+            "/v2/parameters",
+            params={**pinned, "limit": 500},
+        ),
         expected_version,
-    )["items"][0]["name"]
-    parameters_response, seconds = _timed_get(
-        api_client,
-        "/v2/model-catalog/parameters",
-        params={**pinned, "name": parameter_name},
     )
-    route_times.append(
-        ("/v2/model-catalog/parameters (1 name)", seconds, parameters_response)
+    first_parameter = page["items"][0]
+    one_parameter_values = _assert_ok(
+        timed_get(
+            "/v2/parameter-values (one parameter)",
+            "/v2/parameter-values",
+            params={**pinned, "parameter_id": first_parameter["id"]},
+        ),
+        expected_version,
     )
-    parameters = _assert_ok(parameters_response, expected_version)
-    assert [parameter["name"] for parameter in parameters["parameters"]] == [
-        parameter_name
-    ]
-    assert parameters["parameters"][0]["values"]
-    assert parameters["missing_names"] == []
+    assert all(
+        value["parameter_id"] == first_parameter["id"]
+        for value in one_parameter_values["items"]
+    )
 
-    _record_route_times(country_id, route_times)
+    parameters = _assert_ok(
+        timed_get(
+            "/v2/model-catalog/parameters (1 name)",
+            "/v2/model-catalog/parameters",
+            params={**pinned, "name": first_parameter["name"]},
+        ),
+        expected_version,
+    )
+    assert [parameter["name"] for parameter in parameters["parameters"]] == [
+        first_parameter["name"]
+    ]
+    assert parameters["missing_names"] == []

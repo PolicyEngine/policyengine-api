@@ -370,11 +370,14 @@ return typed client errors.
 
 The same test loads each country's catalog in parts as a client starting
 cold would: `GET /v2/model-catalog` for the running version, then
-`/v2/model-catalog/variables` for that exact version twice (the second served
-from the process's kept body) and once more with `If-None-Match`, which must
-return 304, then `/v2/model-catalog/parameters` for one parameter. It appends
-each request's time and body size to the GitHub job summary, so every staging
-and production release records these route times against its own catalog.
+`/v2/model-catalog/variables` for that exact version twice (the second request
+may be served by another instance, so its time is not necessarily a kept
+response's) and once more with `If-None-Match`, which must return 304, then a
+page of 500 parameters, one parameter's values (the two routes measured at
+0.8–2.6 s and 0.5–0.65 s in production on 2026-10-21) and that parameter by
+name. It appends each request's time and body size to the GitHub job summary,
+even when an assertion fails, so every staging and production release records
+these route times against its own catalog.
 
 Request `GET /v2/openapi.json` and confirm that the public document contains
 every documented resource path and explicit component schema references for
