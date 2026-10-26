@@ -1090,20 +1090,18 @@ def test_each_country_and_version_keeps_its_own_selection(
 def test_value_and_node_label_reads_return_typed_rows(
     catalog_session: Session,
 ) -> None:
-    from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_nodes import (  # noqa: E501
-        read_parameter_node_labels,
-    )
-    from policyengine_api.services.v2.metadata.database_connectors.reads_parameters import (  # noqa: E501
-        read_current_law_values_by_parameter_name,
+    from policyengine_api.services.v2.metadata.database_connectors import (
+        reads_parameter_nodes,
+        reads_parameters,
     )
 
     model_version = _us_model_version(catalog_session)
-    values = read_current_law_values_by_parameter_name(
+    values = reads_parameters.read_current_law_values_by_parameter_name(
         catalog_session,
         model_version_id=model_version.id,
         parameter_names={"gov.example.rate"},
     )
-    labels = read_parameter_node_labels(
+    labels = reads_parameter_nodes.read_parameter_node_labels(
         catalog_session,
         model_version_id=model_version.id,
         node_names={"gov.example", "gov.absent"},
