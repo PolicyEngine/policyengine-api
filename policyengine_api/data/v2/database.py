@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from threading import Lock
 from typing import TYPE_CHECKING
 
+from sqlalchemy import event
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine
 
@@ -83,20 +84,34 @@ def build_v2_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
 
 
+class ReadOnlySessionError(RuntimeError):
+    """Raised when code tries to write rows through a v2 read session."""
+
+
+def _refuse_flush(*_flush_arguments: object) -> None:
+    msg = "v2 read sessions do not write rows"
+    raise ReadOnlySessionError(msg)
+
+
 def build_v2_read_session_factory(engine: Engine) -> sessionmaker[Session]:
-    """Build a factory of read-only Sessions that run without a transaction.
+    """Build a factory of Sessions for v2 metadata reads, run without a transaction.
 
     The sessions share ``engine``'s pool in autocommit mode, so psycopg sends
     each statement on its own: no BEGIN before the first read and no ROLLBACK
-    when the session closes. Use them only for reads whose statements need no
-    common snapshot, such as reads of a published catalog version, which never
-    changes. The pool restores the ordinary mode when a connection returns.
+    when the session closes. Only the metadata reader uses them: each of its
+    reads is one statement on a published catalog version, which never
+    changes, so no common snapshot is needed. The sessions refuse to flush
+    added or changed rows; statements passed directly to ``execute`` are not
+    checked, so they must stay reads. The pool restores the ordinary mode
+    when a connection returns.
     """
-    return sessionmaker(
+    factory = sessionmaker(
         bind=engine.execution_options(isolation_level="AUTOCOMMIT"),
         class_=Session,
         expire_on_commit=False,
     )
+    event.listen(factory, "before_flush", _refuse_flush)
+    return factory
 
 
 def _discard_inherited_state(current_pid: int) -> None:
