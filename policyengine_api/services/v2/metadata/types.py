@@ -5,13 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Generic, Literal, NamedTuple, TypeVar
+from typing import Any, Generic, Literal, NamedTuple, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, JsonValue
-
-if TYPE_CHECKING:
-    from policyengine_api.data.v2.models import Parameter
 
 
 @dataclass(frozen=True)
@@ -60,14 +57,6 @@ class CurrentLawValueRow(NamedTuple):
     value_json: Any
     start_date: datetime
     end_date: datetime | None
-
-
-@dataclass(frozen=True)
-class FoundParameters:
-    """The stored parameters a by-name read found, and their names."""
-
-    parameters: list[Parameter]
-    names: set[str]
 
 
 class ParameterNodeLabelRow(NamedTuple):
