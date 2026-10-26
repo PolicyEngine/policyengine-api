@@ -33,6 +33,7 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
+    ParameterTreeUnavailableError,
 )
 from policyengine_api.vary_headers import unique_vary_values
 
@@ -59,6 +60,19 @@ PATH_COUNTRY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
 }
 """The extra response of the one metadata route that takes the country in its path."""
+
+PARAMETER_TREE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    503: {
+        "model": V2ErrorResponse,
+        "description": (
+            "The initialized v2 catalog is unavailable, or the catalog version "
+            "has no parameter tree (publication writes trees only for the "
+            "versions it publishes and for the installed version with catalog "
+            "format 2); the message then names the version."
+        ),
+    },
+}
+"""The parameter tree route's 503, which also covers a version without a tree."""
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {
@@ -348,8 +362,14 @@ def run_metadata_read(
         MetadataResourceNotFoundError,
     ) as error:
         return v2_error_response(404, str(error))
-    except (V2ConfigurationError, MetadataCatalogUnavailableError):
-        return v2_error_response(503, "V2 metadata catalog is unavailable")
+    except (V2ConfigurationError, MetadataCatalogUnavailableError) as error:
+        # Only a missing parameter tree has a message written for callers.
+        message = (
+            str(error)
+            if isinstance(error, ParameterTreeUnavailableError)
+            else "V2 metadata catalog is unavailable"
+        )
+        return v2_error_response(503, message)
     except Exception:  # noqa: BLE001  # preview must return typed errors
         return v2_error_response(500, "V2 metadata query failed")
     finally:

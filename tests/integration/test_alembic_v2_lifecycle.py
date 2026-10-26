@@ -1547,3 +1547,116 @@ def test_catalog_format_2_columns_leave_earlier_versions_empty() -> None:
             )
         command.upgrade(config, "head")
         engine.dispose()
+
+
+PARAMETER_TREE_PARENT_REVISION = "f5c1d9b4685b"
+
+
+def test_parameter_tree_table_is_created_empty_and_dropped_without_data_loss() -> None:
+    """The parameter tree revision creates an empty table and downgrades cleanly.
+
+    The revision writes no rows: catalog publication writes each version's
+    tree. A tree row is deleted with its version or its parameter, and
+    downgrading drops the table while every catalog row stays.
+    """
+    config = _config()
+    engine = create_engine(_disposable_url())
+    try:
+        command.downgrade(config, PARAMETER_TREE_PARENT_REVISION)
+        assert "parameter_tree_children" not in inspect(engine).get_table_names()
+        with engine.begin() as connection:
+            version_id = _catalog_version_published_before_format_2(connection)
+
+        command.upgrade(config, "head")
+
+        indexes = {
+            index["name"]: (index["column_names"], index["unique"])
+            for index in inspect(engine).get_indexes("parameter_tree_children")
+        }
+        assert indexes["ix_parameter_tree_children_listing"] == (
+            ["tax_benefit_model_version_id", "parent_path", "position"],
+            True,
+        )
+        assert indexes["ix_parameter_tree_children_reform_listing"] == (
+            ["tax_benefit_model_version_id", "parent_path", "reform_position"],
+            True,
+        )
+        with engine.begin() as connection:
+            assert (
+                connection.execute(
+                    text("SELECT count(*) FROM parameter_tree_children")
+                ).scalar_one()
+                == 0
+            )
+            parameter_id = connection.execute(
+                text(
+                    "SELECT id FROM parameters "
+                    "WHERE tax_benefit_model_version_id = :version_id"
+                ),
+                {"version_id": version_id},
+            ).scalar_one()
+            for path, parent, position, child_type, child_count, reference in (
+                ("gov", "", 0, "node", 1, None),
+                ("gov.probe", "gov", 0, "node", 1, None),
+                ("gov.probe.rate", "gov.probe", 0, "parameter", None, parameter_id),
+            ):
+                connection.execute(
+                    text(
+                        "INSERT INTO parameter_tree_children (id, "
+                        "tax_benefit_model_version_id, parent_path, path, position, "
+                        "label, child_type, child_count, parameter_id) VALUES "
+                        "(:id, :version_id, :parent, :path, :position, :path, "
+                        ":child_type, :child_count, :parameter_id)"
+                    ),
+                    {
+                        "id": uuid4(),
+                        "version_id": version_id,
+                        "parent": parent,
+                        "path": path,
+                        "position": position,
+                        "child_type": child_type,
+                        "child_count": child_count,
+                        "parameter_id": reference,
+                    },
+                )
+            with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
+                connection.execute(
+                    text(
+                        "INSERT INTO parameter_tree_children (id, "
+                        "tax_benefit_model_version_id, parent_path, path, position, "
+                        "label, child_type) VALUES (:id, :version_id, 'gov', "
+                        "'gov.other', 0, 'Other', 'node')"
+                    ),
+                    {"id": uuid4(), "version_id": version_id},
+                )
+            connection.execute(
+                text("DELETE FROM parameters WHERE id = :parameter_id"),
+                {"parameter_id": parameter_id},
+            )
+            assert connection.execute(
+                text("SELECT path FROM parameter_tree_children ORDER BY path")
+            ).scalars().all() == ["gov", "gov.probe"]
+
+        command.downgrade(config, PARAMETER_TREE_PARENT_REVISION)
+
+        assert "parameter_tree_children" not in inspect(engine).get_table_names()
+        with engine.connect() as connection:
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT count(*) FROM variables "
+                        "WHERE tax_benefit_model_version_id = :version_id"
+                    ),
+                    {"version_id": version_id},
+                ).scalar_one()
+                == 1
+            )
+    finally:
+        command.upgrade(config, "head")
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "DELETE FROM tax_benefit_models WHERE name = 'catalog-format-probe'"
+                )
+            )
+        engine.dispose()

@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from sqlalchemy import Connection, Engine
 
+from policyengine_api.data.v2.catalog.publication_parameter_tree import (
+    assert_parameter_trees_written,
+    write_parameter_trees,
+)
 from policyengine_api.data.v2.catalog.publication_reconciliation import (
     assert_canonical_value_uniqueness,
     assert_country_matches,
@@ -118,7 +123,14 @@ def publish_catalog(
     *,
     checkpoint: Callable[[str, Connection], None] | None = None,
 ) -> PublicationEvidence:
-    """Publish one complete catalog atomically and return non-secret evidence."""
+    """Publish one complete catalog atomically and return non-secret evidence.
+
+    In the same transaction it writes the parameter tree of each version in
+    the catalog that has none, built from the catalog: the versions it
+    publishes, and the installed version when an earlier release stored it with
+    catalog format 2 but without a tree. Other stored versions, and an
+    installed version stored before catalog format 2, keep having none.
+    """
     started = time.monotonic()
     with engine.begin() as connection:
         _verify_expected_revision(connection)
@@ -134,6 +146,7 @@ def publish_catalog(
         for country in catalog.countries:
             if country.country_id not in existing:
                 publish_new_country(connection, country)
+        parameter_trees_written = write_parameter_trees(connection, catalog.countries)
         if checkpoint is not None:
             checkpoint("after_reconciliation", connection)
 
@@ -144,13 +157,17 @@ def publish_catalog(
                 include_regions=country.country_id not in existing,
             )
         assert_canonical_value_uniqueness(connection)
+        assert_parameter_trees_written(connection, catalog.countries)
         if _protected_row_counts(connection) != before:
             msg = "publication changed simulation, report, or dataset-version rows"
             raise CatalogPublicationError(msg)
         if checkpoint is not None:
             checkpoint("after_validation", connection)
 
-    return _evidence(catalog, kept_region_summaries, started=started)
+    return replace(
+        _evidence(catalog, kept_region_summaries, started=started),
+        parameter_trees_written=parameter_trees_written,
+    )
 
 
 def _check_stored_versions(

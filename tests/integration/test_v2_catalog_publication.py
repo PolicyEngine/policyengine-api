@@ -6,6 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from alembic import command
@@ -33,6 +34,7 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.data.v2.privileges import CATALOG_WRITER_ROLE
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from tests.fixtures.v2_catalog import (
     POLICYENGINE_VERSION,
@@ -798,3 +800,265 @@ def test_republication_detects_a_changed_enum_label_parameter_path_unit_or_perio
         )
 
     assert _stored_us_variables(publication_engine) == stored
+
+
+def _stored_tree(
+    engine: Engine,
+    model_name: str,
+    version: str,
+    *,
+    parameter_column: str = "parameter.name",
+) -> list[tuple]:
+    """Return a stored version's tree rows; each parameter by name by default."""
+    with engine.connect() as connection:
+        return [
+            tuple(row)
+            for row in connection.execute(
+                text(
+                    "SELECT tree.parent_path, tree.path, tree.position, tree.label, "
+                    "tree.child_type, tree.child_count, tree.reform_position, "
+                    f"tree.reform_child_count, {parameter_column}, tree.economy, "
+                    "tree.household "
+                    "FROM parameter_tree_children AS tree "
+                    "JOIN tax_benefit_model_versions AS version "
+                    "ON version.id = tree.tax_benefit_model_version_id "
+                    "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                    "LEFT JOIN parameters AS parameter "
+                    "ON parameter.id = tree.parameter_id "
+                    "WHERE model.name = :model_name AND version.version = :version "
+                    "ORDER BY tree.parent_path, tree.position"
+                ),
+                {"model_name": model_name, "version": version},
+            )
+        ]
+
+
+def _delete_tree(engine: Engine, version: str) -> None:
+    """Make the stored versions of one .py version look stored before the tree."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "DELETE FROM parameter_tree_children AS tree "
+                "USING tax_benefit_model_versions AS version "
+                "WHERE version.id = tree.tax_benefit_model_version_id "
+                "AND version.version = :version"
+            ),
+            {"version": version},
+        )
+
+
+FIXTURE_TREE = [
+    ("", "gov", 0, "Gov", "node", 1, 0, 1, None, None, None),
+    ("gov", "gov.example", 0, "Example policy", "node", 1, 0, 1, None, None, None),
+    (
+        "gov.example",
+        "gov.example.rate",
+        0,
+        "Example rate",
+        "parameter",
+        None,
+        0,
+        None,
+        "gov.example.rate",
+        True,
+        False,
+    ),
+]
+
+
+def test_publication_writes_each_new_version_parameter_tree(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+
+    evidence = publish_catalog(publication_engine, catalog)
+
+    for country in catalog.countries:
+        assert (
+            _stored_tree(
+                publication_engine,
+                country.model.name,
+                country.model_version.version,
+            )
+            == FIXTURE_TREE
+        )
+    assert evidence.parameter_trees_written == tuple(
+        (country.model.name, country.model_version.version, len(FIXTURE_TREE))
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    )
+
+
+def _stored_tree_with_parameter_ids(
+    engine: Engine, model_name: str, version: str
+) -> list[tuple]:
+    return _stored_tree(
+        engine, model_name, version, parameter_column="tree.parameter_id"
+    )
+
+
+def _with_other_parameter_ids(catalog):
+    """Return the catalog with a new ID for every parameter, and its values."""
+    countries = []
+    for country in catalog.countries:
+        parameters = []
+        for parameter in country.parameters:
+            parameter_id = uuid4()
+            parameters.append(
+                replace(
+                    parameter,
+                    id=parameter_id,
+                    values=tuple(
+                        replace(value, id=uuid4(), parameter_id=parameter_id)
+                        for value in parameter.values
+                    ),
+                )
+            )
+        countries.append(replace(country, parameters=tuple(parameters)))
+    return replace(catalog, countries=tuple(countries))
+
+
+def test_publication_gives_the_installed_stored_version_its_tree(
+    publication_engine: Engine,
+) -> None:
+    """The installed version, stored by a release without the tree, gets one.
+
+    It is built from the installed packages' catalog, the same as a fresh
+    publication's; writing it again changes nothing. The version is first
+    stored with parameter IDs that differ from the catalog's, so the rebuilt
+    tree must reference the stored rows' IDs.
+    """
+    catalog = normalized_catalog()
+    current_version = catalog.country("us").model_version.version
+    publish_catalog(publication_engine, _with_other_parameter_ids(catalog))
+    fresh = {
+        country.model.name: _stored_tree_with_parameter_ids(
+            publication_engine, country.model.name, current_version
+        )
+        for country in catalog.countries
+    }
+    _delete_tree(publication_engine, current_version)
+    before_ids = _identifiers(publication_engine)
+
+    evidence = publish_catalog(publication_engine, catalog)
+    again = publish_catalog(publication_engine, catalog)
+
+    assert evidence.parameter_trees_written == tuple(
+        (country.model.name, current_version, len(FIXTURE_TREE))
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    )
+    assert again.parameter_trees_written == ()
+    for country in catalog.countries:
+        assert (
+            _stored_tree_with_parameter_ids(
+                publication_engine, country.model.name, current_version
+            )
+            == fresh[country.model.name]
+        )
+    assert _identifiers(publication_engine) == before_ids
+    catalog_parameter_ids = {
+        parameter.id
+        for country in catalog.countries
+        for parameter in country.parameters
+    }
+    for rows in fresh.values():
+        assert {row[8] for row in rows if row[8] is not None}.isdisjoint(
+            catalog_parameter_ids
+        )
+
+
+def test_an_installed_version_stored_before_format_2_gets_no_tree(
+    publication_engine: Engine,
+) -> None:
+    """A version stored before catalog format 2 stores no flags, so no tree.
+
+    Its tree would carry the installed catalog's flags, which its own
+    parameter rows do not store; it keeps returning the clear 503 instead, and
+    publication still succeeds.
+    """
+    catalog = normalized_catalog()
+    current_version = catalog.country("us").model_version.version
+    publish_catalog(publication_engine, catalog)
+    _clear_format_2_fields(publication_engine)
+    _delete_tree(publication_engine, current_version)
+
+    evidence = publish_catalog(publication_engine, catalog)
+
+    assert evidence.as_dict()["outcome"] == "ok"
+    assert evidence.parameter_trees_written == ()
+    for country in catalog.countries:
+        assert (
+            _stored_tree(publication_engine, country.model.name, current_version) == []
+        )
+
+
+def test_publication_writes_no_tree_for_another_version_stored_without_one(
+    publication_engine: Engine,
+) -> None:
+    """A stored version that is not the installed one keeps having no tree.
+
+    Writing it would derive rows from what an earlier release stored, which
+    the migration rules leave to a human migration decision.
+    """
+    older = normalized_catalog(policyengine_version="1.0.0")
+    catalog = normalized_catalog()
+    older_version = older.country("us").model_version.version
+    publish_catalog(publication_engine, older)
+    _delete_tree(publication_engine, older_version)
+
+    evidence = publish_catalog(publication_engine, catalog)
+    again = publish_catalog(publication_engine, catalog)
+
+    assert {version for _model, version, _rows in evidence.parameter_trees_written} == {
+        catalog.country("us").model_version.version
+    }
+    assert again.parameter_trees_written == ()
+    for country in catalog.countries:
+        assert _stored_tree(publication_engine, country.model.name, older_version) == []
+
+
+def test_publication_fails_when_a_published_version_is_left_without_a_tree(
+    publication_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        publication_module,
+        "write_parameter_trees",
+        lambda _connection, _countries: (),
+    )
+
+    with pytest.raises(CatalogPublicationError, match="has no parameter tree"):
+        publish_catalog(publication_engine, normalized_catalog())
+
+    assert _counts(publication_engine)["tax_benefit_model_versions"] == 0
+
+
+def test_the_catalog_writer_role_publishes_the_parameter_tree(
+    publication_engine: Engine,
+    managed_v2_roles,
+    v2_engine_as_role,
+) -> None:
+    """Publication as the catalog writer, with only its declared privileges.
+
+    It writes each published version's tree, which needs the role's INSERT
+    grant on the tree table.
+    """
+    writer_engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
+    catalog = normalized_catalog()
+    try:
+        evidence = publish_catalog(writer_engine, catalog)
+    finally:
+        writer_engine.dispose()
+
+    assert evidence.parameter_trees_written == tuple(
+        (country.model.name, country.model_version.version, len(FIXTURE_TREE))
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    )
+    for country in catalog.countries:
+        assert (
+            _stored_tree(
+                publication_engine,
+                country.model.name,
+                country.model_version.version,
+            )
+            == FIXTURE_TREE
+        )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
@@ -33,6 +34,8 @@ from policyengine_api.data.v2.models import (
 )
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from policyengine_api.data.v2.catalog.records import CountryCatalog
 
 DATASETS = Dataset.__table__
@@ -76,16 +79,24 @@ def _versioned_table_from(table: sa.Table) -> sa.Join:
     )
 
 
-def stored_catalog_format(
-    connection: Connection, country: CountryCatalog
-) -> int | None:
-    """Return the catalog format this country's stored version was published with.
+@dataclass(frozen=True, slots=True)
+class StoredVersion:
+    """A country's stored catalog version: its ID and catalog format.
 
-    None means it was published before catalog format 2, so its format 2
-    fields are empty.
+    ``catalog_format`` is None for a version published before catalog format 2,
+    whose format 2 fields are empty.
     """
+
+    id: UUID
+    catalog_format: int | None
+
+
+def stored_version(
+    connection: Connection, country: CountryCatalog
+) -> StoredVersion | None:
+    """Return this country's stored catalog version, or None if it is not stored."""
     statement = (
-        sa.select(MODEL_VERSIONS.c.catalog_format)
+        sa.select(MODEL_VERSIONS.c.id, MODEL_VERSIONS.c.catalog_format)
         .select_from(
             MODEL_VERSIONS.join(
                 MODELS,
@@ -97,7 +108,10 @@ def stored_catalog_format(
             MODEL_VERSIONS.c.version == country.model_version.version,
         )
     )
-    return connection.execute(statement).scalar_one_or_none()
+    row = connection.execute(statement).one_or_none()
+    if row is None:
+        return None
+    return StoredVersion(id=row.id, catalog_format=row.catalog_format)
 
 
 def _comparison_pairs(
@@ -375,8 +389,11 @@ def assert_country_matches(
     PolicyEngine.py version stays the same. A version published before catalog
     format 2 is compared without format 2's fields.
     """
-    stored_format = stored_catalog_format(connection, country)
-    pairs = _comparison_pairs(country, with_format_2=stored_format is not None)
+    stored = stored_version(connection, country)
+    pairs = _comparison_pairs(
+        country,
+        with_format_2=stored is not None and stored.catalog_format is not None,
+    )
     if include_regions:
         pairs = (*pairs, ("regions", *_region_comparison_pair(country)))
     for table_name, staged, actual in pairs:

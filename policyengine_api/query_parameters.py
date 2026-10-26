@@ -261,11 +261,22 @@ class RegionCollectionQuery(CatalogPageQuery):
 
 
 class ParameterChildrenQuery(CatalogPageQuery):
-    """Query contract for a page of one parameter path's direct children."""
+    """Query contract for one level of a catalog version's parameter tree."""
 
     parent_path: str = Field(
         default="",
-        description="Dotted path whose direct children are listed; empty for the root",
+        max_length=512,
+        description=(
+            "Path of the node whose direct children are listed; empty for the "
+            "top level. A bracket schedule's brackets are its children."
+        ),
+    )
+    reform_changeable: bool = Field(
+        default=False,
+        description=(
+            "List only the children a reform can change, sorted by label, with "
+            "child counts that count only those"
+        ),
     )
 
 

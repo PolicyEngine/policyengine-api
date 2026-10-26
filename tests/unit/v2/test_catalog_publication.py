@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import re
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
@@ -19,6 +21,12 @@ from policyengine_api.data.v2.catalog import (
     publication,
     publication_reconciliation,
     publication_staging,
+)
+from policyengine_api.data.v2.catalog.publication_parameter_tree import (
+    catalog_parameter_tree,
+)
+from policyengine_api.data.v2.catalog.publication_types import (
+    CatalogPublicationError,
 )
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
 from policyengine_api.data.v2.models import (
@@ -284,6 +292,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         elapsed_seconds=2.3456,
         omitted_region_summaries=(("us", "place", 333),),
         kept_region_summaries=(("uk", "6.7.5", 5, 1_015),),
+        parameter_trees_written=(("policyengine-uk", "6.7.5", 2_430),),
     ).as_dict()
 
     assert evidence == {
@@ -303,6 +312,13 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
                 "policyengine_version": "6.7.5",
                 "stored_regions": 5,
                 "staged_regions": 1_015,
+            }
+        ],
+        "parameter_trees_written": [
+            {
+                "model": "policyengine-uk",
+                "version": "6.7.5",
+                "rows": 2_430,
             }
         ],
         "elapsed_seconds": 2.346,
@@ -389,3 +405,31 @@ def test_matching_kept_regions_log_nothing(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     assert _kept_region_records(monkeypatch, caplog, (0, 0)) == []
+
+
+def test_a_catalog_tree_needs_a_stored_row_for_every_parameter() -> None:
+    """Each tree parameter references the stored parameter of the same name.
+
+    The stored IDs differ from the catalog's, so the tree must take them from
+    the stored rows, not from the catalog records.
+    """
+    country = normalized_catalog().country("us")
+    stored_ids = {parameter.name: uuid4() for parameter in country.parameters}
+
+    rows = catalog_parameter_tree(country, stored_ids)
+    leaves = [row for row in rows if row.child_type == "parameter"]
+
+    assert [(row.path, row.parameter_id) for row in leaves] == [
+        (parameter.name, stored_ids[parameter.name]) for parameter in country.parameters
+    ]
+    assert {row.parameter_id for row in leaves}.isdisjoint(
+        parameter.id for parameter in country.parameters
+    )
+    with pytest.raises(
+        CatalogPublicationError,
+        match=re.escape(
+            f"the stored us catalog version {country.model_version.version} "
+            "lacks the parameter gov.example.rate"
+        ),
+    ):
+        catalog_parameter_tree(country, {})

@@ -146,9 +146,10 @@ check the declarations:
 - `api.v2.runtime-privileges-declared`: a unit test reads each connector
   module and fails when it needs a privilege its role isn't declared to hold.
 - `api.v2.runtime-privileges-tested-as-runtime-role`: the cross-database
-  integration tests run the v2 user services as `policyengine_v2_runtime` and
-  the comparison-run services as `policyengine_stage12_test`, holding only
-  their declared privileges.
+  integration tests run the v2 user services and the parameter tree read as
+  `policyengine_v2_runtime`, catalog publication as
+  `policyengine_v2_catalog_writer`, and the comparison-run services as
+  `policyengine_stage12_test`, holding only their declared privileges.
 - `api.v2.deployed-privileges-match`: every deploy runs
   `scripts/reconcile_v2_privileges.py apply` right after the schema upgrade,
   then `verify`, before the catalog is seeded.
@@ -183,6 +184,8 @@ When a pull request adds or changes a v2 table, or a connector's use of one:
    uv run pytest -q tests/integration/test_v2_user_identity_persistence.py \
      tests/integration/test_v2_saved_policy_view.py \
      tests/integration/test_v2_stage12_comparison_persistence.py \
+     tests/integration/test_v2_metadata_routes.py \
+     tests/integration/test_v2_catalog_publication.py \
      tests/integration/test_v2_privilege_reconciliation.py
    ```
 

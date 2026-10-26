@@ -55,6 +55,7 @@ if TYPE_CHECKING:
         MetadataRegion,
         MetadataVariable,
         ParameterFilter,
+        ParameterTreeLevel,
         ParameterValueFilter,
     )
     from policyengine_api.services.v2.policies.types import (
@@ -223,13 +224,14 @@ class V2MetadataResourceReader(Protocol):
         country_id: str,
         policyengine_version: str | None = None,
         *,
-        parent_path: str = "",
+        level: ParameterTreeLevel | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> MetadataPageResult[MetadataParameterChild]:
-        """Return the nodes and parameters one level below ``parent_path``.
+        """Return the nodes and parameters one level below the level's parent path.
 
-        An empty ``parent_path`` lists the top level of the parameter tree.
+        An empty parent path lists the top level of the parameter tree; the
+        level's ``reform_changeable`` keeps only what a reform can change.
         """
         ...
 

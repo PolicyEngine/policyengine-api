@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -18,6 +19,7 @@ from sqlalchemy.pool import NullPool
 from sqlmodel import Session, select
 
 from policyengine_api.asgi_factory import create_asgi_app
+from policyengine_api.data.v2.catalog.extraction import extract_catalog
 from policyengine_api.data.v2.catalog.publication import publish_catalog
 from policyengine_api.data.v2.models import (
     Dataset,
@@ -37,7 +39,15 @@ from policyengine_api.services.v2.metadata.database_session import (
     MetadataDatabaseSession,
 )
 from policyengine_api.services.v2.metadata.services import V2MetadataService
-from tests.fixtures.v2_catalog import POLICYENGINE_VERSION, normalized_catalog
+from policyengine_api.services.v2.metadata.types import ParameterTreeLevel
+from tests.fixtures.v2_catalog import (
+    POLICYENGINE_VERSION,
+    bundle,
+    installed_version,
+    normalized_catalog,
+    region_references,
+    source_models,
+)
 
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
@@ -723,3 +733,319 @@ def test_postgres_current_values_and_their_lifetime_use_one_instant(
         expected_values
     )
     assert response.headers["cache-control"] == expected_cache_control
+
+
+SCHEDULE = "gov.hmrc.income_tax.rates.uk"
+
+
+def _catalog_with_a_bracket_schedule():
+    """Return the fixture catalog with a UK-style income tax schedule added.
+
+    The schedule has a stored node row; a second schedule has none.
+    """
+    models = source_models()
+    uk = models["uk"]
+    nodes = [
+        SimpleNamespace(name=SCHEDULE, label="Income Tax main rates", description=None)
+    ]
+    parameters = [
+        SimpleNamespace(
+            name=name,
+            label=label,
+            description=None,
+            data_type=float,
+            unit="/1",
+            economy=economy,
+            household=household,
+            parameter_values=[
+                SimpleNamespace(
+                    value=0.2,
+                    start_date=datetime(2025, 1, 1, tzinfo=UTC),
+                    end_date=None,
+                )
+            ],
+        )
+        for name, label, economy, household in (
+            (f"{SCHEDULE}[0].rate", "Basic rate", True, True),
+            (f"{SCHEDULE}[0].threshold", "Basic rate threshold", True, True),
+            (f"{SCHEDULE}[1].rate", "Higher rate", True, True),
+            (f"{SCHEDULE}[1].threshold", "Higher rate threshold", False, False),
+            ("gov.hmrc.income_tax.rates.dividends[0].rate", None, True, False),
+        )
+    ]
+    uk.parameter_nodes.extend(nodes)
+    uk.parameters.extend(parameters)
+    uk.parameter_nodes_by_name.update({node.name: node for node in nodes})
+    uk.parameters_by_name.update(
+        {parameter.name: parameter for parameter in parameters}
+    )
+    return extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+        region_references=region_references(),
+    )
+
+
+def _items(response) -> list[tuple]:
+    assert response.status_code == 200, response.text
+    return [
+        (item["path"], item["label"], item["type"], item["child_count"])
+        for item in response.json()["result"]["items"]
+    ]
+
+
+def test_postgres_parameter_tree_nests_schedules_and_filters_reform_changes(
+    published_engine: Engine,
+) -> None:
+    with published_engine.begin() as connection:
+        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
+    publish_catalog(published_engine, _catalog_with_a_bracket_schedule())
+    client = _client(published_engine)
+    query = {"country_id": "uk"}
+
+    rates = client.get(
+        "/v2/parameters/children",
+        params={**query, "parent_path": "gov.hmrc.income_tax.rates"},
+    )
+    schedule = client.get(
+        "/v2/parameters/children", params={**query, "parent_path": SCHEDULE}
+    )
+    bracket = client.get(
+        "/v2/parameters/children",
+        params={**query, "parent_path": f"{SCHEDULE}[1]"},
+    )
+    reform_bracket = client.get(
+        "/v2/parameters/children",
+        params={
+            **query,
+            "parent_path": f"{SCHEDULE}[1]",
+            "reform_changeable": "true",
+        },
+    )
+    reform_rates = client.get(
+        "/v2/parameters/children",
+        params={
+            **query,
+            "parent_path": "gov.hmrc.income_tax.rates",
+            "reform_changeable": "true",
+        },
+    )
+
+    assert _items(rates) == [
+        ("gov.hmrc.income_tax.rates.dividends", "Dividends", "node", 1),
+        (SCHEDULE, "Income Tax main rates", "node", 2),
+    ]
+    assert _items(schedule) == [
+        (f"{SCHEDULE}[0]", "Bracket 1", "node", 2),
+        (f"{SCHEDULE}[1]", "Bracket 2", "node", 2),
+    ]
+    assert _items(bracket) == [
+        (f"{SCHEDULE}[1].rate", "Higher rate", "parameter", None),
+        (f"{SCHEDULE}[1].threshold", "Higher rate threshold", "parameter", None),
+    ]
+    assert _items(reform_bracket) == [
+        (f"{SCHEDULE}[1].rate", "Higher rate", "parameter", None),
+    ]
+    assert _items(reform_rates) == [
+        ("gov.hmrc.income_tax.rates.dividends", "Dividends", "node", 1),
+        (SCHEDULE, "Income Tax main rates", "node", 2),
+    ]
+    leaf = bracket.json()["result"]["items"][0]["parameter"]
+    assert leaf["name"] == f"{SCHEDULE}[1].rate"
+
+
+def test_postgres_parameter_tree_reads_as_the_runtime_role(
+    published_engine: Engine,
+    managed_v2_roles,
+    v2_engine_as_role,
+) -> None:
+    """The Public API's runtime role can read the tree with its declared privileges."""
+    runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
+    try:
+        with Session(runtime_engine) as session:
+            result = V2MetadataService(
+                MetadataDatabaseSession(session),
+                running_policyengine_version=POLICYENGINE_VERSION,
+            ).list_parameter_children(
+                "us",
+                level=ParameterTreeLevel(parent_path="gov", reform_changeable=True),
+            )
+    finally:
+        runtime_engine.dispose()
+
+    assert [(item.path, item.child_count) for item in result.items] == [
+        ("gov.example", 1)
+    ]
+
+
+def _catalog_shaped_like_policyengine_py_output():
+    """Return the fixture catalog with US records shaped like PolicyEngine.py's.
+
+    Bracket parameters carry the labels PolicyEngine.py generates, and a
+    breakdown parameter its parent's label with the key. One schedule has no
+    node row, as the locked PolicyEngine.py publishes; the other has one with
+    its label, as the release that publishes schedules will.
+    """
+    models = source_models()
+    us = models["us"]
+    nodes = [
+        SimpleNamespace(
+            name="gov.irs.deductions.standard.amount",
+            label="Standard deduction",
+            description=None,
+        ),
+        SimpleNamespace(
+            name="gov.aca.age_curves.ak",
+            label="ACA premium age curve factors - AK",
+            description=None,
+        ),
+    ]
+    labelled_parameters = [
+        (f"gov.aca.age_curves.{state}[{index}].{field}", f"{label} ({tier} {field})")
+        for state, label in (
+            ("al", "ACA premium age curve factors - AL"),
+            ("ak", "ACA premium age curve factors - AK"),
+        )
+        for index, tier in ((0, "tier 1"), (1, "tier 2"))
+        for field in ("amount", "threshold")
+    ] + [
+        ("gov.irs.deductions.standard.amount.SINGLE", "Standard deduction (Single)"),
+        ("gov.irs.deductions.standard.amount.JOINT", "Standard deduction (Joint)"),
+    ]
+    parameters = [
+        SimpleNamespace(
+            name=name,
+            label=label,
+            description=None,
+            data_type=float,
+            unit="currency-USD",
+            economy=True,
+            household=True,
+            parameter_values=[
+                SimpleNamespace(
+                    value=1.0,
+                    start_date=datetime(2025, 1, 1, tzinfo=UTC),
+                    end_date=None,
+                )
+            ],
+        )
+        for name, label in labelled_parameters
+    ]
+    us.parameter_nodes.extend(nodes)
+    us.parameters.extend(parameters)
+    us.parameter_nodes_by_name.update({node.name: node for node in nodes})
+    us.parameters_by_name.update(
+        {parameter.name: parameter for parameter in parameters}
+    )
+    return extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+        region_references=region_references(),
+    )
+
+
+def test_postgres_parameter_tree_from_records_shaped_like_policyengine_py(
+    published_engine: Engine,
+) -> None:
+    with published_engine.begin() as connection:
+        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
+    publish_catalog(published_engine, _catalog_shaped_like_policyengine_py_output())
+    client = _client(published_engine)
+
+    def level(parent_path: str) -> list[tuple]:
+        return _items(
+            client.get(
+                "/v2/parameters/children",
+                params={"country_id": "us", "parent_path": parent_path},
+            )
+        )
+
+    assert level("gov.aca.age_curves") == [
+        ("gov.aca.age_curves.ak", "ACA premium age curve factors - AK", "node", 2),
+        ("gov.aca.age_curves.al", "Al", "node", 2),
+    ]
+    assert level("gov.aca.age_curves.al") == [
+        ("gov.aca.age_curves.al[0]", "Bracket 1", "node", 2),
+        ("gov.aca.age_curves.al[1]", "Bracket 2", "node", 2),
+    ]
+    assert level("gov.aca.age_curves.al[1]") == [
+        (
+            "gov.aca.age_curves.al[1].amount",
+            "ACA premium age curve factors - AL (tier 2 amount)",
+            "parameter",
+            None,
+        ),
+        (
+            "gov.aca.age_curves.al[1].threshold",
+            "ACA premium age curve factors - AL (tier 2 threshold)",
+            "parameter",
+            None,
+        ),
+    ]
+    assert level("gov.irs.deductions.standard") == [
+        ("gov.irs.deductions.standard.amount", "Standard deduction", "node", 2),
+    ]
+    assert level("gov.irs.deductions.standard.amount") == [
+        (
+            "gov.irs.deductions.standard.amount.JOINT",
+            "Standard deduction (Joint)",
+            "parameter",
+            None,
+        ),
+        (
+            "gov.irs.deductions.standard.amount.SINGLE",
+            "Standard deduction (Single)",
+            "parameter",
+            None,
+        ),
+    ]
+
+
+def test_postgres_a_version_stored_before_format_2_returns_the_tree_503(
+    published_engine: Engine,
+) -> None:
+    """A version stored before catalog format 2 gets no tree on republication.
+
+    Its parameter tree request returns 503 with the message naming it.
+    """
+    with published_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE tax_benefit_model_versions SET catalog_format = NULL, "
+                "entities = NULL, basic_inputs = NULL"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE variables SET is_input_variable = NULL, hidden_input = NULL, "
+                "module_name = NULL, adds_parameter_path = NULL, "
+                "subtracts_parameter_path = NULL, enum_values = NULL, "
+                "unit = NULL, definition_period = NULL"
+            )
+        )
+        connection.execute(
+            text("UPDATE parameters SET economy = NULL, household = NULL")
+        )
+        connection.execute(text("DELETE FROM parameter_tree_children"))
+    evidence = publish_catalog(published_engine, normalized_catalog())
+
+    response = _client(published_engine).get(
+        "/v2/parameters/children",
+        params={"country_id": "us", "policyengine_version": POLICYENGINE_VERSION},
+    )
+
+    assert evidence.parameter_trees_written == ()
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": (
+            f"catalog version {POLICYENGINE_VERSION} has no parameter tree: "
+            "catalog publication writes trees only for the versions it publishes "
+            "and for the installed version with catalog format 2"
+        ),
+    }
+    assert "cache-control" not in response.headers

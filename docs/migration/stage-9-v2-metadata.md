@@ -305,6 +305,55 @@ since they describe staged regions that were not published. Every other table
 must still match exactly. Region reference changes therefore take effect in the
 next catalog version that is published.
 
+### Parameter tree
+
+Publication also writes parameter trees into `parameter_tree_children`, which
+`/v2/parameters/children` reads one level at a time. A tree is built from a
+catalog version's parameter and node records: every node and parameter is one
+row under its parent's path, a `[` starts a child as a `.` does (so a bracket schedule is one node
+whose children are its brackets, labelled "Bracket 1", "Bracket 2" and so on),
+and labels take the form the app's newer interface shows in every view: the
+stored label with underscores as spaces and its first letter upper-cased, or,
+without one, the last part of the name in that form (so an unlabelled schedule
+`...rates.uk` is "Uk"). Each row also records its position among all its
+siblings and, if a reform can change it, among the siblings a reform can
+change: a parameter under `gov` whose economy or household flag is set and whose path names
+neither `taxsim`, `gov.abolitions` nor `pycache`, and every node above such a
+parameter. These are the rules of the tree the app's newer interface builds
+from v1 metadata. Trees are written only for versions with catalog format 2,
+so every parameter in a tree has both flags.
+
+In the same transaction, the command writes the tree of each version in the
+catalog it publishes, which comes from the installed packages, when that
+version has none: the versions it publishes now, and the installed version when
+an earlier release stored it with catalog format 2 but without a tree. An
+installed version stored before catalog format 2 gets none, since its parameter
+rows store no flags. The rows are built from the
+catalog's own parameter and node records; only the stored parameters' IDs are
+read, by name, so the rows reference them, after publication has checked that
+the stored rows match the catalog. This is a row-only, idempotent insert of
+package-derived rows, which the deployment-seeder passage of the Alembic skill
+allows. The evidence's `parameter_trees_written` lists each version written,
+with its model, version and row count, and publication fails if a version in
+the catalog with catalog format 2 is still without a tree when it finishes.
+
+Other stored versions get no tree. Writing one for them would derive rows from
+what earlier releases stored, a data migration that the Alembic skill's rules
+leave to a human migration decision, so it is not done; such a version gets a
+tree only if a person decides on that migration.
+
+`/v2/parameters/children` lists one level with one indexed read:
+`parent_path` names the node ("" for the top level), and
+`reform_changeable=true` keeps only the children a reform can change, sorted
+by label, with child counts that count only those. Without it, children are
+in path order, with a schedule's brackets in bracket order. A node carries
+its child count, a parameter its summary. An unknown parent path has no
+children. The route reads its query through the shared strict query models,
+so unknown or repeated parameters, an unsupported country and a malformed
+`policyengine_version` return 422 (the last two returned 400 before). A
+catalog version without a tree returns 503 with a message that names the
+version.
+
 ## Validation evidence and retry
 
 Successful JSON evidence contains:
@@ -315,6 +364,8 @@ Successful JSON evidence contains:
 - fallback counts and omitted-region counts by country and region type, and
   the stored and staged region counts of any stored version whose regions were
   kept;
+- the model, version and row count of each catalog version whose parameter
+  tree was written;
 - elapsed publication time; and
 - a success outcome.
 
