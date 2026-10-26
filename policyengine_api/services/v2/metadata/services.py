@@ -24,6 +24,7 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_n
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_search_file import (  # noqa: E501  # a dotted module path cannot be wrapped
     read_parameter_search_file,
+    read_parameter_search_file_hash,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_tree import (  # noqa: E501  # a dotted module path cannot be wrapped
     read_parameter_children,
@@ -109,6 +110,17 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.metadata.selected_catalogs import (
         SelectedCatalogStore,
     )
+
+
+def _parameter_search_file_unavailable(
+    selected: SelectedCatalog,
+) -> ParameterSearchFileUnavailableError:
+    msg = (
+        f"catalog version {selected.policyengine_version} has no parameter search "
+        "file: a file is written when a catalog version is published, and this "
+        "version was published before"
+    )
+    return ParameterSearchFileUnavailableError(msg)
 
 
 class V2MetadataService:
@@ -419,13 +431,30 @@ class V2MetadataService:
             ),
         )
         if search_file is None:
-            msg = (
-                f"catalog version {selected.policyengine_version} has no parameter "
-                "search file: a file is written when a catalog version is "
-                "published, and this version was published before"
-            )
-            raise ParameterSearchFileUnavailableError(msg)
+            raise _parameter_search_file_unavailable(selected)
         return search_file
+
+    def get_parameter_search_file_hash(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> str:
+        """Return the SHA-256 of the selected version's uncompressed search file.
+
+        It reads the hash only, so a client revalidating its copy does not load
+        the file. Raise ParameterSearchFileUnavailableError as
+        ``get_parameter_search_file`` does.
+        """
+        selected = self._select_catalog(country_id, policyengine_version)
+        rows = read_parameter_search_file_hash(
+            self._database_session.session,
+            model_version_id=selected.model_version.id,
+            file_format=PARAMETER_SEARCH_FILE_FORMAT,
+        )
+        if not rows:
+            raise _parameter_search_file_unavailable(selected)
+        content_sha256: str = rows[0].content_sha256
+        return content_sha256
 
     def list_parameter_values(
         self,

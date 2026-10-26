@@ -646,7 +646,11 @@ def test_the_selected_version_search_file_is_returned_as_stored(
     catalog_session.commit()
 
     search_file = catalog_service(catalog_session).get_parameter_search_file("us")
+    content_sha256 = catalog_service(catalog_session).get_parameter_search_file_hash(
+        "us"
+    )
 
+    assert content_sha256 == encoded.content_sha256
     assert search_file.policyengine_version == POLICYENGINE_VERSION
     assert search_file.file_format == 1
     assert search_file.compressed_content == encoded.compressed_content
@@ -673,6 +677,10 @@ def test_a_version_without_a_search_file_of_the_current_format_is_unavailable(
 
     with pytest.raises(ParameterSearchFileUnavailableError) as raised:
         catalog_service(catalog_session).get_parameter_search_file("us")
+    with pytest.raises(ParameterSearchFileUnavailableError) as raised_for_hash:
+        catalog_service(catalog_session).get_parameter_search_file_hash("us")
+
+    assert str(raised_for_hash.value) == str(raised.value)
 
     assert str(raised.value) == (
         f"catalog version {POLICYENGINE_VERSION} has no parameter search file: a "
