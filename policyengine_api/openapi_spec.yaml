@@ -180,6 +180,17 @@ paths:
                         type: string
                       api_version:
                         type: string
+                      missing_parameters:
+                        type: array
+                        nullable: true
+                        items:
+                          type: string
+                        description: >-
+                          The parameter paths this policy sets that the
+                          country model the API runs no longer has, sorted;
+                          empty when it has them all. Null when they cannot
+                          be checked. A policy with missing parameters cannot
+                          be run on the current model.
         404:
           description: Policy not found.
           content:

@@ -344,6 +344,49 @@ def test_v1_policy_reads_require_cloud_sql_and_never_invoke_v2(
     invalid_get.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "missing_parameters",
+    [["gov.irs.income.bracket.thresholds.1.WIDOW"], [], None],
+    ids=["missing", "none-missing", "not-checked"],
+)
+def test_v1_policy_read_reports_the_parameters_the_model_lacks(
+    monkeypatch, missing_parameters: list[str] | None
+) -> None:
+    policy = Policy(
+        id=96567,
+        country_id="us",
+        label=None,
+        api_version="1.633.2",
+        policy_json={"gov.dol.minimum_wage": {"2026-01-01.2100-12-31": 9}},
+        policy_hash="legacy/base64+hash=",
+    )
+    monkeypatch.setenv("DB_READ_POLICY", "cloud_sql")
+    with (
+        patch(
+            "policyengine_api.routes.policy_routes.policy_service.get_policy",
+            return_value=policy,
+        ),
+        patch(
+            "policyengine_api.routes.policy_routes.policy_parameter_service.missing_parameters",
+            return_value=missing_parameters,
+        ) as check,
+    ):
+        response = _client().get("/us/policy/96567")
+
+    assert response.status_code == 200
+    result = json.loads(response.text)["result"]
+    assert result == {
+        "id": 96567,
+        "country_id": "us",
+        "label": None,
+        "api_version": "1.633.2",
+        "policy_json": {"gov.dol.minimum_wage": {"2026-01-01.2100-12-31": 9}},
+        "policy_hash": "legacy/base64+hash=",
+        "missing_parameters": missing_parameters,
+    }
+    check.assert_called_once_with("us", policy.policy_json)
+
+
 def test_policy_search_failure_does_not_expose_exception_details(
     monkeypatch,
 ) -> None:
