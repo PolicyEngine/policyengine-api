@@ -18,8 +18,13 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataCatalogParametersResponse,
     MetadataCatalogVariablesResponse,
     MetadataModelCatalogResponse,
+    MetadataResourceSuccessResponse,
 )
 from policyengine_api.query_parameters import CatalogParameterQuery, CatalogQuery
+from policyengine_api.services.v2.metadata.types import (
+    MetadataCatalogVariablesResult,
+    MetadataModelCatalogResult,
+)
 
 if TYPE_CHECKING:
     from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
@@ -61,10 +66,11 @@ def build_v2_model_catalog_router(
     )
     def get_model_catalog(
         query: CatalogQueryDependency,
-    ) -> MetadataModelCatalogResponse | Response:
+    ) -> MetadataResourceSuccessResponse[MetadataModelCatalogResult] | Response:
         return read_whole_version_resource(
             dependencies,
-            ("model-catalog", query.country_id, query.policyengine_version),
+            "model-catalog",
+            query,
             MetadataModelCatalogResponse,
             lambda reader: reader.get_model_catalog(
                 query.country_id, query.policyengine_version
@@ -85,10 +91,11 @@ def build_v2_model_catalog_router(
     )
     def get_catalog_variables(
         query: CatalogQueryDependency,
-    ) -> MetadataCatalogVariablesResponse | Response:
+    ) -> MetadataResourceSuccessResponse[MetadataCatalogVariablesResult] | Response:
         return read_whole_version_resource(
             dependencies,
-            ("model-catalog/variables", query.country_id, query.policyengine_version),
+            "model-catalog/variables",
+            query,
             MetadataCatalogVariablesResponse,
             lambda reader: reader.get_catalog_variables(
                 query.country_id, query.policyengine_version

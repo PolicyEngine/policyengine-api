@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import contextlib
-import hashlib
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from fastapi.routing import APIRoute
 from pydantic import BaseModel
@@ -23,6 +22,14 @@ from policyengine_api.fastapi_routes.v2.errors import (
     V2ErrorResponse,
     v2_error_response,
 )
+from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+    BuiltResponse,
+    KeptResponse,
+    body_entity_tag,
+)
+from policyengine_api.fastapi_routes.v2.metadata.response_models import (
+    MetadataResourceSuccessResponse,
+)
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
@@ -38,9 +45,7 @@ if TYPE_CHECKING:
         NativeRouteDependencies,
         V2MetadataResourceReader,
     )
-    from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
-        ResponseKey,
-    )
+    from policyengine_api.query_parameters import CatalogQuery
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
@@ -70,8 +75,18 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 
 
+class CatalogVersionResult(Protocol):
+    """A whole-version result, which names the catalog version it was read from."""
+
+    @property
+    def policyengine_version(self) -> str:
+        """The exact PolicyEngine.py version of the catalog read."""
+        ...
+
+
 ResponseT = TypeVar("ResponseT", bound=BaseModel)
 ReadT = TypeVar("ReadT")
+CatalogResultT = TypeVar("CatalogResultT", bound=CatalogVersionResult)
 
 EXPLICIT_VERSION_MAX_AGE_SECONDS = 86_400
 """How long a response for a named catalog version may be reused (a day).
@@ -138,7 +153,7 @@ def with_cache_headers(request: Request, response: Response) -> Response:
     midnight. A request whose ``If-None-Match`` names the ETag gets a 304 with
     no body.
     """
-    entity_tag = f'"{hashlib.sha256(response.body).hexdigest()[:32]}"'
+    entity_tag = response.headers.get("etag") or body_entity_tag(response.body)
     max_age = (
         EXPLICIT_VERSION_MAX_AGE_SECONDS
         if "policyengine_version" in request.query_params
@@ -180,31 +195,42 @@ def read_resource(
 
 def read_whole_version_resource(
     dependencies: NativeRouteDependencies,
-    key: ResponseKey,
-    response_type: type[ResponseT],
-    operation: Callable[[V2MetadataResourceReader], object],
-) -> ResponseT | Response:
+    route: str,
+    query: CatalogQuery,
+    response_type: type[MetadataResourceSuccessResponse[CatalogResultT]],
+    operation: Callable[[V2MetadataResourceReader], CatalogResultT],
+) -> MetadataResourceSuccessResponse[CatalogResultT] | Response:
     """Serve a whole catalog-version response, built once per process when kept.
 
-    With the dependencies' response cache, the serialized body for ``key`` is
-    read and built only on the first successful request; failures are served
-    as ``read_resource`` serves them and never kept. Without a cache this is
+    With the dependencies' response cache, the serialized body and its ETag
+    for ``route``, the query's country and the version it selects are read
+    and built only on the first successful request; failures are served as
+    ``read_resource`` serves them and never kept. Without a cache this is
     ``read_resource``.
     """
     cache = dependencies.v2_metadata_response_cache
     if cache is None:
         return read_resource(dependencies, response_type, operation)
 
-    def build() -> bytes | JSONResponse:
+    def build() -> BuiltResponse | JSONResponse:
         result = read_resource(dependencies, response_type, operation)
-        if isinstance(result, BaseModel):
-            return result.model_dump_json().encode()
+        if isinstance(result, MetadataResourceSuccessResponse):
+            return BuiltResponse(
+                body=result.model_dump_json().encode(),
+                policyengine_version=result.result.policyengine_version,
+            )
         return result
 
-    built = cache.get_or_build(key, build)
-    if isinstance(built, bytes):
-        return Response(content=built, media_type="application/json")
-    return built
+    kept = cache.get_or_build(
+        route, query.country_id, query.policyengine_version, build
+    )
+    if isinstance(kept, KeptResponse):
+        return Response(
+            content=kept.body,
+            media_type="application/json",
+            headers={"ETag": kept.entity_tag},
+        )
+    return kept
 
 
 def run_metadata_read(
