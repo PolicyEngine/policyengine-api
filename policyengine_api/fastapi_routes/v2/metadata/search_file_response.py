@@ -44,6 +44,13 @@ SEARCH_FILE_RESPONSE_HEADERS: Final[dict[str, dict[str, Any]]] = {
 }
 
 
+def search_file_entity_tag(content_sha256: str, *, accept_encoding: str | None) -> str:
+    """Return the ETag of the representation the request accepts."""
+    if accepts_gzip(accept_encoding):
+        return f'"{content_sha256}{_GZIP_ETAG_SUFFIX}"'
+    return f'"{content_sha256}"'
+
+
 def parameter_search_file_response(
     search_file: MetadataParameterSearchFile,
     *,
@@ -54,17 +61,17 @@ def parameter_search_file_response(
     It decides with the application's gzip middleware's rule, and the gzip
     form names its Content-Encoding, so the middleware never re-encodes it.
     """
+    entity_tag = search_file_entity_tag(
+        search_file.content_sha256, accept_encoding=accept_encoding
+    )
     if accepts_gzip(accept_encoding):
         return Response(
             content=search_file.compressed_content,
             media_type="application/json",
-            headers={
-                "ETag": f'"{search_file.content_sha256}{_GZIP_ETAG_SUFFIX}"',
-                "Content-Encoding": "gzip",
-            },
+            headers={"ETag": entity_tag, "Content-Encoding": "gzip"},
         )
     return Response(
         content=gzip.decompress(search_file.compressed_content),
         media_type="application/json",
-        headers={"ETag": f'"{search_file.content_sha256}"'},
+        headers={"ETag": entity_tag},
     )

@@ -247,6 +247,17 @@ class V2MetadataResourceReader(Protocol):
         """
         ...
 
+    def get_parameter_search_file_hash(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> str:
+        """Return the content hash of the selected version's search file only.
+
+        Raise ``ParameterSearchFileUnavailableError`` when the version has none.
+        """
+        ...
+
     def list_parameter_values(
         self,
         country_id: str,

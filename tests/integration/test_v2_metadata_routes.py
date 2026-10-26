@@ -1114,16 +1114,19 @@ def test_postgres_search_file_reads_as_the_runtime_role(
     runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
     try:
         with Session(runtime_engine) as session:
-            search_file = V2MetadataService(
+            service = V2MetadataService(
                 MetadataDatabaseSession(session),
                 running_policyengine_version=POLICYENGINE_VERSION,
-            ).get_parameter_search_file("us")
+            )
+            search_file = service.get_parameter_search_file("us")
+            content_sha256 = service.get_parameter_search_file_hash("us")
     finally:
         runtime_engine.dispose()
 
     assert json.loads(gzip.decompress(search_file.compressed_content)) == (
         country_search_file(normalized_catalog().country("us"))
     )
+    assert content_sha256 == search_file.content_sha256
 
 
 def test_postgres_search_file_of_an_unknown_catalog_version_is_absent(

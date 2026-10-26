@@ -1713,7 +1713,13 @@ def _search_file_reader(*, error: Exception | None = None) -> ResourceReader:
         uncompressed_size=encoded.uncompressed_size,
         compressed_size=encoded.compressed_size,
     )
-    return ResourceReader({"get_parameter_search_file": stored}, error=error)
+    return ResourceReader(
+        {
+            "get_parameter_search_file": stored,
+            "get_parameter_search_file_hash": encoded.content_sha256,
+        },
+        error=error,
+    )
 
 
 def _content_sha256() -> str:
@@ -2064,3 +2070,53 @@ def test_search_file_route_reports_an_unknown_catalog_version_as_absent() -> Non
     assert response.status_code == 404
     assert "etag" not in response.headers
     assert "cache-control" not in response.headers
+
+
+def test_a_matching_revalidation_reads_only_the_stored_hash() -> None:
+    reader = _search_file_reader()
+
+    response = _client(lambda: reader).get(
+        SEARCH_FILE_PATH,
+        params={"country_id": "us", "policyengine_version": "4.20.3"},
+        headers={
+            "If-None-Match": f'"{_content_sha256()}-gzip"',
+            "Accept-Encoding": "gzip",
+        },
+    )
+
+    assert response.status_code == 304
+    assert response.headers["etag"] == f'"{_content_sha256()}-gzip"'
+    assert [name for name, _args, _kwargs in reader.calls] == [
+        "get_parameter_search_file_hash"
+    ]
+    assert reader.closed
+
+
+def test_a_revalidation_that_does_not_match_reads_the_whole_file() -> None:
+    reader = _search_file_reader()
+
+    response = _client(lambda: reader).get(
+        SEARCH_FILE_PATH,
+        params={"country_id": "us"},
+        headers={"If-None-Match": '"stale"', "Accept-Encoding": "gzip"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == SEARCH_FILE_CONTENT
+    assert [name for name, _args, _kwargs in reader.calls] == [
+        "get_parameter_search_file_hash",
+        "get_parameter_search_file",
+    ]
+
+
+def test_a_request_without_if_none_match_reads_the_file_once() -> None:
+    reader = _search_file_reader()
+
+    response = _client(lambda: reader).get(
+        SEARCH_FILE_PATH, params={"country_id": "us"}
+    )
+
+    assert response.status_code == 200
+    assert [name for name, _args, _kwargs in reader.calls] == [
+        "get_parameter_search_file"
+    ]

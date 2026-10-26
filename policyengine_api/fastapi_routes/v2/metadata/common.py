@@ -253,7 +253,7 @@ def with_cache_headers(request: Request, response: Response) -> Response:
     if read_instant is not None:
         max_age = min(max_age, _seconds_left_in_utc_day(read_instant, utc_now()))
     headers = {"Cache-Control": f"public, max-age={max_age}", "ETag": entity_tag}
-    if _names_entity_tag(request.headers.get("if-none-match"), entity_tag):
+    if names_entity_tag(request.headers.get("if-none-match"), entity_tag):
         not_modified = Response(status_code=304, headers=headers)
         not_modified.headers["Vary"] = _cacheable_vary(None)
         return not_modified
@@ -281,7 +281,8 @@ def _cacheable_vary(existing: str | None) -> str:
     return unique_vary_values(", ".join([existing or "", *CACHEABLE_VARY_VALUES]))
 
 
-def _names_entity_tag(if_none_match: str | None, entity_tag: str) -> bool:
+def names_entity_tag(if_none_match: str | None, entity_tag: str) -> bool:
+    """Return whether an If-None-Match value names ``entity_tag`` (or is ``*``)."""
     if if_none_match is None:
         return False
     candidates = {candidate.strip() for candidate in if_none_match.split(",")}

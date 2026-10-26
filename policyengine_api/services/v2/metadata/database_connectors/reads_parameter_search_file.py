@@ -38,3 +38,25 @@ def read_parameter_search_file(
             col(ParameterSearchFile.file_format) == file_format,
         ),
     )
+
+
+def read_parameter_search_file_hash(
+    session: Session,
+    *,
+    model_version_id: UUID,
+    file_format: int,
+) -> list[Any]:
+    """Return the content hash of the version's search file: one row, or none.
+
+    The same index read as ``read_parameter_search_file``, without the
+    compressed content, so a revalidation does not load the file.
+    """
+    return read_rows(
+        session,
+        sa.select(
+            col(ParameterSearchFile.content_sha256).label("content_sha256"),
+        ).where(
+            col(ParameterSearchFile.tax_benefit_model_version_id) == model_version_id,
+            col(ParameterSearchFile.file_format) == file_format,
+        ),
+    )
