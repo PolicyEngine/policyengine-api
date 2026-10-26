@@ -24,6 +24,15 @@ class InvalidMetadataPageError(ValueError):
     """Raised when collection pagination is outside the documented bounds."""
 
 
+class ParameterSearchFileUnavailableError(MetadataCatalogUnavailableError):
+    """Raised when a selected catalog version has no parameter search file.
+
+    Catalog publication writes a version's file only when it publishes the
+    version, from the installed packages' catalog, so a version stored by an
+    earlier release before search files existed has none.
+    """
+
+
 class ParameterTreeUnavailableError(MetadataCatalogUnavailableError):
     """Raised when a selected catalog version has no parameter tree.
 

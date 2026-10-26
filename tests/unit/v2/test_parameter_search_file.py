@@ -7,6 +7,8 @@ import hashlib
 import json
 from datetime import date
 
+import pytest
+
 from policyengine_api.data.v2.catalog.parameter_search_file import (
     PARAMETER_SEARCH_FILE_FORMAT,
     DraftabilityChange,
@@ -14,6 +16,7 @@ from policyengine_api.data.v2.catalog.parameter_search_file import (
     SearchParameterSource,
     build_parameter_search_file,
     encode_parameter_search_file,
+    is_draftable_value,
 )
 
 
@@ -294,3 +297,25 @@ def test_the_same_catalog_rows_always_encode_to_the_same_bytes() -> None:
     assert first.compressed_content == second.compressed_content
     assert first.content_sha256 == second.content_sha256
     assert "Ä rate" in gzip.decompress(first.compressed_content).decode("utf-8")
+
+
+@pytest.mark.parametrize(
+    ("value", "draftable"),
+    [
+        (0.2, True),
+        (0, True),
+        (True, True),
+        (False, True),
+        ("Infinity", True),
+        ("-Infinity", True),
+        (None, False),
+        (["employment_income"], False),
+        ("SINGLE", False),
+        ({"a": 1}, False),
+    ],
+)
+def test_draftable_values_follow_v3s_draft_editor(
+    value: object, *, draftable: bool
+) -> None:
+    # v3's isDraftableValue: a number, a yes/no switch, or "Infinity"/"-Infinity".
+    assert is_draftable_value(value) is draftable
