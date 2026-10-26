@@ -29,7 +29,8 @@ class ParameterSearchFileUnavailableError(MetadataCatalogUnavailableError):
 
     Catalog publication writes a version's file only when it publishes the
     version, from the installed packages' catalog, so a version stored by an
-    earlier release before search files existed has none.
+    earlier release before search files existed has none. The message names
+    the version and is safe to return to the caller.
     """
 
 

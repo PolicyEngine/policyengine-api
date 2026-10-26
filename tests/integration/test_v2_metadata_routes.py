@@ -1097,7 +1097,11 @@ def test_postgres_search_file_of_a_version_without_one_is_unavailable(
     assert response.status_code == 503
     assert response.json() == {
         "status": "error",
-        "message": "V2 metadata catalog is unavailable",
+        "message": (
+            f"catalog version {POLICYENGINE_VERSION} has no parameter search "
+            "file: a file is written when a catalog version is published, and "
+            "this version was published before"
+        ),
     }
 
 

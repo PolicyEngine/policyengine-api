@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse, Response
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     METADATA_RESPONSES,
+    PARAMETER_SEARCH_FILE_ERROR_RESPONSES,
     PARAMETER_TREE_ERROR_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
@@ -129,6 +130,7 @@ def build_v2_metadata_parameter_router(
                 ),
                 "headers": SEARCH_FILE_RESPONSE_HEADERS,
             },
+            **PARAMETER_SEARCH_FILE_ERROR_RESPONSES,
         },
         summary="Get a catalog version's parameter search file",
     )

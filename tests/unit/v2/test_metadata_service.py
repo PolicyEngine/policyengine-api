@@ -1674,7 +1674,11 @@ def test_a_version_without_a_search_file_of_the_current_format_is_unavailable(
     )
     catalog_session.commit()
 
-    with pytest.raises(
-        ParameterSearchFileUnavailableError, match="has no parameter search file"
-    ):
+    with pytest.raises(ParameterSearchFileUnavailableError) as raised:
         _service(catalog_session).get_parameter_search_file("us")
+
+    assert str(raised.value) == (
+        f"catalog version {POLICYENGINE_VERSION} has no parameter search file: a "
+        "file is written when a catalog version is published, and this version "
+        "was published before"
+    )

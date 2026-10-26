@@ -1875,19 +1875,19 @@ def test_search_file_route_sends_the_file_when_the_etag_differs() -> None:
 
 
 def test_search_file_route_reports_a_missing_file_as_unavailable() -> None:
-    reader = _search_file_reader(
-        error=ParameterSearchFileUnavailableError("search file not written")
+    message = (
+        "catalog version 4.20.3 has no parameter search file: a file is written "
+        "when a catalog version is published, and this version was published "
+        "before"
     )
+    reader = _search_file_reader(error=ParameterSearchFileUnavailableError(message))
 
     response = _client(lambda: reader).get(
         SEARCH_FILE_PATH, params={"country_id": "us"}
     )
 
     assert response.status_code == 503
-    assert response.json() == {
-        "status": "error",
-        "message": "V2 metadata catalog is unavailable",
-    }
+    assert response.json() == {"status": "error", "message": message}
     assert "etag" not in response.headers
     assert "cache-control" not in response.headers
     assert reader.closed
@@ -1934,6 +1934,7 @@ def test_search_file_openapi_declares_its_query_and_content() -> None:
     }
     assert {"ETag", "Cache-Control", "Content-Encoding", "Vary"} <= set(ok["headers"])
     assert "304" in operation["responses"]
+    assert "no parameter search file" in operation["responses"]["503"]["description"]
     assert "MetadataParameterSearchFileParameter" in schema["components"]["schemas"]
 
 
