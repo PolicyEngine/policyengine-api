@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import json
 import os
+from collections import Counter
 from importlib import metadata as importlib_metadata
+from typing import TYPE_CHECKING
 
 import pytest
 from policyengine.bundle import get_current_bundle
 
 from policyengine_api.data.v2.catalog.extraction import extract_installed_catalog
+
+if TYPE_CHECKING:
+    from policyengine_api.data.v2.catalog.records import CountryCatalog
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("RUN_V2_CATALOG_COMPATIBILITY") != "1",
@@ -38,10 +43,9 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
     )
     # Counts for the 6.10.0 bundle's models: US 2.2.1 and UK 2.132.6. Keep
     # this exact assertion so later package changes require explicit review.
-    # Since 6.10.0 the UK registry also lists its 650 constituencies and 361
-    # local authorities, because the bundle routes them to a local-area
-    # release, so regions grow by 1,011 from 6.7.5's 826 and the catalog
-    # adds that release's dataset.
+    # Regions come from the checked-in reference files: 488 US (places are
+    # left out) and 1,016 UK, whose constituencies and local authorities use
+    # the local-area dataset the release routes them to.
     assert catalog.entity_counts() == {
         "models": 2,
         "model_versions": 2,
@@ -50,7 +54,7 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "parameters": 104_172,
         "parameter_values": 1_194_360,
         "datasets": 4,
-        "regions": 1_837,
+        "regions": 1_504,
     }
 
     for country_id in ("us", "uk"):
@@ -73,18 +77,18 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
             total_values += len(batch)
         assert total_values == country.entity_counts()["parameter_values"]
 
-    assert {dataset.name for dataset in catalog.country("us").datasets} == {
-        "populace_us_2024",
-        "populace_us_2024_acs_local",
-    }
-    assert {dataset.name for dataset in catalog.country("uk").datasets} == {
+    _check_uk_regions(catalog.country("uk"))
+    _check_us_regions(catalog.country("us"))
+
+
+def _check_uk_regions(uk_catalog: CountryCatalog) -> None:
+    assert {dataset.name for dataset in uk_catalog.datasets} == {
         "microcosm_uk_2024_25",
         "microcosm_uk_2024_25_dense",
     }
     # The national file has no area codes, so UK constituencies and local
     # authorities use the local-area dataset .py routes them to, while the
     # UK countries filter the national file.
-    uk_catalog = catalog.country("uk")
     uk_dataset_names = {dataset.id: dataset.name for dataset in uk_catalog.datasets}
     uk_region_type_datasets: dict[str, set[str]] = {}
     for region in uk_catalog.regions:
@@ -99,9 +103,7 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
     }
     assert uk_catalog.fallback_summaries == ()
     england = next(
-        region
-        for region in catalog.country("uk").regions
-        if region.code == "country/england"
+        region for region in uk_catalog.regions if region.code == "country/england"
     )
     assert england.filter_field == "region"
     assert england.filter_strategy == "row_filter"
@@ -118,11 +120,39 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "SOUTH_WEST",
     ]
 
+    uk_types = Counter(region.region_type for region in uk_catalog.regions)
+    assert uk_types == {
+        "national": 1,
+        "country": 4,
+        "constituency": 650,
+        "local_authority": 361,
+    }
+    uk_regions = {region.code: region for region in uk_catalog.regions}
+    aldershot = uk_regions["constituency/E14001063"]
+    assert (
+        aldershot.filter_strategy,
+        aldershot.filter_field,
+        aldershot.filter_value,
+    ) == ("row_filter", "constituency_code_oa", "E14001063")
+    ards = uk_regions["local_authority/N09000011"]
+    assert (ards.label, ards.filter_field, ards.filter_value) == (
+        "Ards and North Down",
+        "la_code_oa",
+        "N09000011",
+    )
+    assert uk_regions["uk"].label == "United Kingdom"
+
+
+def _check_us_regions(us_catalog: CountryCatalog) -> None:
+    assert {dataset.name for dataset in us_catalog.datasets} == {
+        "populace_us_2024",
+        "populace_us_2024_acs_local",
+    }
     # Since 6.7.5, US state and congressional-district regions use the
     # ACS-local dataset again, on the PolicyEngine/microcosm#1263 rebuild
     # (PolicyEngine/policyengine.py#649, ending #604's national-file filter).
-    # The national region uses the national dataset, and places fall back to it.
-    us_catalog = catalog.country("us")
+    # The national region uses the national dataset. Regions come from the
+    # checked-in reference files; US places cannot run yet and are left out.
     us_dataset_names = {dataset.id: dataset.name for dataset in us_catalog.datasets}
     region_type_datasets: dict[str, set[str]] = {}
     for region in us_catalog.regions:
@@ -133,11 +163,13 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "national": {"populace_us_2024"},
         "state": {"populace_us_2024_acs_local"},
         "congressional_district": {"populace_us_2024_acs_local"},
-        "place": {"populace_us_2024"},
     }
+    assert us_catalog.fallback_summaries == ()
     assert [
         (summary.region_type, summary.count)
-        for summary in us_catalog.fallback_summaries
-    ] == [
-        ("place", 333),
-    ]
+        for summary in us_catalog.omitted_region_summaries
+    ] == [("place", 333)]
+
+    assert {region.code: region.label for region in us_catalog.regions}["us"] == (
+        "United States"
+    )

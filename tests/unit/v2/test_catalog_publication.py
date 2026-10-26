@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -214,10 +215,20 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
 
     catalog = normalized_catalog()
     comparisons = publication_reconciliation._comparison_pairs(catalog.country("us"))
+    assert [table_name for table_name, _staged, _stored in comparisons] == [
+        "model version",
+        "variables",
+        "parameter nodes",
+        "parameters",
+        "parameter values",
+        "datasets",
+    ]
+    statements = [
+        statement for _table_name, *pair in comparisons for statement in pair
+    ] + list(publication_reconciliation._region_comparison_pair(catalog.country("us")))
     assert all(
         isinstance(statement, sa.sql.Select) and not isinstance(statement, TextClause)
-        for pair in comparisons
-        for statement in pair
+        for statement in statements
     )
 
     class Result:
@@ -251,6 +262,8 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         entity_counts={"parameters": 12},
         fallback_summaries=(("us", "state", 3),),
         elapsed_seconds=2.3456,
+        omitted_region_summaries=(("us", "place", 333),),
+        kept_region_summaries=(("uk", "6.7.5", 5, 1_015),),
     ).as_dict()
 
     assert evidence == {
@@ -260,6 +273,17 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         "entity_counts": {"parameters": 12},
         "fallback_summaries": [
             {"country_id": "us", "region_type": "state", "count": 3}
+        ],
+        "omitted_region_summaries": [
+            {"country_id": "us", "region_type": "place", "count": 333}
+        ],
+        "kept_regions": [
+            {
+                "country_id": "uk",
+                "policyengine_version": "6.7.5",
+                "stored_regions": 5,
+                "staged_regions": 1_015,
+            }
         ],
         "elapsed_seconds": 2.346,
     }
@@ -293,3 +317,55 @@ def test_fallback_summary_emits_one_non_secret_warning() -> None:
     rendered_message = message_template % (logged_summaries,)
     assert "regional dataset fallback summary" in rendered_message
     assert "postgresql://" not in rendered_message
+
+
+def _kept_region_records(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    differences: tuple[int, int],
+) -> list[logging.LogRecord]:
+    monkeypatch.setattr(
+        publication,
+        "count_region_differences",
+        lambda _connection, _country: differences,
+    )
+    monkeypatch.setattr(publication, "count_stored_regions", lambda *_args: 4)
+    # An earlier test's Alembic logging setup may have disabled existing loggers.
+    monkeypatch.setattr(publication.LOGGER, "disabled", False)
+    us = normalized_catalog().country("us")
+    with caplog.at_level(logging.WARNING, logger=publication.LOGGER.name):
+        summary = publication._kept_region_summary(object(), us)
+    assert summary == (None if differences == (0, 0) else ("us", "5.0.4", 4, 3))
+    return [
+        record for record in caplog.records if record.name == publication.LOGGER.name
+    ]
+
+
+def test_kept_region_warning_prints_country_version_and_counts_without_logging_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    [record] = _kept_region_records(monkeypatch, caplog, (1, 2))
+
+    # The seed command configures no logging, so Python's last-resort handler
+    # prints the record; this is the text the job output shows.
+    assert logging.lastResort is not None
+    assert logging.lastResort.format(record) == (
+        "kept the published regions of the stored us catalog version 5.0.4: "
+        "1 staged region rows are not stored and 2 stored region rows are not "
+        "staged"
+    )
+    assert record.levelno == logging.WARNING
+    assert record.policyengine_attributes == {
+        "country_id": "us",
+        "policyengine_version": "5.0.4",
+        "staged_region_rows_not_stored": 1,
+        "stored_region_rows_not_staged": 2,
+    }
+
+
+def test_matching_kept_regions_log_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    assert _kept_region_records(monkeypatch, caplog, (0, 0)) == []

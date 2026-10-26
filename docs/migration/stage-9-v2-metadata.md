@@ -64,8 +64,14 @@ must execute in this order:
    Alembic chain, confirms all heads are current, and detects ungenerated model
    changes.
 3. Remove the migration URL from the command environment.
-4. Supply only `V2_DATA_WRITE_DATABASE_URL` and the same target identity, then
-   run `uv run python scripts/publish_v2_metadata_catalog.py`.
+4. Supply only `V2_DATA_WRITE_DATABASE_URL`, the same target identity and
+   `HUGGING_FACE_TOKEN` (from the organization secret
+   `PE_UK_PRIVATE_HF_READ_TOKEN`), then run
+   `uv run python scripts/publish_v2_metadata_catalog.py`. Before publishing a
+   catalog version that is not stored yet, the command reads the certified data
+   artifacts its regions' filters use and stops if one cannot select a region.
+   It stops before reading anything if a UK version needs checking and
+   `HUGGING_FACE_TOKEN` is unset, because the UK data repository is private.
 5. Require the command to finish successfully and retain its non-secret JSON
    evidence before creating the candidate revision.
 6. Deploy the Cloud Run candidate with the target identity and
@@ -101,20 +107,50 @@ does not reorder, deduplicate, or repair package output. A value superseded on
 the immediately following day therefore has equal start and end dates and is a
 valid one-day interval.
 
-The US national region uses `populace_us_2024`. A US state,
-congressional-district, or place region uses its PolicyEngine.py regional
-alternative when one is available. Until a later reviewed change removes the
-fallback, a subnational region without such an alternative uses
-`populace_us_2024`. The command emits one summary warning containing only the
-affected region types and counts. The UK national and country regions use
-`microcosm_uk_2024_25`, the default certified by PolicyEngine.py 6.10.0; a
-country filters that national file. UK constituency and local-authority
-regions use the dataset PolicyEngine.py routes them to,
-`microcosm_uk_2024_25_dense`, because the national file has no area codes.
+Regions come from the Public API's checked-in reference files, one per country
+(`policyengine_api/data/v2/catalog/region_reference_files/`), not from
+PolicyEngine.py's region registry. Each row lists a region's code, label, type,
+parent, US state, the value that selects its households, and the v1 identifier
+it replaces. A scoping rule per country and region type gives each region its
+dataset from the certified data release and its filter:
 
-Review the fallback summary on every new PolicyEngine.py release. A changed
-count may identify an upstream catalog change that needs a reviewed dataset
-selection even when publication otherwise succeeds.
+| Regions | Dataset | Filter |
+| --- | --- | --- |
+| US national | the release's national dataset (`populace_us_2024`) | none |
+| US states and congressional districts | the release's state and district dataset | `row_filter` on `state_fips` or `congressional_district_geoid` |
+| UK national | the release's national dataset (`microcosm_uk_2024_25`) | none |
+| UK nations | the release's national dataset | `row_filter` on `region` |
+| UK constituencies and local authorities | the release's local-area dataset (`microcosm_uk_2024_25_dense`), which carries their codes | `row_filter` on `constituency_code_oa` or `la_code_oa`, value the ONS code |
+
+If the release names no dataset for a US state or district, those regions use
+the default dataset and the command emits one summary warning with the affected
+region types and counts. A UK constituency or local authority cannot fall back,
+since the national file has no area codes: a release that routes no dataset to
+their type stops publication. Region types without a rule, such as US places
+until the data can select them, are left out and counted in the evidence's
+`omitted_region_summaries`.
+
+Before a new catalog version is published, the command reads the HDF5 metadata
+of each dataset the row filters use, with ranged requests at the pinned
+revision, and stops if a filter's column is missing from its dataset's
+household columns. It does not check that a column holds rows for every
+region's value.
+
+Review the fallback and omitted-region summaries on every new PolicyEngine.py
+release. A changed count may identify an upstream catalog change that needs a
+reviewed dataset selection even when publication otherwise succeeds.
+
+A catalog version is identified by its country and PolicyEngine.py version and
+never changes once published. When the command republishes a stored version
+whose staged regions differ from the stored ones, it keeps the stored regions
+unchanged, prints a warning with the country, the version and the counts of
+staged region rows the stored version lacks and of stored rows not staged, and
+continues. Its evidence then describes what is stored: the region count is the
+stored one, `kept_regions` lists the country, version, stored and staged region
+counts, and the fallback and omitted-region summaries leave that country out,
+since they describe staged regions that were not published. Every other table
+must still match exactly. Region reference changes therefore take effect in the
+next catalog version that is published.
 
 ## Validation evidence and retry
 
@@ -123,7 +159,9 @@ Successful JSON evidence contains:
 - the canonical PolicyEngine.py version;
 - the dependency versions derived from its packaged manifest;
 - catalog entity counts;
-- US fallback counts;
+- fallback counts and omitted-region counts by country and region type, and
+  the stored and staged region counts of any stored version whose regions were
+  kept;
 - elapsed publication time; and
 - a success outcome.
 
@@ -142,8 +180,11 @@ confirms existing simulation and report record counts are unchanged.
 A failed attempt rolls back all catalog changes. Retry the same artifact only
 after correcting the external failure. A matching retry preserves identifiers,
 content, and row counts. Different normalized content under the same
-PolicyEngine.py version fails for operator review; it is never silently
-replaced. A later PolicyEngine.py version adds a catalog version without
+PolicyEngine.py version fails for operator review, with an error naming the
+first table that differs; it is never silently replaced. Regions are the
+exception: they come from the Public API's reference files, so a stored version
+keeps the regions it was published with (see "Source and regional dataset
+behavior"). A later PolicyEngine.py version adds a catalog version without
 deleting or modifying earlier versioned rows, including their logical datasets,
 regions, model descriptions, current-law IDs, and time-period options.
 

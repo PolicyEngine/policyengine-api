@@ -78,7 +78,8 @@ def _versioned_table_from(table: sa.Table) -> sa.Join:
 
 def _comparison_pairs(
     country: CountryCatalog,
-) -> tuple[tuple[Select, Select], ...]:
+) -> tuple[tuple[str, Select, Select], ...]:
+    """Return each compared table's name with its staged and stored rows."""
     staged_country = STAGE_CATALOG_MODELS.c.country_id == country.country_id
     selected_version = sa.and_(
         MODELS.c.name == country.model.name,
@@ -220,6 +221,22 @@ def _comparison_pairs(
         )
     )
 
+    return (
+        ("model version", staged_model_version, actual_model_version),
+        ("variables", staged_variables, actual_variables),
+        ("parameter nodes", staged_parameter_nodes, actual_parameter_nodes),
+        ("parameters", staged_parameters, actual_parameters),
+        ("parameter values", staged_parameter_values, actual_parameter_values),
+        ("datasets", staged_datasets, actual_datasets),
+    )
+
+
+def _region_comparison_pair(country: CountryCatalog) -> tuple[Select, Select]:
+    """Return the staged and stored region rows of one country's catalog version."""
+    selected_version = sa.and_(
+        MODELS.c.name == country.model.name,
+        MODEL_VERSIONS.c.version == country.model_version.version,
+    )
     staged_regions = sa.select(
         STAGE_CATALOG_REGIONS.c.code,
         STAGE_CATALOG_REGIONS.c.label,
@@ -256,15 +273,7 @@ def _comparison_pairs(
         .where(selected_version)
     )
 
-    return (
-        (staged_model_version, actual_model_version),
-        (staged_variables, actual_variables),
-        (staged_parameter_nodes, actual_parameter_nodes),
-        (staged_parameters, actual_parameters),
-        (staged_parameter_values, actual_parameter_values),
-        (staged_datasets, actual_datasets),
-        (staged_regions, actual_regions),
-    )
+    return staged_regions, actual_regions
 
 
 def _sets_differ(
@@ -284,16 +293,54 @@ def _sets_differ(
 def assert_country_matches(
     connection: Connection,
     country: CountryCatalog,
+    *,
+    include_regions: bool = True,
 ) -> None:
     """Raise CatalogPublicationError if the stored version differs from the staged one.
 
     Rows are compared as sets in both directions, so a missing row and an extra
-    row both fail.
+    row both fail; the error names the first table that differs, never its
+    rows. Without ``include_regions``, region rows are not compared: they come
+    from the Public API's reference files, which may change while the
+    PolicyEngine.py version stays the same.
     """
-    for staged, actual in _comparison_pairs(country):
+    pairs = _comparison_pairs(country)
+    if include_regions:
+        pairs = (*pairs, ("regions", *_region_comparison_pair(country)))
+    for table_name, staged, actual in pairs:
         if _sets_differ(connection, staged, actual):
-            msg = f"persisted {country.country_id} catalog differs from PolicyEngine.py"
+            msg = (
+                f"the stored {country.country_id} catalog version "
+                f"{country.model_version.version} differs from the staged catalog "
+                f"in its {table_name}"
+            )
             raise CatalogPublicationError(msg)
+
+
+def count_stored_regions(connection: Connection, country: CountryCatalog) -> int:
+    """Count the region rows stored for one country's catalog version."""
+    _staged, actual = _region_comparison_pair(country)
+    return connection.execute(
+        sa.select(sa.func.count()).select_from(actual.subquery())
+    ).scalar_one()
+
+
+def count_region_differences(
+    connection: Connection,
+    country: CountryCatalog,
+) -> tuple[int, int]:
+    """Count staged region rows the stored version lacks, and stored rows not staged."""
+    staged, actual = _region_comparison_pair(country)
+    staged_not_stored = sa.except_(staged, actual).subquery()
+    stored_not_staged = sa.except_(actual, staged).subquery()
+    return (
+        connection.execute(
+            sa.select(sa.func.count()).select_from(staged_not_stored)
+        ).scalar_one(),
+        connection.execute(
+            sa.select(sa.func.count()).select_from(stored_not_staged)
+        ).scalar_one(),
+    )
 
 
 INSERT_MODEL = (

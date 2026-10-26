@@ -23,3 +23,8 @@ gha-creds-*.json
 ## vscode settings
 /.vscode
 *.db.init.lock
+
+# coverage.py data and reports written by `make test`
+.coverage
+.coverage.*
+coverage.xml
