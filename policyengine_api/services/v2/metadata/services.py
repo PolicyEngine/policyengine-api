@@ -42,6 +42,7 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_variables i
 )
 from policyengine_api.services.v2.metadata.transformations import (
     ancestor_paths,
+    dated_values_by_parameter_name,
     metadata_catalog_parameters,
     metadata_catalog_variables,
     metadata_dataset,
@@ -61,7 +62,6 @@ from policyengine_api.services.v2.metadata.transformations import (
     part_parameter_paths,
 )
 from policyengine_api.services.v2.metadata.types import (
-    FoundParameters,
     MetadataCanonicalParameterValue,
     MetadataCatalogParametersResult,
     MetadataCatalogVariablesResult,
@@ -657,30 +657,25 @@ class V2MetadataService:
         parameters = read_parameters_by_name(
             session, model_version_id=model_version_id, parameter_names=requested_names
         )
-        found_parameters = FoundParameters(
-            parameters=parameters,
-            names={parameter.name for parameter in parameters},
-        )
+        found_names = {parameter.name for parameter in parameters}
         value_rows = read_current_law_values_by_parameter_name(
-            session,
-            model_version_id=model_version_id,
-            parameter_names=found_parameters.names,
+            session, model_version_id=model_version_id, parameter_names=found_names
         )
         node_rows = read_parameter_node_labels(
             session,
             model_version_id=model_version_id,
             node_names={
-                ancestor
-                for name in found_parameters.names
-                for ancestor in ancestor_paths(name)
+                ancestor for name in found_names for ancestor in ancestor_paths(name)
             },
         )
         return metadata_catalog_parameters(
             selected,
-            requested_names=requested_names,
-            found_parameters=found_parameters,
-            value_rows=value_rows,
+            parameters=parameters,
+            values_by_name=dated_values_by_parameter_name(
+                value_rows, parameter_names=found_names
+            ),
             node_rows=node_rows,
+            missing_names=requested_names - found_names,
         )
 
 

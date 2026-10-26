@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from policyengine_api.dataset_display import get_dataset_display_label
 from policyengine_api.services.v2.metadata.types import (
     CurrentLawValueRow,
-    FoundParameters,
     MetadataCanonicalParameterValue,
     MetadataCatalogParameter,
     MetadataCatalogParametersResult,
@@ -153,7 +152,7 @@ def metadata_catalog_variables(
     current-law values of those parameters in name and start-date order. Each
     path gets an entry, empty when no value carries its name.
     """
-    values_by_path = _dated_values_by_parameter_name(
+    values_by_path = dated_values_by_parameter_name(
         part_values, parameter_names=part_paths
     )
     return MetadataCatalogVariablesResult(
@@ -164,7 +163,7 @@ def metadata_catalog_variables(
     )
 
 
-def _dated_values_by_parameter_name(
+def dated_values_by_parameter_name(
     value_rows: list[CurrentLawValueRow], *, parameter_names: set[str]
 ) -> dict[str, list[MetadataDatedValue]]:
     """Group value rows by parameter name, with an empty list for each other name.
@@ -216,21 +215,17 @@ def ancestor_paths(parameter_name: str) -> list[str]:
 def metadata_catalog_parameters(
     selected: SelectedCatalog,
     *,
-    requested_names: set[str],
-    found_parameters: FoundParameters,
-    value_rows: list[CurrentLawValueRow],
+    parameters: list[Parameter],
+    values_by_name: dict[str, list[MetadataDatedValue]],
     node_rows: list[ParameterNodeLabelRow],
+    missing_names: set[str],
 ) -> MetadataCatalogParametersResult:
     """Build the requested parameters with their values and ancestor labels.
 
-    value_rows are the found parameters' current-law values and node_rows the
-    stored labels of their ancestor nodes.
+    values_by_name maps each parameter's name to its current-law values (see
+    dated_values_by_parameter_name), node_rows are the stored labels of their
+    ancestor nodes, and missing_names the requested names the version lacks.
     """
-    parameters = found_parameters.parameters
-    found_names = found_parameters.names
-    values_by_name = _dated_values_by_parameter_name(
-        value_rows, parameter_names=found_names
-    )
     return MetadataCatalogParametersResult(
         policyengine_version=selected.policyengine_version,
         catalog_format=selected.model_version.catalog_format,
@@ -242,7 +237,7 @@ def metadata_catalog_parameters(
             for parameter in parameters
         ],
         node_labels={row.name: row.label for row in node_rows},
-        missing_names=sorted(requested_names - found_names),
+        missing_names=sorted(missing_names),
     )
 
 
