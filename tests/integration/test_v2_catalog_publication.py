@@ -33,6 +33,7 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.data.v2.privileges import CATALOG_WRITER_ROLE
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from tests.fixtures.v2_catalog import (
     POLICYENGINE_VERSION,
@@ -925,3 +926,35 @@ def test_publication_fails_when_a_published_version_is_left_without_a_tree(
         publish_catalog(publication_engine, normalized_catalog())
 
     assert _counts(publication_engine)["tax_benefit_model_versions"] == 0
+
+
+def test_the_catalog_writer_role_publishes_the_parameter_tree(
+    publication_engine: Engine,
+    managed_v2_roles,
+    v2_engine_as_role,
+) -> None:
+    """Publication as the catalog writer, with only its declared privileges.
+
+    It writes each published version's tree, which needs the role's INSERT
+    grant on the tree table.
+    """
+    writer_engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
+    catalog = normalized_catalog()
+    try:
+        evidence = publish_catalog(writer_engine, catalog)
+    finally:
+        writer_engine.dispose()
+
+    assert evidence.parameter_trees_written == tuple(
+        (country.model.name, country.model_version.version, len(FIXTURE_TREE))
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    )
+    for country in catalog.countries:
+        assert (
+            _stored_tree(
+                publication_engine,
+                country.model.name,
+                country.model_version.version,
+            )
+            == FIXTURE_TREE
+        )
