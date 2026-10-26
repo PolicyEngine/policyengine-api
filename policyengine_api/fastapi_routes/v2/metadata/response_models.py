@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Generic, Literal, TypeVar
 
+from pydantic import Field
+
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
     MetadataCatalogParametersResult,
@@ -175,8 +177,9 @@ class MetadataParameterSearchFileParameter(StrictResponseModel):
 
     ``label`` is the stored label, or null when none is stored. ``editable``
     says whether a draft can edit the earliest current-law value (a number, a
-    yes/no value or an infinite threshold); ``editable_changes``, when
-    present, lists the dates from which that changes.
+    yes/no value or an infinite threshold); ``editable_changes``, present only
+    when that changes over time and never null, lists the dates from which it
+    changes.
     """
 
     path: str
@@ -184,7 +187,9 @@ class MetadataParameterSearchFileParameter(StrictResponseModel):
     unit: str | None
     description: str | None
     editable: bool
-    editable_changes: list[MetadataParameterSearchFileEditabilityChange] | None = None
+    editable_changes: list[MetadataParameterSearchFileEditabilityChange] = Field(
+        default_factory=list
+    )
 
 
 class MetadataParameterSearchFileLabel(StrictResponseModel):
