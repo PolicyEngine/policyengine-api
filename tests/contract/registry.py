@@ -217,46 +217,6 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
         ),
     ),
     WorkflowContract(
-        name="saved_policy_v1_compatibility",
-        current_contract="api_v1_compatible",
-        future_owner_pr="PR 10: Policy Migration",
-        requests=(
-            ContractRequest(
-                method="POST",
-                path="/us/user-policy",
-                expected_status=201,
-                stable_response_fields=(
-                    "status",
-                    "message",
-                    "result.id",
-                    "result.reform_id",
-                    "result.reform_label",
-                    "result.baseline_id",
-                    "result.user_id",
-                ),
-                route_group="policy",
-            ),
-            ContractRequest(
-                method="GET",
-                path="/us/user-policy/{user_id}",
-                expected_status=200,
-                stable_response_fields=(
-                    "status",
-                    "message",
-                    "result",
-                ),
-                route_group="policy",
-            ),
-            ContractRequest(
-                method="PUT",
-                path="/us/user-policy",
-                expected_status=200,
-                stable_response_fields=("status", "message", "result.id"),
-                route_group="policy",
-            ),
-        ),
-    ),
-    WorkflowContract(
         name="user_policy_associations_v2",
         current_contract="typed_v2_resources",
         future_owner_pr="PR 12A: User Login and v1-Anchored User Associations",

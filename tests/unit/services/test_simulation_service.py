@@ -262,7 +262,7 @@ def test_update_simulation_without_values_is_a_noop(service):
 
 def test_update_missing_simulation_raises(service):
     with pytest.raises(LookupError, match="Simulation #999 not found"):
-        service.update_simulation("us", 999, status="complete")
+        service.update_simulation("us", 999, status="complete", output={"ok": True})
 
 
 @pytest.mark.parametrize("population_id", ["1", "00001", 1, "household-1"])

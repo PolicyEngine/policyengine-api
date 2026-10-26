@@ -4,7 +4,10 @@ from sqlalchemy import func, select
 from policyengine_api import constants
 from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun
-from policyengine_api.services.report_output_service import ReportOutputService
+from policyengine_api.services.report_output_service import (
+    ReportOutputAlreadyCompleteError,
+    ReportOutputService,
+)
 from policyengine_api.services.report_run_service import (
     NewReportOutputRun,
     ReportRunService,
@@ -422,10 +425,21 @@ def test_update_running_requires_mutable_run(service, orm_session_factory):
     simulation = create_simulation(orm_session_factory)
     report = create_report(service, simulation.id)
     service.update_report_output(
-        "us", report.id, status="complete", output={"ok": True}
+        "us", report.id, status="error", error_message="failed"
     )
 
     with pytest.raises(ValueError, match="without an active pending or running"):
+        service.update_report_output("us", report.id, status="running")
+
+
+def test_update_cannot_mark_a_complete_report_running(service, orm_session_factory):
+    simulation = create_simulation(orm_session_factory)
+    report = create_report(service, simulation.id)
+    service.update_report_output(
+        "us", report.id, status="complete", output={"ok": True}
+    )
+
+    with pytest.raises(ReportOutputAlreadyCompleteError):
         service.update_report_output("us", report.id, status="running")
 
 

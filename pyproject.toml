@@ -67,6 +67,7 @@ dependencies = [
 dev = [
     "build",
     "coverage",
+    "hypothesis>=6.100",
     "mypy>=1.15,<2",
     "pytest",
     "pytest-snapshot",

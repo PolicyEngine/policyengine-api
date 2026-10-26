@@ -36,6 +36,14 @@ def test_cloud_run_candidate_metadata_and_policy(
     assert policy_payload["result"]["id"] == current_law_id
 
 
+def test_cloud_run_candidate_serves_no_legacy_user_routes(api_client):
+    # Reads only, of IDs no record can have (v1 IDs start at 1), and the body is
+    # never printed: CI logs are public.
+    for path in ("/us/user-profile?user_id=0", "/us/user-policy/candidate-probe-0"):
+        response = api_client.get(path)
+        assert response.status_code == 404, (path, response.status_code)
+
+
 def test_cloud_run_candidate_stage6_read_route_contracts(api_client):
     specification_response = api_client.get("/specification")
     assert specification_response.status_code == 200, specification_response.text
