@@ -6,6 +6,12 @@ publishes: each new version, and the installed version when an earlier
 release stored it before search files existed. Writing only inserts. A stored
 file of the same format must equal the one built from the installed packages,
 because the stored version's other rows already match them.
+
+A version stored before catalog format 2 (``catalog_format`` null) has no
+stored economy or household flags, so a file built from the installed
+catalog's flags would contradict its own parameter rows: it gets no file and
+is not required to have one, and the route reports it as a version without a
+file.
 """
 
 from __future__ import annotations
@@ -38,9 +44,12 @@ MODEL_VERSIONS = V2_METADATA.tables["tax_benefit_model_versions"]
 PARAMETER_SEARCH_FILES = V2_METADATA.tables["parameter_search_files"]
 
 
-def _stored_version_id(connection: Connection, country: CountryCatalog) -> UUID:
-    version_id: UUID = connection.execute(
-        sa.select(MODEL_VERSIONS.c.id)
+def _stored_version(
+    connection: Connection, country: CountryCatalog
+) -> tuple[UUID, int | None]:
+    """Return the stored version's ID and catalog format (None before format 2)."""
+    row = connection.execute(
+        sa.select(MODEL_VERSIONS.c.id, MODEL_VERSIONS.c.catalog_format)
         .select_from(
             MODEL_VERSIONS.join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
         )
@@ -48,8 +57,10 @@ def _stored_version_id(connection: Connection, country: CountryCatalog) -> UUID:
             MODELS.c.name == country.model.name,
             MODEL_VERSIONS.c.version == country.model_version.version,
         )
-    ).scalar_one()
-    return version_id
+    ).one()
+    version_id: UUID = row.id
+    catalog_format: int | None = row.catalog_format
+    return version_id, catalog_format
 
 
 def _stored_content_sha256(connection: Connection, version_id: UUID) -> str | None:
@@ -66,7 +77,7 @@ def write_parameter_search_files(
     connection: Connection,
     countries: Sequence[CountryCatalog],
 ) -> tuple[tuple[str, str, int, int], ...]:
-    """Write the search file of each published version that has none.
+    """Write the search file of each published format 2 version that has none.
 
     Returns the model name, version and uncompressed and compressed sizes of
     each file written, in model name order. Runs inside publication's
@@ -74,7 +85,9 @@ def write_parameter_search_files(
     """
     written = []
     for country in sorted(countries, key=lambda item: item.model.name):
-        version_id = _stored_version_id(connection, country)
+        version_id, catalog_format = _stored_version(connection, country)
+        if catalog_format is None:
+            continue
         encoded = encode_parameter_search_file(country_search_file(country))
         stored_sha256 = _stored_content_sha256(connection, version_id)
         if stored_sha256 is None:
@@ -111,9 +124,14 @@ def assert_parameter_search_files_written(
     connection: Connection,
     countries: Sequence[CountryCatalog],
 ) -> None:
-    """Raise CatalogPublicationError if a catalog country's version has no file."""
+    """Raise CatalogPublicationError if a catalog country's version has no file.
+
+    A version stored before catalog format 2 is exempt: it gets no file.
+    """
     for country in countries:
-        version_id = _stored_version_id(connection, country)
+        version_id, catalog_format = _stored_version(connection, country)
+        if catalog_format is None:
+            continue
         if _stored_content_sha256(connection, version_id) is None:
             msg = (
                 f"the {country.country_id} catalog version "

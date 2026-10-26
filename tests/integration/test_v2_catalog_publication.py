@@ -1365,3 +1365,42 @@ def test_one_publication_gives_the_installed_stored_version_its_tree_and_file(
         assert _stored_search_file(
             publication_engine, country.model.name, current_version
         ) == _fixture_search_file(country.country_id, current_version)
+
+
+def _mark_stored_before_catalog_format_2(engine: Engine, version: str) -> None:
+    """Make the stored versions of one .py version look stored before format 2."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE tax_benefit_model_versions SET catalog_format = NULL "
+                "WHERE version = :version"
+            ),
+            {"version": version},
+        )
+
+
+def test_an_installed_version_stored_before_catalog_format_2_gets_no_search_file(
+    publication_engine: Engine,
+) -> None:
+    """A version stored without format 2's flags keeps having no search file.
+
+    Building its file from the installed catalog's flags would contradict the
+    version's own stored parameter rows, so publication writes none for it and
+    does not require one; the route then reports the version without a file.
+    """
+    catalog = normalized_catalog()
+    current_version = catalog.country("us").model_version.version
+    publish_catalog(publication_engine, catalog)
+    _delete_search_files(publication_engine, current_version)
+    _mark_stored_before_catalog_format_2(publication_engine, current_version)
+
+    evidence = publish_catalog(publication_engine, catalog)
+
+    assert evidence.parameter_search_files_written == ()
+    with publication_engine.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT count(*) FROM parameter_search_files")
+            ).scalar_one()
+            == 0
+        )

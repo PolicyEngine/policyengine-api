@@ -381,7 +381,10 @@ The file is built from the installed packages' catalog, never from rows an
 earlier release stored, so publication writes one only for the versions it
 publishes: each new version, and the installed version when an earlier
 release stored it before search files existed. A version that is neither has
-no file until a person decides otherwise. Writing only inserts; a stored file
+no file until a person decides otherwise. An installed version stored before
+catalog format 2 (`catalog_format` null) gets none either: it has no stored
+economy or household flags, so a file built from the installed catalog's
+flags would contradict its own parameter rows. Writing only inserts; a stored file
 of the same format must equal the one built from the installed packages, and
 publication fails if it differs or if a version it publishes is left without a
 file. A later file format adds a row for the version instead of changing the
