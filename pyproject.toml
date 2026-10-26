@@ -163,6 +163,7 @@ files = [
     "policyengine_api/fastapi_routes/resource_service_protocols.py",
     "policyengine_api/fastapi_routes/v2",
     "policyengine_api/services/v2",
+    "policyengine_api/content_encoding.py",
     "policyengine_api/libs/user_auth.py",
     "policyengine_api/libs/auth0_management.py",
     "policyengine_api/startup_country_check.py",
