@@ -6,8 +6,10 @@ it. Two modes:
 
 - ``apply`` reads the managed roles' current grants, grants every declared
   privilege a role lacks, and reports privileges the manifest doesn't declare.
-  It never revokes, and it changes nothing when a declared role or table is
-  missing. Running it again grants nothing more.
+  It never revokes, and it changes nothing when a declared role, table or view
+  is missing. A declared table must exist as a table and a declared temporary
+  view as a view; a relation of the other kind counts as missing. Running it
+  again grants nothing more.
 - ``verify`` checks every declared privilege with ``has_table_privilege``
   (rule ``api.v2.deployed-privileges-match``) and fails on any that is missing.
 
@@ -42,6 +44,7 @@ from policyengine_api.data.v2.migration_target import (
 )
 from policyengine_api.data.v2.privileges import (
     PERSISTENT_ENVIRONMENTS,
+    TEMPORARY_VIEW_TABLES,
     TablePrivilege,
     declared_privileges,
 )
@@ -56,6 +59,8 @@ DEPLOYMENT_ENVIRONMENT = "DEPLOYMENT_ENVIRONMENT"
 GITHUB_STEP_SUMMARY = "GITHUB_STEP_SUMMARY"
 SCHEMA = "public"
 SAFE_IDENTIFIER = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
+# The manifest's temporary views; every other declared name is a table.
+DECLARED_VIEWS: frozenset[str] = frozenset(TEMPORARY_VIEW_TABLES)
 
 
 class PrivilegeReconciliationError(RuntimeError):
@@ -94,11 +99,20 @@ class ReconciliationPlan:
     undeclared: tuple[PrivilegeEntry, ...]
     missing_roles: tuple[str, ...]
     missing_tables: tuple[str, ...]
+    missing_views: tuple[str, ...] = ()
 
     @property
     def can_apply(self) -> bool:
-        """Whether every declared role and table exists, so grants may run."""
-        return not self.missing_roles and not self.missing_tables
+        """Whether every declared role, table and view exists, so grants may run."""
+        return not (self.missing_roles or self.missing_tables or self.missing_views)
+
+
+@dataclass(frozen=True)
+class PublicRelations:
+    """The tables and views in the public schema, by name."""
+
+    tables: frozenset[str]
+    views: frozenset[str]
 
 
 def plan_reconciliation(
@@ -106,21 +120,30 @@ def plan_reconciliation(
     granted: Mapping[str, Mapping[str, Collection[str]]],
     *,
     existing_roles: Collection[str],
-    existing_tables: Collection[str],
+    existing_relations: PublicRelations,
+    declared_views: Collection[str] = (),
 ) -> ReconciliationPlan:
     """Compare declared privileges with what the database grants.
 
     ``granted`` holds the managed roles' direct grants, by role then table.
+    Names in ``declared_views`` must exist as views, and every other declared
+    name as a table.
     """
     missing_roles = tuple(sorted(set(declared) - set(existing_roles)))
-    declared_tables = {table for tables in declared.values() for table in tables}
-    missing_tables = tuple(sorted(declared_tables - set(existing_tables)))
+    declared_names = {table for tables in declared.values() for table in tables}
+    missing_views = tuple(
+        sorted((declared_names & set(declared_views)) - existing_relations.views)
+    )
+    missing_tables = tuple(
+        sorted(declared_names - set(declared_views) - existing_relations.tables)
+    )
+    missing_relations = {*missing_tables, *missing_views}
     grants = sorted(
         PrivilegeEntry(role, table, privilege.value)
         for role, tables in declared.items()
         if role not in missing_roles
         for table, privileges in tables.items()
-        if table not in missing_tables
+        if table not in missing_relations
         for privilege in privileges
         if privilege.value not in granted.get(role, {}).get(table, ())
     )
@@ -140,6 +163,7 @@ def plan_reconciliation(
         undeclared=tuple(undeclared),
         missing_roles=missing_roles,
         missing_tables=missing_tables,
+        missing_views=missing_views,
     )
 
 
@@ -214,6 +238,12 @@ def render_summary(
             + ", ".join(f"`{table}`" for table in plan.missing_tables),
             "",
         ]
+    if plan.missing_views:
+        lines += [
+            "Declared views missing from the database (nothing was granted): "
+            + ", ".join(f"`{view}`" for view in plan.missing_views),
+            "",
+        ]
     grant_heading = "Granted" if applied else "Would grant"
     lines += [f"### {grant_heading}", ""]
     if plan.grants:
@@ -270,16 +300,17 @@ _EXISTING_ROLES = text(
     "SELECT rolname FROM pg_roles WHERE rolname IN :roles"
 ).bindparams(bindparam("roles", expanding=True))
 
-_PUBLIC_TABLES = text(
+_PUBLIC_RELATIONS = text(
     """
-    SELECT table_class.relname
-    FROM pg_class AS table_class
-    JOIN pg_namespace AS table_namespace
-      ON table_namespace.oid = table_class.relnamespace
-    WHERE table_namespace.nspname = :schema
-      AND table_class.relkind IN ('r', 'p', 'v')
+    SELECT relation_class.relname, relation_class.relkind
+    FROM pg_class AS relation_class
+    JOIN pg_namespace AS relation_namespace
+      ON relation_namespace.oid = relation_class.relnamespace
+    WHERE relation_namespace.nspname = :schema
+      AND relation_class.relkind IN ('r', 'p', 'v')
     """
 )
+_TABLE_KINDS = frozenset({"r", "p"})
 
 _DEFAULT_PRIVILEGES = text(
     """
@@ -312,13 +343,17 @@ def read_existing_roles(connection: Connection, roles: Collection[str]) -> set[s
     return set(connection.execute(_EXISTING_ROLES, {"roles": list(roles)}).scalars())
 
 
-def read_public_tables(connection: Connection) -> set[str]:
-    """Return every table and view in the public schema.
+def read_public_relations(connection: Connection) -> PublicRelations:
+    """Return the tables and the views in the public schema.
 
-    Views count because the manifest declares privileges on temporary views as
-    it does on tables, and ``GRANT ... ON TABLE`` grants on a view too.
+    The manifest declares privileges on temporary views as it does on tables,
+    and ``GRANT ... ON TABLE`` grants on a view too.
     """
-    return set(connection.execute(_PUBLIC_TABLES, {"schema": SCHEMA}).scalars())
+    rows = connection.execute(_PUBLIC_RELATIONS, {"schema": SCHEMA}).all()
+    return PublicRelations(
+        tables=frozenset(name for name, kind in rows if kind in _TABLE_KINDS),
+        views=frozenset(name for name, kind in rows if kind == "v"),
+    )
 
 
 def read_granted_privileges(
@@ -368,17 +403,22 @@ def create_missing_roles(connection: Connection, roles: Iterable[str]) -> list[s
 def apply_declared_privileges(
     connection: Connection,
     declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
+    *,
+    declared_views: Collection[str] = DECLARED_VIEWS,
 ) -> tuple[ReconciliationPlan, list[DefaultPrivilege]]:
     """Grant every declared privilege a role lacks; never revoke.
 
-    Grants nothing when a declared role or table is missing.
+    Grants nothing when a declared role, table or view is missing, including a
+    declared view that exists as a table or a declared table that exists as a
+    view.
     """
     roles = list(declared)
     plan = plan_reconciliation(
         declared,
         read_granted_privileges(connection, roles),
         existing_roles=read_existing_roles(connection, roles),
-        existing_tables=read_public_tables(connection),
+        existing_relations=read_public_relations(connection),
+        declared_views=declared_views,
     )
     if plan.can_apply:
         for statement in grant_statements(
@@ -391,16 +431,24 @@ def apply_declared_privileges(
 def check_declared_privileges(
     connection: Connection,
     declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
+    *,
+    declared_views: Collection[str] = DECLARED_VIEWS,
 ) -> list[PrivilegeEntry]:
     """Return every declared privilege a role doesn't effectively hold.
 
-    A missing role or table counts as missing every privilege declared for it.
+    A missing role, table or view counts as missing every privilege declared
+    for it; so does a declared view that exists as a table, or the reverse.
     """
     existing_roles = read_existing_roles(connection, list(declared))
-    existing_tables = read_public_tables(connection)
+    relations = read_public_relations(connection)
+
+    def exists_as_declared(name: str) -> bool:
+        if name in declared_views:
+            return name in relations.views
+        return name in relations.tables
 
     def has_privilege(role: str, table: str, privilege: str) -> bool:
-        if role not in existing_roles or table not in existing_tables:
+        if role not in existing_roles or not exists_as_declared(table):
             return False
         return bool(
             connection.execute(

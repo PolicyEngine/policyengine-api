@@ -155,8 +155,10 @@ check the declarations:
 
 `apply` grants each declared privilege a role lacks. It never revokes: it
 reports privileges the file doesn't declare, and the projects' default
-privileges, in the job summary. It grants nothing when a declared role or
-table is missing. The roles themselves are provisioned outside the
+privileges, in the job summary. It grants nothing when a declared role,
+table or view is missing; a declared table must exist as a table and a
+temporary view (`TEMPORARY_VIEW_TABLES`) as a view, so a relation of the other
+kind counts as missing. The roles themselves are provisioned outside the
 repository; `--create-missing-roles` is accepted only for the disposable test
 database.
 

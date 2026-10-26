@@ -161,13 +161,47 @@ def test_apply_grants_and_verify_checks_privileges_on_a_declared_view(
     role = temporary_role()
     declared = {role: {temporary_view: READ_WRITE}}
     with superuser_engine.begin() as connection:
-        plan, _defaults = apply_declared_privileges(connection, declared)
-        missing = check_declared_privileges(connection, declared)
+        plan, _defaults = apply_declared_privileges(
+            connection, declared, declared_views={temporary_view}
+        )
+        missing = check_declared_privileges(
+            connection, declared, declared_views={temporary_view}
+        )
 
-    assert plan.missing_tables == ()
+    assert plan.missing_tables == plan.missing_views == ()
     assert {entry.privilege for entry in plan.grants} == {
         privilege.value for privilege in READ_WRITE
     }
     assert missing == []
     for privilege in READ_WRITE:
         assert _has_privilege(superuser_engine, role, temporary_view, privilege.value)
+
+
+def test_a_view_declared_as_a_table_or_a_table_declared_as_a_view_blocks_grants(
+    superuser_engine, temporary_role, temporary_view
+) -> None:
+    """Each declared name must exist with its declared kind.
+
+    ``regions`` is a table, declared here as a view, and the temporary view is
+    declared as a table: neither is granted, and both fail verification.
+    """
+    role = temporary_role()
+    declared = {role: {"regions": READ, temporary_view: READ}}
+    with superuser_engine.begin() as connection:
+        plan, _defaults = apply_declared_privileges(
+            connection, declared, declared_views={"regions"}
+        )
+        missing = check_declared_privileges(
+            connection, declared, declared_views={"regions"}
+        )
+
+    assert plan.missing_views == ("regions",)
+    assert plan.missing_tables == (temporary_view,)
+    assert not plan.can_apply
+    assert not _has_privilege(superuser_engine, role, "regions", "SELECT")
+    assert missing == sorted(
+        [
+            PrivilegeEntry(role, "regions", "SELECT"),
+            PrivilegeEntry(role, temporary_view, "SELECT"),
+        ]
+    )
