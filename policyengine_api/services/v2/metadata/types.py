@@ -137,14 +137,14 @@ class MetadataVariable(StrictResponseModel):
     default_value: JsonValue
     adds: list[str] | None
     subtracts: list[str] | None
-    is_input_variable: bool | None = None
-    hidden_input: bool | None = None
-    module_name: str | None = None
-    adds_parameter_path: str | None = None
-    subtracts_parameter_path: str | None = None
-    enum_values: list[MetadataEnumValue] | None = None
-    unit: str | None = None
-    definition_period: str | None = None
+    is_input_variable: bool | None
+    hidden_input: bool | None
+    module_name: str | None
+    adds_parameter_path: str | None
+    subtracts_parameter_path: str | None
+    enum_values: list[MetadataEnumValue] | None
+    unit: str | None
+    definition_period: str | None
 
 
 class MetadataParameterSummary(StrictResponseModel):
@@ -161,8 +161,8 @@ class MetadataParameterSummary(StrictResponseModel):
     description: str | None
     data_type: str | None
     unit: str | None
-    economy: bool | None = None
-    household: bool | None = None
+    economy: bool | None
+    household: bool | None
 
 
 class MetadataCanonicalParameterValue(StrictResponseModel):
