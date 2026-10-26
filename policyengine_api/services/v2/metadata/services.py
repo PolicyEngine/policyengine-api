@@ -117,8 +117,8 @@ def _parameter_search_file_unavailable(
 ) -> ParameterSearchFileUnavailableError:
     msg = (
         f"catalog version {selected.policyengine_version} has no parameter search "
-        "file: a file is written when a catalog version is published, and this "
-        "version was published before"
+        "file: only catalog format 2 versions that catalog publication has "
+        "published, or run with installed, since search files were added have one"
     )
     return ParameterSearchFileUnavailableError(msg)
 

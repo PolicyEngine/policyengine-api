@@ -80,8 +80,9 @@ PARAMETER_SEARCH_FILE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": (
             "The initialized v2 catalog is unavailable, or the catalog version "
-            "has no parameter search file because it was published before search "
-            "files existed; the message then names the version."
+            "has no parameter search file: only catalog format 2 versions that "
+            "publication has published, or run with installed, since search files "
+            "were added have one. The message then names the version."
         ),
     },
 }
@@ -116,7 +117,10 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 
 CACHE_HEADER_DESCRIPTIONS: dict[str, dict[str, Any]] = {
     "ETag": {
-        "description": "Strong validator: a hash of the exact response body.",
+        "description": (
+            "Strong validator: a hash of the uncompressed response body, so a "
+            "gzip-encoded response carries the same tag."
+        ),
         "schema": {"type": "string"},
     },
     "Cache-Control": {

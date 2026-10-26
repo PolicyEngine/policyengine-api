@@ -27,10 +27,11 @@ class InvalidMetadataPageError(ValueError):
 class ParameterSearchFileUnavailableError(MetadataCatalogUnavailableError):
     """Raised when a selected catalog version has no parameter search file.
 
-    Catalog publication writes a version's file only when it publishes the
-    version, from the installed packages' catalog, so a version stored by an
-    earlier release before search files existed has none. The message names
-    the version and is safe to return to the caller.
+    Catalog publication writes a file, from the installed packages' catalog,
+    for a catalog format 2 version it publishes or runs with installed. Other
+    versions have none: those stored before catalog format 2, and those stored
+    before search files existed that publication has not run with installed
+    since. The message names the version and is safe to return to the caller.
     """
 
 
