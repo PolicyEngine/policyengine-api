@@ -61,32 +61,55 @@ class UserHouseholdCreationInput(StrictUserHouseholdInput):
         return self
 
 
+USER_HOUSEHOLD_REFERENCE_FIELDS = frozenset({"household_id", "legacy_household_id"})
+
+
 class UserHouseholdUpdateInput(StrictUserHouseholdInput):
     """A partial update of a saved household; only supplied fields are changed.
 
-    At least one field must be supplied. ``legacy_household_id`` may point the
-    association at another v1 household but cannot be cleared.
+    At least one field must be supplied. ``household_id`` points the association
+    at another v2 household; supplied without ``legacy_household_id``, it also
+    clears the v1 reference, which no longer describes the saved household.
+    ``legacy_household_id`` alone points the association at another v1 household
+    and takes ``household_id`` from that household's v2 copy, or clears it when
+    there is none. Supplied together, both are stored, and ``household_id`` must
+    be that v2 copy when one exists. Neither reference can be set to null.
     """
 
+    household_id: ResourceId | None = None
     legacy_household_id: LegacyRecordId | None = None
     name: AssociationName | None = None
     description: AssociationDescription | None = None
 
     @model_validator(mode="after")
     def require_valid_supplied_field(self) -> UserHouseholdUpdateInput:
-        """Require a supplied field, and reject an explicit null legacy_household_id."""
-        mutable_fields = {"legacy_household_id", "name", "description"}
+        """Require a supplied field, and reject an explicit null household reference."""
+        mutable_fields = {*USER_HOUSEHOLD_REFERENCE_FIELDS, "name", "description"}
         supplied = self.model_fields_set.intersection(mutable_fields)
         if not supplied:
             msg = (
-                "At least one of legacy_household_id, name, or description must be "
-                "supplied"
+                "At least one of household_id, legacy_household_id, name, or "
+                "description must be supplied"
             )
             raise ValueError(msg)
-        if "legacy_household_id" in supplied and self.legacy_household_id is None:
-            msg = "legacy_household_id must not be null"
-            raise ValueError(msg)
+        for reference_field in sorted(USER_HOUSEHOLD_REFERENCE_FIELDS):
+            if reference_field in supplied and getattr(self, reference_field) is None:
+                msg = f"{reference_field} must not be null"
+                raise ValueError(msg)
         return self
+
+    @property
+    def repoints(self) -> bool:
+        """Whether the update changes which household the association references."""
+        return bool(self.model_fields_set & USER_HOUSEHOLD_REFERENCE_FIELDS)
+
+
+@dataclass(frozen=True)
+class UserHouseholdReferences:
+    """The v2 and v1 household references a repointed association stores."""
+
+    household_id: UUID | None
+    legacy_household_id: int | None
 
 
 @dataclass(frozen=True)
