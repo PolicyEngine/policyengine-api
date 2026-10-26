@@ -116,7 +116,8 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "dataset_versions": _access(catalog_writer=READ),
     "datasets": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
     "parameter_nodes": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
-    # Written with each catalog version, and for versions stored before it.
+    # Written by catalog publication for each version it publishes, from the
+    # installed packages' catalog; never rewritten.
     "parameter_search_files": _access(runtime=READ, catalog_writer=READ_INSERT),
     # Written with each catalog version that publication publishes.
     "parameter_tree_children": _access(runtime=READ, catalog_writer=READ_INSERT),
