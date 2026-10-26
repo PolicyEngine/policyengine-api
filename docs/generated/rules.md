@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 54 | 0 | 1 | 13 | 68 |
+| mechanical | 55 | 0 | 1 | 13 | 69 |
 | metric | 0 | 0 | 0 | 0 | 0 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 54 of 69 rules.
+**Blocking:** 55 of 70 rules.
 
 ## Gaps
 
@@ -123,6 +123,7 @@ flowchart LR
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `api.data.runtime-sql-confined` | Raw SQL is confined to the data-access layer; runtime modules and report orchestration use sessions and mapped models. | mechanical | enforced | yes | pytest `tests/unit/data/test_runtime_sql_boundaries.py` | `pr.yml:test` | **unproven** |
+| `api.data.sqlalchemy-and-alembic-only` | Code connects to relational databases only through SQLAlchemy engines, connections and sessions, never by calling a database driver directly, and changes persistent schema only through Alembic revisions. | mechanical | enforced | yes | pytest `tests/unit/data/test_database_access_boundaries.py` | `pr.yml:test` | yes |
 | `api.legacy.removed-layers-stay-removed` | Removed legacy persistence layers, the temporary DAO module and the legacy endpoints package stay removed. | mechanical | enforced | yes | pytest `tests/unit/data/test_runtime_sql_boundaries.py`, `tests/unit/routes/test_flask_route_boundaries.py`, `tests/unit/services/test_orm_service_boundaries.py` | `pr.yml:test` | **unproven** |
 | `api.routes.flask-blueprints-own-urls` | Legacy Flask URLs are owned by blueprints, and the Flask app assembles blueprints without legacy endpoint wiring. | mechanical | enforced | yes | pytest `tests/unit/routes/test_flask_route_boundaries.py` | `pr.yml:test` | **unproven** |
 | `api.routes.no-domain-logic-in-http` | Flask routes delegate domain processing, such as calculation, to services instead of doing it in the HTTP layer. | mechanical | enforced | yes | pytest `tests/unit/routes/test_flask_route_boundaries.py` | `pr.yml:test` | **unproven** |
@@ -135,6 +136,8 @@ flowchart LR
   r_api_data_runtime_sql_confined("api.data.runtime-sql-confined (enforced)")
   e_pytest_tests_unit_data_test_runtime_sql_boundaries_py["pytest tests/unit/data/test_runtime_sql_boundaries.py"]
   j_CI_pr_yml_test["CI pr.yml:test"]
+  r_api_data_sqlalchemy_and_alembic_only("api.data.sqlalchemy-and-alembic-only (enforced)")
+  e_pytest_tests_unit_data_test_database_access_boundaries_py["pytest tests/unit/data/test_database_access_boundaries.py"]
   r_api_legacy_removed_layers_stay_removed("api.legacy.removed-layers-stay-removed (enforced)")
   e_pytest_tests_unit_data_test_runtime_sql_boundaries_py__tests_unit_routes_test_flask_route_boundaries_py__tests_unit_services_test_orm_service_boundaries_py["pytest tests/unit/data/test_runtime_sql_boundaries.py, tests/unit/routes/test_flask_route_boundaries.py, tests/unit/services/test_orm_service_boundaries.py"]
   r_api_routes_flask_blueprints_own_urls("api.routes.flask-blueprints-own-urls (enforced)")
@@ -147,6 +150,8 @@ flowchart LR
   e_pytest_tests_unit_services_test_local_data_service_boundaries_py__tests_unit_services_test_orm_service_boundaries_py["pytest tests/unit/services/test_local_data_service_boundaries.py, tests/unit/services/test_orm_service_boundaries.py"]
   r_api_data_runtime_sql_confined --> e_pytest_tests_unit_data_test_runtime_sql_boundaries_py
   e_pytest_tests_unit_data_test_runtime_sql_boundaries_py --> j_CI_pr_yml_test
+  r_api_data_sqlalchemy_and_alembic_only --> e_pytest_tests_unit_data_test_database_access_boundaries_py
+  e_pytest_tests_unit_data_test_database_access_boundaries_py --> j_CI_pr_yml_test
   r_api_legacy_removed_layers_stay_removed --> e_pytest_tests_unit_data_test_runtime_sql_boundaries_py__tests_unit_routes_test_flask_route_boundaries_py__tests_unit_services_test_orm_service_boundaries_py
   e_pytest_tests_unit_data_test_runtime_sql_boundaries_py__tests_unit_routes_test_flask_route_boundaries_py__tests_unit_services_test_orm_service_boundaries_py --> j_CI_pr_yml_test
   r_api_routes_flask_blueprints_own_urls --> e_pytest_tests_unit_routes_test_flask_route_boundaries_py
