@@ -32,6 +32,10 @@ id = "migration"
 title = "Migration and schema"
 
 [[category]]
+id = "microdata"
+title = "Weighted microdata"
+
+[[category]]
 id = "quality"
 title = "Code quality and types"
 
@@ -740,6 +744,83 @@ kind = "workflow-job"
 workflow = ".github/workflows/pr.yml"
 job = "ensure-policyengine-bundle-supported-by-simulation-api"
 invocation = "check-policyengine-bundle-supported.sh"
+
+# --- Weighted microdata ---------------------------------------------------
+
+[[rule]]
+id = "api.microdata.weights-not-values"
+category = "microdata"
+statement = "Microdata columns are weights, values, labels or counts: weights are only summed plainly to count entities or passed as weights=, values are aggregated with their own entity's weights, labels only group or filter, and counts derive from weights."
+rationale = "docs/engineering/skills/microdata-weights.md#weights-arent-values"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "api.microdata.weights-not-aggregated-as-values"
+category = "microdata"
+statement = "A weight column is never aggregated as a value: never the value of a weighted MicroSeries, the variable of a weighted aggregator, or frame[<weight>] followed by a weighted reduction."
+rationale = "docs/engineering/skills/microdata-weights.md#rules"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/services/test_microdata_weight_boundaries.py::test_weights_are_never_aggregated_as_values"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.microdata.weights-not-aggregated-as-values/bad_budget.py"
+good_fixture = "rules/fixtures/api.microdata.weights-not-aggregated-as-values/good_budget.py"
+test = "tests/unit/services/test_microdata_weight_boundaries.py::test_rule_proof_weights_not_aggregated_as_values"
+
+[[rule]]
+id = "api.microdata.weight-stripping-confined"
+category = "microdata"
+statement = "Raw values are read from weighted microdata (np.array, np.asarray, .values, .to_numpy(), .tolist(), pd.DataFrame or pd.Series) only in a designated stripping module, and the Public API has none yet."
+rationale = "docs/engineering/skills/microdata-weights.md#handling-a-finding"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/services/test_microdata_weight_boundaries.py::test_weight_stripping_stays_in_the_designated_module"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.microdata.weight-stripping-confined/bad_net_income.py"
+good_fixture = "rules/fixtures/api.microdata.weight-stripping-confined/good_net_income.py"
+test = "tests/unit/services/test_microdata_weight_boundaries.py::test_rule_proof_weight_stripping_confined"
+
+[[rule]]
+id = "api.microdata.unweighted-series-are-labels"
+category = "microdata"
+statement = "A MicroSeries built without weights= is a label: it only groups or filters weighted series and is never reduced itself."
+rationale = "docs/engineering/skills/microdata-weights.md#rules"
+scope = ["policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = ["tests/unit/services/test_microdata_weight_boundaries.py::test_unweighted_series_are_only_labels"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.microdata.unweighted-series-are-labels/bad_decile.py"
+good_fixture = "rules/fixtures/api.microdata.unweighted-series-are-labels/good_decile.py"
+test = "tests/unit/services/test_microdata_weight_boundaries.py::test_rule_proof_unweighted_series_are_labels"
 
 # --- Code quality and types ------------------------------------------------
 
