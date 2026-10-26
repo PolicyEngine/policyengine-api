@@ -1597,3 +1597,7 @@ def test_parameter_children_openapi_declares_the_query_contract() -> None:
     assert parameters["reform_changeable"]["schema"]["type"] == "boolean"
     assert parameters["reform_changeable"]["schema"]["default"] is False
     assert parameters["limit"]["schema"]["maximum"] == 500
+    description = schema["paths"]["/v2/parameters/children"]["get"]["description"]
+    assert "422" in description
+    assert "malformed policyengine_version" in description
+    assert "503" in description

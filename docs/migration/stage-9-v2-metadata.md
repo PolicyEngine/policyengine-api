@@ -344,8 +344,11 @@ gets its tree when it is published.
 by label, with child counts that count only those. Without it, children are
 in path order, with a schedule's brackets in bracket order. A node carries
 its child count, a parameter its summary. An unknown parent path has no
-children. A catalog version without a tree returns 503 with a message that
-names the version and says it was published before the tree existed.
+children. The route reads its query through the shared strict query models,
+so unknown or repeated parameters, an unsupported country and a malformed
+`policyengine_version` return 422 (the last two returned 400 before). A
+catalog version without a tree returns 503 with a message that names the
+version and says it was published before the tree existed.
 
 ## Validation evidence and retry
 
