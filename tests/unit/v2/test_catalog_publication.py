@@ -271,6 +271,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         entity_counts={"parameters": 12},
         fallback_summaries=(("us", "state", 3),),
         elapsed_seconds=2.3456,
+        parameter_trees_written=(("policyengine-uk", "6.7.5", 2_430),),
     ).as_dict()
 
     assert evidence == {
@@ -280,6 +281,13 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         "entity_counts": {"parameters": 12},
         "fallback_summaries": [
             {"country_id": "us", "region_type": "state", "count": 3}
+        ],
+        "parameter_trees_written": [
+            {
+                "model": "policyengine-uk",
+                "version": "6.7.5",
+                "rows": 2_430,
+            }
         ],
         "elapsed_seconds": 2.346,
     }
