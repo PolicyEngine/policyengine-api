@@ -325,13 +325,14 @@ def metadata_region(region: Region) -> MetadataRegion:
 def metadata_parameter_children(rows: list[Any]) -> list[MetadataParameterChild]:
     """Build parameter-tree children from read_parameter_children rows.
 
-    Parameter leaves carry the same summary as the parameter routes, and a child
-    with no label is labelled with the last segment of its path.
+    Parameter leaves carry the same summary as the parameter routes. Every
+    stored child has a label: its stored label, "Bracket N" for a bracket, or
+    one generated from the last part of its name.
     """
     return [
         MetadataParameterChild(
             path=row.path,
-            label=row.label or row.path.rsplit(".", 1)[-1],
+            label=row.label,
             type=row.type,
             child_count=row.child_count,
             parameter=(

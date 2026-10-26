@@ -21,6 +21,7 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_n
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_tree import (  # noqa: E501  # a dotted module path cannot be wrapped
     read_parameter_children,
+    read_parameter_tree_written,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameters import (
     read_current_law_values_by_parameter_name,
@@ -78,9 +79,11 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataRegion,
     MetadataVariable,
     ParameterFilter,
+    ParameterTreeLevel,
     ParameterValueFilter,
 )
 from policyengine_api.services.v2.metadata.validators import (
+    ParameterTreeUnavailableError,
     require_metadata_resource,
     validate_economy_options,
     validate_metadata_page,
@@ -345,25 +348,38 @@ class V2MetadataService:
         country_id: str,
         policyengine_version: str | None = None,
         *,
-        parent_path: str = "",
+        level: ParameterTreeLevel | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> MetadataPageResult[MetadataParameterChild]:
-        """Return a page of the direct children of parent_path in the parameter tree.
+        """Return a page of one level of the version's stored parameter tree.
 
-        An empty parent_path lists the top-level children. A child is a parameter
-        when it is a leaf with a parameter row, and a node otherwise.
+        The level's parent path "" lists the top-level children. A bracket
+        schedule is one node whose children are its brackets. With the level's
+        ``reform_changeable``, only the children a reform can change are listed,
+        sorted by label. Raise ParameterTreeUnavailableError when the version's
+        tree has not been written.
         """
+        selected_level = level if level is not None else ParameterTreeLevel()
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
         )
+        session = self._database_session.session
         rows = read_parameter_children(
-            self._database_session.session,
+            session,
             model_version_id=selected.model_version.id,
-            parent_path=parent_path,
+            level=selected_level,
             offset=offset,
             limit=limit,
         )
+        if not rows and not read_parameter_tree_written(
+            session, model_version_id=selected.model_version.id
+        ):
+            msg = (
+                f"the parameter tree of catalog version "
+                f"{selected.policyengine_version} has not been written"
+            )
+            raise ParameterTreeUnavailableError(msg)
         return page_result(
             selected,
             metadata_parameter_children(rows),

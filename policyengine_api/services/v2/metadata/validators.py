@@ -24,6 +24,14 @@ class InvalidMetadataPageError(ValueError):
     """Raised when collection pagination is outside the documented bounds."""
 
 
+class ParameterTreeUnavailableError(MetadataCatalogUnavailableError):
+    """Raised when a selected catalog version's parameter tree is not written.
+
+    Catalog publication writes every stored version's tree, so this means the
+    publication step has not run since the version was stored.
+    """
+
+
 def validate_metadata_page(offset: int, limit: int) -> tuple[int, int]:
     """Return offset and limit unchanged, or raise InvalidMetadataPageError.
 

@@ -29,6 +29,7 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
 )
 from policyengine_api.services.v2.metadata.types import (
     ParameterFilter,
+    ParameterTreeLevel,
     ParameterValueFilter,
 )
 
@@ -76,7 +77,7 @@ def build_v2_metadata_parameter_router(
     @router.get(
         "/parameters/children",
         response_model=MetadataParameterChildPageResponse,
-        summary="List direct children of one parameter path",
+        summary="List one level of a catalog version's parameter tree",
     )
     def list_parameter_children(
         query: ParameterChildrenQueryDependency,
@@ -87,7 +88,10 @@ def build_v2_metadata_parameter_router(
             lambda reader: reader.list_parameter_children(
                 query.country_id,
                 query.policyengine_version,
-                parent_path=query.parent_path,
+                level=ParameterTreeLevel(
+                    parent_path=query.parent_path,
+                    reform_changeable=query.reform_changeable,
+                ),
                 offset=query.offset,
                 limit=query.limit,
             ),
