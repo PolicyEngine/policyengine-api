@@ -83,11 +83,13 @@ still returns HTTP 400.
 
 ## Database round trips per request
 
-Metadata reads use read-only sessions in autocommit mode on the shared v2
-pool (`get_v2_read_session_factory`): each read is one statement on rows a
-published catalog version never changes, so no transaction is needed, and the
-database receives no `BEGIN` before the reads and no `ROLLBACK` when the
-session closes. Each process also keeps every catalog version a request has
+Metadata reads use sessions in autocommit mode on the shared v2 pool
+(`get_v2_read_session_factory`), which only the metadata reader opens: each
+read is one statement on rows a published catalog version never changes, so no
+transaction is needed, and the database receives no `BEGIN` before the reads
+and no `ROLLBACK` when the session closes. The sessions refuse to flush added
+or changed rows (`ReadOnlySessionError`); a statement passed directly to
+`execute` is not checked, so the metadata connectors keep to `SELECT`. Each process also keeps every catalog version a request has
 selected (`SelectedCatalogStore`), since a published version never changes, so
 later requests for the same country and version skip the selection query;
 failed selections are not kept. Measured with statement logging in a local
