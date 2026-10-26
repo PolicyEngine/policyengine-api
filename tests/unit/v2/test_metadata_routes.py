@@ -1356,3 +1356,33 @@ def test_failed_metadata_reads_do_not_add_vary_by_origin() -> None:
 
     assert response.status_code == 404
     assert "origin" not in _vary_values(response)
+
+
+def test_openapi_declares_caching_headers_and_not_modified_responses() -> None:
+    results, _ids = _resource_results()
+    schema = _client(lambda: ResourceReader(results)).get("/v2/openapi.json").json()
+    metadata_paths = [
+        path
+        for path in schema["paths"]
+        if path.startswith(
+            (
+                "/v2/datasets",
+                "/v2/economy-options",
+                "/v2/model-catalog",
+                "/v2/parameter",
+                "/v2/regions",
+                "/v2/tax-benefit-model",
+                "/v2/variables",
+            )
+        )
+    ]
+
+    assert len(metadata_paths) == 21
+    for path in metadata_paths:
+        responses = schema["paths"][path]["get"]["responses"]
+        assert set(responses["200"]["headers"]) == {"ETag", "Cache-Control", "Vary"}
+        assert "$ref" in responses["200"]["content"]["application/json"]["schema"]
+        assert set(responses["304"]["headers"]) == {"ETag", "Cache-Control", "Vary"}
+        assert "content" not in responses["304"]
+        assert "policyengine_version" not in responses["400"]["description"]
+        assert "path" in responses["400"]["description"]

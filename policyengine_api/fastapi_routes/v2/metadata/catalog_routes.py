@@ -8,7 +8,7 @@ from fastapi import APIRouter
 from starlette.responses import JSONResponse, Response
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
-    ERROR_RESPONSES,
+    METADATA_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
     read_whole_version_resource,
@@ -42,7 +42,7 @@ def build_v2_model_catalog_router(
     """
     router = APIRouter(
         prefix="/v2",
-        responses=ERROR_RESPONSES,
+        responses=METADATA_RESPONSES,
         route_class=CacheableMetadataRoute,
     )
 

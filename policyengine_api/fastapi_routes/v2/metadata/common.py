@@ -50,7 +50,11 @@ if TYPE_CHECKING:
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
         "model": V2ErrorResponse,
-        "description": "The resource request or PolicyEngine.py version is invalid.",
+        "description": (
+            "The country in the path is not supported. Query parameters are "
+            "checked first: an invalid one, including the PolicyEngine.py "
+            "version, returns 422."
+        ),
     },
     404: {
         "model": V2ErrorResponse,
@@ -62,7 +66,10 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
     422: {
         "model": V2ErrorResponse,
-        "description": "The request parameters do not match the resource schema.",
+        "description": (
+            "The query parameters do not match the resource schema, for example "
+            "an unknown parameter or a malformed PolicyEngine.py version."
+        ),
     },
     500: {
         "model": V2ErrorResponse,
@@ -73,6 +80,38 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "description": "The initialized v2 catalog is unavailable.",
     },
 }
+
+
+CACHE_HEADER_DESCRIPTIONS: dict[str, dict[str, Any]] = {
+    "ETag": {
+        "description": "Strong validator: a hash of the exact response body.",
+        "schema": {"type": "string"},
+    },
+    "Cache-Control": {
+        "description": (
+            "public, with max-age 86400 when the request names "
+            "policyengine_version and 300 otherwise; current parameter values "
+            "expire at the next UTC midnight."
+        ),
+        "schema": {"type": "string"},
+    },
+    "Vary": {
+        "description": "Includes Origin, so caches keep responses apart by origin.",
+        "schema": {"type": "string"},
+    },
+}
+
+METADATA_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **ERROR_RESPONSES,
+    200: {"headers": CACHE_HEADER_DESCRIPTIONS},
+    304: {
+        "description": (
+            "Not modified: If-None-Match names the current ETag. No body is sent."
+        ),
+        "headers": CACHE_HEADER_DESCRIPTIONS,
+    },
+}
+"""Every metadata route's documented responses, with its caching headers."""
 
 
 class CatalogVersionResult(Protocol):
