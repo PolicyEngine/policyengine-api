@@ -574,3 +574,54 @@ def test_postgres_metadata_reads_send_no_transaction_statements(
     assert all(autocommit_modes)
     with published_engine.connect() as connection:
         assert connection.connection.dbapi_connection.autocommit is False
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        # Read for 31 December, headers written after midnight: not reusable.
+        (
+            datetime(2025, 12, 31, 23, 59, 59, tzinfo=UTC),
+            datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+            [0.1],
+            "public, max-age=0",
+        ),
+        (
+            datetime(2025, 12, 31, 12, 0, tzinfo=UTC),
+            datetime(2025, 12, 31, 12, 0, tzinfo=UTC),
+            [0.1],
+            "public, max-age=43200",
+        ),
+        (
+            datetime(2026, 1, 1, 0, 0, tzinfo=UTC),
+            datetime(2026, 1, 1, 0, 0, tzinfo=UTC),
+            [0.2],
+            "public, max-age=86400",
+        ),
+    ],
+)
+def test_postgres_current_values_and_their_lifetime_use_one_instant(
+    published_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    case: tuple[datetime, datetime, list[float], str],
+) -> None:
+    from policyengine_api.fastapi_routes.v2.metadata import common
+
+    read_instant, header_instant, expected_values, expected_cache_control = case
+    instants = iter([read_instant, header_instant])
+    monkeypatch.setattr(common, "utc_now", lambda: next(instants))
+
+    response = _client(published_engine).get(
+        "/v2/parameter-values",
+        params={
+            "country_id": "us",
+            "policyengine_version": POLICYENGINE_VERSION,
+            "current": "true",
+        },
+    )
+
+    assert response.status_code == 200
+    assert [item["value"] for item in response.json()["result"]["items"]] == (
+        expected_values
+    )
+    assert response.headers["cache-control"] == expected_cache_control

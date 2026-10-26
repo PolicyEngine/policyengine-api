@@ -9,10 +9,10 @@ from fastapi import APIRouter, Request
 from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
-    DEPENDS_ON_UTC_DAY,
     ERROR_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
+    take_utc_instant_for_read,
 )
 from policyengine_api.fastapi_routes.v2.metadata.query_dependencies import (
     CatalogQueryDependency,
@@ -121,8 +121,9 @@ def build_v2_metadata_parameter_router(
         request: Request,
         query: ParameterValueCollectionQueryDependency,
     ) -> MetadataParameterValuePageResponse | JSONResponse:
-        # Current values are those in effect on the request's UTC day.
-        setattr(request.state, DEPENDS_ON_UTC_DAY, query.current)
+        # Current values are those in effect on the request's UTC day; the
+        # read and the response's lifetime use the same instant.
+        now = take_utc_instant_for_read(request) if query.current else None
         return read_resource(
             dependencies,
             MetadataParameterValuePageResponse,
@@ -132,6 +133,7 @@ def build_v2_metadata_parameter_router(
                 value_filter=ParameterValueFilter(
                     parameter_id=query.parameter_id,
                     current=query.current,
+                    now=now,
                     parameter_names=(
                         None
                         if query.parameter_name is None
