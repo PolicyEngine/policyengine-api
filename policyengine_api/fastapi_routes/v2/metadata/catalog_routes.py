@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from starlette.responses import JSONResponse, Response
 
-from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     ERROR_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
     read_whole_version_resource,
+)
+from policyengine_api.fastapi_routes.v2.metadata.query_dependencies import (
+    CatalogParameterQueryDependency,
+    CatalogQueryDependency,
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataCatalogParametersResponse,
@@ -20,7 +23,6 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataModelCatalogResponse,
     MetadataResourceSuccessResponse,
 )
-from policyengine_api.query_parameters import CatalogParameterQuery, CatalogQuery
 from policyengine_api.services.v2.metadata.types import (
     MetadataCatalogVariablesResult,
     MetadataModelCatalogResult,
@@ -28,13 +30,6 @@ from policyengine_api.services.v2.metadata.types import (
 
 if TYPE_CHECKING:
     from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-
-CatalogQueryDependency = Annotated[
-    CatalogQuery, Depends(query_dependency(CatalogQuery))
-]
-CatalogParameterQueryDependency = Annotated[
-    CatalogParameterQuery, Depends(query_dependency(CatalogParameterQuery))
-]
 
 
 def build_v2_model_catalog_router(

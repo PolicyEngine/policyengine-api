@@ -110,7 +110,7 @@ def test_live_v2_invalid_version_returns_a_typed_error(api_client) -> None:
         params={"country_id": "us", "policyengine_version": "not a version"},
     )
 
-    assert response.status_code == 400, response.text[:500]
+    assert response.status_code == 422, response.text[:500]
     payload = response.json()
     assert payload["status"] == "error"
     assert payload["message"]

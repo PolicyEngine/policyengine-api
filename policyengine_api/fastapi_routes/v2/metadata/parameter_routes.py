@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Request
 from starlette.responses import JSONResponse
 
-from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     DEPENDS_ON_UTC_DAY,
     ERROR_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
+)
+from policyengine_api.fastapi_routes.v2.metadata.query_dependencies import (
+    CatalogQueryDependency,
+    ParameterChildrenQueryDependency,
+    ParameterCollectionQueryDependency,
+    ParameterValueCollectionQueryDependency,
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataParameterChildPageResponse,
@@ -22,10 +27,6 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataParameterValueDetailResponse,
     MetadataParameterValuePageResponse,
 )
-from policyengine_api.query_parameters import (
-    ParameterCollectionQuery,
-    ParameterValueCollectionQuery,
-)
 from policyengine_api.services.v2.metadata.types import (
     ParameterFilter,
     ParameterValueFilter,
@@ -33,18 +34,6 @@ from policyengine_api.services.v2.metadata.types import (
 
 if TYPE_CHECKING:
     from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-
-Offset = Annotated[int, Query(ge=0)]
-Limit = Annotated[int, Query(ge=1, le=500)]
-
-
-ParameterCollectionQueryDependency = Annotated[
-    ParameterCollectionQuery, Depends(query_dependency(ParameterCollectionQuery))
-]
-ParameterValueCollectionQueryDependency = Annotated[
-    ParameterValueCollectionQuery,
-    Depends(query_dependency(ParameterValueCollectionQuery)),
-]
 
 
 def build_v2_metadata_parameter_router(
@@ -90,21 +79,17 @@ def build_v2_metadata_parameter_router(
         summary="List direct children of one parameter path",
     )
     def list_parameter_children(
-        country_id: str,
-        parent_path: str = "",
-        policyengine_version: str | None = None,
-        offset: Offset = 0,
-        limit: Limit = 100,
+        query: ParameterChildrenQueryDependency,
     ) -> MetadataParameterChildPageResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataParameterChildPageResponse,
             lambda reader: reader.list_parameter_children(
-                country_id,
-                policyengine_version,
-                parent_path=parent_path,
-                offset=offset,
-                limit=limit,
+                query.country_id,
+                query.policyengine_version,
+                parent_path=query.parent_path,
+                offset=query.offset,
+                limit=query.limit,
             ),
         )
 
@@ -115,16 +100,15 @@ def build_v2_metadata_parameter_router(
     )
     def get_parameter(
         parameter_id: UUID,
-        country_id: str,
-        policyengine_version: str | None = None,
+        query: CatalogQueryDependency,
     ) -> MetadataParameterDetailResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataParameterDetailResponse,
             lambda reader: reader.get_parameter(
-                country_id,
+                query.country_id,
                 parameter_id,
-                policyengine_version,
+                query.policyengine_version,
             ),
         )
 
@@ -166,16 +150,15 @@ def build_v2_metadata_parameter_router(
     )
     def get_parameter_value(
         value_id: UUID,
-        country_id: str,
-        policyengine_version: str | None = None,
+        query: CatalogQueryDependency,
     ) -> MetadataParameterValueDetailResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataParameterValueDetailResponse,
             lambda reader: reader.get_parameter_value(
-                country_id,
+                query.country_id,
                 value_id,
-                policyengine_version,
+                query.policyengine_version,
             ),
         )
 
