@@ -843,3 +843,45 @@ def test_parameter_tree_child_type_is_typed_with_its_two_values() -> None:
     column = V2_METADATA.tables["parameter_tree_children"].c["child_type"]
     assert isinstance(column.type, AutoString)
     assert column.type.length == 16
+
+
+def test_parameter_search_files_hold_one_compressed_file_per_version() -> None:
+    """Each catalog version has one search file per format, removed with it.
+
+    The row holds the gzip-compressed JSON, its file format, the SHA-256 of the
+    uncompressed JSON (the response's ETag) and both sizes.
+    """
+    table = V2_METADATA.tables["parameter_search_files"]
+
+    assert {column.name for column in table.columns} == {
+        "id",
+        "created_at",
+        "tax_benefit_model_version_id",
+        "file_format",
+        "compressed_content",
+        "content_sha256",
+        "uncompressed_size",
+        "compressed_size",
+    }
+    for column in table.columns:
+        assert not column.nullable, column.name
+    assert isinstance(table.c["compressed_content"].type, sa.LargeBinary)
+    assert table.c["content_sha256"].type.length == 64
+    unique_constraints = {
+        constraint.name: tuple(column.name for column in constraint.columns)
+        for constraint in table.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert unique_constraints == {
+        "uq_parameter_search_files_model_version_format": (
+            "tax_benefit_model_version_id",
+            "file_format",
+        )
+    }
+    foreign_keys = {
+        foreign_key.parent.name: (foreign_key.column.table.name, foreign_key.ondelete)
+        for foreign_key in table.foreign_keys
+    }
+    assert foreign_keys == {
+        "tax_benefit_model_version_id": ("tax_benefit_model_versions", "CASCADE"),
+    }

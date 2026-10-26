@@ -534,3 +534,33 @@ class ParameterTreeChild(IdentifiedModel, table=True):
     )
     economy: bool | None = None
     household: bool | None = None
+
+
+class ParameterSearchFile(IdentifiedModel, table=True):
+    """One catalog version's parameter search file, as gzip-compressed JSON.
+
+    Built from the installed packages' catalog when catalog publication
+    publishes the version (``parameter_search_file`` describes the content).
+    A version has at most one file per file format, so a later format adds a
+    row rather than changing a stored one. ``content_sha256`` is the SHA-256 of
+    the uncompressed JSON, which the route serves as the file's ETag.
+    """
+
+    __tablename__ = "parameter_search_files"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "tax_benefit_model_version_id",
+            "file_format",
+            name="uq_parameter_search_files_model_version_format",
+        ),
+    )
+
+    tax_benefit_model_version_id: UUID = Field(
+        foreign_key="tax_benefit_model_versions.id",
+        ondelete="CASCADE",
+    )
+    file_format: int
+    compressed_content: bytes = Field(sa_type=sa.LargeBinary)
+    content_sha256: str = Field(max_length=64)
+    uncompressed_size: int
+    compressed_size: int
