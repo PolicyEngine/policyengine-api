@@ -29,6 +29,10 @@ from policyengine_api.data.v2.catalog.parameter_tree import (
     TreeParameterSource,
     build_parameter_tree,
 )
+from policyengine_api.data.v2.catalog.publication_reconciliation import (
+    StoredVersion,
+    stored_version,
+)
 from policyengine_api.data.v2.catalog.publication_staging import copy_rows
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
@@ -36,8 +40,6 @@ from policyengine_api.data.v2.catalog.publication_types import (
 from policyengine_api.data.v2.models import (
     Parameter,
     ParameterTreeChild,
-    TaxBenefitModel,
-    TaxBenefitModelVersion,
 )
 
 if TYPE_CHECKING:
@@ -48,27 +50,19 @@ if TYPE_CHECKING:
 
     from policyengine_api.data.v2.catalog.records import CountryCatalog
 
-MODELS = TaxBenefitModel.__table__
-MODEL_VERSIONS = TaxBenefitModelVersion.__table__
 PARAMETERS = Parameter.__table__
 PARAMETER_TREE_CHILDREN = ParameterTreeChild.__table__
 
 
-def _stored_version(
-    connection: Connection, country: CountryCatalog
-) -> tuple[UUID, int | None]:
-    """Return the stored version's ID and catalog format (None before format 2)."""
-    row = connection.execute(
-        sa.select(MODEL_VERSIONS.c.id, MODEL_VERSIONS.c.catalog_format)
-        .select_from(
-            MODEL_VERSIONS.join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
+def _version_for_tree(connection: Connection, country: CountryCatalog) -> StoredVersion:
+    stored = stored_version(connection, country)
+    if stored is None:
+        msg = (
+            f"the {country.country_id} catalog version "
+            f"{country.model_version.version} is not stored"
         )
-        .where(
-            MODELS.c.name == country.model.name,
-            MODEL_VERSIONS.c.version == country.model_version.version,
-        )
-    ).one()
-    return row.id, row.catalog_format
+        raise CatalogPublicationError(msg)
+    return stored
 
 
 def _has_tree(connection: Connection, version_id: UUID) -> bool:
@@ -171,16 +165,16 @@ def write_parameter_trees(
     """
     written = []
     for country in countries:
-        version_id, catalog_format = _stored_version(connection, country)
-        if catalog_format is None or _has_tree(connection, version_id):
+        stored = _version_for_tree(connection, country)
+        if stored.catalog_format is None or _has_tree(connection, stored.id):
             continue
         rows = catalog_parameter_tree(
-            country, _stored_parameter_ids(connection, version_id)
+            country, _stored_parameter_ids(connection, stored.id)
         )
         count = copy_rows(
             connection,
             table=PARAMETER_TREE_CHILDREN,
-            rows=_table_rows(version_id, rows),
+            rows=_table_rows(stored.id, rows),
         )
         written.append((country.model.name, country.model_version.version, count))
     return tuple(sorted(written))
@@ -195,8 +189,8 @@ def assert_parameter_trees_written(
     Versions stored before catalog format 2 are exempt: they get no tree.
     """
     for country in countries:
-        version_id, catalog_format = _stored_version(connection, country)
-        if catalog_format is not None and not _has_tree(connection, version_id):
+        stored = _version_for_tree(connection, country)
+        if stored.catalog_format is not None and not _has_tree(connection, stored.id):
             msg = (
                 f"the {country.country_id} catalog version "
                 f"{country.model_version.version} has no parameter tree"
