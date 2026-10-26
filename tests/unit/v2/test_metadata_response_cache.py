@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-import time
 
 import pytest
 from starlette.responses import JSONResponse
@@ -119,24 +118,59 @@ def test_the_least_recently_used_response_is_dropped_beyond_capacity() -> None:
 def test_concurrent_requests_for_one_response_build_it_once() -> None:
     cache = MetadataResponseCache()
     builds: list[str] = []
-    started = threading.Barrier(4)
+    building = threading.Event()
+    release = threading.Event()
 
-    def slow_build() -> BuiltResponse:
+    def blocked_build() -> BuiltResponse:
         builds.append("built")
-        time.sleep(0.05)
+        building.set()
+        release.wait()
         return BuiltResponse(body=b"{}", policyengine_version=RUNNING_VERSION)
 
     def request() -> None:
-        started.wait()
-        cache.get_or_build("variables", "us", None, slow_build)
+        cache.get_or_build("variables", "us", None, blocked_build)
 
-    threads = [threading.Thread(target=request) for _ in range(4)]
-    for thread in threads:
+    first = threading.Thread(target=request)
+    first.start()
+    building.wait()
+    others = [threading.Thread(target=request) for _ in range(3)]
+    for thread in others:
         thread.start()
-    for thread in threads:
+    release.set()
+    for thread in [first, *others]:
         thread.join()
 
+    # Whether the others waited on the build or arrived after it, none read.
     assert builds == ["built"]
+
+
+def test_a_request_arriving_while_a_response_is_stored_waits_for_it() -> None:
+    cache = MetadataResponseCache()
+    builds: list[str] = []
+    second_results: list[object] = []
+    second_requests: list[threading.Thread] = []
+    original_keep = cache._keep
+
+    def keep_after_another_request_arrives(*keep_arguments: object) -> KeptResponse:
+        second_request = threading.Thread(
+            target=lambda: second_results.append(
+                cache.get_or_build("variables", "us", None, _counting_build(builds))
+            )
+        )
+        second_requests.append(second_request)
+        second_request.start()
+        # The second request may not build while this one stores its result:
+        # it waits on the build, whatever the timing.
+        second_request.join(timeout=0.2)
+        return original_keep(*keep_arguments)
+
+    cache._keep = keep_after_another_request_arrives  # type: ignore[method-assign]
+
+    first = cache.get_or_build("variables", "us", None, _counting_build(builds))
+    second_requests[0].join()
+
+    assert builds == ["built"]
+    assert second_results == [first]
 
 
 def test_capacity_must_be_positive() -> None:
