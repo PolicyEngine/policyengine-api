@@ -68,12 +68,18 @@ carry the same `economy` and `household` flags.
 
 `GET /v2/parameters` also accepts repeated `name` keys (at most 100) to page
 only those exact parameters, and `GET /v2/parameter-values` repeated
-`parameter_name` keys to page only those parameters' values. Both routes now
-read their query through the shared query models (`ParameterCollectionQuery`
-and `ParameterValueCollectionQuery`): unknown and repeated scalar parameters,
-an unsupported `country_id` and a malformed `policyengine_version` are
-rejected with HTTP 422 before any read; before, the last two returned HTTP 400
-from the read and unknown parameters were ignored.
+`parameter_name` keys to page only those parameters' values.
+
+Every v2 metadata route reads its query through the shared query models in
+`policyengine_api.query_parameters` (`CatalogQuery`, `CatalogPageQuery` and the
+resource-specific models built on them): unknown parameters, repeated scalar
+parameters, a missing or unsupported `country_id`, a malformed
+`policyengine_version` and out-of-range `offset` or `limit` values are
+rejected with HTTP 422 before any read. Before, the routes other than the
+`/v2/model-catalog` ones ignored unknown parameters, and an unsupported country
+or malformed version returned HTTP 400 from the read. A country given in the
+path (`/v2/tax-benefit-models/by-country/{country_id}`) that is not supported
+still returns HTTP 400.
 
 ## Database round trips per request
 
@@ -353,7 +359,7 @@ A successful response has HTTP 200, `status: "ok"`, `message: null`, and a
 typed `result`. Collection results contain `policyengine_version`, `items`,
 `offset`, `limit`, and `has_more`; detail results contain
 `policyengine_version` and `item`. A malformed or noncanonical explicit
-version returns a typed HTTP 400 error. A valid explicit version that has not
+version returns a typed HTTP 422 error. A valid explicit version that has not
 been published for the country returns a typed HTTP 404 error. An absent
 catalog for the candidate's installed default version returns a typed HTTP 503
 service error. None of these outcomes reads or repairs v1. Unsupported

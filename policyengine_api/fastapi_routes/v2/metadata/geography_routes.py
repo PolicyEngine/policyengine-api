@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     ERROR_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
+)
+from policyengine_api.fastapi_routes.v2.metadata.query_dependencies import (
+    CatalogPageQueryDependency,
+    CatalogQueryDependency,
+    RegionCollectionQueryDependency,
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataDatasetDetailResponse,
@@ -20,13 +25,9 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataRegionDetailResponse,
     MetadataRegionPageResponse,
 )
-from policyengine_api.services.v2.metadata.types import MetadataRegionType
 
 if TYPE_CHECKING:
     from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-
-Offset = Annotated[int, Query(ge=0)]
-Limit = Annotated[int, Query(ge=1, le=500)]
 
 
 def build_v2_metadata_geography_router(
@@ -49,19 +50,16 @@ def build_v2_metadata_geography_router(
         summary="List logical inputs from a selected PolicyEngine.py catalog",
     )
     def list_datasets(
-        country_id: str,
-        policyengine_version: str | None = None,
-        offset: Offset = 0,
-        limit: Limit = 100,
+        query: CatalogPageQueryDependency,
     ) -> MetadataDatasetPageResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataDatasetPageResponse,
             lambda reader: reader.list_datasets(
-                country_id,
-                policyengine_version,
-                offset=offset,
-                limit=limit,
+                query.country_id,
+                query.policyengine_version,
+                offset=query.offset,
+                limit=query.limit,
             ),
         )
 
@@ -72,16 +70,15 @@ def build_v2_metadata_geography_router(
     )
     def get_dataset(
         dataset_id: UUID,
-        country_id: str,
-        policyengine_version: str | None = None,
+        query: CatalogQueryDependency,
     ) -> MetadataDatasetDetailResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataDatasetDetailResponse,
             lambda reader: reader.get_dataset(
-                country_id,
+                query.country_id,
                 dataset_id,
-                policyengine_version,
+                query.policyengine_version,
             ),
         )
 
@@ -91,21 +88,19 @@ def build_v2_metadata_geography_router(
         summary="List regions from a selected PolicyEngine.py catalog",
     )
     def list_regions(
-        country_id: str,
-        policyengine_version: str | None = None,
-        region_type: MetadataRegionType | None = None,
-        offset: Offset = 0,
-        limit: Limit = 100,
+        query: RegionCollectionQueryDependency,
     ) -> MetadataRegionPageResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataRegionPageResponse,
             lambda reader: reader.list_regions(
-                country_id,
-                policyengine_version,
-                region_type=region_type.value if region_type is not None else None,
-                offset=offset,
-                limit=limit,
+                query.country_id,
+                query.policyengine_version,
+                region_type=(
+                    None if query.region_type is None else query.region_type.value
+                ),
+                offset=query.offset,
+                limit=query.limit,
             ),
         )
 
@@ -116,16 +111,15 @@ def build_v2_metadata_geography_router(
     )
     def get_region_by_code(
         region_code: str,
-        country_id: str,
-        policyengine_version: str | None = None,
+        query: CatalogQueryDependency,
     ) -> MetadataRegionDetailResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataRegionDetailResponse,
             lambda reader: reader.get_region_by_code(
-                country_id,
+                query.country_id,
                 region_code,
-                policyengine_version,
+                query.policyengine_version,
             ),
         )
 
@@ -136,16 +130,15 @@ def build_v2_metadata_geography_router(
     )
     def get_region(
         region_id: UUID,
-        country_id: str,
-        policyengine_version: str | None = None,
+        query: CatalogQueryDependency,
     ) -> MetadataRegionDetailResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataRegionDetailResponse,
             lambda reader: reader.get_region(
-                country_id,
+                query.country_id,
                 region_id,
-                policyengine_version,
+                query.policyengine_version,
             ),
         )
 
@@ -155,15 +148,14 @@ def build_v2_metadata_geography_router(
         summary="Get compact economy-selection options from a selected catalog",
     )
     def get_economy_options(
-        country_id: str,
-        policyengine_version: str | None = None,
+        query: CatalogQueryDependency,
     ) -> MetadataEconomyOptionsResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataEconomyOptionsResponse,
             lambda reader: reader.get_economy_options(
-                country_id,
-                policyengine_version,
+                query.country_id,
+                query.policyengine_version,
             ),
         )
 

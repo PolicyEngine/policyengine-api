@@ -328,7 +328,7 @@ def test_postgres_resources_distinguish_invalid_and_absent_versions(
         params={"country_id": "us", "policyengine_version": "4.99.0"},
     )
 
-    assert invalid.status_code == 400
+    assert invalid.status_code == 422
     assert invalid.json()["status"] == "error"
     assert invalid.json()["message"]
     assert absent.status_code == 404

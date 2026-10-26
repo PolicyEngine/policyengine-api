@@ -1202,3 +1202,74 @@ def test_a_kept_response_is_served_without_hashing_its_body_again(
     assert len(hashed_bodies) == 1
     assert second.headers["etag"] == first.headers["etag"]
     assert second.content == first.content
+
+
+def _query_rejections(path: str) -> list[str]:
+    separator = "&" if "?" in path else "?"
+    rejections = [
+        f"{path}{separator}policyengine_version=not%20a%20version",
+        f"{path}{separator}unexpected=1",
+        f"{path}{separator}policyengine_version=4.20.3&policyengine_version=4.20.3",
+    ]
+    if "country_id=us" in path:
+        rejections.append(path.replace("country_id=us", "country_id=ca"))
+        rejections.append(
+            path.replace("country_id=us&", "").replace("?country_id=us", "")
+        )
+    return rejections
+
+
+def test_every_metadata_route_rejects_invalid_queries_before_reading() -> None:
+    _results, ids = _resource_results()
+    calls = []
+
+    def factory():
+        calls.append("called")
+        results, _ids = _resource_results()
+        return ResourceReader(results)
+
+    client = _client(factory)
+    for path in _every_resource_path(ids):
+        for rejected in _query_rejections(path):
+            response = client.get(rejected)
+            assert response.status_code == 422, (rejected, response.text)
+            assert response.json() == {
+                "status": "error",
+                "message": "Invalid API v2 request",
+            }
+    assert calls == []
+
+
+def test_every_metadata_route_declares_the_shared_catalog_query() -> None:
+    results, _ids = _resource_results()
+    schema = _client(lambda: ResourceReader(results)).get("/v2/openapi.json").json()
+    metadata_paths = [
+        path
+        for path in schema["paths"]
+        if path.startswith(
+            (
+                "/v2/datasets",
+                "/v2/economy-options",
+                "/v2/model-catalog",
+                "/v2/parameter",
+                "/v2/regions",
+                "/v2/tax-benefit-model",
+                "/v2/variables",
+            )
+        )
+    ]
+
+    assert len(metadata_paths) == 21
+    for path in metadata_paths:
+        parameters = {
+            parameter["name"]: parameter
+            for parameter in schema["paths"][path]["get"]["parameters"]
+            if parameter["in"] == "query"
+        }
+        version = parameters["policyengine_version"]
+        assert version["required"] is False, path
+        assert version["schema"]["anyOf"][0]["maxLength"] == 128, path
+        if path != "/v2/tax-benefit-models/by-country/{country_id}":
+            country = parameters["country_id"]
+            assert country["required"] is True, path
+            assert country["schema"]["enum"] == ["us", "uk"], path

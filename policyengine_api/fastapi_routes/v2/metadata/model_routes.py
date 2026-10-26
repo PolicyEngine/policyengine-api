@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     ERROR_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
+)
+from policyengine_api.fastapi_routes.v2.metadata.query_dependencies import (
+    CatalogPageQueryDependency,
+    CatalogQueryDependency,
+    CatalogVersionQueryDependency,
+    VariableCollectionQueryDependency,
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataModelDetailResponse,
@@ -25,9 +31,6 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
 
 if TYPE_CHECKING:
     from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-
-Offset = Annotated[int, Query(ge=0)]
-Limit = Annotated[int, Query(ge=1, le=500)]
 
 
 def build_v2_metadata_model_router(
@@ -50,19 +53,16 @@ def build_v2_metadata_model_router(
         summary="List models for one PolicyEngine.py catalog",
     )
     def list_models(
-        country_id: str,
-        policyengine_version: str | None = None,
-        offset: Offset = 0,
-        limit: Limit = 100,
+        query: CatalogPageQueryDependency,
     ) -> MetadataModelPageResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataModelPageResponse,
             lambda reader: reader.list_models(
-                country_id,
-                policyengine_version,
-                offset=offset,
-                limit=limit,
+                query.country_id,
+                query.policyengine_version,
+                offset=query.offset,
+                limit=query.limit,
             ),
         )
 
@@ -73,14 +73,14 @@ def build_v2_metadata_model_router(
     )
     def get_model_by_country(
         country_id: str,
-        policyengine_version: str | None = None,
+        query: CatalogVersionQueryDependency,
     ) -> MetadataModelSelectionResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataModelSelectionResponse,
             lambda reader: reader.get_model_by_country(
                 country_id,
-                policyengine_version,
+                query.policyengine_version,
             ),
         )
 
@@ -91,16 +91,15 @@ def build_v2_metadata_model_router(
     )
     def get_model(
         model_id: UUID,
-        country_id: str,
-        policyengine_version: str | None = None,
+        query: CatalogQueryDependency,
     ) -> MetadataModelDetailResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataModelDetailResponse,
             lambda reader: reader.get_model(
-                country_id,
+                query.country_id,
                 model_id,
-                policyengine_version,
+                query.policyengine_version,
             ),
         )
 
@@ -110,19 +109,16 @@ def build_v2_metadata_model_router(
         summary="List selected PolicyEngine.py model versions",
     )
     def list_model_versions(
-        country_id: str,
-        policyengine_version: str | None = None,
-        offset: Offset = 0,
-        limit: Limit = 100,
+        query: CatalogPageQueryDependency,
     ) -> MetadataModelVersionPageResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataModelVersionPageResponse,
             lambda reader: reader.list_model_versions(
-                country_id,
-                policyengine_version,
-                offset=offset,
-                limit=limit,
+                query.country_id,
+                query.policyengine_version,
+                offset=query.offset,
+                limit=query.limit,
             ),
         )
 
@@ -133,16 +129,15 @@ def build_v2_metadata_model_router(
     )
     def get_model_version(
         version_id: UUID,
-        country_id: str,
-        policyengine_version: str | None = None,
+        query: CatalogQueryDependency,
     ) -> MetadataModelVersionDetailResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataModelVersionDetailResponse,
             lambda reader: reader.get_model_version(
-                country_id,
+                query.country_id,
                 version_id,
-                policyengine_version,
+                query.policyengine_version,
             ),
         )
 
@@ -152,21 +147,17 @@ def build_v2_metadata_model_router(
         summary="List variables from a selected PolicyEngine.py catalog",
     )
     def list_variables(
-        country_id: str,
-        policyengine_version: str | None = None,
-        offset: Offset = 0,
-        limit: Limit = 100,
-        search: str | None = None,
+        query: VariableCollectionQueryDependency,
     ) -> MetadataVariablePageResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataVariablePageResponse,
             lambda reader: reader.list_variables(
-                country_id,
-                policyengine_version,
-                offset=offset,
-                limit=limit,
-                search=search,
+                query.country_id,
+                query.policyengine_version,
+                offset=query.offset,
+                limit=query.limit,
+                search=query.search,
             ),
         )
 
@@ -177,16 +168,15 @@ def build_v2_metadata_model_router(
     )
     def get_variable(
         variable_id: UUID,
-        country_id: str,
-        policyengine_version: str | None = None,
+        query: CatalogQueryDependency,
     ) -> MetadataVariableDetailResponse | JSONResponse:
         return read_resource(
             dependencies,
             MetadataVariableDetailResponse,
             lambda reader: reader.get_variable(
-                country_id,
+                query.country_id,
                 variable_id,
-                policyengine_version,
+                query.policyengine_version,
             ),
         )
 

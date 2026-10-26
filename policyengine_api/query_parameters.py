@@ -30,6 +30,7 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     validate_policyengine_version,
 )
 from policyengine_api.services.economic_impact_request import LocalAreaBreakdown
+from policyengine_api.services.v2.metadata.types import MetadataRegionType
 from policyengine_api.spm import SPMSelection
 from policyengine_api.utils.budget_window import (
     BUDGET_WINDOW_MAX_END_YEAR,
@@ -232,6 +233,42 @@ class PaginationQuery(StrictQueryParameters):
     limit: Limit = DEFAULT_QUERY_LIMIT
 
 
+class CatalogVersionQuery(StrictQueryParameters):
+    """An optional exact catalog version, for routes with the country in the path."""
+
+    policyengine_version: PolicyEngineVersion | None = None
+
+
+class CatalogPageQuery(CatalogQuery, PaginationQuery):
+    """Query contract for one page of a catalog's resources."""
+
+
+class VariableCollectionQuery(CatalogPageQuery):
+    """Query contract for a page of a catalog's variables."""
+
+    search: str | None = Field(
+        default=None,
+        description="Case-insensitive substring of the name, label or description",
+    )
+
+
+class RegionCollectionQuery(CatalogPageQuery):
+    """Query contract for a page of a catalog's regions."""
+
+    region_type: MetadataRegionType | None = Field(
+        default=None, description="Keep only regions of this type"
+    )
+
+
+class ParameterChildrenQuery(CatalogPageQuery):
+    """Query contract for a page of one parameter path's direct children."""
+
+    parent_path: str = Field(
+        default="",
+        description="Dotted path whose direct children are listed; empty for the root",
+    )
+
+
 MAXIMUM_PARAMETER_NAMES = 100
 ParameterName = Annotated[
     str,
@@ -249,7 +286,7 @@ class CatalogParameterQuery(CatalogQuery):
     )
 
 
-class ParameterCollectionQuery(CatalogQuery, PaginationQuery):
+class ParameterCollectionQuery(CatalogPageQuery):
     """Query contract for a page of a catalog's parameters."""
 
     search: str | None = Field(
@@ -263,7 +300,7 @@ class ParameterCollectionQuery(CatalogQuery, PaginationQuery):
     )
 
 
-class ParameterValueCollectionQuery(CatalogQuery, PaginationQuery):
+class ParameterValueCollectionQuery(CatalogPageQuery):
     """Query contract for a page of a catalog's current-law parameter values."""
 
     parameter_id: ResourceId | None = None
