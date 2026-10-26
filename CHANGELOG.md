@@ -1,3 +1,10 @@
+## [5.10.1] - 2026-10-26
+
+### Changed
+
+- CI test jobs and the Make install and test targets install from `uv.lock` with `uv sync --frozen --extra dev` and run tests through `uv run --frozen` on Python 3.12, so tests use the same dependency versions as the Cloud Run image.
+
+
 ## [5.10.0] - 2026-10-26
 
 ### Added
