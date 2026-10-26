@@ -8,10 +8,10 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from starlette.responses import Response
+
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-    from starlette.responses import JSONResponse
 
 DEFAULT_RESPONSE_CAPACITY = 8
 
@@ -40,6 +40,35 @@ class KeptResponse:
     entity_tag: str
 
 
+@dataclass(frozen=True)
+class FailedRead:
+    """A failed whole-version read, given to the requests that waited on it."""
+
+    status_code: int
+    body: bytes
+
+    def response(self) -> Response:
+        """Return a new error response for one waiting request.
+
+        Each request gets its own response object, because middleware adds
+        request-specific headers to the response it sends.
+        """
+        return Response(
+            content=self.body,
+            status_code=self.status_code,
+            media_type="application/json",
+        )
+
+
+class _InFlightRead:
+    """One read in progress for a key, and how many requests wait on it."""
+
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.outcome: KeptResponse | FailedRead | None = None
+        self.waiters = 0
+
+
 class MetadataResponseCache:
     """Keep whole-version responses, built once each per process.
 
@@ -51,10 +80,10 @@ class MetadataResponseCache:
     are kept: the US variables body of the 6.10.0 catalog is 3,910,063 bytes
     uncompressed, so the default of eight holds about 11 MB for both
     countries' two whole-version routes at two versions, and at most about
-    31 MB if every entry were that large. Requests for a response being built
-    wait for that build, and its storage, instead of starting another, and a
-    failed read (a v2 error response) is returned but not kept, so the next
-    request tries again.
+    31 MB if every entry were that large. Requests that arrive while a read
+    for the same key is in progress wait for it, and all receive its outcome:
+    the kept response, or a copy of its error response. A failed read is not
+    kept, so the first request after it reads again.
     """
 
     def __init__(self, *, capacity: int = DEFAULT_RESPONSE_CAPACITY) -> None:
@@ -66,7 +95,7 @@ class MetadataResponseCache:
         self._responses: OrderedDict[KeptResponseKey, KeptResponse] = OrderedDict()
         self._running_versions: dict[tuple[str, str], str] = {}
         self._lock = threading.Lock()
-        self._build_locks: dict[tuple[str, str, str | None], threading.Lock] = {}
+        self._builds: dict[tuple[str, str, str | None], _InFlightRead] = {}
 
     def _stored(
         self, route: str, country_id: str, requested_version: str | None
@@ -90,32 +119,55 @@ class MetadataResponseCache:
         route: str,
         country_id: str,
         requested_version: str | None,
-        build: Callable[[], BuiltResponse | JSONResponse],
-    ) -> KeptResponse | JSONResponse:
+        build: Callable[[], BuiltResponse | Response],
+    ) -> KeptResponse | Response:
         """Return the kept response, calling ``build`` only when none is kept.
 
-        ``requested_version`` None means the running version.
+        ``requested_version`` None means the running version. Requests that
+        arrive while a read for the same key is in progress wait for it and
+        receive its outcome: the kept response, or a copy of its error
+        response. A failed read is not kept, so the next request after it
+        reads again.
         """
         kept = self._stored(route, country_id, requested_version)
         if kept is not None:
             return kept
-        build_key = (route, country_id, requested_version)
+        key = (route, country_id, requested_version)
         with self._lock:
-            build_lock = self._build_locks.setdefault(build_key, threading.Lock())
-        with build_lock:
-            try:
-                kept = self._stored(route, country_id, requested_version)
-                if kept is not None:
-                    return kept
+            in_flight = self._builds.get(key)
+            if in_flight is None:
+                in_flight = _InFlightRead()
+                self._builds[key] = in_flight
+                reads_itself = True
+            else:
+                in_flight.waiters += 1
+                reads_itself = False
+        if not reads_itself:
+            in_flight.done.wait()
+            outcome = in_flight.outcome
+            if outcome is None:
+                # The read raised instead of returning a response: try again.
+                return self.get_or_build(route, country_id, requested_version, build)
+            return outcome.response() if isinstance(outcome, FailedRead) else outcome
+        try:
+            kept = self._stored(route, country_id, requested_version)
+            if kept is None:
                 built = build()
                 if not isinstance(built, BuiltResponse):
+                    in_flight.outcome = FailedRead(
+                        status_code=built.status_code, body=bytes(built.body)
+                    )
                     return built
-                # Stored before the build lock is released, so a request
-                # waiting on it finds the response instead of reading again.
-                return self._keep(route, country_id, requested_version, built)
-            finally:
-                with self._lock:
-                    self._build_locks.pop(build_key, None)
+                kept = self._keep(route, country_id, requested_version, built)
+            in_flight.outcome = kept
+            return kept
+        finally:
+            with self._lock:
+                # Only this read's own entry is removed; a later read for the
+                # same key keeps its entry.
+                if self._builds.get(key) is in_flight:
+                    del self._builds[key]
+            in_flight.done.set()
 
     def _keep(
         self,
