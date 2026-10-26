@@ -10,12 +10,18 @@ from typing import TYPE_CHECKING, Annotated, Protocol
 from fastapi import Depends
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
+from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+    MetadataResponseCache,
+)
 from policyengine_api.fastapi_routes.v2.user_auth import authenticate_account_request
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.readiness import is_ready
+from policyengine_api.services.v2.metadata.selected_catalogs import (
+    SelectedCatalogStore,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from uuid import UUID
 
     from policyengine_api.json_types import JSONObject
@@ -34,10 +40,13 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.metadata.types import (
         MetadataCanonicalParameterValue,
+        MetadataCatalogParametersResult,
+        MetadataCatalogVariablesResult,
         MetadataDataset,
         MetadataDetailResult,
         MetadataEconomyOptionsResult,
         MetadataModel,
+        MetadataModelCatalogResult,
         MetadataModelSelectionResult,
         MetadataModelVersionDetail,
         MetadataPageResult,
@@ -45,6 +54,7 @@ if TYPE_CHECKING:
         MetadataParameterSummary,
         MetadataRegion,
         MetadataVariable,
+        ParameterFilter,
         ParameterValueFilter,
     )
     from policyengine_api.services.v2.policies.types import (
@@ -190,11 +200,12 @@ class V2MetadataResourceReader(Protocol):
         *,
         offset: int = 0,
         limit: int = 100,
-        search: str | None = None,
+        parameter_filter: ParameterFilter | None = None,
     ) -> MetadataPageResult[MetadataParameterSummary]:
-        """Return parameters in name order, optionally filtered by ``search``.
+        """Return parameters in name order, optionally filtered.
 
-        ``search`` is a case-insensitive substring of the name, label or description.
+        The filter's ``search`` is a case-insensitive substring of the name,
+        label or description; its ``names`` keep only those exact names.
         """
         ...
 
@@ -231,9 +242,10 @@ class V2MetadataResourceReader(Protocol):
         offset: int = 0,
         limit: int = 100,
     ) -> MetadataPageResult[MetadataCanonicalParameterValue]:
-        """Return canonical values, optionally for one parameter.
+        """Return canonical values, optionally for one or several parameters.
 
-        With the filter's ``current``, only values in effect on the UTC day of its
+        The filter's ``parameter_id`` or ``parameter_names`` select parameters.
+        With its ``current``, only values in effect on the UTC day of its
         ``now`` (default: the present) are returned.
         """
         ...
@@ -308,6 +320,46 @@ class V2MetadataResourceReader(Protocol):
 
         Raise ``MetadataCatalogUnavailableError`` when the national region, its
         dataset or the model version's options are missing from the catalog.
+        """
+        ...
+
+    def get_model_catalog(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> MetadataModelCatalogResult:
+        """Return the small parts of the selected catalog version.
+
+        These are the model and model version, entities, basic inputs, regions,
+        logical input datasets and economy choices, which are empty for a
+        catalog without regions. Raise ``MetadataCatalogUnavailableError`` when
+        a catalog with regions lacks what ``get_economy_options`` needs.
+        """
+        ...
+
+    def get_catalog_variables(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> MetadataCatalogVariablesResult:
+        """Return every variable of the selected catalog version, in name order.
+
+        It also carries the current-law values of each parameter a variable's
+        adds or subtracts names.
+        """
+        ...
+
+    def get_catalog_parameters(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+        *,
+        names: Sequence[str],
+    ) -> MetadataCatalogParametersResult:
+        """Return the named parameters of the selected version, in name order.
+
+        Each carries its current-law values; the result also carries the
+        stored labels of their ancestor nodes and the names the version lacks.
         """
         ...
 
@@ -727,9 +779,21 @@ def _running_policyengine_version() -> str:
     return importlib_metadata.version("policyengine")
 
 
+@lru_cache(maxsize=1)
+def _process_selected_catalogs() -> SelectedCatalogStore:
+    """Return the catalog versions this process's metadata reads have selected."""
+    return SelectedCatalogStore()
+
+
+@lru_cache(maxsize=1)
+def _process_metadata_response_cache() -> MetadataResponseCache:
+    """Return the whole catalog-version responses this process keeps."""
+    return MetadataResponseCache()
+
+
 def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     from policyengine_api.data.v2.database import (
-        get_v2_session_factory,
+        get_v2_read_session_factory,
     )
     from policyengine_api.services.v2.metadata.database_session import (
         MetadataDatabaseSession,
@@ -737,8 +801,9 @@ def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     from policyengine_api.services.v2.metadata.services import V2MetadataService
 
     return V2MetadataService(
-        MetadataDatabaseSession(get_v2_session_factory()()),
+        MetadataDatabaseSession(get_v2_read_session_factory()()),
         running_policyengine_version=_running_policyengine_version(),
+        selected_catalogs=_process_selected_catalogs(),
     )
 
 
@@ -932,6 +997,9 @@ class NativeRouteDependencies:
         None
     )
     v2_account_service_factory: Callable[[], V2AccountResourceService] | None = None
+    # Whole catalog-version responses (/v2/model-catalog and its variables) are
+    # kept here once built; None reads them on every request.
+    v2_metadata_response_cache: MetadataResponseCache | None = None
     # User-owned routes attach this at router level. The default validates the
     # Auth0 bearer token, or else accepts the unauthenticated-user header, and
     # fails closed (401/403/503); tests replace it with a callable returning a
@@ -947,6 +1015,7 @@ class NativeRouteDependencies:
             metadata_reader_factory=_default_metadata_reader_factory,
             specification_provider=_default_specification_provider,
             v2_metadata_reader_factory=_default_v2_metadata_reader_factory,
+            v2_metadata_response_cache=_process_metadata_response_cache(),
             v2_policy_service_factory=_default_v2_policy_service_factory,
             v2_household_service_factory=_default_v2_household_service_factory,
             v2_user_policy_service_factory=(_default_v2_user_policy_service_factory),

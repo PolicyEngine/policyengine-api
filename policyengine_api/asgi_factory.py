@@ -53,6 +53,7 @@ from policyengine_api.request_context import (
     current_observability_id,
     generate_request_id,
 )
+from policyengine_api.vary_headers import UniqueVaryMiddleware
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
@@ -471,7 +472,9 @@ def create_asgi_app(
     app.mount("/", WSGIMiddleware(wsgi_app))
     # The public API already permits every web origin. Use the standard ASGI
     # implementation while preserving the existing reflected-origin response.
-    return CORSMiddleware(
+    # UniqueVaryMiddleware wraps it, because CORS and gzip each append to Vary
+    # values a route may already have named.
+    cors_app = CORSMiddleware(
         app=app,
         allow_origin_regex=".*",
         allow_methods=["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
@@ -480,7 +483,10 @@ def create_asgi_app(
             REQUEST_ID_HEADER,
             OBSERVABILITY_ID_HEADER,
             "WWW-Authenticate",
+            # v2 metadata responses carry an ETag a client may revalidate with.
+            "ETag",
         ],
         allow_credentials=False,
         max_age=600,
     )
+    return UniqueVaryMiddleware(cors_app)

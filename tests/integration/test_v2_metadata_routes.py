@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,7 +12,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session, select
@@ -20,8 +21,11 @@ from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.publication import publish_catalog
 from policyengine_api.data.v2.models import (
     Dataset,
+    Parameter,
+    ParameterValue,
     TaxBenefitModel,
     TaxBenefitModelVersion,
+    Variable,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
@@ -324,7 +328,7 @@ def test_postgres_resources_distinguish_invalid_and_absent_versions(
         params={"country_id": "us", "policyengine_version": "4.99.0"},
     )
 
-    assert invalid.status_code == 400
+    assert invalid.status_code == 422
     assert invalid.json()["status"] == "error"
     assert invalid.json()["message"]
     assert absent.status_code == 404
@@ -360,3 +364,362 @@ def test_postgres_parameter_collection_remains_available_without_values(
     assert parameters.status_code == values.status_code == 200
     assert parameters.json()["result"]["items"]
     assert values.json()["result"]["items"] == []
+
+
+@pytest.mark.parametrize("country_id", ["us", "uk"])
+def test_postgres_model_catalog_serves_the_small_parts_of_a_version(
+    published_engine: Engine,
+    country_id: str,
+) -> None:
+    client = _client(published_engine)
+    country = normalized_catalog().country(country_id)
+
+    running = client.get("/v2/model-catalog", params={"country_id": country_id})
+    named = client.get(
+        "/v2/model-catalog",
+        params={"country_id": country_id, "policyengine_version": POLICYENGINE_VERSION},
+    )
+
+    assert running.status_code == 200
+    assert running.headers["cache-control"] == "public, max-age=300"
+    assert named.headers["cache-control"] == "public, max-age=86400"
+    assert running.headers["etag"] == named.headers["etag"]
+    result = running.json()["result"]
+    assert result["policyengine_version"] == POLICYENGINE_VERSION
+    assert result["catalog_format"] == country.model_version.catalog_format
+    assert result["entities"] == [
+        {
+            "key": entity.key,
+            "plural": entity.plural,
+            "is_person": entity.is_person,
+        }
+        for entity in country.model_version.entities
+    ]
+    assert result["basic_inputs"] == list(country.model_version.basic_inputs)
+    assert [region["code"] for region in result["regions"]] == sorted(
+        region.code for region in country.regions
+    )
+    assert [dataset["name"] for dataset in result["datasets"]] == sorted(
+        dataset.name for dataset in country.datasets
+    )
+    assert [option["name"] for option in result["economy_options"]["region"]] == [
+        region["code"] for region in result["regions"]
+    ]
+    assert "variables" not in result
+    assert "parameters" not in result
+
+    revalidated = client.get(
+        "/v2/model-catalog",
+        params={"country_id": country_id},
+        headers={"If-None-Match": running.headers["etag"]},
+    )
+    assert revalidated.status_code == 304
+
+
+def _us_model_version_id(engine: Engine):
+    with Session(engine) as session:
+        return session.exec(
+            select(TaxBenefitModelVersion.id)
+            .join(
+                TaxBenefitModel, TaxBenefitModel.id == TaxBenefitModelVersion.model_id
+            )
+            .where(TaxBenefitModel.name == "policyengine-us")
+        ).one()
+
+
+def test_postgres_catalog_variables_carry_part_parameter_values_by_date(
+    published_engine: Engine,
+) -> None:
+    model_version_id = _us_model_version_id(published_engine)
+    parts_id = uuid4()
+    with Session(published_engine) as session:
+        session.add(
+            Parameter(
+                id=parts_id,
+                tax_benefit_model_version_id=model_version_id,
+                name="gov.example.parts",
+                label="Income parts",
+                economy=False,
+                household=True,
+            )
+        )
+        session.flush()
+        session.add_all(
+            [
+                ParameterValue(
+                    parameter_id=parts_id,
+                    value_json=["employment_income"],
+                    start_date=datetime(2024, 1, 1, tzinfo=UTC),
+                ),
+                ParameterValue(
+                    parameter_id=parts_id,
+                    value_json=["employment_income", "pension_income"],
+                    start_date=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                Variable(
+                    tax_benefit_model_version_id=model_version_id,
+                    name="total_income",
+                    entity="person",
+                    data_type="float",
+                    default_value=0,
+                    adds=["employment_income"],
+                    is_input_variable=False,
+                    hidden_input=False,
+                    module_name="household.income.total_income",
+                    adds_parameter_path="gov.example.parts",
+                ),
+            ]
+        )
+        session.commit()
+    client = _client(published_engine)
+
+    response = client.get(
+        "/v2/model-catalog/variables",
+        params={"country_id": "us", "policyengine_version": POLICYENGINE_VERSION},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    result = response.json()["result"]
+    assert [variable["name"] for variable in result["variables"]] == [
+        "employment_income",
+        "total_income",
+    ]
+    assert result["variables"][0]["module_name"] == (
+        "household.income.employment_income"
+    )
+    assert result["variables"][0]["unit"] == "currency-USD"
+    assert result["variables"][0]["definition_period"] == "year"
+    assert result["variables"][1]["adds_parameter_path"] == "gov.example.parts"
+    assert result["part_parameter_values"] == {
+        "gov.example.parts": [
+            {
+                "start_date": "2024-01-01T00:00:00Z",
+                "end_date": None,
+                "value": ["employment_income"],
+            },
+            {
+                "start_date": "2026-01-01T00:00:00Z",
+                "end_date": None,
+                "value": ["employment_income", "pension_income"],
+            },
+        ]
+    }
+    uk = client.get("/v2/model-catalog/variables", params={"country_id": "uk"})
+    assert [variable["name"] for variable in uk.json()["result"]["variables"]] == [
+        "employment_income"
+    ]
+    assert uk.json()["result"]["part_parameter_values"] == {}
+
+
+def test_postgres_catalog_parameters_load_values_and_breadcrumb_labels(
+    published_engine: Engine,
+) -> None:
+    client = _client(published_engine)
+
+    response = client.get(
+        "/v2/model-catalog/parameters",
+        params=[
+            ("country_id", "us"),
+            ("policyengine_version", POLICYENGINE_VERSION),
+            ("name", "gov.example.rate"),
+            ("name", "gov.removed.amount"),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    result = response.json()["result"]
+    assert [parameter["name"] for parameter in result["parameters"]] == [
+        "gov.example.rate"
+    ]
+    parameter = result["parameters"][0]
+    assert (parameter["economy"], parameter["household"]) == (True, False)
+    assert parameter["values"] == [
+        {
+            "start_date": "2025-01-01T00:00:00Z",
+            "end_date": "2025-12-31T00:00:00Z",
+            "value": 0.1,
+        },
+        {"start_date": "2026-01-01T00:00:00Z", "end_date": None, "value": 0.2},
+    ]
+    assert result["node_labels"] == {"gov.example": "Example policy"}
+    assert result["missing_names"] == ["gov.removed.amount"]
+
+
+def test_postgres_metadata_reads_send_no_transaction_statements(
+    published_engine: Engine,
+) -> None:
+    # Each metadata read is one statement on rows a published catalog never
+    # changes, so the read session runs in autocommit mode: psycopg then sends
+    # no BEGIN before the reads and no ROLLBACK when the session closes. The
+    # engine has one pooled connection, so the writer below must get the same
+    # connection back in the ordinary, transactional mode.
+    from psycopg.pq import TransactionStatus
+
+    from policyengine_api.data.v2.database import build_v2_read_session_factory
+
+    del published_engine  # publishes the catalog this pooled engine reads
+    pooled_engine = create_engine(_disposable_url(), pool_size=1, max_overflow=0)
+    read_connections: list[object] = []
+    autocommit_modes: list[bool] = []
+
+    def record_mode(connection, _cursor, _statement, *_args) -> None:
+        dbapi_connection = connection.connection.dbapi_connection
+        read_connections.append(dbapi_connection)
+        autocommit_modes.append(dbapi_connection.autocommit)
+
+    try:
+        event.listen(pooled_engine, "before_cursor_execute", record_mode)
+        service = V2MetadataService(
+            MetadataDatabaseSession(build_v2_read_session_factory(pooled_engine)()),
+            running_policyengine_version=POLICYENGINE_VERSION,
+        )
+        result = service.list_parameters("us")
+        service.close()
+        event.remove(pooled_engine, "before_cursor_execute", record_mode)
+
+        with Session(pooled_engine) as writer:
+            writer_connection = writer.connection().connection.dbapi_connection
+            writer.execute(text("SELECT 1"))
+            writer_status = writer_connection.info.transaction_status
+            writer_autocommit = writer_connection.autocommit
+    finally:
+        pooled_engine.dispose()
+
+    assert [item.name for item in result.items] == ["gov.example.rate"]
+    assert autocommit_modes
+    assert all(autocommit_modes)
+    assert {id(connection) for connection in read_connections} == {
+        id(writer_connection)
+    }
+    assert writer_autocommit is False
+    assert writer_status == TransactionStatus.INTRANS
+
+
+def test_postgres_production_metadata_reader_keeps_catalogs_and_responses(
+    published_engine: Engine,
+) -> None:
+    # The production combination: autocommit read sessions, the process's
+    # selected catalogs and its whole-version response cache.
+    from policyengine_api.data.v2.database import build_v2_read_session_factory
+    from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+        MetadataResponseCache,
+    )
+    from policyengine_api.services.v2.metadata.selected_catalogs import (
+        SelectedCatalogStore,
+    )
+
+    read_factory = build_v2_read_session_factory(published_engine)
+    selected_catalogs = SelectedCatalogStore()
+    statements: list[str] = []
+
+    def record_statement(_connection, _cursor, statement, *_args) -> None:
+        statements.append(statement)
+
+    dependencies = NativeRouteDependencies(
+        readiness_probe=lambda: True,
+        gateway_client_factory=lambda: None,
+        metadata_reader_factory=lambda: None,
+        specification_provider=dict,
+        v2_metadata_reader_factory=lambda: V2MetadataService(
+            MetadataDatabaseSession(read_factory()),
+            running_policyengine_version=POLICYENGINE_VERSION,
+            selected_catalogs=selected_catalogs,
+        ),
+        v2_metadata_response_cache=MetadataResponseCache(),
+    )
+    settings = RouteImplementationSettings(
+        health=RouteImplementation.FLASK_FALLBACK,
+        specification=RouteImplementation.FLASK_FALLBACK,
+        metadata=RouteImplementation.FLASK_FALLBACK,
+    )
+    client = TestClient(
+        create_asgi_app(
+            Flask(__name__), dependencies=dependencies, route_settings=settings
+        )
+    )
+    query = {"country_id": "us", "policyengine_version": POLICYENGINE_VERSION}
+
+    event.listen(published_engine, "before_cursor_execute", record_statement)
+    try:
+        first_variables = client.get(
+            "/v2/model-catalog/variables", params={"country_id": "us"}
+        )
+        statements_for_first = len(statements)
+        repeated_variables = client.get("/v2/model-catalog/variables", params=query)
+        statements_for_repeat = len(statements) - statements_for_first
+        parameters = client.get(
+            "/v2/parameters", params={"country_id": "us", "name": "gov.example.rate"}
+        )
+        statements_for_parameters = (
+            len(statements) - statements_for_first - statements_for_repeat
+        )
+    finally:
+        event.remove(published_engine, "before_cursor_execute", record_statement)
+
+    assert first_variables.status_code == 200
+    assert repeated_variables.content == first_variables.content
+    assert repeated_variables.headers["etag"] == first_variables.headers["etag"]
+    # The running version's selection and the variables read (the fixture's
+    # variables name no parameter-defined parts, so no value read); then
+    # nothing for the explicit request, which shares the kept response; then
+    # only the parameter read, the running version's selection being kept.
+    assert statements_for_first == 2
+    assert statements_for_repeat == 0
+    assert statements_for_parameters == 1
+    assert [item["name"] for item in parameters.json()["result"]["items"]] == [
+        "gov.example.rate"
+    ]
+    assert selected_catalogs.get(("us", None)) is not None
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        # Read for 31 December, headers written after midnight: not reusable.
+        (
+            datetime(2025, 12, 31, 23, 59, 59, tzinfo=UTC),
+            datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+            [0.1],
+            "public, max-age=0",
+        ),
+        (
+            datetime(2025, 12, 31, 12, 0, tzinfo=UTC),
+            datetime(2025, 12, 31, 12, 0, tzinfo=UTC),
+            [0.1],
+            "public, max-age=43200",
+        ),
+        (
+            datetime(2026, 1, 1, 0, 0, tzinfo=UTC),
+            datetime(2026, 1, 1, 0, 0, tzinfo=UTC),
+            [0.2],
+            "public, max-age=86400",
+        ),
+    ],
+)
+def test_postgres_current_values_and_their_lifetime_use_one_instant(
+    published_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    case: tuple[datetime, datetime, list[float], str],
+) -> None:
+    from policyengine_api.fastapi_routes.v2.metadata import common
+
+    read_instant, header_instant, expected_values, expected_cache_control = case
+    instants = iter([read_instant, header_instant])
+    monkeypatch.setattr(common, "utc_now", lambda: next(instants))
+
+    response = _client(published_engine).get(
+        "/v2/parameter-values",
+        params={
+            "country_id": "us",
+            "policyengine_version": POLICYENGINE_VERSION,
+            "current": "true",
+        },
+    )
+
+    assert response.status_code == 200
+    assert [item["value"] for item in response.json()["result"]["items"]] == (
+        expected_values
+    )
+    assert response.headers["cache-control"] == expected_cache_control

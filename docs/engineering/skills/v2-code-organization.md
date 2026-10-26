@@ -21,8 +21,17 @@ user_policies/
 metadata/
   response_models.py
   common.py
+  query_dependencies.py
+  response_cache.py
   *_routes.py
 ```
+
+`common.py` also holds the route class that gives metadata responses their
+caching headers. `query_dependencies.py` defines the typed FastAPI
+dependencies for the shared query models once, for every metadata route
+module to import. `response_cache.py` keeps serialized whole-version
+responses (bodies and ETags) for the process; it is HTTP-level, so it lives
+with the routes.
 
 `errors.py` defines the strict error response and serialization function shared
 by every API v2 resource. Application-wide exception handling distinguishes
@@ -51,6 +60,13 @@ services/v2/<resource>/
     updates.py
     deletes.py
 ```
+
+A resource may also add a module for process-wide state its service reuses
+across requests, named for what it keeps, such as the metadata package's
+`selected_catalogs.py` (each catalog version a request has selected, which
+never changes once published). Such a module holds plain data, constructs no
+SQL and owns no session; the composition code creates one instance per process
+and injects it into the service.
 
 Only add CRUD connector modules for operations the resource supports. Append a
 specific descriptor when one operation file would become too broad, such as

@@ -33,8 +33,20 @@ from policyengine_api.data.v2.models import (
 from policyengine_api.services.v2.metadata.database_session import (
     MetadataDatabaseSession,
 )
+from policyengine_api.services.v2.metadata.selected_catalogs import (
+    SelectedCatalogStore,
+)
 from policyengine_api.services.v2.metadata.services import V2MetadataService
-from policyengine_api.services.v2.metadata.types import ParameterValueFilter
+from policyengine_api.services.v2.metadata.transformations import ancestor_paths
+from policyengine_api.services.v2.metadata.types import (
+    CurrentLawValueRow,
+    MetadataDatedValue,
+    MetadataEntity,
+    MetadataEnumValue,
+    ParameterFilter,
+    ParameterNodeLabelRow,
+    ParameterValueFilter,
+)
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
@@ -74,6 +86,16 @@ def _insert_country(
                 if time_periods is None
                 else time_periods
             ),
+            catalog_format=country.model_version.catalog_format,
+            entities=[
+                {
+                    "key": entity.key,
+                    "plural": entity.plural,
+                    "is_person": entity.is_person,
+                }
+                for entity in country.model_version.entities
+            ],
+            basic_inputs=list(country.model_version.basic_inputs),
         )
     )
     session.add_all(
@@ -89,6 +111,21 @@ def _insert_country(
             default_value=record.default_value,
             adds=record.adds,
             subtracts=record.subtracts,
+            is_input_variable=record.is_input_variable,
+            hidden_input=record.hidden_input,
+            module_name=record.module_name,
+            adds_parameter_path=record.adds_parameter_path,
+            subtracts_parameter_path=record.subtracts_parameter_path,
+            enum_values=(
+                None
+                if record.enum_values is None
+                else [
+                    {"value": enum_value.value, "label": enum_value.label}
+                    for enum_value in record.enum_values
+                ]
+            ),
+            unit=record.unit,
+            definition_period=record.definition_period,
         )
         for record in country.variables
     )
@@ -111,6 +148,8 @@ def _insert_country(
             description=record.description,
             data_type=record.data_type,
             unit=record.unit,
+            economy=record.economy,
+            household=record.household,
         )
         for record in country.parameters
     )
@@ -196,28 +235,33 @@ def _add_country_version(
     session.commit()
 
 
-def _us_model_version(session: Session) -> TaxBenefitModelVersion:
+def _model_version(
+    session: Session, model_name: str, version: str = POLICYENGINE_VERSION
+) -> TaxBenefitModelVersion:
     return session.exec(
         select(TaxBenefitModelVersion)
         .join(TaxBenefitModel, TaxBenefitModel.id == TaxBenefitModelVersion.model_id)
         .where(
-            TaxBenefitModel.name == "policyengine-us",
-            TaxBenefitModelVersion.version == POLICYENGINE_VERSION,
+            TaxBenefitModel.name == model_name,
+            TaxBenefitModelVersion.version == version,
         )
     ).one()
 
 
-def _service(session: Session) -> V2MetadataService:
+def _service(
+    session: Session, *, selected_catalogs: SelectedCatalogStore | None = None
+) -> V2MetadataService:
     return V2MetadataService(
         MetadataDatabaseSession(session),
         running_policyengine_version=POLICYENGINE_VERSION,
+        selected_catalogs=selected_catalogs,
     )
 
 
 def test_resource_collection_uses_bounded_pagination_without_counting(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = _model_version(catalog_session, "policyengine-us")
     catalog_session.add(
         Variable(
             id=uuid4(),
@@ -309,7 +353,7 @@ def test_parameter_collection_does_not_query_or_embed_values(
 def test_parameter_values_are_separate_canonical_resources(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = _model_version(catalog_session, "policyengine-us")
     parameter = catalog_session.exec(
         select(Parameter).where(
             Parameter.tax_benefit_model_version_id == model_version.id,
@@ -370,7 +414,7 @@ def test_current_parameter_value_uses_inclusive_effective_dates(
 def test_parameter_children_are_loaded_one_level_at_a_time(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = _model_version(catalog_session, "policyengine-us")
     nested_node = ParameterNode(
         id=uuid4(),
         tax_benefit_model_version_id=model_version.id,
@@ -421,7 +465,9 @@ def test_resource_filters_and_details_remain_inside_selected_catalog(
 ) -> None:
     service = _service(catalog_session)
     variables = service.list_variables("us", search="employment")
-    parameters = service.list_parameters("us", search="example rate")
+    parameters = service.list_parameters(
+        "us", parameter_filter=ParameterFilter(search="example rate")
+    )
     states = service.list_regions("us", region_type="state")
     region = service.get_region_by_code("us", "state/ca")
 
@@ -503,7 +549,7 @@ def test_version_selection_rejects_invalid_absent_and_unsupported_requests(
 def test_dataset_collection_excludes_outputs_and_storage_references(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = _model_version(catalog_session, "policyengine-us")
     output_id = uuid4()
     catalog_session.add(
         Dataset(
@@ -560,6 +606,681 @@ def test_economy_options_require_a_national_region_and_dataset(
         _service(catalog_session).get_economy_options("us")
 
 
+def _recorded_statements(session: Session, read):
+    statements: list[str] = []
+
+    def record_statement(_connection, _cursor, statement, *_args) -> None:
+        statements.append(statement.lower())
+
+    bind = session.get_bind()
+    event.listen(bind, "before_cursor_execute", record_statement)
+    try:
+        result = read()
+    finally:
+        event.remove(bind, "before_cursor_execute", record_statement)
+    return result, statements
+
+
+def test_model_catalog_holds_only_the_small_parts_of_a_catalog_version(
+    catalog_session: Session,
+) -> None:
+    result, statements = _recorded_statements(
+        catalog_session, lambda: _service(catalog_session).get_model_catalog("us")
+    )
+    us_catalog = normalized_catalog().country("us")
+
+    assert result.policyengine_version == POLICYENGINE_VERSION
+    assert result.catalog_format == 2
+    assert result.model.name == "policyengine-us"
+    assert (
+        result.model_version.current_law_id == us_catalog.model_version.current_law_id
+    )
+    assert result.entities == [
+        MetadataEntity(key="person", plural="people", is_person=True),
+        MetadataEntity(key="household", plural="households", is_person=False),
+    ]
+    assert result.basic_inputs == ["employment_income"]
+    assert [region.code for region in result.regions] == sorted(
+        region.code for region in us_catalog.regions
+    )
+    assert [dataset.name for dataset in result.datasets] == sorted(
+        dataset.name for dataset in us_catalog.datasets
+    )
+    assert [option.name for option in result.economy_options.region] == [
+        region.code for region in result.regions
+    ]
+    assert [option.name for option in result.economy_options.time_period] == list(
+        us_catalog.model_version.metadata_time_periods
+    )
+    assert [option.label for option in result.economy_options.datasets] == ["Microcosm"]
+    assert len(statements) == 3
+    for table in ("variables", "parameters", "parameter_values", "parameter_nodes"):
+        assert all(f"from {table}" not in statement for statement in statements)
+
+
+def test_model_catalog_without_regions_offers_no_economy_calculation(
+    catalog_session: Session,
+) -> None:
+    # A household-only country publishes no regions or datasets; its catalog
+    # still serves entities and basic inputs, with empty economy choices.
+    model_version = _model_version(catalog_session, "policyengine-us")
+    for region in catalog_session.exec(
+        select(Region).where(Region.tax_benefit_model_version_id == model_version.id)
+    ).all():
+        catalog_session.delete(region)
+    catalog_session.flush()
+    for dataset in catalog_session.exec(
+        select(Dataset).where(Dataset.tax_benefit_model_version_id == model_version.id)
+    ).all():
+        catalog_session.delete(dataset)
+    catalog_session.commit()
+
+    result = _service(catalog_session).get_model_catalog("us")
+
+    assert result.regions == []
+    assert result.datasets == []
+    assert result.economy_options.region == []
+    assert result.economy_options.time_period == []
+    assert result.economy_options.datasets == []
+    assert result.basic_inputs == ["employment_income"]
+
+
+def test_model_catalog_published_before_format_2_has_empty_new_fields(
+    catalog_session: Session,
+) -> None:
+    model_version = _model_version(catalog_session, "policyengine-us")
+    model_version.catalog_format = None
+    model_version.entities = None
+    model_version.basic_inputs = None
+    catalog_session.add(model_version)
+    catalog_session.commit()
+
+    result = _service(catalog_session).get_model_catalog("us")
+
+    assert result.catalog_format is None
+    assert result.entities == []
+    assert result.basic_inputs == []
+
+
+def test_model_catalog_with_regions_requires_the_national_region(
+    catalog_session: Session,
+) -> None:
+    national_region = catalog_session.exec(
+        select(Region).where(Region.code == "us")
+    ).one()
+    catalog_session.delete(national_region)
+    catalog_session.commit()
+
+    with pytest.raises(MetadataCatalogUnavailableError, match="national v2 region"):
+        _service(catalog_session).get_model_catalog("us")
+
+
+def _add_variable_with_parameter_named_parts(session: Session) -> None:
+    model_version = _model_version(session, "policyengine-us")
+    parts = Parameter(
+        id=uuid4(),
+        tax_benefit_model_version_id=model_version.id,
+        name="gov.example.parts",
+        label="Income parts",
+        description=None,
+        data_type="list",
+        unit=None,
+        economy=False,
+        household=True,
+    )
+    session.add(parts)
+    session.add_all(
+        [
+            ParameterValue(
+                id=uuid4(),
+                parameter_id=parts.id,
+                value_json=["employment_income", "pension_income"],
+                start_date=datetime(2026, 1, 1, tzinfo=UTC),
+                end_date=None,
+            ),
+            ParameterValue(
+                id=uuid4(),
+                parameter_id=parts.id,
+                value_json=["employment_income"],
+                start_date=datetime(2024, 1, 1, tzinfo=UTC),
+                end_date=datetime(2025, 12, 31, tzinfo=UTC),
+            ),
+            ParameterValue(
+                id=uuid4(),
+                parameter_id=parts.id,
+                value_json=["reform_only_income"],
+                start_date=datetime(2027, 1, 1, tzinfo=UTC),
+                end_date=None,
+                policy_id=uuid4(),
+            ),
+        ]
+    )
+    session.add(
+        Variable(
+            id=uuid4(),
+            tax_benefit_model_version_id=model_version.id,
+            name="total_income",
+            label="Total income",
+            entity="person",
+            description=None,
+            data_type="float",
+            possible_values=["LOW", "HIGH"],
+            default_value=0,
+            adds=["employment_income"],
+            subtracts=None,
+            is_input_variable=False,
+            hidden_input=True,
+            module_name="household.income.total_income",
+            adds_parameter_path="gov.example.parts",
+            subtracts_parameter_path="gov.example.unpublished_parts",
+            enum_values=[
+                {"value": "LOW", "label": "Low"},
+                {"value": "HIGH", "label": 2},
+            ],
+        )
+    )
+    session.commit()
+
+
+def test_catalog_variables_hold_every_variable_with_its_format_2_fields(
+    catalog_session: Session,
+) -> None:
+    _add_variable_with_parameter_named_parts(catalog_session)
+
+    result, statements = _recorded_statements(
+        catalog_session,
+        lambda: _service(catalog_session).get_catalog_variables("us"),
+    )
+
+    assert result.policyengine_version == POLICYENGINE_VERSION
+    assert result.catalog_format == 2
+    assert [variable.name for variable in result.variables] == [
+        "employment_income",
+        "total_income",
+    ]
+    employment_income, total_income = result.variables
+    assert employment_income.is_input_variable is True
+    assert employment_income.hidden_input is False
+    assert employment_income.module_name == "household.income.employment_income"
+    assert employment_income.adds_parameter_path is None
+    assert total_income.hidden_input is True
+    assert total_income.adds_parameter_path == "gov.example.parts"
+    assert total_income.subtracts_parameter_path == "gov.example.unpublished_parts"
+    assert total_income.enum_values == [
+        MetadataEnumValue(value="LOW", label="Low"),
+        MetadataEnumValue(value="HIGH", label=2),
+    ]
+    assert len(statements) == 3
+
+
+def test_catalog_variables_carry_the_dated_values_of_parameter_named_parts(
+    catalog_session: Session,
+) -> None:
+    _add_variable_with_parameter_named_parts(catalog_session)
+
+    result = _service(catalog_session).get_catalog_variables("us")
+
+    assert result.part_parameter_values == {
+        "gov.example.parts": [
+            MetadataDatedValue(
+                start_date=datetime(2024, 1, 1, tzinfo=UTC),
+                end_date=datetime(2025, 12, 31, tzinfo=UTC),
+                value=["employment_income"],
+            ),
+            MetadataDatedValue(
+                start_date=datetime(2026, 1, 1, tzinfo=UTC),
+                end_date=None,
+                value=["employment_income", "pension_income"],
+            ),
+        ],
+        "gov.example.unpublished_parts": [],
+    }
+
+
+def test_catalog_variables_without_parameter_named_parts_read_no_values(
+    catalog_session: Session,
+) -> None:
+    result, statements = _recorded_statements(
+        catalog_session,
+        lambda: _service(catalog_session).get_catalog_variables("uk"),
+    )
+
+    assert [variable.name for variable in result.variables] == ["employment_income"]
+    assert result.part_parameter_values == {}
+    assert len(statements) == 2
+    assert all("parameter_values" not in statement for statement in statements)
+
+
+def test_variable_pages_carry_the_format_2_fields(catalog_session: Session) -> None:
+    variable = _service(catalog_session).list_variables("us").items[0]
+
+    assert variable.is_input_variable is True
+    assert variable.module_name == "household.income.employment_income"
+    assert variable.enum_values is None
+
+
+def _add_bracket_schedule(session: Session) -> None:
+    model_version = _model_version(session, "policyengine-us")
+    session.add_all(
+        [
+            ParameterNode(
+                id=uuid4(),
+                tax_benefit_model_version_id=model_version.id,
+                name="gov.example.rates",
+                label="Example rates",
+                description=None,
+            ),
+            ParameterNode(
+                id=uuid4(),
+                tax_benefit_model_version_id=model_version.id,
+                name="gov.example.rates[0]",
+                label=None,
+                description=None,
+            ),
+        ]
+    )
+    bracket_rate = Parameter(
+        id=uuid4(),
+        tax_benefit_model_version_id=model_version.id,
+        name="gov.example.rates[0].rate",
+        label="Rate",
+        description=None,
+        data_type="float",
+        unit="/1",
+        economy=True,
+        household=True,
+    )
+    session.add(bracket_rate)
+    session.add(
+        ParameterValue(
+            id=uuid4(),
+            parameter_id=bracket_rate.id,
+            value_json=0.2,
+            start_date=datetime(2025, 1, 1, tzinfo=UTC),
+            end_date=None,
+        )
+    )
+    session.commit()
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("gov", []),
+        ("gov.example.rate", ["gov", "gov.example"]),
+        (
+            "gov.example.rates[0].rate",
+            ["gov", "gov.example", "gov.example.rates", "gov.example.rates[0]"],
+        ),
+        ("gov.example.rates[10]", ["gov", "gov.example", "gov.example.rates"]),
+    ],
+)
+def test_ancestor_paths_treat_a_bracket_index_as_a_child(
+    name: str, expected: list[str]
+) -> None:
+    assert ancestor_paths(name) == expected
+
+
+def test_named_parameters_load_with_values_and_ancestor_labels_in_one_read(
+    catalog_session: Session,
+) -> None:
+    _add_bracket_schedule(catalog_session)
+
+    result, statements = _recorded_statements(
+        catalog_session,
+        lambda: _service(catalog_session).get_catalog_parameters(
+            "us",
+            names=["gov.example.rates[0].rate", "gov.example.rate", "gov.example.rate"],
+        ),
+    )
+
+    assert result.policyengine_version == POLICYENGINE_VERSION
+    assert result.catalog_format == 2
+    assert [parameter.name for parameter in result.parameters] == [
+        "gov.example.rate",
+        "gov.example.rates[0].rate",
+    ]
+    example_rate, bracket_rate = result.parameters
+    assert (example_rate.economy, example_rate.household) == (True, False)
+    assert [value.value for value in example_rate.values] == [0.1, 0.2]
+    assert example_rate.values[0].start_date == datetime(2025, 1, 1, tzinfo=UTC)
+    assert example_rate.values[0].end_date == datetime(2025, 12, 31, tzinfo=UTC)
+    assert [value.value for value in bracket_rate.values] == [0.2]
+    assert result.node_labels == {
+        "gov.example": "Example policy",
+        "gov.example.rates": "Example rates",
+        "gov.example.rates[0]": None,
+    }
+    assert result.missing_names == []
+    assert len(statements) == 4
+
+
+def test_named_parameters_list_names_the_version_lacks(
+    catalog_session: Session,
+) -> None:
+    result = _service(catalog_session).get_catalog_parameters(
+        "uk", names=["gov.example.rate", "gov.removed.amount"]
+    )
+
+    assert [parameter.name for parameter in result.parameters] == ["gov.example.rate"]
+    assert result.missing_names == ["gov.removed.amount"]
+
+
+def test_named_parameters_exclude_policy_and_dynamic_values(
+    catalog_session: Session,
+) -> None:
+    model_version = _model_version(catalog_session, "policyengine-us")
+    parameter = catalog_session.exec(
+        select(Parameter).where(
+            Parameter.tax_benefit_model_version_id == model_version.id,
+            Parameter.name == "gov.example.rate",
+        )
+    ).one()
+    catalog_session.add(
+        ParameterValue(
+            id=uuid4(),
+            parameter_id=parameter.id,
+            value_json=0.9,
+            start_date=datetime(2027, 1, 1, tzinfo=UTC),
+            end_date=None,
+            policy_id=uuid4(),
+        )
+    )
+    catalog_session.commit()
+
+    result = _service(catalog_session).get_catalog_parameters(
+        "us", names=["gov.example.rate"]
+    )
+
+    assert [value.value for value in result.parameters[0].values] == [0.1, 0.2]
+
+
+def test_parameter_pages_and_values_can_be_narrowed_to_named_parameters(
+    catalog_session: Session,
+) -> None:
+    _add_bracket_schedule(catalog_session)
+    service = _service(catalog_session)
+
+    parameters = service.list_parameters(
+        "us",
+        parameter_filter=ParameterFilter(
+            names=("gov.example.rates[0].rate", "gov.removed.amount")
+        ),
+    )
+    values = service.list_parameter_values(
+        "us",
+        value_filter=ParameterValueFilter(
+            parameter_names=("gov.example.rate", "gov.example.rates[0].rate")
+        ),
+    )
+
+    assert [parameter.name for parameter in parameters.items] == [
+        "gov.example.rates[0].rate"
+    ]
+    assert parameters.items[0].economy is True
+    assert sorted(value.value for value in values.items) == [0.1, 0.2, 0.2]
+
+
+def test_a_kept_catalog_selection_saves_its_query_on_later_reads(
+    catalog_session: Session,
+) -> None:
+    store = SelectedCatalogStore()
+
+    first, first_statements = _recorded_statements(
+        catalog_session,
+        lambda: _service(catalog_session, selected_catalogs=store).list_parameters(
+            "us"
+        ),
+    )
+    second, second_statements = _recorded_statements(
+        catalog_session,
+        lambda: _service(catalog_session, selected_catalogs=store).list_parameters(
+            "us"
+        ),
+    )
+
+    assert second == first
+    assert len(first_statements) == 2
+    assert len(second_statements) == 1
+    assert "tax_benefit_model_versions" not in second_statements[0]
+
+
+def test_failed_catalog_selections_are_not_kept(catalog_session: Session) -> None:
+    store = SelectedCatalogStore()
+    service = _service(catalog_session, selected_catalogs=store)
+
+    for _attempt in range(2):
+        with pytest.raises(MetadataCatalogVersionNotFoundError):
+            service.list_parameters("us", "9.9.9")
+        with pytest.raises(UnsupportedPreviewCountryError):
+            service.list_parameters("ca")
+        with pytest.raises(InvalidPolicyEngineVersionError):
+            service.list_parameters("us", "not a version")
+
+    _add_country_version(
+        catalog_session,
+        policyengine_version="9.9.9",
+        current_law_id=7,
+        time_periods=[2027],
+    )
+    assert service.list_parameters("us", "9.9.9").policyengine_version == "9.9.9"
+
+
+def test_each_country_and_version_keeps_its_own_selection(
+    catalog_session: Session,
+) -> None:
+    store = SelectedCatalogStore()
+    _add_country_version(
+        catalog_session,
+        policyengine_version="9.9.9",
+        current_law_id=7,
+        time_periods=[2027],
+    )
+    service = _service(catalog_session, selected_catalogs=store)
+
+    running_us = service.get_model_by_country("us")
+    named_us = service.get_model_by_country("us", "9.9.9")
+    running_uk = service.get_model_by_country("uk")
+
+    assert (running_us.policyengine_version, named_us.policyengine_version) == (
+        POLICYENGINE_VERSION,
+        "9.9.9",
+    )
+    assert named_us.model_version.current_law_id == 7
+    assert running_uk.model.name == "policyengine-uk"
+    assert service.get_model_by_country("us", "9.9.9") == named_us
+
+
+def test_value_and_node_label_reads_return_typed_rows(
+    catalog_session: Session,
+) -> None:
+    from policyengine_api.services.v2.metadata.database_connectors import (
+        reads_parameter_nodes,
+        reads_parameters,
+    )
+
+    model_version = _model_version(catalog_session, "policyengine-us")
+    values = reads_parameters.read_current_law_values_by_parameter_name(
+        catalog_session,
+        model_version_id=model_version.id,
+        parameter_names={"gov.example.rate"},
+    )
+    labels = reads_parameter_nodes.read_parameter_node_labels(
+        catalog_session,
+        model_version_id=model_version.id,
+        node_names={"gov.example", "gov.absent"},
+    )
+
+    assert [type(row) for row in values] == [CurrentLawValueRow, CurrentLawValueRow]
+    assert [(row.name, row.value_json) for row in values] == [
+        ("gov.example.rate", 0.1),
+        ("gov.example.rate", 0.2),
+    ]
+    assert labels == [ParameterNodeLabelRow(name="gov.example", label="Example policy")]
+
+
+def test_parameter_tree_leaves_carry_the_same_summary_as_parameter_pages(
+    catalog_session: Session,
+) -> None:
+    service = _service(catalog_session)
+
+    leaf = next(
+        child
+        for child in service.list_parameter_children(
+            "us", parent_path="gov.example"
+        ).items
+        if child.type == "parameter"
+    )
+    page_item = service.list_parameters(
+        "us", parameter_filter=ParameterFilter(names=("gov.example.rate",))
+    ).items[0]
+
+    assert leaf.parameter == page_item
+    assert (leaf.parameter.economy, leaf.parameter.household) == (True, False)
+
+
+def test_variables_carry_their_unit_and_definition_period(
+    catalog_session: Session,
+) -> None:
+    uk_version = _model_version(catalog_session, "policyengine-uk")
+    catalog_session.add_all(
+        [
+            Variable(
+                id=uuid4(),
+                tax_benefit_model_version_id=uk_version.id,
+                name="universal_credit",
+                entity="benunit",
+                data_type="float",
+                default_value=0,
+                unit="currency-GBP",
+                definition_period="month",
+            ),
+            # A variable published before catalog format 2 stored neither.
+            Variable(
+                id=uuid4(),
+                tax_benefit_model_version_id=uk_version.id,
+                name="age",
+                entity="person",
+                data_type="int",
+                default_value=0,
+            ),
+        ]
+    )
+    catalog_session.commit()
+    service = _service(catalog_session)
+
+    us_variables = service.get_catalog_variables("us").variables
+    uk_variables = {
+        variable.name: variable
+        for variable in service.get_catalog_variables("uk").variables
+    }
+    us_page = service.list_variables("us").items
+
+    assert [(item.unit, item.definition_period) for item in us_variables] == [
+        ("currency-USD", "year")
+    ]
+    assert (us_page[0].unit, us_page[0].definition_period) == (
+        "currency-USD",
+        "year",
+    )
+    assert (
+        uk_variables["universal_credit"].unit,
+        uk_variables["universal_credit"].definition_period,
+    ) == ("currency-GBP", "month")
+    assert (uk_variables["age"].unit, uk_variables["age"].definition_period) == (
+        None,
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("country_id", "version", "expected_catalog_format", "expected_fields"),
+    [
+        ("us", None, 2, {"employment_income": ("currency-USD", "year")}),
+        (
+            "uk",
+            None,
+            2,
+            {
+                "employment_income": ("currency-USD", "year"),
+                "universal_credit": ("currency-GBP", "month"),
+            },
+        ),
+        # A version published before catalog format 2 stored neither field.
+        ("us", "9.9.9", None, {"employment_income": (None, None)}),
+    ],
+)
+def test_both_variables_routes_serve_unit_and_definition_period(
+    catalog_session: Session,
+    country_id: str,
+    version: str | None,
+    expected_catalog_format: int | None,
+    expected_fields: dict[str, tuple[str | None, str | None]],
+) -> None:
+    from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+        MetadataResponseCache,
+    )
+
+    from .test_metadata_routes import _client
+
+    catalog_session.add(
+        Variable(
+            id=uuid4(),
+            tax_benefit_model_version_id=_model_version(
+                catalog_session, "policyengine-uk"
+            ).id,
+            name="universal_credit",
+            entity="benunit",
+            data_type="float",
+            default_value=0,
+            unit="currency-GBP",
+            definition_period="month",
+        )
+    )
+    catalog_session.commit()
+    _add_country_version(
+        catalog_session,
+        policyengine_version="9.9.9",
+        current_law_id=7,
+        time_periods=[2027],
+    )
+    earlier_version = _model_version(catalog_session, "policyengine-us", "9.9.9")
+    earlier_version.catalog_format = None
+    for variable in catalog_session.exec(
+        select(Variable).where(
+            Variable.tax_benefit_model_version_id == earlier_version.id
+        )
+    ).all():
+        variable.unit = None
+        variable.definition_period = None
+    catalog_session.commit()
+    client = _client(
+        lambda: _service(catalog_session), response_cache=MetadataResponseCache()
+    )
+    query = f"country_id={country_id}" + (
+        "" if version is None else f"&policyengine_version={version}"
+    )
+
+    whole_version_bodies = [
+        client.get(f"/v2/model-catalog/variables?{query}").json()["result"]
+        for _attempt in ("read", "stored")
+    ]
+    page = client.get(f"/v2/variables?{query}").json()["result"]
+
+    for result in whole_version_bodies:
+        assert result["catalog_format"] == expected_catalog_format
+        served = {
+            variable["name"]: (variable["unit"], variable["definition_period"])
+            for variable in result["variables"]
+        }
+        assert served == expected_fields
+    paged = {
+        item["name"]: (item["unit"], item["definition_period"])
+        for item in page["items"]
+    }
+    assert paged == expected_fields
+
+
 def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
     project_package = Path(__file__).parents[3] / "policyengine_api"
     connector_directory = (
@@ -569,6 +1290,7 @@ def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
         project_package / "data" / "v2" / "catalog" / "catalog_selection.py",
         connector_directory / "reads.py",
         connector_directory / "reads_datasets.py",
+        connector_directory / "reads_parameter_nodes.py",
         connector_directory / "reads_parameter_tree.py",
         connector_directory / "reads_parameters.py",
         connector_directory / "reads_regions.py",
@@ -624,6 +1346,9 @@ def test_resource_entrypoints_are_defined_in_the_service_module() -> None:
         "get_region",
         "get_region_by_code",
         "get_economy_options",
+        "get_model_catalog",
+        "get_catalog_variables",
+        "get_catalog_parameters",
     }
 
     for method_name in method_names:
