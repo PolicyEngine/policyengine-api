@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 from importlib import metadata as importlib_metadata
@@ -13,8 +14,11 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from policyengine_api.data.v2.catalog.errors import CatalogExtractionError
 from policyengine_api.data.v2.catalog.records import (
+    CATALOG_FORMAT,
     CountryCatalog,
     DatasetRecord,
+    EntityRecord,
+    EnumValueRecord,
     FallbackSummary,
     ModelRecord,
     ModelVersionRecord,
@@ -35,6 +39,7 @@ from policyengine_api.data.v2.catalog.region_scoping import (
     filtered_artifacts,
     scope_regions,
 )
+from policyengine_api.data.v2.models import Variable
 
 if TYPE_CHECKING:
     from policyengine_api.json_types import JSONValue
@@ -45,9 +50,28 @@ REQUIRED_DEPENDENCIES = (
     "policyengine-us",
     "policyengine-uk",
 )
-REVIEWED_DEFAULT_DATASETS = {
-    "us": "populace_us_2024",
-    "uk": "microcosm_uk_2024_25",
+
+
+def _variable_column_length(column_name: str) -> int:
+    """Return the length limit of one text column of the v2 ``variables`` table."""
+    length = getattr(Variable.__table__.c[column_name].type, "length", None)
+    if not isinstance(length, int):
+        msg = f"variables.{column_name} has no length limit"
+        raise TypeError(msg)
+    return length
+
+
+# Catalog format 2's variable text fields, checked against the columns that
+# store them, so the two limits cannot drift apart.
+VARIABLE_TEXT_LIMITS: Mapping[str, int] = {
+    column_name: _variable_column_length(column_name)
+    for column_name in (
+        "module_name",
+        "adds_parameter_path",
+        "subtracts_parameter_path",
+        "unit",
+        "definition_period",
+    )
 }
 CURRENT_LAW_IDS = {"us": 2, "uk": 1}
 METADATA_TIME_PERIODS = {
@@ -87,6 +111,20 @@ def _optional_text(
         raise CatalogExtractionError(msg)
     if maximum is not None and len(value) > maximum:
         msg = f"{field_name} exceeds {maximum} characters"
+        raise CatalogExtractionError(msg)
+    return value
+
+
+def _optional_bool(value: object, *, field_name: str) -> bool | None:
+    if value is not None and not isinstance(value, bool):
+        msg = f"{field_name} must be a boolean or null"
+        raise CatalogExtractionError(msg)
+    return value
+
+
+def _required_bool(value: object, *, field_name: str) -> bool:
+    if not isinstance(value, bool):
+        msg = f"{field_name} must be a boolean"
         raise CatalogExtractionError(msg)
     return value
 
@@ -277,6 +315,12 @@ def _normalize_variable(
     else:
         normalized_possible_values = None
 
+    enum_values = _normalize_enum_values(
+        name,
+        getattr(source, "enum_values", None),
+        possible_values=normalized_possible_values,
+    )
+
     def optional_names(attribute: str) -> list[str] | None:
         values = getattr(source, attribute, None)
         if values is None:
@@ -316,7 +360,85 @@ def _normalize_variable(
         default_value=normalize_json_value(getattr(source, "default_value", None)),
         adds=optional_names("adds"),
         subtracts=optional_names("subtracts"),
+        is_input_variable=_optional_bool(
+            getattr(source, "is_input_variable", None),
+            field_name=f"variable {name} is_input_variable",
+        ),
+        hidden_input=_optional_bool(
+            getattr(source, "hidden_input", None),
+            field_name=f"variable {name} hidden_input",
+        ),
+        module_name=_optional_text(
+            getattr(source, "module_name", None),
+            field_name=f"variable {name} module_name",
+            maximum=VARIABLE_TEXT_LIMITS["module_name"],
+        ),
+        adds_parameter_path=_optional_text(
+            getattr(source, "adds_parameter_path", None),
+            field_name=f"variable {name} adds_parameter_path",
+            maximum=VARIABLE_TEXT_LIMITS["adds_parameter_path"],
+        ),
+        subtracts_parameter_path=_optional_text(
+            getattr(source, "subtracts_parameter_path", None),
+            field_name=f"variable {name} subtracts_parameter_path",
+            maximum=VARIABLE_TEXT_LIMITS["subtracts_parameter_path"],
+        ),
+        enum_values=enum_values,
+        unit=_optional_text(
+            getattr(source, "unit", None),
+            field_name=f"variable {name} unit",
+            maximum=VARIABLE_TEXT_LIMITS["unit"],
+        ),
+        definition_period=_optional_text(
+            getattr(source, "definition_period", None),
+            field_name=f"variable {name} definition_period",
+            maximum=VARIABLE_TEXT_LIMITS["definition_period"],
+        ),
     )
+
+
+def _normalize_enum_values(
+    name: str,
+    source_values: object,
+    *,
+    possible_values: list[str] | None,
+) -> tuple[EnumValueRecord, ...] | None:
+    """Normalize an enum variable's value labels, which must match its values.
+
+    Each label is kept as declared when it is a JSON scalar.
+    """
+    if source_values is None and possible_values is None:
+        return None
+    if (
+        source_values is None
+        or not isinstance(source_values, Sequence)
+        or isinstance(source_values, (str, bytes))
+    ):
+        msg = f"variable {name} enum values do not match its possible values"
+        raise CatalogExtractionError(msg)
+    records: list[EnumValueRecord] = []
+    for source_value in source_values:
+        value = _required_text(
+            getattr(source_value, "value", None),
+            field_name=f"variable {name} enum value",
+            maximum=255,
+        )
+        try:
+            label = normalize_json_value(getattr(source_value, "label", None))
+        except CatalogExtractionError as error:
+            msg = (
+                f"variable {name} enum label for {value} is not JSON-compatible: "
+                f"{error}"
+            )
+            raise CatalogExtractionError(msg) from error
+        if isinstance(label, (dict, list)):
+            msg = f"variable {name} enum label for {value} must be a JSON scalar"
+            raise CatalogExtractionError(msg)
+        records.append(EnumValueRecord(value=value, label=label))
+    if [record.value for record in records] != possible_values:
+        msg = f"variable {name} enum values do not match its possible values"
+        raise CatalogExtractionError(msg)
+    return tuple(records)
 
 
 def _normalize_parameter(
@@ -409,6 +531,14 @@ def _normalize_parameter(
             maximum=128,
         ),
         values=tuple(normalized_values),
+        economy=_required_bool(
+            getattr(source, "economy", None),
+            field_name=f"parameter {name} economy",
+        ),
+        household=_required_bool(
+            getattr(source, "household", None),
+            field_name=f"parameter {name} household",
+        ),
     )
 
 
@@ -526,14 +656,207 @@ def _normalize_parameter_nodes(
     return tuple(normalized_nodes)
 
 
-def _verified_default_dataset(country_id: str, release_manifest: object) -> str:
-    """Return the reviewed default dataset once the manifest names it as its default."""
-    reviewed_default = REVIEWED_DEFAULT_DATASETS[country_id]
-    manifest_default = getattr(release_manifest, "default_dataset", None)
-    if manifest_default != reviewed_default:
-        msg = f"{country_id} default dataset does not match the reviewed selection"
+# The public fields catalog format 2 reads, by the record that carries them.
+FORMAT_2_FIELDS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("model version", "", ("entities", "basic_inputs")),
+    (
+        "variable",
+        "variables_by_name",
+        (
+            "is_input_variable",
+            "hidden_input",
+            "module_name",
+            "adds_parameter_path",
+            "subtracts_parameter_path",
+            "enum_values",
+            "unit",
+            "definition_period",
+        ),
+    ),
+    ("parameter", "parameters_by_name", ("economy", "household")),
+)
+
+
+def _require_format_2_fields(country_id: str, source: object) -> None:
+    """Fail first, naming each field, when PolicyEngine.py does not publish them.
+
+    Older releases, such as 6.7.5 and the locked 6.10.0, publish only the
+    variables' unit and definition period of catalog format 2's fields.
+    """
+    missing: list[str] = []
+    for record_name, mapping_attribute, field_names in FORMAT_2_FIELDS:
+        if mapping_attribute:
+            records = getattr(source, mapping_attribute, None)
+            holders = list(records.values()) if isinstance(records, Mapping) else []
+        else:
+            holders = [source]
+        absent = [
+            field_name
+            for field_name in field_names
+            if any(not hasattr(holder, field_name) for holder in holders)
+        ]
+        if absent:
+            missing.append(f"{record_name} {', '.join(absent)}")
+    if missing:
+        msg = (
+            "the installed PolicyEngine.py does not publish catalog format 2's "
+            f"fields for {country_id}: {'; '.join(missing)}"
+        )
         raise CatalogExtractionError(msg)
-    return reviewed_default
+
+
+def _source_sequence(country_id: str, source: object, attribute: str) -> Sequence:
+    values = getattr(source, attribute, None)
+    if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
+        msg = f"{country_id} public model {attribute} must be a sequence"
+        raise CatalogExtractionError(msg)
+    return values
+
+
+def _normalize_entities(country_id: str, source: object) -> tuple[EntityRecord, ...]:
+    """Normalize the public model's entities, in its order, with one person entity."""
+    source_entities = _source_sequence(country_id, source, "entities")
+    entities: list[EntityRecord] = []
+    for source_entity in source_entities:
+        key = _required_text(
+            getattr(source_entity, "key", None),
+            field_name=f"{country_id} entity key",
+            maximum=128,
+        )
+        if any(entity.key == key for entity in entities):
+            msg = f"{country_id} entity key {key!r} is repeated"
+            raise CatalogExtractionError(msg)
+        entities.append(
+            EntityRecord(
+                key=key,
+                plural=_required_text(
+                    getattr(source_entity, "plural", None),
+                    field_name=f"{country_id} entity {key} plural",
+                    maximum=128,
+                ),
+                is_person=_required_bool(
+                    getattr(source_entity, "is_person", None),
+                    field_name=f"{country_id} entity {key} is_person",
+                ),
+            )
+        )
+    if sum(entity.is_person for entity in entities) != 1:
+        msg = f"{country_id} public model must have exactly one person entity"
+        raise CatalogExtractionError(msg)
+    return tuple(entities)
+
+
+def _normalize_basic_inputs(
+    country_id: str,
+    source: object,
+    *,
+    variable_names: frozenset[str],
+) -> tuple[str, ...]:
+    """Normalize the country's default household fields; each is a variable.
+
+    An empty list, which PolicyEngine.py gives a package that declares none, is
+    stored as empty.
+    """
+    source_inputs = _source_sequence(country_id, source, "basic_inputs")
+    basic_inputs = tuple(
+        _required_text(value, field_name=f"{country_id} basic input", maximum=512)
+        for value in source_inputs
+    )
+    for name in basic_inputs:
+        if name not in variable_names:
+            msg = f"{country_id} basic input {name!r} is not a published variable"
+            raise CatalogExtractionError(msg)
+    return basic_inputs
+
+
+def _verify_parameter_paths(
+    variables: tuple[VariableRecord, ...],
+    *,
+    parameter_names: frozenset[str],
+) -> None:
+    """Require each parameter named by ``adds`` or ``subtracts`` to be published."""
+    for variable in variables:
+        for field_name, path in (
+            ("adds_parameter_path", variable.adds_parameter_path),
+            ("subtracts_parameter_path", variable.subtracts_parameter_path),
+        ):
+            if path is not None and path not in parameter_names:
+                msg = (
+                    f"variable {variable.name} {field_name} {path!r} is not a "
+                    "published parameter"
+                )
+                raise CatalogExtractionError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class ModelMetadata:
+    """The model metadata of one country's catalog, without regions or datasets."""
+
+    entities: tuple[EntityRecord, ...]
+    basic_inputs: tuple[str, ...]
+    variables: tuple[VariableRecord, ...]
+    parameter_nodes: tuple[ParameterNodeRecord, ...]
+    parameters: tuple[ParameterRecord, ...]
+
+
+def normalize_model_metadata(
+    country_id: str,
+    source: object,
+    *,
+    model_version_id: UUID,
+) -> ModelMetadata:
+    """Normalize a public model's entities, variables and parameter tree.
+
+    Everything comes from PolicyEngine.py's public records. Separate from the
+    certified data release, so the metadata can be checked on its own.
+    """
+    _require_format_2_fields(country_id, source)
+    variables = tuple(
+        _normalize_variable(variable, model_version_id=model_version_id)
+        for variable in _public_named_records(
+            source,
+            attribute="variables_by_name",
+            entity_name="variable",
+        )
+    )
+    parameters = tuple(
+        _normalize_parameter(parameter, model_version_id=model_version_id)
+        for parameter in _public_named_records(
+            source,
+            attribute="parameters_by_name",
+            entity_name="parameter",
+        )
+    )
+    _verify_parameter_paths(
+        variables,
+        parameter_names=frozenset(parameter.name for parameter in parameters),
+    )
+    return ModelMetadata(
+        entities=_normalize_entities(country_id, source),
+        basic_inputs=_normalize_basic_inputs(
+            country_id,
+            source,
+            variable_names=frozenset(variable.name for variable in variables),
+        ),
+        variables=variables,
+        parameter_nodes=_normalize_parameter_nodes(
+            source, model_version_id=model_version_id
+        ),
+        parameters=parameters,
+    )
+
+
+def _release_default_dataset(country_id: str, release_manifest: object) -> str:
+    """Return the default dataset the installed PolicyEngine.py release names.
+
+    The Public API sets no default of its own; region scoping then requires the
+    release to certify it.
+    """
+    default_dataset = getattr(release_manifest, "default_dataset", None)
+    if not isinstance(default_dataset, str) or not default_dataset:
+        msg = f"{country_id} release manifest names no default dataset"
+        raise CatalogExtractionError(msg)
+    return default_dataset
 
 
 def _normalize_region(
@@ -581,32 +904,15 @@ def _normalize_country(
         expected_country_package_version=expected_country_package_version,
     )
 
-    variables = tuple(
-        _normalize_variable(variable, model_version_id=model_version_id)
-        for variable in _public_named_records(
-            source,
-            attribute="variables_by_name",
-            entity_name="variable",
-        )
-    )
-    parameter_nodes = _normalize_parameter_nodes(
-        source, model_version_id=model_version_id
-    )
-    parameters = tuple(
-        _normalize_parameter(parameter, model_version_id=model_version_id)
-        for parameter in _public_named_records(
-            source,
-            attribute="parameters_by_name",
-            entity_name="parameter",
-        )
+    metadata = normalize_model_metadata(
+        country_id, source, model_version_id=model_version_id
     )
 
-    reviewed_default = _verified_default_dataset(country_id, release_manifest)
     scoping = scope_regions(
         country_id,
         region_references,
         release_manifest,
-        reviewed_default=reviewed_default,
+        default_dataset=_release_default_dataset(country_id, release_manifest),
     )
 
     datasets = tuple(
@@ -650,10 +956,13 @@ def _normalize_country(
             ),
             current_law_id=CURRENT_LAW_IDS[country_id],
             metadata_time_periods=METADATA_TIME_PERIODS[country_id],
+            catalog_format=CATALOG_FORMAT,
+            entities=metadata.entities,
+            basic_inputs=metadata.basic_inputs,
         ),
-        variables=variables,
-        parameter_nodes=parameter_nodes,
-        parameters=parameters,
+        variables=metadata.variables,
+        parameter_nodes=metadata.parameter_nodes,
+        parameters=metadata.parameters,
         datasets=datasets,
         regions=tuple(sorted(regions, key=lambda record: record.code)),
         fallback_summaries=tuple(

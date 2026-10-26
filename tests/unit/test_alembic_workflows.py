@@ -219,6 +219,7 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert "alembic -c alembic-v2.ini upgrade head" in workflow
     assert "test_alembic_v2_lifecycle.sh" not in workflow
     assert "test_v2_catalog_installed.py" in workflow
+    assert "test_v2_catalog_metadata_parity.py" in workflow
     assert "RUN_V2_CATALOG_COMPATIBILITY" in workflow
     assert "test_v2_catalog_publication.py" in workflow
     assert "test_v2_metadata_routes.py" in workflow

@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import replace
 
 from psycopg.types.json import Jsonb
 
 from policyengine_api.data.v2.catalog.publication_staging import (
+    STAGE_CATALOG_VARIABLES,
     STAGING_TABLES,
     _catalog_rows,
 )
+from policyengine_api.data.v2.catalog.records import EnumValueRecord
 from tests.fixtures.v2_catalog import normalized_catalog
 
 
@@ -49,6 +52,15 @@ def test_catalog_rows_project_every_record_field_in_column_order() -> None:
             country.model_version.description,
             country.model_version.current_law_id,
             ("jsonb", country.model_version.metadata_time_periods),
+            2,
+            (
+                "jsonb",
+                [
+                    {"key": "person", "plural": "people", "is_person": True},
+                    {"key": "household", "plural": "households", "is_person": False},
+                ],
+            ),
+            ("jsonb", ["employment_income"]),
         )
     ]
     assert rows["stage_catalog_variables"] == [
@@ -66,6 +78,14 @@ def test_catalog_rows_project_every_record_field_in_column_order() -> None:
             ("jsonb", record.default_value),
             None if record.adds is None else ("jsonb", record.adds),
             None if record.subtracts is None else ("jsonb", record.subtracts),
+            record.is_input_variable,
+            record.hidden_input,
+            record.module_name,
+            record.adds_parameter_path,
+            record.subtracts_parameter_path,
+            None,
+            record.unit,
+            record.definition_period,
         )
         for record in country.variables
     ]
@@ -82,6 +102,8 @@ def test_catalog_rows_project_every_record_field_in_column_order() -> None:
             record.description,
             record.data_type,
             record.unit,
+            record.economy,
+            record.household,
         )
         for record in country.parameters
     ]
@@ -121,3 +143,24 @@ def test_catalog_rows_project_every_record_field_in_column_order() -> None:
     ]
     assert len(rows["stage_catalog_parameter_values"]) == 2
     assert len(rows["stage_catalog_regions"]) == 3
+
+
+def test_enum_values_are_staged_as_value_and_label_objects_in_order() -> None:
+    country = normalized_catalog().country("us")
+    variable = replace(
+        country.variables[0],
+        possible_values=["SINGLE", "JOINT"],
+        enum_values=(
+            EnumValueRecord(value="SINGLE", label="Single"),
+            EnumValueRecord(value="JOINT", label=2),
+        ),
+    )
+    country = replace(country, variables=(variable,))
+
+    (row,) = (_plain(row) for row in _catalog_rows(country)[STAGE_CATALOG_VARIABLES])
+
+    staged_column_names = [column.name for column in STAGE_CATALOG_VARIABLES.columns]
+    assert row[staged_column_names.index("enum_values")] == (
+        "jsonb",
+        [{"value": "SINGLE", "label": "Single"}, {"value": "JOINT", "label": 2}],
+    )

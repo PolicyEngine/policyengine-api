@@ -16,8 +16,10 @@ from policyengine_api.data.v2.catalog.publication_types import (
 from policyengine_api.data.v2.catalog.records import (
     CountryCatalog,
     NormalizedCatalog,
+    VariableRecord,
     iter_batches,
 )
+from policyengine_api.data.v2.models import CatalogEntity, CatalogEnumValue
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Sequence
@@ -39,6 +41,9 @@ STAGE_CATALOG_MODELS = Table(
     sa.Column("version_description", sa.Text),
     sa.Column("current_law_id", sa.Integer, nullable=False),
     sa.Column("metadata_time_periods", JSONB, nullable=False),
+    sa.Column("catalog_format", sa.Integer, nullable=False),
+    sa.Column("entities", JSONB, nullable=False),
+    sa.Column("basic_inputs", JSONB, nullable=False),
     prefixes=["TEMPORARY"],
     postgresql_on_commit="DROP",
 )
@@ -57,6 +62,14 @@ STAGE_CATALOG_VARIABLES = Table(
     sa.Column("default_value", JSONB, nullable=False),
     sa.Column("adds", JSONB),
     sa.Column("subtracts", JSONB),
+    sa.Column("is_input_variable", sa.Boolean),
+    sa.Column("hidden_input", sa.Boolean),
+    sa.Column("module_name", sa.Text),
+    sa.Column("adds_parameter_path", sa.Text),
+    sa.Column("subtracts_parameter_path", sa.Text),
+    sa.Column("enum_values", JSONB),
+    sa.Column("unit", sa.Text),
+    sa.Column("definition_period", sa.Text),
     prefixes=["TEMPORARY"],
     postgresql_on_commit="DROP",
 )
@@ -83,6 +96,8 @@ STAGE_CATALOG_PARAMETERS = Table(
     sa.Column("description", sa.Text),
     sa.Column("data_type", sa.Text),
     sa.Column("unit", sa.Text),
+    sa.Column("economy", sa.Boolean, nullable=False),
+    sa.Column("household", sa.Boolean, nullable=False),
     prefixes=["TEMPORARY"],
     postgresql_on_commit="DROP",
 )
@@ -163,6 +178,30 @@ def _model_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
         country.model_version.description,
         country.model_version.current_law_id,
         Jsonb(country.model_version.metadata_time_periods),
+        country.model_version.catalog_format,
+        Jsonb(
+            [
+                CatalogEntity(
+                    key=entity.key,
+                    plural=entity.plural,
+                    is_person=entity.is_person,
+                )
+                for entity in country.model_version.entities
+            ]
+        ),
+        Jsonb(list(country.model_version.basic_inputs)),
+    )
+
+
+def _enum_values_json(record: VariableRecord) -> Jsonb | None:
+    """Return an enum variable's values as ordered value and label objects."""
+    if record.enum_values is None:
+        return None
+    return Jsonb(
+        [
+            CatalogEnumValue(value=item.value, label=item.label)
+            for item in record.enum_values
+        ]
     )
 
 
@@ -182,6 +221,14 @@ def _variable_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
                 Jsonb(record.default_value),
                 _optional_json(record.adds),
                 _optional_json(record.subtracts),
+                record.is_input_variable,
+                record.hidden_input,
+                record.module_name,
+                record.adds_parameter_path,
+                record.subtracts_parameter_path,
+                _enum_values_json(record),
+                record.unit,
+                record.definition_period,
             )
 
 
@@ -213,6 +260,8 @@ def _parameter_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
                 record.description,
                 record.data_type,
                 record.unit,
+                record.economy,
+                record.household,
             )
 
 
