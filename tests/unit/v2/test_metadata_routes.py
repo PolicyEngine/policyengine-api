@@ -126,6 +126,14 @@ def _resource_results() -> tuple[dict[str, object], dict[str, object]]:
         default_value=0,
         adds=None,
         subtracts=None,
+        is_input_variable=True,
+        hidden_input=False,
+        module_name=None,
+        adds_parameter_path=None,
+        subtracts_parameter_path=None,
+        enum_values=None,
+        unit="currency-USD",
+        definition_period="year",
     )
     parameter = MetadataParameterSummary(
         id=parameter_id,
@@ -134,6 +142,8 @@ def _resource_results() -> tuple[dict[str, object], dict[str, object]]:
         description=None,
         data_type="float",
         unit="/1",
+        economy=True,
+        household=False,
     )
     parameter_value = MetadataCanonicalParameterValue(
         id=parameter_value_id,
@@ -1432,3 +1442,34 @@ def test_openapi_declares_each_variables_unit_and_definition_period() -> None:
     for field in ("unit", "definition_period"):
         assert {"type": "string"} in variable_properties[field]["anyOf"]
         assert {"type": "null"} in variable_properties[field]["anyOf"]
+
+
+def test_openapi_requires_every_catalog_format_2_field_as_nullable() -> None:
+    # Every response includes these fields (null for versions published before
+    # catalog format 2), so a generated client must not type them as missing.
+    results, _ids = _resource_results()
+    schemas = (
+        _client(lambda: ResourceReader(results))
+        .get("/v2/openapi.json")
+        .json()["components"]["schemas"]
+    )
+    format_2_fields = {
+        "MetadataVariable": {
+            "is_input_variable",
+            "hidden_input",
+            "module_name",
+            "adds_parameter_path",
+            "subtracts_parameter_path",
+            "enum_values",
+            "unit",
+            "definition_period",
+        },
+        "MetadataParameterSummary": {"economy", "household"},
+        "MetadataCatalogParameter": {"economy", "household"},
+    }
+
+    for schema_name, fields in format_2_fields.items():
+        schema = schemas[schema_name]
+        assert set(schema["properties"]) <= set(schema["required"]), schema_name
+        for field in fields:
+            assert {"type": "null"} in schema["properties"][field]["anyOf"], field
