@@ -289,3 +289,64 @@ def test_earlier_copy_with_another_source_hash_is_an_integrity_error(
         _copy(catalog_session, snapshot)
 
     assert recorded_writes == RecordedCopyWrites()
+
+
+def _lose_mapping_race(monkeypatch, *, winning_source_hash: str) -> None:
+    """Make the mapping insert find a row a concurrent copy committed first.
+
+    The replacement returns None, as the insert does when its unique
+    constraint makes it a no-op.
+    """
+
+    def insert_after_concurrent_copy(session, **mapping_fields):
+        session.add(
+            LegacyPolicyMapping(
+                country_id=mapping_fields["country_id"],
+                legacy_policy_id=mapping_fields["legacy_policy_id"],
+                policy_id=EARLIER_COPY_POLICY_ID,
+                source_policy_hash=winning_source_hash,
+            )
+        )
+        session.flush()
+
+    monkeypatch.setattr(
+        policy_services, "create_legacy_policy_mapping", insert_after_concurrent_copy
+    )
+
+
+def test_concurrent_copy_on_another_catalog_version_is_reused(
+    catalog_session: Session,
+    recorded_writes: RecordedCopyWrites,
+    monkeypatch,
+) -> None:
+    # Two first copies of the same v1 policy ran at once, for example on two
+    # revisions with different PolicyEngine.py versions, so each translated
+    # it to a different v2 policy. The mapping committed first is the copy.
+    _add_running_catalog(
+        catalog_session, country_id="us", parameter_names=["gov.dol.minimum_wage"]
+    )
+    snapshot = _reused_snapshot()
+    _lose_mapping_race(monkeypatch, winning_source_hash=snapshot.source_policy_hash)
+
+    result = _copy(catalog_session, snapshot)
+
+    assert result == LegacyPolicyPersistenceResult(
+        policy_id=EARLIER_COPY_POLICY_ID,
+        policy_created=False,
+        mapping_created=False,
+    )
+    assert len(recorded_writes.created_policies) == 1
+
+
+def test_concurrent_copy_with_another_source_hash_is_an_integrity_error(
+    catalog_session: Session,
+    recorded_writes: RecordedCopyWrites,
+    monkeypatch,
+) -> None:
+    _add_running_catalog(
+        catalog_session, country_id="us", parameter_names=["gov.dol.minimum_wage"]
+    )
+    _lose_mapping_race(monkeypatch, winning_source_hash="different-legacy-hash")
+
+    with pytest.raises(LegacyPolicyMappingIntegrityError, match="source hash"):
+        _copy(catalog_session, _reused_snapshot())

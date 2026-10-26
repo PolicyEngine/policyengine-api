@@ -198,8 +198,7 @@ def mirror_legacy_policy_in_session(
     returns that copy without being translated again, so writing it again after
     a PolicyEngine.py or country package upgrade still succeeds. Raise
     LegacyPolicyMappingIntegrityError if the v1 id is already mapped with a
-    different source hash, or a concurrent copy mapped it to a different v2
-    policy.
+    different source hash.
     """
     existing = read_legacy_policy_mapping(
         session,
@@ -261,10 +260,11 @@ def mirror_legacy_policy_in_session(
     if concurrent is None:
         msg = "legacy policy mapping conflict did not resolve to a stored row"
         raise LegacyPolicyMappingIntegrityError(msg)
+    # A concurrent copy mapped the policy first. As with a mapping found at the
+    # start, the same source hash makes its v2 policy the copy, even when it was
+    # translated with another catalog version than this one.
     verify_legacy_policy_mapping(
-        concurrent,
-        source_policy_hash=snapshot.source_policy_hash,
-        expected_policy_id=policy_result.policy_id,
+        concurrent, source_policy_hash=snapshot.source_policy_hash
     )
     return LegacyPolicyPersistenceResult(
         policy_id=concurrent.policy_id,

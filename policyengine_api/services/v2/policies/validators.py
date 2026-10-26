@@ -179,12 +179,12 @@ def verify_legacy_policy_mapping(
     mapping: LegacyPolicyMapping,
     *,
     source_policy_hash: str,
-    expected_policy_id: UUID | None = None,
 ) -> None:
-    """Validate an existing mapping without performing SQL."""
+    """Require an existing mapping to come from the same v1 content, without SQL.
+
+    v1 policies never change, so a mapping with the same source hash is the
+    copy whichever catalog version translated it.
+    """
     if mapping.source_policy_hash != source_policy_hash:
         msg = "legacy policy identity was presented with a different source hash"
-        raise LegacyPolicyMappingIntegrityError(msg)
-    if expected_policy_id is not None and mapping.policy_id != expected_policy_id:
-        msg = "legacy policy mapping does not match translated immutable content"
         raise LegacyPolicyMappingIntegrityError(msg)
