@@ -326,8 +326,9 @@ def metadata_parameter_children(rows: list[Any]) -> list[MetadataParameterChild]
     """Build parameter-tree children from read_parameter_children rows.
 
     Parameter leaves carry the same summary as the parameter routes. Every
-    stored child has a label: its stored label, "Bracket N" for a bracket, or
-    one generated from the last part of its name.
+    stored child has a label in the form v3 shows it: its stored label with
+    underscores as spaces and its first letter upper-cased, "Bracket N" for a
+    bracket, or the last part of its name in that form.
     """
     return [
         MetadataParameterChild(

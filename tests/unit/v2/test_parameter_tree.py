@@ -276,15 +276,6 @@ def test_the_reform_view_is_sorted_by_label_as_v3_shows_it() -> None:
     ]
 
 
-def test_parameters_without_flags_count_as_changeable_in_the_reform_view() -> None:
-    rows = build_parameter_tree(
-        nodes=[],
-        parameters=[_parameter("gov.older.rate", economy=None, household=None)],
-    )
-
-    assert _rows_by_path(rows)["gov.older.rate"].reform_changeable is True
-
-
 def test_every_row_has_its_parent_and_counts_match_the_rows() -> None:
     rows = _uk_income_tax_tree()
     by_path = _rows_by_path(rows)

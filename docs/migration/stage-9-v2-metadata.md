@@ -322,8 +322,8 @@ change: a parameter
 under `gov` whose economy or household flag is set and whose path names
 neither `taxsim`, `gov.abolitions` nor `pycache`, and every node above such a
 parameter. These are the rules of the tree the app's newer interface builds
-from v1 metadata. A version stored before catalog format 2 has no flags, so
-only the path rules apply to it.
+from v1 metadata. Trees are written only for versions published with catalog
+format 2, so every parameter in a tree has both flags.
 
 In the same transaction, the command writes the tree of each catalog version
 it publishes, from the parameters and parameter nodes it has just stored. The

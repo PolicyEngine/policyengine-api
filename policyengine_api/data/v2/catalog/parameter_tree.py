@@ -18,8 +18,8 @@ the app's newer interface builds from v1 metadata
 (``app/src/libs/buildParameterTree.ts``): a parameter under ``gov`` whose
 economy or household flag is set and whose path names neither ``taxsim``,
 ``gov.abolitions`` nor ``pycache``, and every node with such a parameter
-below it. A version published before catalog format 2 has no flags, so only
-the path rules apply to it.
+below it. Trees are written only for versions published with catalog format
+2, so every parameter has both flags.
 """
 
 from __future__ import annotations
@@ -123,8 +123,6 @@ def is_reform_changeable_parameter(parameter: TreeParameterSource) -> bool:
         return False
     if any(part in parameter.name for part in REFORM_EXCLUDED_PATH_PARTS):
         return False
-    if parameter.economy is None and parameter.household is None:
-        return True
     return bool(parameter.economy) or bool(parameter.household)
 
 
