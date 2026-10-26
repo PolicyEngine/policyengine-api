@@ -185,6 +185,20 @@ def test_nodes_carry_their_stored_labels_only() -> None:
     ]
 
 
+def test_the_labelled_gov_node_itself_is_included() -> None:
+    # v3's concept clusters pair each node's key with its label, so the root
+    # node's "Government" label must be in the file, as v1's metadata has it.
+    search_file = _file(
+        [_parameter("gov.hmrc.vat.rate")],
+        nodes=[
+            SearchNodeSource(name="gov", label="Government"),
+            SearchNodeSource(name="government_bonds", label="Bonds"),
+        ],
+    )
+
+    assert search_file["nodes"] == [{"path": "gov", "label": "Government"}]
+
+
 def test_a_value_that_is_not_a_number_or_switch_cannot_be_edited() -> None:
     search_file = _file(
         [

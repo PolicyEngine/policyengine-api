@@ -370,8 +370,8 @@ holds what the app's newer interface's parameter search reads:
   day it was built;
 - the path and stored label of every other parameter under `gov`, which the
   search's concept clusters, acronym aliases and member labels read;
-- the path and stored label of every node under `gov` that has a stored label,
-  for breadcrumbs and schedule names.
+- the path and stored label of `gov` and every node under it that has a stored
+  label, for breadcrumbs, schedule names and concept clusters.
 
 Labels are stored labels, or null: the search treats a label that only
 restates its path's last key as a placeholder, so its reader applies v1's

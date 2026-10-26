@@ -133,6 +133,11 @@ def _stored_label(label: str | None) -> str | None:
     return label if label is not None and label.strip() else None
 
 
+def _is_gov_node(name: str) -> bool:
+    """Return whether a node is ``gov`` itself or below it, as in v1's metadata."""
+    return name == REFORM_TREE_PREFIX.rstrip(".") or name.startswith(REFORM_TREE_PREFIX)
+
+
 def build_parameter_search_file(
     *,
     country_id: str,
@@ -145,8 +150,8 @@ def build_parameter_search_file(
 
     ``parameters`` lists every parameter a reform can change with its search
     fields and editability; ``other_parameters`` lists the other parameters
-    under ``gov`` with their labels; ``nodes`` lists every node under ``gov``
-    that has a stored label. A parameter without current-law values cannot be
+    under ``gov`` with their labels; ``nodes`` lists ``gov`` and every node
+    under it that has a stored label. A parameter without current-law values cannot be
     edited.
     """
     editability = _editability(draftability)
@@ -175,7 +180,7 @@ def build_parameter_search_file(
     labelled_nodes = [
         {"path": node.name, "label": node.label}
         for node in sorted(nodes, key=lambda node: node.name)
-        if node.name.startswith(REFORM_TREE_PREFIX) and _stored_label(node.label)
+        if _is_gov_node(node.name) and _stored_label(node.label)
     ]
     return {
         "format": PARAMETER_SEARCH_FILE_FORMAT,
