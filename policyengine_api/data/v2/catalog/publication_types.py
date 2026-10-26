@@ -26,6 +26,9 @@ class PublicationEvidence:
     # model, version and tree rows. Empty when none needed one: each already
     # has its tree, or was stored before catalog format 2 and gets none.
     parameter_trees_written: tuple[tuple[str, str, int], ...] = ()
+    # Published catalog versions whose parameter search file publication wrote:
+    # model, version, and the file's uncompressed and compressed sizes in bytes.
+    parameter_search_files_written: tuple[tuple[str, str, int, int], ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         """Return the evidence as the JSON object printed after a publication."""
@@ -62,6 +65,17 @@ class PublicationEvidence:
             "parameter_trees_written": [
                 {"model": model_name, "version": version, "rows": rows}
                 for model_name, version, rows in self.parameter_trees_written
+            ],
+            "parameter_search_files_written": [
+                {
+                    "model": model_name,
+                    "version": version,
+                    "uncompressed_bytes": uncompressed,
+                    "compressed_bytes": compressed,
+                }
+                for model_name, version, uncompressed, compressed in (
+                    self.parameter_search_files_written
+                )
             ],
             "elapsed_seconds": round(self.elapsed_seconds, 3),
         }

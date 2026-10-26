@@ -18,6 +18,9 @@ Whether a value can be edited depends on the date, because a bracket that
 stops applying has a null value from that date. The file states editability
 for the earliest value and the dates from which it changes, so its content
 never depends on the day it was built.
+
+Catalog publication builds the file from the installed packages' catalog
+(``country_search_file``) for the version it publishes.
 """
 
 from __future__ import annotations
@@ -35,8 +38,13 @@ from policyengine_api.data.v2.catalog.parameter_tree import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Iterator
     from datetime import date
+
+    from policyengine_api.data.v2.catalog.records import (
+        CountryCatalog,
+        ParameterRecord,
+    )
 
 PARAMETER_SEARCH_FILE_FORMAT = 1
 
@@ -44,6 +52,8 @@ PARAMETER_SEARCH_FILE_FORMAT = 1
 # carries no timestamp.
 _GZIP_MTIME = 0
 _GZIP_LEVEL = 9
+# v3's draft editor accepts these two text values as numbers.
+_INFINITE_VALUES = frozenset({"Infinity", "-Infinity"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,4 +200,58 @@ def encode_parameter_search_file(
         content_sha256=hashlib.sha256(content).hexdigest(),
         uncompressed_size=len(content),
         compressed_size=len(compressed),
+    )
+
+
+def is_draftable_value(value: object) -> bool:
+    """Return whether a draft can edit a value, as v3's draft editor decides.
+
+    A number (an infinite threshold, stored as the text "Infinity" or
+    "-Infinity", included) or a yes/no value can be edited; a list of variable
+    names, other text and a missing value cannot.
+    """
+    if isinstance(value, bool | int | float):
+        return True
+    return isinstance(value, str) and value in _INFINITE_VALUES
+
+
+def _parameter_draftability(parameter: ParameterRecord) -> Iterator[DraftabilityChange]:
+    """Yield the parameter's first value's editability and each later change."""
+    previous: bool | None = None
+    for value in sorted(parameter.values, key=lambda value: value.start_date):
+        draftable = is_draftable_value(value.value_json)
+        if draftable != previous:
+            yield DraftabilityChange(
+                parameter_name=parameter.name,
+                start_date=value.start_date.date(),
+                draftable=draftable,
+            )
+            previous = draftable
+
+
+def country_search_file(country: CountryCatalog) -> dict[str, Any]:
+    """Return the search file of a country's catalog version from its records."""
+    return build_parameter_search_file(
+        country_id=country.country_id,
+        policyengine_version=country.model_version.version,
+        parameters=(
+            SearchParameterSource(
+                name=parameter.name,
+                label=parameter.label,
+                unit=parameter.unit,
+                description=parameter.description,
+                economy=parameter.economy,
+                household=parameter.household,
+            )
+            for parameter in country.parameters
+        ),
+        nodes=(
+            SearchNodeSource(name=node.name, label=node.label)
+            for node in country.parameter_nodes
+        ),
+        draftability=(
+            change
+            for parameter in country.parameters
+            for change in _parameter_draftability(parameter)
+        ),
     )
