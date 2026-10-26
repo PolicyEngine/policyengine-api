@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections import deque
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import sessionmaker
@@ -16,10 +18,15 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.services.v2.policies.database_connectors.reads import (
+    PARAMETER_NAME_BATCH_SIZE,
+    read_parameters_by_name,
+)
 from policyengine_api.services.v2.policies.database_session import (
     PolicyDatabaseSession,
 )
 from policyengine_api.services.v2.policies.services import V2PolicyService
+from tests.fixtures.recording_session import RecordingSession
 
 RUNNING_VERSION = "5.2.0"
 EARLIER_VERSION = "5.1.0"
@@ -155,3 +162,26 @@ def test_without_a_running_catalog_nothing_is_reported(
     )
 
     assert policy.missing_parameters is None
+
+
+def test_parameter_names_are_read_in_batches_of_bounded_size() -> None:
+    # A page of policies on an earlier catalog can name tens of thousands of
+    # parameters; PostgreSQL drivers refuse more than 65,535 bound values.
+    names = {f"gov.example.parameter_{index}" for index in range(2_500)}
+    session = RecordingSession(results=deque([[], [], []]))
+
+    found = read_parameters_by_name(session, model_version_id=uuid4(), names=names)
+
+    statements = [
+        operation for operation in session.operations if operation[0] == "exec"
+    ]
+    name_batches = [
+        value
+        for _method, _sql, parameters in statements
+        for value in parameters.values()
+        if isinstance(value, list)
+    ]
+    assert found == {}
+    assert len(statements) == 3
+    assert all(len(batch) <= PARAMETER_NAME_BATCH_SIZE for batch in name_batches)
+    assert sorted(name for batch in name_batches for name in batch) == sorted(names)
