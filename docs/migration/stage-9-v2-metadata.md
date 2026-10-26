@@ -112,8 +112,8 @@ publishes entities, basic inputs and these flags:
 Bracket schedules are parameter nodes with their stored label, or none when
 the package stores none. An empty basic-input list is stored as empty.
 Extraction stops before reading any record if the installed PolicyEngine.py
-does not publish these fields, as 6.7.5 does not, and names each missing
-field. It also stops if the model has other than one person entity, names a
+does not publish these fields, as neither 6.7.5 nor the locked 6.10.0 does,
+and names each missing field. It also stops if the model has other than one person entity, names a
 basic input or a parameter path that is not published, gives enum labels that
 do not match the variable's possible values or are not JSON scalars, or gives
 a flag that is not a boolean. An opt-in test
@@ -152,7 +152,7 @@ region its dataset from the certified data release and its filter:
 | US states and congressional districts | the release's state and district dataset | `row_filter` on `state_fips` or `congressional_district_geoid` |
 | UK national | the release's default dataset (`microcosm_uk_2024_25` in 6.10.0) | none |
 | UK nations | the release's default dataset | `row_filter` on `region` |
-| UK constituencies and local authorities | the release's local-area dataset (`microcosm_uk_2024_25_dense`), which carries their codes | `row_filter` on `constituency_code_oa` or `la_code_oa`, value the ONS code |
+| UK constituencies and local authorities | the release's local-area dataset (`microcosm_uk_2024_25_dense` in 6.10.0), which carries their codes | `row_filter` on `constituency_code_oa` or `la_code_oa`, value the ONS code |
 
 If the release names no dataset for a US state or district, those regions use
 the default dataset and the command emits one summary warning with the affected

@@ -644,7 +644,8 @@ FORMAT_2_FIELDS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 def _require_format_2_fields(country_id: str, source: object) -> None:
     """Fail first, naming each field, when PolicyEngine.py does not publish them.
 
-    Older releases, such as 6.7.5, publish none of catalog format 2's fields.
+    Releases without them, such as 6.7.5 and the locked 6.10.0, publish none of
+    catalog format 2's fields.
     """
     missing: list[str] = []
     for record_name, mapping_attribute, field_names in FORMAT_2_FIELDS:

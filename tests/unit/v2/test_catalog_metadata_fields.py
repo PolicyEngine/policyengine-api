@@ -380,9 +380,9 @@ def test_inconsistent_format_2_metadata_fails_with_a_specific_message(
 
 
 def test_a_release_without_format_2_fields_fails_naming_each_missing_field() -> None:
-    """An older PolicyEngine.py fails before any record is checked, naming what lacks.
+    """A release without the fields fails before any record is checked, naming each.
 
-    PolicyEngine.py 6.7.5, for example, publishes none of these fields.
+    PolicyEngine.py 6.7.5 and the locked 6.10.0, for example, publish none of them.
     """
     models = source_models()
     model = models["us"]
