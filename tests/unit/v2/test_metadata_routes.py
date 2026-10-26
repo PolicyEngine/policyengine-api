@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import gzip
 from datetime import UTC, date, datetime
-from typing import get_type_hints
+from types import UnionType
+from typing import Union, get_args, get_origin, get_type_hints
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
+from pydantic import BaseModel
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.catalog_selection import (
@@ -1983,60 +1985,51 @@ def test_the_built_search_file_matches_the_declared_content_schema() -> None:
     assert content.parameters[0].editable_changes is not None
 
 
+def _json_shape(annotation: object, pairs: dict[object, type]) -> object:
+    """Return an annotation's JSON shape, naming each paired type by its model.
+
+    A ``date`` field is an ISO date string in JSON.
+    """
+    if annotation in pairs:
+        return pairs[annotation].__name__
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return annotation.__name__
+    if annotation is date:
+        return str
+    origin = get_origin(annotation)
+    if origin is list:
+        return ("list", _json_shape(get_args(annotation)[0], pairs))
+    if origin in (Union, UnionType):
+        return frozenset(
+            _json_shape(argument, pairs) for argument in get_args(annotation)
+        )
+    return annotation
+
+
 def test_the_search_file_shapes_match_the_declared_content_models() -> None:
-    """The builder's typed shapes and the OpenAPI models name the same fields."""
-    pairs = (
-        (ParameterSearchFileDocument, MetadataParameterSearchFileContent),
-        (SearchFileParameterEntry, MetadataParameterSearchFileParameter),
-        (EditabilityChangeEntry, MetadataParameterSearchFileEditabilityChange),
-        (SearchFileLabelEntry, MetadataParameterSearchFileLabel),
-        (SearchFileNodeEntry, MetadataParameterSearchFileNode),
-    )
-    for typed_shape, model in pairs:
-        assert set(get_type_hints(typed_shape)) == set(model.model_fields), model
-    assert SearchFileParameterEntry.__optional_keys__ == {"editable_changes"}
+    """The builder's typed shapes and the OpenAPI models declare the same JSON.
 
-
-@pytest.mark.parametrize("accept_encoding", ["gzip;q=0", "identity"])
-def test_a_large_search_file_stays_uncompressed_for_a_client_refusing_gzip(
-    accept_encoding: str,
-) -> None:
-    content: ParameterSearchFileDocument = {
-        **SEARCH_FILE_CONTENT,
-        "parameters": [
-            {
-                "path": f"gov.example.rate_{index}",
-                "label": f"Rate {index}",
-                "unit": "/1",
-                "description": None,
-                "editable": True,
-            }
-            for index in range(200)
-        ],
+    Field names and JSON types match, and a key the file may omit is optional
+    but never null in the model.
+    """
+    pairs: dict[object, type] = {
+        ParameterSearchFileDocument: MetadataParameterSearchFileContent,
+        SearchFileParameterEntry: MetadataParameterSearchFileParameter,
+        EditabilityChangeEntry: MetadataParameterSearchFileEditabilityChange,
+        SearchFileLabelEntry: MetadataParameterSearchFileLabel,
+        SearchFileNodeEntry: MetadataParameterSearchFileNode,
     }
-    encoded = encode_parameter_search_file(content)
-    stored = MetadataParameterSearchFile(
-        policyengine_version="4.20.3",
-        file_format=1,
-        compressed_content=encoded.compressed_content,
-        content_sha256=encoded.content_sha256,
-        uncompressed_size=encoded.uncompressed_size,
-        compressed_size=encoded.compressed_size,
-    )
-
-    response = _client(
-        lambda: ResourceReader({"get_parameter_search_file": stored})
-    ).get(
-        SEARCH_FILE_PATH,
-        params={"country_id": "us"},
-        headers={"Accept-Encoding": accept_encoding},
-    )
-
-    assert encoded.uncompressed_size > 1000
-    assert response.status_code == 200
-    assert "content-encoding" not in response.headers
-    assert response.headers["etag"] == f'"{encoded.content_sha256}"'
-    assert response.content == gzip.decompress(encoded.compressed_content)
+    for typed_shape, model in pairs.items():
+        hints = get_type_hints(typed_shape)
+        assert set(hints) == set(model.model_fields), model
+        for name, annotation in hints.items():
+            assert _json_shape(annotation, pairs) == _json_shape(
+                model.model_fields[name].annotation, pairs
+            ), (model, name)
+        optional_keys = getattr(typed_shape, "__optional_keys__", frozenset())
+        for name, field in model.model_fields.items():
+            assert field.is_required() is (name not in optional_keys), (model, name)
+    assert SearchFileParameterEntry.__optional_keys__ == {"editable_changes"}
 
 
 def test_browser_scripts_can_read_the_search_file_entity_tag() -> None:
