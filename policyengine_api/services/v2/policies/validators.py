@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import math
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Container, Iterable
     from uuid import UUID
 
     from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
@@ -41,8 +43,47 @@ class LegacyPolicyMappingIntegrityError(RuntimeError):
     """Raised when one immutable v1 identity maps inconsistently."""
 
 
+class LegacyPolicyTranslationReason(StrEnum):
+    """Why committed v1 content cannot be translated, as copy failure logs name it."""
+
+    MISSING_PARAMETERS = "missing_parameters"
+    INVALID_PARAMETER_VALUES = "invalid_parameter_values"
+    EMPTY_PARAMETER_VALUES = "empty_parameter_values"
+    INVALID_PERIOD = "invalid_period"
+    CONFLICTING_VALUES = "conflicting_values"
+
+
 class LegacyPolicyTranslationError(ValueError):
-    """Raised when committed v1 content cannot be interpreted exactly."""
+    """Raised when committed v1 content cannot be interpreted exactly.
+
+    ``reason`` is a fixed code that copy failure logs record; the message is
+    never logged.
+    """
+
+    def __init__(self, message: str, *, reason: LegacyPolicyTranslationReason) -> None:
+        """Keep the message for debugging and the fixed reason for logs."""
+        super().__init__(message)
+        self.reason = reason
+
+
+def parameters_missing_from_model(
+    policy_parameter_names: Iterable[str],
+    model_parameter_names: Container[str],
+) -> tuple[str, ...]:
+    """Return the parameter paths a policy sets that the model does not have.
+
+    Each absent path appears once, in sorted order; an empty tuple means every
+    path exists. The v2 copy of a v1 policy is refused when it is not empty.
+    """
+    return tuple(
+        sorted(
+            {
+                name
+                for name in policy_parameter_names
+                if name not in model_parameter_names
+            }
+        )
+    )
 
 
 def require_json_value(

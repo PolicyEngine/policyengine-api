@@ -33,6 +33,8 @@ from policyengine_api.services.v2.policies.transformations import (
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyTranslationError,
+    LegacyPolicyTranslationReason,
+    parameters_missing_from_model,
 )
 from tests.fixtures.local_v1_database import create_test_v1_schema
 
@@ -236,29 +238,78 @@ def test_new_retry_and_equivalent_label_mirror_the_same_stored_json(
 
 
 @pytest.mark.parametrize(
-    "policy_json",
+    ("policy_json", "reason"),
     [
-        {"gov.missing": {"2026": 1}},
-        {"gov.example.rate": 1},
-        {"gov.example.rate": {"not-a-period": 1}},
-        {
-            "gov.example.rate": {
-                "2026": 1,
-                "2026-01-01.2026-12-31": 2,
-            }
-        },
+        pytest.param(
+            {"gov.missing": {"2026": 1}},
+            LegacyPolicyTranslationReason.MISSING_PARAMETERS,
+            id="unknown-path",
+        ),
+        pytest.param(
+            {"gov.example.rate": {"2026": 1}, "gov.removed": {"2026": 2}},
+            LegacyPolicyTranslationReason.MISSING_PARAMETERS,
+            id="one-of-two-paths-unknown",
+        ),
+        pytest.param(
+            {"gov.example.rate": 1},
+            LegacyPolicyTranslationReason.INVALID_PARAMETER_VALUES,
+            id="value-without-period",
+        ),
+        pytest.param(
+            {"gov.example.rate": {}},
+            LegacyPolicyTranslationReason.EMPTY_PARAMETER_VALUES,
+            id="empty-period-object",
+        ),
+        pytest.param(
+            {"gov.example.rate": {"not-a-period": 1}},
+            LegacyPolicyTranslationReason.INVALID_PERIOD,
+            id="unparseable-period",
+        ),
+        pytest.param(
+            {"gov.example.rate": {".": 1}},
+            LegacyPolicyTranslationReason.INVALID_PERIOD,
+            id="dot-period",
+        ),
+        pytest.param(
+            {
+                "gov.example.rate": {
+                    "2026": 1,
+                    "2026-01-01.2026-12-31": 2,
+                }
+            },
+            LegacyPolicyTranslationReason.CONFLICTING_VALUES,
+            id="two-values-same-start",
+        ),
     ],
 )
-def test_missing_paths_malformed_periods_and_conflicts_fail(
+def test_untranslatable_policy_fails_with_a_fixed_reason(
     policy_json: dict[str, object],
+    reason: LegacyPolicyTranslationReason,
 ) -> None:
     engine, session, _model, _version, _first, _second = _session_and_catalog()
     try:
-        with pytest.raises(LegacyPolicyTranslationError):
+        with pytest.raises(LegacyPolicyTranslationError) as failure:
             _translate(session, _snapshot(policy_json=policy_json))
+        assert failure.value.reason is reason
     finally:
         session.close()
         engine.dispose()
+
+
+def test_parameters_missing_from_model_lists_each_absent_name_once_in_order() -> None:
+    model_parameter_names = {"gov.example.rate", "gov.example.amount"}
+
+    assert parameters_missing_from_model(
+        ["gov.removed.b", "gov.example.rate", "gov.removed.a", "gov.removed.b"],
+        model_parameter_names,
+    ) == ("gov.removed.a", "gov.removed.b")
+    assert parameters_missing_from_model([], model_parameter_names) == ()
+    assert (
+        parameters_missing_from_model(
+            {"gov.example.amount": {"2026": 1}}, model_parameter_names
+        )
+        == ()
+    )
 
 
 @pytest.mark.parametrize("saved_api_version", ["0.9.0", "1.633.2", "99.0.0"])
@@ -295,8 +346,9 @@ def test_snapshot_rejects_incomplete_or_non_json_committed_fields(changes) -> No
 
 
 def test_reverse_legacy_range_is_rejected() -> None:
-    with pytest.raises(LegacyPolicyTranslationError, match="ends before"):
+    with pytest.raises(LegacyPolicyTranslationError, match="ends before") as failure:
         parse_legacy_period("2026-12-31.2026-01-01")
+    assert failure.value.reason is LegacyPolicyTranslationReason.INVALID_PERIOD
 
 
 def test_unknown_policyengine_version_never_falls_back() -> None:

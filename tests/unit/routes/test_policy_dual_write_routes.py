@@ -16,6 +16,7 @@ from policyengine_api.services.policy_service import PolicySetResult
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyTranslationError,
+    LegacyPolicyTranslationReason,
 )
 
 
@@ -224,7 +225,8 @@ def test_destination_failure_returns_the_stored_policy_and_logs_an_error(
     monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
     failing_destination = MagicMock()
     failing_destination.mirror_legacy_policy.side_effect = LegacyPolicyTranslationError(
-        "private parameter value"
+        "private parameter value",
+        reason=LegacyPolicyTranslationReason.MISSING_PARAMETERS,
     )
     with (
         patch(
