@@ -323,31 +323,21 @@ def metadata_region(region: Region) -> MetadataRegion:
 def metadata_parameter_children(rows: list[Any]) -> list[MetadataParameterChild]:
     """Build parameter-tree children from read_parameter_children rows.
 
-    Parameter leaves carry the parameter's summary, and a child with no label is
-    labelled with the last segment of its path.
+    Parameter leaves carry the same summary as the parameter routes, and a child
+    with no label is labelled with the last segment of its path.
     """
-    items = []
-    for row in rows:
-        parameter = None
-        if row.type == "parameter":
-            parameter = MetadataParameterSummary(
-                id=row.parameter_id,
-                name=row.path,
-                label=row.parameter_label,
-                description=row.parameter_description,
-                data_type=row.parameter_data_type,
-                unit=row.parameter_unit,
-            )
-        items.append(
-            MetadataParameterChild(
-                path=row.path,
-                label=row.label or row.path.rsplit(".", 1)[-1],
-                type=row.type,
-                child_count=row.child_count,
-                parameter=parameter,
-            )
+    return [
+        MetadataParameterChild(
+            path=row.path,
+            label=row.label or row.path.rsplit(".", 1)[-1],
+            type=row.type,
+            child_count=row.child_count,
+            parameter=(
+                metadata_parameter(row.Parameter) if row.type == "parameter" else None
+            ),
         )
-    return items
+        for row in rows
+    ]
 
 
 def national_region(regions: list[Region], country_id: str) -> Region | None:

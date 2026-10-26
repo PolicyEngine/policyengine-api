@@ -1117,6 +1117,26 @@ def test_value_and_node_label_reads_return_typed_rows(
     assert labels == [ParameterNodeLabelRow(name="gov.example", label="Example policy")]
 
 
+def test_parameter_tree_leaves_carry_the_same_summary_as_parameter_pages(
+    catalog_session: Session,
+) -> None:
+    service = _service(catalog_session)
+
+    leaf = next(
+        child
+        for child in service.list_parameter_children(
+            "us", parent_path="gov.example"
+        ).items
+        if child.type == "parameter"
+    )
+    page_item = service.list_parameters(
+        "us", parameter_filter=ParameterFilter(names=("gov.example.rate",))
+    ).items[0]
+
+    assert leaf.parameter == page_item
+    assert (leaf.parameter.economy, leaf.parameter.household) == (True, False)
+
+
 def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
     project_package = Path(__file__).parents[3] / "policyengine_api"
     connector_directory = (
