@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import gzip
+import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +22,9 @@ from sqlmodel import Session, select
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.extraction import extract_catalog
+from policyengine_api.data.v2.catalog.parameter_search_file import (
+    country_search_file,
+)
 from policyengine_api.data.v2.catalog.publication import publish_catalog
 from policyengine_api.data.v2.models import (
     Dataset,
@@ -1049,3 +1054,69 @@ def test_postgres_a_version_stored_before_format_2_returns_the_tree_503(
         ),
     }
     assert "cache-control" not in response.headers
+
+
+def test_postgres_search_file_is_served_with_its_etag_and_revalidated(
+    published_engine: Engine,
+) -> None:
+    client = _client(published_engine)
+    expected = country_search_file(normalized_catalog().country("uk"))
+
+    response = client.get(
+        "/v2/parameters/search-file",
+        params={"country_id": "uk", "policyengine_version": POLICYENGINE_VERSION},
+        headers={"Accept-Encoding": "gzip"},
+    )
+    revalidated = client.get(
+        "/v2/parameters/search-file",
+        params={"country_id": "uk", "policyengine_version": POLICYENGINE_VERSION},
+        headers={
+            "Accept-Encoding": "gzip",
+            "If-None-Match": response.headers["etag"],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-encoding"] == "gzip"
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    assert response.json() == expected
+    assert revalidated.status_code == 304
+    assert revalidated.headers["etag"] == response.headers["etag"]
+
+
+def test_postgres_search_file_of_a_version_without_one_is_unavailable(
+    published_engine: Engine,
+) -> None:
+    with published_engine.begin() as connection:
+        connection.execute(text("DELETE FROM parameter_search_files"))
+
+    response = _client(published_engine).get(
+        "/v2/parameters/search-file", params={"country_id": "us"}
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": "V2 metadata catalog is unavailable",
+    }
+
+
+def test_postgres_search_file_reads_as_the_runtime_role(
+    published_engine: Engine,
+    managed_v2_roles,
+    v2_engine_as_role,
+) -> None:
+    """The Public API's runtime role reads the file with its declared privileges."""
+    runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
+    try:
+        with Session(runtime_engine) as session:
+            search_file = V2MetadataService(
+                MetadataDatabaseSession(session),
+                running_policyengine_version=POLICYENGINE_VERSION,
+            ).get_parameter_search_file("us")
+    finally:
+        runtime_engine.dispose()
+
+    assert json.loads(gzip.decompress(search_file.compressed_content)) == (
+        country_search_file(normalized_catalog().country("us"))
+    )

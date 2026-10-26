@@ -645,6 +645,20 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
             ),
             ContractRequest(
                 method="GET",
+                path="/v2/parameters/search-file?country_id=us",
+                expected_status=200,
+                stable_response_fields=(
+                    "format",
+                    "country_id",
+                    "policyengine_version",
+                    "parameters",
+                    "other_parameters",
+                    "nodes",
+                ),
+                route_group="metadata",
+            ),
+            ContractRequest(
+                method="GET",
                 path="/v2/tax-benefit-models/by-country/us",
                 expected_status=200,
                 stable_response_fields=(

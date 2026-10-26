@@ -1,7 +1,7 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 92,
+    "request_count": 93,
     "route_group_count": 9,
     "sim_flow_count": 3,
     "workflow_count": 16
@@ -1584,6 +1584,21 @@
             "message",
             "result.policyengine_version",
             "result.item"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/parameters/search-file?country_id=us",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "format",
+            "country_id",
+            "policyengine_version",
+            "parameters",
+            "other_parameters",
+            "nodes"
           ]
         },
         {

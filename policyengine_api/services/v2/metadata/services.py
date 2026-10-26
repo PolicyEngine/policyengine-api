@@ -8,6 +8,9 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     SelectedCatalog,
     validate_policyengine_version,
 )
+from policyengine_api.data.v2.catalog.parameter_search_file import (
+    PARAMETER_SEARCH_FILE_FORMAT,
+)
 from policyengine_api.services.v2.metadata.database_connectors.reads import (
     read_metadata_catalog,
 )
@@ -18,6 +21,9 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_datasets im
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_nodes import (  # noqa: E501  # a dotted module path cannot be wrapped
     read_parameter_node_labels,
+)
+from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_search_file import (  # noqa: E501  # a dotted module path cannot be wrapped
+    read_parameter_search_file,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_tree import (  # noqa: E501  # a dotted module path cannot be wrapped
     read_parameter_children,
@@ -54,6 +60,7 @@ from policyengine_api.services.v2.metadata.transformations import (
     metadata_model_version,
     metadata_parameter,
     metadata_parameter_children,
+    metadata_parameter_search_file,
     metadata_parameter_value,
     metadata_region,
     metadata_variable,
@@ -75,6 +82,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataModelVersionDetail,
     MetadataPageResult,
     MetadataParameterChild,
+    MetadataParameterSearchFile,
     MetadataParameterSummary,
     MetadataRegion,
     MetadataVariable,
@@ -83,6 +91,7 @@ from policyengine_api.services.v2.metadata.types import (
     ParameterValueFilter,
 )
 from policyengine_api.services.v2.metadata.validators import (
+    ParameterSearchFileUnavailableError,
     ParameterTreeUnavailableError,
     require_metadata_resource,
     validate_economy_options,
@@ -388,6 +397,34 @@ class V2MetadataService:
             offset=offset,
             limit=limit,
         )
+
+    def get_parameter_search_file(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> MetadataParameterSearchFile:
+        """Return the selected catalog version's stored parameter search file.
+
+        Raise ParameterSearchFileUnavailableError when the version has no file
+        of the current format: publication writes one only for the versions it
+        publishes.
+        """
+        selected = self._select_catalog(country_id, policyengine_version)
+        search_file = metadata_parameter_search_file(
+            selected,
+            read_parameter_search_file(
+                self._database_session.session,
+                model_version_id=selected.model_version.id,
+                file_format=PARAMETER_SEARCH_FILE_FORMAT,
+            ),
+        )
+        if search_file is None:
+            msg = (
+                f"catalog version {selected.policyengine_version} has no parameter "
+                "search file"
+            )
+            raise ParameterSearchFileUnavailableError(msg)
+        return search_file
 
     def list_parameter_values(
         self,

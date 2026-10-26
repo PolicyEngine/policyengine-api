@@ -67,6 +67,23 @@ class ParameterNodeLabelRow(NamedTuple):
 
 
 @dataclass(frozen=True)
+class MetadataParameterSearchFile:
+    """A catalog version's stored parameter search file and what identifies it.
+
+    ``compressed_content`` is gzip-compressed JSON; ``content_sha256`` is the
+    SHA-256 of the uncompressed JSON, so it names the content whichever
+    encoding a response uses.
+    """
+
+    policyengine_version: str
+    file_format: int
+    compressed_content: bytes
+    content_sha256: str
+    uncompressed_size: int
+    compressed_size: int
+
+
+@dataclass(frozen=True)
 class ParameterTreeLevel:
     """Which level of a catalog version's parameter tree a listing reads.
 

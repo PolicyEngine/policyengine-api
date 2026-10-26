@@ -6,13 +6,14 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import APIRouter, Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     METADATA_RESPONSES,
     PARAMETER_TREE_ERROR_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
+    run_metadata_read,
     take_utc_instant_for_read,
 )
 from policyengine_api.fastapi_routes.v2.metadata.query_dependencies import (
@@ -25,8 +26,13 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataParameterChildPageResponse,
     MetadataParameterDetailResponse,
     MetadataParameterPageResponse,
+    MetadataParameterSearchFileContent,
     MetadataParameterValueDetailResponse,
     MetadataParameterValuePageResponse,
+)
+from policyengine_api.fastapi_routes.v2.metadata.search_file_response import (
+    SEARCH_FILE_RESPONSE_HEADERS,
+    parameter_search_file_response,
 )
 from policyengine_api.services.v2.metadata.types import (
     ParameterFilter,
@@ -41,7 +47,7 @@ if TYPE_CHECKING:
 def build_v2_metadata_parameter_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
-    """Build the v2 parameter, parameter-tree and parameter-value routes.
+    """Build the v2 parameter, parameter-tree, search-file and parameter-value routes.
 
     Each request opens and closes its own metadata reader, so building the
     router touches no database.
@@ -108,6 +114,38 @@ def build_v2_metadata_parameter_router(
                 offset=query.offset,
                 limit=query.limit,
             ),
+        )
+
+    @router.get(
+        "/parameters/search-file",
+        response_model=None,
+        response_class=Response,
+        responses={
+            200: {
+                "model": MetadataParameterSearchFileContent,
+                "description": (
+                    "The catalog version's parameter search file, gzip-encoded "
+                    "when the request accepts gzip."
+                ),
+                "headers": SEARCH_FILE_RESPONSE_HEADERS,
+            },
+        },
+        summary="Get a catalog version's parameter search file",
+    )
+    def get_parameter_search_file(
+        request: Request,
+        query: CatalogQueryDependency,
+    ) -> Response:
+        result = run_metadata_read(
+            dependencies,
+            lambda reader: reader.get_parameter_search_file(
+                query.country_id, query.policyengine_version
+            ),
+        )
+        if isinstance(result, JSONResponse):
+            return result
+        return parameter_search_file_response(
+            result, accept_encoding=request.headers.get("accept-encoding")
         )
 
     @router.get(

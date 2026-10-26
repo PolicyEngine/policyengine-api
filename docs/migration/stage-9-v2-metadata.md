@@ -388,6 +388,17 @@ file. A later file format adds a row for the version instead of changing the
 stored one. The evidence's `parameter_search_files_written` lists each file
 written with its model, version and uncompressed and compressed sizes in bytes.
 
+`/v2/parameters/search-file` (query `country_id` and optional
+`policyengine_version`) serves the selected version's file of the current
+format. A client that accepts gzip receives the stored bytes with
+`Content-Encoding: gzip`; any other client receives the uncompressed JSON. The
+body is the file itself, not the `status`/`result` envelope. Each
+representation has its own strong `ETag`, made from the SHA-256 of the
+uncompressed JSON (`"<sha256>"`, or `"<sha256>-gzip"` for the gzip one). The
+cache lifetime, `Vary` and the 304 for a matching `If-None-Match` are those of
+every metadata route. A version without a file of the current format returns
+503.
+
 ## Validation evidence and retry
 
 Successful JSON evidence contains:

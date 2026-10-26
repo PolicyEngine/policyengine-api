@@ -25,6 +25,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataModelVersionDetail,
     MetadataPageResult,
     MetadataParameterChild,
+    MetadataParameterSearchFile,
     MetadataParameterSummary,
     MetadataRegion,
     MetadataRegionOption,
@@ -347,6 +348,26 @@ def metadata_parameter_children(rows: list[Any]) -> list[MetadataParameterChild]
 def national_region(regions: list[Region], country_id: str) -> Region | None:
     """Return the country's national region (its code is the country ID), or None."""
     return next((region for region in regions if region.code == country_id), None)
+
+
+def metadata_parameter_search_file(
+    selected: SelectedCatalog, rows: list[Any]
+) -> MetadataParameterSearchFile | None:
+    """Build the selected version's search file from read_parameter_search_file rows.
+
+    Return None when the version has no stored file of the format read.
+    """
+    if not rows:
+        return None
+    row = rows[0]
+    return MetadataParameterSearchFile(
+        policyengine_version=selected.policyengine_version,
+        file_format=row.file_format,
+        compressed_content=bytes(row.compressed_content),
+        content_sha256=row.content_sha256,
+        uncompressed_size=row.uncompressed_size,
+        compressed_size=row.compressed_size,
+    )
 
 
 def metadata_economy_options(
