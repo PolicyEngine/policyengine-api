@@ -1884,9 +1884,9 @@ def test_search_file_route_sends_the_file_when_the_etag_differs() -> None:
 
 def test_search_file_route_reports_a_missing_file_as_unavailable() -> None:
     message = (
-        "catalog version 4.20.3 has no parameter search file: a file is written "
-        "when a catalog version is published, and this version was published "
-        "before"
+        "catalog version 4.20.3 has no parameter search file: only catalog format "
+        "2 versions that catalog publication has published, or run with "
+        "installed, since search files were added have one"
     )
     reader = _search_file_reader(error=ParameterSearchFileUnavailableError(message))
 

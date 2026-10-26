@@ -1684,7 +1684,7 @@ def test_a_version_without_a_search_file_of_the_current_format_is_unavailable(
     assert str(raised_for_hash.value) == str(raised.value)
 
     assert str(raised.value) == (
-        f"catalog version {POLICYENGINE_VERSION} has no parameter search file: a "
-        "file is written when a catalog version is published, and this version "
-        "was published before"
+        f"catalog version {POLICYENGINE_VERSION} has no parameter search file: "
+        "only catalog format 2 versions that catalog publication has published, "
+        "or run with installed, since search files were added have one"
     )

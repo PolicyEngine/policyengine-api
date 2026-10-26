@@ -1099,8 +1099,9 @@ def test_postgres_search_file_of_a_version_without_one_is_unavailable(
         "status": "error",
         "message": (
             f"catalog version {POLICYENGINE_VERSION} has no parameter search "
-            "file: a file is written when a catalog version is published, and "
-            "this version was published before"
+            "file: only catalog format 2 versions that catalog publication has "
+            "published, or run with installed, since search files were added have "
+            "one"
         ),
     }
 
