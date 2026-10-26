@@ -26,6 +26,10 @@ from policyengine_api.data.v2.catalog.parameter_search_file import (
     country_search_file,
     encode_parameter_search_file,
 )
+from policyengine_api.data.v2.catalog.publication_reconciliation import (
+    StoredVersion,
+    stored_version,
+)
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
 )
@@ -39,28 +43,20 @@ if TYPE_CHECKING:
 
     from policyengine_api.data.v2.catalog.records import CountryCatalog
 
-MODELS = V2_METADATA.tables["tax_benefit_models"]
-MODEL_VERSIONS = V2_METADATA.tables["tax_benefit_model_versions"]
 PARAMETER_SEARCH_FILES = V2_METADATA.tables["parameter_search_files"]
 
 
-def _stored_version(
+def _version_for_search_file(
     connection: Connection, country: CountryCatalog
-) -> tuple[UUID, int | None]:
-    """Return the stored version's ID and catalog format (None before format 2)."""
-    row = connection.execute(
-        sa.select(MODEL_VERSIONS.c.id, MODEL_VERSIONS.c.catalog_format)
-        .select_from(
-            MODEL_VERSIONS.join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
+) -> StoredVersion:
+    stored = stored_version(connection, country)
+    if stored is None:
+        msg = (
+            f"the {country.country_id} catalog version "
+            f"{country.model_version.version} is not stored"
         )
-        .where(
-            MODELS.c.name == country.model.name,
-            MODEL_VERSIONS.c.version == country.model_version.version,
-        )
-    ).one()
-    version_id: UUID = row.id
-    catalog_format: int | None = row.catalog_format
-    return version_id, catalog_format
+        raise CatalogPublicationError(msg)
+    return stored
 
 
 def _stored_content_sha256(connection: Connection, version_id: UUID) -> str | None:
@@ -85,16 +81,16 @@ def write_parameter_search_files(
     """
     written = []
     for country in sorted(countries, key=lambda item: item.model.name):
-        version_id, catalog_format = _stored_version(connection, country)
-        if catalog_format is None:
+        stored = _version_for_search_file(connection, country)
+        if stored.catalog_format is None:
             continue
         encoded = encode_parameter_search_file(country_search_file(country))
-        stored_sha256 = _stored_content_sha256(connection, version_id)
+        stored_sha256 = _stored_content_sha256(connection, stored.id)
         if stored_sha256 is None:
             connection.execute(
                 sa.insert(PARAMETER_SEARCH_FILES).values(
                     id=uuid4(),
-                    tax_benefit_model_version_id=version_id,
+                    tax_benefit_model_version_id=stored.id,
                     file_format=PARAMETER_SEARCH_FILE_FORMAT,
                     compressed_content=encoded.compressed_content,
                     content_sha256=encoded.content_sha256,
@@ -129,10 +125,10 @@ def assert_parameter_search_files_written(
     A version stored before catalog format 2 is exempt: it gets no file.
     """
     for country in countries:
-        version_id, catalog_format = _stored_version(connection, country)
-        if catalog_format is None:
+        stored = _version_for_search_file(connection, country)
+        if stored.catalog_format is None:
             continue
-        if _stored_content_sha256(connection, version_id) is None:
+        if _stored_content_sha256(connection, stored.id) is None:
             msg = (
                 f"the {country.country_id} catalog version "
                 f"{country.model_version.version} has no parameter search file"
