@@ -93,8 +93,11 @@ later requests for the same country and version skip the selection query;
 failed selections are not kept. Measured with statement logging in a local
 database, a page of 500 parameters or one parameter's values took five
 statements per request before (the pool's liveness check, `BEGIN`, the catalog
-selection, the read and `ROLLBACK`) and two after (the liveness check and the
-read). The pool's liveness check (`pool_pre_ping`) is unchanged.
+selection, the read and `ROLLBACK`) and two after, once the process has
+selected that version (the liveness check and the read). A route that makes
+several reads, such as `/v2/model-catalog` (regions and datasets), sends one
+statement per read after the liveness check. The pool's liveness check
+(`pool_pre_ping`) is unchanged.
 
 ## Response caching
 

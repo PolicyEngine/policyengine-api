@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request
 from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
-    ERROR_RESPONSES,
+    METADATA_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
     take_utc_instant_for_read,
@@ -46,7 +46,7 @@ def build_v2_metadata_parameter_router(
     """
     router = APIRouter(
         prefix="/v2",
-        responses=ERROR_RESPONSES,
+        responses=METADATA_RESPONSES,
         route_class=CacheableMetadataRoute,
     )
 
