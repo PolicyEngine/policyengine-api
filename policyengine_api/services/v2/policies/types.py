@@ -175,6 +175,9 @@ class PolicyRead:
     created_at: datetime
     updated_at: datetime
     parameter_values: tuple[PolicyParameterValueRead, ...]
+    # The parameters the policy sets that the running catalog lacks; None
+    # when there is no catalog for the running PolicyEngine.py version.
+    missing_parameters: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)

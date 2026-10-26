@@ -63,7 +63,8 @@ def parameters_missing_from_model(
     """Return the parameter paths a policy sets that the model does not have.
 
     Each absent path appears once, in sorted order; an empty tuple means every
-    path exists. The v2 copy of a v1 policy is refused when it is not empty.
+    path exists. The v2 copy of a v1 policy is refused when it is not empty, and
+    the policy routes report it as a policy's ``missing_parameters``.
     """
     return tuple(
         sorted(

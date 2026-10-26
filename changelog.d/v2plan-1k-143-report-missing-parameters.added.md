@@ -1,0 +1,1 @@
+The v2 policy routes (`GET /v2/policies/{policy_id}`, `GET /v2/policies` and `POST /v2/policies`) now return `missing_parameters` with each policy: the parameter paths it sets that the catalog of the running PolicyEngine.py version no longer has, or null when that catalog is not published.
