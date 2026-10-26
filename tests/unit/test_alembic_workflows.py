@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -255,6 +256,41 @@ def test_v2_integration_check_grants_and_verifies_privileges_before_tests():
 
     assert "      DEPLOYMENT_ENVIRONMENT: test\n" in workflow
     assert schema_upgrade < grant < verify < first_test
+
+
+def _integration_modules_using(pattern: str) -> list[str]:
+    return sorted(
+        path.relative_to(REPO).as_posix()
+        for path in (REPO / "tests" / "integration").glob("test_*.py")
+        if re.search(pattern, path.read_text(encoding="utf-8"))
+    )
+
+
+def test_every_managed_role_integration_module_runs_in_ci_and_is_in_its_rule():
+    """Integration modules that use the managed v2 roles run in the workflow.
+
+    Those that run services as a managed role (``v2_engine_as_role``) are also
+    in the scope of rule ``api.v2.runtime-privileges-tested-as-runtime-role``.
+    """
+    workflow = _workflow("v2-integration-check.yml")
+    rules = tomllib.loads((REPO / "rules" / "registry.toml").read_text())
+    (runtime_role_rule,) = (
+        rule
+        for rule in rules["rule"]
+        if rule["id"] == "api.v2.runtime-privileges-tested-as-runtime-role"
+    )
+    managed_role_modules = _integration_modules_using(
+        r"\b(managed_v2_roles|v2_engine_as_role)\b"
+    )
+    role_session_modules = _integration_modules_using(r"\bv2_engine_as_role\b")
+
+    assert "tests/integration/test_v2_saved_policy_view.py" in role_session_modules
+    assert [module for module in managed_role_modules if module not in workflow] == []
+    assert [
+        module
+        for module in role_session_modules
+        if module not in runtime_role_rule["scope"]
+    ] == []
 
 
 def test_release_migration_fails_closed_before_tests_and_cloud_run_deploy():

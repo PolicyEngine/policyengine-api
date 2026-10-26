@@ -179,6 +179,7 @@ When a pull request adds or changes a v2 table, or a connector's use of one:
    uv run python scripts/reconcile_v2_privileges.py apply --create-missing-roles
    uv run python scripts/reconcile_v2_privileges.py verify
    uv run pytest -q tests/integration/test_v2_user_identity_persistence.py \
+     tests/integration/test_v2_saved_policy_view.py \
      tests/integration/test_v2_stage12_comparison_persistence.py \
      tests/integration/test_v2_privilege_reconciliation.py
    ```
