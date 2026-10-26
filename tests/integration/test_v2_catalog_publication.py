@@ -36,7 +36,7 @@ from policyengine_api.data.v2.models import (
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from tests.fixtures.v2_catalog import (
     POLICYENGINE_VERSION,
-    add_enum_and_parameter_part_records,
+    add_format_2_variable_records,
     bundle,
     installed_version,
     normalized_catalog,
@@ -694,9 +694,9 @@ def test_version_stored_with_format_2_fails_when_a_format_2_field_changes(
     assert _format_2_values(publication_engine)["parameter"] == (True, False)
 
 
-def _catalog_with_enum_and_parameter_parts():
+def _catalog_with_format_2_variable_records():
     models = source_models()
-    add_enum_and_parameter_part_records(models["us"])
+    add_format_2_variable_records(models["us"])
     return extract_catalog(
         bundle=bundle(),
         policyengine_version=POLICYENGINE_VERSION,
@@ -735,10 +735,10 @@ def _with_changed_us_variable(catalog, name: str, **changes: object):
     )
 
 
-def test_enum_labels_and_parameter_paths_round_trip_exactly(
+def test_enum_labels_parameter_paths_units_and_periods_round_trip_exactly(
     publication_engine: Engine,
 ) -> None:
-    catalog = _catalog_with_enum_and_parameter_parts()
+    catalog = _catalog_with_format_2_variable_records()
 
     publish_catalog(publication_engine, catalog)
     before_ids = _identifiers(publication_engine)
@@ -782,12 +782,12 @@ def test_enum_labels_and_parameter_paths_round_trip_exactly(
         ("countable_income", {"definition_period": "year"}),
     ],
 )
-def test_republication_detects_a_changed_enum_label_or_parameter_path(
+def test_republication_detects_a_changed_enum_label_parameter_path_unit_or_period(
     publication_engine: Engine,
     variable_name: str,
     changes: dict[str, object],
 ) -> None:
-    catalog = _catalog_with_enum_and_parameter_parts()
+    catalog = _catalog_with_format_2_variable_records()
     publish_catalog(publication_engine, catalog)
     stored = _stored_us_variables(publication_engine)
 

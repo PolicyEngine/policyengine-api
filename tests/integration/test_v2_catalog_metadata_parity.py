@@ -80,7 +80,7 @@ def test_entities_and_basic_inputs_match_v1(
     assert list(metadata.basic_inputs) == (v1_country.metadata["basicInputs"])
 
 
-def test_variable_flags_modules_enum_labels_and_parts_match_v1(
+def test_variable_flags_modules_enums_parts_units_and_periods_match_v1(
     country_pair: tuple[ModelMetadata, Any],
 ) -> None:
     metadata, v1_country = country_pair

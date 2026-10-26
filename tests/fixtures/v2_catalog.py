@@ -323,11 +323,13 @@ def normalized_catalog(
     )
 
 
-def add_enum_and_parameter_part_records(model: SimpleNamespace) -> None:
-    """Add an enum variable and a variable whose parts are named by parameters.
+def add_format_2_variable_records(model: SimpleNamespace) -> None:
+    """Add two variables that between them fill every format 2 variable field.
 
-    The enum's labels are a string and an integer. The two parameters hold the
-    lists ``countable_income`` adds and subtracts.
+    ``filing_status`` is an enum whose labels are a string and an integer, with
+    no unit and a yearly period. ``countable_income`` names the parameters that
+    hold the lists it adds and subtracts, with a currency unit and a monthly
+    period.
     """
     for name in ("gov.example.countable_income", "gov.example.deductions"):
         parameter = SimpleNamespace(

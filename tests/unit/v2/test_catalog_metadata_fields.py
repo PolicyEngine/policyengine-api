@@ -106,7 +106,7 @@ def test_catalog_format_2_publishes_entities_and_basic_inputs() -> None:
         assert model_version.basic_inputs == ("employment_income",)
 
 
-def test_variables_carry_input_flags_module_and_unset_parts() -> None:
+def test_variables_carry_flags_module_unit_period_and_unset_parts() -> None:
     variable = normalized_catalog().country("us").variables[0]
 
     assert variable.name == "employment_income"

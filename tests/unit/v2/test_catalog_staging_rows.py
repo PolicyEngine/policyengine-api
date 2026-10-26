@@ -159,8 +159,8 @@ def test_enum_values_are_staged_as_value_and_label_objects_in_order() -> None:
 
     (row,) = (_plain(row) for row in _catalog_rows(country)[STAGE_CATALOG_VARIABLES])
 
-    enum_values_column = [column.name for column in STAGE_CATALOG_VARIABLES.columns]
-    assert row[enum_values_column.index("enum_values")] == (
+    staged_column_names = [column.name for column in STAGE_CATALOG_VARIABLES.columns]
+    assert row[staged_column_names.index("enum_values")] == (
         "jsonb",
         [{"value": "SINGLE", "label": "Single"}, {"value": "JOINT", "label": 2}],
     )
