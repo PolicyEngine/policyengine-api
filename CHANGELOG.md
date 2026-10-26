@@ -1,3 +1,10 @@
+## [5.10.0] - 2026-10-26
+
+### Added
+
+- Added an enforced rule (api.data.sqlalchemy-and-alembic-only): code connects to relational databases only through SQLAlchemy engines, connections and sessions, and changes persistent schema only through Alembic revisions. A unit test parses non-test code and fails on direct database-driver imports, driver-connection access, create_all, drop_all, table create or drop calls, Alembic operations outside migrations/, and schema-changing SQL text, allowing only the COPY step and the temporary staging tables in catalog publication staging. Application behaviour is unchanged.
+
+
 ## [5.9.0] - 2026-10-26
 
 ### Added
