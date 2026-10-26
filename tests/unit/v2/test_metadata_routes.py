@@ -1316,3 +1316,43 @@ def test_current_values_read_just_before_midnight_expire_at_that_midnight(
     assert response.headers["cache-control"] == "public, max-age=0"
     _name, _args, kwargs = reader.calls[0]
     assert kwargs["value_filter"].now == read_instant
+
+
+def _vary_values(response) -> set[str]:
+    return {
+        value.strip().lower()
+        for value in response.headers.get("vary", "").split(",")
+        if value.strip()
+    }
+
+
+@pytest.mark.parametrize("origin", [None, "https://app.policyengine.org"])
+def test_cacheable_metadata_responses_vary_by_origin(origin: str | None) -> None:
+    # The API reflects any origin, so a shared cache must not reuse a response
+    # stored for a request without Origin (no Access-Control-Allow-Origin) for
+    # a cross-origin one, or the reverse.
+    results, _ids = _resource_results()
+    client = _client(lambda: ResourceReader(results))
+    headers = {} if origin is None else {"Origin": origin}
+
+    small = client.get("/v2/tax-benefit-models?country_id=us", headers=headers)
+    large = client.get("/v2/model-catalog?country_id=us", headers=headers)
+    revalidated = client.get(
+        "/v2/model-catalog?country_id=us",
+        headers={**headers, "If-None-Match": large.headers["etag"]},
+    )
+
+    assert revalidated.status_code == 304
+    for response in (small, large, revalidated):
+        assert "origin" in _vary_values(response)
+    assert "accept-encoding" in _vary_values(large)
+
+
+def test_failed_metadata_reads_do_not_add_vary_by_origin() -> None:
+    results, _ids = _resource_results()
+    reader = ResourceReader(results, error=MetadataResourceNotFoundError("missing"))
+
+    response = _client(lambda: reader).get("/v2/variables?country_id=us")
+
+    assert response.status_code == 404
+    assert "origin" not in _vary_values(response)

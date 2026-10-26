@@ -112,7 +112,12 @@ response may be reused only until the UTC midnight after that instant,
 whichever lifetime would otherwise apply (`max-age=0` if its headers are
 written after that midnight). A request whose `If-None-Match` names the current `ETag` (strong or
 weak form, alone or in a list) gets HTTP 304 with no body. Error responses
-carry neither header. `ETag` is listed in `Access-Control-Expose-Headers`, so
+carry neither header. Every cacheable response, and every 304, carries
+`Vary: Origin` (added to any other `Vary` value, such as compression's
+`Accept-Encoding`): the API reflects every origin in
+`Access-Control-Allow-Origin` and a request without `Origin` gets no such
+header, so a shared cache must keep responses apart by `Origin`. `ETag` is
+listed in `Access-Control-Expose-Headers`, so
 browser scripts on other origins can read it (`Cache-Control` is readable
 without that).
 
