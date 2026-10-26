@@ -357,8 +357,9 @@ class V2MetadataService:
         The level's parent path "" lists the top-level children. A bracket
         schedule is one node whose children are its brackets. With the level's
         ``reform_changeable``, only the children a reform can change are listed,
-        sorted by label. Raise ParameterTreeUnavailableError when the version's
-        tree has not been written.
+        sorted by label. Raise ParameterTreeUnavailableError when the version has
+        no tree, which is the case for versions published before the tree
+        existed.
         """
         selected_level = level if level is not None else ParameterTreeLevel()
         selected = self._select_paginated_catalog(
@@ -376,8 +377,9 @@ class V2MetadataService:
             session, model_version_id=selected.model_version.id
         ):
             msg = (
-                f"the parameter tree of catalog version "
-                f"{selected.policyengine_version} has not been written"
+                f"catalog version {selected.policyengine_version} has no parameter "
+                "tree: a tree is written when a catalog version is published, and "
+                "this version was published before"
             )
             raise ParameterTreeUnavailableError(msg)
         return page_result(

@@ -25,10 +25,11 @@ class InvalidMetadataPageError(ValueError):
 
 
 class ParameterTreeUnavailableError(MetadataCatalogUnavailableError):
-    """Raised when a selected catalog version's parameter tree is not written.
+    """Raised when a selected catalog version has no parameter tree.
 
-    Catalog publication writes every stored version's tree, so this means the
-    publication step has not run since the version was stored.
+    Catalog publication writes a version's tree when it publishes the version,
+    so versions published before the tree existed have none. The message names
+    the version and is safe to return to the caller.
     """
 
 

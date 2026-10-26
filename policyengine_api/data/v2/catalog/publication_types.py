@@ -18,8 +18,8 @@ class PublicationEvidence:
     entity_counts: dict[str, int]
     fallback_summaries: tuple[tuple[str, str, int], ...]
     elapsed_seconds: float
-    # Stored catalog versions whose parameter tree publication wrote: model,
-    # version and rows written. Empty once every stored version has its tree.
+    # Catalog versions published now, with their parameter tree: model,
+    # version and tree rows written. Empty when no version is published.
     parameter_trees_written: tuple[tuple[str, str, int], ...] = ()
 
     def as_dict(self) -> dict[str, object]:

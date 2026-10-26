@@ -672,7 +672,13 @@ def test_an_unwritten_parameter_tree_is_reported_as_unavailable(
 ) -> None:
     service = _service(catalog_session)
 
-    with pytest.raises(ParameterTreeUnavailableError, match="has not been written"):
+    with pytest.raises(
+        ParameterTreeUnavailableError,
+        match=(
+            f"catalog version {POLICYENGINE_VERSION} has no parameter tree: "
+            "a tree is written when a catalog version is published"
+        ),
+    ):
         service.list_parameter_children("us")
 
 
