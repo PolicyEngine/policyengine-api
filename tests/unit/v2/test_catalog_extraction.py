@@ -367,9 +367,65 @@ def test_rejects_incomplete_public_model_catalogs() -> None:
             installed_version=installed_version,
         )
 
+
+def _use_another_certified_default(model: SimpleNamespace, dataset_name: str) -> None:
+    """Make the release default to another dataset it certifies, for every region."""
+    manifest = model.release_manifest
+    manifest.default_dataset = dataset_name
+    manifest.datasets[dataset_name] = SimpleNamespace(
+        path=f"{dataset_name}.h5",
+        revision="fixture",
+        sha256="0" * 64,
+        repo_id=None,
+        repo_type=None,
+    )
+    for template in manifest.region_datasets.values():
+        template.path_template = f"{dataset_name}.h5"
+
+
+def test_each_country_uses_the_default_dataset_its_release_names() -> None:
+    """The release's own default is used; the Public API fixes none of its own."""
     models = source_models()
-    models["us"].release_manifest.default_dataset = "unreviewed_us_2025"
-    with pytest.raises(CatalogExtractionError, match="reviewed selection"):
+    _use_another_certified_default(models["us"], "populace_us_2025")
+    _use_another_certified_default(models["uk"], "microcosm_uk_2025_26")
+
+    catalog = extract_catalog(
+        region_references=region_references(),
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    )
+
+    for country_id, default_dataset in (
+        ("us", "populace_us_2025"),
+        ("uk", "microcosm_uk_2025_26"),
+    ):
+        country = catalog.country(country_id)
+        dataset_names = {dataset.id: dataset.name for dataset in country.datasets}
+        national = next(
+            region for region in country.regions if region.region_type == "national"
+        )
+        assert dataset_names[national.default_dataset_id] == default_dataset
+        assert set(dataset_names.values()) == {default_dataset}
+
+
+@pytest.mark.parametrize(
+    ("default_dataset", "message"),
+    [
+        (None, "^us release manifest names no default dataset$"),
+        ("", "^us release manifest names no default dataset$"),
+        ("populace_us_2025", "^us release does not certify populace_us_2025$"),
+    ],
+)
+def test_a_missing_or_uncertified_release_default_fails(
+    default_dataset: str | None,
+    message: str,
+) -> None:
+    models = source_models()
+    models["us"].release_manifest.default_dataset = default_dataset
+
+    with pytest.raises(CatalogExtractionError, match=message):
         extract_catalog(
             region_references=region_references(),
             bundle=bundle(),

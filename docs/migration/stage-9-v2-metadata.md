@@ -139,15 +139,19 @@ Regions come from the Public API's checked-in reference files, one per country
 (`policyengine_api/data/v2/catalog/region_reference_files/`), not from
 PolicyEngine.py's region registry. Each row lists a region's code, label, type,
 parent, US state, the value that selects its households, and the v1 identifier
-it replaces. A scoping rule per country and region type gives each region its
-dataset from the certified data release and its filter:
+it replaces. Each country's default dataset is the one the installed
+PolicyEngine.py release names in its manifest (`default_dataset`); the Public
+API sets none of its own. Publication stops if the manifest names no default,
+if the release does not certify it, or if the release routes national regions
+to another dataset. A scoping rule per country and region type gives each
+region its dataset from the certified data release and its filter:
 
 | Regions | Dataset | Filter |
 | --- | --- | --- |
-| US national | the release's national dataset (`populace_us_2024`) | none |
+| US national | the release's default dataset (`populace_us_2024` in 6.10.0) | none |
 | US states and congressional districts | the release's state and district dataset | `row_filter` on `state_fips` or `congressional_district_geoid` |
-| UK national | the release's national dataset (`microcosm_uk_2024_25`) | none |
-| UK nations | the release's national dataset | `row_filter` on `region` |
+| UK national | the release's default dataset (`microcosm_uk_2024_25` in 6.10.0) | none |
+| UK nations | the release's default dataset | `row_filter` on `region` |
 | UK constituencies and local authorities | the release's local-area dataset (`microcosm_uk_2024_25_dense`), which carries their codes | `row_filter` on `constituency_code_oa` or `la_code_oa`, value the ONS code |
 
 If the release names no dataset for a US state or district, those regions use
@@ -165,8 +169,8 @@ household columns. It does not check that a column holds rows for every
 region's value.
 
 Review the fallback and omitted-region summaries on every new PolicyEngine.py
-release. A changed count may identify an upstream catalog change that needs a
-reviewed dataset selection even when publication otherwise succeeds.
+release. A changed count may identify an upstream change to the certified data
+release even when publication otherwise succeeds.
 
 A catalog version is identified by its country and PolicyEngine.py version and
 never changes once published. When the command republishes a stored version

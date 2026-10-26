@@ -49,10 +49,6 @@ REQUIRED_DEPENDENCIES = (
     "policyengine-us",
     "policyengine-uk",
 )
-REVIEWED_DEFAULT_DATASETS = {
-    "us": "populace_us_2024",
-    "uk": "microcosm_uk_2024_25",
-}
 CURRENT_LAW_IDS = {"us": 2, "uk": 1}
 METADATA_TIME_PERIODS = {
     "us": tuple(range(2035, 2021, -1)),
@@ -813,14 +809,17 @@ def normalize_model_metadata(
     )
 
 
-def _verified_default_dataset(country_id: str, release_manifest: object) -> str:
-    """Return the reviewed default dataset once the manifest names it as its default."""
-    reviewed_default = REVIEWED_DEFAULT_DATASETS[country_id]
-    manifest_default = getattr(release_manifest, "default_dataset", None)
-    if manifest_default != reviewed_default:
-        msg = f"{country_id} default dataset does not match the reviewed selection"
+def _release_default_dataset(country_id: str, release_manifest: object) -> str:
+    """Return the default dataset the installed PolicyEngine.py release names.
+
+    The Public API sets no default of its own; region scoping then requires the
+    release to certify it.
+    """
+    default_dataset = getattr(release_manifest, "default_dataset", None)
+    if not isinstance(default_dataset, str) or not default_dataset:
+        msg = f"{country_id} release manifest names no default dataset"
         raise CatalogExtractionError(msg)
-    return reviewed_default
+    return default_dataset
 
 
 def _normalize_region(
@@ -872,12 +871,11 @@ def _normalize_country(
         country_id, source, model_version_id=model_version_id
     )
 
-    reviewed_default = _verified_default_dataset(country_id, release_manifest)
     scoping = scope_regions(
         country_id,
         region_references,
         release_manifest,
-        reviewed_default=reviewed_default,
+        default_dataset=_release_default_dataset(country_id, release_manifest),
     )
 
     datasets = tuple(

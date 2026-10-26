@@ -160,7 +160,7 @@ def _remove_the_dataset_map(
     models["us"].release_manifest.datasets = None
 
 
-def _remove_the_reviewed_default_dataset(
+def _remove_the_release_default_dataset(
     models: dict[str, SimpleNamespace], _references: References
 ) -> None:
     del models["us"].release_manifest.datasets["populace_us_2024"]
@@ -214,7 +214,7 @@ def _remove_every_artifact_repository(
             "^us release manifest lacks datasets, region_datasets or data_package$",
         ),
         (
-            _remove_the_reviewed_default_dataset,
+            _remove_the_release_default_dataset,
             "^us release does not certify populace_us_2024$",
         ),
         (
@@ -241,7 +241,8 @@ def _remove_every_artifact_repository(
         ),
         (
             _point_national_region_at_another_dataset,
-            "^uk national region does not use the reviewed dataset$",
+            "^uk release routes national regions to frs_2024_25, not to its default "
+            "dataset microcosm_uk_2024_25$",
         ),
         (
             _name_an_uncertified_region_dataset,

@@ -237,13 +237,14 @@ def scope_regions(
     references: tuple[RegionReference, ...],
     release_manifest: object,
     *,
-    reviewed_default: str,
+    default_dataset: str,
 ) -> RegionScoping:
     """Give every runnable reference region its certified dataset and filter.
 
-    The national region must use the reviewed default dataset. A region whose
-    type has no scoping rule is left out, and a runnable region may not sit
-    under a region that is left out.
+    ``default_dataset`` is the release's own default. The release must certify
+    it, and the national region must use it. A region whose type has no
+    scoping rule is left out, and a runnable region may not sit under a region
+    that is left out.
     """
     if not isinstance(release_manifest, ReleaseManifest):
         msg = (
@@ -252,12 +253,16 @@ def scope_regions(
         )
         raise CatalogExtractionError(msg)
     artifacts = certified_artifacts(country_id, release_manifest)
-    if reviewed_default not in artifacts:
-        msg = f"{country_id} release does not certify {reviewed_default}"
+    if default_dataset not in artifacts:
+        msg = f"{country_id} release does not certify {default_dataset}"
         raise CatalogExtractionError(msg)
     role_datasets = _role_datasets(country_id, release_manifest, artifacts)
-    if role_datasets.get(NATIONAL_DATASET_ROLE, reviewed_default) != reviewed_default:
-        msg = f"{country_id} national region does not use the reviewed dataset"
+    national_dataset = role_datasets.get(NATIONAL_DATASET_ROLE, default_dataset)
+    if national_dataset != default_dataset:
+        msg = (
+            f"{country_id} release routes national regions to {national_dataset}, "
+            f"not to its default dataset {default_dataset}"
+        )
         raise CatalogExtractionError(msg)
 
     omitted = {
@@ -287,7 +292,7 @@ def scope_regions(
                     "cannot select its households"
                 )
                 raise CatalogExtractionError(msg)
-            dataset_name = reviewed_default
+            dataset_name = default_dataset
             if rule.dataset_role != NATIONAL_DATASET_ROLE:
                 fallback_counts[reference.region_type] += 1
         regions.append(
@@ -301,7 +306,7 @@ def scope_regions(
     return RegionScoping(
         regions=tuple(regions),
         dataset_names=frozenset(
-            {reviewed_default, *(region.dataset_name for region in regions)}
+            {default_dataset, *(region.dataset_name for region in regions)}
         ),
         certified_artifacts=artifacts,
         fallback_counts=dict(sorted(fallback_counts.items())),
