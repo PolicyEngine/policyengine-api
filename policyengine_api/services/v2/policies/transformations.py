@@ -23,6 +23,7 @@ from policyengine_api.services.v2.policies.types import (
     ResolvedPolicyCreationInput,
 )
 from policyengine_api.services.v2.policies.validators import (
+    MAXIMUM_POLICY_PARAMETER_VALUES,
     LegacyPolicyTranslationError,
     LegacyPolicyTranslationReason,
     parameters_missing_from_model,
@@ -316,6 +317,11 @@ def translate_legacy_policy(
                     end_date=end_date,
                 )
             )
+    if len(parameter_values) > MAXIMUM_POLICY_PARAMETER_VALUES:
+        msg = "legacy policy has more values than a v2 policy may hold"
+        raise LegacyPolicyTranslationError(
+            msg, reason=LegacyPolicyTranslationReason.TOO_MANY_VALUES
+        )
     try:
         policy_input = PolicyCreationInput(
             country_id=snapshot.country_id,
@@ -323,6 +329,8 @@ def translate_legacy_policy(
             parameter_values=parameter_values,
         )
     except ValueError as error:
+        # The count is checked above, so what remains is two values for one
+        # parameter with the same start date.
         msg = "legacy parameter periods or values conflict"
         raise LegacyPolicyTranslationError(
             msg, reason=LegacyPolicyTranslationReason.CONFLICTING_VALUES

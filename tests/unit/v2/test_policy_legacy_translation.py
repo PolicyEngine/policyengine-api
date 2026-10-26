@@ -32,6 +32,7 @@ from policyengine_api.services.v2.policies.transformations import (
 )
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.policies.validators import (
+    MAXIMUM_POLICY_PARAMETER_VALUES,
     LegacyPolicyTranslationError,
     LegacyPolicyTranslationReason,
     parameters_missing_from_model,
@@ -291,6 +292,25 @@ def test_untranslatable_policy_fails_with_a_fixed_reason(
         with pytest.raises(LegacyPolicyTranslationError) as failure:
             _translate(session, _snapshot(policy_json=policy_json))
         assert failure.value.reason is reason
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_policy_with_more_values_than_v2_accepts_fails_as_too_many_values() -> None:
+    engine, session, _model, _version, _first, _second = _session_and_catalog()
+    # One more dated value than a v2 policy may hold, with no repeated dates.
+    too_many_periods = {
+        f"{2026 + offset}-01-01.{2026 + offset}-12-31": offset
+        for offset in range(MAXIMUM_POLICY_PARAMETER_VALUES + 1)
+    }
+    try:
+        with pytest.raises(LegacyPolicyTranslationError) as failure:
+            _translate(
+                session,
+                _snapshot(policy_json={"gov.example.rate": too_many_periods}),
+            )
+        assert failure.value.reason is LegacyPolicyTranslationReason.TOO_MANY_VALUES
     finally:
         session.close()
         engine.dispose()

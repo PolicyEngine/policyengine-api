@@ -51,6 +51,7 @@ class LegacyPolicyTranslationReason(StrEnum):
     EMPTY_PARAMETER_VALUES = "empty_parameter_values"
     INVALID_PERIOD = "invalid_period"
     CONFLICTING_VALUES = "conflicting_values"
+    TOO_MANY_VALUES = "too_many_values"
 
 
 class LegacyPolicyTranslationError(ValueError):
