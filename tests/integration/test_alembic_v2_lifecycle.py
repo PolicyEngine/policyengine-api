@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-import psycopg
 import pytest
 import sqlalchemy as sa
 from alembic import command
@@ -22,6 +21,7 @@ from policyengine_api.data.v2.migration_target import (
     V2_ALEMBIC_HEAD_REVISION,
     V2MigrationTargetError,
     load_v2_alembic_settings,
+    validate_v2_head_schema,
 )
 from policyengine_api.data.v2.models import V2_METADATA
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
@@ -410,11 +410,6 @@ USER_ASSOCIATION_TABLES = (
     "user_simulation_associations",
     "user_report_associations",
 )
-# Tables head renamed, keyed by their name at the parent revision. The
-# previous release's statements name the old table, which head does not have
-# until a view under that name exists (test_previous_release_still_finds_
-# user_policies), so its column usage runs against the renamed table here.
-RENAMED_AT_HEAD = {"user_policies": "user_policy_associations"}
 COUNTRY_COLUMN_NAMES = frozenset({"country", "country_id", "primary_country"})
 # Nullable references that a parent-revision check constraint requires.
 REFERENCES_REQUIRED_BY_CHECKS = frozenset({("simulations", "household_id")})
@@ -594,7 +589,7 @@ def _assert_user_deletion_cascades(
 
     assert result.rowcount == 1
     for table_name in (*USER_ASSOCIATION_TABLES, "user_identities"):
-        table = head.tables[RENAMED_AT_HEAD.get(table_name, table_name)]
+        table = head.tables[table_name]
         remaining = connection.execute(
             sa.select(sa.func.count())
             .select_from(table)
@@ -611,8 +606,9 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
     requires), read the row back with every mapped column, rewrite those
     columns, delete it, and delete a user who owns Stage 12A rows so the
     cascades run. Head may not give any table the parent revision writes a
-    new required column without a server default. A table head renamed is
-    used under its new name (``RENAMED_AT_HEAD``).
+    new required column without a server default. Since the saved-policy
+    rename, the parent's ``user_policies`` is head's temporary view of that
+    name, so the parent's statements on it run through the view.
     """
     database_url = _disposable_url()
     config = _config()
@@ -622,11 +618,9 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
         command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
         parent = sa.MetaData()
         parent.reflect(engine)
-        for parent_name, head_name in RENAMED_AT_HEAD.items():
-            parent.tables[parent_name].name = head_name
         command.upgrade(config, "head")
         head = sa.MetaData()
-        head.reflect(engine)
+        head.reflect(engine, views=True)
         parent_tables = [
             table for table in parent.sorted_tables if table.name != "alembic_version"
         ]
@@ -1225,6 +1219,31 @@ GRANTED_TO_PROBE = {"SELECT": True, "UPDATE": True, "INSERT": False}
 CLEARED_REFERENCES = (None, None, None)
 
 
+def _view_names(engine) -> set[str]:
+    return set(inspect(engine).get_view_names(schema="public"))
+
+
+def _column_names(engine, relation_name: str) -> list[str]:
+    return [
+        column["name"]
+        for column in inspect(engine).get_columns(relation_name, schema="public")
+    ]
+
+
+def _assert_view_under_old_name_at_head(engine, config) -> None:
+    """Head keeps a view named ``user_policies`` with the table's columns.
+
+    Neither the head schema validation nor ``alembic check`` reports it.
+    """
+    assert _view_names(engine) == {"user_policies"}
+    assert _column_names(engine, "user_policies") == _column_names(
+        engine, "user_policy_associations"
+    )
+    with engine.connect() as connection:
+        validate_v2_head_schema(connection, V2_METADATA)
+    command.check(config)
+
+
 def _drop_rename_privilege_probe(engine) -> None:
     with engine.begin() as connection:
         connection.execute(
@@ -1242,8 +1261,10 @@ def test_saved_policy_rename_keeps_rows_references_and_privileges() -> None:
 
     Saved policies, their v1 mappings and the reports that name them survive
     both directions, the references and a table grant follow the table, and
-    the constraints and indexes named after the table take its name. The
-    downgrade restores every name the parent revision had.
+    the constraints and indexes named after the table take its name. Head has
+    a view named ``user_policies`` with the table's columns, which neither the
+    schema validation nor ``alembic check`` reports. The downgrade drops the
+    view and restores every name the parent revision had.
     """
     config = _config()
     engine = create_engine(_disposable_url())
@@ -1272,6 +1293,7 @@ def test_saved_policy_rename_keeps_rows_references_and_privileges() -> None:
 
         table_names = set(inspect(engine).get_table_names(schema="public"))
         assert "user_policies" not in table_names
+        _assert_view_under_old_name_at_head(engine, config)
         with engine.connect() as connection:
             after = _saved_policy_row(
                 connection, "user_policy_associations", saved_policy_id
@@ -1296,6 +1318,8 @@ def test_saved_policy_rename_keeps_rows_references_and_privileges() -> None:
 
         table_names = set(inspect(engine).get_table_names(schema="public"))
         assert "user_policy_associations" not in table_names
+        assert "user_policies" in table_names
+        assert _view_names(engine) == set()
         with engine.connect() as connection:
             restored = _saved_policy_row(connection, "user_policies", saved_policy_id)
             restored_references = _saved_policy_references(connection, saved)
@@ -1316,39 +1340,13 @@ def test_saved_policy_rename_keeps_rows_references_and_privileges() -> None:
         engine.dispose()
 
 
-class OldTableNameMissingError(Exception):
-    """Raised when head has no relation named ``user_policies`` to read from."""
-
-
-def _saved_policy_row_by_old_name(connection, saved_policy_id: UUID) -> dict:
-    """Read a saved policy as the previous release does, under the old name.
-
-    Only the missing relation is turned into ``OldTableNameMissingError``, so
-    any other failure in the test is reported as a failure.
-    """
-    try:
-        return _saved_policy_row(connection, "user_policies", saved_policy_id)
-    except sa.exc.ProgrammingError as error:
-        if isinstance(error.orig, psycopg.errors.UndefinedTable):
-            raise OldTableNameMissingError from error
-        raise
-
-
-@pytest.mark.xfail(
-    strict=True,
-    raises=OldTableNameMissingError,
-    reason=(
-        "Head has no view named user_policies yet. Autogeneration cannot "
-        "create one, and a hand-written view needs a human migration decision "
-        "(see the saved-policy table rename in the Alembic migrations skill); "
-        "until then the release running during a deploy cannot find the table."
-    ),
-)
 def test_previous_release_still_finds_user_policies() -> None:
-    """The release running during the deploy reads saved policies by the old name.
+    """The release running during the deploy uses saved policies by the old name.
 
-    A saved policy stored before the rename must still be found under
-    ``user_policies`` at head, as the previous release's statements name it.
+    A saved policy stored before the rename is found under ``user_policies``
+    at head, and a row written, changed and deleted through the view is
+    written, changed and deleted in ``user_policy_associations``. The runtime
+    role's own use of the view is in ``test_v2_saved_policy_view``.
     """
     config = _config()
     engine = create_engine(_disposable_url())
@@ -1360,13 +1358,57 @@ def test_previous_release_still_finds_user_policies() -> None:
         with engine.begin() as connection:
             saved = _saved_policy_with_references(connection, parent)
         command.upgrade(config, "head")
+        saved_policy_id = saved["saved_policy_id"]
         with engine.connect() as connection:
             stored = _saved_policy_row(
-                connection, "user_policy_associations", saved["saved_policy_id"]
+                connection, "user_policy_associations", saved_policy_id
             )
-        with engine.connect() as connection:
-            found = _saved_policy_row_by_old_name(connection, saved["saved_policy_id"])
+            found = _saved_policy_row(connection, "user_policies", saved_policy_id)
         assert found == stored
+
+        written_id = uuid4()
+        with engine.connect() as connection:
+            transaction = connection.begin()
+            try:
+                connection.execute(
+                    text(
+                        "INSERT INTO user_policies "
+                        "(id, user_id, policy_id, country_id, name) "
+                        "VALUES (:id, :user_id, :policy_id, :country_id, 'Written')"
+                    ),
+                    {
+                        "id": written_id,
+                        "user_id": stored["user_id"],
+                        "policy_id": stored["policy_id"],
+                        "country_id": stored["country_id"],
+                    },
+                )
+                written = _saved_policy_row(
+                    connection, "user_policy_associations", written_id
+                )
+                connection.execute(
+                    text("UPDATE user_policies SET name = 'Changed' WHERE id = :id"),
+                    {"id": written_id},
+                )
+                changed_name = _saved_policy_row(
+                    connection, "user_policy_associations", written_id
+                )["name"]
+                connection.execute(
+                    text("DELETE FROM user_policies WHERE id = :id"),
+                    {"id": written_id},
+                )
+                remaining = connection.execute(
+                    text(
+                        "SELECT count(*) FROM user_policy_associations WHERE id = :id"
+                    ),
+                    {"id": written_id},
+                ).scalar_one()
+            finally:
+                transaction.rollback()
+        assert written["name"] == "Written"
+        assert written["created_at"] is not None
+        assert changed_name == "Changed"
+        assert remaining == 0
     finally:
         command.upgrade(config, "head")
         if saved is not None:

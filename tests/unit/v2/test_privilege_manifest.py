@@ -22,6 +22,7 @@ from policyengine_api.data.v2.privileges import (
     READ_WRITE,
     RUNTIME_ROLE,
     TABLE_ACCESS,
+    TEMPORARY_VIEW_TABLES,
     InvalidDeploymentEnvironmentError,
     TablePrivilege,
     declared_privileges,
@@ -72,7 +73,28 @@ def test_every_v2_table_has_an_entry_for_every_managed_role() -> None:
 
     assert set(TABLE_ACCESS) == metadata_tables | {"alembic_version"}
     for role, privileges_by_table in declared_privileges(TEST_ENVIRONMENT).items():
-        assert set(privileges_by_table) == set(TABLE_ACCESS), role
+        assert set(privileges_by_table) == set(TABLE_ACCESS) | set(
+            TEMPORARY_VIEW_TABLES
+        ), role
+
+
+def test_each_temporary_view_grants_every_role_what_its_table_grants() -> None:
+    """A view under a renamed table's earlier name serves the earlier release.
+
+    That release reads and writes the table through the view, so each role
+    needs on the view exactly what it holds on the table.
+    """
+    metadata_tables = {table.name for table in V2_METADATA.tables.values()}
+
+    assert TEMPORARY_VIEW_TABLES == {"user_policies": "user_policy_associations"}
+    for view, table in TEMPORARY_VIEW_TABLES.items():
+        assert view not in metadata_tables
+        assert table in metadata_tables
+        for role, privileges_by_table in declared_privileges(TEST_ENVIRONMENT).items():
+            assert privileges_by_table[view] == privileges_by_table[table], role
+    assert declared_privileges(TEST_ENVIRONMENT)[RUNTIME_ROLE]["user_policies"] == (
+        READ_WRITE
+    )
 
 
 def test_v2_schema_has_no_sequences_the_manifest_would_need_to_cover() -> None:
