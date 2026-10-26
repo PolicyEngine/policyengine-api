@@ -490,9 +490,9 @@ MISSING_INPUT_CASES = {
     ),
     "year-after-forecast": MissingInputCase(
         "SPM_YEAR_UNAVAILABLE",
-        "Forecast has no entry for 2036",
+        "Forecast has no entry for 2037",
         geography_kind="national",
-        year="2036",
+        year="2037",
     ),
 }
 
