@@ -27,6 +27,7 @@ from policyengine_api.data.v2.catalog.extraction_values import (
     required_text,
 )
 from policyengine_api.data.v2.catalog.extraction_variables_and_parameters import (
+    VARIABLE_TEXT_LIMITS,
     normalize_parameter,
     normalize_parameter_nodes,
     normalize_variable,
@@ -63,6 +64,7 @@ __all__ = [
     "REQUIRED_DEPENDENCIES",
     "SUPPORTED_COUNTRIES",
     "SUPPORTED_REGION_TYPES",
+    "VARIABLE_TEXT_LIMITS",
     "CatalogExtractionError",
     "ModelMetadata",
     "extract_catalog",

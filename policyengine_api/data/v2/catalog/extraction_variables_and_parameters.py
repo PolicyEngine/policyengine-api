@@ -22,9 +22,33 @@ from policyengine_api.data.v2.catalog.records import (
     ParameterValueRecord,
     VariableRecord,
 )
+from policyengine_api.data.v2.models import Variable
 
 if TYPE_CHECKING:
     from uuid import UUID
+
+
+def _variable_column_length(column_name: str) -> int:
+    """Return the length limit of one text column of the v2 ``variables`` table."""
+    length = getattr(Variable.__table__.c[column_name].type, "length", None)
+    if not isinstance(length, int):
+        msg = f"variables.{column_name} has no length limit"
+        raise TypeError(msg)
+    return length
+
+
+# Catalog format 2's variable text fields, checked against the columns that
+# store them, so the two limits cannot drift apart.
+VARIABLE_TEXT_LIMITS: Mapping[str, int] = {
+    column_name: _variable_column_length(column_name)
+    for column_name in (
+        "module_name",
+        "adds_parameter_path",
+        "subtracts_parameter_path",
+        "unit",
+        "definition_period",
+    )
+}
 
 
 def _type_name(value: object) -> str | None:
@@ -137,28 +161,28 @@ def normalize_variable(
         module_name=optional_text(
             getattr(source, "module_name", None),
             field_name=f"variable {name} module_name",
-            maximum=512,
+            maximum=VARIABLE_TEXT_LIMITS["module_name"],
         ),
         adds_parameter_path=optional_text(
             getattr(source, "adds_parameter_path", None),
             field_name=f"variable {name} adds_parameter_path",
-            maximum=512,
+            maximum=VARIABLE_TEXT_LIMITS["adds_parameter_path"],
         ),
         subtracts_parameter_path=optional_text(
             getattr(source, "subtracts_parameter_path", None),
             field_name=f"variable {name} subtracts_parameter_path",
-            maximum=512,
+            maximum=VARIABLE_TEXT_LIMITS["subtracts_parameter_path"],
         ),
         enum_values=enum_values,
         unit=optional_text(
             getattr(source, "unit", None),
             field_name=f"variable {name} unit",
-            maximum=128,
+            maximum=VARIABLE_TEXT_LIMITS["unit"],
         ),
         definition_period=optional_text(
             getattr(source, "definition_period", None),
             field_name=f"variable {name} definition_period",
-            maximum=32,
+            maximum=VARIABLE_TEXT_LIMITS["definition_period"],
         ),
     )
 
