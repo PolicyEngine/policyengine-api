@@ -68,6 +68,8 @@ STAGE_CATALOG_VARIABLES = Table(
     sa.Column("adds_parameter_path", sa.Text),
     sa.Column("subtracts_parameter_path", sa.Text),
     sa.Column("enum_values", JSONB),
+    sa.Column("unit", sa.Text),
+    sa.Column("definition_period", sa.Text),
     prefixes=["TEMPORARY"],
     postgresql_on_commit="DROP",
 )
@@ -225,6 +227,8 @@ def _variable_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
                 record.adds_parameter_path,
                 record.subtracts_parameter_path,
                 _enum_values_json(record),
+                record.unit,
+                record.definition_period,
             )
 
 

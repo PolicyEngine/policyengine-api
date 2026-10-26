@@ -84,6 +84,8 @@ def test_catalog_rows_project_every_record_field_in_column_order() -> None:
             record.adds_parameter_path,
             record.subtracts_parameter_path,
             None,
+            record.unit,
+            record.definition_period,
         )
         for record in country.variables
     ]
@@ -157,7 +159,8 @@ def test_enum_values_are_staged_as_value_and_label_objects_in_order() -> None:
 
     (row,) = (_plain(row) for row in _catalog_rows(country)[STAGE_CATALOG_VARIABLES])
 
-    assert row[-1] == (
+    enum_values_column = [column.name for column in STAGE_CATALOG_VARIABLES.columns]
+    assert row[enum_values_column.index("enum_values")] == (
         "jsonb",
         [{"value": "SINGLE", "label": "Single"}, {"value": "JOINT", "label": 2}],
     )

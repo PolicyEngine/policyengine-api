@@ -409,7 +409,8 @@ def _format_2_values(engine: Engine) -> dict[str, object]:
         variable = connection.execute(
             text(
                 "SELECT is_input_variable, hidden_input, module_name, "
-                "adds_parameter_path, subtracts_parameter_path, enum_values "
+                "adds_parameter_path, subtracts_parameter_path, enum_values, "
+                "unit, definition_period "
                 "FROM variables WHERE name = 'employment_income' "
                 "AND tax_benefit_model_version_id = ("
                 "SELECT version.id FROM tax_benefit_model_versions AS version "
@@ -447,7 +448,8 @@ def _clear_format_2_fields(engine: Engine) -> None:
             text(
                 "UPDATE variables SET is_input_variable = NULL, hidden_input = NULL, "
                 "module_name = NULL, adds_parameter_path = NULL, "
-                "subtracts_parameter_path = NULL, enum_values = NULL"
+                "subtracts_parameter_path = NULL, enum_values = NULL, "
+                "unit = NULL, definition_period = NULL"
             )
         )
         connection.execute(
@@ -476,6 +478,8 @@ def test_publication_stores_catalog_format_2_fields(
             None,
             None,
             None,
+            "currency-USD",
+            "year",
         ),
         "parameter": (True, False),
     }
@@ -495,7 +499,7 @@ def test_version_stored_before_format_2_keeps_its_fields_empty_on_republish(
     assert _identifiers(publication_engine) == before_ids
     assert _format_2_values(publication_engine) == {
         "version": (None, None, None),
-        "variable": (None, None, None, None, None, None),
+        "variable": (None, None, None, None, None, None, None, None),
         "parameter": (None, None),
     }
 
@@ -539,7 +543,8 @@ def _stored_us_variables(engine: Engine) -> dict[str, tuple[object, ...]]:
         rows = connection.execute(
             text(
                 "SELECT variable.name, variable.enum_values, "
-                "variable.adds_parameter_path, variable.subtracts_parameter_path "
+                "variable.adds_parameter_path, variable.subtracts_parameter_path, "
+                "variable.unit, variable.definition_period "
                 "FROM variables AS variable "
                 "JOIN tax_benefit_model_versions AS version "
                 "ON version.id = variable.tax_benefit_model_version_id "
@@ -576,12 +581,16 @@ def test_enum_labels_and_parameter_paths_round_trip_exactly(
         [{"value": "SINGLE", "label": "Single"}, {"value": "JOINT", "label": 2}],
         None,
         None,
+        None,
+        "year",
     )
     assert type(stored["filing_status"][0][1]["label"]) is int
     assert stored["countable_income"] == (
         None,
         "gov.example.countable_income",
         "gov.example.deductions",
+        "currency-USD",
+        "month",
     )
     assert republished.as_dict()["outcome"] == "ok"
     assert _identifiers(publication_engine) == before_ids
@@ -601,6 +610,8 @@ def test_enum_labels_and_parameter_paths_round_trip_exactly(
         ),
         ("countable_income", {"adds_parameter_path": "gov.example.deductions"}),
         ("countable_income", {"subtracts_parameter_path": None}),
+        ("filing_status", {"unit": "currency-USD"}),
+        ("countable_income", {"definition_period": "year"}),
     ],
 )
 def test_republication_detects_a_changed_enum_label_or_parameter_path(
