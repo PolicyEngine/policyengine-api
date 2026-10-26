@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     METADATA_RESPONSES,
+    PARAMETER_TREE_ERROR_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
     take_utc_instant_for_read,
@@ -77,6 +78,7 @@ def build_v2_metadata_parameter_router(
     @router.get(
         "/parameters/children",
         response_model=MetadataParameterChildPageResponse,
+        responses=PARAMETER_TREE_ERROR_RESPONSES,
         summary="List one level of a catalog version's parameter tree",
         description=(
             "Lists the direct children of `parent_path` (the top level when "

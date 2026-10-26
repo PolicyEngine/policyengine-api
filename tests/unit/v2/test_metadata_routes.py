@@ -1601,3 +1601,15 @@ def test_parameter_children_openapi_declares_the_query_contract() -> None:
     assert "422" in description
     assert "malformed policyengine_version" in description
     assert "503" in description
+
+
+def test_parameter_children_openapi_declares_exactly_its_error_responses() -> None:
+    results, _ids = _resource_results()
+    schema = _client(lambda: ResourceReader(results)).get("/v2/openapi.json").json()
+    responses = schema["paths"]["/v2/parameters/children"]["get"]["responses"]
+    parameter_responses = schema["paths"]["/v2/parameters"]["get"]["responses"]
+
+    assert set(responses) == {"200", "304", "404", "405", "422", "500", "503"}
+    assert "PolicyEngine.py version" in responses["422"]["description"]
+    assert "parameter tree" in responses["503"]["description"]
+    assert "parameter tree" not in parameter_responses["503"]["description"]
