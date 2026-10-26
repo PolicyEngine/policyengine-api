@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 
 import pytest
 from starlette.responses import JSONResponse
@@ -171,6 +172,95 @@ def test_a_request_arriving_while_a_response_is_stored_waits_for_it() -> None:
 
     assert builds == ["built"]
     assert second_results == [first]
+
+
+def _wait_for_waiters(cache: MetadataResponseCache, key: tuple, count: int) -> None:
+    # Polls until every request has registered as waiting on the read in
+    # progress, so the result does not depend on thread timing.
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        with cache._lock:
+            in_flight = cache._builds.get(key)
+            if in_flight is not None and in_flight.waiters == count:
+                return
+        time.sleep(0.001)
+    pytest.fail(f"{count} requests did not wait on the read in progress")
+
+
+@pytest.mark.parametrize("read_outcome", ["failure", "success"])
+def test_waiting_requests_receive_the_outcome_of_the_one_read(
+    read_outcome: str,
+) -> None:
+    read_fails = read_outcome == "failure"
+    cache = MetadataResponseCache()
+    builds: list[str] = []
+    release = threading.Event()
+    key = ("variables", "us", None)
+
+    def blocked_build() -> BuiltResponse | JSONResponse:
+        builds.append("built")
+        release.wait()
+        if read_fails:
+            return JSONResponse({"status": "error"}, status_code=503)
+        return BuiltResponse(body=b"{}", policyengine_version=RUNNING_VERSION)
+
+    results: list[object] = []
+
+    def request() -> None:
+        results.append(cache.get_or_build(*key, blocked_build))
+
+    owner = threading.Thread(target=request, daemon=True)
+    waiters = [threading.Thread(target=request, daemon=True) for _ in range(9)]
+    try:
+        owner.start()
+        while not builds:
+            time.sleep(0.001)
+        for thread in waiters:
+            thread.start()
+        _wait_for_waiters(cache, key, 9)
+    finally:
+        release.set()
+    for thread in [owner, *waiters]:
+        thread.join(timeout=10)
+
+    assert builds == ["built"]
+    assert len(results) == 10
+    if read_fails:
+        assert all(result.status_code == 503 for result in results)
+        assert {bytes(result.body) for result in results} == {b'{"status":"error"}'}
+        # Each request gets its own response object, so middleware headers
+        # added for one request cannot reach another.
+        assert len({id(result) for result in results}) == 10
+    else:
+        assert all(result is results[0] for result in results)
+    assert key not in cache._builds
+
+
+def test_a_finished_read_leaves_a_newer_reads_entry_in_place() -> None:
+    cache = MetadataResponseCache()
+    building = threading.Event()
+    release = threading.Event()
+    key = ("variables", "us", None)
+
+    def blocked_build() -> JSONResponse:
+        building.set()
+        release.wait()
+        return JSONResponse({"status": "error"}, status_code=503)
+
+    owner = threading.Thread(
+        target=lambda: cache.get_or_build(*key, blocked_build), daemon=True
+    )
+    newer_read = object()
+    try:
+        owner.start()
+        building.wait(timeout=10)
+        with cache._lock:
+            cache._builds[key] = newer_read
+    finally:
+        release.set()
+    owner.join(timeout=10)
+
+    assert cache._builds[key] is newer_read
 
 
 def test_capacity_must_be_positive() -> None:

@@ -285,7 +285,7 @@ def read_whole_version_resource(
     if cache is None:
         return read_resource(dependencies, response_type, operation)
 
-    def build() -> BuiltResponse | JSONResponse:
+    def build() -> BuiltResponse | Response:
         result = read_resource(dependencies, response_type, operation)
         if isinstance(result, MetadataResourceSuccessResponse):
             return BuiltResponse(

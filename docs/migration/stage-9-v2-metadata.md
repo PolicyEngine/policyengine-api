@@ -134,10 +134,13 @@ so eight entries hold about 11 MB for both countries' two routes at two
 versions). A response is kept under the exact version it was read from,
 so a request without `policyengine_version` (the process's running version,
 which never changes while it runs) and one naming that version share it. Only
-the first successful request per process reads the database; concurrent first
-requests wait for one read, and a failed read is not kept. Measured locally against the full 6.10.0 US
-catalog, the variables route takes about 160 ms when read and about 25 ms
-when kept, most of it compression.
+the first successful request per process reads the database. Requests that
+arrive while that read is in progress wait for it and all receive its outcome,
+the kept response or a copy of its error response, so one failing read is not
+repeated by each of them; a failed read is not kept, so the first request after
+it reads again. Measured locally against the full 6.10.0 US catalog, the
+variables route takes about 160 ms when read and about 25 ms when kept, most of
+it compression.
 
 ## Configuration and credential boundaries
 
