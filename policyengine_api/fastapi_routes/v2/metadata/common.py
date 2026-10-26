@@ -165,8 +165,9 @@ def with_cache_headers(request: Request, response: Response) -> Response:
     content, including the catalog format. A request naming its catalog with
     ``policyengine_version`` may be reused for a day, one that takes the
     running version for five minutes, and one whose route read for a UTC day
-    (``UTC_DAY_READ``) no later than the midnight after that day. A request
-    whose ``If-None-Match`` names the ETag gets a 304 with no body.
+    (``UTC_DAY_READ``) no later than the midnight after that day. Every such
+    response, and the 304 a request whose ``If-None-Match`` names the ETag
+    gets instead, varies by ``Origin``.
     """
     entity_tag = response.headers.get("etag") or body_entity_tag(response.body)
     max_age = (
@@ -179,9 +180,26 @@ def with_cache_headers(request: Request, response: Response) -> Response:
         max_age = min(max_age, _seconds_left_in_utc_day(read_instant, utc_now()))
     headers = {"Cache-Control": f"public, max-age={max_age}", "ETag": entity_tag}
     if _names_entity_tag(request.headers.get("if-none-match"), entity_tag):
-        return Response(status_code=304, headers=headers)
+        not_modified = Response(status_code=304, headers=headers)
+        not_modified.headers["Vary"] = _vary_with_origin(None)
+        return not_modified
     response.headers.update(headers)
+    response.headers["Vary"] = _vary_with_origin(response.headers.get("vary"))
     return response
+
+
+def _vary_with_origin(existing: str | None) -> str:
+    """Return a Vary value that keeps ``existing`` and names Origin once.
+
+    The API reflects every origin in Access-Control-Allow-Origin, and a request
+    without Origin gets no such header, so a shared cache must store responses
+    per Origin value or it could serve one to a cross-origin request that the
+    browser then rejects.
+    """
+    values = [value.strip() for value in (existing or "").split(",") if value.strip()]
+    if not any(value.lower() == "origin" for value in values):
+        values.append("Origin")
+    return ", ".join(values)
 
 
 def _names_entity_tag(if_none_match: str | None, entity_tag: str) -> bool:
