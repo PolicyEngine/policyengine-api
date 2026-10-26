@@ -111,6 +111,11 @@ def test_variable_flags_modules_enum_labels_and_parts_match_v1(
             "hidden_input": (variable.hidden_input, v1_variable["hidden_input"]),
             "module_name": (variable.module_name, v1_variable["moduleName"]),
             "enum_values": (enum_values, v1_enum_values),
+            "unit": (variable.unit, v1_variable["unit"]),
+            "definition_period": (
+                variable.definition_period,
+                v1_variable["definitionPeriod"],
+            ),
             "adds_parameter_path": (
                 variable.adds_parameter_path,
                 v1_variable["adds"] if isinstance(v1_variable["adds"], str) else None,

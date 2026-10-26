@@ -227,6 +227,8 @@ def _model_source(
         adds_parameter_path=None,
         subtracts_parameter_path=None,
         enum_values=None,
+        unit="currency-USD",
+        definition_period="year",
     )
     parameter_node = SimpleNamespace(
         name="gov.example",
@@ -366,6 +368,8 @@ def add_enum_and_parameter_part_records(model: SimpleNamespace) -> None:
                 SimpleNamespace(value="SINGLE", label="Single"),
                 SimpleNamespace(value="JOINT", label=2),
             ],
+            unit=None,
+            definition_period="year",
         ),
         SimpleNamespace(
             name="countable_income",
@@ -383,6 +387,8 @@ def add_enum_and_parameter_part_records(model: SimpleNamespace) -> None:
             adds_parameter_path="gov.example.countable_income",
             subtracts_parameter_path="gov.example.deductions",
             enum_values=None,
+            unit="currency-USD",
+            definition_period="month",
         ),
     )
     for variable in variables:

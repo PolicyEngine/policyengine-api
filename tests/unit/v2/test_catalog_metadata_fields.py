@@ -57,6 +57,8 @@ def _add_variable(model: SimpleNamespace, **fields: object) -> None:
         adds_parameter_path=None,
         subtracts_parameter_path=None,
         enum_values=None,
+        unit=None,
+        definition_period="year",
     )
     for name, value in fields.items():
         setattr(variable, name, value)
@@ -114,6 +116,8 @@ def test_variables_carry_input_flags_module_and_unset_parts() -> None:
     assert variable.adds_parameter_path is None
     assert variable.subtracts_parameter_path is None
     assert variable.enum_values is None
+    assert variable.unit == "currency-USD"
+    assert variable.definition_period == "year"
 
 
 def test_enum_values_keep_their_declared_labels_in_order() -> None:
@@ -239,6 +243,18 @@ def _name_unknown_basic_input(models: dict[str, SimpleNamespace]) -> None:
     models["us"].basic_inputs = ["employment_income", "unpublished_input"]
 
 
+def _remove_variable_unit(models: dict[str, SimpleNamespace]) -> None:
+    del models["us"].variables[0].unit
+
+
+def _make_unit_a_number(models: dict[str, SimpleNamespace]) -> None:
+    models["us"].variables[0].unit = 1
+
+
+def _make_definition_period_a_list(models: dict[str, SimpleNamespace]) -> None:
+    models["us"].variables[0].definition_period = ["year"]
+
+
 def _make_input_flag_text(models: dict[str, SimpleNamespace]) -> None:
     models["us"].variables[0].is_input_variable = "true"
 
@@ -324,6 +340,19 @@ def _make_household_flag_text(models: dict[str, SimpleNamespace]) -> None:
             "^us basic input 'unpublished_input' is not a published variable$",
         ),
         (
+            _remove_variable_unit,
+            "^the installed PolicyEngine.py does not publish catalog format 2's "
+            "fields for us: variable unit$",
+        ),
+        (
+            _make_unit_a_number,
+            "^variable employment_income unit must be a string or null$",
+        ),
+        (
+            _make_definition_period_a_list,
+            "^variable employment_income definition_period must be a string or null$",
+        ),
+        (
             _make_input_flag_text,
             "^variable employment_income is_input_variable must be a boolean or null$",
         ),
@@ -382,7 +411,8 @@ def test_inconsistent_format_2_metadata_fails_with_a_specific_message(
 def test_a_release_without_format_2_fields_fails_naming_each_missing_field() -> None:
     """A release without the fields fails before any record is checked, naming each.
 
-    PolicyEngine.py 6.7.5 and the locked 6.10.0, for example, publish none of them.
+    PolicyEngine.py 6.7.5 and the locked 6.10.0, for example, publish only the
+    variables' unit and definition period of these fields.
     """
     models = source_models()
     model = models["us"]
@@ -395,6 +425,8 @@ def test_a_release_without_format_2_fields_fails_naming_each_missing_field() -> 
             "adds_parameter_path",
             "subtracts_parameter_path",
             "enum_values",
+            "unit",
+            "definition_period",
         ):
             delattr(variable, field_name)
     for parameter in model.parameters:
@@ -405,7 +437,8 @@ def test_a_release_without_format_2_fields_fails_naming_each_missing_field() -> 
         match=r"^the installed PolicyEngine.py does not publish catalog format 2's "
         r"fields for us: model version entities, basic_inputs; variable "
         r"is_input_variable, hidden_input, module_name, adds_parameter_path, "
-        r"subtracts_parameter_path, enum_values; parameter economy, household$",
+        r"subtracts_parameter_path, enum_values, unit, definition_period; parameter "
+        r"economy, household$",
     ):
         _extract(models)
 

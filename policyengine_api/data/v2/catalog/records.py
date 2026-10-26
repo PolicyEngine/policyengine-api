@@ -97,6 +97,8 @@ class VariableRecord:
     adds_parameter_path: str | None
     subtracts_parameter_path: str | None
     enum_values: tuple[EnumValueRecord, ...] | None
+    unit: str | None
+    definition_period: str | None
 
 
 @dataclass(frozen=True, slots=True)
