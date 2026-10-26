@@ -15,6 +15,10 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
 )
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.gcp_logging import logger
+from policyengine_api.services.policy_mirroring import (
+    PolicyCopyFailureReason,
+    policy_copy_failure_reason,
+)
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.user_policy_service import (
     PendingUserPolicyMirrorEvent,
@@ -60,6 +64,10 @@ class UserPolicyMirrorUnavailableError(RuntimeError):
     """Raised when a committed saved policy could not be mirrored immediately."""
 
 
+class ReformPolicyUnavailableError(UserPolicyMirrorUnavailableError):
+    """Raised when a saved policy's v1 reform policy cannot be loaded to copy it."""
+
+
 def _default_mirror_factory() -> LegacyUserPolicyMirror:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -100,6 +108,14 @@ def _failure_category(error: Exception) -> str:
     return "unexpected"
 
 
+def _failure_reason(error: Exception) -> str:
+    if isinstance(error, LegacyUserPolicyIntegrityError):
+        return PolicyCopyFailureReason.SAVED_POLICY_MAPPING_CONFLICT.value
+    if isinstance(error, ReformPolicyUnavailableError):
+        return PolicyCopyFailureReason.MISSING_REFORM_POLICY.value
+    return policy_copy_failure_reason(error)
+
+
 @dataclass(frozen=True)
 class UserPolicyMirrorCollaborators:
     """The services a saved-policy mirror uses; each one left None takes its default.
@@ -135,6 +151,7 @@ class _MirrorOutcome:
     actual_write_sources: list[str]
     result: LegacyUserPolicyPersistenceResult | None = None
     failure_category: str | None = None
+    failure_reason: str | None = None
 
 
 def _log_mirror_operation(
@@ -164,6 +181,7 @@ def _log_mirror_operation(
                 ),
                 "outcome": mirror_outcome.outcome,
                 "failure_category": mirror_outcome.failure_category,
+                "failure_reason": mirror_outcome.failure_reason,
                 "association_created": (
                     result.association_created if result is not None else None
                 ),
@@ -232,6 +250,7 @@ def mirror_user_policy_after_commit(
                 outcome="error",
                 actual_write_sources=["cloud_sql"],
                 failure_category=_failure_category(error),
+                failure_reason=_failure_reason(error),
             ),
         )
         msg = "The committed v1 saved policy could not be mirrored to v2"
@@ -292,7 +311,7 @@ def mirror_pending_user_policy_events_after_commit(
         )
         if reform_snapshot is None:
             msg = "The saved policy references an unavailable reform policy"
-            raise UserPolicyMirrorUnavailableError(msg)
+            raise ReformPolicyUnavailableError(msg)
         result = _run_user_policy_mirror(
             event.snapshot,
             reform_snapshot,
@@ -367,6 +386,7 @@ def mirror_pending_user_policy_events_after_commit(
                 ),
                 result=result,
                 failure_category=_failure_category(failure),
+                failure_reason=_failure_reason(failure),
             ),
         )
         msg = "The committed v1 saved policy event could not be mirrored to v2"

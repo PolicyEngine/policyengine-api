@@ -250,6 +250,7 @@ def test_destination_failure_returns_the_stored_policy_and_logs_an_error(
     assert logged_record["metric_name"] == "v1_policy_mirror_operations"
     assert logged_record["outcome"] == "error"
     assert logged_record["failure_category"] == "catalog_or_translation"
+    assert logged_record["failure_reason"] == "missing_parameters"
     assert logged_record["legacy_policy_id"] == stored_policy_id
     assert "private parameter value" not in json.dumps(logged_record)
 
@@ -283,6 +284,7 @@ def test_policy_without_a_mirror_snapshot_is_returned_and_logged(
     assert logged_record["metric_name"] == "v1_policy_mirror_operations"
     assert logged_record["outcome"] == "error"
     assert logged_record["failure_category"] == "missing_mirror_snapshot"
+    assert logged_record["failure_reason"] == "missing_mirror_snapshot"
     assert logged_record["country_id"] == "us"
     assert logged_record["legacy_policy_id"] == 42
     assert route_logger.log_struct.call_args.kwargs["severity"] == "ERROR"

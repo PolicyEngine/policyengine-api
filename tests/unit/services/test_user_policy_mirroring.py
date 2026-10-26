@@ -18,8 +18,16 @@ from policyengine_api.services.user_policy_mirroring import (
     mirror_pending_user_policy_events_after_commit,
     mirror_user_policy_after_commit,
 )
-from policyengine_api.services.user_policy_service import UserPolicyService
+from policyengine_api.services.user_policy_service import (
+    PendingUserPolicyMirrorEvent,
+    UserPolicyService,
+)
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+from policyengine_api.services.v2.policies.validators import (
+    LegacyPolicyMappingIntegrityError,
+    LegacyPolicyTranslationError,
+    LegacyPolicyTranslationReason,
+)
 from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicyPersistenceResult,
     LegacyUserPolicySnapshot,
@@ -131,20 +139,39 @@ def test_logging_failure_does_not_change_successful_mirror_result() -> None:
 
 
 @pytest.mark.parametrize(
-    ("error", "category"),
+    ("error", "category", "reason"),
     [
         (
             OperationalError("statement secret", {}, Exception("credential")),
             "database",
+            "database_error",
         ),
-        (PoolTimeoutError("pool timeout"), "database"),
-        (LegacyUserPolicyIntegrityError("mapping conflict"), "integrity"),
-        (RuntimeError("caller data secret"), "unexpected"),
+        (PoolTimeoutError("pool timeout"), "database", "database_error"),
+        (
+            LegacyUserPolicyIntegrityError("mapping conflict"),
+            "integrity",
+            "saved_policy_mapping_conflict",
+        ),
+        (
+            LegacyPolicyMappingIntegrityError("reform mapping conflict"),
+            "integrity",
+            "mapping_conflict",
+        ),
+        (
+            LegacyPolicyTranslationError(
+                "gov.private.secret",
+                reason=LegacyPolicyTranslationReason.MISSING_PARAMETERS,
+            ),
+            "catalog_or_translation",
+            "missing_parameters",
+        ),
+        (RuntimeError("caller data secret"), "unexpected", "unexpected"),
     ],
 )
 def test_failure_is_secret_safe_and_reports_only_cloud_sql_completed(
     error: Exception,
     category: str,
+    reason: str,
 ) -> None:
     mirror = MagicMock()
     mirror.mirror_legacy_user_policy.side_effect = error
@@ -163,6 +190,7 @@ def test_failure_is_secret_safe_and_reports_only_cloud_sql_completed(
     payload = logger.log_struct.call_args.args[0]
     assert payload["actual_write_sources"] == ["cloud_sql"]
     assert payload["failure_category"] == category
+    assert payload["failure_reason"] == reason
     assert payload["destination_association_id"] is None
     assert "secret" not in repr(payload)
     assert "credential" not in repr(payload)
@@ -268,3 +296,40 @@ def test_event_preparation_failure_logs_error_and_retains_the_event(
     with orm_session_factory() as session:
         retained_event = session.scalar(select(UserPolicyMirrorEvent))
         assert retained_event.processed_at is None
+
+
+def test_saved_policy_whose_reform_is_missing_logs_its_own_reason() -> None:
+    event_service = MagicMock()
+
+    def process(_country_id, _legacy_user_policy_id, **callbacks):
+        return callbacks["processor"](
+            PendingUserPolicyMirrorEvent(
+                event_id=1,
+                source_revision=1,
+                event_type="create",
+                snapshot=_saved(),
+                changed_fields=frozenset(),
+                source_fingerprint_sha256="f" * 64,
+            )
+        )
+
+    event_service.process_pending_mirror_events.side_effect = process
+
+    with (
+        patch("policyengine_api.services.user_policy_mirroring.logger") as logger,
+        pytest.raises(UserPolicyMirrorUnavailableError),
+    ):
+        mirror_pending_user_policy_events_after_commit(
+            "us",
+            10,
+            through_revision=1,
+            collaborators=UserPolicyMirrorCollaborators(
+                event_service=event_service,
+                reform_snapshot_loader=lambda _country_id, _policy_id: None,
+                mirror_factory=MagicMock(),
+            ),
+        )
+
+    payload = logger.log_struct.call_args.args[0]
+    assert payload["failure_category"] == "unexpected"
+    assert payload["failure_reason"] == "missing_reform_policy"

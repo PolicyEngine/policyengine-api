@@ -90,6 +90,8 @@ def _log_uncopied_v1_write(
                 "request_id": current_request_id(),
                 "outcome": "error",
                 "failure_category": failure_category,
+                # These failures have no finer cause than their category.
+                "failure_reason": failure_category,
             },
             severity="ERROR",
         )

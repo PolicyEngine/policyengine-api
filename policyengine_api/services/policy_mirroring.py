@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import time
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -18,6 +19,7 @@ from policyengine_api.gcp_logging import logger
 from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyMappingIntegrityError,
     LegacyPolicyTranslationError,
+    LegacyPolicyTranslationReason,
     PolicyCatalogValidationError,
     PolicyContentHashCollisionError,
     PolicyCreationIntegrityError,
@@ -86,6 +88,70 @@ def _failure_category(error: Exception) -> str:
     return "unexpected"
 
 
+class PolicyCopyFailureReason(StrEnum):
+    """Fixed reason codes a failed policy or saved-policy copy logs.
+
+    A translation failure logs its LegacyPolicyTranslationReason value instead,
+    such as ``missing_parameters``. Together the two sets are every value of a
+    copy record's ``failure_reason``.
+    """
+
+    CONFIGURATION = "configuration"
+    CATALOG_QUERY_FAILED = "catalog_query_failed"
+    CATALOG_ABSENT = "catalog_absent"
+    CATALOG_VERSION_NOT_FOUND = "catalog_version_not_found"
+    CATALOG_MISMATCH = "catalog_mismatch"
+    MAPPING_CONFLICT = "mapping_conflict"
+    SAVED_POLICY_MAPPING_CONFLICT = "saved_policy_mapping_conflict"
+    CONTENT_HASH_COLLISION = "content_hash_collision"
+    STORED_POLICY_INTEGRITY = "stored_policy_integrity"
+    MISSING_REFORM_POLICY = "missing_reform_policy"
+    DATABASE_ERROR = "database_error"
+    UNEXPECTED = "unexpected"
+
+
+def policy_copy_failure_reason(error: Exception) -> str:
+    """Return the fixed reason code a failed policy copy logs for this error.
+
+    The code comes only from the error's type, and for a translation error its
+    fixed reason, so a log record never holds policy content or error text.
+    """
+    return _failure_reason_code(error).value
+
+
+# Checked in order, so the hash collision is matched before its integrity base
+# class.
+_FAILURE_REASONS_BY_ERROR_TYPE: tuple[
+    tuple[type[Exception], PolicyCopyFailureReason], ...
+] = (
+    (V2ConfigurationError, PolicyCopyFailureReason.CONFIGURATION),
+    (
+        MetadataCatalogVersionNotFoundError,
+        PolicyCopyFailureReason.CATALOG_VERSION_NOT_FOUND,
+    ),
+    (PolicyCatalogValidationError, PolicyCopyFailureReason.CATALOG_MISMATCH),
+    (LegacyPolicyMappingIntegrityError, PolicyCopyFailureReason.MAPPING_CONFLICT),
+    (PolicyContentHashCollisionError, PolicyCopyFailureReason.CONTENT_HASH_COLLISION),
+    (PolicyCreationIntegrityError, PolicyCopyFailureReason.STORED_POLICY_INTEGRITY),
+    (SQLAlchemyError, PolicyCopyFailureReason.DATABASE_ERROR),
+)
+
+
+def _failure_reason_code(
+    error: Exception,
+) -> PolicyCopyFailureReason | LegacyPolicyTranslationReason:
+    if isinstance(error, LegacyPolicyTranslationError):
+        return error.reason
+    if isinstance(error, MetadataCatalogUnavailableError):
+        if isinstance(error.__cause__, SQLAlchemyError):
+            return PolicyCopyFailureReason.CATALOG_QUERY_FAILED
+        return PolicyCopyFailureReason.CATALOG_ABSENT
+    for error_type, reason in _FAILURE_REASONS_BY_ERROR_TYPE:
+        if isinstance(error, error_type):
+            return reason
+    return PolicyCopyFailureReason.UNEXPECTED
+
+
 @dataclass(frozen=True)
 class _MirrorOutcome:
     """How one immediate policy mirror ended, as its metric record reports it."""
@@ -94,6 +160,7 @@ class _MirrorOutcome:
     actual_write_sources: list[str]
     destination_policy_id: object | None = None
     failure_category: str | None = None
+    failure_reason: str | None = None
     policy_created: bool | None = None
     mapping_created: bool | None = None
 
@@ -124,6 +191,7 @@ def _log_mirror_event(
                 ),
                 "outcome": mirror_outcome.outcome,
                 "failure_category": mirror_outcome.failure_category,
+                "failure_reason": mirror_outcome.failure_reason,
                 "policy_created": mirror_outcome.policy_created,
                 "mapping_created": mirror_outcome.mapping_created,
                 "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
@@ -155,6 +223,7 @@ def mirror_policy_after_commit(
                 outcome="error",
                 actual_write_sources=["cloud_sql"],
                 failure_category=_failure_category(error),
+                failure_reason=policy_copy_failure_reason(error),
             ),
         )
         msg = "The committed v1 policy could not be mirrored to v2"

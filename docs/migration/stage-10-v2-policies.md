@@ -175,7 +175,19 @@ functions do not implement separate preflight behavior.
 
 Monitor structured events with metric names `v1_policy_mirror_operations` and
 `v1_user_policy_mirror_operations`. Alert on `outcome=error`, grouped by
-`failure_category` and country. Events include the legacy integer ID,
+`failure_category` and country. Each failed copy also records a fixed
+`failure_reason`:
+
+| `failure_category` | `failure_reason` |
+| --- | --- |
+| `catalog_or_translation` | `missing_parameters` (the policy sets a parameter the running catalog lacks), `invalid_parameter_values`, `empty_parameter_values`, `invalid_period`, `conflicting_values`, `catalog_absent` (no catalog for the running PolicyEngine.py version), `catalog_query_failed`, `catalog_version_not_found`, `catalog_mismatch` |
+| `integrity` | `mapping_conflict`, `saved_policy_mapping_conflict`, `content_hash_collision`, `stored_policy_integrity` |
+| `database` | `database_error` |
+| `configuration` | `configuration` |
+| `unexpected` | `missing_reform_policy` (a saved policy's v1 reform could not be loaded), `unexpected` |
+| `missing_mirror_snapshot`, `missing_mirror_revision` | the same value as the category |
+
+Events include the legacy integer ID,
 destination UUID when committed, attempted and completed database sources, and
 duration. They do not include policy JSON, presentation data, database URLs, or
 credentials.

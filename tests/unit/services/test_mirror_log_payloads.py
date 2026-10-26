@@ -204,6 +204,7 @@ def test_policy_mirror_success_logs_one_complete_record() -> None:
         "destination_policy_id": str(DESTINATION_ID),
         "outcome": "ok",
         "failure_category": None,
+        "failure_reason": None,
         "policy_created": False,
         "mapping_created": True,
     }
@@ -235,6 +236,7 @@ def test_policy_mirror_failure_logs_one_complete_record() -> None:
         "destination_policy_id": None,
         "outcome": "error",
         "failure_category": "database",
+        "failure_reason": "database_error",
         "policy_created": None,
         "mapping_created": None,
     }
@@ -285,6 +287,7 @@ def _user_policy_record(**changes: object) -> dict[str, object]:
         "destination_policy_id": str(DESTINATION_ID),
         "outcome": "ok",
         "failure_category": None,
+        "failure_reason": None,
         "association_created": False,
         "association_updated": True,
         "mapping_created": False,
@@ -299,6 +302,7 @@ FAILED_USER_POLICY_RECORD = _user_policy_record(
     destination_policy_id=None,
     outcome="error",
     failure_category="database",
+    failure_reason="database_error",
     association_created=None,
     association_updated=None,
     mapping_created=None,
@@ -429,6 +433,7 @@ def test_pending_event_failure_logs_the_active_event_and_unwrapped_cause() -> No
         legacy_user_policy_id=11,
         outcome="error",
         failure_category="database",
+        failure_reason="database_error",
     )
     assert list(payload) == list(expected)
     assert payload == expected
