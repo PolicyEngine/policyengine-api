@@ -7,6 +7,7 @@ import re
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
@@ -407,16 +408,23 @@ def test_matching_kept_regions_log_nothing(
 
 
 def test_a_catalog_tree_needs_a_stored_row_for_every_parameter() -> None:
-    """Each tree parameter references the stored parameter of the same name."""
+    """Each tree parameter references the stored parameter of the same name.
+
+    The stored IDs differ from the catalog's, so the tree must take them from
+    the stored rows, not from the catalog records.
+    """
     country = normalized_catalog().country("us")
-    stored_ids = {parameter.name: parameter.id for parameter in country.parameters}
+    stored_ids = {parameter.name: uuid4() for parameter in country.parameters}
 
     rows = catalog_parameter_tree(country, stored_ids)
     leaves = [row for row in rows if row.child_type == "parameter"]
 
     assert [(row.path, row.parameter_id) for row in leaves] == [
-        (parameter.name, parameter.id) for parameter in country.parameters
+        (parameter.name, stored_ids[parameter.name]) for parameter in country.parameters
     ]
+    assert {row.parameter_id for row in leaves}.isdisjoint(
+        parameter.id for parameter in country.parameters
+    )
     with pytest.raises(
         CatalogPublicationError,
         match=re.escape(

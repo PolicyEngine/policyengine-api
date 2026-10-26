@@ -6,6 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from alembic import command
@@ -895,17 +896,40 @@ def _stored_tree_with_parameter_ids(
     )
 
 
+def _with_other_parameter_ids(catalog):
+    """Return the catalog with a new ID for every parameter, and its values."""
+    countries = []
+    for country in catalog.countries:
+        parameters = []
+        for parameter in country.parameters:
+            parameter_id = uuid4()
+            parameters.append(
+                replace(
+                    parameter,
+                    id=parameter_id,
+                    values=tuple(
+                        replace(value, id=uuid4(), parameter_id=parameter_id)
+                        for value in parameter.values
+                    ),
+                )
+            )
+        countries.append(replace(country, parameters=tuple(parameters)))
+    return replace(catalog, countries=tuple(countries))
+
+
 def test_publication_gives_the_installed_stored_version_its_tree(
     publication_engine: Engine,
 ) -> None:
     """The installed version, stored by a release without the tree, gets one.
 
     It is built from the installed packages' catalog, the same as a fresh
-    publication's; writing it again changes nothing.
+    publication's; writing it again changes nothing. The version is first
+    stored with parameter IDs that differ from the catalog's, so the rebuilt
+    tree must reference the stored rows' IDs.
     """
     catalog = normalized_catalog()
     current_version = catalog.country("us").model_version.version
-    publish_catalog(publication_engine, catalog)
+    publish_catalog(publication_engine, _with_other_parameter_ids(catalog))
     fresh = {
         country.model.name: _stored_tree_with_parameter_ids(
             publication_engine, country.model.name, current_version
@@ -931,6 +955,15 @@ def test_publication_gives_the_installed_stored_version_its_tree(
             == fresh[country.model.name]
         )
     assert _identifiers(publication_engine) == before_ids
+    catalog_parameter_ids = {
+        parameter.id
+        for country in catalog.countries
+        for parameter in country.parameters
+    }
+    for rows in fresh.values():
+        assert {row[8] for row in rows if row[8] is not None}.isdisjoint(
+            catalog_parameter_ids
+        )
 
 
 def test_an_installed_version_stored_before_format_2_gets_no_tree(
