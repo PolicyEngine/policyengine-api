@@ -146,10 +146,9 @@ def test_every_country_list_follows_a_country_added_to_the_one_list() -> None:
 
 
 def test_catalog_settings_cover_exactly_the_listed_countries() -> None:
-    # Each listed country needs reviewed catalog settings, so adding a country
+    # Each listed country needs catalog settings, so adding a country
     # without them fails here rather than during publication.
     listed_countries = set(SUPPORTED_COUNTRY_IDS)
 
-    assert set(extraction.REVIEWED_DEFAULT_DATASETS) == listed_countries
     assert set(extraction.CURRENT_LAW_IDS) == listed_countries
     assert set(extraction.METADATA_TIME_PERIODS) == listed_countries

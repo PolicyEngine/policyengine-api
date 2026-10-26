@@ -10,12 +10,11 @@ from typing import TYPE_CHECKING, Any
 from policyengine_api.data.v2.catalog.extraction_regions import (
     DATASET_YEAR_PATTERN,
     MAX_REGION_FILTER_VALUE_LENGTH,
-    REVIEWED_DEFAULT_DATASETS,
     SUPPORTED_REGION_TYPES,
     dataset_year,
     normalize_region,
+    release_default_dataset,
     select_region_datasets,
-    verified_default_dataset,
     verified_source_regions,
 )
 from policyengine_api.data.v2.catalog.extraction_values import (
@@ -62,7 +61,6 @@ __all__ = [
     "METADATA_TIME_PERIODS",
     "PLACEHOLDER_VERSIONS",
     "REQUIRED_DEPENDENCIES",
-    "REVIEWED_DEFAULT_DATASETS",
     "SUPPORTED_COUNTRIES",
     "SUPPORTED_REGION_TYPES",
     "CatalogExtractionError",
@@ -402,14 +400,14 @@ def _normalize_country(
         country_id, source, model_version_id=model_version_id
     )
 
-    reviewed_default, default_dataset_uri = verified_default_dataset(
+    default_dataset, default_dataset_uri = release_default_dataset(
         country_id, release_manifest
     )
     source_regions = verified_source_regions(country_id, source)
     dataset_selection = select_region_datasets(
         country_id,
         source_regions,
-        reviewed_default=reviewed_default,
+        default_dataset=default_dataset,
         default_dataset_uri=default_dataset_uri,
     )
 

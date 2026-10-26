@@ -129,20 +129,24 @@ does not reorder, deduplicate, or repair package output. A value superseded on
 the immediately following day therefore has equal start and end dates and is a
 valid one-day interval.
 
-The US national region uses `populace_us_2024`. A US state,
+Each country's default dataset is the one the installed PolicyEngine.py
+release names in its manifest (`default_dataset`); the Public API sets none of
+its own. Publication stops if the manifest names no default, or if the release
+gives the national region another dataset. The US national region uses the
+release's default (`populace_us_2024` in 6.11.1). A US state,
 congressional-district, or place region uses its PolicyEngine.py regional
 alternative when one is available. Until a later reviewed change removes the
-fallback, a subnational region without such an alternative uses
-`populace_us_2024`. The command emits one summary warning containing only the
-affected region types and counts. The UK national and country regions use
-`microcosm_uk_2024_25`, the default certified by PolicyEngine.py 6.10.0; a
-country filters that national file. UK constituency and local-authority
-regions use the dataset PolicyEngine.py routes them to,
-`microcosm_uk_2024_25_dense`, because the national file has no area codes.
+fallback, a subnational region without such an alternative uses the default.
+The command emits one summary warning containing only the affected region
+types and counts. The UK national and country regions use the release's
+default (`microcosm_uk_2024_25` in 6.11.1); a country filters that national
+file. UK constituency and local-authority regions use the dataset
+PolicyEngine.py routes them to, `microcosm_uk_2024_25_dense`, because the
+national file has no area codes.
 
 Review the fallback summary on every new PolicyEngine.py release. A changed
-count may identify an upstream catalog change that needs a reviewed dataset
-selection even when publication otherwise succeeds.
+count may identify an upstream change to the release's datasets even when
+publication otherwise succeeds.
 
 ## Validation evidence and retry
 
