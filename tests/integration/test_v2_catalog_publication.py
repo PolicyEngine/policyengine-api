@@ -801,7 +801,14 @@ def test_republication_detects_a_changed_enum_label_parameter_path_unit_or_perio
     assert _stored_us_variables(publication_engine) == stored
 
 
-def _stored_tree(engine: Engine, model_name: str, version: str) -> list[tuple]:
+def _stored_tree(
+    engine: Engine,
+    model_name: str,
+    version: str,
+    *,
+    parameter_column: str = "parameter.name",
+) -> list[tuple]:
+    """Return a stored version's tree rows; each parameter by name by default."""
     with engine.connect() as connection:
         return [
             tuple(row)
@@ -809,7 +816,7 @@ def _stored_tree(engine: Engine, model_name: str, version: str) -> list[tuple]:
                 text(
                     "SELECT tree.parent_path, tree.path, tree.position, tree.label, "
                     "tree.child_type, tree.child_count, tree.reform_position, "
-                    "tree.reform_child_count, parameter.name, tree.economy, "
+                    f"tree.reform_child_count, {parameter_column}, tree.economy, "
                     "tree.household "
                     "FROM parameter_tree_children AS tree "
                     "JOIN tax_benefit_model_versions AS version "
@@ -883,25 +890,9 @@ def test_publication_writes_each_new_version_parameter_tree(
 def _stored_tree_with_parameter_ids(
     engine: Engine, model_name: str, version: str
 ) -> list[tuple]:
-    with engine.connect() as connection:
-        return [
-            tuple(row)
-            for row in connection.execute(
-                text(
-                    "SELECT tree.parent_path, tree.path, tree.position, tree.label, "
-                    "tree.child_type, tree.child_count, tree.reform_position, "
-                    "tree.reform_child_count, tree.parameter_id, tree.economy, "
-                    "tree.household "
-                    "FROM parameter_tree_children AS tree "
-                    "JOIN tax_benefit_model_versions AS version "
-                    "ON version.id = tree.tax_benefit_model_version_id "
-                    "JOIN tax_benefit_models AS model ON model.id = version.model_id "
-                    "WHERE model.name = :model_name AND version.version = :version "
-                    "ORDER BY tree.parent_path, tree.position"
-                ),
-                {"model_name": model_name, "version": version},
-            )
-        ]
+    return _stored_tree(
+        engine, model_name, version, parameter_column="tree.parameter_id"
+    )
 
 
 def test_publication_gives_the_installed_stored_version_its_tree(
@@ -999,7 +990,7 @@ def test_publication_fails_when_a_published_version_is_left_without_a_tree(
     monkeypatch.setattr(
         publication_module,
         "write_parameter_trees",
-        lambda _connection, _version_ids: (),
+        lambda _connection, _countries: (),
     )
 
     with pytest.raises(CatalogPublicationError, match="has no parameter tree"):
