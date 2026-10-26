@@ -305,6 +305,33 @@ since they describe staged regions that were not published. Every other table
 must still match exactly. Region reference changes therefore take effect in the
 next catalog version that is published.
 
+### Parameter tree
+
+Publication also writes each catalog version's parameter tree into
+`parameter_tree_children`, which `/v2/parameters/children` reads one level at
+a time. The rows are derived from the version's stored parameters and
+parameter nodes alone: every node and parameter is one row under its parent's
+path, a `[` starts a child as a `.` does (so a bracket schedule is one node
+whose children are its brackets, labelled "Bracket 1", "Bracket 2" and so on),
+and a path without a stored label gets one made from the last part of its
+name. Each row also records its position among all its siblings and, if a
+reform can change it, among the siblings a reform can change: a parameter
+under `gov` whose economy or household flag is set and whose path names
+neither `taxsim`, `gov.abolitions` nor `pycache`, and every node above such a
+parameter. These are the rules of the tree the app's newer interface builds
+from v1 metadata. A version stored before catalog format 2 has no flags, so
+only the path rules apply to it.
+
+In the same transaction, and on every run, the command writes the tree of
+every stored catalog version that has parameters but no tree: the versions it
+publishes and versions stored before the tree existed. This is a row-only,
+idempotent insert of rows derived from catalog rows already stored; it changes
+no other table, and a version that has its tree keeps it. The evidence's
+`parameter_trees_written` lists each version written, with its model, version
+and row count, and is empty once every stored version has its tree.
+Publication fails if a stored version with parameters is still without a tree
+when it finishes.
+
 ## Validation evidence and retry
 
 Successful JSON evidence contains:
@@ -315,6 +342,8 @@ Successful JSON evidence contains:
 - fallback counts and omitted-region counts by country and region type, and
   the stored and staged region counts of any stored version whose regions were
   kept;
+- the model, version and row count of each catalog version whose parameter
+  tree was written;
 - elapsed publication time; and
 - a success outcome.
 

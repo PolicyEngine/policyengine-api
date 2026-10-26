@@ -284,6 +284,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         elapsed_seconds=2.3456,
         omitted_region_summaries=(("us", "place", 333),),
         kept_region_summaries=(("uk", "6.7.5", 5, 1_015),),
+        parameter_trees_written=(("policyengine-uk", "6.7.5", 2_430),),
     ).as_dict()
 
     assert evidence == {
@@ -303,6 +304,13 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
                 "policyengine_version": "6.7.5",
                 "stored_regions": 5,
                 "staged_regions": 1_015,
+            }
+        ],
+        "parameter_trees_written": [
+            {
+                "model": "policyengine-uk",
+                "version": "6.7.5",
+                "rows": 2_430,
             }
         ],
         "elapsed_seconds": 2.346,

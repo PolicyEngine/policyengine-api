@@ -22,6 +22,9 @@ class PublicationEvidence:
     # Stored catalog versions whose region rows were kept although the staged
     # regions differ: country, version, stored and staged region counts.
     kept_region_summaries: tuple[tuple[str, str, int, int], ...] = ()
+    # Stored catalog versions whose parameter tree publication wrote: model,
+    # version and rows written. Empty once every stored version has its tree.
+    parameter_trees_written: tuple[tuple[str, str, int], ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         """Return the evidence as the JSON object printed after a publication."""
@@ -54,6 +57,10 @@ class PublicationEvidence:
                     "staged_regions": staged,
                 }
                 for country_id, version, stored, staged in self.kept_region_summaries
+            ],
+            "parameter_trees_written": [
+                {"model": model_name, "version": version, "rows": rows}
+                for model_name, version, rows in self.parameter_trees_written
             ],
             "elapsed_seconds": round(self.elapsed_seconds, 3),
         }

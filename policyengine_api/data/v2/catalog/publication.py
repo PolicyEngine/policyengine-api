@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from sqlalchemy import Connection, Engine
 
+from policyengine_api.data.v2.catalog.publication_parameter_tree import (
+    assert_every_parameter_tree_written,
+    write_missing_parameter_trees,
+)
 from policyengine_api.data.v2.catalog.publication_reconciliation import (
     assert_canonical_value_uniqueness,
     assert_country_matches,
@@ -118,7 +123,12 @@ def publish_catalog(
     *,
     checkpoint: Callable[[str, Connection], None] | None = None,
 ) -> PublicationEvidence:
-    """Publish one complete catalog atomically and return non-secret evidence."""
+    """Publish one complete catalog atomically and return non-secret evidence.
+
+    In the same transaction it writes the parameter tree of every stored
+    catalog version that has none: the versions published now, and versions
+    stored before the tree existed.
+    """
     started = time.monotonic()
     with engine.begin() as connection:
         _verify_expected_revision(connection)
@@ -134,6 +144,7 @@ def publish_catalog(
         for country in catalog.countries:
             if country.country_id not in existing:
                 publish_new_country(connection, country)
+        parameter_trees_written = write_missing_parameter_trees(connection)
         if checkpoint is not None:
             checkpoint("after_reconciliation", connection)
 
@@ -144,13 +155,17 @@ def publish_catalog(
                 include_regions=country.country_id not in existing,
             )
         assert_canonical_value_uniqueness(connection)
+        assert_every_parameter_tree_written(connection)
         if _protected_row_counts(connection) != before:
             msg = "publication changed simulation, report, or dataset-version rows"
             raise CatalogPublicationError(msg)
         if checkpoint is not None:
             checkpoint("after_validation", connection)
 
-    return _evidence(catalog, kept_region_summaries, started=started)
+    return replace(
+        _evidence(catalog, kept_region_summaries, started=started),
+        parameter_trees_written=parameter_trees_written,
+    )
 
 
 def _check_stored_versions(

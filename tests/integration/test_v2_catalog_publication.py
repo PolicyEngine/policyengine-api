@@ -798,3 +798,135 @@ def test_republication_detects_a_changed_enum_label_parameter_path_unit_or_perio
         )
 
     assert _stored_us_variables(publication_engine) == stored
+
+
+def _stored_tree(engine: Engine, model_name: str, version: str) -> list[tuple]:
+    with engine.connect() as connection:
+        return [
+            tuple(row)
+            for row in connection.execute(
+                text(
+                    "SELECT tree.parent_path, tree.path, tree.position, tree.label, "
+                    "tree.child_type, tree.child_count, tree.reform_position, "
+                    "tree.reform_child_count, parameter.name, tree.economy, "
+                    "tree.household "
+                    "FROM parameter_tree_children AS tree "
+                    "JOIN tax_benefit_model_versions AS version "
+                    "ON version.id = tree.tax_benefit_model_version_id "
+                    "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                    "LEFT JOIN parameters AS parameter "
+                    "ON parameter.id = tree.parameter_id "
+                    "WHERE model.name = :model_name AND version.version = :version "
+                    "ORDER BY tree.parent_path, tree.position"
+                ),
+                {"model_name": model_name, "version": version},
+            )
+        ]
+
+
+def _delete_tree(engine: Engine, version: str) -> None:
+    """Make the stored versions of one .py version look stored before the tree."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "DELETE FROM parameter_tree_children AS tree "
+                "USING tax_benefit_model_versions AS version "
+                "WHERE version.id = tree.tax_benefit_model_version_id "
+                "AND version.version = :version"
+            ),
+            {"version": version},
+        )
+
+
+FIXTURE_TREE = [
+    ("", "gov", 0, "Gov", "node", 1, 0, 1, None, None, None),
+    ("gov", "gov.example", 0, "Example policy", "node", 1, 0, 1, None, None, None),
+    (
+        "gov.example",
+        "gov.example.rate",
+        0,
+        "Example rate",
+        "parameter",
+        None,
+        0,
+        None,
+        "gov.example.rate",
+        True,
+        False,
+    ),
+]
+
+
+def test_publication_writes_each_new_version_parameter_tree(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+
+    evidence = publish_catalog(publication_engine, catalog)
+
+    for country in catalog.countries:
+        assert (
+            _stored_tree(
+                publication_engine,
+                country.model.name,
+                country.model_version.version,
+            )
+            == FIXTURE_TREE
+        )
+    assert evidence.parameter_trees_written == tuple(
+        (country.model.name, country.model_version.version, len(FIXTURE_TREE))
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    )
+
+
+def test_publication_writes_the_tree_of_stored_versions_that_have_none(
+    publication_engine: Engine,
+) -> None:
+    older_version = "1.0.0"
+    older = normalized_catalog(policyengine_version=older_version)
+    catalog = normalized_catalog()
+    older_country_version = older.country("us").model_version.version
+    publish_catalog(publication_engine, older)
+    publish_catalog(publication_engine, catalog)
+    current_country_version = catalog.country("us").model_version.version
+    _delete_tree(publication_engine, older_country_version)
+    _delete_tree(publication_engine, current_country_version)
+    before_ids = _identifiers(publication_engine)
+    before_counts = _counts(publication_engine)
+
+    evidence = publish_catalog(publication_engine, catalog)
+    again = publish_catalog(publication_engine, catalog)
+
+    assert {
+        (model_name, version)
+        for model_name, version, _rows in evidence.parameter_trees_written
+    } == {
+        (country.model.name, version)
+        for country in catalog.countries
+        for version in {older_country_version, current_country_version}
+    }
+    assert again.parameter_trees_written == ()
+    for country in catalog.countries:
+        for version in (older_country_version, current_country_version):
+            assert (
+                _stored_tree(publication_engine, country.model.name, version)
+                == FIXTURE_TREE
+            )
+    assert _identifiers(publication_engine) == before_ids
+    assert _counts(publication_engine) == before_counts
+
+
+def test_publication_fails_when_a_stored_version_is_left_without_a_tree(
+    publication_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        publication_module,
+        "write_missing_parameter_trees",
+        lambda _connection: (),
+    )
+
+    with pytest.raises(CatalogPublicationError, match="has no parameter tree"):
+        publish_catalog(publication_engine, normalized_catalog())
+
+    assert _counts(publication_engine)["tax_benefit_model_versions"] == 0
