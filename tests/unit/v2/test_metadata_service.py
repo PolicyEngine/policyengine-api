@@ -1193,6 +1193,94 @@ def test_variables_carry_their_unit_and_definition_period(
     )
 
 
+@pytest.mark.parametrize(
+    ("country_id", "version", "expected_catalog_format", "expected_fields"),
+    [
+        ("us", None, 2, {"employment_income": ("currency-USD", "year")}),
+        (
+            "uk",
+            None,
+            2,
+            {
+                "employment_income": ("currency-USD", "year"),
+                "universal_credit": ("currency-GBP", "month"),
+            },
+        ),
+        # A version published before catalog format 2 stored neither field.
+        ("us", "9.9.9", None, {"employment_income": (None, None)}),
+    ],
+)
+def test_both_variables_routes_serve_unit_and_definition_period(
+    catalog_session: Session,
+    country_id: str,
+    version: str | None,
+    expected_catalog_format: int | None,
+    expected_fields: dict[str, tuple[str | None, str | None]],
+) -> None:
+    from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+        MetadataResponseCache,
+    )
+
+    from .test_metadata_routes import _client
+
+    catalog_session.add(
+        Variable(
+            id=uuid4(),
+            tax_benefit_model_version_id=_model_version(
+                catalog_session, "policyengine-uk"
+            ).id,
+            name="universal_credit",
+            entity="benunit",
+            data_type="float",
+            default_value=0,
+            unit="currency-GBP",
+            definition_period="month",
+        )
+    )
+    catalog_session.commit()
+    _add_country_version(
+        catalog_session,
+        policyengine_version="9.9.9",
+        current_law_id=7,
+        time_periods=[2027],
+    )
+    earlier_version = _model_version(catalog_session, "policyengine-us", "9.9.9")
+    earlier_version.catalog_format = None
+    for variable in catalog_session.exec(
+        select(Variable).where(
+            Variable.tax_benefit_model_version_id == earlier_version.id
+        )
+    ).all():
+        variable.unit = None
+        variable.definition_period = None
+    catalog_session.commit()
+    client = _client(
+        lambda: _service(catalog_session), response_cache=MetadataResponseCache()
+    )
+    query = f"country_id={country_id}" + (
+        "" if version is None else f"&policyengine_version={version}"
+    )
+
+    whole_version_bodies = [
+        client.get(f"/v2/model-catalog/variables?{query}").json()["result"]
+        for _attempt in ("read", "stored")
+    ]
+    page = client.get(f"/v2/variables?{query}").json()["result"]
+
+    for result in whole_version_bodies:
+        assert result["catalog_format"] == expected_catalog_format
+        served = {
+            variable["name"]: (variable["unit"], variable["definition_period"])
+            for variable in result["variables"]
+        }
+        assert served == expected_fields
+    paged = {
+        item["name"]: (item["unit"], item["definition_period"])
+        for item in page["items"]
+    }
+    assert paged == expected_fields
+
+
 def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
     project_package = Path(__file__).parents[3] / "policyengine_api"
     connector_directory = (
