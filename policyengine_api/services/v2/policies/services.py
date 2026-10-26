@@ -194,9 +194,12 @@ def mirror_legacy_policy_in_session(
     """Copy one committed v1 policy into v2 and map its v1 id to the result.
 
     The policy is translated against the running catalog, whichever country
-    package version it was saved under. Replaying the same v1 policy is
-    idempotent. Raise LegacyPolicyMappingIntegrityError if the v1 id is already
-    mapped with a different source hash or to a different v2 policy.
+    package version it was saved under. A v1 policy that already has a v2 copy
+    returns that copy without being translated again, so writing it again after
+    a PolicyEngine.py or country package upgrade still succeeds. Raise
+    LegacyPolicyMappingIntegrityError if the v1 id is already mapped with a
+    different source hash, or a concurrent copy mapped it to a different v2
+    policy.
     """
     existing = read_legacy_policy_mapping(
         session,
@@ -205,8 +208,15 @@ def mirror_legacy_policy_in_session(
         lock=True,
     )
     if existing is not None:
+        # v1 policies never change, so the same source hash means the mapped
+        # v2 policy is still the copy, whichever catalog is running now.
         verify_legacy_policy_mapping(
             existing, source_policy_hash=snapshot.source_policy_hash
+        )
+        return LegacyPolicyPersistenceResult(
+            policy_id=existing.policy_id,
+            policy_created=False,
+            mapping_created=False,
         )
 
     selected = read_policy_catalog(
@@ -229,18 +239,6 @@ def mirror_legacy_policy_in_session(
         parameters=parameters,
     )
     policy_result = create_resolved_policy(session, policy_input)
-    if existing is not None:
-        verify_legacy_policy_mapping(
-            existing,
-            source_policy_hash=snapshot.source_policy_hash,
-            expected_policy_id=policy_result.policy_id,
-        )
-        return LegacyPolicyPersistenceResult(
-            policy_id=existing.policy_id,
-            policy_created=False,
-            mapping_created=False,
-        )
-
     mapping_id = create_legacy_policy_mapping(
         session,
         country_id=snapshot.country_id,

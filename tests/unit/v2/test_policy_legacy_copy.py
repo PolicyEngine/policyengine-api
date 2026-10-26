@@ -15,6 +15,7 @@ from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
     V2_METADATA,
+    LegacyPolicyMapping,
     Parameter,
     TaxBenefitModel,
     TaxBenefitModelVersion,
@@ -26,9 +27,13 @@ from policyengine_api.services.v2.policies.types import (
     PolicyCreationResult,
     ResolvedPolicyCreationInput,
 )
+from policyengine_api.services.v2.policies.validators import (
+    LegacyPolicyMappingIntegrityError,
+)
 
 RUNNING_POLICYENGINE_VERSION = "6.7.5"
 COPIED_POLICY_ID = UUID("00000000-0000-0000-0000-000000000042")
+EARLIER_COPY_POLICY_ID = UUID("00000000-0000-0000-0000-000000000041")
 MAPPING_ID = UUID("00000000-0000-0000-0000-000000000043")
 
 
@@ -204,3 +209,83 @@ def test_policy_with_a_country_package_the_api_does_not_run_is_copied(
 
     assert result.mapping_created is True
     assert len(recorded_writes.created_policies) == 1
+
+
+def _add_earlier_copy(
+    session: Session, snapshot: LegacyPolicySnapshot, *, source_policy_hash: str
+) -> None:
+    session.add(
+        LegacyPolicyMapping(
+            country_id=snapshot.country_id,
+            legacy_policy_id=snapshot.legacy_policy_id,
+            policy_id=EARLIER_COPY_POLICY_ID,
+            source_policy_hash=source_policy_hash,
+        )
+    )
+    session.commit()
+
+
+def _reused_snapshot() -> LegacyPolicySnapshot:
+    return _snapshot(
+        country_id="us",
+        legacy_policy_id=96567,
+        api_version="1.633.2",
+        policy_json={"gov.dol.minimum_wage": {"2026-01-01.2100-12-31": 9}},
+    )
+
+
+def test_earlier_copy_is_reused_when_the_running_catalog_is_not_published(
+    catalog_session: Session,
+    recorded_writes: RecordedCopyWrites,
+) -> None:
+    # After a PolicyEngine.py upgrade, the new release's catalog may not be
+    # published yet. Writing the same v1 policy again still succeeds.
+    snapshot = _reused_snapshot()
+    _add_earlier_copy(
+        catalog_session, snapshot, source_policy_hash=snapshot.source_policy_hash
+    )
+
+    result = _copy(catalog_session, snapshot)
+
+    assert result == LegacyPolicyPersistenceResult(
+        policy_id=EARLIER_COPY_POLICY_ID,
+        policy_created=False,
+        mapping_created=False,
+    )
+    assert recorded_writes == RecordedCopyWrites()
+
+
+def test_earlier_copy_is_reused_when_the_running_catalog_lacks_its_parameter(
+    catalog_session: Session,
+    recorded_writes: RecordedCopyWrites,
+) -> None:
+    # A later release renamed or removed the parameter. The v2 copy made
+    # before that keeps its own catalog version, so it is still the copy.
+    _add_running_catalog(
+        catalog_session, country_id="us", parameter_names=["gov.example.rate"]
+    )
+    snapshot = _reused_snapshot()
+    _add_earlier_copy(
+        catalog_session, snapshot, source_policy_hash=snapshot.source_policy_hash
+    )
+
+    result = _copy(catalog_session, snapshot)
+
+    assert result.policy_id == EARLIER_COPY_POLICY_ID
+    assert (result.policy_created, result.mapping_created) == (False, False)
+    assert recorded_writes == RecordedCopyWrites()
+
+
+def test_earlier_copy_with_another_source_hash_is_an_integrity_error(
+    catalog_session: Session,
+    recorded_writes: RecordedCopyWrites,
+) -> None:
+    snapshot = _reused_snapshot()
+    _add_earlier_copy(
+        catalog_session, snapshot, source_policy_hash="different-legacy-hash"
+    )
+
+    with pytest.raises(LegacyPolicyMappingIntegrityError, match="source hash"):
+        _copy(catalog_session, snapshot)
+
+    assert recorded_writes == RecordedCopyWrites()

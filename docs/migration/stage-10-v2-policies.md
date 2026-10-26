@@ -152,7 +152,9 @@ its `failure_category`, and the route returns its normal v1 response. A
 saved-policy event that failed stays pending, and the next mutation of the same
 saved policy replays it, with earlier retained events first. A core policy
 whose copy failed is copied again the next time any request writes the same
-policy. Destination revision and fingerprint checks make a replay safe if
+policy. A core policy that already has a copy returns that copy without being
+translated again, so writing it again after a PolicyEngine.py or country
+package upgrade does not fail. Destination revision and fingerprint checks make a replay safe if
 Supabase committed but the Cloud SQL processing marker did not. There is no
 background processor or reconciliation process.
 
