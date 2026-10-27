@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import httpx
 from policyengine_api_simulation_client.models.household_calculation_response import (
@@ -65,7 +65,7 @@ from policyengine_api.services.v2.household_calculations.types import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
     from uuid import UUID
 
 CALCULATIONS_PATH = "/v2/household-calculations"
@@ -83,7 +83,12 @@ def _send(send: Callable[[], httpx.Response]) -> httpx.Response:
         raise SimulationServiceUnavailableError(msg) from error
 
 
-def _decoded(response: httpx.Response, model: Any) -> tuple[Any, Any]:  # noqa: ANN401  # a generated model class and its instance
+ModelT = TypeVar("ModelT")
+
+
+def _decoded(
+    response: httpx.Response, read_model: Callable[[Mapping[str, Any]], ModelT]
+) -> tuple[object, ModelT]:
     """Return the decoded body and the generated model read from it.
 
     Raise SimulationServiceUnavailableError when the body is not JSON or not
@@ -91,14 +96,16 @@ def _decoded(response: httpx.Response, model: Any) -> tuple[Any, Any]:  # noqa: 
     """
     try:
         body = response.json()
-        return body, model.from_dict(body)
+        return body, read_model(body)
     except (ValueError, KeyError, TypeError, AttributeError) as error:
         msg = "The simulation service's answer could not be read."
         raise SimulationServiceUnavailableError(msg) from error
 
 
 def _calculation(response: httpx.Response) -> dict[str, Any]:
-    body, _calculation_model = _decoded(response, HouseholdCalculationResponse)
+    body, _calculation_model = _decoded(
+        response, HouseholdCalculationResponse.from_dict
+    )
     if not isinstance(body, dict):
         msg = "The simulation service's answer could not be read."
         raise SimulationServiceUnavailableError(msg)
@@ -184,10 +191,10 @@ class SimulationHouseholdClient:
         if response.status_code == HTTPStatus.ACCEPTED:
             return _calculation(response)
         if response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-            _body, invalid = _decoded(response, HTTPValidationError)
+            _body, invalid = _decoded(response, HTTPValidationError.from_dict)
             raise SimulationServiceInvalidRequestError(_invalid_request_reason(invalid))
         if response.status_code == HTTPStatus.BAD_REQUEST:
-            _body, refusal = _decoded(response, HouseholdRouteError)
+            _body, refusal = _decoded(response, HouseholdRouteError.from_dict)
             raise SimulationServiceRefusedError(refusal.detail)
         raise _unavailable(response.status_code)
 
@@ -199,7 +206,7 @@ class SimulationHouseholdClient:
         if response.status_code == HTTPStatus.OK:
             return _calculation(response)
         if response.status_code == HTTPStatus.NOT_FOUND:
-            _decoded(response, HouseholdRouteError)
+            _decoded(response, HouseholdRouteError.from_dict)
             return None
         raise _unavailable(response.status_code)
 
