@@ -342,7 +342,7 @@ jobs:
   parallel-live-simulation-tests-staging-cloud-run:
     name: Run live simulations against the staging candidate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: deploy-cloud-run-staging
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')

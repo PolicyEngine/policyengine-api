@@ -292,3 +292,28 @@ Without the URL, or with gateway auth partly configured, both routes answer
 503. They also answer 503 when the simulation service cannot be reached,
 answers with an error, or refuses the calculation (for example when no v2
 worker is deployed for the catalog version's PolicyEngine.py version).
+
+### Staging checks
+
+The parallel live staging job (`run_live_staging_tests.sh`) runs two modules
+against each tagged staging candidate, through staging API v1, the staging
+Simulation Entrypoint, the v2 household functions on Modal and the staging v2
+database:
+
+- `test_live_v2_household_calculations.py`: a submit, poll and result cycle
+  for a new US household; six calculations submitted at once, each accepted
+  within 10 seconds and finished within 300 seconds; and one household varied
+  across 401 points of employment income, which must finish. The measured
+  times appear in the job log as `HouseholdCalculationMeasurement` warnings.
+- `test_live_v2_household_parity.py`: two US and two UK households, one of
+  each with axes, calculated through `/v2/household-calculations` and through
+  API v1's `/calculate`; every calculated value and warning must match.
+
+`STAGING_HOUSEHOLD_PARALLEL_COUNT`, `STAGING_HOUSEHOLD_SUBMIT_LIMIT_SECONDS`,
+`STAGING_HOUSEHOLD_FINISH_LIMIT_SECONDS` and
+`STAGING_HOUSEHOLD_CALCULATION_TIMEOUT_SECONDS` (600 seconds per calculation)
+change those limits; none is set in the workflow. The checks see neither the
+number of Simulation Entrypoint instances that served the calculations nor
+the household functions' memory use: a calculation that runs out of memory
+fails, and so fails the check. Both modules fail until the staging Simulation
+Entrypoint serves `/v2/household-calculations`.

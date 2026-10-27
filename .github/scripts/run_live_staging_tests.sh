@@ -8,4 +8,6 @@ python -m pytest \
   tests/integration/test_live_budget_window_cache.py \
   tests/integration/test_live_calculate.py \
   tests/integration/test_live_economy.py \
+  tests/integration/test_live_v2_household_calculations.py \
+  tests/integration/test_live_v2_household_parity.py \
   -v

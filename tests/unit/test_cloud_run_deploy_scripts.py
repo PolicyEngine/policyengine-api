@@ -1894,6 +1894,12 @@ def _assert_live_tests_run_in_parallel_after_readiness(
     assert "tests/integration/test_live_budget_window_cache.py" in live_test_script
     assert "tests/integration/test_live_calculate.py" in live_test_script
     assert "tests/integration/test_live_economy.py" in live_test_script
+    assert "tests/integration/test_live_v2_household_calculations.py" in (
+        live_test_script
+    )
+    assert "tests/integration/test_live_v2_household_parity.py" in live_test_script
+    # The household calculation checks wait on Modal; 30 minutes leaves room.
+    assert "timeout-minutes: 30" in parallel_live_tests
     assert "tests/integration/test_live_v2_policies.py" not in parallel_live_tests
     assert (
         "API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}"
