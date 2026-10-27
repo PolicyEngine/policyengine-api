@@ -111,13 +111,11 @@ class ReportRunItem(StrictReportAPIModel):
         return cls.model_validate(record)
 
 
-class ReportItem(StrictReportAPIModel):
+class ReportSummaryItem(StrictReportAPIModel):
     """An economy report comparing a baseline and a reform simulation.
 
     ``status`` is the newest run's, or ``not_run`` for a report with no run.
     ``legacy_report_id`` is the v1 report output it was migrated from.
-    ``result`` holds today's economy result format (``SingleYearMacroOutput``)
-    once the newest run has succeeded, and is null otherwise.
     """
 
     id: UUID
@@ -131,6 +129,20 @@ class ReportItem(StrictReportAPIModel):
     reform_simulation: SimulationItem
     status: ReportStatus
     run: ReportRunItem | None
+
+    @classmethod
+    def from_record(cls, record: EconomyReportRecord) -> ReportSummaryItem:
+        """Build the summary from the service's report record, without its result."""
+        return cls.model_validate(record)
+
+
+class ReportItem(ReportSummaryItem):
+    """An economy report with its result.
+
+    ``result`` holds today's economy result format (``SingleYearMacroOutput``)
+    once the newest run has succeeded, and is null otherwise.
+    """
+
     result: dict[str, JsonValue] | None
 
     @classmethod
@@ -143,6 +155,12 @@ class ReportDetailResult(StrictReportAPIModel):
     """Result holding one report in ``item``."""
 
     item: ReportItem
+
+
+class ReportListResult(StrictReportAPIModel):
+    """The listed reports in ``items``, in the order asked, without results."""
+
+    items: list[ReportSummaryItem]
 
 
 class ReportRunDetailResult(StrictReportAPIModel):
@@ -170,6 +188,10 @@ class ReportSuccessResponse(StrictReportAPIModel, Generic[ResultT]):
 
 class ReportDetailResponse(ReportSuccessResponse[ReportDetailResult]):
     """Success response holding one report."""
+
+
+class ReportListResponse(ReportSuccessResponse[ReportListResult]):
+    """Success response holding listed reports."""
 
 
 class ReportRunDetailResponse(ReportSuccessResponse[ReportRunDetailResult]):

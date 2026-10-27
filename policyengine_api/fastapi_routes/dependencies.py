@@ -18,7 +18,7 @@ from policyengine_api.services.v2.economy_reports.types import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from uuid import UUID
 
     from policyengine_api.json_types import JSONObject
@@ -370,6 +370,12 @@ class V2EconomyReportResourceService(Protocol):
         reports, ``EconomyReportNotFoundError`` for an unknown report and
         ``SimulationRequestRefusedError`` when the entrypoint cannot run it.
         """
+        ...
+
+    def list_reports(
+        self, *, country_id: str, report_ids: Sequence[UUID]
+    ) -> tuple[EconomyReportRecord, ...]:
+        """Return the country's reports among ``report_ids``, in order, once each."""
         ...
 
     def list_report_runs(

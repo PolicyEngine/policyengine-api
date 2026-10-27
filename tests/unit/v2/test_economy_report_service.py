@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 import pytest
 
 from policyengine_api.services.v2.economy_reports.types import (
@@ -295,3 +297,23 @@ def test_the_runs_of_a_report_not_in_the_country_are_not_found() -> None:
         )
 
     assert [name for name, _ in simulation.calls] == ["get_report"]
+
+
+def test_listed_reports_keep_the_asked_order_and_only_the_countrys() -> None:
+    second_id = UUID("00000000-0000-4000-8000-000000000201")
+    other_country_id = UUID("00000000-0000-4000-8000-000000000202")
+    unknown_id = UUID("00000000-0000-4000-8000-000000000203")
+    simulation = FakeEconomyReportSimulation(
+        report_record(),
+        report_record(report_id=second_id, run=report_run_record()),
+        report_record(report_id=other_country_id, country_id="uk"),
+    )
+
+    reports = economy_report_service(simulation).list_reports(
+        country_id="us",
+        report_ids=[second_id, unknown_id, REPORT_ID, other_country_id, second_id],
+    )
+
+    assert [report.id for report in reports] == [second_id, REPORT_ID]
+    assert reports[1].status is ReportStatus.NOT_RUN
+    assert [name for name, _ in simulation.calls] == ["get_report"] * 4

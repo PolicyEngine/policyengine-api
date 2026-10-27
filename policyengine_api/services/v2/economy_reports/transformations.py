@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING
 from policyengine_api.services.v2.economy_reports.types import EconomyReportSubmission
 
 if TYPE_CHECKING:
-    from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
+    from collections.abc import Iterable
+
+    from policyengine_api.services.v2.economy_reports.types import (
+        EconomyReportFields,
+        EconomyReportRecord,
+    )
 
 
 def economy_report_submission(
@@ -26,3 +31,14 @@ def economy_report_submission(
         baseline=report_input.baseline,
         reform=report_input.reform,
     )
+
+
+def reports_of_country(
+    reports: Iterable[EconomyReportRecord | None], *, country_id: str
+) -> tuple[EconomyReportRecord, ...]:
+    """Keep the found reports of the country, in order, each once."""
+    kept: dict[object, EconomyReportRecord] = {}
+    for report in reports:
+        if report is not None and report.country_id == country_id:
+            kept.setdefault(report.id, report)
+    return tuple(kept.values())

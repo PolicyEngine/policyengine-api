@@ -34,15 +34,19 @@ from policyengine_api.fastapi_routes.v2.reports.response_models import (
     ReportDetailResponse,
     ReportDetailResult,
     ReportItem,
+    ReportListResponse,
+    ReportListResult,
     ReportRunDetailResponse,
     ReportRunDetailResult,
     ReportRunItem,
     ReportRunListResponse,
     ReportRunListResult,
+    ReportSummaryItem,
 )
 from policyengine_api.fastapi_routes.v2.user_resources import request_size_limit
 from policyengine_api.query_parameters import (
     MAXIMUM_LEGACY_RESOURCE_ID,
+    ReportCollectionQuery,
     ReportCreateQuery,
     ReportDetailQuery,
 )
@@ -76,6 +80,9 @@ enforce_report_request_size = request_size_limit(
 
 ReportCreateQueryDependency = Annotated[
     ReportCreateQuery, Depends(query_dependency(ReportCreateQuery))
+]
+ReportCollectionQueryDependency = Annotated[
+    ReportCollectionQuery, Depends(query_dependency(ReportCollectionQuery))
 ]
 ReportDetailQueryDependency = Annotated[
     ReportDetailQuery, Depends(query_dependency(ReportDetailQuery))
@@ -163,6 +170,14 @@ def _report_detail(report: EconomyReportRecord) -> ReportDetailResponse:
     )
 
 
+def _report_list(reports: tuple[EconomyReportRecord, ...]) -> ReportListResponse:
+    return ReportListResponse(
+        result=ReportListResult(
+            items=[ReportSummaryItem.from_record(report) for report in reports]
+        )
+    )
+
+
 def _report_run_detail(report_run: EconomyReportRunRecord) -> ReportRunDetailResponse:
     return ReportRunDetailResponse(
         result=ReportRunDetailResult(item=ReportRunItem.from_record(report_run))
@@ -210,6 +225,29 @@ def build_v2_report_router(
             lambda: _report_detail(
                 service_factory().submit_report(
                     country_id=query.country_id, report_input=body
+                )
+            )
+        )
+
+    @router.get(
+        "/reports",
+        response_model=ReportListResponse,
+        summary="List chosen economy reports",
+        description=(
+            "Lists the country's reports among the report_id values (at most "
+            "25), in that order and once each, with their status and newest run "
+            "but without results. Unknown reports and other countries' are left "
+            "out. Listing does not start the first run of a report that has "
+            "none; reading it does."
+        ),
+    )
+    def list_reports(
+        query: ReportCollectionQueryDependency,
+    ) -> ReportListResponse | JSONResponse:
+        return _report_operation(
+            lambda: _report_list(
+                service_factory().list_reports(
+                    country_id=query.country_id, report_ids=query.report_id
                 )
             )
         )

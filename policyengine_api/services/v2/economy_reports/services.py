@@ -25,6 +25,7 @@ from policyengine_api.services.v2.economy_reports.database_connectors.reads impo
 )
 from policyengine_api.services.v2.economy_reports.transformations import (
     economy_report_submission,
+    reports_of_country,
 )
 from policyengine_api.services.v2.economy_reports.types import (
     RunTrigger,
@@ -39,7 +40,7 @@ from policyengine_api.services.v2.economy_reports.validators import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from uuid import UUID
 
     from policyengine_api.services.v2.economy_reports.database_session import (
@@ -232,3 +233,25 @@ class V2EconomyReportService:
             raise report_not_found(
                 country_id=country_id, reference=reference
             ) from error
+
+    def _report_or_none(self, report_id: UUID) -> EconomyReportRecord | None:
+        try:
+            return self._simulation.get_report(report_id)
+        except SimulationRecordNotFoundError:
+            return None
+
+    def list_reports(
+        self, *, country_id: str, report_ids: Sequence[UUID]
+    ) -> tuple[EconomyReportRecord, ...]:
+        """Return the country's reports among ``report_ids``, in that order, once each.
+
+        Unknown reports and other countries' are left out. Listing a report
+        with no run does not start one; reading it does.
+        """
+        return reports_of_country(
+            (
+                self._report_or_none(report_id)
+                for report_id in dict.fromkeys(report_ids)
+            ),
+            country_id=country_id,
+        )

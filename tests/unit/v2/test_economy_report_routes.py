@@ -7,6 +7,7 @@ Simulation Entrypoint.
 from __future__ import annotations
 
 import sys
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -554,3 +555,64 @@ def test_openapi_publishes_the_run_contracts() -> None:
     body = schema["components"]["schemas"]["EconomyReportRunRequest"]
     assert body["additionalProperties"] is False
     assert body["properties"]["force"]["default"] is False
+
+
+SECOND_REPORT_ID = "00000000-0000-4000-8000-000000000201"
+
+
+def test_reports_are_listed_by_id_without_their_results() -> None:
+    simulation = FakeEconomyReportSimulation(
+        report_record(run=report_run_record(status=ReportStatus.SUCCEEDED)),
+        report_record(report_id=UUID(SECOND_REPORT_ID), legacy_report_id=615),
+    )
+
+    response = _client(simulation).get(
+        f"/v2/reports?country_id=us&report_id={SECOND_REPORT_ID}&report_id={REPORT_ID}"
+    )
+
+    assert response.status_code == 200
+    items = response.json()["result"]["items"]
+    assert [item["id"] for item in items] == [SECOND_REPORT_ID, str(REPORT_ID)]
+    assert [item["status"] for item in items] == ["not_run", "succeeded"]
+    assert all("result" not in item for item in items)
+    assert items[0]["run"] is None
+    assert [name for name, _ in simulation.calls] == ["get_report", "get_report"]
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "country_id=us",
+        "country_id=us&report_id=not-a-uuid",
+        "report_id=" + SECOND_REPORT_ID,
+        "country_id=us&country_id=uk&report_id=" + SECOND_REPORT_ID,
+        "country_id=us&"
+        + "&".join(
+            f"report_id=00000000-0000-4000-8000-{number:012d}" for number in range(26)
+        ),
+    ],
+    ids=["no-ids", "bad-id", "no-country", "two-countries", "too-many"],
+)
+def test_a_listing_outside_the_contract_is_refused(query: str) -> None:
+    simulation = FakeEconomyReportSimulation()
+
+    response = _client(simulation).get(f"/v2/reports?{query}")
+
+    assert response.status_code == 422
+    assert simulation.calls == []
+
+
+def test_openapi_publishes_the_listing_contract() -> None:
+    schema = _client(FakeEconomyReportSimulation()).get("/v2/openapi.json").json()
+
+    operation = schema["paths"]["/v2/reports"]["get"]
+    report_ids = next(
+        parameter
+        for parameter in operation["parameters"]
+        if parameter["name"] == "report_id"
+    )
+    assert report_ids["required"] is True
+    assert report_ids["schema"]["type"] == "array"
+    assert report_ids["schema"]["maxItems"] == 25
+    item = schema["components"]["schemas"]["ReportSummaryItem"]
+    assert "result" not in item["properties"]

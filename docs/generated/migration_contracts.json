@@ -1,7 +1,7 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 95,
+    "request_count": 96,
     "route_group_count": 9,
     "sim_flow_count": 3,
     "workflow_count": 18
@@ -1392,6 +1392,18 @@
             "result.item.status",
             "result.item.run",
             "result.item.result"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/reports?country_id=us&report_id={report_id}",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items"
           ]
         },
         {
