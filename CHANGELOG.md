@@ -1,3 +1,10 @@
+## [5.13.3] - 2026-10-27
+
+### Changed
+
+- The daily telemetry error report now identifies each stack frame in an exception's fingerprint by its function name, without leading underscores, instead of its module path and function name (fingerprint algorithm 2), so moving a function to another module no longer opens a duplicate issue. Every error group gets a new fingerprint: issues opened under algorithm 1 are no longer updated or reopened, and a group that still fails opens a new issue.
+
+
 ## [5.13.2] - 2026-10-27
 
 ### Fixed
