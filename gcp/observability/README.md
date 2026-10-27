@@ -151,7 +151,10 @@ through `github_client`. Each run:
    `request.completed` records per route in the report day, for error rates.
    Each query is limited to 5 GiB billed.
 2. Chooses one record per failed request and service: the exception record,
-   else the error message, else the failed `request.completed` record.
+   else the error message, else the failed `request.completed` record. Records
+   that tie, such as two exceptions logged at the same moment, are ordered by
+   their own values, so the same records give the same report whatever order
+   the query returns them in.
 3. Groups failures by a 16-character HMAC-SHA256 fingerprint of the service
    family and either the exception type and innermost application stack
    frames, the route and message template, or the route and HTTP status.

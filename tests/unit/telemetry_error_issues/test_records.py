@@ -137,7 +137,8 @@ def test_primary_keeps_failures_of_different_services_separate() -> None:
 
     primary = primary_records([api_failure, simulation_failure])
 
-    assert primary == [api_failure, simulation_failure]
+    assert len(primary) == 2
+    assert set(primary) == {api_failure, simulation_failure}
 
 
 def test_fingerprint_exception_ignores_lines_path_prefixes_and_routes() -> None:
