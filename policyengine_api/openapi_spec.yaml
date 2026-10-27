@@ -757,7 +757,9 @@ paths:
       summary: Update a report output
       operationId: update_report_output
       description: >-
-        Update a report output status, result, or error message. Completed US
+        Update a report output status, result, or error message. An ID stored
+        under an outdated cache version updates the current report that GET
+        serves for that ID, and the response keeps the requested ID. Completed US
         economy outputs require compact v2 comparison provenance. Each receipt
         contains the complete resolved configuration; a sibling spm_config is rejected.
       parameters:
@@ -813,7 +815,10 @@ paths:
     get:
       summary: Get a report output
       operationId: get_report_output
-      description: Get a report output by ID. Timestamp fields are projected from the selected base report run.
+      description: >-
+        Get a report output by ID. An ID stored under an outdated cache version
+        serves the current report for the same simulations and year, under the
+        requested ID. Timestamp fields are projected from the selected base report run.
       parameters:
         - name: country_id
           in: path

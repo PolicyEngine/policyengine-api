@@ -717,9 +717,16 @@ class ReportOutputService:
     ) -> ReportOutputView | None:
         """Apply the given status, output or error message and sync the run history.
 
+        An ID stored under an outdated cache version updates the current report for
+        the same simulations and year, the one ``resolve_report_output`` serves for
+        that ID, and the view keeps the outdated record's ID as ``response_id``.
+        Otherwise a client that saves the result it was served under the old ID
+        would update the outdated record, and the served report would stay pending.
+
         Return None when nothing was given. Raise LookupError if the report does not
-        exist, and ValueError when marking it running without an active run or
-        completing a US economy report whose SPM provenance is invalid.
+        exist, and ValueError when marking it running without an active run,
+        completing a US economy report whose SPM provenance is invalid, or when an
+        outdated record names a simulation that no longer exists.
         """
         values = {
             key: value
@@ -741,13 +748,19 @@ class ReportOutputService:
             if report_output is None:
                 msg = f"Report output #{report_id} not found"
                 raise LookupError(msg)
+            response_id = None
+            if not self._is_current_report_output(report_output):
+                response_id = report_output.id
+                report_output = self._get_or_create_current_report_output(
+                    session, report_output
+                )
             self._update_report_output(
                 session,
                 report_output,
                 values,
                 requested_status=status,
             )
-            return self._build_view(session, report_output)
+            return self._build_view(session, report_output, response_id=response_id)
 
     def _update_report_output(
         self,

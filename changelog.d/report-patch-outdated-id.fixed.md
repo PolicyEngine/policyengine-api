@@ -1,0 +1,1 @@
+`PATCH /{country_id}/report` with a report ID stored under an outdated cache version now updates the current report that `GET /{country_id}/report/{id}` serves for that ID, so a recomputed report no longer stays pending.
