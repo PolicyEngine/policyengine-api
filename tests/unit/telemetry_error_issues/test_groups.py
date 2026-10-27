@@ -21,6 +21,8 @@ from tests.unit.telemetry_error_issues.report_support import (
     hours_after_window_noon,
     input_orders,
     message_record,
+    original_worker_failure,
+    recorded_cause_copy,
     request_count,
 )
 
@@ -524,3 +526,24 @@ def test_groups_are_the_same_in_any_input_order() -> None:
 
     assert groups_by_order["reversed"] == groups_by_order["forward"]
     assert groups_by_order["shuffled"] == groups_by_order["forward"]
+
+
+def test_groups_count_each_worker_failure_in_its_original_exception_group() -> None:
+    # As on 2026-10-26, the copy of some failures has the original's
+    # timestamp, and the copy of others is logged a moment later.
+    records = []
+    for index in range(4):
+        failed_at = hours_after_window_noon(index)
+        copy_logged_at = failed_at + timedelta(milliseconds=100 * (index % 2))
+        records += [
+            original_worker_failure(request_key=f"worker-{index}", timestamp=failed_at),
+            recorded_cause_copy(
+                request_key=f"worker-{index}", timestamp=copy_logged_at
+            ),
+        ]
+
+    groups = build_groups(records, [], reporting_window(REPORT_DATE), FINGERPRINT_KEY)
+
+    assert [(group.error_type, group.production.occurrences) for group in groups] == [
+        ("ValueError", 4)
+    ]
