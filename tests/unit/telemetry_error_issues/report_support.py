@@ -142,6 +142,26 @@ def failures_with_and_without_a_route() -> list:
     ]
 
 
+GATEWAY_SERVICE = "policyengine-simulation-gateway"
+
+
+def failures_on_the_unmatched_route(failure_count: int = 15) -> list[ErrorRecord]:
+    """Return gateway failures in separate requests that matched no route.
+
+    The gateway logs ``<unmatched>`` as the route of such a request.
+    """
+    return [
+        exception_record(
+            service_name=GATEWAY_SERVICE,
+            error_type="ValueError",
+            route="<unmatched>",
+            request_key=f"unmatched-{index}",
+            timestamp=hours_after_window_noon(index / 10),
+        )
+        for index in range(failure_count)
+    ]
+
+
 PROJECT_ID = "policyengine-observability"
 # The deployment's values of the repository variables that name the logs.
 LOG_SOURCE = LogSource(

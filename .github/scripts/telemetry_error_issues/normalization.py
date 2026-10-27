@@ -157,6 +157,16 @@ def public_route(value: str | None) -> str:
     return UNRECOGNIZED
 
 
+def is_route_template(value: str | None) -> bool:
+    """Return whether ``value`` is a route template rather than a placeholder.
+
+    The placeholders are the missing and unrecognized values ``public_route``
+    shows, and ``<unmatched>``, which a service logs as the route of a
+    request that matched none of its routes.
+    """
+    return public_route(value) not in {MISSING, UNRECOGNIZED, UNMATCHED_ROUTE}
+
+
 def public_status(value: object) -> int | None:
     """Return an HTTP status code as an integer, or None for anything else."""
     if isinstance(value, bool):

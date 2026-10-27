@@ -11,10 +11,12 @@ from telemetry_error_issues.window import reporting_window
 
 from tests.unit.telemetry_error_issues.report_support import (
     FINGERPRINT_KEY,
+    GATEWAY_SERVICE,
     REPORT_DATE,
     WINDOW_NOON,
     exception_record,
     failed_request_record,
+    failures_on_the_unmatched_route,
     failures_with_and_without_a_route,
     hours_after_window_noon,
     message_record,
@@ -129,6 +131,74 @@ def test_measures_error_rate_counts_only_failures_on_routes() -> None:
     assert group.production.route_affected_requests == 1
     assert group.production.route_requests == 1
     assert group.production.error_rate == pytest.approx(1.0)
+
+
+def test_measures_error_rate_leaves_out_failures_on_the_unmatched_route() -> None:
+    # 15 failed requests on "<unmatched>", which one completed request also
+    # carried, used to give an error rate of 15 (1500%).
+    group = _only_group(
+        failures_on_the_unmatched_route(),
+        [request_count("<unmatched>", 1, service_name=GATEWAY_SERVICE)],
+    )
+
+    assert group.production.error_rate is None
+    assert group.production.route_affected_requests == 0
+    assert group.production.route_requests == 0
+    assert group.production.affected_requests == 15
+    assert group.route == "<unmatched>"
+
+
+@pytest.mark.parametrize(
+    "placeholder_route",
+    [
+        pytest.param("<unmatched>", id="unmatched"),
+        pytest.param("<unrecognized>", id="unrecognized"),
+        pytest.param("-", id="missing"),
+        pytest.param("/us/policy/12345", id="path-with-a-record-id"),
+    ],
+)
+def test_measures_error_rate_counts_only_route_templates(
+    placeholder_route: str,
+) -> None:
+    records = [
+        exception_record(request_key="r1", route="/<country_id>/calculate"),
+        *(
+            exception_record(
+                request_key=f"placeholder-{index}",
+                route=placeholder_route,
+                timestamp=hours_after_window_noon(index + 1),
+            )
+            for index in range(3)
+        ),
+    ]
+    request_counts = [
+        request_count("/<country_id>/calculate", 10),
+        request_count(placeholder_route, 1),
+    ]
+
+    group = _only_group(records, request_counts)
+
+    assert group.production.error_rate == pytest.approx(0.1)
+    assert group.production.route_affected_requests == 1
+    assert group.production.route_requests == 10
+    assert group.production.affected_requests == 4
+
+
+def test_measures_error_rate_is_unknown_when_failures_outnumber_completions() -> None:
+    records = [
+        exception_record(
+            request_key=f"r{index}",
+            route="/<country_id>/calculate",
+            timestamp=hours_after_window_noon(index),
+        )
+        for index in range(3)
+    ]
+
+    group = _only_group(records, [request_count("/<country_id>/calculate", 2)])
+
+    assert group.production.error_rate is None
+    assert group.production.route_affected_requests == 3
+    assert group.production.route_requests == 2
 
 
 def test_measures_error_rate_counts_every_simulation_service_version() -> None:
