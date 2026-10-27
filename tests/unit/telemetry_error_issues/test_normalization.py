@@ -196,11 +196,7 @@ def test_frames_choose_the_three_innermost_application_frames() -> None:
         '/venv/lib/python3.12/site-packages/sqlalchemy/orm/f.py", line 6, in raises',
     ]
 
-    assert fingerprint_frames(frames) == (
-        "policyengine_api/services/b.py:middle",
-        "policyengine_api/services/c.py:inner",
-        "policyengine_api/services/e.py:callback",
-    )
+    assert fingerprint_frames(frames) == ("middle", "inner", "callback")
 
 
 def test_frames_count_simulation_and_stage12_packages_as_application_code() -> None:
@@ -211,9 +207,20 @@ def test_frames_count_simulation_and_stage12_packages_as_application_code() -> N
         '/pkg/synchronicity/combined_types.py", line 4, in __call__',
     ]
 
+    assert fingerprint_frames(frames) == ("execute", "save")
+
+
+def test_frames_are_keyed_by_function_name_without_leading_underscores() -> None:
+    frames = [
+        '/app/policyengine_api/services/regions.py", line 12, in _resolve_region',
+        '/app/policyengine_api/services/regions.py", line 30, in __load_boundaries',
+        '/app/policyengine_api/services/regions.py", line 44, in __getitem__',
+    ]
+
     assert fingerprint_frames(frames) == (
-        "policyengine_simulation_executor/run.py:execute",
-        "policyengine_stage12_persistence/store.py:save",
+        "resolve_region",
+        "load_boundaries",
+        "getitem__",
     )
 
 
@@ -225,11 +232,7 @@ def test_frames_without_application_frames_use_the_innermost_frames() -> None:
         '/pkg/synchronicity/d.py", line 4, in fourth',
     ]
 
-    assert fingerprint_frames(frames) == (
-        "modal/b.py:second",
-        "modal/c.py:third",
-        "synchronicity/d.py:fourth",
-    )
+    assert fingerprint_frames(frames) == ("second", "third", "fourth")
 
 
 @pytest.mark.parametrize("frames", [[], None, ["not a frame header"]])
