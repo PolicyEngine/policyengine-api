@@ -77,6 +77,14 @@ def stable_identifiers(
             "policyengine_api.services.economy_service.start_observability_id",
             side_effect=lambda value: value,
         ),
+        patch(
+            "policyengine_api.services.economy_budget_window_submission.resolve_observability_id",
+            return_value=MOCK_OBSERVABILITY_ID,
+        ),
+        patch(
+            "policyengine_api.services.economy_budget_window_submission.start_observability_id",
+            side_effect=lambda value: value,
+        ),
     ):
         yield
 

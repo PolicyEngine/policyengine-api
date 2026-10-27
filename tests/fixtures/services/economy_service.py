@@ -1,3 +1,4 @@
+import contextlib
 import datetime
 import json
 from dataclasses import dataclass
@@ -45,6 +46,15 @@ MOCK_OPTIONS_HASH = (
     MOCK_LOOKUP_OPTIONS_HASH[:-1]
     + "&runtime_app_name=policyengine-simulation-us1-2-3-uk2-7-8]"
 )
+# The economy service modules whose code logs through their own ``logger``
+# name. A fake logger has to replace the name in each of them.
+ECONOMY_SERVICE_LOGGER_MODULES = (
+    "policyengine_api.services.economy_service",
+    "policyengine_api.services.economy_budget_window_submission",
+    "policyengine_api.services.economy_impact_execution",
+    "policyengine_api.services.economy_impact_types",
+    "policyengine_api.services.economy_stored_impacts",
+)
 MOCK_MODAL_JOB_ID = "fc-test123xyz"
 MOCK_EXECUTION_ID = MOCK_MODAL_JOB_ID  # Alias for test compatibility
 MOCK_OBSERVABILITY_ID = "00000000-0000-4000-8000-000000000001"
@@ -81,6 +91,37 @@ MOCK_SIM_CONFIG = {
     "model_version": MOCK_MODEL_VERSION,
     "policyengine_version": MOCK_POLICYENGINE_VERSION,
 }
+
+
+@pytest.fixture
+def stable_observability_lifecycle():
+    with (
+        patch(
+            "policyengine_api.services.economy_service.start_observability_id",
+            return_value=MOCK_OBSERVABILITY_ID,
+        ),
+        patch(
+            "policyengine_api.services.economy_service.restore_observability_id",
+            side_effect=lambda value: value,
+        ),
+        patch(
+            "policyengine_api.services.economy_service.resolve_observability_id",
+            return_value=MOCK_OBSERVABILITY_ID,
+        ),
+        patch(
+            "policyengine_api.services.economy_budget_window_submission.start_observability_id",
+            return_value=MOCK_OBSERVABILITY_ID,
+        ),
+        patch(
+            "policyengine_api.services.economy_budget_window_submission.restore_observability_id",
+            side_effect=lambda value: value,
+        ),
+        patch(
+            "policyengine_api.services.economy_budget_window_submission.resolve_observability_id",
+            return_value=MOCK_OBSERVABILITY_ID,
+        ),
+    ):
+        yield
 
 
 @pytest.fixture
@@ -192,7 +233,10 @@ def mock_budget_window_cache():
 @pytest.fixture
 def mock_logger():
     """Mock logger."""
-    with patch("policyengine_api.services.economy_service.logger") as mock:
+    mock = MagicMock()
+    with contextlib.ExitStack() as patches:
+        for module_name in ECONOMY_SERVICE_LOGGER_MODULES:
+            patches.enter_context(patch(f"{module_name}.logger", mock))
         yield mock
 
 
@@ -200,7 +244,9 @@ def mock_logger():
 def mock_datetime():
     """Mock datetime.datetime.now()."""
     mock_now = datetime.datetime(2025, 6, 26, 12, 0, 0)
-    with patch("policyengine_api.services.economy_service.datetime.datetime") as mock:
+    with patch(
+        "policyengine_api.services.economy_stored_impacts.datetime.datetime"
+    ) as mock:
         mock.now.return_value = mock_now
         yield mock
 
