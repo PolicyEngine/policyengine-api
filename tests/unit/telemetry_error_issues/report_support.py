@@ -145,7 +145,7 @@ def failures_with_and_without_a_route() -> list:
 GATEWAY_SERVICE = "policyengine-simulation-gateway"
 
 
-def failures_on_the_unmatched_route(failure_count: int = 15) -> list:
+def failures_on_the_unmatched_route(failure_count: int = 15) -> list[ErrorRecord]:
     """Return gateway failures in separate requests that matched no route.
 
     The gateway logs ``<unmatched>`` as the route of such a request.

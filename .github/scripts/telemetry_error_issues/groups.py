@@ -154,13 +154,23 @@ def _related_fingerprints(
     return related
 
 
+def completions_missing(affected_requests: int, completed_requests: int) -> bool:
+    """Return whether more requests failed than were logged as completed.
+
+    Some completion records are then missing, so the counts give no error rate.
+    """
+    return 0 < completed_requests < affected_requests
+
+
 def _error_rate(affected_requests: int, completed_requests: int) -> float | None:
     """Return the share of completed requests that failed, or None.
 
-    There is no share without completed requests, or when more requests failed
-    than were logged as completed, which means completion records are missing.
+    There is no share without completed requests, or when completion records
+    are missing (see ``completions_missing``).
     """
-    if completed_requests == 0 or affected_requests > completed_requests:
+    if completed_requests == 0 or completions_missing(
+        affected_requests, completed_requests
+    ):
         return None
     return affected_requests / completed_requests
 

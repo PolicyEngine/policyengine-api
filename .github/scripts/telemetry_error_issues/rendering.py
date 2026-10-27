@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, urlencode
 
+from telemetry_error_issues.groups import completions_missing
 from telemetry_error_issues.log_source import (
     LOCATION_PATTERN,
     LOG_BUCKET_PATTERN,
@@ -154,7 +155,9 @@ def _error_rate(measures: EnvironmentMeasures) -> str:
     would exceed 100%, so n/a is shown with the two counts instead.
     """
     if measures.error_rate is None:
-        if 0 < measures.route_requests < measures.route_affected_requests:
+        if completions_missing(
+            measures.route_affected_requests, measures.route_requests
+        ):
             return (
                 f"{NOT_AVAILABLE} ({measures.route_affected_requests:,} affected "
                 f"requests, only {measures.route_requests:,} logged as completed)"
