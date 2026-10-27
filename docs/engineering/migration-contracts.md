@@ -7,8 +7,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | Metric | Count |
 | --- | ---: |
 | route group count | 9 |
-| workflow count | 17 |
-| request count | 90 |
+| workflow count | 18 |
+| request count | 91 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -23,7 +23,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `household` | `household`, `households`, `user-household`, `user-households`, `calculate`, `calculate-full` | `household` | `household` |
 | `economy` | `economy` | `simulation` | `economy` |
 | `simulation` | `simulation`, `simulations`, `user-simulations` | `simulation` | `economy` |
-| `report` | `report`, `user-reports`, `shared-reports` | `report` | `report` |
+| `report` | `report`, `reports`, `user-reports`, `shared-reports` | `report` | `report` |
 | `user_profile` | `user-profile`, `me` | `user` | `none` |
 
 ## App V2 Workflow Contracts
@@ -198,6 +198,15 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | Method | Path | Status | Route group | Required headers | Stable response fields |
 | --- | --- | ---: | --- | --- | --- |
 | `GET` | `/v2/countries` | 200 | `metadata` | none | `status`, `message`, `result.items` |
+
+### `economy_reports_v2`
+
+- Current contract: `typed_v2_resources`
+- Future owner: Economy reports on v2
+
+| Method | Path | Status | Route group | Required headers | Stable response fields |
+| --- | --- | ---: | --- | --- | --- |
+| `POST` | `/v2/reports?country_id=us` | 201 | `report` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.kind`, `result.item.year`, `result.item.baseline_simulation`, `result.item.reform_simulation`, `result.item.status`, `result.item.run`, `result.item.result` |
 
 ### `metadata_resources_v2_preview`
 

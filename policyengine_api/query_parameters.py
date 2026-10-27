@@ -282,6 +282,10 @@ class UserSimulationCollectionQuery(CountryQuery, PaginationQuery):
     legacy_simulation_id: LegacyResourceId | None = None
 
 
+class ReportCreateQuery(CountryQuery):
+    """Query contract for submitting an economy report."""
+
+
 class UserReportCollectionQuery(CountryQuery, PaginationQuery):
     """Query contract for the signed-in user's report associations."""
 

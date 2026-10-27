@@ -606,6 +606,32 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
         ),
     ),
     WorkflowContract(
+        name="economy_reports_v2",
+        current_contract="typed_v2_resources",
+        future_owner_pr="Economy reports on v2",
+        requests=(
+            ContractRequest(
+                method="POST",
+                path="/v2/reports?country_id=us",
+                expected_status=201,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result.item.id",
+                    "result.item.country_id",
+                    "result.item.kind",
+                    "result.item.year",
+                    "result.item.baseline_simulation",
+                    "result.item.reform_simulation",
+                    "result.item.status",
+                    "result.item.run",
+                    "result.item.result",
+                ),
+                route_group="report",
+            ),
+        ),
+    ),
+    WorkflowContract(
         name="metadata_resources_v2_preview",
         current_contract="typed_v2_resources",
         future_owner_pr="Later metadata read cutover and v2 route-prefix removal",

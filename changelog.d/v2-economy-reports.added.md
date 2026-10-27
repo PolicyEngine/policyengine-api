@@ -1,0 +1,1 @@
+Added `/v2/reports` for economy reports, which the simulation service calculates and stores: `POST /v2/reports` creates a report and its first run on the country's current catalog version. A country whose `countries` row does not allow society-wide calculations gets a 422 naming it, before anything is sent to the simulation service. Nothing calls these routes yet.
