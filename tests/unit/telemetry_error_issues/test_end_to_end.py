@@ -25,6 +25,7 @@ from tests.unit.telemetry_error_issues.report_support import (
     PROJECT_ID,
     WINDOW_NOON,
     hours_after_window_noon,
+    input_orders,
     sentinel_row,
 )
 
@@ -444,3 +445,84 @@ def test_main_never_publishes_values_from_records(
     ]
     for text in published:
         assert "SENTINEL" not in unquote(text)
+
+
+def _requests_failing_with(error_type: str, count: int) -> list[dict[str, object]]:
+    return [
+        _error_row(
+            error_type=error_type,
+            request_key=f"{error_type}-{index}",
+            timestamp=hours_after_window_noon(index + 1),
+        )
+        for index in range(count)
+    ]
+
+
+def _rows_that_tie() -> list[dict[str, object]]:
+    """Return error rows that tie on everything the report orders records by.
+
+    StaleDataError and TimeoutError each fail in two requests, and a third
+    request logs both at the same moment, so whichever group it joins reaches
+    the issue thresholds. Five groups then have three production failures and
+    KeyError has four, so one group waits for a later run. KeyError fails
+    twice on each of two routes, and one message group is logged by two
+    operations at the same moment.
+    """
+    return [
+        *_requests_failing_with("StaleDataError", 2),
+        *_requests_failing_with("TimeoutError", 2),
+        *(
+            _error_row(error_type=error_type, request_key="both")
+            for error_type in ("StaleDataError", "TimeoutError")
+        ),
+        *_requests_failing_with("ValueError", 3),
+        *_requests_failing_with("TypeError", 3),
+        *_requests_failing_with("LookupError", 3),
+        *(
+            _error_row(error_type="KeyError", request_key=f"route-{index}", route=route)
+            for index, route in enumerate(
+                ["/<country_id>/report", "/<country_id>/calculate"] * 2
+            )
+        ),
+        *(
+            _error_row(
+                event_name=None,
+                error_type=None,
+                error_handled=None,
+                frames=[],
+                status_code=None,
+                message_template="failed to save",
+                request_key=f"operation-{index}",
+                operation_name=operation,
+            )
+            for index, operation in enumerate(
+                ("save_report", "save_policy", "save_policy")
+            )
+        ),
+    ]
+
+
+def test_main_publishes_the_same_report_in_any_row_order(tmp_path: Path) -> None:
+    count_rows = [
+        ["policyengine-api", "production", "/<country_id>/report", 600],
+        ["policyengine-api", "production", "/<country_id>/calculate", 300],
+    ]
+    count_rows_by_order = input_orders(count_rows)
+    published_by_order: dict[str, tuple[str, str, dict]] = {}
+
+    for order, rows in input_orders(_rows_that_tie()).items():
+        run_directory = tmp_path / order
+        run_directory.mkdir()
+        github = FakeGitHub()
+        bigquery = FakeBigQuery(rows, count_rows_by_order[order])
+        exit_code, stdout, stderr = _run_main(run_directory, bigquery, github)
+        assert exit_code == 0, stderr
+        summary = (run_directory / "summary.md").read_text()
+        published_by_order[order] = (stdout, summary, github.issues)
+
+    forward_summary = published_by_order["forward"][1]
+    assert "7 error groups: 1 below-threshold, 5 created, 1 deferred." in (
+        forward_summary
+    )
+    assert published_by_order["reversed"] == published_by_order["forward"]
+    assert published_by_order["shuffled"] == published_by_order["forward"]

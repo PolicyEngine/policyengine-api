@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING
 
 from telemetry_error_issues.normalization import (
@@ -95,11 +95,33 @@ def _primary_preference(record: ErrorRecord) -> tuple[int, int, datetime]:
     return source_rank, handled_rank, record.timestamp
 
 
+def _field_values(record: ErrorRecord) -> tuple[tuple[bool, object], ...]:
+    """Return every field of the record, each as whether it is set and its value.
+
+    Missing values sort first and are never compared with set ones, so any two
+    records compare, and only equal records tie.
+    """
+    values = (getattr(record, field.name) for field in fields(record))
+    return tuple((value is not None, value) for value in values)
+
+
+def _tie_breaker(record: ErrorRecord) -> tuple[object, ...]:
+    """Order records by their values alone, never by the order they arrived in.
+
+    The values that decide the record's error group come first, so a tie goes
+    to the group whose values sort first, and the choice doesn't change when
+    only the line numbers in the stack do.
+    """
+    return fingerprint_parts(record), _field_values(record)
+
+
 def primary_records(records: Iterable[ErrorRecord]) -> list[ErrorRecord]:
     """Return one record per failure, in time order.
 
     Records of one service that share a request ID, or a trace when there is no
     request ID, describe one failure. A record with neither is its own failure.
+    Records that tie on preference, or on time, are ordered by their values, so
+    the result doesn't depend on the order of ``records``.
     """
     failures: dict[tuple[str, str], list[ErrorRecord]] = {}
     standalone: list[ErrorRecord] = []
@@ -109,8 +131,17 @@ def primary_records(records: Iterable[ErrorRecord]) -> list[ErrorRecord]:
             standalone.append(record)
         else:
             failures.setdefault((record.family, correlation), []).append(record)
-    chosen = [min(group, key=_primary_preference) for group in failures.values()]
-    return sorted([*chosen, *standalone], key=lambda record: record.timestamp)
+    chosen = [
+        min(
+            group,
+            key=lambda record: (_primary_preference(record), _tie_breaker(record)),
+        )
+        for group in failures.values()
+    ]
+    return sorted(
+        [*chosen, *standalone],
+        key=lambda record: (record.timestamp, _tie_breaker(record)),
+    )
 
 
 def fingerprint_parts(record: ErrorRecord) -> tuple[str, ...]:

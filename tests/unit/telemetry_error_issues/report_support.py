@@ -123,6 +123,19 @@ def request_count(
     return RequestCount(service_name, environment_name, route, requests)
 
 
+def input_orders(items: list) -> dict[str, list]:
+    """Return ``items`` forward, reversed and in a fixed shuffled order.
+
+    The shuffled order puts the items at odd positions first, then those at
+    even positions from last to first, so it separates and reorders neighbours.
+    """
+    return {
+        "forward": list(items),
+        "reversed": items[::-1],
+        "shuffled": [*items[1::2], *items[::2][::-1]],
+    }
+
+
 def failures_with_and_without_a_route() -> list:
     """Return one failed request on a route and two route-less failures."""
     return [

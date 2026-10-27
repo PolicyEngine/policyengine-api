@@ -1,0 +1,1 @@
+The daily telemetry error report gives the same error groups, counts and issues for the same log records whatever order BigQuery returns them in: records that tie on preference or time are now ordered by their own values.
