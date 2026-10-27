@@ -337,6 +337,18 @@ def test_typed_worker_dataset_year_error_is_preserved(status):
     assert caught.value.to_dict() == detail
 
 
+def test_an_unknown_worker_error_code_is_left_to_the_caller():
+    import httpx
+
+    from policyengine_api.worker_spm import raise_worker_spm_error
+
+    # An unknown code keeps today's handling: the caller sees the 400 itself.
+    detail = {"code": "SOME_FUTURE_CODE", "message": "Not a public input error"}
+    assert (
+        raise_worker_spm_error(httpx.Response(400, json={"errors": [detail]})) is None
+    )
+
+
 def test_variadic_constructor_alone_does_not_claim_support():
     class Legacy:
         def __init__(self, **kwargs):
