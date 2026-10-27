@@ -164,6 +164,29 @@ def store_reform(client: httpx.Client, household: LiveHousehold) -> str | None:
     return response.json()["result"]["item"]["id"]
 
 
+def _retry_wait_seconds(response: httpx.Response) -> float:
+    retry_after = response.headers.get("Retry-After", "")
+    return float(retry_after) if retry_after.isdigit() else POLL_INTERVAL_SECONDS
+
+
+def _submit(
+    client: httpx.Client, body: dict[str, Any], deadline: float
+) -> httpx.Response:
+    """Post the calculation, sending it again after a 5xx answer until the deadline.
+
+    The simulation service answers 503 with ``Retry-After`` while its database
+    or version manifest cannot be read; such an outage is not a failure of
+    the calculation.
+    """
+    while True:
+        response = client.post(CALCULATION_PATH, json=body)
+        if response.status_code not in TRANSIENT_STATUS_CODES:
+            return response
+        if time.monotonic() >= deadline:
+            return response
+        time.sleep(_retry_wait_seconds(response))
+
+
 def calculate(
     client: httpx.Client,
     household: LiveHousehold,
@@ -180,11 +203,11 @@ def calculate(
     }
     if household.axes is not None:
         body["axes"] = household.axes
-    response = client.post(CALCULATION_PATH, json=body)
+    deadline = started + CALCULATION_TIMEOUT_SECONDS
+    response = _submit(client, body, deadline)
     submit_seconds = time.monotonic() - started
     assert response.status_code == 202, response.text
     item = response.json()["result"]
-    deadline = started + CALCULATION_TIMEOUT_SECONDS
     while item["status"] not in FINISHED_STATUSES:
         if time.monotonic() >= deadline:
             msg = (
