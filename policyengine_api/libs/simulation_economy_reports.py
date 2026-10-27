@@ -153,8 +153,8 @@ def _raise_for_refusal(response: httpx.Response) -> None:
 def _parsed(call: Callable[[], Response[Any]], expected: type[ParsedT]) -> ParsedT:
     """Run one generated route call and return its parsed success answer.
 
-    Network failures, other answers and answers that do not parse mean the
-    entrypoint cannot be used now.
+    Network failures, a gateway token that cannot be fetched, other answers
+    and answers that do not parse mean the entrypoint cannot be used now.
     """
     try:
         response = call()
@@ -166,6 +166,9 @@ def _parsed(call: Callable[[], Response[Any]], expected: type[ParsedT]) -> Parse
         raise
     except httpx.HTTPError as error:
         msg = f"the Simulation Entrypoint could not be reached: {type(error).__name__}"
+        raise SimulationServiceUnavailableError(msg) from error
+    except GatewayAuthError as error:
+        msg = f"the gateway token for the Simulation Entrypoint is unavailable: {error}"
         raise SimulationServiceUnavailableError(msg) from error
     except (KeyError, TypeError, ValueError, AttributeError) as error:
         _raise_unreadable(error)

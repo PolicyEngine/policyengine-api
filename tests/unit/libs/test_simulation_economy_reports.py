@@ -18,6 +18,7 @@ import pytest
 
 pytest.importorskip("policyengine_api_simulation_client")
 
+from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.libs.simulation_economy_reports import (
     SimulationEntrypointEconomyReports,
     economy_reports_from_environment,
@@ -478,6 +479,25 @@ def test_an_expired_token_is_replaced_and_the_request_sent_again() -> None:
 
     assert report.id == REPORT_ID
     assert entrypoint.authorizations == ["Bearer token-1", "Bearer token-2"]
+
+
+class FailingTokenAuth(httpx.Auth):
+    """Fail to fetch a token, as the gateway auth does when Auth0 cannot answer."""
+
+    def auth_flow(self, request: httpx.Request):
+        message = "Auth0 token fetch failed: HTTP 503"
+        raise GatewayAuthError(message)
+        yield request  # pragma: no cover - makes this a generator, as httpx expects
+
+
+def test_a_failed_token_fetch_means_the_entrypoint_is_unavailable() -> None:
+    entrypoint = SimulationEntrypointStub(httpx.Response(200, json=_report_body()))
+
+    with pytest.raises(SimulationServiceUnavailableError) as raised:
+        entrypoint.adapter(auth=FailingTokenAuth()).get_report(REPORT_ID)
+
+    assert "token" in str(raised.value)
+    assert entrypoint.requests == []
 
 
 def test_requests_carry_the_current_request_id() -> None:
