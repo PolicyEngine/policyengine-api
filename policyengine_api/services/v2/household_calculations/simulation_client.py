@@ -1,16 +1,18 @@
-"""The simulation service's household calculation routes, through its client.
+"""The simulation service's household calculation routes, checked by its models.
 
 Calls go to the Cloud Run Simulation Entrypoint (``SIMULATION_ENTRYPOINT_URL``),
-the only simulation service with these routes, through the generated client's
-HTTP client, with the gateway credentials the Public API already uses
-(``GATEWAY_AUTH_*``) and the request's correlation headers.
+the only simulation service with these routes, over HTTP with the gateway
+credentials the Public API already uses (``GATEWAY_AUTH_*``) and the request's
+correlation headers.
 
-The submission is checked against the generated submission model and sent as
-built, and each answer is checked against the generated model for its status
-and returned as decoded, both in their original key order: the household
-function lists warnings and calculated values in the household's key order,
-as API v1 does, and the generated models write their keys in their own
-order. A 400 is a refusal, whose reason the service gives; a 422 lists what
+The submission is checked against the generated client's submission model and
+sent as built, and each answer is checked against the generated model for its
+status and returned as decoded, both in their original key order: the
+household function lists warnings and calculated values in the household's
+key order, and the generated models write their keys in an order of their
+own. That order is the stored household's as the v2 database returns it,
+which orders each record's keys itself, so it can differ from the order a
+caller sent. A 400 is a refusal, whose reason the service gives; a 422 lists what
 the service finds invalid in the household or its options; anything else,
 including a 503, no answer, an answer of another shape, a gateway token that
 cannot be fetched or missing configuration, means the service is unavailable.
@@ -26,7 +28,6 @@ from http import HTTPStatus
 from typing import TYPE_CHECKING, Any
 
 import httpx
-from policyengine_api_simulation_client import AuthenticatedClient
 from policyengine_api_simulation_client.models.household_calculation_response import (
     HouseholdCalculationResponse,
 )
@@ -148,13 +149,7 @@ class SimulationHouseholdClient:
         )
         instrument_httpx(http_client, get_runtime())
         self._base_url = base_url.rstrip("/")
-        # The generated routes take an AuthenticatedClient. Its fixed token is
-        # sent only from an httpx client it builds itself; the one set here
-        # authenticates through ``httpx_args`` (GatewayBearerAuth, which
-        # fetches and renews the gateway token), so the empty token is unused.
-        self._client = AuthenticatedClient(
-            base_url=base_url, token=""
-        ).set_httpx_client(http_client)
+        self._http_client = http_client
 
     @property
     def base_url(self) -> str:
@@ -181,8 +176,9 @@ class SimulationHouseholdClient:
     def submit(self, submission: dict[str, Any]) -> dict[str, Any]:
         """Submit a calculation and return the service's calculation answer."""
         HouseholdCalculationSubmission.from_dict(submission)
-        http_client = self._client.get_httpx_client()
-        response = _send(lambda: http_client.post(CALCULATIONS_PATH, json=submission))
+        response = _send(
+            lambda: self._http_client.post(CALCULATIONS_PATH, json=submission)
+        )
         if response.status_code == HTTPStatus.ACCEPTED:
             return _calculation(response)
         if response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
@@ -195,9 +191,8 @@ class SimulationHouseholdClient:
 
     def read(self, calculation_id: UUID) -> dict[str, Any] | None:
         """Return the service's calculation answer, or None when it has none."""
-        http_client = self._client.get_httpx_client()
         response = _send(
-            lambda: http_client.get(f"{CALCULATIONS_PATH}/{calculation_id}")
+            lambda: self._http_client.get(f"{CALCULATIONS_PATH}/{calculation_id}")
         )
         if response.status_code == HTTPStatus.OK:
             return _calculation(response)

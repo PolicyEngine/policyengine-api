@@ -7,14 +7,16 @@ already checks economy requests' SPM selections against it. A US catalog
 version offers SPM when the service reports a canonical capability for its
 PolicyEngine.py version; other countries never do.
 
-Publication records it after the catalog itself, on each version that has
-none yet, so versions published before it existed get it on the next run. A
-bundle pins its SPM release, so a recorded value never changes. A US version
+Publication records it after the catalog itself, for the installed
+PolicyEngine.py version's catalog versions that have none yet, so a version
+published before this existed gets it on the next publication run of that
+PolicyEngine.py version; versions of other PolicyEngine.py versions keep none.
+A bundle pins its SPM release, so a recorded value never changes. A US version
 the service does not serve yet (its ``policyengine`` routes do not name it)
 is left unrecorded rather than recorded as unavailable, and the next
 publication run tries again; ``/v2/model-catalog`` offers no SPM settings for
 it meanwhile. So is every version when the service's versions cannot be
-read: recording never fails the publication.
+read: an unreadable answer never fails the publication.
 """
 
 from __future__ import annotations
