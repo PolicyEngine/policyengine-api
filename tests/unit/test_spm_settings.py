@@ -319,6 +319,24 @@ def test_typed_worker_year_error_is_preserved(status):
     assert caught.value.to_dict() == detail
 
 
+@pytest.mark.parametrize("status", [400, 422])
+def test_typed_worker_dataset_year_error_is_preserved(status):
+    import httpx
+
+    from policyengine_api.worker_spm import raise_worker_spm_error
+
+    detail = {
+        "code": "DATASET_YEAR_UNAVAILABLE",
+        "message": (
+            "UK results are available for 2024 to 2032. 2033 is outside the years "
+            "the current UK model and data cover."
+        ),
+    }
+    with pytest.raises(spm.SPMValidationError) as caught:
+        raise_worker_spm_error(httpx.Response(status, json={"errors": [detail]}))
+    assert caught.value.to_dict() == detail
+
+
 def test_variadic_constructor_alone_does_not_claim_support():
     class Legacy:
         def __init__(self, **kwargs):
