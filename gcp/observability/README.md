@@ -154,8 +154,9 @@ through `github_client`. Each run:
    else the error message, else the failed `request.completed` record. An
    exception of class `Stage12FailureCause` ranks after any other exception
    and before messages: the simulation service records it as a redacted copy
-   of a worker's original exception, with the same stack, so the original's
-   class decides the group, and a failure with only the copy still uses it.
+   of a worker's or coordinator's original exception, carrying the original's
+   traceback and often its timestamp, so the original's class decides the
+   group, and a failure with only the copy still uses it.
    Records that tie, such as two exceptions logged at the same moment, are
    ordered by their own values, so the same records give the same report
    whatever order the query returns them in.

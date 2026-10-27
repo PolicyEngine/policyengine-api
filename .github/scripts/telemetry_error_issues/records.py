@@ -36,11 +36,12 @@ FINGERPRINT_ALGORITHM = 2
 FINGERPRINT_LENGTH = 16
 MIN_FINGERPRINT_KEY_LENGTH = 32
 # Exception classes that only copy another exception of the same failure. When
-# a simulation worker fails, the simulation service logs the original
-# exception, then ``record_failure_cause`` records a redacted copy with the
-# same stack: a handled ``exception.recorded`` event, often with the same
-# timestamp. The copy sets no event name or attribute of its own, so only its
-# class tells it apart from other handled exceptions.
+# a simulation worker or coordinator fails, the simulation service logs the
+# original exception, then ``record_failure_cause`` records a redacted copy
+# that carries the original's traceback: a handled ``exception.recorded``
+# event. A worker's copy often has the original's frames and timestamp. The
+# copy sets no event name or attribute of its own, so only its class tells it
+# apart from other handled exceptions.
 RECORDED_CAUSE_COPY_TYPES = frozenset({"Stage12FailureCause"})
 
 
