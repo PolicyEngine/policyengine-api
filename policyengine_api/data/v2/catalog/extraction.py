@@ -40,15 +40,15 @@ from policyengine_api.data.v2.catalog.region_scoping import (
     scope_regions,
 )
 from policyengine_api.data.v2.models import Variable
+from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
 
 if TYPE_CHECKING:
     from policyengine_api.json_types import JSONValue
 
-SUPPORTED_COUNTRIES = ("us", "uk")
+SUPPORTED_COUNTRIES = SUPPORTED_COUNTRY_IDS
 REQUIRED_DEPENDENCIES = (
     "policyengine-core",
-    "policyengine-us",
-    "policyengine-uk",
+    *(f"policyengine-{country_id}" for country_id in SUPPORTED_COUNTRY_IDS),
 )
 
 
@@ -1041,8 +1041,8 @@ def extract_installed_catalog() -> NormalizedCatalog:
         bundle=get_current_bundle(),
         policyengine_version=policyengine_version,
         models={
-            "us": policyengine.us.model,
-            "uk": policyengine.uk.model,
+            country_id: getattr(policyengine, country_id).model
+            for country_id in SUPPORTED_COUNTRIES
         },
         region_references={
             country_id: load_region_references(country_id)

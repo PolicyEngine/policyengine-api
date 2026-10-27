@@ -588,6 +588,24 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
         ),
     ),
     WorkflowContract(
+        name="country_selection_v2",
+        current_contract="typed_v2_resources",
+        future_owner_pr="Countries table and one country list in code",
+        requests=(
+            ContractRequest(
+                method="GET",
+                path="/v2/countries",
+                expected_status=200,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result.items",
+                ),
+                route_group="metadata",
+            ),
+        ),
+    ),
+    WorkflowContract(
         name="metadata_resources_v2_preview",
         current_contract="typed_v2_resources",
         future_owner_pr="Later metadata read cutover and v2 route-prefix removal",

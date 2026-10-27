@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 V2_ALEMBIC_DISPOSABLE_TEST = "V2_ALEMBIC_DISPOSABLE_TEST"
-V2_ALEMBIC_HEAD_REVISION = "f5c1d9b4685b"
+V2_ALEMBIC_HEAD_REVISION = "fb1a3e40d3d6"
 DISPOSABLE_DATABASE_NAME = "policyengine_v2_alembic_test"
 DISPOSABLE_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "postgres"})
 MIGRATION_ROLE = "policyengine_v2_migrator"

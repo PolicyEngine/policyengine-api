@@ -1,10 +1,10 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 92,
+    "request_count": 93,
     "route_group_count": 9,
     "sim_flow_count": 3,
-    "workflow_count": 16
+    "workflow_count": 17
   },
   "route_groups": [
     {
@@ -31,6 +31,7 @@
       "name": "metadata",
       "path_segments": [
         "metadata",
+        "countries",
         "datasets",
         "economy-options",
         "model-catalog",
@@ -1345,6 +1346,25 @@
             "result.current_law_id",
             "result.economy_options.region",
             "result.economy_options.time_period"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_resources",
+      "future_owner_pr": "Countries table and one country list in code",
+      "name": "country_selection_v2",
+      "requests": [
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/countries",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items"
           ]
         }
       ]
