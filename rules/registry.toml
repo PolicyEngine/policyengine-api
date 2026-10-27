@@ -1096,10 +1096,8 @@ category = "quality"
 statement = "A tracked Python file has at most 800 physical lines, or at most 1,500 if it is test code (a file under a tests or fixtures directory, or a conftest.py); a longer file is split by responsibility into modules, and keeps its public import path."
 rationale = "docs/engineering/skills/file-length.md"
 scope = ["**/*.py"]
-tier = "mechanical"
-# Ratcheted with the files over their limit on 2026-10-27, as Anthony Volk
-# decided that day; #4053 enforces the rule once the baseline is empty.
-status = "ratcheted"
+tier = "metric"
+status = "enforced"
 autofix = false
 [rule.enforcer]
 kind = "quality-guard"
@@ -1108,12 +1106,10 @@ name = "file-length"
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
 invocation = "run_quality_guards.py"
-[rule.baseline]
-file = "rules/baselines/file-length.txt"
-count = 0
 [rule.proof]
-bad_fixture = "rules/fixtures/api.quality.file-length/bad_tree.toml"
-good_fixture = "rules/fixtures/api.quality.file-length/good_tree.toml"
+below_fixture = "rules/fixtures/api.quality.file-length/good_tree.toml"
+above_fixture = "rules/fixtures/api.quality.file-length/bad_tree.toml"
+threshold = 800
 test = "scripts/rules/tests/test_file_length.py::TestFileLengthProof::test_rule_proof_file_length"
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
