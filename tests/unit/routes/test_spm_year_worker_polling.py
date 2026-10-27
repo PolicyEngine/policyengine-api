@@ -379,7 +379,7 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
 
 
 @pytest.mark.parametrize("budget_window", [False, True], ids=["annual", "window"])
-def test_a_dataset_year_error_is_a_terminal_400_replayed_from_storage(
+def test_a_dataset_year_error_returns_400_and_replays_from_storage(
     monkeypatch, budget_window
 ):
     """A year the worker's model cannot project is a caller error, not a 502.
