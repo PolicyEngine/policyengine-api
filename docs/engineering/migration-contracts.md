@@ -16,7 +16,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 
 | Route group | Path segments | DB entity | Simulation flow |
 | --- | --- | --- | --- |
-| `health` | `health`, `simulation-gateway-check`, `liveness-check`, `readiness-check` | `none` | `none` |
+| `health` | `health`, `simulation-gateway-check`, `liveness-check`, `readiness-check`, `deployment` | `none` | `none` |
 | `specification` | `specification` | `none` | `none` |
 | `metadata` | `metadata`, `datasets`, `economy-options`, `parameter-values`, `parameters`, `regions`, `tax-benefit-model-versions`, `tax-benefit-models`, `variables` | `metadata` | `none` |
 | `policy` | `policy`, `policies`, `user-policy`, `user-policies` | `policy` | `none` |

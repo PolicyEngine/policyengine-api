@@ -32,7 +32,8 @@ class DeploymentResponse(BaseModel):
 
     ``policyengine_version_live_since`` is when this .py version first went
     live: redeploys that keep the version keep the date. It is null on a
-    revision deployed before the deploy recorded it, or outside Cloud Run.
+    revision deployed before the deploy recorded it, outside Cloud Run, or
+    when the version the deploy dated is not the installed one.
     """
 
     policyengine_version: str
@@ -52,10 +53,15 @@ def build_core_health_router(
 
     @router.get("/deployment", response_model=DeploymentResponse)
     def deployment() -> DeploymentResponse:
+        installed = importlib_metadata.version("policyengine")
+        # The deploy computed the date for the version it read from uv.lock;
+        # it describes the installed version only when the two agree.
+        deployed = os.environ.get("DEPLOYED_POLICYENGINE_VERSION")
+        live_since = os.environ.get("POLICYENGINE_VERSION_LIVE_SINCE") or None
         return DeploymentResponse(
-            policyengine_version=importlib_metadata.version("policyengine"),
+            policyengine_version=installed,
             policyengine_version_live_since=(
-                os.environ.get("POLICYENGINE_VERSION_LIVE_SINCE") or None
+                live_since if deployed == installed else None
             ),
             revision=os.environ.get("K_REVISION") or None,
         )

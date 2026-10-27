@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
+from importlib import metadata as importlib_metadata
 from typing import TYPE_CHECKING
 
 import pytest
 from fastapi.testclient import TestClient
 
 from policyengine_api.asgi_factory import create_asgi_app
+from policyengine_api.migration_flags import infer_route_group
 from tests.unit.cloud_run_deploy_support import (
     PRODUCTION_CLOUD_RUN_SERVICE,
+    REPO,
+    push_workflow,
     required_runtime_env,
     run_script,
     script_env,
+    workflow_job_block,
 )
 from tests.unit.test_asgi_factory import create_test_wsgi_app
 
@@ -173,6 +180,9 @@ def test_the_candidate_deploy_sets_both_variables():
 
 
 def test_the_deployment_route_reports_version_date_and_revision(monkeypatch):
+    monkeypatch.setenv(
+        "DEPLOYED_POLICYENGINE_VERSION", importlib_metadata.version("policyengine")
+    )
     monkeypatch.setenv("POLICYENGINE_VERSION_LIVE_SINCE", EARLIER)
     monkeypatch.setenv("K_REVISION", "policyengine-api-00042-abc")
     client = TestClient(create_asgi_app(create_test_wsgi_app()))
@@ -191,3 +201,69 @@ def test_the_deployment_route_has_no_date_before_the_deploy_records_one(
     client = TestClient(create_asgi_app(create_test_wsgi_app()))
 
     assert client.get("/deployment").json()["policyengine_version_live_since"] is None
+
+
+def test_the_deployment_route_drops_a_date_for_another_version(monkeypatch):
+    monkeypatch.setenv("DEPLOYED_POLICYENGINE_VERSION", "0.0.0")
+    monkeypatch.setenv("POLICYENGINE_VERSION_LIVE_SINCE", EARLIER)
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    assert client.get("/deployment").json()["policyengine_version_live_since"] is None
+
+
+def test_the_deployment_route_logs_under_the_health_group():
+    assert infer_route_group("/deployment") == "health"
+
+
+@pytest.mark.parametrize(
+    ("job", "step"),
+    [
+        ("deploy-cloud-run-staging", "Deploy tagged Cloud Run staging candidate"),
+        ("deploy-cloud-run-candidate", "Deploy tagged Cloud Run candidate"),
+    ],
+)
+def test_both_candidate_deploys_receive_the_serving_revision(job, step):
+    """Without it every deploy would look like a first deploy and get a new date."""
+    block = workflow_job_block(push_workflow(), job)
+    step_block = block.split(f"- name: {step}\n", 1)[1].split("\n      - name:", 1)[0]
+
+    assert (
+        "PREVIOUS_CLOUD_RUN_REVISION: ${{ steps.previous.outputs.revision }}"
+        in step_block
+    )
+    assert "id: previous" in block
+
+
+def _bundle_version(lock: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(REPO / ".github/scripts/locked_packages.py"),
+            "bundle-version",
+            str(lock),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_bundle_version_reads_the_one_locked_policyengine(tmp_path):
+    result = _bundle_version(_lock(tmp_path, "6.11.1"))
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "6.11.1"
+
+
+def test_bundle_version_refuses_more_than_one_locked_version(tmp_path):
+    lock = tmp_path / "uv.lock"
+    lock.write_text(
+        '[[package]]\nname = "policyengine"\nversion = "6.10.0"\n\n'
+        '[[package]]\nname = "policyengine"\nversion = "6.11.1"\n',
+        encoding="utf-8",
+    )
+
+    result = _bundle_version(lock)
+
+    assert result.returncode != 0
+    assert "expected exactly one version" in result.stderr

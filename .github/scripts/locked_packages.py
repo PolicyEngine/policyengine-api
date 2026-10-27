@@ -11,6 +11,7 @@ Usage:
     locked_packages.py upgradeable LOCK  names it may upgrade, one per line
     locked_packages.py held LOCK         "name version" of each package it holds
     locked_packages.py summary OLD NEW   Markdown summary of the changes
+    locked_packages.py bundle-version LOCK  the locked .py bundle version
 """
 
 from __future__ import annotations
@@ -78,6 +79,25 @@ def held_versions(lock_path: Path) -> list[str]:
     ]
 
 
+def bundle_version(lock_path: Path) -> str:
+    """Return the one version of the .py bundle package that ``lock_path`` locks.
+
+    Raises:
+        SystemExit: when the bundle is locked at more than one version, since
+            the deploy could not say which one it installs.
+
+    """
+    versions, _ = _locked_versions(lock_path)
+    found = versions[BUNDLE_PACKAGE]
+    if len(found) != 1:
+        message = (
+            f"{BUNDLE_PACKAGE} is locked at {', '.join(found)} in {lock_path}; "
+            "expected exactly one version."
+        )
+        raise SystemExit(message)
+    return found[0]
+
+
 def summary(old_lock: Path, new_lock: Path) -> str:
     """Return a Markdown summary of the version changes from old_lock to new_lock."""
     old_versions, _ = _locked_versions(old_lock)
@@ -128,6 +148,7 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("upgradeable").add_argument("lock", type=Path)
     commands.add_parser("held").add_argument("lock", type=Path)
+    commands.add_parser("bundle-version").add_argument("lock", type=Path)
     summary_parser = commands.add_parser("summary")
     summary_parser.add_argument("old_lock", type=Path)
     summary_parser.add_argument("new_lock", type=Path)
@@ -137,6 +158,8 @@ def main() -> None:
         print("\n".join(upgradeable(arguments.lock)))
     elif arguments.command == "held":
         print("\n".join(held_versions(arguments.lock)))
+    elif arguments.command == "bundle-version":
+        print(bundle_version(arguments.lock))
     else:
         sys.stdout.write(summary(arguments.old_lock, arguments.new_lock))
 

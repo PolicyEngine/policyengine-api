@@ -24,11 +24,9 @@ source .github/scripts/cloud_run_env.sh
 cloud_run_set_defaults
 
 lock_file="${POLICYENGINE_LOCK_FILE:-uv.lock}"
-version="$(awk '
-  /^name = "policyengine"$/ { found = 1; next }
-  found && /^version = / { gsub(/"/, "", $3); print $3; exit }
-  /^\[\[package\]\]$/ { found = 0 }
-' "${lock_file}")"
+# The same uv.lock reader the daily relock uses; it fails unless policyengine
+# is locked at exactly one version.
+version="$(python3 .github/scripts/locked_packages.py bundle-version "${lock_file}")"
 if [[ -z "${version}" ]]; then
   echo "policyengine is not locked in ${lock_file}" >&2
   exit 1

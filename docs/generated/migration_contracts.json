@@ -14,7 +14,8 @@
         "health",
         "simulation-gateway-check",
         "liveness-check",
-        "readiness-check"
+        "readiness-check",
+        "deployment"
       ],
       "sim_flow": null
     },
