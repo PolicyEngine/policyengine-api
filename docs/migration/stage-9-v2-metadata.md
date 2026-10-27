@@ -354,6 +354,54 @@ so unknown or repeated parameters, an unsupported country and a malformed
 catalog version without a tree returns 503 with a message that names the
 version.
 
+### Parameter search file
+
+Publication also writes the parameter search file of each catalog version it
+publishes into `parameter_search_files`: one gzip-compressed JSON file per
+version and file format, with the SHA-256 of the uncompressed JSON. The file
+holds what the app's newer interface's parameter search reads:
+
+- every parameter a reform can change (the parameter tree's rule) with its
+  path, stored label, unit, description, and whether a draft can edit its
+  current-law value: a number, a yes/no value or an infinite threshold. Where
+  that changes over time (a bracket that stops applying has a null value from
+  that date), `editable` describes the earliest value and `editable_changes`
+  lists the dates from which it changes, so the file does not depend on the
+  day it was built;
+- the path and stored label of every other parameter under `gov`, which the
+  search's concept clusters, acronym aliases and member labels read;
+- the path and stored label of `gov` and every node under it that has a stored
+  label, for breadcrumbs, schedule names and concept clusters.
+
+Labels are stored labels, or null: the search treats a label that only
+restates its path's last key as a placeholder, so its reader applies v1's
+fallback (the key with underscores as spaces, "bracket N" for a bracket).
+
+The file is built from the installed packages' catalog, never from rows an
+earlier release stored, so publication writes one only for the versions it
+publishes: each new version, and the installed version when an earlier
+release stored it before search files existed. A version that is neither has
+no file until a person decides otherwise. An installed version stored before
+catalog format 2 (`catalog_format` null) gets none either: it has no stored
+economy or household flags, so a file built from the installed catalog's
+flags would contradict its own parameter rows. Writing only inserts; a stored file
+of the same format must equal the one built from the installed packages, and
+publication fails if it differs or if a version it publishes is left without a
+file. A later file format adds a row for the version instead of changing the
+stored one. The evidence's `parameter_search_files_written` lists each file
+written with its model, version and uncompressed and compressed sizes in bytes.
+
+`/v2/parameters/search-file` (query `country_id` and optional
+`policyengine_version`) serves the selected version's file of the current
+format. A client that accepts gzip receives the stored bytes with
+`Content-Encoding: gzip`; any other client receives the uncompressed JSON. The
+body is the file itself, not the `status`/`result` envelope. Each
+representation has its own strong `ETag`, made from the SHA-256 of the
+uncompressed JSON (`"<sha256>"`, or `"<sha256>-gzip"` for the gzip one). The
+cache lifetime, `Vary` and the 304 for a matching `If-None-Match` are those of
+every metadata route. A version without a file of the current format returns
+503.
+
 ## Validation evidence and retry
 
 Successful JSON evidence contains:
@@ -366,6 +414,8 @@ Successful JSON evidence contains:
   kept;
 - the model, version and row count of each catalog version whose parameter
   tree was written;
+- the model, version and uncompressed and compressed sizes of each parameter
+  search file written;
 - elapsed publication time; and
 - a success outcome.
 

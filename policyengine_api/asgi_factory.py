@@ -13,11 +13,11 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.cors import CORSMiddleware
-from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Match, Mount
 
 from policyengine_api.constants import VERSION
+from policyengine_api.content_encoding import NegotiatedGZipMiddleware
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.fastapi_routes.health import (
     build_core_health_router,
@@ -457,7 +457,8 @@ def create_asgi_app(
     # Cloud Run because it does not have an nginx sidecar to handle gzip.
     # Measured on the real payload: level 9 = 5.5s -> 9.0MB, level 4 = 0.7s ->
     # 9.9MB — 7.5x faster for ~10% larger output.
-    app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=4)
+    # It weighs Accept-Encoding qualities, so a client refusing gzip gets none.
+    app.add_middleware(NegotiatedGZipMiddleware, minimum_size=1000, compresslevel=4)
     app.exception_handler(Exception)(_add_headers_to_unhandled_errors)
     app.exception_handler(RequestValidationError)(_typed_v2_request_validation_error)
     app.exception_handler(V2RequestTooLargeError)(_oversized_v2_request)

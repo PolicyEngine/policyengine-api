@@ -569,6 +569,41 @@ def test_large_flask_fallback_response_supports_http_gzip():
     assert response.text == "x" * 2_000
 
 
+@pytest.mark.parametrize(
+    "accept_encoding",
+    ["gzip;q=0", "br, gzip;q=0.0", "identity", "*;q=0", "gzipped"],
+)
+def test_large_responses_are_not_gzipped_for_a_client_that_refuses_gzip(
+    accept_encoding: str,
+):
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.get(
+        "/large-fallback",
+        headers={"Accept-Encoding": accept_encoding},
+    )
+
+    assert response.status_code == 200
+    assert "content-encoding" not in response.headers
+    assert response.text == "x" * 2_000
+
+
+@pytest.mark.parametrize("accept_encoding", ["gzip;q=0.5", "br, *", "GZIP"])
+def test_large_responses_are_gzipped_for_a_client_that_accepts_gzip(
+    accept_encoding: str,
+):
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.get(
+        "/large-fallback",
+        headers={"Accept-Encoding": accept_encoding},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-encoding"] == "gzip"
+    assert response.text == "x" * 2_000
+
+
 def test_request_headers_and_cookies_pass_through_to_flask_fallback():
     client = TestClient(create_asgi_app(create_test_wsgi_app()))
     client.cookies.set("session_id", "session-123")

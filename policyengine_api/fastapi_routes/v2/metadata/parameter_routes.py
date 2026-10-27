@@ -6,13 +6,16 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import APIRouter, Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     METADATA_RESPONSES,
+    PARAMETER_SEARCH_FILE_ERROR_RESPONSES,
     PARAMETER_TREE_ERROR_RESPONSES,
     CacheableMetadataRoute,
+    names_entity_tag,
     read_resource,
+    run_metadata_read,
     take_utc_instant_for_read,
 )
 from policyengine_api.fastapi_routes.v2.metadata.query_dependencies import (
@@ -25,8 +28,14 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataParameterChildPageResponse,
     MetadataParameterDetailResponse,
     MetadataParameterPageResponse,
+    MetadataParameterSearchFileContent,
     MetadataParameterValueDetailResponse,
     MetadataParameterValuePageResponse,
+)
+from policyengine_api.fastapi_routes.v2.metadata.search_file_response import (
+    SEARCH_FILE_RESPONSE_HEADERS,
+    parameter_search_file_response,
+    search_file_entity_tag,
 )
 from policyengine_api.services.v2.metadata.types import (
     ParameterFilter,
@@ -36,12 +45,52 @@ from policyengine_api.services.v2.metadata.types import (
 
 if TYPE_CHECKING:
     from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+    from policyengine_api.query_parameters import CatalogQuery
+
+
+def _serve_parameter_search_file(
+    dependencies: NativeRouteDependencies,
+    request: Request,
+    query: CatalogQuery,
+) -> Response:
+    """Serve the selected version's search file in the encoding it accepts.
+
+    A request that revalidates a copy (If-None-Match) first reads only the
+    stored hash, so a match is answered with 304 without loading the file.
+    """
+    accept_encoding = request.headers.get("accept-encoding")
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match is not None:
+        content_sha256 = run_metadata_read(
+            dependencies,
+            lambda reader: reader.get_parameter_search_file_hash(
+                query.country_id, query.policyengine_version
+            ),
+        )
+        if isinstance(content_sha256, JSONResponse):
+            return content_sha256
+        entity_tag = search_file_entity_tag(
+            content_sha256, accept_encoding=accept_encoding
+        )
+        if names_entity_tag(if_none_match, entity_tag):
+            # The route class answers a 200 whose ETag the request names
+            # with 304, so the file itself is never read.
+            return Response(headers={"ETag": entity_tag})
+    result = run_metadata_read(
+        dependencies,
+        lambda reader: reader.get_parameter_search_file(
+            query.country_id, query.policyengine_version
+        ),
+    )
+    if isinstance(result, JSONResponse):
+        return result
+    return parameter_search_file_response(result, accept_encoding=accept_encoding)
 
 
 def build_v2_metadata_parameter_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
-    """Build the v2 parameter, parameter-tree and parameter-value routes.
+    """Build the v2 parameter, parameter-tree, search-file and parameter-value routes.
 
     Each request opens and closes its own metadata reader, so building the
     router touches no database.
@@ -109,6 +158,29 @@ def build_v2_metadata_parameter_router(
                 limit=query.limit,
             ),
         )
+
+    @router.get(
+        "/parameters/search-file",
+        response_model=None,
+        response_class=Response,
+        responses={
+            200: {
+                "model": MetadataParameterSearchFileContent,
+                "description": (
+                    "The catalog version's parameter search file, gzip-encoded "
+                    "when the request accepts gzip."
+                ),
+                "headers": SEARCH_FILE_RESPONSE_HEADERS,
+            },
+            **PARAMETER_SEARCH_FILE_ERROR_RESPONSES,
+        },
+        summary="Get a catalog version's parameter search file",
+    )
+    def get_parameter_search_file(
+        request: Request,
+        query: CatalogQueryDependency,
+    ) -> Response:
+        return _serve_parameter_search_file(dependencies, request, query)
 
     @router.get(
         "/parameters/{parameter_id}",

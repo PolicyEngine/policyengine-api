@@ -118,13 +118,27 @@ def _child_label(path: str, stored_label: str | None) -> str:
     return generated_label(path)
 
 
+def is_reform_changeable(
+    name: str, *, economy: bool | None, household: bool | None
+) -> bool:
+    """Return whether a reform can change the named parameter, as v3 decides.
+
+    The parameter is under ``gov``, its path names neither ``taxsim``,
+    ``gov.abolitions`` nor ``pycache``, and its economy or household flag is
+    set; a parameter without flags is not changeable.
+    """
+    if not name.startswith(REFORM_TREE_PREFIX):
+        return False
+    if any(part in name for part in REFORM_EXCLUDED_PATH_PARTS):
+        return False
+    return bool(economy) or bool(household)
+
+
 def is_reform_changeable_parameter(parameter: TreeParameterSource) -> bool:
     """Return whether a reform can change this parameter, as v3's tree decides."""
-    if not parameter.name.startswith(REFORM_TREE_PREFIX):
-        return False
-    if any(part in parameter.name for part in REFORM_EXCLUDED_PATH_PARTS):
-        return False
-    return bool(parameter.economy) or bool(parameter.household)
+    return is_reform_changeable(
+        parameter.name, economy=parameter.economy, household=parameter.household
+    )
 
 
 def _ancestors(path: str) -> list[str]:

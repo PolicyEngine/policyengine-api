@@ -18,6 +18,10 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogVersionNotFoundError,
     UnsupportedPreviewCountryError,
 )
+from policyengine_api.data.v2.catalog.parameter_search_file import (
+    country_search_file,
+    encode_parameter_search_file,
+)
 from policyengine_api.data.v2.catalog.parameter_tree import (
     TreeNodeSource,
     TreeParameterSource,
@@ -28,6 +32,7 @@ from policyengine_api.data.v2.models import (
     Dataset,
     Parameter,
     ParameterNode,
+    ParameterSearchFile,
     ParameterTreeChild,
     ParameterValue,
     Region,
@@ -57,6 +62,7 @@ from policyengine_api.services.v2.metadata.types import (
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
+    ParameterSearchFileUnavailableError,
     ParameterTreeUnavailableError,
 )
 from tests.fixtures.v2_catalog import POLICYENGINE_VERSION, normalized_catalog
@@ -1621,3 +1627,64 @@ def test_resource_entrypoints_are_defined_in_the_service_module() -> None:
     for method_name in method_names:
         method = getattr(V2MetadataService, method_name)
         assert method.__module__.endswith(".services")
+
+
+def test_the_selected_version_search_file_is_returned_as_stored(
+    catalog_session: Session,
+) -> None:
+    model_version = _model_version(catalog_session, "policyengine-us")
+    encoded = encode_parameter_search_file(
+        country_search_file(normalized_catalog().country("us"))
+    )
+    catalog_session.add(
+        ParameterSearchFile(
+            tax_benefit_model_version_id=model_version.id,
+            file_format=1,
+            compressed_content=encoded.compressed_content,
+            content_sha256=encoded.content_sha256,
+            uncompressed_size=encoded.uncompressed_size,
+            compressed_size=encoded.compressed_size,
+        )
+    )
+    catalog_session.commit()
+
+    search_file = _service(catalog_session).get_parameter_search_file("us")
+    content_sha256 = _service(catalog_session).get_parameter_search_file_hash("us")
+
+    assert content_sha256 == encoded.content_sha256
+    assert search_file.policyengine_version == POLICYENGINE_VERSION
+    assert search_file.file_format == 1
+    assert search_file.compressed_content == encoded.compressed_content
+    assert search_file.content_sha256 == encoded.content_sha256
+    assert search_file.uncompressed_size == encoded.uncompressed_size
+    assert search_file.compressed_size == encoded.compressed_size
+
+
+def test_a_version_without_a_search_file_of_the_current_format_is_unavailable(
+    catalog_session: Session,
+) -> None:
+    model_version = _model_version(catalog_session, "policyengine-us")
+    catalog_session.add(
+        ParameterSearchFile(
+            tax_benefit_model_version_id=model_version.id,
+            file_format=99,
+            compressed_content=b"later format",
+            content_sha256="0" * 64,
+            uncompressed_size=12,
+            compressed_size=12,
+        )
+    )
+    catalog_session.commit()
+
+    with pytest.raises(ParameterSearchFileUnavailableError) as raised:
+        _service(catalog_session).get_parameter_search_file("us")
+    with pytest.raises(ParameterSearchFileUnavailableError) as raised_for_hash:
+        _service(catalog_session).get_parameter_search_file_hash("us")
+
+    assert str(raised_for_hash.value) == str(raised.value)
+
+    assert str(raised.value) == (
+        f"catalog version {POLICYENGINE_VERSION} has no parameter search file: "
+        "only catalog format 2 versions that catalog publication has published, "
+        "or run with installed, since search files were added have one"
+    )

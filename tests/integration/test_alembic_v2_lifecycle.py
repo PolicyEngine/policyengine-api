@@ -1660,3 +1660,95 @@ def test_parameter_tree_table_is_created_empty_and_dropped_without_data_loss() -
                 )
             )
         engine.dispose()
+
+
+PARAMETER_SEARCH_FILE_PARENT_REVISION = "3869eb814a90"
+
+
+def test_parameter_search_file_table_is_created_empty_and_dropped_without_loss() -> (
+    None
+):
+    """The search file revision creates an empty table and downgrades cleanly.
+
+    The revision writes no rows: catalog publication writes each version's
+    file. A version holds at most one file, the file is deleted with its
+    version, and downgrading drops the table while every catalog row stays.
+    """
+    config = _config()
+    engine = create_engine(_disposable_url())
+    try:
+        command.downgrade(config, PARAMETER_SEARCH_FILE_PARENT_REVISION)
+        assert "parameter_search_files" not in inspect(engine).get_table_names()
+        with engine.begin() as connection:
+            version_id = _catalog_version_published_before_format_2(connection)
+
+        command.upgrade(config, "head")
+
+        insert_file = text(
+            "INSERT INTO parameter_search_files (id, tax_benefit_model_version_id, "
+            "file_format, compressed_content, content_sha256, uncompressed_size, "
+            "compressed_size) VALUES (:id, :version_id, 1, :content, :sha, 2, 22)"
+        )
+        file_values = {
+            "version_id": version_id,
+            "content": b"\x1f\x8b compressed bytes",
+            "sha": "0" * 64,
+        }
+        with engine.begin() as connection:
+            assert (
+                connection.execute(
+                    text("SELECT count(*) FROM parameter_search_files")
+                ).scalar_one()
+                == 0
+            )
+            connection.execute(insert_file, {"id": uuid4(), **file_values})
+            with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
+                connection.execute(insert_file, {"id": uuid4(), **file_values})
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT compressed_content FROM parameter_search_files "
+                        "WHERE tax_benefit_model_version_id = :version_id"
+                    ),
+                    {"version_id": version_id},
+                ).scalar_one()
+                == file_values["content"]
+            )
+
+        command.downgrade(config, PARAMETER_SEARCH_FILE_PARENT_REVISION)
+
+        assert "parameter_search_files" not in inspect(engine).get_table_names()
+        with engine.connect() as connection:
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT count(*) FROM variables "
+                        "WHERE tax_benefit_model_version_id = :version_id"
+                    ),
+                    {"version_id": version_id},
+                ).scalar_one()
+                == 1
+            )
+
+        command.upgrade(config, "head")
+        with engine.begin() as connection:
+            connection.execute(insert_file, {"id": uuid4(), **file_values})
+            connection.execute(
+                text("DELETE FROM tax_benefit_model_versions WHERE id = :version_id"),
+                {"version_id": version_id},
+            )
+            assert (
+                connection.execute(
+                    text("SELECT count(*) FROM parameter_search_files")
+                ).scalar_one()
+                == 0
+            )
+    finally:
+        command.upgrade(config, "head")
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "DELETE FROM tax_benefit_models WHERE name = 'catalog-format-probe'"
+                )
+            )
+        engine.dispose()

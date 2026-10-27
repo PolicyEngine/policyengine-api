@@ -51,6 +51,7 @@ if TYPE_CHECKING:
         MetadataModelVersionDetail,
         MetadataPageResult,
         MetadataParameterChild,
+        MetadataParameterSearchFile,
         MetadataParameterSummary,
         MetadataRegion,
         MetadataVariable,
@@ -232,6 +233,28 @@ class V2MetadataResourceReader(Protocol):
 
         An empty parent path lists the top level of the parameter tree; the
         level's ``reform_changeable`` keeps only what a reform can change.
+        """
+        ...
+
+    def get_parameter_search_file(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> MetadataParameterSearchFile:
+        """Return the selected catalog version's stored parameter search file.
+
+        Raise ``ParameterSearchFileUnavailableError`` when the version has none.
+        """
+        ...
+
+    def get_parameter_search_file_hash(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> str:
+        """Return the content hash of the selected version's search file only.
+
+        Raise ``ParameterSearchFileUnavailableError`` when the version has none.
         """
         ...
 

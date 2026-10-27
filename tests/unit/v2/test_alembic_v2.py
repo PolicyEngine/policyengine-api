@@ -44,6 +44,7 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "legacy_policy_mappings",
         "legacy_user_mappings",
         "legacy_user_policy_mappings",
+        "parameter_search_files",
         "parameter_tree_children",
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
@@ -68,6 +69,7 @@ SAVED_POLICY_VIEW_CREATION = (
 )
 SAVED_POLICY_VIEW_REMOVAL = "DROP VIEW user_policies"
 CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
+PARAMETER_TREE_REVISION = "3869eb814a90"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -249,6 +251,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        PARAMETER_TREE_REVISION,
         CATALOG_FORMAT_2_REVISION,
         SAVED_POLICY_RENAME_REVISION,
         SAVED_POLICY_RENAME_PARENT_REVISION,
@@ -880,7 +883,7 @@ def test_parameter_tree_revision_creates_only_the_children_table() -> None:
         if revision.down_revision == CATALOG_FORMAT_2_REVISION
     ]
     assert len(children) == 1
-    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    assert children[0].revision == PARAMETER_TREE_REVISION
     revision = Path(children[0].path).read_text(encoding="utf-8")
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")
@@ -903,6 +906,42 @@ def test_parameter_tree_revision_creates_only_the_children_table() -> None:
     ):
         assert index_name in upgrade
         assert index_name in downgrade
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "op.add_column(" not in body
+
+
+def test_parameter_search_file_revision_creates_only_the_files_table() -> None:
+    """The revision after the parameter tree creates the search files' table.
+
+    It is generated, creates the table with its unique version constraint and
+    drops it on downgrade, and writes no data: catalog publication writes each
+    version's file.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == PARAMETER_TREE_REVISION
+    ]
+    assert len(children) == 1
+    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert upgrade.count("op.create_table(") == 1
+    assert '"parameter_search_files"' in upgrade
+    assert "uq_parameter_search_files_model_version_format" in upgrade
+    assert downgrade.count("op.drop_table(") == 1
+    assert '"parameter_search_files"' in downgrade
     for body in (upgrade, downgrade):
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body
