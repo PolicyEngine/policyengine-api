@@ -63,6 +63,44 @@ def test_primary_prefers_an_unhandled_exception_over_a_handled_one() -> None:
     assert primary_records([handled, unhandled]) == [unhandled]
 
 
+def test_primary_chooses_the_same_record_of_a_tie_in_either_input_order() -> None:
+    # One request logged two unhandled exceptions at the same moment.
+    stale_data = exception_record()
+    timeout = exception_record(error_type="TimeoutError")
+    assert fingerprint(stale_data, FINGERPRINT_KEY) != fingerprint(
+        timeout, FINGERPRINT_KEY
+    )
+
+    forward = primary_records([stale_data, timeout])
+    backward = primary_records([timeout, stale_data])
+
+    assert len(forward) == 1
+    assert forward == backward
+
+
+def test_primary_orders_failures_at_one_moment_the_same_way_in_either_input_order():
+    saving = message_record(request_key="request-1")
+    loading = message_record(request_key="request-2", message_template="failed to load")
+    unidentified = message_record(
+        request_key=None, trace_key=None, message_template="no request"
+    )
+
+    forward = primary_records([saving, loading, unidentified])
+    backward = primary_records([unidentified, loading, saving])
+
+    assert forward == backward
+
+
+def test_primary_prefers_the_earlier_record_before_breaking_a_tie() -> None:
+    later = exception_record(
+        timestamp=datetime(2026, 10, 20, 16, 0, 1, tzinfo=UTC),
+        error_type="AttributeError",
+    )
+    earlier = exception_record(error_type="ZeroDivisionError")
+
+    assert primary_records([later, earlier]) == [earlier]
+
+
 def test_primary_treats_a_request_completed_record_with_error_fields_as_an_exception():
     completed = failed_request_record(
         error_type="StaleDataError", frames=APPLICATION_FRAMES

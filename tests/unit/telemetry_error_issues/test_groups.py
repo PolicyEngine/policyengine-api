@@ -19,9 +19,13 @@ from tests.unit.telemetry_error_issues.report_support import (
     failures_on_the_unmatched_route,
     failures_with_and_without_a_route,
     hours_after_window_noon,
+    input_orders,
     message_record,
     request_count,
 )
+
+REPORT_ROUTE = "/<country_id>/report"
+CALCULATE_ROUTE = "/<country_id>/calculate"
 
 
 def _only_group(records: list, request_counts=()) -> object:
@@ -446,3 +450,77 @@ def test_measures_count_production_occurrences_since_a_moment() -> None:
 
     assert group.production_since(hours_after_window_noon(-1)) == (2, 2)
     assert group.production_since(hours_after_window_noon(-48)) == (3, 3)
+
+
+def _failures_that_tie() -> list:
+    """Return failures whose records tie on time, and within a failure on rank."""
+    two_requests_each = [
+        exception_record(
+            error_type=error_type,
+            request_key=f"{error_type}-{hour}",
+            timestamp=hours_after_window_noon(hour),
+        )
+        for error_type in ("StaleDataError", "TimeoutError")
+        for hour in (1, 2)
+    ]
+    # One request logged two unhandled exceptions at the same moment, and the
+    # gateway logged an error on the same trace.
+    one_request = [
+        exception_record(request_key="both", trace_key="shared"),
+        exception_record(
+            error_type="TimeoutError", request_key="both", trace_key="shared"
+        ),
+        message_record(
+            service_name="policyengine-simulation-gateway",
+            request_key="gateway",
+            trace_key="shared",
+        ),
+    ]
+    two_failures_on_each_route = [
+        exception_record(
+            error_type="KeyError", request_key=f"route-{index}", route=route
+        )
+        for index, route in enumerate([REPORT_ROUTE, CALCULATE_ROUTE] * 2)
+    ]
+    two_operations = [
+        message_record(request_key=f"operation-{operation}", operation_name=operation)
+        for operation in ("save_report", "save_policy")
+    ]
+    two_statuses = [
+        exception_record(
+            error_type="ValueError", request_key=f"status-{status}", status_code=status
+        )
+        for status in (500, 502)
+    ]
+    without_request_or_trace = [
+        message_record(request_key=None, trace_key=None, message_template=template)
+        for template in ("first unidentified", "second unidentified")
+    ]
+    return [
+        *two_requests_each,
+        *one_request,
+        *two_failures_on_each_route,
+        *two_operations,
+        *two_statuses,
+        *without_request_or_trace,
+    ]
+
+
+def test_groups_are_the_same_in_any_input_order() -> None:
+    request_counts = [
+        request_count(REPORT_ROUTE, 200),
+        request_count(CALCULATE_ROUTE, 100),
+        request_count(REPORT_ROUTE, 50, environment_name="staging"),
+    ]
+    request_counts_by_order = input_orders(request_counts)
+    window = reporting_window(REPORT_DATE)
+
+    groups_by_order = {
+        order: build_groups(
+            records, request_counts_by_order[order], window, FINGERPRINT_KEY
+        )
+        for order, records in input_orders(_failures_that_tie()).items()
+    }
+
+    assert groups_by_order["reversed"] == groups_by_order["forward"]
+    assert groups_by_order["shuffled"] == groups_by_order["forward"]
