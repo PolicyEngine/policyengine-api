@@ -1,3 +1,14 @@
+## [5.12.0] - 2026-10-27
+
+### Added
+
+- Registered a rule, checked by a new quality guard, that a Python file has at most 800 lines, or 1,500 for test code; Alembic revisions are not measured, and the five files over their limit today are listed in a baseline that may only shrink.
+
+### Fixed
+
+- `PATCH /{country_id}/report` with a report ID stored under an outdated cache version now updates the current report that `GET /{country_id}/report/{id}` serves for that ID, so a recomputed report no longer stays pending.
+
+
 ## [5.11.0] - 2026-10-27
 
 ### Added
