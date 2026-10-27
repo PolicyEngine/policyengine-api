@@ -171,8 +171,9 @@ An issue's "Error rate on affected routes" compares the group's failed
 requests with the `request.completed` records counted on the same route
 templates. Failures with no route, or with a placeholder route such as
 `<unmatched>` (which a service logs for a request that matched none of its
-routes), count in neither. When more requests failed than were logged as
-completed, the rate shows n/a with both counts instead of a percentage.
+routes), count in neither. When some requests were logged as completed but
+more failed, the rate shows n/a with both counts instead of a percentage;
+when none were logged as completed, it shows n/a.
 
 This repository is public, so issues, workflow logs and job summaries hold
 only fingerprints, counts, service names, exception class names, route
