@@ -9,8 +9,9 @@ from __future__ import annotations
 import contextlib
 import logging
 from typing import TYPE_CHECKING, Annotated, TypeVar
+from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Path
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import JSONResponse
 
@@ -34,12 +35,17 @@ from policyengine_api.fastapi_routes.v2.reports.response_models import (
     ReportItem,
 )
 from policyengine_api.fastapi_routes.v2.user_resources import request_size_limit
-from policyengine_api.query_parameters import ReportCreateQuery
+from policyengine_api.query_parameters import (
+    MAXIMUM_LEGACY_RESOURCE_ID,
+    ReportCreateQuery,
+    ReportDetailQuery,
+)
 from policyengine_api.services.v2.economy_reports.types import (
     SimulationRequestRefusedError,
     SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.economy_reports.validators import (
+    EconomyReportNotFoundError,
     EconomyReportsUnsupportedError,
 )
 
@@ -61,14 +67,29 @@ enforce_report_request_size = request_size_limit(
 ReportCreateQueryDependency = Annotated[
     ReportCreateQuery, Depends(query_dependency(ReportCreateQuery))
 ]
+ReportDetailQueryDependency = Annotated[
+    ReportDetailQuery, Depends(query_dependency(ReportDetailQuery))
+]
+LegacyReportNumber = Annotated[
+    int,
+    Path(
+        ge=1,
+        le=MAXIMUM_LEGACY_RESOURCE_ID,
+        description="The v1 report output number the report was migrated from",
+    ),
+]
 
 # Refusals a caller can act on carry their own message.
 REPORT_REFUSALS: tuple[type[Exception], ...] = (
     EconomyReportsUnsupportedError,
     SimulationRequestRefusedError,
+    EconomyReportNotFoundError,
 )
 REPORT_ERROR_MAPPINGS = (
-    V2ErrorMapping(REPORT_REFUSALS, 422),
+    V2ErrorMapping((EconomyReportNotFoundError,), 404),
+    V2ErrorMapping(
+        (EconomyReportsUnsupportedError, SimulationRequestRefusedError), 422
+    ),
     V2ErrorMapping(
         (SimulationServiceUnavailableError,),
         503,
@@ -163,5 +184,56 @@ def build_v2_report_router(
             )
 
         return _report_operation(submit)
+
+    @router.get(
+        "/reports/by-legacy-number/{legacy_report_id}",
+        response_model=ReportDetailResponse,
+        summary="Find the report migrated from a v1 report number",
+        description=(
+            "Answers as reading the report by its ID, including starting the "
+            "first run of a report that has none. 404 means no report of this "
+            "country was migrated from that number."
+        ),
+    )
+    def get_report_by_legacy_number(
+        legacy_report_id: LegacyReportNumber,
+        query: ReportDetailQueryDependency,
+    ) -> ReportDetailResponse | JSONResponse:
+        def read() -> ReportDetailResponse:
+            report = service_factory().get_report_by_legacy_number(
+                country_id=query.country_id, legacy_report_id=legacy_report_id
+            )
+            return ReportDetailResponse(
+                result=ReportDetailResult(item=ReportItem.from_record(report))
+            )
+
+        return _report_operation(read)
+
+    @router.get(
+        "/reports/{report_id}",
+        response_model=ReportDetailResponse,
+        summary="Read an economy report",
+        description=(
+            "Returns the report, its newest run and, once that run succeeded, its "
+            "result. A report with no run, such as one migrated from v1, is "
+            "calculated the first time it is read: the read starts a run with "
+            "the system trigger on the current catalog version and answers with "
+            "it. If the simulation service cannot run it, the report is "
+            "returned not run."
+        ),
+    )
+    def get_report(
+        report_id: UUID,
+        query: ReportDetailQueryDependency,
+    ) -> ReportDetailResponse | JSONResponse:
+        def read() -> ReportDetailResponse:
+            report = service_factory().get_report(
+                country_id=query.country_id, report_id=report_id
+            )
+            return ReportDetailResponse(
+                result=ReportDetailResult(item=ReportItem.from_record(report))
+            )
+
+        return _report_operation(read)
 
     return router

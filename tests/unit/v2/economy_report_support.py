@@ -205,6 +205,9 @@ class FakeEconomyReportSimulation:
             raise SimulationRecordNotFoundError(msg)
         run = replace(self.next_run, trigger=trigger.value)
         self.runs.setdefault(report_id, []).insert(0, run)
+        self.reports[report_id] = replace(
+            self.reports[report_id], run=run, status=run.status, result=None
+        )
         return run
 
     def list_report_runs(self, report_id: UUID) -> tuple[EconomyReportRunRecord, ...]:

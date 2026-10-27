@@ -343,6 +343,22 @@ class V2EconomyReportResourceService(Protocol):
         """
         ...
 
+    def get_report(self, *, country_id: str, report_id: UUID) -> EconomyReportRecord:
+        """Return a report of the country, starting its first run if it has none.
+
+        Raise ``EconomyReportNotFoundError`` when the country has no such report.
+        """
+        ...
+
+    def get_report_by_legacy_number(
+        self, *, country_id: str, legacy_report_id: int
+    ) -> EconomyReportRecord:
+        """Return the report migrated from a v1 report output number, as ``get_report``.
+
+        Raise ``EconomyReportNotFoundError`` when none of the country's was.
+        """
+        ...
+
 
 class V2PolicyResourceService(Protocol):
     """Route-independent native policy operations for one request."""

@@ -1,7 +1,7 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 91,
+    "request_count": 93,
     "route_group_count": 9,
     "sim_flow_count": 3,
     "workflow_count": 18
@@ -1392,6 +1392,36 @@
             "result.item.status",
             "result.item.run",
             "result.item.result"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/reports/{report_id}?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.legacy_report_id",
+            "result.item.status",
+            "result.item.run",
+            "result.item.result"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/reports/by-legacy-number/{legacy_report_id}?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.legacy_report_id",
+            "result.item.status"
           ]
         }
       ]

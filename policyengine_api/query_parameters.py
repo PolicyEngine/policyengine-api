@@ -286,6 +286,10 @@ class ReportCreateQuery(CountryQuery):
     """Query contract for submitting an economy report."""
 
 
+class ReportDetailQuery(CountryQuery):
+    """Query contract for reading one report, or acting on it, in a country."""
+
+
 class UserReportCollectionQuery(CountryQuery, PaginationQuery):
     """Query contract for the signed-in user's report associations."""
 

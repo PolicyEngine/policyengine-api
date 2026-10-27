@@ -27,6 +27,7 @@ from policyengine_api.migration_flags import (
     infer_route_group,
 )
 from policyengine_api.services.v2.economy_reports.types import (
+    ReportStatus,
     SimulationRequestRefusedError,
     SimulationServiceUnavailableError,
 )
@@ -40,9 +41,12 @@ from tests.unit.v2.economy_report_support import (
     REFORM_SIMULATION_ID,
     REPORT_ID,
     REPORT_RUN_ID,
+    RESULT,
     FakeEconomyReportSimulation,
     countries_store,
     economy_report_service,
+    report_record,
+    report_run_record,
 )
 
 SUBMISSION = {
@@ -339,3 +343,111 @@ def test_openapi_publishes_the_submit_contract() -> None:
         "reform",
     }
     assert body["additionalProperties"] is False
+
+
+def test_a_succeeded_report_is_read_with_its_result() -> None:
+    simulation = FakeEconomyReportSimulation(
+        report_record(run=report_run_record(status=ReportStatus.SUCCEEDED))
+    )
+
+    response = _client(simulation).get(f"/v2/reports/{REPORT_ID}?country_id=us")
+
+    assert response.status_code == 200
+    item = response.json()["result"]["item"]
+    assert item["status"] == "succeeded"
+    assert item["run"]["status"] == "succeeded"
+    assert item["result"] == RESULT
+
+
+def test_reading_a_migrated_report_starts_its_first_run() -> None:
+    simulation = FakeEconomyReportSimulation(report_record(legacy_report_id=615))
+
+    response = _client(simulation).get(f"/v2/reports/{REPORT_ID}?country_id=us")
+
+    assert response.status_code == 200
+    item = response.json()["result"]["item"]
+    assert item["legacy_report_id"] == 615
+    assert item["status"] == "pending"
+    assert item["run"]["trigger"] == "system"
+    assert item["result"] is None
+
+
+@pytest.mark.parametrize(
+    "reports",
+    [(), (report_record(country_id="uk"),)],
+    ids=["unknown", "other-country"],
+)
+def test_a_report_outside_the_country_is_not_found(reports) -> None:
+    response = _client(FakeEconomyReportSimulation(*reports)).get(
+        f"/v2/reports/{REPORT_ID}?country_id=us"
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "status": "error",
+        "message": f"Economy report {REPORT_ID} was not found in country 'us'",
+    }
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v2/reports/not-a-uuid?country_id=us",
+        f"/v2/reports/{REPORT_ID}",
+        f"/v2/reports/{REPORT_ID}?country_id=us&country_id=uk",
+        f"/v2/reports/{REPORT_ID}?country_id=us&extra=1",
+        "/v2/reports/by-legacy-number/0?country_id=us",
+        "/v2/reports/by-legacy-number/first?country_id=us",
+        "/v2/reports/by-legacy-number/615",
+    ],
+)
+def test_a_read_outside_the_contract_is_refused(path: str) -> None:
+    simulation = FakeEconomyReportSimulation(report_record(legacy_report_id=615))
+
+    response = _client(simulation).get(path)
+
+    assert response.status_code == 422
+    assert simulation.calls == []
+
+
+def test_a_migrated_report_is_found_by_its_v1_number() -> None:
+    simulation = FakeEconomyReportSimulation(report_record(legacy_report_id=615))
+
+    response = _client(simulation).get("/v2/reports/by-legacy-number/615?country_id=us")
+
+    assert response.status_code == 200
+    assert response.json()["result"]["item"]["id"] == str(REPORT_ID)
+    assert simulation.calls[0] == ("get_report_by_legacy_id", 615)
+
+
+def test_an_unknown_v1_number_is_not_found() -> None:
+    response = _client(FakeEconomyReportSimulation()).get(
+        "/v2/reports/by-legacy-number/615?country_id=us"
+    )
+
+    assert response.status_code == 404
+    assert response.json()["message"] == (
+        "Economy report migrated from v1 report 615 was not found in country 'us'"
+    )
+
+
+def test_openapi_publishes_the_read_contracts() -> None:
+    schema = _client(FakeEconomyReportSimulation()).get("/v2/openapi.json").json()
+
+    for path in (
+        "/v2/reports/{report_id}",
+        "/v2/reports/by-legacy-number/{legacy_report_id}",
+    ):
+        operation = schema["paths"][path]["get"]
+        assert {parameter["name"] for parameter in operation["parameters"]} >= {
+            "country_id"
+        }
+        assert set(operation["responses"]) >= {"200", "404", "422", "503"}
+    legacy_number = next(
+        parameter
+        for parameter in schema["paths"][
+            "/v2/reports/by-legacy-number/{legacy_report_id}"
+        ]["get"]["parameters"]
+        if parameter["name"] == "legacy_report_id"
+    )
+    assert legacy_number["schema"]["minimum"] == 1
