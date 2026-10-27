@@ -1110,7 +1110,7 @@ job = "quality-guards"
 invocation = "run_quality_guards.py"
 [rule.baseline]
 file = "rules/baselines/file-length.txt"
-count = 1
+count = 0
 [rule.proof]
 bad_fixture = "rules/fixtures/api.quality.file-length/bad_tree.toml"
 good_fixture = "rules/fixtures/api.quality.file-length/good_tree.toml"
