@@ -11,7 +11,10 @@ import pytest
 import yaml
 
 from tests.unit.telemetry_error_issues.github_support import REPOSITORY
-from tests.unit.telemetry_error_issues.report_support import PROJECT_ID
+from tests.unit.telemetry_error_issues.report_support import (
+    LOG_SOURCE_ENVIRONMENT,
+    PROJECT_ID,
+)
 
 REPO = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO / ".github" / "scripts" / "sync_telemetry_error_issues.py"
@@ -23,6 +26,7 @@ WRAPPER_ENVIRONMENT = {
     "GITHUB_REPOSITORY": REPOSITORY,
     "TELEMETRY_ERROR_FINGERPRINT_KEY": "f" * 64,
     "OBSERVABILITY_PROJECT_ID": PROJECT_ID,
+    **LOG_SOURCE_ENVIRONMENT,
 }
 
 
@@ -100,6 +104,15 @@ def test_workflow_passes_settings_to_the_wrapper() -> None:
             "${{ secrets.TELEMETRY_ERROR_FINGERPRINT_KEY }}"
         ),
         "OBSERVABILITY_PROJECT_ID": "${{ vars.OBSERVABILITY_PROJECT_ID }}",
+        "OBSERVABILITY_LOG_BUCKET": "${{ vars.OBSERVABILITY_LOG_BUCKET }}",
+        "OBSERVABILITY_LOG_BUCKET_LOCATION": (
+            "${{ vars.OBSERVABILITY_LOG_BUCKET_LOCATION }}"
+        ),
+        "OBSERVABILITY_LOG_DATASET": "${{ vars.OBSERVABILITY_LOG_DATASET }}",
+        "OBSERVABILITY_LOG_VIEW": "${{ vars.OBSERVABILITY_LOG_VIEW }}",
+        "OBSERVABILITY_SERVICE_NAMESPACE": (
+            "${{ vars.OBSERVABILITY_SERVICE_NAMESPACE }}"
+        ),
         # A scheduled run has no inputs, so it is never a dry run.
         "DRY_RUN": "${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}",
         "REPORT_DATE": "${{ inputs.report_date }}",

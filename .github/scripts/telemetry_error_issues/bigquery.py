@@ -9,6 +9,11 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, urlencode
 
 from telemetry_error_issues.groups import RequestCount
+from telemetry_error_issues.log_source import (
+    DATASET_PATTERN,
+    LOG_VIEW_PATTERN,
+    checked_identifier,
+)
 from telemetry_error_issues.normalization import MISSING
 from telemetry_error_issues.records import ErrorRecord
 from telemetry_error_issues.transport import (
@@ -21,6 +26,7 @@ from telemetry_error_issues.transport import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
+    from telemetry_error_issues.log_source import LogSource
     from telemetry_error_issues.window import ReportingWindow
 
 # Captures 'path", line N, in function' from each frame header of a Python
@@ -49,7 +55,6 @@ SINGLE_QUOTED_PATTERN = r"(^|[^A-Za-z0-9])'[^']*'"
 TEMPLATE_WORD_PATTERN = r"\b[A-Za-z]+\b"
 
 BIGQUERY_API = "https://bigquery.googleapis.com/bigquery/v2"
-LINKED_DATASET = "observability_logs"
 MAXIMUM_BYTES_BILLED = 5 * 1024**3
 QUERY_WAIT_MILLISECONDS = 30_000
 MAX_QUERY_POLLS = 40
@@ -62,10 +67,12 @@ HEALTH_CHECK_ROUTES = (
     "/readiness-check",
 )
 
-# Each query reads the linked dataset's _AllLogs view. Only code-defined or
-# normalized values leave BigQuery: stacks only as frame headers, messages
-# only as templates (see DOUBLE_QUOTED_PATTERN), and identifiers only as
-# SHA-256 hashes. Duplicate deliveries of one log entry are removed.
+# Each query reads the linked dataset's log view, whose name replaces
+# {log_view} once it has passed LOG_VIEW_PATTERN: BigQuery takes no table name
+# as a parameter. Only code-defined or normalized values leave BigQuery: stacks
+# only as frame headers, messages only as templates (see DOUBLE_QUOTED_PATTERN),
+# and identifiers only as SHA-256 hashes. Duplicate deliveries of one log entry
+# are removed.
 ERROR_RECORDS_QUERY = r"""
 SELECT
   timestamp,
@@ -114,10 +121,10 @@ SELECT
     JSON_VALUE(json_payload, '$.trace_id'),
     REGEXP_EXTRACT(trace, r'/traces/([0-9A-Fa-f]+)$')
   ))) AS trace_key
-FROM `_AllLogs`
+FROM `{log_view}`
 WHERE timestamp >= @query_start AND timestamp < @window_end
   AND JSON_VALUE(json_payload, '$.schema_version') = 'policyengine.observability.v2'
-  AND JSON_VALUE(json_payload, '$."service.namespace"') = 'policyengine.api-v1'
+  AND JSON_VALUE(json_payload, '$."service.namespace"') = @service_namespace
   AND severity_number >= 500
   AND COALESCE(JSON_VALUE(json_payload, '$."http.route"'), '')
     NOT IN UNNEST(@excluded_routes)
@@ -132,10 +139,10 @@ WITH completed_requests AS (
     JSON_VALUE(json_payload, '$."service.name"') AS service_name,
     JSON_VALUE(json_payload, '$."deployment.environment.name"') AS environment_name,
     JSON_VALUE(json_payload, '$."http.route"') AS route
-  FROM `_AllLogs`
+  FROM `{log_view}`
   WHERE timestamp >= @window_start AND timestamp < @window_end
     AND JSON_VALUE(json_payload, '$.schema_version') = 'policyengine.observability.v2'
-    AND JSON_VALUE(json_payload, '$."service.namespace"') = 'policyengine.api-v1'
+    AND JSON_VALUE(json_payload, '$."service.namespace"') = @service_namespace
     AND JSON_VALUE(json_payload, '$."event.name"') = 'request.completed'
     AND COALESCE(JSON_VALUE(json_payload, '$."http.route"'), '')
       NOT IN UNNEST(@excluded_routes)
@@ -206,17 +213,16 @@ class BigQueryClient:
 
     def __init__(
         self,
-        project_id: str,
+        log_source: LogSource,
         access_token: str,
         transport: Callable[[HttpRequest], HttpResponse] = urllib_transport,
     ) -> None:
-        """Run jobs in ``project_id`` against its linked log dataset."""
-        self.project_id = project_id
+        """Run jobs in the log source's project against its linked dataset."""
+        self.log_source = log_source
         self._access_token = access_token
         self._transport = transport
-        self._queries_url = (
-            f"{BIGQUERY_API}/projects/{quote(project_id, safe='')}/queries"
-        )
+        project_id = quote(log_source.project_id, safe="")
+        self._queries_url = f"{BIGQUERY_API}/projects/{project_id}/queries"
 
     def query(
         self, sql: str, parameters: list[dict[str, Any]], label: str
@@ -228,8 +234,10 @@ class BigQueryClient:
             "parameterMode": "NAMED",
             "queryParameters": parameters,
             "defaultDataset": {
-                "projectId": self.project_id,
-                "datasetId": LINKED_DATASET,
+                "projectId": self.log_source.project_id,
+                "datasetId": checked_identifier(
+                    self.log_source.dataset, DATASET_PATTERN, "the log dataset"
+                ),
             },
             "maximumBytesBilled": str(MAXIMUM_BYTES_BILLED),
             "labels": {"purpose": "telemetry-error-issues", "query": label},
@@ -284,6 +292,12 @@ def _timestamp_parameter(name: str, moment: datetime) -> dict[str, Any]:
         "parameterType": {"type": "TIMESTAMP"},
         "parameterValue": {"value": moment.astimezone(UTC).isoformat(sep=" ")},
     }
+
+
+def _query_text(template: str, log_source: LogSource) -> str:
+    """Name the log view in ``template``, once the name has passed its pattern."""
+    view = checked_identifier(log_source.view, LOG_VIEW_PATTERN, "the log view")
+    return template.format(log_view=view)
 
 
 def _query_parameters(
@@ -365,6 +379,7 @@ def fetch_error_records(
     parameters = _query_parameters(
         {"query_start": window.lookback_start, "window_end": window.end},
         {
+            "service_namespace": client.log_source.service_namespace,
             "frame_pattern": FRAME_PATTERN,
             "chained_exception_pattern": CHAINED_EXCEPTION_PATTERN,
             "double_quoted_pattern": DOUBLE_QUOTED_PATTERN,
@@ -372,7 +387,8 @@ def fetch_error_records(
             "template_word_pattern": TEMPLATE_WORD_PATTERN,
         },
     )
-    rows = client.query(ERROR_RECORDS_QUERY, parameters, "error-records")
+    sql = _query_text(ERROR_RECORDS_QUERY, client.log_source)
+    rows = client.query(sql, parameters, "error-records")
     return [error_record_from_row(row) for row in rows]
 
 
@@ -381,9 +397,11 @@ def fetch_request_counts(
 ) -> list[RequestCount]:
     """Return the requests each service completed per route in the window."""
     parameters = _query_parameters(
-        {"window_start": window.start, "window_end": window.end}, {}
+        {"window_start": window.start, "window_end": window.end},
+        {"service_namespace": client.log_source.service_namespace},
     )
-    rows = client.query(REQUEST_COUNTS_QUERY, parameters, "request-counts")
+    sql = _query_text(REQUEST_COUNTS_QUERY, client.log_source)
+    rows = client.query(sql, parameters, "request-counts")
     return [
         RequestCount(
             service_name=_text(row["service_name"]) or MISSING,

@@ -13,7 +13,7 @@ from telemetry_error_issues.window import reporting_window
 
 from tests.unit.telemetry_error_issues.report_support import (
     FINGERPRINT_KEY,
-    PROJECT_ID,
+    LOG_SOURCE,
     REPORT_DATE,
     exception_record,
     hours_after_window_noon,
@@ -175,7 +175,7 @@ def sync(groups: list, github: FakeGitHub, *, dry_run=False):
     return sync_issues(
         groups,
         reporting_window(REPORT_DATE),
-        PROJECT_ID,
+        LOG_SOURCE,
         github.client(),
         dry_run=dry_run,
     )

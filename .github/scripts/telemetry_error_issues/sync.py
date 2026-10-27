@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
     from telemetry_error_issues.groups import ErrorGroup
+    from telemetry_error_issues.log_source import LogSource
     from telemetry_error_issues.window import ReportingWindow
 
 BOT_LOGIN = "github-actions[bot]"
@@ -147,14 +148,14 @@ class IssueSynchronizer:
         self,
         github: GitHubClient,
         window: ReportingWindow,
-        project_id: str,
+        log_source: LogSource,
         *,
         dry_run: bool,
     ) -> None:
         """Sync the groups of ``window``; a dry run reads but never writes."""
         self._github = github
         self._window = window
-        self._project_id = project_id
+        self._log_source = log_source
         self._dry_run = dry_run
         # Case-folded names: GitHub label names are unique regardless of case.
         self._known_labels: set[str] | None = None
@@ -210,7 +211,7 @@ class IssueSynchronizer:
         self._ensure_labels(labels)
         issue = self._github.create_issue(
             issue_title(group),
-            issue_body(group, self._window, self._project_id),
+            issue_body(group, self._window, self._log_source),
             labels,
         )
         number = issue["number"]
@@ -239,7 +240,7 @@ class IssueSynchronizer:
         if reported_end is not None and reported_end > self._window.end:
             return "kept-newer"
         new_body = replace_section(
-            body, issue_section(group, self._window, self._project_id)
+            body, issue_section(group, self._window, self._log_source)
         )
         since = self._reopen_since(issue)
         if since is not None and _meets_thresholds(*group.production_since(since)):
@@ -272,11 +273,11 @@ class IssueSynchronizer:
 def sync_issues(
     groups: Iterable[ErrorGroup],
     window: ReportingWindow,
-    project_id: str,
+    log_source: LogSource,
     github: GitHubClient,
     *,
     dry_run: bool,
 ) -> SyncResult:
     """Create or update the issue for each group; a dry run makes no changes."""
-    synchronizer = IssueSynchronizer(github, window, project_id, dry_run=dry_run)
+    synchronizer = IssueSynchronizer(github, window, log_source, dry_run=dry_run)
     return synchronizer.run(groups)

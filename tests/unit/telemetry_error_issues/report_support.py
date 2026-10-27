@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from telemetry_error_issues.bigquery import CHAINED_EXCEPTION_PATTERN, FRAME_PATTERN
 from telemetry_error_issues.groups import RequestCount
+from telemetry_error_issues.log_source import LogSource
 from telemetry_error_issues.records import ErrorRecord
 
 EASTERN = ZoneInfo("America/New_York")
@@ -142,6 +143,22 @@ def failures_with_and_without_a_route() -> list:
 
 
 PROJECT_ID = "policyengine-observability"
+# The deployment's values of the repository variables that name the logs.
+LOG_SOURCE = LogSource(
+    project_id=PROJECT_ID,
+    bucket="policyengine-observability",
+    bucket_location="global",
+    dataset="observability_logs",
+    view="_AllLogs",
+    service_namespace="policyengine.api-v1",
+)
+LOG_SOURCE_ENVIRONMENT = {
+    "OBSERVABILITY_LOG_BUCKET": LOG_SOURCE.bucket,
+    "OBSERVABILITY_LOG_BUCKET_LOCATION": LOG_SOURCE.bucket_location,
+    "OBSERVABILITY_LOG_DATASET": LOG_SOURCE.dataset,
+    "OBSERVABILITY_LOG_VIEW": LOG_SOURCE.view,
+    "OBSERVABILITY_SERVICE_NAMESPACE": LOG_SOURCE.service_namespace,
+}
 
 
 def sentinel_row(**overrides: object) -> dict[str, object]:

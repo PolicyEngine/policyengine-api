@@ -26,6 +26,15 @@ from telemetry_error_issues.bigquery import (
 )
 from telemetry_error_issues.github_client import GitHubClient
 from telemetry_error_issues.groups import build_groups
+from telemetry_error_issues.log_source import (
+    DATASET_PATTERN,
+    LOCATION_PATTERN,
+    LOG_BUCKET_PATTERN,
+    LOG_VIEW_PATTERN,
+    PROJECT_ID_PATTERN,
+    LogSource,
+    checked_identifier,
+)
 from telemetry_error_issues.normalization import MISSING
 from telemetry_error_issues.records import fingerprint_key
 from telemetry_error_issues.rendering import code, window_text
@@ -48,11 +57,22 @@ if TYPE_CHECKING:
 
 StageResult = TypeVar("StageResult")
 
+# The repository variables that name the logs the run reads, each with the
+# pattern its value must match. They say where the logs are; none of them
+# changes how failures are grouped.
+LOG_NAME_VARIABLES = {
+    "OBSERVABILITY_LOG_BUCKET": LOG_BUCKET_PATTERN,
+    "OBSERVABILITY_LOG_BUCKET_LOCATION": LOCATION_PATTERN,
+    "OBSERVABILITY_LOG_DATASET": DATASET_PATTERN,
+    "OBSERVABILITY_LOG_VIEW": LOG_VIEW_PATTERN,
+}
 REQUIRED_ENVIRONMENT_VARIABLES = (
     "GOOGLE_OAUTH_ACCESS_TOKEN",
     "GITHUB_TOKEN",
     "GITHUB_REPOSITORY",
     "TELEMETRY_ERROR_FINGERPRINT_KEY",
+    *LOG_NAME_VARIABLES,
+    "OBSERVABILITY_SERVICE_NAMESPACE",
 )
 REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
@@ -131,11 +151,12 @@ class Settings(NamedTuple):
     github_credential: str
     repository: str
     fingerprint_key: bytes
+    log_source: LogSource
     summary_path: str | None
 
 
-def read_settings(environ: Mapping[str, str]) -> Settings:
-    """Read and check the environment variables the run needs."""
+def read_settings(environ: Mapping[str, str], project_id: str) -> Settings:
+    """Read and check the environment variables the run needs, and its project."""
     missing = [name for name in REQUIRED_ENVIRONMENT_VARIABLES if not environ.get(name)]
     if missing:
         msg = f"missing environment variables: {', '.join(missing)}"
@@ -145,13 +166,25 @@ def read_settings(environ: Mapping[str, str]) -> Settings:
         raise ConfigurationError(msg)
     try:
         key = fingerprint_key(environ["TELEMETRY_ERROR_FINGERPRINT_KEY"])
+        checked_identifier(project_id, PROJECT_ID_PATTERN, "--project-id")
+        for name, pattern in LOG_NAME_VARIABLES.items():
+            checked_identifier(environ[name], pattern, name)
     except ValueError as error:
         raise ConfigurationError(str(error)) from None
+    log_source = LogSource(
+        project_id=project_id,
+        bucket=environ["OBSERVABILITY_LOG_BUCKET"],
+        bucket_location=environ["OBSERVABILITY_LOG_BUCKET_LOCATION"],
+        dataset=environ["OBSERVABILITY_LOG_DATASET"],
+        view=environ["OBSERVABILITY_LOG_VIEW"],
+        service_namespace=environ["OBSERVABILITY_SERVICE_NAMESPACE"],
+    )
     return Settings(
         google_access_token=environ["GOOGLE_OAUTH_ACCESS_TOKEN"],
         github_credential=environ["GITHUB_TOKEN"],
         repository=environ["GITHUB_REPOSITORY"],
         fingerprint_key=key,
+        log_source=log_source,
         summary_path=environ.get("GITHUB_STEP_SUMMARY") or None,
     )
 
@@ -220,12 +253,14 @@ def _append_summary(path: str, summary: str) -> None:
 
 
 def _report(arguments: argparse.Namespace, runtime: Runtime) -> str:
-    settings = _stage("configuration", lambda: read_settings(runtime.environ))
+    settings = _stage(
+        "configuration", lambda: read_settings(runtime.environ, arguments.project_id)
+    )
     window = _stage(
         "configuration", lambda: _report_window(arguments.report_date, runtime.now())
     )
     bigquery = BigQueryClient(
-        arguments.project_id, settings.google_access_token, runtime.bigquery_transport
+        settings.log_source, settings.google_access_token, runtime.bigquery_transport
     )
     records = _stage(
         "query error records", lambda: fetch_error_records(bigquery, window)
@@ -247,7 +282,7 @@ def _report(arguments: argparse.Namespace, runtime: Runtime) -> str:
     result = _stage(
         "sync issues",
         lambda: sync_issues(
-            groups, window, arguments.project_id, github, dry_run=arguments.dry_run
+            groups, window, settings.log_source, github, dry_run=arguments.dry_run
         ),
     )
     summary = render_summary(result, window, dry_run=arguments.dry_run)

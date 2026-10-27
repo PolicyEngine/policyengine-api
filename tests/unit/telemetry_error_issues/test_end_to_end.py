@@ -23,6 +23,7 @@ from tests.unit.telemetry_error_issues.github_support import REPOSITORY, FakeGit
 from tests.unit.telemetry_error_issues.report_support import (
     APPLICATION_FRAMES,
     EASTERN,
+    LOG_SOURCE_ENVIRONMENT,
     PROJECT_ID,
     WINDOW_NOON,
     hours_after_window_noon,
@@ -120,6 +121,7 @@ def _environment(tmp_path: Path, **overrides: str) -> dict[str, str]:
         "GITHUB_REPOSITORY": REPOSITORY,
         "TELEMETRY_ERROR_FINGERPRINT_KEY": "f" * 64,
         "GITHUB_STEP_SUMMARY": str(tmp_path / "summary.md"),
+        **LOG_SOURCE_ENVIRONMENT,
     }
     environment.update(overrides)
     return {name: value for name, value in environment.items() if value}
@@ -276,6 +278,63 @@ def test_main_rejects_a_short_fingerprint_key_without_printing_it(
     assert exit_code == 1
     assert "at least 32 characters" in stderr
     assert "SENTINEL" not in stdout + stderr
+
+
+def test_main_names_missing_log_settings(tmp_path: Path) -> None:
+    environment = _environment(tmp_path, **dict.fromkeys(LOG_SOURCE_ENVIRONMENT, ""))
+
+    exit_code, _, stderr = _run_main(
+        tmp_path, FakeBigQuery([]), FakeGitHub(), environment=environment
+    )
+
+    assert exit_code == 1
+    assert stderr == (
+        "configuration failed: ConfigurationError (missing environment variables: "
+        f"{', '.join(LOG_SOURCE_ENVIRONMENT)})\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [
+        ("OBSERVABILITY_LOG_BUCKET", "SENTINEL bucket"),
+        ("OBSERVABILITY_LOG_BUCKET_LOCATION", "SENTINEL/location"),
+        ("OBSERVABILITY_LOG_DATASET", "SENTINEL`; DROP TABLE logs"),
+        ("OBSERVABILITY_LOG_VIEW", "_AllLogs` WHERE SENTINEL"),
+    ],
+)
+def test_main_refuses_a_log_name_that_is_not_an_identifier(
+    tmp_path: Path, setting: str, value: str
+) -> None:
+    bigquery = FakeBigQuery([])
+
+    exit_code, stdout, stderr = _run_main(
+        tmp_path,
+        bigquery,
+        FakeGitHub(),
+        environment=_environment(tmp_path, **{setting: value}),
+    )
+
+    assert exit_code == 1
+    assert stdout == ""
+    assert stderr == (
+        f"configuration failed: ConfigurationError ({setting} is not a valid name)\n"
+    )
+    assert bigquery.requests == []
+
+
+def test_main_refuses_a_project_id_that_is_not_an_identifier(tmp_path: Path) -> None:
+    bigquery = FakeBigQuery([])
+
+    exit_code, _, stderr = _run_main(
+        tmp_path, bigquery, FakeGitHub(), "--project-id", "SENTINEL project"
+    )
+
+    assert exit_code == 1
+    assert stderr == (
+        "configuration failed: ConfigurationError (--project-id is not a valid name)\n"
+    )
+    assert bigquery.requests == []
 
 
 def test_main_reports_an_api_failure_by_stage_class_and_status_only(

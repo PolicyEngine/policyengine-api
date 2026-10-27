@@ -33,6 +33,7 @@ from tests.unit.telemetry_error_issues.bigquery_support import (
 )
 from tests.unit.telemetry_error_issues.report_support import (
     APPLICATION_FRAMES,
+    LOG_SOURCE,
     REPORT_DATE,
     WINDOW_NOON,
     exception_record,
@@ -42,8 +43,8 @@ from tests.unit.telemetry_error_issues.report_support import (
 STRING_FIELD = {"name": "name", "type": "STRING", "mode": "NULLABLE"}
 
 
-def _client(transport: FakeTransport) -> object:
-    return BigQueryClient("policyengine-observability", ACCESS_TOKEN, transport)
+def _client(transport: FakeTransport, log_source: object = LOG_SOURCE) -> object:
+    return BigQueryClient(log_source, ACCESS_TOKEN, transport)
 
 
 def test_bigquery_error_query_request_limits_cost_and_names_its_parameters() -> None:
@@ -73,6 +74,10 @@ def test_bigquery_error_query_request_limits_cost_and_names_its_parameters() -> 
         "datasetId": "observability_logs",
     }
     assert body["formatOptions"] == {"useInt64Timestamp": True}
+    assert "FROM `_AllLogs`" in body["query"]
+    assert parameters["service_namespace"]["parameterValue"]["value"] == (
+        "policyengine.api-v1"
+    )
     assert parameters["query_start"]["parameterType"] == {"type": "TIMESTAMP"}
     assert parameters["query_start"]["parameterValue"]["value"] == (
         "2026-10-13 04:00:00+00:00"
@@ -96,19 +101,57 @@ def test_bigquery_error_query_request_limits_cost_and_names_its_parameters() -> 
     ] == ["/health", "/simulation-gateway-check", "/liveness-check", "/readiness-check"]
 
 
+def test_bigquery_queries_name_the_configured_dataset_and_view() -> None:
+    transport = FakeTransport([json_response(query_response([], []))] * 2)
+    log_source = LOG_SOURCE._replace(dataset="linked_logs", view="_Requests")
+    client = _client(transport, log_source)
+
+    fetch_error_records(client, reporting_window(REPORT_DATE))
+    fetch_request_counts(client, reporting_window(REPORT_DATE))
+
+    for index in range(2):
+        body = transport.json_body(index)
+        assert body["defaultDataset"]["datasetId"] == "linked_logs"
+        assert "FROM `_Requests`" in body["query"]
+        assert "_AllLogs" not in body["query"]
+
+
+@pytest.mark.parametrize(
+    "unsafe_names",
+    [
+        {"view": "_AllLogs` WHERE TRUE --"},
+        {"view": "_AllLogs\n"},
+        {"view": ""},
+        {"dataset": "observability_logs.other"},
+        {"dataset": "logs; DROP TABLE logs"},
+    ],
+)
+def test_bigquery_refuses_a_dataset_or_view_that_is_not_an_identifier(
+    unsafe_names: dict[str, str],
+) -> None:
+    transport = FakeTransport([json_response(query_response([], []))])
+    client = _client(transport, LOG_SOURCE._replace(**unsafe_names))
+
+    with pytest.raises(ValueError, match="is not a valid name"):
+        fetch_error_records(client, reporting_window(REPORT_DATE))
+
+    assert transport.requests == []
+
+
 def test_bigquery_error_query_filters_application_error_records() -> None:
     sql = ERROR_RECORDS_QUERY
 
-    assert "FROM `_AllLogs`" in sql
+    assert "FROM `{log_view}`" in sql
     assert "timestamp >= @query_start AND timestamp < @window_end" in sql
     assert (
         "JSON_VALUE(json_payload, '$.schema_version') = "
         "'policyengine.observability.v2'" in sql
     )
     assert (
-        "JSON_VALUE(json_payload, '$.\"service.namespace\"') = "
-        "'policyengine.api-v1'" in sql
+        "JSON_VALUE(json_payload, '$.\"service.namespace\"') = @service_namespace"
+        in sql
     )
+    assert "policyengine.api-v1" not in sql
     assert "severity_number >= 500" in sql
     assert "NOT IN UNNEST(@excluded_routes)" in sql
     assert "QUALIFY ROW_NUMBER() OVER" in sql
@@ -213,6 +256,10 @@ def test_bigquery_request_count_query_counts_completed_requests_in_the_window() 
     assert parameters["window_start"]["parameterValue"]["value"] == (
         "2026-10-20 04:00:00+00:00"
     )
+    assert parameters["service_namespace"]["parameterValue"]["value"] == (
+        "policyengine.api-v1"
+    )
+    assert "FROM `_AllLogs`" in transport.json_body(0)["query"]
     assert transport.json_body(0)["labels"]["query"] == "request-counts"
 
 

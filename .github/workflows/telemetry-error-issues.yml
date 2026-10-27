@@ -60,6 +60,11 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           TELEMETRY_ERROR_FINGERPRINT_KEY: ${{ secrets.TELEMETRY_ERROR_FINGERPRINT_KEY }}
           OBSERVABILITY_PROJECT_ID: ${{ vars.OBSERVABILITY_PROJECT_ID }}
+          OBSERVABILITY_LOG_BUCKET: ${{ vars.OBSERVABILITY_LOG_BUCKET }}
+          OBSERVABILITY_LOG_BUCKET_LOCATION: ${{ vars.OBSERVABILITY_LOG_BUCKET_LOCATION }}
+          OBSERVABILITY_LOG_DATASET: ${{ vars.OBSERVABILITY_LOG_DATASET }}
+          OBSERVABILITY_LOG_VIEW: ${{ vars.OBSERVABILITY_LOG_VIEW }}
+          OBSERVABILITY_SERVICE_NAMESPACE: ${{ vars.OBSERVABILITY_SERVICE_NAMESPACE }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
           REPORT_DATE: ${{ inputs.report_date }}
         run: bash .github/scripts/sync_telemetry_error_issues.sh

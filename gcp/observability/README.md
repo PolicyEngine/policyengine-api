@@ -190,6 +190,11 @@ GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token)" \
 GITHUB_TOKEN="$(gh auth token)" \
 GITHUB_REPOSITORY=PolicyEngine/policyengine-api \
 TELEMETRY_ERROR_FINGERPRINT_KEY="$(openssl rand -hex 32)" \
+OBSERVABILITY_LOG_BUCKET=policyengine-observability \
+OBSERVABILITY_LOG_BUCKET_LOCATION=global \
+OBSERVABILITY_LOG_DATASET=observability_logs \
+OBSERVABILITY_LOG_VIEW=_AllLogs \
+OBSERVABILITY_SERVICE_NAMESPACE=policyengine.api-v1 \
 python3 .github/scripts/sync_telemetry_error_issues.py \
   --project-id policyengine-observability --dry-run
 ```
@@ -207,7 +212,23 @@ python3 .github/scripts/sync_telemetry_error_issues.py \
 | Environment secret `TELEMETRY_ERROR_FINGERPRINT_KEY` | The 32-byte hexadecimal HMAC key for fingerprints |
 
 The workflow also uses the repository secret `GCP_WORKLOAD_IDENTITY_PROVIDER`
-and the repository variable `OBSERVABILITY_PROJECT_ID`.
+and these repository variables, which say where the logs are:
+
+| Repository variable | Value | Used for |
+| --- | --- | --- |
+| `OBSERVABILITY_PROJECT_ID` | `policyengine-observability` | The project that runs the query jobs and holds the bucket |
+| `OBSERVABILITY_LOG_BUCKET` | `policyengine-observability` | The log bucket, in the Logs Explorer link |
+| `OBSERVABILITY_LOG_BUCKET_LOCATION` | `global` | The bucket's location, in the Logs Explorer link |
+| `OBSERVABILITY_LOG_DATASET` | `observability_logs` | The linked BigQuery dataset the queries read |
+| `OBSERVABILITY_LOG_VIEW` | `_AllLogs` | The log view, which is also the name of the linked dataset's view |
+| `OBSERVABILITY_SERVICE_NAMESPACE` | `policyengine.api-v1` | The `service.namespace` of the records to report; the API reads the same variable |
+
+Each name must match a strict identifier pattern
+(`.github/scripts/telemetry_error_issues/log_source.py`), because BigQuery
+can't take a dataset or view name as a query parameter; the run refuses any
+other value. The namespace is sent as a query parameter. The rules that decide
+which group a failure belongs to stay in code, because changing one changes
+fingerprints.
 
 These resources were created on 2026-10-20:
 

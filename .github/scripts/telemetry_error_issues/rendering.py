@@ -8,12 +8,20 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, urlencode
 
+from telemetry_error_issues.log_source import (
+    LOCATION_PATTERN,
+    LOG_BUCKET_PATTERN,
+    LOG_VIEW_PATTERN,
+    PROJECT_ID_PATTERN,
+    checked_identifier,
+)
 from telemetry_error_issues.normalization import MISSING, UNRECOGNIZED
 from telemetry_error_issues.records import FINGERPRINT_ALGORITHM
 from telemetry_error_issues.window import REPORTING_TIME_ZONE, ReportingWindow
 
 if TYPE_CHECKING:
     from telemetry_error_issues.groups import EnvironmentMeasures, ErrorGroup
+    from telemetry_error_issues.log_source import LogSource
 
 ISSUE_TITLE_PREFIX = "[telemetry]"
 MAX_TITLE_LENGTH = 256
@@ -22,8 +30,6 @@ SECTION_END = "<!-- telemetry-error-issues:end -->"
 STATE_PATTERN = re.compile(r"<!-- telemetry-error-issues:state (\{[^\n]*?\}) -->")
 NOT_AVAILABLE = "n/a"
 LOGS_EXPLORER_URL = "https://console.cloud.google.com/logs/query"
-LOG_BUCKET = "policyengine-observability"
-LOG_VIEW = "_AllLogs"
 SCHEMA_VERSION = "policyengine.observability.v2"
 SIMULATION_FAMILY = "policyengine-simulation-py"
 
@@ -93,8 +99,21 @@ def _logs_filters(group: ErrorGroup) -> list[str]:
     return filters
 
 
+def _log_view_path(log_source: LogSource) -> str:
+    """Return the log view's resource name, once each part has passed its pattern."""
+    project_id = checked_identifier(
+        log_source.project_id, PROJECT_ID_PATTERN, "the project ID"
+    )
+    location = checked_identifier(
+        log_source.bucket_location, LOCATION_PATTERN, "the log bucket location"
+    )
+    bucket = checked_identifier(log_source.bucket, LOG_BUCKET_PATTERN, "the log bucket")
+    view = checked_identifier(log_source.view, LOG_VIEW_PATTERN, "the log view")
+    return f"projects/{project_id}/locations/{location}/buckets/{bucket}/views/{view}"
+
+
 def logs_explorer_url(
-    group: ErrorGroup, window: ReportingWindow, project_id: str
+    group: ErrorGroup, window: ReportingWindow, log_source: LogSource
 ) -> str:
     """Return a Logs Explorer link to the group's records in the window."""
     query = "\n".join(
@@ -104,9 +123,8 @@ def logs_explorer_url(
             f'timestamp<"{_logs_timestamp(window.end)}"',
         ]
     )
-    view = (
-        f"projects/{project_id}/locations/global/buckets/{LOG_BUCKET}/views/{LOG_VIEW}"
-    )
+    view = _log_view_path(log_source)
+    project_id = log_source.project_id
     settings = {"query": query, "storageScope": f"storage,{view}"}
     encoded = "".join(
         f";{name}={quote(value, safe='')}" for name, value in settings.items()
@@ -202,7 +220,9 @@ def parse_state(body: str) -> dict[str, Any] | None:
     return state if isinstance(state, dict) else None
 
 
-def issue_section(group: ErrorGroup, window: ReportingWindow, project_id: str) -> str:
+def issue_section(
+    group: ErrorGroup, window: ReportingWindow, log_source: LogSource
+) -> str:
     """Return the marked section of the issue body, which each run replaces."""
     related = ", ".join(map(code, group.related_fingerprints))
     lines = [
@@ -222,8 +242,8 @@ def issue_section(group: ErrorGroup, window: ReportingWindow, project_id: str) -
         "",
         (
             f"[Matching log records in Logs Explorer]"
-            f"({logs_explorer_url(group, window, project_id)}), for the window only. "
-            f"It needs read access to the `{project_id}` project."
+            f"({logs_explorer_url(group, window, log_source)}), for the window only. "
+            f"It needs read access to the `{log_source.project_id}` project."
         ),
         "",
         _state_comment(group, window),
@@ -232,11 +252,13 @@ def issue_section(group: ErrorGroup, window: ReportingWindow, project_id: str) -
     return "\n".join(lines)
 
 
-def issue_body(group: ErrorGroup, window: ReportingWindow, project_id: str) -> str:
+def issue_body(
+    group: ErrorGroup, window: ReportingWindow, log_source: LogSource
+) -> str:
     """Return a new issue's body: a short note, then the marked section."""
     note = (
         "The daily telemetry error report opened this issue for a production "
         "error group. Each run replaces the marked section below with the "
         "latest day's measures; text outside it is kept."
     )
-    return f"{note}\n\n{issue_section(group, window, project_id)}\n"
+    return f"{note}\n\n{issue_section(group, window, log_source)}\n"

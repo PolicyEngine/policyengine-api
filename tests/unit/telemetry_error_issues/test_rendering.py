@@ -19,7 +19,7 @@ from telemetry_error_issues.window import reporting_window
 
 from tests.unit.telemetry_error_issues.report_support import (
     FINGERPRINT_KEY,
-    PROJECT_ID,
+    LOG_SOURCE,
     REPORT_DATE,
     exception_record,
     failed_request_record,
@@ -45,7 +45,7 @@ def _render(group: object) -> tuple[str, str]:
     window = reporting_window(REPORT_DATE)
     return (
         issue_title(group),
-        issue_body(group, window, PROJECT_ID),
+        issue_body(group, window, LOG_SOURCE),
     )
 
 
@@ -224,7 +224,7 @@ def test_render_body_stays_under_the_github_limit() -> None:
 
 def test_render_logs_link_filters_exceptions_by_service_and_type() -> None:
     group = _group([exception_record()])
-    url = logs_explorer_url(group, reporting_window(REPORT_DATE), PROJECT_ID)
+    url = logs_explorer_url(group, reporting_window(REPORT_DATE), LOG_SOURCE)
 
     query, settings = _logs_query(url)
 
@@ -246,6 +246,46 @@ def test_render_logs_link_filters_exceptions_by_service_and_type() -> None:
         assert character not in url
 
 
+def test_render_logs_link_names_the_configured_bucket_location_and_view() -> None:
+    group = _group([exception_record()])
+    log_source = LOG_SOURCE._replace(
+        project_id="other-project",
+        bucket="central-logs",
+        bucket_location="us-central1",
+        view="_Requests",
+    )
+
+    url = logs_explorer_url(group, reporting_window(REPORT_DATE), log_source)
+
+    _, settings = _logs_query(url)
+    assert urlparse(url).query == "project=other-project"
+    assert settings["storageScope"] == quote(
+        "storage,projects/other-project/locations/us-central1/"
+        "buckets/central-logs/views/_Requests",
+        safe="",
+    )
+
+
+@pytest.mark.parametrize(
+    "unsafe_names",
+    [
+        {"project_id": "SENTINEL project"},
+        {"bucket": "logs/views/other"},
+        {"bucket_location": "global/../other"},
+        {"view": "_AllLogs?project=other"},
+    ],
+)
+def test_render_logs_link_refuses_names_that_are_not_identifiers(
+    unsafe_names: dict[str, str],
+) -> None:
+    group = _group([exception_record()])
+
+    with pytest.raises(ValueError, match="is not a valid name"):
+        logs_explorer_url(
+            group, reporting_window(REPORT_DATE), LOG_SOURCE._replace(**unsafe_names)
+        )
+
+
 def test_render_logs_link_filters_failed_requests_by_route_and_status() -> None:
     group = _group(
         [
@@ -258,7 +298,7 @@ def test_render_logs_link_filters_failed_requests_by_route_and_status() -> None:
     )
 
     query, _ = _logs_query(
-        logs_explorer_url(group, reporting_window(REPORT_DATE), PROJECT_ID)
+        logs_explorer_url(group, reporting_window(REPORT_DATE), LOG_SOURCE)
     )
 
     assert query.splitlines()[1:5] == [
@@ -276,9 +316,9 @@ def test_render_logs_link_filters_logged_errors_by_route_or_operation() -> None:
         [message_record(route=None, operation_name="simulation.dispatch")],
     )
 
-    route_query, _ = _logs_query(logs_explorer_url(route_group, window, PROJECT_ID))
+    route_query, _ = _logs_query(logs_explorer_url(route_group, window, LOG_SOURCE))
     operation_query, _ = _logs_query(
-        logs_explorer_url(operation_group, window, PROJECT_ID)
+        logs_explorer_url(operation_group, window, LOG_SOURCE)
     )
 
     assert 'jsonPayload."http.route"="/<country_id>/report"' in route_query
@@ -303,7 +343,7 @@ def test_render_never_includes_values_from_records(
     window = reporting_window(REPORT_DATE)
 
     title, body = _render(group)
-    url = logs_explorer_url(group, window, PROJECT_ID)
+    url = logs_explorer_url(group, window, LOG_SOURCE)
 
     for output in (title, body, url, unquote(url)):
         assert "SENTINEL" not in output

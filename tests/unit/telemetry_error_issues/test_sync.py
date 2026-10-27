@@ -24,7 +24,7 @@ from tests.unit.telemetry_error_issues.github_support import (
     sync,
 )
 from tests.unit.telemetry_error_issues.report_support import (
-    PROJECT_ID,
+    LOG_SOURCE,
     REPORT_DATE,
     WINDOW_NOON,
     exception_record,
@@ -38,7 +38,7 @@ def _existing_issue(group: object, number: int = 7, **fields: object) -> dict:
     issue = bot_issue(
         number,
         title=issue_title(group),
-        body=issue_body(group, earlier, PROJECT_ID),
+        body=issue_body(group, earlier, LOG_SOURCE),
     )
     issue.update(fields)
     return issue
@@ -120,7 +120,7 @@ def test_sync_replaces_only_the_marked_section_and_never_the_title() -> None:
     result = sync([group], github)
 
     patch = json.loads(github.writes[0][1].body)
-    expected_section = issue_section(group, reporting_window(REPORT_DATE), PROJECT_ID)
+    expected_section = issue_section(group, reporting_window(REPORT_DATE), LOG_SOURCE)
     assert list(patch) == ["body"]
     assert patch["body"].startswith("Notes before.\n\n")
     assert patch["body"].endswith("\nNotes after.\n")
@@ -222,7 +222,7 @@ def test_sync_keeps_a_completed_issue_closed_within_24_hours_of_closing() -> Non
     assert github.issues[7]["state"] == "closed"
     assert 7 not in github.comments
     assert (
-        issue_section(group, reporting_window(REPORT_DATE), PROJECT_ID)
+        issue_section(group, reporting_window(REPORT_DATE), LOG_SOURCE)
         in github.issues[7]["body"]
     )
     assert result.actions[0].action == "updated"
@@ -252,7 +252,7 @@ def test_sync_keeps_a_newer_report_instead_of_overwriting_it() -> None:
     issue = bot_issue(
         7,
         title=issue_title(group),
-        body=issue_body(group, later, PROJECT_ID),
+        body=issue_body(group, later, LOG_SOURCE),
     )
     github = FakeGitHub([issue])
 
