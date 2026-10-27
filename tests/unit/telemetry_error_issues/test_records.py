@@ -24,6 +24,32 @@ from tests.unit.telemetry_error_issues.report_support import (
 )
 
 
+def _frame_header(module_path: str, function_name: str, line_number: int) -> str:
+    """Return one stack frame header as the query extracts it."""
+    return f'/app/{module_path}", line {line_number}, in {function_name}'
+
+
+# One exception's stack before and after a file-length split moved the service
+# functions into new modules, and after the split made a private helper public.
+FRAMES_BEFORE_SPLIT = (
+    _frame_header("policyengine_api/routes/report_routes.py", "create_report", 41),
+    _frame_header("policyengine_api/services/report_service.py", "create", 88),
+    _frame_header(
+        "policyengine_api/services/report_service.py", "_resolve_region", 140
+    ),
+)
+FRAMES_AFTER_SPLIT = (
+    _frame_header("policyengine_api/routes/report_routes.py", "create_report", 41),
+    _frame_header("policyengine_api/services/report/creation.py", "create", 30),
+    _frame_header("policyengine_api/services/report/regions.py", "_resolve_region", 12),
+)
+FRAMES_AFTER_SPLIT_WITH_PUBLIC_HELPER = (
+    _frame_header("policyengine_api/routes/report_routes.py", "create_report", 41),
+    _frame_header("policyengine_api/services/report/creation.py", "create", 30),
+    _frame_header("policyengine_api/services/report/regions.py", "resolve_region", 12),
+)
+
+
 def test_primary_prefers_the_exception_record_of_a_failed_request() -> None:
     exception = exception_record()
     records = [
@@ -157,6 +183,46 @@ def test_fingerprint_exception_ignores_lines_path_prefixes_and_routes() -> None:
     assert fingerprint(first, FINGERPRINT_KEY) == fingerprint(second, FINGERPRINT_KEY)
 
 
+def test_fingerprint_exception_is_the_same_after_its_functions_move_modules() -> None:
+    before_split = exception_record(frames=FRAMES_BEFORE_SPLIT)
+    after_split = exception_record(frames=FRAMES_AFTER_SPLIT)
+
+    assert fingerprint(before_split, FINGERPRINT_KEY) == fingerprint(
+        after_split, FINGERPRINT_KEY
+    )
+
+
+@pytest.mark.parametrize(
+    "private_helper_frames",
+    [FRAMES_BEFORE_SPLIT, FRAMES_AFTER_SPLIT],
+    ids=["in-its-old-module", "in-its-new-module"],
+)
+def test_fingerprint_exception_ignores_leading_underscores_in_function_names(
+    private_helper_frames: tuple[str, ...],
+) -> None:
+    private_helper = exception_record(frames=private_helper_frames)
+    public_helper = exception_record(frames=FRAMES_AFTER_SPLIT_WITH_PUBLIC_HELPER)
+
+    assert fingerprint(private_helper, FINGERPRINT_KEY) == fingerprint(
+        public_helper, FINGERPRINT_KEY
+    )
+
+
+def test_fingerprint_exception_differs_when_a_function_is_renamed() -> None:
+    renamed_frames = (
+        *FRAMES_AFTER_SPLIT[:-1],
+        _frame_header(
+            "policyengine_api/services/report/regions.py", "_find_region", 12
+        ),
+    )
+    original = exception_record(frames=FRAMES_AFTER_SPLIT)
+    renamed = exception_record(frames=renamed_frames)
+
+    assert fingerprint(original, FINGERPRINT_KEY) != fingerprint(
+        renamed, FINGERPRINT_KEY
+    )
+
+
 def test_fingerprint_exception_merges_simulation_service_versions() -> None:
     first = exception_record(service_name="policyengine-simulation-py1-2-3")
     second = exception_record(service_name="policyengine-simulation-py1-2-4")
@@ -228,8 +294,8 @@ def test_fingerprint_key_parts_for_each_kind() -> None:
         "exception",
         "policyengine-api",
         "StaleDataError",
-        "policyengine_api/routes/report_routes.py:create_report",
-        "policyengine_api/services/report_service.py:create",
+        "create_report",
+        "create",
     )
     assert fingerprint_parts(message) == (
         "message",

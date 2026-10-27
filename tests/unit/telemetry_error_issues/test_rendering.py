@@ -219,11 +219,12 @@ def test_render_body_state_comment_records_the_group_and_window() -> None:
     _, body = _render(group)
 
     assert parse_state(body) == {
-        "algorithm": 1,
+        "algorithm": 2,
         "fingerprint": group.fingerprint,
         "kind": "exception",
         "window_end": "2026-10-21T04:00:00+00:00",
     }
+    assert "- Kind: exception (fingerprint algorithm 2)" in body
 
 
 def test_render_body_stays_under_the_github_limit() -> None:

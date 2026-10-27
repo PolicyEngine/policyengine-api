@@ -8,7 +8,7 @@ never reaches an issue, a log or a job summary.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -85,28 +85,54 @@ def normalize_path(path: str) -> str:
     return "/".join(path.split("/")[-FALLBACK_PATH_COMPONENTS:])
 
 
-def frame_key(frame: str) -> str | None:
-    """Return ``path:function`` for one ``FRAME_PATTERN`` match, without its line."""
+class FrameLocation(NamedTuple):
+    """The source file and function of one stack frame."""
+
+    path: str
+    function: str
+
+
+def frame_location(frame: str) -> FrameLocation | None:
+    """Return the normalized path and the function of one ``FRAME_PATTERN`` match.
+
+    The frame's line number is dropped.
+    """
     parts = FRAME_PARTS.match(frame)
     if parts is None:
         return None
-    return f"{normalize_path(parts['path'])}:{parts['function']}"
+    return FrameLocation(normalize_path(parts["path"]), parts["function"])
+
+
+def function_key(function: str) -> str:
+    """Return a function name without its leading underscores."""
+    return function.lstrip("_")
 
 
 def fingerprint_frames(frames: Iterable[str] | None) -> tuple[str, ...]:
-    """Choose the frames that identify where an exception was raised.
+    """Choose the frames that identify where an exception was raised, and key them.
 
     ``frames`` come from the first traceback of the stack only (see
     ``CHAINED_EXCEPTION_PATTERN``); for a chained exception that is its first
-    cause. These are the three innermost frames in application packages.
-    Without application frames they are the three innermost frames of any
-    kind, and without a stack, a placeholder.
+    cause. These are the three innermost frames whose paths are in
+    application packages. Without application frames they are the three
+    innermost frames of any kind, and without a stack, a placeholder.
+
+    Each chosen frame is keyed by its function name alone, without leading
+    underscores, so moving a function to another module, or making a private
+    helper public, keeps the fingerprint. Any other rename changes it.
     """
-    keys = [key for key in map(frame_key, frames or ()) if key is not None]
-    if not keys:
+    locations = [
+        location
+        for location in map(frame_location, frames or ())
+        if location is not None
+    ]
+    if not locations:
         return (MISSING,)
-    application_keys = [key for key in keys if APPLICATION_PATH.match(key)]
-    return tuple((application_keys or keys)[-FINGERPRINT_FRAME_COUNT:])
+    application_locations = [
+        location for location in locations if APPLICATION_PATH.match(location.path)
+    ]
+    chosen = (application_locations or locations)[-FINGERPRINT_FRAME_COUNT:]
+    return tuple(function_key(location.function) for location in chosen)
 
 
 def _validated(value: str | None, pattern: re.Pattern[str], max_length: int) -> str:
