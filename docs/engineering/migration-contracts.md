@@ -7,8 +7,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | Metric | Count |
 | --- | ---: |
 | route group count | 9 |
-| workflow count | 17 |
-| request count | 93 |
+| workflow count | 18 |
+| request count | 95 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -20,7 +20,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `specification` | `specification` | `none` | `none` |
 | `metadata` | `metadata`, `countries`, `datasets`, `economy-options`, `model-catalog`, `parameter-values`, `parameters`, `regions`, `tax-benefit-model-versions`, `tax-benefit-models`, `variables` | `metadata` | `none` |
 | `policy` | `policy`, `policies`, `user-policy`, `user-policies` | `policy` | `none` |
-| `household` | `household`, `households`, `user-household`, `user-households`, `calculate`, `calculate-full` | `household` | `household` |
+| `household` | `household`, `households`, `household-calculations`, `user-household`, `user-households`, `calculate`, `calculate-full` | `household` | `household` |
 | `economy` | `economy` | `simulation` | `economy` |
 | `simulation` | `simulation`, `simulations`, `user-simulations` | `simulation` | `economy` |
 | `report` | `report`, `user-reports`, `shared-reports` | `report` | `report` |
@@ -99,6 +99,16 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `POST` | `/v2/households?country_id=us` | 201 | `household` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.default_year`, `result.item.household_data`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/households/{household_id}?country_id=us` | 200 | `household` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.default_year`, `result.item.household_data`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/households?country_id=us` | 200 | `household` | none | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+
+### `household_calculations_v2`
+
+- Current contract: `typed_v2_resources`
+- Future owner: Household calculations on v2
+
+| Method | Path | Status | Route group | Required headers | Stable response fields |
+| --- | --- | ---: | --- | --- | --- |
+| `POST` | `/v2/household-calculations` | 202 | `household` | none | `status`, `message`, `result.calculation_id`, `result.country_id`, `result.household_id`, `result.policy_id`, `result.year`, `result.catalog_version_id`, `result.status`, `result.created_at` |
+| `GET` | `/v2/household-calculations/{calculation_id}` | 200 | `household` | none | `status`, `message`, `result.calculation_id`, `result.status`, `result.completed_at`, `result.result.household`, `result.result.warnings`, `result.result.spm_config`, `result.result.spm_provenance`, `result.result.policyengine_version`, `result.error` |
 
 ### `user_household_associations_v2`
 

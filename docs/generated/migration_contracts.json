@@ -1,10 +1,10 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 93,
+    "request_count": 95,
     "route_group_count": 9,
     "sim_flow_count": 3,
-    "workflow_count": 17
+    "workflow_count": 18
   },
   "route_groups": [
     {
@@ -61,6 +61,7 @@
       "path_segments": [
         "household",
         "households",
+        "household-calculations",
         "user-household",
         "user-households",
         "calculate",
@@ -534,6 +535,52 @@
             "result.offset",
             "result.limit",
             "result.has_more"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_resources",
+      "future_owner_pr": "Household calculations on v2",
+      "name": "household_calculations_v2",
+      "requests": [
+        {
+          "expected_status": 202,
+          "headers": [],
+          "method": "POST",
+          "path": "/v2/household-calculations",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.calculation_id",
+            "result.country_id",
+            "result.household_id",
+            "result.policy_id",
+            "result.year",
+            "result.catalog_version_id",
+            "result.status",
+            "result.created_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/household-calculations/{calculation_id}",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.calculation_id",
+            "result.status",
+            "result.completed_at",
+            "result.result.household",
+            "result.result.warnings",
+            "result.result.spm_config",
+            "result.result.spm_provenance",
+            "result.result.policyengine_version",
+            "result.error"
           ]
         }
       ]
