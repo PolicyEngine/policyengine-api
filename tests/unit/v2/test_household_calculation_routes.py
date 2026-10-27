@@ -210,11 +210,32 @@ def test_a_simulation_service_that_cannot_calculate_answers_503(
     "changes",
     [
         {"axes": [[{"name": "employment_income", "count": 0, "min": 0, "max": 1}]]},
+        {
+            "axes": [
+                [
+                    {"name": "employment_income", "count": 3, "min": 0, "max": 1},
+                    {"name": "age", "count": 4, "min": 20, "max": 60},
+                ]
+            ]
+        },
+        {
+            "axes": [
+                [{"name": "employment_income", "count": 101, "min": 0, "max": 1}],
+                [{"name": "age", "count": 100, "min": 20, "max": 60}],
+            ]
+        },
         {"country_id": "ca"},
         {"unexpected": True},
         {"year": 1800},
     ],
-    ids=["axis-count", "country", "unknown-field", "year"],
+    ids=[
+        "axis-count",
+        "parallel-axes-of-different-counts",
+        "too-many-axis-points",
+        "country",
+        "unknown-field",
+        "year",
+    ],
 )
 def test_a_malformed_request_is_refused_before_anything_is_read(changes) -> None:
     app = App()
@@ -236,3 +257,18 @@ def test_a_household_the_simulation_service_finds_invalid_gets_422_with_why() ->
 
     assert response.status_code == 422
     assert "members" in response.json()["message"]
+
+
+def test_axis_groups_within_the_point_limit_are_accepted() -> None:
+    app = App()
+    axes = [
+        [
+            {"name": "employment_income", "count": 100, "min": 0, "max": 1},
+            {"name": "self_employment_income", "count": 100, "min": 0, "max": 1},
+        ],
+        [{"name": "age", "count": 100, "min": 20, "max": 60}],
+    ]
+
+    response = app.client.post(PATH, json=body(axes=axes))
+
+    assert response.status_code == 202

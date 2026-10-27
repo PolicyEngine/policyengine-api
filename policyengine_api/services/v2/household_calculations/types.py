@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 from policyengine_api.query_parameters import CountryId, DefaultYear
 
@@ -20,7 +21,8 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.policies.types import PolicyRead
 
-# The simulation service's limits on axes.
+# The simulation service's limits on axes: the product of the groups' point
+# counts is at most MAXIMUM_AXIS_POINTS.
 MAXIMUM_AXIS_POINTS = 10_000
 MAXIMUM_AXIS_GROUPS = 8
 MAXIMUM_PARALLEL_AXES = 32
@@ -59,7 +61,9 @@ class HouseholdCalculationInput(StrictCalculationModel):
     """A stored household to calculate under a stored policy, or current law.
 
     ``year`` defaults to the household's default year. ``axes`` vary inputs
-    across points; ``add_missing_variables`` adds every yearly, monthly and
+    across points: the axes of one group vary together, so they share one
+    point count, and the groups form a grid of at most 10,000 points.
+    ``add_missing_variables`` adds every yearly, monthly and
     eternal variable the household lacks, as ``/calculate-full`` does.
     ``force`` calculates again even when a recent calculation can be reused.
     """
@@ -73,6 +77,23 @@ class HouseholdCalculationInput(StrictCalculationModel):
     )
     add_missing_variables: bool = False
     force: bool = False
+
+    @field_validator("axes")
+    @classmethod
+    def limit_axis_points(
+        cls, axes: list[list[HouseholdCalculationAxis]] | None
+    ) -> list[list[HouseholdCalculationAxis]] | None:
+        """Refuse groups of uneven point counts and grids of too many points."""
+        if axes is None:
+            return None
+        for group in axes:
+            if len({axis.count for axis in group}) != 1:
+                msg = "the axes of one group must share one point count"
+                raise ValueError(msg)
+        if math.prod(group[0].count for group in axes) > MAXIMUM_AXIS_POINTS:
+            msg = f"the axis groups may vary at most {MAXIMUM_AXIS_POINTS} points"
+            raise ValueError(msg)
+        return axes
 
 
 class HouseholdCalculationResult(StrictCalculationModel):
