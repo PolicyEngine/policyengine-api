@@ -1,3 +1,20 @@
+## [5.13.0] - 2026-10-27
+
+### Added
+
+- A daily workflow reports the previous day's production error groups from the central telemetry logs as GitHub issues, with production and staging counts and no error messages or stack text.
+
+### Changed
+
+- Split the Cloud Run deployment script tests into files under the file-length limit, without changing any test.
+- Split the FastAPI route dependencies and the v2 catalog extractor into modules under the file-length limit, without changing behaviour, import paths or the OpenAPI documents.
+- Split the economy service and its tests into modules under the file-length limit, without changing behaviour or import paths.
+
+### Fixed
+
+- Split the report output service into modules under the file-length limit, without changing behaviour or import paths, so the file-length check passes on master again.
+
+
 ## [5.12.0] - 2026-10-27
 
 ### Added
