@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Run the daily telemetry error report with the settings the workflow passes
+# in the environment, through uv (the workflow sets it up). DRY_RUN=true adds --dry-run; a non-empty REPORT_DATE
+# (YYYY-MM-DD, an Eastern calendar day) replaces the default previous day.
+set -euo pipefail
+
+: "${GOOGLE_OAUTH_ACCESS_TOKEN:?GOOGLE_OAUTH_ACCESS_TOKEN is required}"
+: "${GITHUB_TOKEN:?GITHUB_TOKEN is required}"
+: "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
+: "${TELEMETRY_ERROR_FINGERPRINT_KEY:?TELEMETRY_ERROR_FINGERPRINT_KEY is required}"
+: "${OBSERVABILITY_PROJECT_ID:?OBSERVABILITY_PROJECT_ID is required}"
+: "${OBSERVABILITY_LOG_BUCKET:?OBSERVABILITY_LOG_BUCKET is required}"
+: "${OBSERVABILITY_LOG_BUCKET_LOCATION:?OBSERVABILITY_LOG_BUCKET_LOCATION is required}"
+: "${OBSERVABILITY_LOG_DATASET:?OBSERVABILITY_LOG_DATASET is required}"
+: "${OBSERVABILITY_LOG_VIEW:?OBSERVABILITY_LOG_VIEW is required}"
+: "${OBSERVABILITY_SERVICE_NAMESPACE:?OBSERVABILITY_SERVICE_NAMESPACE is required}"
+
+# Hide both values in the job log even if a later command prints them.
+echo "::add-mask::${GOOGLE_OAUTH_ACCESS_TOKEN}"
+echo "::add-mask::${TELEMETRY_ERROR_FINGERPRINT_KEY}"
+
+arguments=(--project-id "${OBSERVABILITY_PROJECT_ID}")
+if [[ "${DRY_RUN:-false}" == "true" ]]; then
+  arguments+=(--dry-run)
+fi
+if [[ -n "${REPORT_DATE:-}" ]]; then
+  arguments+=(--report-date "${REPORT_DATE}")
+fi
+
+script_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repository_root="$(cd "${script_directory}/../.." && pwd)"
+# Run in an environment that holds only the telemetry-error-issues dependency
+# group, at the versions uv.lock pins, not the API's own dependencies.
+exec uv run --frozen --only-group telemetry-error-issues --project "${repository_root}" \
+  python "${script_directory}/sync_telemetry_error_issues.py" "${arguments[@]}"
