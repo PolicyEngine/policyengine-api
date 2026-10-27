@@ -94,7 +94,9 @@ HOUSEHOLD_CALCULATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": (
             "The request does not match the schema, the country does not offer "
-            "household calculations, or no year can be chosen."
+            "household calculations, the household has no default year, or the "
+            "simulation service finds the household or its options invalid "
+            "(the message lists why)."
         ),
     },
     500: {

@@ -157,6 +157,13 @@ class SimulationServiceRefusedError(RuntimeError):
     """The simulation service refused the calculation; the message says why."""
 
 
+class SimulationServiceInvalidRequestError(ValueError):
+    """The simulation service finds the household or its options invalid.
+
+    The message lists each invalid field and why, as the service reports it.
+    """
+
+
 class CountrySource(Protocol):
     """The countries table (``V2CountryService``)."""
 

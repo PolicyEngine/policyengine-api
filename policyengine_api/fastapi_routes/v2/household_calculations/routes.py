@@ -33,6 +33,7 @@ from policyengine_api.fastapi_routes.v2.household_calculations.response_models i
     HouseholdCalculationResponse,
 )
 from policyengine_api.services.v2.household_calculations.types import (
+    SimulationServiceInvalidRequestError,
     SimulationServiceRefusedError,
     SimulationServiceUnavailableError,
 )
@@ -56,7 +57,12 @@ OperationT = TypeVar("OperationT")
 
 HOUSEHOLD_CALCULATION_ERROR_MAPPINGS = (
     V2ErrorMapping(
-        (HouseholdCalculationCountryError, HouseholdCalculationYearError), 422
+        (
+            HouseholdCalculationCountryError,
+            HouseholdCalculationYearError,
+            SimulationServiceInvalidRequestError,
+        ),
+        422,
     ),
     V2ErrorMapping(
         (

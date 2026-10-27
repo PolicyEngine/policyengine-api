@@ -19,6 +19,7 @@ from policyengine_api.services.v2.household_calculations.services import (
     V2HouseholdCalculationService,
 )
 from policyengine_api.services.v2.household_calculations.types import (
+    SimulationServiceInvalidRequestError,
     SimulationServiceRefusedError,
     SimulationServiceUnavailableError,
 )
@@ -222,3 +223,16 @@ def test_a_malformed_request_is_refused_before_anything_is_read(changes) -> None
 
     assert response.status_code == 422
     assert app.simulation.submissions == []
+
+
+def test_a_household_the_simulation_service_finds_invalid_gets_422_with_why() -> None:
+    app = App()
+    app.simulation.error = SimulationServiceInvalidRequestError(
+        "The simulation service cannot calculate this household: "
+        "household.households.household-1.members: List should have at least 1 item"
+    )
+
+    response = app.client.post(PATH, json=body())
+
+    assert response.status_code == 422
+    assert "members" in response.json()["message"]

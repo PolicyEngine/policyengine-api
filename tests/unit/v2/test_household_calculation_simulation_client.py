@@ -11,10 +11,12 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.services.v2.household_calculations.simulation_client import (
     SimulationHouseholdClient,
 )
 from policyengine_api.services.v2.household_calculations.types import (
+    SimulationServiceInvalidRequestError,
     SimulationServiceRefusedError,
     SimulationServiceUnavailableError,
 )
@@ -164,3 +166,74 @@ def test_the_configured_service_is_called_without_auth_when_none_is_set(
     client = SimulationHouseholdClient.from_environment()
 
     assert client.base_url == BASE_URL
+
+
+def test_a_household_the_service_finds_invalid_is_reported_with_its_reasons() -> None:
+    client = client_answering(
+        422,
+        {
+            "detail": [
+                {
+                    "loc": ["body", "household", "households", "h", "members"],
+                    "msg": "List should have at least 1 item after validation",
+                    "type": "too_short",
+                }
+            ]
+        },
+        [],
+    )
+
+    with pytest.raises(
+        SimulationServiceInvalidRequestError,
+        match=r"household\.households\.h\.members: List should have at least 1 item",
+    ):
+        client.submit(SUBMISSION)
+
+
+@pytest.mark.parametrize("status_code", [400, 503, 202, 200])
+def test_an_answer_that_is_not_json_is_unavailable(status_code: int) -> None:
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            status_code,
+            content=b"<html><body>Service Unavailable</body></html>",
+            headers={"Content-Type": "text/html"},
+        )
+
+    client = SimulationHouseholdClient(
+        BASE_URL, httpx_args={"transport": httpx.MockTransport(answer)}
+    )
+
+    with pytest.raises(SimulationServiceUnavailableError):
+        client.submit(SUBMISSION)
+    with pytest.raises(SimulationServiceUnavailableError):
+        client.read(CALCULATION_ID)
+
+
+def test_an_answer_of_the_wrong_shape_is_unavailable() -> None:
+    client = client_answering(202, {"calculation_id": "not a calculation"}, [])
+
+    with pytest.raises(SimulationServiceUnavailableError):
+        client.submit(SUBMISSION)
+
+
+def test_a_gateway_token_that_cannot_be_fetched_is_unavailable() -> None:
+    class FailingTokenAuth(httpx.Auth):
+        def auth_flow(self, request: httpx.Request):  # httpx's generator protocol
+            message = "The gateway token request failed"
+            raise GatewayAuthError(message)
+            yield request
+
+    client = SimulationHouseholdClient(
+        BASE_URL,
+        httpx_args={
+            "auth": FailingTokenAuth(),
+            "transport": httpx.MockTransport(
+                lambda request: httpx.Response(202, json=simulation_calculation())
+            ),
+        },
+    )
+
+    with pytest.raises(SimulationServiceUnavailableError):
+        client.submit(SUBMISSION)
+    with pytest.raises(SimulationServiceUnavailableError):
+        client.read(CALCULATION_ID)

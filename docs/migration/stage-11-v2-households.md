@@ -289,9 +289,12 @@ The routes always call the Cloud Run Simulation Entrypoint, whatever
   for every simulation call, with `GATEWAY_AUTH_REQUIRED=1`.
 
 Without the URL, or with gateway auth partly configured, both routes answer
-503. They also answer 503 when the simulation service cannot be reached,
-answers with an error, or refuses the calculation (for example when no v2
-worker is deployed for the catalog version's PolicyEngine.py version).
+503. They also answer 503 when the simulation service cannot be reached, its
+gateway token cannot be fetched, it answers with an error or with a body of
+another shape, or it refuses the calculation (for example when no v2 worker is
+deployed for the catalog version's PolicyEngine.py version). A household or
+options the simulation service finds invalid, such as a group no person
+belongs to, get 422 with each invalid field and why.
 
 ### Staging checks
 
