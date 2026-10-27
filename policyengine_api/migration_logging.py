@@ -61,6 +61,15 @@ V2_SUPABASE_RESOURCE_SEGMENTS = frozenset(
 V2_USER_RESOURCE_SEGMENTS = frozenset(
     {"user-policies", "user-households", "user-simulations", "user-reports", "me"}
 )
+# /v2/household-calculations reads the stored household, policy and catalog
+# from Supabase when submitting, stores nothing itself, and always computes on
+# the Cloud Run Simulation Entrypoint's v2 workers, whatever the household
+# route group's flags select.
+V2_HOUSEHOLD_CALCULATION_SEGMENT = "household-calculations"
+V2_HOUSEHOLD_CALCULATION_COMPUTE = {
+    "sim_entrypoint": "cloud_run_simulation_entrypoint",
+    "sim_compute": "v2_primary",
+}
 V2_RESOURCE_METHODS = frozenset({"GET", "POST", "PATCH", "DELETE"})
 # A v2 resource path has at least the "v2" segment and the resource segment.
 V2_RESOURCE_PATH_MINIMUM_SEGMENTS = 2
@@ -247,6 +256,17 @@ def _migration_context(
     route_impl: RouteImplementation | None,
 ) -> dict[str, str | None]:
     route_group = infer_route_group(path)
+    if _v2_resource_segment(path) == V2_HOUSEHOLD_CALCULATION_SEGMENT:
+        context = get_migration_log_context(
+            route_group,
+            route_impl=route_impl,
+            explicit_db_sources=ExplicitDatabaseSources(
+                db_read_source="supabase" if method == "POST" else None
+            ),
+        )
+        if "migration_flag_error" not in context:
+            context.update(V2_HOUSEHOLD_CALCULATION_COMPUTE)
+        return context
     is_v2_metadata_read = _is_v2_metadata_resource_read(method, path)
     is_v2_supabase_resource = _is_v2_supabase_resource(method, path)
     uses_explicit_v2_source = is_v2_metadata_read or is_v2_supabase_resource

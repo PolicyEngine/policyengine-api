@@ -717,3 +717,52 @@ def test_compute_routes_in_the_same_groups_keep_their_compute_labels():
     assert context["route_group"] == "simulation"
     assert context["sim_flow"] == "economy"
     assert context["sim_compute"] is not None
+
+
+def test_household_calculations_log_their_actual_sources_and_compute(monkeypatch):
+    monkeypatch.setenv("DB_READ_HOUSEHOLD", "invalid-for-native-v2")
+    monkeypatch.setenv("DB_WRITE_HOUSEHOLD", "invalid-for-native-v2")
+    monkeypatch.setenv("SIM_ENTRYPOINT", "old_gateway_direct")
+    monkeypatch.delenv("SIM_COMPUTE_HOUSEHOLD", raising=False)
+
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        for method, path in (
+            ("POST", "/v2/household-calculations"),
+            (
+                "GET",
+                "/v2/household-calculations/00000000-0000-0000-0000-000000000001",
+            ),
+        ):
+            log_migration_request(
+                ServedRequest(
+                    request_id=f"request-{method}",
+                    method=method,
+                    path=path,
+                    status_code=202 if method == "POST" else 200,
+                    started_at=None,
+                    route_impl=RouteImplementation.FASTAPI_NATIVE,
+                )
+            )
+
+    submit_context, read_context = (
+        call.args[0]["migration"] for call in mock_logger.log_struct.call_args_list
+    )
+    computed_on_v2 = {
+        "route_group": "household",
+        "route_impl": "fastapi_native",
+        "sim_flow": "household",
+        "sim_entrypoint": "cloud_run_simulation_entrypoint",
+        "sim_compute": "v2_primary",
+    }
+    assert submit_context == {
+        **submit_context,
+        **computed_on_v2,
+        "db_write": None,
+        "db_read": "supabase",
+    }
+    assert read_context == {
+        **read_context,
+        **computed_on_v2,
+        "db_write": None,
+        "db_read": None,
+    }
