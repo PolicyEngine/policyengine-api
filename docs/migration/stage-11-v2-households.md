@@ -325,9 +325,12 @@ database:
   (`/calculate-full` when adding missing variables); every calculated value
   and warning must match.
 
-Each request is sent again while it gets 502, 503 or 504 for at most 90
-seconds in a row; any other failure, or a longer outage, fails the check with
-the answer's body. Warnings are compared regardless of order, because the v2
+A calculation's submission and each poll are sent again while they get 502,
+503 or 504 for at most 90 seconds in a row; any other failure, or a longer
+run of such answers, fails the check with the answer's body. The Public API
+also answers 503 for failures that do not pass, such as a simulation service
+without these routes, so those take about 90 seconds to fail. Every other
+request in the checks fails at once. Warnings are compared regardless of order, because the v2
 database orders each stored record's keys itself; one US household has a
 deprecated input, so both calculations warn.
 

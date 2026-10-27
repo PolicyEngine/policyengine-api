@@ -26,10 +26,10 @@ POLL_INTERVAL_SECONDS = float(
     os.environ.get("STAGING_API_TEST_POLL_INTERVAL_SECONDS", "5")
 )
 # A 502, 503 or 504 can be a short outage, such as the simulation service
-# failing to read its database or version manifest for a moment; each request
-# is sent again while such answers last at most TRANSIENT_LIMIT_SECONDS in a
-# row. Any other failure, and a longer outage, fails the check at once with
-# the answer's body.
+# failing to read its database or version manifest for a moment; a
+# calculation's submission and each poll are sent again while such answers
+# last at most TRANSIENT_LIMIT_SECONDS in a row. Any other failure, and a
+# longer run of such answers, fails the check with the answer's body.
 TRANSIENT_STATUS_CODES = {502, 503, 504}
 TRANSIENT_LIMIT_SECONDS = float(
     os.environ.get("STAGING_HOUSEHOLD_TRANSIENT_LIMIT_SECONDS", "90")
@@ -60,8 +60,8 @@ class LiveHousehold:
     parameter to a value from the start of ``YEAR`` with no end, through a
     policy stored with ``/v2/policies``. ``add_missing_variables`` calculates
     every variable the household lacks, as ``/calculate-full`` does.
-    ``expects_warnings`` says the household has an input the country model
-    ignores with a warning.
+    ``expects_warnings`` says the household has a deprecated input, which the
+    calculation drops with a warning before the country model runs.
     """
 
     name: str

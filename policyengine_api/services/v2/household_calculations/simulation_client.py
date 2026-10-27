@@ -7,13 +7,15 @@ correlation headers.
 
 The submission is checked against the generated client's submission model and
 sent as built, and each answer is checked against the generated model for its
-status and returned as decoded, both in their original key order: the
+status and returned as decoded, both in their original key order, because
+the generated models write their keys in an order of their own and the
 household function lists warnings and calculated values in the household's
-key order, and the generated models write their keys in an order of their
-own. That order is the stored household's as the v2 database returns it,
-which orders each record's keys itself, so it can differ from the order a
-caller sent. A 400 is a refusal, whose reason the service gives; a 422 lists what
-the service finds invalid in the household or its options; anything else,
+key order. The household's key order is the stored household's as the v2
+database returns it, which orders each record's keys itself, so it can
+differ from the order a caller sent.
+
+A 400 is a refusal, whose reason the service gives; a 422 lists what the
+service finds invalid in the household or its options; anything else,
 including a 503, no answer, an answer of another shape, a gateway token that
 cannot be fetched or missing configuration, means the service is unavailable.
 

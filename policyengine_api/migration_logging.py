@@ -13,10 +13,13 @@ import flask
 from policyengine_api.gcp_logging import logger
 from policyengine_api.migration_flags import (
     ExplicitDatabaseSources,
+    MigrationContext,
     RouteImplementation,
     get_migration_log_context,
+    get_route_impl,
     infer_route_group,
 )
+from policyengine_api.migration_registry import ROUTE_GROUP_CONFIG_BY_NAME
 from policyengine_api.observability.identifiers import (
     OBSERVABILITY_ID_HEADER,
     normalize_observability_id,
@@ -64,12 +67,11 @@ V2_USER_RESOURCE_SEGMENTS = frozenset(
 # /v2/household-calculations reads the stored household, policy and catalog
 # from Supabase when submitting, stores nothing itself, and always computes on
 # the Cloud Run Simulation Entrypoint's v2 workers, whatever the household
-# route group's flags select.
+# route group's database, entrypoint and compute flags select; it reads none
+# of them, so none of them is checked for its log record.
 V2_HOUSEHOLD_CALCULATION_SEGMENT = "household-calculations"
-V2_HOUSEHOLD_CALCULATION_COMPUTE = {
-    "sim_entrypoint": "cloud_run_simulation_entrypoint",
-    "sim_compute": "v2_primary",
-}
+V2_HOUSEHOLD_CALCULATION_ENTRYPOINT = "cloud_run_simulation_entrypoint"
+V2_HOUSEHOLD_CALCULATION_COMPUTE = "v2_primary"
 V2_RESOURCE_METHODS = frozenset({"GET", "POST", "PATCH", "DELETE"})
 # A v2 resource path has at least the "v2" segment and the resource segment.
 V2_RESOURCE_PATH_MINIMUM_SEGMENTS = 2
@@ -249,6 +251,27 @@ def log_migration_request(served_request: ServedRequest) -> None:
     )
 
 
+def _household_calculation_context(
+    route_group: str, *, method: str, route_impl: RouteImplementation | None
+) -> dict[str, str | None]:
+    """Return a household calculation's log record from what it actually uses."""
+    try:
+        selected_route_impl = route_impl or get_route_impl(route_group)
+    except ValueError as error:
+        return {"route_group": route_group, "migration_flag_error": str(error)}
+    route_config = ROUTE_GROUP_CONFIG_BY_NAME[route_group]
+    return MigrationContext(
+        route_group=route_group,
+        route_impl=selected_route_impl,
+        db_entity=route_config.db_entity,
+        db_write=None,
+        db_read="supabase" if method == "POST" else None,
+        sim_flow=route_config.sim_flow,
+        sim_entrypoint=V2_HOUSEHOLD_CALCULATION_ENTRYPOINT,
+        sim_compute=V2_HOUSEHOLD_CALCULATION_COMPUTE,
+    ).to_log_dict()
+
+
 def _migration_context(
     *,
     method: str,
@@ -257,16 +280,9 @@ def _migration_context(
 ) -> dict[str, str | None]:
     route_group = infer_route_group(path)
     if _v2_resource_segment(path) == V2_HOUSEHOLD_CALCULATION_SEGMENT:
-        context = get_migration_log_context(
-            route_group,
-            route_impl=route_impl,
-            explicit_db_sources=ExplicitDatabaseSources(
-                db_read_source="supabase" if method == "POST" else None
-            ),
+        return _household_calculation_context(
+            route_group, method=method, route_impl=route_impl
         )
-        if "migration_flag_error" not in context:
-            context.update(V2_HOUSEHOLD_CALCULATION_COMPUTE)
-        return context
     is_v2_metadata_read = _is_v2_metadata_resource_read(method, path)
     is_v2_supabase_resource = _is_v2_supabase_resource(method, path)
     uses_explicit_v2_source = is_v2_metadata_read or is_v2_supabase_resource

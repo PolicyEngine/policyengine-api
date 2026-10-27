@@ -766,3 +766,30 @@ def test_household_calculations_log_their_actual_sources_and_compute(monkeypatch
         "db_write": None,
         "db_read": None,
     }
+
+
+def test_household_calculations_ignore_compute_flags_they_do_not_use(monkeypatch):
+    monkeypatch.setenv("SIM_ENTRYPOINT", "invalid-unused")
+    monkeypatch.setenv("SIM_COMPUTE_HOUSEHOLD", "invalid-unused")
+
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        log_migration_request(
+            ServedRequest(
+                request_id="request-submit",
+                method="POST",
+                path="/v2/household-calculations",
+                status_code=202,
+                started_at=None,
+                route_impl=RouteImplementation.FASTAPI_NATIVE,
+            )
+        )
+
+    context = mock_logger.log_struct.call_args.args[0]["migration"]
+    assert "migration_flag_error" not in context
+    assert context == {
+        **context,
+        "route_group": "household",
+        "db_read": "supabase",
+        "sim_entrypoint": "cloud_run_simulation_entrypoint",
+        "sim_compute": "v2_primary",
+    }
