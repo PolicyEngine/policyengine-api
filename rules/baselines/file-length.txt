@@ -1,0 +1,11 @@
+# Python files tolerated over their api.quality.file-length limit (800 lines,
+# or 1,500 for test code). This list may only shrink: split a file, then remove
+# it here and lower the rule's baseline count in rules/registry.toml.
+#
+# Anthony Volk authorized this starting baseline on 2026-10-27. When it is
+# empty, #4053 makes the rule enforced and deletes this file.
+policyengine_api/data/v2/catalog/extraction.py
+policyengine_api/fastapi_routes/dependencies.py
+policyengine_api/services/economy_service.py
+tests/unit/services/test_economy_service.py
+tests/unit/test_cloud_run_deploy_scripts.py

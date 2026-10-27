@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 59 | 0 | 1 | 13 | 73 |
+| mechanical | 59 | 1 | 1 | 13 | 74 |
 | metric | 0 | 0 | 0 | 0 | 0 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 59 of 74 rules.
+**Blocking:** 60 of 75 rules.
 
 ## Gaps
 
@@ -66,7 +66,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Ratcheted (existing violations still tolerated)
 
-- None.
+- `api.quality.file-length`: 5 remaining in `rules/baselines/file-length.txt`
 
 ### Exceptions and review dates
 
@@ -78,6 +78,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 - `api.dependencies.install-from-lock`: exception for `.github/workflows/push.yml` (`pip install "shellcheck-py==`) allowed as a pinned-tool (shellcheck is a command-line tool the ci-scripts guard runs; it is not a dependency of the project.)
 - `api.dependencies.install-from-lock`: exception for `.github/workflows/update-policyengine-bundle.yaml` (`pip install requests uv`) until the workflow installs uv with astral-sh/setup-uv at a pinned version and runs its Python through uv run --frozen (The bundle updater changes uv.lock, so it runs before a matching lock exists; it installs uv itself and requests for its inline Python with setup-python's interpreter.)
 - `api.dependencies.install-from-lock`: exception for `docker/Dockerfile` (`pip install "policyengine[models]==`) until the image installs from uv.lock (uv sync --frozen, or uv export --frozen piped to pip install --no-deps), or is removed (The image packages the PolicyEngine .py bundle for interactive use, not this project; uv.lock locks this project. The bundle updater keeps the pin equal to pyproject.toml's, but ipython and the bundle's own dependencies are not pinned.)
+- `api.quality.file-length`: exception for `migrations/*/versions/*.py` allowed as a migration-revision (Alembic revisions stay exactly as Alembic generated them, and an applied revision has already run against a database, so it is never split. Ruff excludes the same files (lint.exclude in pyproject.toml).)
 
 ## API v2 layer boundaries
 
@@ -332,6 +333,7 @@ flowchart LR
 | `api.quality.command-line-modules-ruff-exemptions` | Application modules that also run as command-line programs (if __name__ == "__main__") may print their output (T201); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of T201 for `policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/privilege_reconciliation,data/v2/user_association_migration_qualification,worker_spm_release}.py` | `pr.yml:lint` | — |
 | `api.quality.command-line-scripts-ruff-exemptions` | Command-line scripts under scripts/ may print their output, run other programs, fetch fixed URLs, stamp today's date and pick random samples (T201, S603, S607, S310, DTZ011, S311); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of DTZ011, S310, S311, S603, S607, T201 for `scripts/**` | `pr.yml:lint` | — |
 | `api.quality.environment-variables-load` | Required environment variables and credentials load in a deployed-like environment. | mechanical | enforced | yes | CI job `test_env_vars` | `pr.yml:test_env_vars` | — |
+| `api.quality.file-length` | A tracked Python file has at most 800 physical lines, or at most 1,500 if it is test code (a file under a tests or fixtures directory, or a conftest.py); a longer file is split by responsibility into modules, and keeps its public import path. | mechanical | ratcheted | yes | quality guard `file-length` | `pr.yml:quality-guards` | yes |
 | `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, v2 routes and services, and the user sign-in and account-deletion libraries pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:typecheck-v2` | — |
 | `api.quality.ruff-format` | All Python files are formatted with ruff format. | mechanical | enforced | yes | ruff format | `pr.yml:lint` | — |
 | `api.quality.ruff-lint` | All Python code passes ruff check with every ruff rule selected (ALL), with no ratchet, except the ignores in pyproject.toml: COM812 and ISC001, which conflict with ruff format, and D203 and D213, which conflict with the kept D211 and D212. | mechanical | enforced | yes | ruff check (ALL) | `pr.yml:lint` | — |
@@ -354,6 +356,9 @@ flowchart LR
   r_api_quality_environment_variables_load("api.quality.environment-variables-load (enforced)")
   e_CI_job_test_env_vars["CI job test_env_vars"]
   j_CI_pr_yml_test_env_vars["CI pr.yml:test_env_vars"]
+  r_api_quality_file_length("api.quality.file-length (ratcheted)")
+  e_quality_guard_file_length["quality guard file-length"]
+  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
   r_api_quality_mypy_v2("api.quality.mypy-v2 (enforced)")
   e_mypy["mypy"]
   j_CI_pr_yml_typecheck_v2["CI pr.yml:typecheck-v2"]
@@ -379,6 +384,8 @@ flowchart LR
   e_ruff_per_file_ignore_of_DTZ011__S310__S311__S603__S607__T201_for_scripts___ --> j_CI_pr_yml_lint
   r_api_quality_environment_variables_load --> e_CI_job_test_env_vars
   e_CI_job_test_env_vars --> j_CI_pr_yml_test_env_vars
+  r_api_quality_file_length --> e_quality_guard_file_length
+  e_quality_guard_file_length --> j_CI_pr_yml_quality_guards
   r_api_quality_mypy_v2 --> e_mypy
   e_mypy --> j_CI_pr_yml_typecheck_v2
   r_api_quality_ruff_format --> e_ruff_format
