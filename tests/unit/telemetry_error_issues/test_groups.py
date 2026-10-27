@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from telemetry_error_issues.groups import build_groups
-from telemetry_error_issues.records import fingerprint
+from telemetry_error_issues.records import ErrorRecord, fingerprint
 from telemetry_error_issues.window import reporting_window
 
 from tests.unit.telemetry_error_issues.report_support import (
@@ -452,7 +452,7 @@ def test_measures_count_production_occurrences_since_a_moment() -> None:
     assert group.production_since(hours_after_window_noon(-48)) == (3, 3)
 
 
-def _failures_that_tie() -> list:
+def _failures_that_tie() -> list[ErrorRecord]:
     """Return failures whose records tie on time, and within a failure on rank."""
     two_requests_each = [
         exception_record(

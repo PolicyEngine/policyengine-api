@@ -135,10 +135,12 @@ def test_primary_keeps_failures_of_different_services_separate() -> None:
         frames=(),
     )
 
-    primary = primary_records([api_failure, simulation_failure])
-
-    assert len(primary) == 2
-    assert set(primary) == {api_failure, simulation_failure}
+    # Both failures happen at the same moment, so they are ordered by their
+    # values: the exception's fingerprint inputs sort before the failed
+    # request's, whichever order the records arrive in.
+    expected = [simulation_failure, api_failure]
+    assert primary_records([api_failure, simulation_failure]) == expected
+    assert primary_records([simulation_failure, api_failure]) == expected
 
 
 def test_fingerprint_exception_ignores_lines_path_prefixes_and_routes() -> None:
