@@ -54,6 +54,12 @@ def test_reusable_seeding_workflow_separates_database_credentials() -> None:
     assert "V2_MIGRATION_DATABASE_URL" not in publication
     assert "V2_RUNTIME_DATABASE_URL" not in workflow
     assert "scripts/publish_v2_metadata_catalog.py" in publication
+    # Publication records each version's SPM availability from the
+    # environment's own simulation service.
+    assert (
+        "SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}"
+        in publication
+    )
     assert (REPO / "scripts/publish_v2_metadata_catalog.py").is_file()
     assert not (REPO / "scripts/initialize_v2_metadata.py").exists()
 

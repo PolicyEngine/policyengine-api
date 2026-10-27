@@ -248,6 +248,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        "fb1a3e40d3d6",
         "f5c1d9b4685b",
         SAVED_POLICY_RENAME_REVISION,
         SAVED_POLICY_RENAME_PARENT_REVISION,
@@ -622,7 +623,7 @@ def _countries_revision_source() -> str:
         for revision in script.walk_revisions()
         if revision.down_revision == "f5c1d9b4685b"
     )
-    assert countries_revision.revision == V2_ALEMBIC_HEAD_REVISION
+    assert countries_revision.revision == "fb1a3e40d3d6"
     assert countries_revision.path is not None
     return Path(countries_revision.path).read_text(encoding="utf-8")
 

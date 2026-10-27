@@ -78,12 +78,19 @@ def test_initialization_uses_only_data_write_settings_and_disposes_engine() -> N
             environ,
         )
 
+    def record_spm(selected_engine, catalog, environ):
+        assert "engine" in observed
+        observed["spm"] = (selected_engine, catalog.policyengine_version, environ)
+
     result = initialization.initialize_catalog(
         ENVIRONMENT,
         extractor=normalized_catalog,
         engine_builder=build,
-        publisher=publish,
-        region_data_verifier=verify,
+        steps=initialization.PublicationSteps(
+            verify_region_data=verify,
+            publish=publish,
+            record_spm_availability=record_spm,
+        ),
     )
 
     assert result == _evidence()
@@ -92,6 +99,7 @@ def test_initialization_uses_only_data_write_settings_and_disposes_engine() -> N
         "verified": (engine, POLICYENGINE_VERSION, ENVIRONMENT),
         "engine": engine,
         "version": POLICYENGINE_VERSION,
+        "spm": (engine, POLICYENGINE_VERSION, ENVIRONMENT),
     }
     assert engine.disposed
 
@@ -112,8 +120,9 @@ def test_region_data_failure_publishes_nothing_and_disposes_engine() -> None:
             ENVIRONMENT,
             extractor=normalized_catalog,
             engine_builder=lambda _settings: engine,
-            publisher=refuse_publication,
-            region_data_verifier=reject,
+            steps=initialization.PublicationSteps(
+                verify_region_data=reject, publish=refuse_publication
+            ),
         )
     assert engine.disposed
 

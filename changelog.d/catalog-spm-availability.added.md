@@ -1,0 +1,1 @@
+Each published catalog version now records whether it offers SPM settings, with their schema and certified defaults, from the simulation service's public versions answer; the catalog publication step reads `SIMULATION_ENTRYPOINT_URL`, and versions published earlier get it on the next publication run.
