@@ -19,10 +19,12 @@ from telemetry_error_issues.window import reporting_window
 
 from tests.unit.telemetry_error_issues.report_support import (
     FINGERPRINT_KEY,
+    GATEWAY_SERVICE,
     LOG_SOURCE,
     REPORT_DATE,
     exception_record,
     failed_request_record,
+    failures_on_the_unmatched_route,
     failures_with_and_without_a_route,
     hours_after_window_noon,
     message_record,
@@ -164,6 +166,37 @@ def test_render_error_rate_names_only_failures_on_routes() -> None:
     _, body = _render(group)
 
     assert "| Error rate on affected routes | 100.00% (1 of 1 requests) | n/a |" in body
+
+
+def test_render_error_rate_is_unavailable_for_failures_on_the_unmatched_route() -> None:
+    group = _group(
+        failures_on_the_unmatched_route(),
+        [request_count("<unmatched>", 1, service_name=GATEWAY_SERVICE)],
+    )
+
+    _, body = _render(group)
+
+    assert "| Error rate on affected routes | n/a | n/a |" in body
+    assert "- Most frequent route: `<unmatched>`" in body
+
+
+def test_render_error_rate_explains_failures_outnumbering_completions() -> None:
+    records = [
+        exception_record(
+            request_key=f"r{index}",
+            route="/<country_id>/calculate",
+            timestamp=hours_after_window_noon(index),
+        )
+        for index in range(3)
+    ]
+    group = _group(records, [request_count("/<country_id>/calculate", 2)])
+
+    _, body = _render(group)
+
+    assert (
+        "| Error rate on affected routes "
+        "| n/a (3 affected requests, only 2 logged as completed) | n/a |" in body
+    )
 
 
 def test_render_body_lists_related_fingerprints() -> None:
