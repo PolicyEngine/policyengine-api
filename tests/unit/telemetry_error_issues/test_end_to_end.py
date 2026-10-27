@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 import io
-import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from urllib.parse import unquote
 
 import pytest
+from google.api_core.exceptions import BadRequest, Forbidden, InternalServerError
 from telemetry_error_issues.cli import Runtime, main
 from telemetry_error_issues.transport import HttpResponse
 
 from tests.unit.telemetry_error_issues.bigquery_support import (
     ACCESS_TOKEN,
-    FakeTransport,
-    json_response,
-    query_response,
+    FakeBigQueryClient,
     sent_parameters,
 )
 from tests.unit.telemetry_error_issues.github_support import REPOSITORY, FakeGitHub
@@ -33,48 +31,40 @@ from tests.unit.telemetry_error_issues.report_support import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-ERROR_RECORD_FIELDS = [
-    {"name": "timestamp", "type": "TIMESTAMP"},
-    {"name": "service_name", "type": "STRING"},
-    {"name": "environment_name", "type": "STRING"},
-    {"name": "event_name", "type": "STRING"},
-    {"name": "error_type", "type": "STRING"},
-    {"name": "error_handled", "type": "STRING"},
-    {"name": "frames", "type": "STRING", "mode": "REPEATED"},
-    {"name": "stack_truncated", "type": "BOOLEAN"},
-    {"name": "message_template", "type": "STRING"},
-    {"name": "attribute_error_type", "type": "STRING"},
-    {"name": "failure_category", "type": "STRING"},
-    {"name": "route", "type": "STRING"},
-    {"name": "status_code", "type": "STRING"},
-    {"name": "operation_name", "type": "STRING"},
-    {"name": "request_key", "type": "STRING"},
-    {"name": "observability_key", "type": "STRING"},
-    {"name": "trace_key", "type": "STRING"},
-]
-REQUEST_COUNT_FIELDS = [
-    {"name": "service_name", "type": "STRING"},
-    {"name": "environment_name", "type": "STRING"},
-    {"name": "route", "type": "STRING"},
-    {"name": "requests", "type": "INTEGER"},
-]
+ERROR_RECORD_COLUMNS = (
+    "timestamp",
+    "service_name",
+    "environment_name",
+    "event_name",
+    "error_type",
+    "error_handled",
+    "frames",
+    "stack_truncated",
+    "message_template",
+    "attribute_error_type",
+    "failure_category",
+    "route",
+    "status_code",
+    "operation_name",
+    "request_key",
+    "observability_key",
+    "trace_key",
+)
+REQUEST_COUNT_COLUMNS = ("service_name", "environment_name", "route", "requests")
 SCHEDULED_RUN_TIME = datetime(2026, 10, 21, 0, 45, tzinfo=EASTERN)
 
 
-def _microseconds(moment: datetime) -> str:
-    return str((moment - datetime(1970, 1, 1, tzinfo=UTC)) // timedelta(microseconds=1))
-
-
-def _error_row(**overrides: object) -> list[object]:
+def _error_row(**overrides: object) -> dict[str, object]:
+    """Return an error-record row with the types the client library gives it."""
     values: dict[str, object] = {
-        "timestamp": _microseconds(WINDOW_NOON),
+        "timestamp": WINDOW_NOON,
         "service_name": "policyengine-api",
         "environment_name": "production",
         "event_name": "exception.recorded",
         "error_type": "StaleDataError",
         "error_handled": "false",
         "frames": list(APPLICATION_FRAMES),
-        "stack_truncated": "false",
+        "stack_truncated": False,
         "message_template": None,
         "attribute_error_type": None,
         "failure_category": None,
@@ -86,32 +76,29 @@ def _error_row(**overrides: object) -> list[object]:
         "trace_key": "t1",
     }
     values.update(overrides)
-    return [values[field["name"]] for field in ERROR_RECORD_FIELDS]
+    return {column: values[column] for column in ERROR_RECORD_COLUMNS}
 
 
-class FakeBigQuery:
+class FakeBigQuery(FakeBigQueryClient):
     """Answers the error-record and request-count queries with fixed rows."""
 
     def __init__(
         self,
-        error_rows: list[list[object]],
+        error_rows: list[dict[str, object]],
         count_rows: list[list[object]] = (),
+        *,
+        error: Exception | None = None,
     ) -> None:
-        self.error_rows = error_rows
-        self.count_rows = list(count_rows)
-        self.requests: list[object] = []
-
-    def __call__(self, request: object) -> object:
-        self.requests.append(request)
-        label = json.loads(request.body)["labels"]["query"]
-        if label == "error-records":
-            response = query_response(ERROR_RECORD_FIELDS, self.error_rows)
-        else:
-            response = query_response(REQUEST_COUNT_FIELDS, self.count_rows)
-        return json_response(response)
-
-    def json_body(self, index: int) -> dict:
-        return json.loads(self.requests[index].body)
+        super().__init__(
+            {
+                "error-records": error_rows,
+                "request-counts": [
+                    dict(zip(REQUEST_COUNT_COLUMNS, row, strict=True))
+                    for row in count_rows
+                ],
+            },
+            error=error,
+        )
 
 
 def _environment(tmp_path: Path, **overrides: str) -> dict[str, str]:
@@ -137,7 +124,7 @@ def _run_main(
     stdout, stderr = io.StringIO(), io.StringIO()
     runtime = Runtime(
         environ=_environment(tmp_path) if environment is None else environment,
-        bigquery_transport=bigquery,
+        bigquery_client_factory=bigquery.factory,
         github_transport=github,
         now=lambda: SCHEDULED_RUN_TIME,
         sleep=github.sleep,
@@ -149,11 +136,11 @@ def _run_main(
     return exit_code, stdout.getvalue(), stderr.getvalue()
 
 
-def _three_failures(**overrides: object) -> list[list[object]]:
+def _three_failures(**overrides: object) -> list[dict[str, object]]:
     return [
         _error_row(
             request_key=f"r{index}",
-            timestamp=_microseconds(hours_after_window_noon(index)),
+            timestamp=hours_after_window_noon(index),
             **overrides,
         )
         for index in range(3)
@@ -165,7 +152,7 @@ def test_main_queries_groups_and_opens_issues_for_the_previous_day(
 ) -> None:
     bigquery = FakeBigQuery(
         _three_failures(),
-        [["policyengine-api", "production", "/<country_id>/report", "600"]],
+        [["policyengine-api", "production", "/<country_id>/report", 600]],
     )
     github = FakeGitHub()
 
@@ -178,8 +165,8 @@ def test_main_queries_groups_and_opens_issues_for_the_previous_day(
         "| Error rate on affected routes | 0.50% (3 of 600 requests) | n/a |"
         in (issue["body"])
     )
-    window_end = sent_parameters(bigquery)["window_end"]["parameterValue"]
-    assert window_end["value"] == "2026-10-21 04:00:00+00:00"
+    window_end = sent_parameters(bigquery)["window_end"]
+    assert window_end.value == datetime(2026, 10, 21, 4, 0, tzinfo=UTC)
     summary = (tmp_path / "summary.md").read_text()
     fingerprint = issue["title"].rsplit("(", 1)[1].rstrip(")")
     assert (
@@ -217,8 +204,8 @@ def test_main_reports_the_requested_day(tmp_path: Path) -> None:
     )
 
     assert exit_code == 0
-    window_end = sent_parameters(bigquery)["window_end"]["parameterValue"]
-    assert window_end["value"] == "2026-10-16 04:00:00+00:00"
+    window_end = sent_parameters(bigquery)["window_end"]
+    assert window_end.value == datetime(2026, 10, 16, 4, 0, tzinfo=UTC)
     assert "## Telemetry error issues for 2026-10-15" in stdout
     assert "No error groups had failures in the window." in stdout
 
@@ -320,7 +307,7 @@ def test_main_refuses_a_log_name_that_is_not_an_identifier(
     assert stderr == (
         f"configuration failed: ConfigurationError ({setting} is not a valid name)\n"
     )
-    assert bigquery.requests == []
+    assert bigquery.queries == []
 
 
 def test_main_refuses_a_project_id_that_is_not_an_identifier(tmp_path: Path) -> None:
@@ -334,21 +321,17 @@ def test_main_refuses_a_project_id_that_is_not_an_identifier(tmp_path: Path) -> 
     assert stderr == (
         "configuration failed: ConfigurationError (--project-id is not a valid name)\n"
     )
-    assert bigquery.requests == []
+    assert bigquery.queries == []
 
 
 def test_main_reports_an_api_failure_by_stage_class_and_status_only(
     tmp_path: Path,
 ) -> None:
-    error_body = {
-        "error": {
-            "message": "SENTINEL echoed value",
-            "errors": [{"reason": "backendError", "message": "SENTINEL"}],
-        }
-    }
-    failing = FakeTransport(
-        [json_response(error_body, status=500, reason="SENTINEL")],
+    error = InternalServerError(
+        "SENTINEL echoed value",
+        errors=[{"reason": "backendError", "message": "SENTINEL"}],
     )
+    failing = FakeBigQuery([], error=error)
 
     exit_code, stdout, stderr = _run_main(tmp_path, failing, FakeGitHub())
 
@@ -359,12 +342,43 @@ def test_main_reports_an_api_failure_by_stage_class_and_status_only(
     )
 
 
-def test_main_reports_an_unexpected_exception_by_class_only(tmp_path: Path) -> None:
-    def broken_transport(request: object) -> object:
-        message = "SENTINEL connection detail"
-        raise RuntimeError(message)
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (
+            BadRequest(
+                "SENTINEL message about the query",
+                errors=[{"reason": "invalidQuery", "message": "SENTINEL detail"}],
+            ),
+            "query error records failed: BigQueryError (HTTP 400 invalidQuery)\n",
+        ),
+        (
+            Forbidden(
+                "SENTINEL access denied", errors=[{"reason": "SENTINEL: 'value'"}]
+            ),
+            "query error records failed: BigQueryError (HTTP 403 Forbidden)\n",
+        ),
+    ],
+)
+def test_main_never_prints_a_client_library_error_message(
+    tmp_path: Path, error: Exception, expected: str
+) -> None:
+    # The library adds the query text to a failed job's error.
+    error.debug_message = "SENTINEL query text"
+    bigquery = FakeBigQuery(_three_failures(), error=error)
 
-    exit_code, _, stderr = _run_main(tmp_path, broken_transport, FakeGitHub())
+    exit_code, stdout, stderr = _run_main(tmp_path, bigquery, FakeGitHub())
+
+    assert exit_code == 1
+    assert stdout == ""
+    assert stderr == expected
+    assert not (tmp_path / "summary.md").exists()
+
+
+def test_main_reports_an_unexpected_exception_by_class_only(tmp_path: Path) -> None:
+    broken = FakeBigQuery([], error=RuntimeError("SENTINEL connection detail"))
+
+    exit_code, _, stderr = _run_main(tmp_path, broken, FakeGitHub())
 
     assert exit_code == 1
     assert stderr == "query error records failed: RuntimeError\n"
@@ -400,19 +414,19 @@ def test_main_never_publishes_values_from_records(
         for name, value in sentinel_row(**overrides).items()
         if name not in {"timestamp", "environment_name", "frames", "stack_truncated"}
     }
-    sentinel_values["stack_truncated"] = "true"
+    sentinel_values["stack_truncated"] = True
     sentinel_values["frames"] = ['/app/SENTINEL.py", line 1, in SENTINEL']
     rows = [
         _error_row(
             **{
                 **sentinel_values,
                 "request_key": f"SENTINEL request {index}",
-                "timestamp": _microseconds(hours_after_window_noon(index)),
+                "timestamp": hours_after_window_noon(index),
             }
         )
         for index in range(3)
     ]
-    count_rows = [["SENTINEL service", "production", "SENTINEL route", "10"]]
+    count_rows = [["SENTINEL service", "production", "SENTINEL route", 10]]
     github = FakeGitHub()
 
     exit_code, stdout, stderr = _run_main(

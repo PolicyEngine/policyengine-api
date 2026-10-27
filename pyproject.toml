@@ -76,6 +76,13 @@ dev = [
     "towncrier>=24.8.0",
 ]
 
+[dependency-groups]
+# Only the daily telemetry error issues workflow needs these. It installs this
+# group alone (uv run --frozen --only-group), not the API's dependencies.
+telemetry-error-issues = [
+    "google-cloud-bigquery>=3.30,<4",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["policyengine_api"]
 

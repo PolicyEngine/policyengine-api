@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run the daily telemetry error report with the settings the workflow passes
-# in the environment. DRY_RUN=true adds --dry-run; a non-empty REPORT_DATE
+# in the environment, through uv (the workflow sets it up). DRY_RUN=true adds --dry-run; a non-empty REPORT_DATE
 # (YYYY-MM-DD, an Eastern calendar day) replaces the default previous day.
 set -euo pipefail
 
@@ -28,4 +28,8 @@ if [[ -n "${REPORT_DATE:-}" ]]; then
 fi
 
 script_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec python3 "${script_directory}/sync_telemetry_error_issues.py" "${arguments[@]}"
+repository_root="$(cd "${script_directory}/../.." && pwd)"
+# Run in an environment that holds only the telemetry-error-issues dependency
+# group, at the versions uv.lock pins, not the API's own dependencies.
+exec uv run --frozen --only-group telemetry-error-issues --project "${repository_root}" \
+  python "${script_directory}/sync_telemetry_error_issues.py" "${arguments[@]}"

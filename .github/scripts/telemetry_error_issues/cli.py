@@ -23,6 +23,7 @@ from telemetry_error_issues.bigquery import (
     BigQueryClient,
     fetch_error_records,
     fetch_request_counts,
+    library_client,
 )
 from telemetry_error_issues.github_client import GitHubClient
 from telemetry_error_issues.groups import build_groups
@@ -54,6 +55,8 @@ from telemetry_error_issues.window import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from typing import TextIO
+
+    from google.cloud import bigquery
 
 StageResult = TypeVar("StageResult")
 
@@ -132,7 +135,7 @@ class Runtime:
     environ: Mapping[str, str]
     stdout: TextIO
     stderr: TextIO
-    bigquery_transport: Callable[[HttpRequest], HttpResponse] = urllib_transport
+    bigquery_client_factory: Callable[[str, str], bigquery.Client] = library_client
     github_transport: Callable[[HttpRequest], HttpResponse] = urllib_transport
     now: Callable[[], datetime] = _current_time
     sleep: Callable[[float], None] = time.sleep
@@ -259,14 +262,19 @@ def _report(arguments: argparse.Namespace, runtime: Runtime) -> str:
     window = _stage(
         "configuration", lambda: _report_window(arguments.report_date, runtime.now())
     )
-    bigquery = BigQueryClient(
-        settings.log_source, settings.google_access_token, runtime.bigquery_transport
+    bigquery_client = _stage(
+        "configuration",
+        lambda: BigQueryClient(
+            settings.log_source,
+            settings.google_access_token,
+            runtime.bigquery_client_factory,
+        ),
     )
     records = _stage(
-        "query error records", lambda: fetch_error_records(bigquery, window)
+        "query error records", lambda: fetch_error_records(bigquery_client, window)
     )
     request_counts = _stage(
-        "query request counts", lambda: fetch_request_counts(bigquery, window)
+        "query request counts", lambda: fetch_request_counts(bigquery_client, window)
     )
     groups = _stage(
         "group errors",

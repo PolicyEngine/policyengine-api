@@ -1,13 +1,21 @@
-"""Query error records and request counts through the BigQuery REST API."""
+"""Query error records and request counts with the BigQuery client library.
+
+The library starts each job, waits for it, reads every page of rows over the
+REST API and converts each value to its Python type. Rows are read by
+iterating the job's result, never with ``to_dataframe`` or ``to_arrow``,
+which may use the BigQuery Storage Read API: the workflow's service account
+has no role that can open a read session.
+"""
 
 from __future__ import annotations
 
-import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any
-from urllib.parse import quote, urlencode
+from typing import TYPE_CHECKING
 
+from google.api_core.exceptions import GoogleAPICallError
+from google.cloud import bigquery
+from google.oauth2.credentials import Credentials
 from telemetry_error_issues.groups import RequestCount
 from telemetry_error_issues.log_source import (
     DATASET_PATTERN,
@@ -16,15 +24,10 @@ from telemetry_error_issues.log_source import (
 )
 from telemetry_error_issues.normalization import MISSING
 from telemetry_error_issues.records import ErrorRecord
-from telemetry_error_issues.transport import (
-    ApiError,
-    HttpRequest,
-    HttpResponse,
-    urllib_transport,
-)
+from telemetry_error_issues.transport import ERROR_REASON_PATTERN, ApiError
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Mapping, Sequence
 
     from telemetry_error_issues.log_source import LogSource
     from telemetry_error_issues.window import ReportingWindow
@@ -54,11 +57,10 @@ DOUBLE_QUOTED_PATTERN = r'"[^"]*"'
 SINGLE_QUOTED_PATTERN = r"(^|[^A-Za-z0-9])'[^']*'"
 TEMPLATE_WORD_PATTERN = r"\b[A-Za-z]+\b"
 
-BIGQUERY_API = "https://bigquery.googleapis.com/bigquery/v2"
 MAXIMUM_BYTES_BILLED = 5 * 1024**3
-QUERY_WAIT_MILLISECONDS = 30_000
-MAX_QUERY_POLLS = 40
-UNIX_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+# How long to wait for a query job to finish: 41 waits of 30 seconds, the
+# limit the report had when it polled the REST API itself.
+QUERY_TIMEOUT_SECONDS = 41 * 30
 
 HEALTH_CHECK_ROUTES = (
     "/health",
@@ -163,135 +165,86 @@ class BigQueryError(ApiError):
 
 
 class BigQueryTimeoutError(BigQueryError):
-    """A BigQuery query job didn't complete within the polling limit."""
+    """A BigQuery query job didn't complete within the time limit."""
 
 
-def _bigquery_boolean(text: str) -> bool:
-    return text == "true"
+QueryParameter = bigquery.ScalarQueryParameter | bigquery.ArrayQueryParameter
 
 
-def _bigquery_timestamp(text: str) -> datetime:
-    """Convert microseconds since the epoch, as ``useInt64Timestamp`` returns."""
-    return UNIX_EPOCH + timedelta(microseconds=int(text))
+def library_client(project_id: str, access_token: str) -> bigquery.Client:
+    """Return a library client that runs jobs in ``project_id`` as the token's owner.
+
+    google-github-actions/auth makes the access token and writes no credentials
+    file, so the client gets the token itself and never looks for other
+    credentials.
+    """
+    credentials = Credentials(token=access_token)
+    return bigquery.Client(project=project_id, credentials=credentials)
 
 
-CELL_CONVERTERS: dict[str, Callable[[str], object]] = {
-    "INTEGER": int,
-    "INT64": int,
-    "FLOAT": float,
-    "FLOAT64": float,
-    "BOOLEAN": _bigquery_boolean,
-    "BOOL": _bigquery_boolean,
-    "TIMESTAMP": _bigquery_timestamp,
-}
+def _error_reason(errors: Sequence[object], status: int) -> str:
+    """Return the error's reason code, else the HTTP reason phrase.
+
+    The library's message can repeat the query and values from the request,
+    so only a short code-defined reason such as ``invalidQuery`` is kept.
+    """
+    reason = errors[0].get("reason") if errors and isinstance(errors[0], dict) else None
+    if isinstance(reason, str) and ERROR_REASON_PATTERN.match(reason):
+        return reason
+    try:
+        return HTTPStatus(status).phrase
+    except ValueError:
+        return "unknown"
 
 
-def _convert_cell(field: Mapping[str, Any], value: object) -> object:
-    """Convert one BigQuery REST value, which arrives as a string, to Python."""
-    if value is None:
-        return None
-    if field.get("mode") == "REPEATED" and isinstance(value, list):
-        item_field = {**field, "mode": "NULLABLE"}
-        return [_convert_cell(item_field, item["v"]) for item in value]
-    converter = CELL_CONVERTERS.get(str(field.get("type")), str)
-    return converter(str(value))
-
-
-def _convert_rows(response: Mapping[str, Any]) -> list[dict[str, object]]:
-    fields = response["schema"]["fields"]
-    return [
-        {
-            field["name"]: _convert_cell(field, cell["v"])
-            for field, cell in zip(fields, row["f"], strict=True)
-        }
-        for row in response.get("rows", [])
-    ]
+def _bigquery_error(error: GoogleAPICallError) -> BigQueryError:
+    """Describe a library error by its HTTP status and reason, never its message."""
+    if error.code is None:
+        return BigQueryError("BigQuery request failed")
+    status = int(error.code)
+    reason = _error_reason(error.errors, status)
+    message = f"BigQuery request failed: HTTP {status} {reason}"
+    return BigQueryError(message, status=status, reason=reason)
 
 
 class BigQueryClient:
-    """Runs parameterized standard SQL queries through the BigQuery REST API."""
+    """Runs parameterized standard SQL queries against the linked log dataset."""
 
     def __init__(
         self,
         log_source: LogSource,
         access_token: str,
-        transport: Callable[[HttpRequest], HttpResponse] = urllib_transport,
+        client_factory: Callable[[str, str], bigquery.Client] = library_client,
     ) -> None:
         """Run jobs in the log source's project against its linked dataset."""
         self.log_source = log_source
-        self._access_token = access_token
-        self._transport = transport
-        project_id = quote(log_source.project_id, safe="")
-        self._queries_url = f"{BIGQUERY_API}/projects/{project_id}/queries"
+        self._client = client_factory(log_source.project_id, access_token)
 
     def query(
-        self, sql: str, parameters: list[dict[str, Any]], label: str
+        self, sql: str, parameters: list[QueryParameter], label: str
     ) -> list[dict[str, object]]:
-        """Run ``sql`` and return every row as a dictionary of converted values."""
-        body = {
-            "query": sql,
-            "useLegacySql": False,
-            "parameterMode": "NAMED",
-            "queryParameters": parameters,
-            "defaultDataset": {
-                "projectId": self.log_source.project_id,
-                "datasetId": checked_identifier(
-                    self.log_source.dataset, DATASET_PATTERN, "the log dataset"
-                ),
-            },
-            "maximumBytesBilled": str(MAXIMUM_BYTES_BILLED),
-            "labels": {"purpose": "telemetry-error-issues", "query": label},
-            "timeoutMs": QUERY_WAIT_MILLISECONDS,
-            "formatOptions": {"useInt64Timestamp": True},
-        }
-        response = self._send("POST", self._queries_url, body)
-        job = response["jobReference"]
-        for _ in range(MAX_QUERY_POLLS):
-            if response.get("jobComplete"):
-                break
-            response = self._results(job, page_token=None)
-        else:
+        """Run ``sql`` and return every row as a dictionary of its values."""
+        dataset = checked_identifier(
+            self.log_source.dataset, DATASET_PATTERN, "the log dataset"
+        )
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=parameters,
+            default_dataset=bigquery.DatasetReference(
+                self.log_source.project_id, dataset
+            ),
+            maximum_bytes_billed=MAXIMUM_BYTES_BILLED,
+            use_legacy_sql=False,
+            labels={"purpose": "telemetry-error-issues", "query": label},
+        )
+        try:
+            job = self._client.query(sql, job_config=job_config)
+            rows = job.result(timeout=QUERY_TIMEOUT_SECONDS)
+            return [dict(row.items()) for row in rows]
+        except GoogleAPICallError as error:
+            raise _bigquery_error(error) from error
+        except TimeoutError as error:
             msg = "BigQuery query did not complete in time"
-            raise BigQueryTimeoutError(msg)
-        rows = _convert_rows(response)
-        while response.get("pageToken"):
-            response = self._results(job, page_token=response["pageToken"])
-            rows.extend(_convert_rows(response))
-        return rows
-
-    def _results(
-        self, job: Mapping[str, str], page_token: str | None
-    ) -> dict[str, Any]:
-        parameters = {
-            "location": job["location"],
-            "timeoutMs": str(QUERY_WAIT_MILLISECONDS),
-            "formatOptions.useInt64Timestamp": "true",
-        }
-        if page_token:
-            parameters["pageToken"] = page_token
-        job_id = quote(job["jobId"], safe="")
-        url = f"{self._queries_url}/{job_id}?{urlencode(parameters)}"
-        return self._send("GET", url, None)
-
-    def _send(
-        self, method: str, url: str, body: Mapping[str, object] | None
-    ) -> dict[str, Any]:
-        headers = {"Authorization": f"Bearer {self._access_token}"}
-        if body is not None:
-            headers["Content-Type"] = "application/json"
-        encoded = None if body is None else json.dumps(body).encode()
-        response = self._transport(HttpRequest(method, url, headers, encoded))
-        if response.status >= HTTPStatus.BAD_REQUEST:
-            raise BigQueryError.from_response(response)
-        return json.loads(response.body)
-
-
-def _timestamp_parameter(name: str, moment: datetime) -> dict[str, Any]:
-    return {
-        "name": name,
-        "parameterType": {"type": "TIMESTAMP"},
-        "parameterValue": {"value": moment.astimezone(UTC).isoformat(sep=" ")},
-    }
+            raise BigQueryTimeoutError(msg) from error
 
 
 def _query_text(template: str, log_source: LogSource) -> str:
@@ -302,26 +255,19 @@ def _query_text(template: str, log_source: LogSource) -> str:
 
 def _query_parameters(
     timestamps: Mapping[str, datetime], strings: Mapping[str, str]
-) -> list[dict[str, Any]]:
-    parameters = [
-        _timestamp_parameter(name, value) for name, value in timestamps.items()
+) -> list[QueryParameter]:
+    parameters: list[QueryParameter] = [
+        bigquery.ScalarQueryParameter(name, "TIMESTAMP", value)
+        for name, value in timestamps.items()
     ]
     parameters.extend(
-        {
-            "name": name,
-            "parameterType": {"type": "STRING"},
-            "parameterValue": {"value": value},
-        }
+        bigquery.ScalarQueryParameter(name, "STRING", value)
         for name, value in strings.items()
     )
     parameters.append(
-        {
-            "name": "excluded_routes",
-            "parameterType": {"type": "ARRAY", "arrayType": {"type": "STRING"}},
-            "parameterValue": {
-                "arrayValues": [{"value": route} for route in HEALTH_CHECK_ROUTES]
-            },
-        }
+        bigquery.ArrayQueryParameter(
+            "excluded_routes", "STRING", list(HEALTH_CHECK_ROUTES)
+        )
     )
     return parameters
 

@@ -195,9 +195,17 @@ OBSERVABILITY_LOG_BUCKET_LOCATION=global \
 OBSERVABILITY_LOG_DATASET=observability_logs \
 OBSERVABILITY_LOG_VIEW=_AllLogs \
 OBSERVABILITY_SERVICE_NAMESPACE=policyengine.api-v1 \
-python3 .github/scripts/sync_telemetry_error_issues.py \
+uv run --frozen --only-group telemetry-error-issues \
+  python .github/scripts/sync_telemetry_error_issues.py \
   --project-id policyengine-observability --dry-run
 ```
+
+The workflow runs the script the same way, through
+`.github/scripts/sync_telemetry_error_issues.sh`: in an environment holding
+only the `telemetry-error-issues` dependency group from `pyproject.toml`,
+which is `google-cloud-bigquery` at the version `uv.lock` pins. The queries
+read rows by iterating each job's result over the BigQuery REST API, never
+through the Storage Read API, which the service account has no role for.
 
 ### Required infrastructure
 

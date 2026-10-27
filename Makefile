@@ -21,7 +21,7 @@ test-env-vars:
 	uv run --frozen --extra dev pytest tests/env_variables
 
 test:
-	MAX_HOUSEHOLDS=1000 uv run --frozen --extra dev coverage run -a --branch -m pytest tests/to_refactor tests/unit tests/contract tests/integration/test_budget_window_in_flight_dedupe.py --disable-pytest-warnings
+	MAX_HOUSEHOLDS=1000 uv run --frozen --extra dev --group telemetry-error-issues coverage run -a --branch -m pytest tests/to_refactor tests/unit tests/contract tests/integration/test_budget_window_in_flight_dedupe.py --disable-pytest-warnings
 	uv run --frozen --extra dev coverage xml -i
 
 quality-guards:
@@ -31,7 +31,7 @@ typecheck-v2:
 	uv run --frozen --extra dev mypy
 
 debug-test:
-	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 uv run --frozen --extra dev pytest -vv --durations=0 tests
+	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 uv run --frozen --extra dev --group telemetry-error-issues pytest -vv --durations=0 tests
 
 format:
 	ruff format .

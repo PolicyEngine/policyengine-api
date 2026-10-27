@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,18 @@ REPO = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO / ".github" / "scripts" / "sync_telemetry_error_issues.py"
 WORKFLOW_PATH = REPO / ".github" / "workflows" / "telemetry-error-issues.yml"
 WRAPPER_PATH = REPO / ".github" / "scripts" / "sync_telemetry_error_issues.sh"
+DEPENDENCY_GROUP = "telemetry-error-issues"
+# The wrapper runs the script in an environment of only its locked group.
+UV_RUN_ARGUMENTS = [
+    "run",
+    "--frozen",
+    "--only-group",
+    DEPENDENCY_GROUP,
+    "--project",
+    str(REPO),
+    "python",
+    str(SCRIPT_PATH),
+]
 WRAPPER_ENVIRONMENT = {
     "GOOGLE_OAUTH_ACCESS_TOKEN": "fake-access-token",
     "GITHUB_TOKEN": "fake-github-token",
@@ -79,6 +92,25 @@ def test_workflow_job_is_limited_to_master_in_its_environment() -> None:
     }
 
 
+def test_workflow_runs_the_report_with_the_pinned_uv_and_python() -> None:
+    assert _sync_job()["env"] == {"UV_PYTHON": "3.12"}
+    assert _step("Set up uv") == {
+        "name": "Set up uv",
+        "uses": "astral-sh/setup-uv@v6",
+        "with": {"version": "0.13.4"},
+    }
+
+
+def test_wrapper_dependency_group_holds_the_bigquery_client_library() -> None:
+    pyproject = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+
+    group = pyproject["dependency-groups"][DEPENDENCY_GROUP]
+
+    assert [requirement.split(">")[0] for requirement in group] == [
+        "google-cloud-bigquery"
+    ]
+
+
 def test_workflow_authenticates_as_the_report_service_account() -> None:
     auth = _step("Authenticate to Google Cloud")
 
@@ -122,13 +154,13 @@ def test_workflow_passes_settings_to_the_wrapper() -> None:
 def _run_wrapper(
     tmp_path: Path, environment: dict[str, str]
 ) -> tuple[subprocess.CompletedProcess[str], list[str] | None]:
-    """Run the wrapper with a fake python3 that records its arguments."""
+    """Run the wrapper with a fake uv that records its arguments."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    calls = tmp_path / "python-arguments.txt"
-    fake_python = bin_dir / "python3"
-    fake_python.write_text(f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "{calls}"\n')
-    fake_python.chmod(0o755)
+    calls = tmp_path / "uv-arguments.txt"
+    fake_uv = bin_dir / "uv"
+    fake_uv.write_text(f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "{calls}"\n')
+    fake_uv.chmod(0o755)
     result = subprocess.run(
         ["bash", str(WRAPPER_PATH)],
         cwd=REPO,
@@ -153,7 +185,7 @@ def test_wrapper_runs_the_report_for_the_project(tmp_path: Path) -> None:
     result, arguments = _run_wrapper(tmp_path, WRAPPER_ENVIRONMENT)
 
     assert result.returncode == 0, result.stderr
-    assert arguments == [str(SCRIPT_PATH), "--project-id", PROJECT_ID]
+    assert arguments == [*UV_RUN_ARGUMENTS, "--project-id", PROJECT_ID]
 
 
 def test_wrapper_masks_the_access_token_and_fingerprint_key(tmp_path: Path) -> None:
@@ -176,7 +208,7 @@ def test_wrapper_adds_dry_run_and_report_date_when_set(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert arguments == [
-        str(SCRIPT_PATH),
+        *UV_RUN_ARGUMENTS,
         "--project-id",
         PROJECT_ID,
         "--dry-run",
@@ -190,7 +222,7 @@ def test_wrapper_runs_live_when_dry_run_is_false(tmp_path: Path) -> None:
 
     _, arguments = _run_wrapper(tmp_path, environment)
 
-    assert arguments == [str(SCRIPT_PATH), "--project-id", PROJECT_ID]
+    assert arguments == [*UV_RUN_ARGUMENTS, "--project-id", PROJECT_ID]
 
 
 @pytest.mark.parametrize("missing", sorted(WRAPPER_ENVIRONMENT))

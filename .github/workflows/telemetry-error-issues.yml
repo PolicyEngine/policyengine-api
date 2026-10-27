@@ -36,6 +36,10 @@ jobs:
       contents: read
       issues: write
       id-token: write
+    env:
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
     steps:
       - name: Require master branch
         if: github.ref != 'refs/heads/master'
@@ -46,6 +50,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # The same uv version as the Cloud Run image and the release job.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.4"
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@v2

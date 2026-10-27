@@ -4,31 +4,32 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from urllib.parse import parse_qs, urlparse
 
 import pytest
+from google.api_core.exceptions import BadRequest, Forbidden, ServiceUnavailable
+from google.cloud import bigquery
 from telemetry_error_issues.bigquery import (
     CHAINED_EXCEPTION_PATTERN,
     DOUBLE_QUOTED_PATTERN,
     ERROR_RECORDS_QUERY,
     FRAME_PATTERN,
+    QUERY_TIMEOUT_SECONDS,
     REQUEST_COUNTS_QUERY,
     SINGLE_QUOTED_PATTERN,
     TEMPLATE_WORD_PATTERN,
     BigQueryClient,
     BigQueryError,
+    BigQueryTimeoutError,
     error_record_from_row,
     fetch_error_records,
     fetch_request_counts,
+    library_client,
 )
-from telemetry_error_issues.transport import HttpResponse
 from telemetry_error_issues.window import reporting_window
 
 from tests.unit.telemetry_error_issues.bigquery_support import (
     ACCESS_TOKEN,
-    FakeTransport,
-    json_response,
-    query_response,
+    FakeBigQueryClient,
     sent_parameters,
 )
 from tests.unit.telemetry_error_issues.report_support import (
@@ -40,80 +41,69 @@ from tests.unit.telemetry_error_issues.report_support import (
     request_count,
 )
 
-STRING_FIELD = {"name": "name", "type": "STRING", "mode": "NULLABLE"}
+
+def _client(fake: FakeBigQueryClient, log_source: object = LOG_SOURCE) -> object:
+    return BigQueryClient(log_source, ACCESS_TOKEN, fake.factory)
 
 
-def _client(transport: FakeTransport, log_source: object = LOG_SOURCE) -> object:
-    return BigQueryClient(log_source, ACCESS_TOKEN, transport)
+def _string_parameter(name: str, value: str) -> bigquery.ScalarQueryParameter:
+    return bigquery.ScalarQueryParameter(name, "STRING", value)
 
 
 def test_bigquery_error_query_request_limits_cost_and_names_its_parameters() -> None:
-    transport = FakeTransport([json_response(query_response([], []))])
-    window = reporting_window(REPORT_DATE)
+    fake = FakeBigQueryClient()
 
-    fetch_error_records(_client(transport), window)
+    fetch_error_records(_client(fake), reporting_window(REPORT_DATE))
 
-    request = transport.requests[0]
-    body = transport.json_body(0)
-    parameters = sent_parameters(transport)
-    assert request.method == "POST"
-    assert request.url == (
-        "https://bigquery.googleapis.com/bigquery/v2/projects/"
-        "policyengine-observability/queries"
-    )
-    assert request.headers["Authorization"] == f"Bearer {ACCESS_TOKEN}"
-    assert body["useLegacySql"] is False
-    assert body["parameterMode"] == "NAMED"
-    assert body["maximumBytesBilled"] == str(5 * 1024**3)
-    assert body["labels"] == {
+    sql, job_config = fake.queries[0]
+    parameters = sent_parameters(fake)
+    assert fake.created_with == [("policyengine-observability", ACCESS_TOKEN)]
+    assert job_config.use_legacy_sql is False
+    assert job_config.maximum_bytes_billed == 5 * 1024**3
+    assert job_config.labels == {
         "purpose": "telemetry-error-issues",
         "query": "error-records",
     }
-    assert body["defaultDataset"] == {
-        "projectId": "policyengine-observability",
-        "datasetId": "observability_logs",
-    }
-    assert body["formatOptions"] == {"useInt64Timestamp": True}
-    assert "FROM `_AllLogs`" in body["query"]
-    assert parameters["service_namespace"]["parameterValue"]["value"] == (
-        "policyengine.api-v1"
+    assert job_config.default_dataset == bigquery.DatasetReference(
+        "policyengine-observability", "observability_logs"
     )
-    assert parameters["query_start"]["parameterType"] == {"type": "TIMESTAMP"}
-    assert parameters["query_start"]["parameterValue"]["value"] == (
-        "2026-10-13 04:00:00+00:00"
+    assert "FROM `_AllLogs`" in sql
+    assert parameters["query_start"] == bigquery.ScalarQueryParameter(
+        "query_start", "TIMESTAMP", datetime(2026, 10, 13, 4, 0, tzinfo=UTC)
     )
-    assert parameters["window_end"]["parameterValue"]["value"] == (
-        "2026-10-21 04:00:00+00:00"
+    assert parameters["window_end"] == bigquery.ScalarQueryParameter(
+        "window_end", "TIMESTAMP", datetime(2026, 10, 21, 4, 0, tzinfo=UTC)
     )
-    assert parameters["frame_pattern"]["parameterValue"]["value"] == (FRAME_PATTERN)
-    assert parameters["chained_exception_pattern"]["parameterValue"]["value"] == (
-        CHAINED_EXCEPTION_PATTERN
+    assert parameters["service_namespace"] == _string_parameter(
+        "service_namespace", "policyengine.api-v1"
     )
     for name, pattern in (
+        ("frame_pattern", FRAME_PATTERN),
+        ("chained_exception_pattern", CHAINED_EXCEPTION_PATTERN),
         ("double_quoted_pattern", DOUBLE_QUOTED_PATTERN),
         ("single_quoted_pattern", SINGLE_QUOTED_PATTERN),
         ("template_word_pattern", TEMPLATE_WORD_PATTERN),
     ):
-        assert parameters[name]["parameterValue"]["value"] == pattern
-    assert [
-        item["value"]
-        for item in parameters["excluded_routes"]["parameterValue"]["arrayValues"]
-    ] == ["/health", "/simulation-gateway-check", "/liveness-check", "/readiness-check"]
+        assert parameters[name] == _string_parameter(name, pattern)
+    assert parameters["excluded_routes"] == bigquery.ArrayQueryParameter(
+        "excluded_routes",
+        "STRING",
+        ["/health", "/simulation-gateway-check", "/liveness-check", "/readiness-check"],
+    )
 
 
 def test_bigquery_queries_name_the_configured_dataset_and_view() -> None:
-    transport = FakeTransport([json_response(query_response([], []))] * 2)
+    fake = FakeBigQueryClient()
     log_source = LOG_SOURCE._replace(dataset="linked_logs", view="_Requests")
-    client = _client(transport, log_source)
+    client = _client(fake, log_source)
 
     fetch_error_records(client, reporting_window(REPORT_DATE))
     fetch_request_counts(client, reporting_window(REPORT_DATE))
 
-    for index in range(2):
-        body = transport.json_body(index)
-        assert body["defaultDataset"]["datasetId"] == "linked_logs"
-        assert "FROM `_Requests`" in body["query"]
-        assert "_AllLogs" not in body["query"]
+    for sql, job_config in fake.queries:
+        assert job_config.default_dataset.dataset_id == "linked_logs"
+        assert "FROM `_Requests`" in sql
+        assert "_AllLogs" not in sql
 
 
 @pytest.mark.parametrize(
@@ -129,13 +119,13 @@ def test_bigquery_queries_name_the_configured_dataset_and_view() -> None:
 def test_bigquery_refuses_a_dataset_or_view_that_is_not_an_identifier(
     unsafe_names: dict[str, str],
 ) -> None:
-    transport = FakeTransport([json_response(query_response([], []))])
-    client = _client(transport, LOG_SOURCE._replace(**unsafe_names))
+    fake = FakeBigQueryClient()
+    client = _client(fake, LOG_SOURCE._replace(**unsafe_names))
 
     with pytest.raises(ValueError, match="is not a valid name"):
         fetch_error_records(client, reporting_window(REPORT_DATE))
 
-    assert transport.requests == []
+    assert fake.queries == []
 
 
 def test_bigquery_error_query_filters_application_error_records() -> None:
@@ -244,126 +234,86 @@ def test_bigquery_error_query_hashes_the_trace() -> None:
 
 def test_bigquery_request_count_query_counts_completed_requests_in_the_window() -> None:
     sql = REQUEST_COUNTS_QUERY
-    transport = FakeTransport([json_response(query_response([], []))])
+    fake = FakeBigQueryClient()
 
-    fetch_request_counts(_client(transport), reporting_window(REPORT_DATE))
+    fetch_request_counts(_client(fake), reporting_window(REPORT_DATE))
 
-    parameters = sent_parameters(transport)
+    sent_sql, job_config = fake.queries[0]
+    parameters = sent_parameters(fake)
     assert "JSON_VALUE(json_payload, '$.\"event.name\"') = 'request.completed'" in sql
     assert "COUNT(*) AS requests" in sql
     assert "GROUP BY service_name, environment_name, route" in sql
     assert "timestamp >= @window_start AND timestamp < @window_end" in sql
-    assert parameters["window_start"]["parameterValue"]["value"] == (
-        "2026-10-20 04:00:00+00:00"
+    assert parameters["window_start"] == bigquery.ScalarQueryParameter(
+        "window_start", "TIMESTAMP", datetime(2026, 10, 20, 4, 0, tzinfo=UTC)
     )
-    assert parameters["service_namespace"]["parameterValue"]["value"] == (
-        "policyengine.api-v1"
+    assert parameters["service_namespace"] == _string_parameter(
+        "service_namespace", "policyengine.api-v1"
     )
-    assert "FROM `_AllLogs`" in transport.json_body(0)["query"]
-    assert transport.json_body(0)["labels"]["query"] == "request-counts"
+    assert "FROM `_AllLogs`" in sent_sql
+    assert job_config.labels["query"] == "request-counts"
 
 
-def test_bigquery_client_polls_until_the_job_completes() -> None:
-    transport = FakeTransport(
-        [
-            json_response(query_response([], [], job_complete=False)),
-            json_response(query_response([], [], job_complete=False)),
-            json_response(query_response([STRING_FIELD], [["done"]])),
-        ],
+def test_bigquery_client_reads_every_row_the_job_yields() -> None:
+    rows = [{"name": "first", "count": 1}, {"name": "second", "count": 2}]
+    fake = FakeBigQueryClient({"test": rows})
+
+    result = _client(fake).query("SELECT 1", [], "test")
+
+    assert result == rows
+    # 41 waits of 30 seconds, the limit of the REST client this replaced.
+    assert fake.result_timeouts == [QUERY_TIMEOUT_SECONDS] == [1_230]
+
+
+def test_bigquery_client_reports_a_job_that_does_not_finish_in_time() -> None:
+    fake = FakeBigQueryClient(error=TimeoutError())
+
+    with pytest.raises(BigQueryTimeoutError, match="did not complete"):
+        _client(fake).query("SELECT 1", [], "test")
+
+
+def test_bigquery_library_error_reports_only_the_status_and_reason() -> None:
+    error = BadRequest(
+        "SENTINEL value echoed from a row",
+        errors=[{"reason": "invalidQuery", "message": "SENTINEL detail"}],
     )
-
-    rows = _client(transport).query("SELECT 1", [], "test")
-
-    assert rows == [{"name": "done"}]
-    poll = urlparse(transport.requests[1].url)
-    assert transport.requests[1].method == "GET"
-    assert poll.path.endswith("/projects/policyengine-observability/queries/job-1")
-    assert parse_qs(poll.query)["location"] == ["US"]
-    assert parse_qs(poll.query)["formatOptions.useInt64Timestamp"] == ["true"]
-
-
-def test_bigquery_client_follows_page_tokens() -> None:
-    transport = FakeTransport(
-        [
-            json_response(
-                query_response([STRING_FIELD], [["first"]], page_token="page-2"),
-            ),
-            json_response(query_response([STRING_FIELD], [["second"]])),
-        ],
-    )
-
-    rows = _client(transport).query("SELECT 1", [], "test")
-
-    assert rows == [{"name": "first"}, {"name": "second"}]
-    page = parse_qs(urlparse(transport.requests[1].url).query)
-    assert page["pageToken"] == ["page-2"]
-    assert page["location"] == ["US"]
-
-
-def test_bigquery_client_gives_up_on_a_job_that_never_completes() -> None:
-    pending = json_response(query_response([], [], job_complete=False))
-    transport = FakeTransport([pending] * 200)
-
-    with pytest.raises(BigQueryError, match="did not complete"):
-        _client(transport).query("SELECT 1", [], "test")
-
-
-def test_bigquery_client_converts_row_values_from_strings() -> None:
-    fields = [
-        {"name": "text", "type": "STRING", "mode": "NULLABLE"},
-        {"name": "count", "type": "INTEGER", "mode": "NULLABLE"},
-        {"name": "flag", "type": "BOOLEAN", "mode": "NULLABLE"},
-        {"name": "moment", "type": "TIMESTAMP", "mode": "NULLABLE"},
-        {"name": "items", "type": "STRING", "mode": "REPEATED"},
-        {"name": "missing", "type": "INTEGER", "mode": "NULLABLE"},
-    ]
-    row = ["value", "42", "true", "1792512000000001", ["a", "b"], None]
-    transport = FakeTransport([json_response(query_response(fields, [row]))])
-
-    rows = _client(transport).query("SELECT 1", [], "test")
-
-    assert rows == [
-        {
-            "text": "value",
-            "count": 42,
-            "flag": True,
-            "moment": datetime(2026, 10, 20, 16, 0, 0, 1, tzinfo=UTC),
-            "items": ["a", "b"],
-            "missing": None,
-        }
-    ]
-
-
-def test_bigquery_http_error_reports_only_the_status_and_reason() -> None:
-    error_body = {
-        "error": {
-            "code": 400,
-            "message": "SENTINEL value echoed from a row",
-            "errors": [{"reason": "invalidQuery", "message": "SENTINEL detail"}],
-        }
-    }
-    transport = FakeTransport(
-        [json_response(error_body, status=400, reason="Bad Request")],
-    )
+    fake = FakeBigQueryClient(error=error)
 
     with pytest.raises(BigQueryError) as raised:
-        _client(transport).query("SELECT 1", [], "test")
+        _client(fake).query("SELECT 1", [], "test")
 
     assert str(raised.value) == "BigQuery request failed: HTTP 400 invalidQuery"
     assert raised.value.status == 400
     assert raised.value.reason == "invalidQuery"
 
 
-def test_bigquery_http_error_without_a_json_reason_uses_the_status_phrase() -> None:
-    response = HttpResponse(
-        status=503, reason="Service Unavailable", headers={}, body=b"SENTINEL <html>"
-    )
-    transport = FakeTransport([response])
+def test_bigquery_library_error_without_a_reason_code_uses_the_status_phrase() -> None:
+    fake = FakeBigQueryClient(error=ServiceUnavailable("SENTINEL <html>"))
 
     with pytest.raises(BigQueryError) as raised:
-        _client(transport).query("SELECT 1", [], "test")
+        _client(fake).query("SELECT 1", [], "test")
 
     assert str(raised.value) == "BigQuery request failed: HTTP 503 Service Unavailable"
+
+
+@pytest.mark.parametrize("reason", ["SENTINEL: 'value'", "a" * 61, 7])
+def test_bigquery_library_error_hides_a_reason_that_is_not_a_short_code(
+    reason: object,
+) -> None:
+    fake = FakeBigQueryClient(error=Forbidden("SENTINEL", errors=[{"reason": reason}]))
+
+    with pytest.raises(BigQueryError) as raised:
+        _client(fake).query("SELECT 1", [], "test")
+
+    assert str(raised.value) == "BigQuery request failed: HTTP 403 Forbidden"
+
+
+def test_bigquery_library_client_sends_the_access_token_for_the_project() -> None:
+    client = library_client("policyengine-observability", ACCESS_TOKEN)
+
+    assert isinstance(client, bigquery.Client)
+    assert client.project == "policyengine-observability"
+    assert client._credentials.token == ACCESS_TOKEN
 
 
 def test_bigquery_rows_become_error_records() -> None:
@@ -431,23 +381,9 @@ def test_bigquery_rows_become_request_counts() -> None:
             "requests": 120,
         }
     ]
-    transport = FakeTransport(
-        [
-            json_response(
-                query_response(
-                    [
-                        {"name": "service_name", "type": "STRING"},
-                        {"name": "environment_name", "type": "STRING"},
-                        {"name": "route", "type": "STRING"},
-                        {"name": "requests", "type": "INTEGER"},
-                    ],
-                    [list(map(str, rows[0].values()))],
-                ),
-            )
-        ],
-    )
+    fake = FakeBigQueryClient({"request-counts": rows})
 
-    counts = fetch_request_counts(_client(transport), reporting_window(REPORT_DATE))
+    counts = fetch_request_counts(_client(fake), reporting_window(REPORT_DATE))
 
     assert counts == [
         request_count("/<country_id>/report", 120),
