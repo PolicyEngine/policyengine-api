@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from policyengine_api.json_types import JSONObject
     from policyengine_api.services.v2.associations.types import (
         LegacyReferenceChecker,
+        SimulationReferenceChecker,
     )
     from policyengine_api.services.v2.countries.types import CountryRead
     from policyengine_api.services.v2.economy_reports.types import (
@@ -956,6 +957,18 @@ def _default_legacy_reference_checker() -> LegacyReferenceChecker:
     return DeferredLegacyReferenceService(_build_v1_legacy_reference_service)
 
 
+def _default_simulation_reference_checker() -> SimulationReferenceChecker:
+    """Defer the simulation client until a request checks a v2 reference."""
+    from policyengine_api.services.v2.simulation_refs.services import (
+        DeferredSimulationReferenceService,
+        SimulationReferenceService,
+    )
+
+    return DeferredSimulationReferenceService(
+        lambda: SimulationReferenceService(_default_economy_report_simulation())
+    )
+
+
 def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -1017,6 +1030,7 @@ def _default_v2_user_report_service_factory() -> V2UserReportResourceService:
     return V2UserReportService(
         UserReportDatabaseSession(get_v2_session_factory()),
         _default_legacy_reference_checker(),
+        _default_simulation_reference_checker(),
     )
 
 

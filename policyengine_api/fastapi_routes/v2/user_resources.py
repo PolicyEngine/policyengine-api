@@ -25,11 +25,17 @@ from policyengine_api.services.v2.associations.validators import (
     AssociationNotFoundError,
     AssociationReferenceConflictError,
 )
+from policyengine_api.services.v2.economy_reports.types import (
+    SimulationServiceUnavailableError,
+)
 from policyengine_api.services.v2.identity.validators import (
     StandardUserRequiresSignInError,
 )
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
+)
+from policyengine_api.services.v2.simulation_refs.validators import (
+    SimulationReferenceNotFoundError,
 )
 from policyengine_api.services.v2.user_accounts.validators import (
     AccountDeletionUnavailableError,
@@ -123,8 +129,8 @@ USER_RESOURCE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: {
         "model": V2ErrorResponse,
         "description": (
-            "The request does not match the schema, or a referenced v1 artifact "
-            "or linked record does not exist."
+            "The request does not match the schema, or a referenced v1 artifact, "
+            "v2 report or simulation, or linked record does not exist."
         ),
     },
     500: {
@@ -133,7 +139,9 @@ USER_RESOURCE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
     503: {
         "model": V2ErrorResponse,
-        "description": "User authentication or persistence is unavailable.",
+        "description": (
+            "User authentication, persistence or the simulation service is unavailable."
+        ),
     },
 }
 
@@ -192,7 +200,12 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
     UserResourceFailure((AccountEditRequiresSignInError,), 403),
     UserResourceFailure((AssociationReferenceConflictError,), 400),
     UserResourceFailure(
-        (LegacyReferenceNotFoundError, AssociationLinkNotFoundError), 422
+        (
+            LegacyReferenceNotFoundError,
+            SimulationReferenceNotFoundError,
+            AssociationLinkNotFoundError,
+        ),
+        422,
     ),
     UserResourceFailure(
         (
@@ -209,6 +222,12 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
     ),
     UserResourceFailure((AccountIdentityDeletionError,), 502),
     UserResourceFailure((AccountDeletionUnavailableError,), 503),
+    UserResourceFailure(
+        (SimulationServiceUnavailableError,),
+        503,
+        "The simulation service is unavailable",
+        logged_event="v2_user_simulation_service_unavailable",
+    ),
     # Schema drift and rejected data surface here too, so keep a record.
     UserResourceFailure(
         (V2ConfigurationError, SQLAlchemyError),

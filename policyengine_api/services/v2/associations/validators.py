@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from policyengine_api.services.v2.economy_reports.types import (
+    SimulationServiceUnavailableError,
+)
+
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
+    from policyengine_api.services.v2.associations.types import (
+        LegacyReferenceChecker,
+        SimulationReferenceChecker,
+    )
 
 
 class AssociationNotFoundError(LookupError):
@@ -42,6 +49,20 @@ def require_legacy_reference_checker(
         msg = "v1 reference checks are not configured"
         raise LegacyReferenceCheckUnavailableError(msg)
     return legacy_references
+
+
+class SimulationReferenceCheckUnavailableError(SimulationServiceUnavailableError):
+    """The service was built without the v2 report and simulation checker."""
+
+
+def require_simulation_reference_checker(
+    simulation_references: SimulationReferenceChecker | None,
+) -> SimulationReferenceChecker:
+    """Return the checker, or raise SimulationReferenceCheckUnavailableError."""
+    if simulation_references is None:
+        msg = "v2 report and simulation references cannot be checked here"
+        raise SimulationReferenceCheckUnavailableError(msg)
+    return simulation_references
 
 
 def require_not_mirror_owned(*, mirror_owned: bool, association_id: UUID) -> None:

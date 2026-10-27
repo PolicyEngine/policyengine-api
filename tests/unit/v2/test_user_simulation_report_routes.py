@@ -11,8 +11,14 @@ import pytest
 from policyengine_api.services.v2.associations.validators import (
     AssociationLinkNotFoundError,
 )
+from policyengine_api.services.v2.economy_reports.types import (
+    SimulationServiceUnavailableError,
+)
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
+)
+from policyengine_api.services.v2.simulation_refs.validators import (
+    SimulationReferenceNotFoundError,
 )
 from policyengine_api.services.v2.user_reports.types import (
     UserReportPage,
@@ -243,7 +249,7 @@ def test_report_routes_round_trip_v3_fields() -> None:
 @pytest.mark.parametrize(
     "changes",
     [
-        {"report_id": str(REPORT_ASSOCIATION_ID)},
+        {"report_id": "not-a-uuid"},
         {"legacy_report_id": None},
         {"user_id": str(OWNER_ID)},
         {"last_run_at": "2026-02-01T12:00:00"},
@@ -280,7 +286,9 @@ def test_report_create_rejects_invalid_v3_payloads(changes: dict) -> None:
     [
         (AssociationLinkNotFoundError("user-policy association was not found"), 422),
         (LegacyReferenceNotFoundError("v1 report 615 was not found"), 422),
+        (SimulationReferenceNotFoundError("v2 report was not found"), 422),
         (UserReportNotFoundError("association was not found"), 404),
+        (SimulationServiceUnavailableError("HTTP 503"), 503),
     ],
 )
 def test_report_failures_map_to_contract_statuses(
@@ -457,3 +465,50 @@ def test_stored_snapshots_outside_input_bounds_still_serialize() -> None:
     assert first["validation"]["calibration"]["geography"] == long_label
     assert "retired_key" not in first["validation"]
     assert second["validation"] == VALIDATION
+
+
+V2_REPORT_ID = UUID("00000000-0000-4000-8000-000000000101")
+
+
+def test_a_report_is_saved_and_repointed_by_its_v2_id() -> None:
+    client, _simulations, reports = _clients()
+
+    created = client.post(
+        "/v2/user-reports?country_id=us",
+        json={"country_id": "us", "report_id": str(V2_REPORT_ID)},
+    )
+    both = client.post(
+        "/v2/user-reports?country_id=us",
+        json={
+            "country_id": "us",
+            "report_id": str(V2_REPORT_ID),
+            "legacy_report_id": 615,
+        },
+    )
+    neither = client.post(
+        "/v2/user-reports?country_id=us", json={"country_id": "us", "name": "x"}
+    )
+    repointed = client.patch(
+        f"/v2/user-reports/{REPORT_ASSOCIATION_ID}?country_id=us",
+        json={"report_id": str(V2_REPORT_ID)},
+    )
+    cleared = client.patch(
+        f"/v2/user-reports/{REPORT_ASSOCIATION_ID}?country_id=us",
+        json={"report_id": None},
+    )
+
+    assert [response.status_code for response in (created, both, repointed)] == [
+        201,
+        201,
+        200,
+    ]
+    assert neither.status_code == 422
+    assert cleared.status_code == 422
+    assert [name for name, _ in reports.calls] == [
+        "create_user_report",
+        "create_user_report",
+        "patch_user_report",
+    ]
+    assert reports.calls[0][1]["association_input"].report_id == V2_REPORT_ID
+    assert reports.calls[0][1]["association_input"].legacy_report_id is None
+    assert reports.calls[2][1]["association_input"].model_fields_set == {"report_id"}

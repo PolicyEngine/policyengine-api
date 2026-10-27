@@ -127,7 +127,8 @@ class ReportValidationItem(StoredSnapshotItem):
 class UserReportItem(StrictUserReportAPIModel):
     """A report saved by a user, with the user's name, notes and saved presentation.
 
-    ``legacy_report_id`` is the v1 report output it shows. ``user_policy_id`` is
+    ``report_id`` is the v2 report it shows and ``legacy_report_id`` the v1
+    report output; a report migrated from v1 has both. ``user_policy_id`` is
     the user's saved reform the report was run from, and
     ``baseline_user_policy_id`` the saved reform it was compared with instead of
     current law; each is null when not set or once that reform is deleted.
@@ -164,10 +165,15 @@ class SharedBaselineReformItem(StrictUserReportAPIModel):
 
 
 class SharedUserReportItem(StrictUserReportAPIModel):
-    """A saved report as anyone holding its link reads it."""
+    """A saved report as anyone holding its link reads it.
+
+    ``report_id`` is the v2 report it shows and ``legacy_report_id`` the v1
+    report output.
+    """
 
     id: UUID
     country_id: CountryId
+    report_id: UUID | None
     legacy_report_id: int | None
     name: str | None
     source_note: str | None

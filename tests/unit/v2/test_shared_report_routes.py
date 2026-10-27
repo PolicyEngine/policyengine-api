@@ -23,6 +23,7 @@ from tests.unit.v2.user_route_support import (
 
 REPORT_ASSOCIATION_ID = UUID("00000000-0000-0000-0000-000000000063")
 SHARED_PATH = f"/v2/shared-reports/{REPORT_ASSOCIATION_ID}"
+V2_REPORT_ID = UUID("00000000-0000-4000-8000-000000000101")
 LAST_RUN_AT = datetime(2026, 2, 1, 12, tzinfo=UTC)
 PROVISIONS = [
     {
@@ -39,6 +40,7 @@ def _shared_report_read() -> SharedUserReportRead:
     return SharedUserReportRead(
         id=REPORT_ASSOCIATION_ID,
         country_id="us",
+        report_id=V2_REPORT_ID,
         legacy_report_id=615,
         name="CTC report",
         source_note="from chat",
@@ -76,6 +78,7 @@ def test_anyone_reads_a_saved_report_by_its_link_without_the_owner() -> None:
             "item": {
                 "id": str(REPORT_ASSOCIATION_ID),
                 "country_id": "us",
+                "report_id": str(V2_REPORT_ID),
                 "legacy_report_id": 615,
                 "name": "CTC report",
                 "source_note": "from chat",

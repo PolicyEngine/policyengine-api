@@ -15,6 +15,7 @@ ASSOCIATION_DESCRIPTION_MAX_LENGTH = 10_000
 # does); Pydantic needs TypeAliasType to build the recursive validator.
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping
+    from uuid import UUID
 
     from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 
@@ -73,4 +74,21 @@ class LegacyReferenceChecker(Protocol):
         requested: Mapping[LegacyRecordKind, Collection[int]],
     ) -> None:
         """Raise ``LegacyReferenceNotFoundError`` if any requested ID is missing."""
+        ...
+
+
+class SimulationReferenceChecker(Protocol):
+    """Existence checks of v2 reports and simulations, run before a v2 transaction.
+
+    Both raise ``SimulationReferenceNotFoundError`` when the simulation service
+    has no such record in the country, and ``SimulationServiceUnavailableError``
+    when it cannot be asked.
+    """
+
+    def require_report(self, *, country_id: str, report_id: UUID) -> None:
+        """Raise unless the country has the report."""
+        ...
+
+    def require_simulation(self, *, country_id: str, simulation_id: UUID) -> None:
+        """Raise unless the country has the simulation."""
         ...

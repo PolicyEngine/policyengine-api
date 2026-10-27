@@ -58,6 +58,7 @@ def shared_user_report_read(
     return SharedUserReportRead(
         id=association.id,
         country_id=association.country_id,
+        report_id=association.report_id,
         legacy_report_id=association.legacy_report_id,
         name=association.name,
         source_note=association.source_note,

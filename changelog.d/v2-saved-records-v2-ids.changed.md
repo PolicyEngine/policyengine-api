@@ -1,0 +1,1 @@
+`/v2/user-reports` accepts a v2 `report_id`, alone or with `legacy_report_id`, when a report is saved or repointed; the simulation service is asked first whether the report exists in the country, and an unknown one is a 422. A shared report (`/v2/shared-reports/{id}`) now shows its `report_id`.

@@ -414,6 +414,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                     "last_run_at",
                 ),
                 patch_fields=(
+                    "report_id",
                     "legacy_report_id",
                     "name",
                     "description",
@@ -437,6 +438,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                     "message",
                     "result.item.id",
                     "result.item.country_id",
+                    "result.item.report_id",
                     "result.item.legacy_report_id",
                     "result.item.name",
                     "result.item.source_note",
