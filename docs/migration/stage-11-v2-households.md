@@ -325,10 +325,17 @@ database:
   (`/calculate-full` when adding missing variables); every calculated value
   and warning must match.
 
+Each request is sent again while it gets 502, 503 or 504 for at most 90
+seconds in a row; any other failure, or a longer outage, fails the check with
+the answer's body. Warnings are compared regardless of order, because the v2
+database orders each stored record's keys itself; one US household has a
+deprecated input, so both calculations warn.
+
 `STAGING_HOUSEHOLD_PARALLEL_COUNT`, `STAGING_HOUSEHOLD_SUBMIT_LIMIT_SECONDS`,
-`STAGING_HOUSEHOLD_FINISH_LIMIT_SECONDS` and
+`STAGING_HOUSEHOLD_FINISH_LIMIT_SECONDS`,
 `STAGING_HOUSEHOLD_CALCULATION_TIMEOUT_SECONDS` (600 seconds per calculation)
-change those limits; none is set in the workflow. The checks see neither the
+and `STAGING_HOUSEHOLD_TRANSIENT_LIMIT_SECONDS` change those limits; none is
+set in the workflow. The checks see neither the
 number of Simulation Entrypoint instances that served the calculations nor
 the household functions' memory use: a calculation that runs out of memory
 fails, and so fails the check. Both modules fail until the staging Simulation

@@ -36,6 +36,8 @@ def _parity_households(run_amount: int) -> list[LiveHousehold]:
                 "adult": {
                     "age": {YEAR: 35},
                     "employment_income": {YEAR: 42_000 + run_amount},
+                    # Deprecated: dropped with a warning by both calculations.
+                    "medical_out_of_pocket_expenses": {YEAR: 1_000},
                     "income_tax": CALCULATED,
                 }
             },
@@ -47,6 +49,7 @@ def _parity_households(run_amount: int) -> list[LiveHousehold]:
                 "tax_unit": {"eitc": CALCULATED, "ctc": CALCULATED},
                 "spm_unit": {"snap": CALCULATED},
             },
+            expects_warnings=True,
         ),
         LiveHousehold(
             name="us-couple-two-children-texas-axes",
@@ -174,7 +177,10 @@ def test_a_v2_household_calculation_matches_api_v1(
     result = finished.item["result"]
     differences = household_differences(v1_answer["result"], result["household"])
     assert differences == [], "\n".join(differences[:50])
-    assert result["warnings"] == v1_answer.get("warnings", [])
+    # The v2 database orders each stored record's keys itself, so warnings,
+    # listed in the household's key order, may come in another order.
+    assert sorted(result["warnings"]) == sorted(v1_answer.get("warnings", []))
+    assert bool(result["warnings"]) == household.expects_warnings
     if household.country_id == "us":
         assert result["spm_config"] is not None
         assert result["spm_provenance"] is not None

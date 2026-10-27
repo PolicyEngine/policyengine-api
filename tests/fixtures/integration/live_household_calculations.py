@@ -10,9 +10,12 @@ import math
 import os
 import time
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import httpx
 
 CALCULATION_PATH = "/v2/household-calculations"
@@ -22,7 +25,15 @@ CALCULATION_TIMEOUT_SECONDS = float(
 POLL_INTERVAL_SECONDS = float(
     os.environ.get("STAGING_API_TEST_POLL_INTERVAL_SECONDS", "5")
 )
-TRANSIENT_STATUS_CODES = {500, 502, 503, 504}
+# A 502, 503 or 504 can be a short outage, such as the simulation service
+# failing to read its database or version manifest for a moment; each request
+# is sent again while such answers last at most TRANSIENT_LIMIT_SECONDS in a
+# row. Any other failure, and a longer outage, fails the check at once with
+# the answer's body.
+TRANSIENT_STATUS_CODES = {502, 503, 504}
+TRANSIENT_LIMIT_SECONDS = float(
+    os.environ.get("STAGING_HOUSEHOLD_TRANSIENT_LIMIT_SECONDS", "90")
+)
 FINISHED_STATUSES = {"succeeded", "failed"}
 YEAR = "2026"
 REFORM_START = f"{YEAR}-01-01"
@@ -49,6 +60,8 @@ class LiveHousehold:
     parameter to a value from the start of ``YEAR`` with no end, through a
     policy stored with ``/v2/policies``. ``add_missing_variables`` calculates
     every variable the household lacks, as ``/calculate-full`` does.
+    ``expects_warnings`` says the household has an input the country model
+    ignores with a warning.
     """
 
     name: str
@@ -58,6 +71,7 @@ class LiveHousehold:
     axes: list[list[dict[str, Any]]] | None = None
     reform: dict[str, int | float] | None = None
     add_missing_variables: bool = False
+    expects_warnings: bool = False
 
     def document(self) -> dict[str, Any]:
         """Return the household as ``/v2/households`` stores it."""
@@ -164,27 +178,21 @@ def store_reform(client: httpx.Client, household: LiveHousehold) -> str | None:
     return response.json()["result"]["item"]["id"]
 
 
-def _retry_wait_seconds(response: httpx.Response) -> float:
-    retry_after = response.headers.get("Retry-After", "")
-    return float(retry_after) if retry_after.isdigit() else POLL_INTERVAL_SECONDS
-
-
-def _submit(
-    client: httpx.Client, body: dict[str, Any], deadline: float
-) -> httpx.Response:
-    """Post the calculation, sending it again after a 5xx answer until the deadline.
-
-    The simulation service answers 503 with ``Retry-After`` while its database
-    or version manifest cannot be read; such an outage is not a failure of
-    the calculation.
-    """
+def _send_through_short_outages(send: Callable[[], httpx.Response]) -> httpx.Response:
+    """Send the request again while it gets 502, 503 or 504 for a short time."""
+    outage_started: float | None = None
     while True:
-        response = client.post(CALCULATION_PATH, json=body)
+        response = send()
         if response.status_code not in TRANSIENT_STATUS_CODES:
             return response
-        if time.monotonic() >= deadline:
-            return response
-        time.sleep(_retry_wait_seconds(response))
+        outage_started = outage_started or time.monotonic()
+        if time.monotonic() - outage_started >= TRANSIENT_LIMIT_SECONDS:
+            msg = (
+                f"HTTP {response.status_code} for {TRANSIENT_LIMIT_SECONDS:.0f} s: "
+                f"{response.text[:500]}"
+            )
+            raise AssertionError(msg)
+        time.sleep(POLL_INTERVAL_SECONDS)
 
 
 def calculate(
@@ -204,7 +212,9 @@ def calculate(
     if household.axes is not None:
         body["axes"] = household.axes
     deadline = started + CALCULATION_TIMEOUT_SECONDS
-    response = _submit(client, body, deadline)
+    response = _send_through_short_outages(
+        lambda: client.post(CALCULATION_PATH, json=body)
+    )
     submit_seconds = time.monotonic() - started
     assert response.status_code == 202, response.text
     item = response.json()["result"]
@@ -216,9 +226,9 @@ def calculate(
             )
             raise AssertionError(msg)
         time.sleep(POLL_INTERVAL_SECONDS)
-        polled = client.get(f"{CALCULATION_PATH}/{item['calculation_id']}")
-        if polled.status_code in TRANSIENT_STATUS_CODES:
-            continue
+        polled = _send_through_short_outages(
+            partial(client.get, f"{CALCULATION_PATH}/{item['calculation_id']}")
+        )
         assert polled.status_code == 200, polled.text
         item = polled.json()["result"]
     return FinishedCalculation(
