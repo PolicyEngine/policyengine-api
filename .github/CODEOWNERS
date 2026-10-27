@@ -1,6 +1,12 @@
-# Rule machinery: changes need review from a core developer other than the
-# author. Deliberately narrow: pyproject.toml and workflow files are not owned,
-# so dependency bots and everyday CI edits are not blocked.
+# Rule machinery: the files that define and check this repository's rules.
+# By team convention, a core developer other than the author approves changes
+# to them (api.process.rule-machinery-code-owned). GitHub doesn't enforce
+# this: the default branch's ruleset needs one approving review from anyone
+# with write access and doesn't require code-owner review. Listing a path here
+# only makes GitHub request a review from its owners on pull requests that
+# change it and aren't drafts.
+# Deliberately narrow: pyproject.toml and workflow files are not listed, so
+# dependency bots and everyday CI edits don't request that review.
 /rules/                         @PolicyEngine/core-developers
 /scripts/rules/                 @PolicyEngine/core-developers
 /scripts/guards/                @PolicyEngine/core-developers

@@ -1,0 +1,1 @@
+Corrected the CODEOWNERS comment and the api.process.rule-machinery-code-owned rule statement, which implied GitHub requires a core developer's approval for rule changes: that approval is a team convention, and the default branch's ruleset needs one approving review from anyone with write access and doesn't require code-owner review.
