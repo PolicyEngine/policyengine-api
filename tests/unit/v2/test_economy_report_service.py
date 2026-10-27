@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
 import pytest
@@ -317,3 +319,52 @@ def test_listed_reports_keep_the_asked_order_and_only_the_countrys() -> None:
     assert [report.id for report in reports] == [second_id, REPORT_ID]
     assert reports[1].status is ReportStatus.NOT_RUN
     assert [name for name, _ in simulation.calls] == ["get_report"] * 4
+
+
+class SimultaneousFirstReads(FakeEconomyReportSimulation):
+    """Hold each of the first two report reads until both have read the report."""
+
+    def __init__(self, *reports) -> None:
+        super().__init__(*reports)
+        self._first_reads = threading.Barrier(2, timeout=5)
+        self._reads_lock = threading.Lock()
+        self._reads = 0
+
+    def get_report(self, report_id):
+        report = super().get_report(report_id)
+        with self._reads_lock:
+            self._reads += 1
+            first_read = self._reads <= 2
+        if first_read:
+            self._first_reads.wait()
+        return report
+
+
+def test_simultaneous_first_reads_share_one_system_run() -> None:
+    """Both reads see no run and start one; the entrypoint records one run.
+
+    The entrypoint returns a report's newest run to a system run, under a
+    lock, so the Public API must start first runs only with the system
+    trigger and no force, and answer with the run the entrypoint returns.
+    """
+    simulation = SimultaneousFirstReads(report_record(legacy_report_id=615))
+    service = economy_report_service(simulation)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        reads = [
+            executor.submit(service.get_report, country_id="us", report_id=REPORT_ID)
+            for _ in range(2)
+        ]
+        reports = [read.result(timeout=10) for read in reads]
+
+    run_starts = [call for name, call in simulation.calls if name == "run_report"]
+    assert len(run_starts) == 2
+    assert all(
+        start["trigger"] is RunTrigger.SYSTEM and start["force"] is False
+        for start in run_starts
+    )
+    assert len(simulation.runs[REPORT_ID]) == 1
+    assert {report.run.id for report in reports if report.run is not None} == {
+        simulation.runs[REPORT_ID][0].id
+    }
+    assert all(report.status is ReportStatus.PENDING for report in reports)

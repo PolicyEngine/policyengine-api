@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -23,6 +24,7 @@ from policyengine_api.services.v2.simulation_entrypoint.types import (
     EconomyReportRecord,
     EconomyReportRunRecord,
     ReportStatus,
+    RunTrigger,
     SimulationRecord,
     SimulationRecordNotFoundError,
     SimulationRunRecord,
@@ -32,7 +34,6 @@ from tests.fixtures.v2_countries import add_listed_countries
 if TYPE_CHECKING:
     from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportSubmission,
-        RunTrigger,
     )
 
 CURRENT_POLICYENGINE_VERSION = "6.7.5"
@@ -143,7 +144,10 @@ class FakeEconomyReportSimulation:
     """An in-memory Simulation Entrypoint that records every call.
 
     ``reports`` and ``simulations`` hold what it knows; ``error`` is raised by
-    every call while set, and ``run_error`` by run starts only.
+    every call while set, and ``run_error`` by run starts only. As the
+    entrypoint does, a ``system`` run of a report that has a run returns its
+    newest run instead of adding one, under a lock, so simultaneous first
+    runs record one run.
     """
 
     def __init__(self, *reports: EconomyReportRecord) -> None:
@@ -154,6 +158,7 @@ class FakeEconomyReportSimulation:
         self.error: Exception | None = None
         self.run_error: Exception | None = None
         self.next_run = report_run_record()
+        self._runs_lock = threading.Lock()
 
     def _record(self, name: str, argument: object) -> None:
         self.calls.append((name, argument))
@@ -203,12 +208,16 @@ class FakeEconomyReportSimulation:
         if report_id not in self.reports:
             msg = f"no report {report_id}"
             raise SimulationRecordNotFoundError(msg)
-        run = replace(self.next_run, trigger=trigger.value)
-        self.runs.setdefault(report_id, []).insert(0, run)
-        self.reports[report_id] = replace(
-            self.reports[report_id], run=run, status=run.status, result=None
-        )
-        return run
+        with self._runs_lock:
+            existing_runs = self.runs.get(report_id, [])
+            if trigger is RunTrigger.SYSTEM and existing_runs:
+                return existing_runs[0]
+            run = replace(self.next_run, trigger=trigger.value)
+            self.runs.setdefault(report_id, []).insert(0, run)
+            self.reports[report_id] = replace(
+                self.reports[report_id], run=run, status=run.status, result=None
+            )
+            return run
 
     def list_report_runs(self, report_id: UUID) -> tuple[EconomyReportRunRecord, ...]:
         self._record("list_report_runs", report_id)
