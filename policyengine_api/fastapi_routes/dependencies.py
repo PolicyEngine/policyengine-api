@@ -899,7 +899,7 @@ def _default_v2_household_calculation_service_factory() -> (
         households=_default_v2_household_service_factory(),
         policies=_default_v2_policy_service_factory(),
         catalog_reader_factory=_default_v2_metadata_reader_factory,
-        simulation=process_simulation_household_client(),
+        simulation_factory=process_simulation_household_client,
     )
 
 

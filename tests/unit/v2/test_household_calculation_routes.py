@@ -52,7 +52,7 @@ class App:
             households=self.households,
             policies=FakePolicies(),
             catalog_reader_factory=FakeCatalogs,
-            simulation=self.simulation,
+            simulation_factory=lambda: self.simulation,
         )
         dependencies = NativeRouteDependencies(
             readiness_probe=lambda: True,

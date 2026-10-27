@@ -59,7 +59,7 @@ class Parts:
             households=self.households,
             policies=self.policies,
             catalog_reader_factory=self.open_catalog_reader,
-            simulation=self.simulation,
+            simulation_factory=lambda: self.simulation,
         )
 
     def open_catalog_reader(self) -> FakeCatalogs:
@@ -271,3 +271,41 @@ def test_a_refused_submission_and_a_read_open_no_catalog_reader() -> None:
     parts.service.get_calculation(CALCULATION_ID)
 
     assert parts.catalog_readers == []
+
+
+def _unconfigured_simulation() -> FakeSimulation:
+    message = "The simulation service is not configured."
+    raise SimulationServiceUnavailableError(message)
+
+
+def test_requests_refused_by_the_public_api_need_no_simulation_service() -> None:
+    parts = Parts(
+        FakeCountries(
+            rows=(
+                CountryRead(
+                    id="us", household_enabled=False, society_wide_enabled=False
+                ),
+            )
+        )
+    )
+    unconfigured = V2HouseholdCalculationService(
+        countries=parts.countries,
+        households=parts.households,
+        policies=parts.policies,
+        catalog_reader_factory=parts.open_catalog_reader,
+        simulation_factory=_unconfigured_simulation,
+    )
+    available_country = V2HouseholdCalculationService(
+        countries=FakeCountries(),
+        households=parts.households,
+        policies=parts.policies,
+        catalog_reader_factory=parts.open_catalog_reader,
+        simulation_factory=_unconfigured_simulation,
+    )
+
+    with pytest.raises(HouseholdCalculationCountryError):
+        unconfigured.submit_calculation(calculation_input())
+    with pytest.raises(HouseholdNotFoundError):
+        available_country.submit_calculation(calculation_input(household_id=uuid4()))
+    with pytest.raises(SimulationServiceUnavailableError):
+        available_country.submit_calculation(calculation_input())

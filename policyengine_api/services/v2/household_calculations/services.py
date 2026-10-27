@@ -54,18 +54,22 @@ class V2HouseholdCalculationService:
         households: HouseholdSource,
         policies: PolicySource,
         catalog_reader_factory: Callable[[], CatalogSource],
-        simulation: SimulationHouseholdCalculations,
+        simulation_factory: Callable[[], SimulationHouseholdCalculations],
     ) -> None:
         """Read through these services for one request.
 
         ``catalog_reader_factory`` opens a catalog reader, with its own
         database session, only once a submission needs the catalog version.
+        ``simulation_factory`` returns the simulation service's client only
+        once a request is sent to it, so a request the Public API refuses
+        gets its own answer even when the simulation service is not
+        configured.
         """
         self._countries = countries
         self._households = households
         self._policies = policies
         self._catalog_reader_factory = catalog_reader_factory
-        self._simulation = simulation
+        self._simulation_factory = simulation_factory
 
     def submit_calculation(
         self, calculation: HouseholdCalculationInput
@@ -132,12 +136,12 @@ class V2HouseholdCalculationService:
         if spm is not None:
             submission["spm"] = spm
         return HouseholdCalculationRead.from_simulation(
-            self._simulation.submit(submission)
+            self._simulation_factory().submit(submission)
         )
 
     def get_calculation(self, calculation_id: UUID) -> HouseholdCalculationRead:
         """Return the calculation, or raise HouseholdCalculationNotFoundError."""
-        calculation = self._simulation.read(calculation_id)
+        calculation = self._simulation_factory().read(calculation_id)
         if calculation is None:
             msg = f"Household calculation {calculation_id} not found."
             raise HouseholdCalculationNotFoundError(msg)
