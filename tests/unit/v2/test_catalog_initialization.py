@@ -34,6 +34,7 @@ ENVIRONMENT = {
     V2_SUPABASE_ENVIRONMENT: "test-foundation",
     "V2_RUNTIME_DATABASE_URL": "invalid-runtime-value",
     "V2_MIGRATION_DATABASE_URL": "invalid-migration-value",
+    "SIMULATION_ENTRYPOINT_URL": "https://simulation.example",
 }
 
 
@@ -308,3 +309,18 @@ def test_main_reports_a_missing_hugging_face_token_with_its_message(
     assert "HUGGING_FACE_TOKEN must be set to read the certified uk data" in (
         failure.err
     )
+
+
+def test_a_missing_simulation_service_url_stops_before_extraction() -> None:
+    def refuse_extraction():
+        msg = "extraction must not start"
+        raise AssertionError(msg)
+
+    environment = {
+        name: value
+        for name, value in ENVIRONMENT.items()
+        if name != "SIMULATION_ENTRYPOINT_URL"
+    }
+
+    with pytest.raises(V2ConfigurationError, match="SIMULATION_ENTRYPOINT_URL"):
+        initialization.initialize_catalog(environment, extractor=refuse_extraction)

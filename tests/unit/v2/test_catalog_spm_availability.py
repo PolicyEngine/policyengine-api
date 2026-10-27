@@ -205,3 +205,39 @@ def test_recording_needs_the_simulation_service_url() -> None:
         )
         == "https://simulation.example"
     )
+
+
+def test_an_unreadable_versions_answer_leaves_every_version_unrecorded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: list[str] = []
+    monkeypatch.setattr(
+        spm_availability,
+        "record_spm_availability",
+        lambda _connection, *, model_name, version, availability: recorded.append(
+            model_name
+        ),
+    )
+    catalog = SimpleNamespace(
+        policyengine_version=POLICYENGINE_VERSION,
+        countries=[
+            SimpleNamespace(
+                country_id="us",
+                model=SimpleNamespace(name="policyengine-us"),
+                model_version=SimpleNamespace(version="1.0.0"),
+            )
+        ],
+    )
+
+    def unreadable(_url: str) -> object:
+        msg = "the simulation service's versions could not be read"
+        raise CatalogPublicationError(msg)
+
+    spm_availability.record_published_spm_availability(
+        RecordingEngine(),
+        catalog,
+        {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
+        fetch_versions=unreadable,
+    )
+
+    assert recorded == []

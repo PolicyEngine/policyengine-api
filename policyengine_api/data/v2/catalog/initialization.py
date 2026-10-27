@@ -30,6 +30,7 @@ from policyengine_api.data.v2.catalog.region_data_verification import (
 )
 from policyengine_api.data.v2.catalog.spm_availability import (
     record_published_spm_availability,
+    simulation_entrypoint_url,
 )
 from policyengine_api.data.v2.settings import (
     V2ConfigurationError,
@@ -130,10 +131,12 @@ def initialize_catalog(
 ) -> PublicationEvidence:
     """Load only row-write settings, extract fully, verify, then publish explicitly.
 
-    After publishing, record each version's SPM availability.
+    After publishing, record each version's SPM availability. The simulation
+    service's URL, which that needs, is checked before anything else.
     """
     selected_steps = steps or PublicationSteps()
     settings = load_v2_data_write_database_settings(environ)
+    simulation_entrypoint_url(os.environ if environ is None else environ)
     catalog = extractor()
     engine = engine_builder(settings)
     try:

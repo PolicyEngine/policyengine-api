@@ -13,11 +13,13 @@ bundle pins its SPM release, so a recorded value never changes. A US version
 the service does not serve yet (its ``policyengine`` routes do not name it)
 is left unrecorded rather than recorded as unavailable, and the next
 publication run tries again; ``/v2/model-catalog`` offers no SPM settings for
-it meanwhile.
+it meanwhile. So is every version when the service's versions cannot be
+read: recording never fails the publication.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import TYPE_CHECKING, Any
 
@@ -39,6 +41,7 @@ if TYPE_CHECKING:
 
     from policyengine_api.data.v2.catalog.records import NormalizedCatalog
 
+LOGGER = logging.getLogger(__name__)
 SIMULATION_ENTRYPOINT_URL = "SIMULATION_ENTRYPOINT_URL"
 SPM_COUNTRY_ID = "us"
 SPM_CONTRACT_VERSION = "canonical-spm-v1"
@@ -159,14 +162,21 @@ def record_published_spm_availability(
 ) -> None:
     """Record each published country's SPM availability for the catalog version.
 
-    A US version the service does not serve yet stays unrecorded.
-
-    Raise V2ConfigurationError without ``SIMULATION_ENTRYPOINT_URL``, and
-    CatalogPublicationError when the service's versions cannot be read.
+    A US version the service does not serve yet stays unrecorded, and so does
+    every version when the service's versions cannot be read; the next
+    publication run tries again. Raise V2ConfigurationError without
+    ``SIMULATION_ENTRYPOINT_URL``.
     """
-    versions = fetch_versions(
-        simulation_entrypoint_url(os.environ if environ is None else environ)
-    )
+    url = simulation_entrypoint_url(os.environ if environ is None else environ)
+    try:
+        versions = fetch_versions(url)
+    except CatalogPublicationError as error:
+        LOGGER.warning(
+            "SPM availability was not recorded; the next publication run "
+            "tries again: %s",
+            error,
+        )
+        return
     with engine.begin() as connection:
         for country in catalog.countries:
             availability = spm_availability(
