@@ -20,10 +20,19 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 REQUEST_COMPLETED_EVENT = "request.completed"
-# Changing how fingerprints are computed changes every fingerprint, and the
-# job matches existing issues only by the current algorithm. A change to it
-# must say how existing issues are carried over.
-FINGERPRINT_ALGORITHM = 1
+# Changing how fingerprints are computed changes every fingerprint. The job
+# matches an issue by the fingerprint in its state comment only when the state
+# names the current algorithm, and otherwise by the fingerprint in its title,
+# which it never changes. A change to the algorithm must say how existing
+# issues are carried over.
+#
+# Algorithm 2 keys an exception's stack frames by function name, where
+# algorithm 1 used module path and function name. The algorithm number is
+# hashed into every fingerprint, so every group's fingerprint changed. Issues
+# opened under algorithm 1 were not carried over: their titles hold algorithm 1
+# fingerprints, so the job no longer updates or reopens them, and a group that
+# still fails opens a new issue.
+FINGERPRINT_ALGORITHM = 2
 FINGERPRINT_LENGTH = 16
 MIN_FINGERPRINT_KEY_LENGTH = 32
 
@@ -148,7 +157,8 @@ def fingerprint_parts(record: ErrorRecord) -> tuple[str, ...]:
     """Return the kind and the values that identify the record's error group.
 
     An exception's route is left out, so one shared failure doesn't open an
-    issue for every route that reaches it.
+    issue for every route that reaches it. Its stack frames are keyed by
+    function name, not module path (see ``fingerprint_frames``).
     """
     kind = record.kind
     if kind == "exception":

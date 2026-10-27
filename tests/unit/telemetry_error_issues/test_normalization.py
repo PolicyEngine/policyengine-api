@@ -9,7 +9,7 @@ from telemetry_error_issues import normalization
 from telemetry_error_issues.bigquery import FRAME_PATTERN
 from telemetry_error_issues.normalization import (
     fingerprint_frames,
-    frame_key,
+    frame_location,
     normalize_path,
     public_error_type,
     public_family,
@@ -108,11 +108,11 @@ def test_frames_pattern_has_one_capturing_group_for_bigquery() -> None:
 def test_frames_pattern_extracts_frame_headers_without_source_or_message() -> None:
     frames = extract_frames(STANDARD_STACK)
 
-    assert [frame_key(frame) for frame in frames] == [
-        "flask/app.py:dispatch_request",
-        "policyengine_api/routes/report_routes.py:create_report",
-        "policyengine_api/services/report_service.py:create",
-        "sqlalchemy/orm/session.py:flush",
+    assert [frame_location(frame) for frame in frames] == [
+        ("flask/app.py", "dispatch_request"),
+        ("policyengine_api/routes/report_routes.py", "create_report"),
+        ("policyengine_api/services/report_service.py", "create"),
+        ("sqlalchemy/orm/session.py", "flush"),
     ]
     assert not any("SENTINEL" in frame or "\n" in frame for frame in frames)
 
@@ -120,27 +120,27 @@ def test_frames_pattern_extracts_frame_headers_without_source_or_message() -> No
 def test_frames_chained_traceback_contributes_only_its_first_traceback() -> None:
     frames = extract_frames(CHAINED_STACK)
 
-    assert [frame_key(frame) for frame in frames] == [
-        "policyengine_api/services/cache.py:read",
+    assert [frame_location(frame) for frame in frames] == [
+        ("policyengine_api/services/cache.py", "read"),
     ]
 
 
 def test_frames_explicitly_chained_traceback_contributes_only_its_cause() -> None:
     frames = extract_frames(chained_stack(recursion_depth=2))
 
-    assert [frame_key(frame) for frame in frames] == [
-        "policyengine_api/services/household.py:calculate",
-        "policyengine_core/simulation.py:calculate",
-        "policyengine_core/simulation.py:calculate",
+    assert [frame_location(frame) for frame in frames] == [
+        ("policyengine_api/services/household.py", "calculate"),
+        ("policyengine_core/simulation.py", "calculate"),
+        ("policyengine_core/simulation.py", "calculate"),
     ]
 
 
 def test_frames_pattern_reads_exception_group_tracebacks() -> None:
     frames = extract_frames(EXCEPTION_GROUP_STACK)
 
-    assert [frame_key(frame) for frame in frames] == [
-        "policyengine_simulation_gateway/app.py:run",
-        "policyengine_simulation_gateway/worker.py:step",
+    assert [frame_location(frame) for frame in frames] == [
+        ("policyengine_simulation_gateway/app.py", "run"),
+        ("policyengine_simulation_gateway/worker.py", "step"),
     ]
 
 
@@ -148,8 +148,8 @@ def test_frames_pattern_skips_a_frame_header_cut_off_by_truncation() -> None:
     cut_at = STANDARD_STACK.index("create_report") + len("create_re")
     frames = extract_frames(STANDARD_STACK[:cut_at])
 
-    assert [frame_key(frame) for frame in frames] == [
-        "flask/app.py:dispatch_request",
+    assert [frame_location(frame) for frame in frames] == [
+        ("flask/app.py", "dispatch_request"),
     ]
 
 
@@ -179,11 +179,11 @@ def test_frames_paths_drop_installation_prefixes(path: str, normalized: str) -> 
     assert normalize_path(path) == normalized
 
 
-def test_frames_keys_ignore_line_numbers() -> None:
-    first = frame_key('/app/policyengine_api/x.py", line 10, in handler')
-    second = frame_key('/srv/policyengine_api/x.py", line 99, in handler')
+def test_frames_locations_ignore_line_numbers() -> None:
+    first = frame_location('/app/policyengine_api/x.py", line 10, in handler')
+    second = frame_location('/srv/policyengine_api/x.py", line 99, in handler')
 
-    assert first == second == "policyengine_api/x.py:handler"
+    assert first == second == ("policyengine_api/x.py", "handler")
 
 
 def test_frames_choose_the_three_innermost_application_frames() -> None:
