@@ -534,3 +534,46 @@ def test_extractor_has_no_direct_core_country_or_v1_metadata_imports() -> None:
         )
         for module in imported_modules
     )
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "extraction_regions.py",
+        "extraction_values.py",
+        "extraction_variables_and_parameters.py",
+    ],
+)
+def test_extractor_modules_have_no_direct_core_country_or_v1_metadata_imports(
+    module_name: str,
+) -> None:
+    source_path = (
+        Path(__file__).parents[3]
+        / "policyengine_api"
+        / "data"
+        / "v2"
+        / "catalog"
+        / module_name
+    )
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    imported_modules = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+    }
+
+    assert not any(
+        module.startswith(
+            (
+                "policyengine_core",
+                "policyengine_us",
+                "policyengine_uk",
+                "policyengine_api.country",
+                "policyengine_api.services.metadata_service",
+            )
+        )
+        for module in imported_modules
+    )

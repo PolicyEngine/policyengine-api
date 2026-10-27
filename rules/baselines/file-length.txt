@@ -4,6 +4,4 @@
 #
 # Anthony Volk authorized this starting baseline on 2026-10-27. When it is
 # empty, #4053 makes the rule enforced and deletes this file.
-policyengine_api/data/v2/catalog/extraction.py
-policyengine_api/fastapi_routes/dependencies.py
 tests/unit/test_cloud_run_deploy_scripts.py
