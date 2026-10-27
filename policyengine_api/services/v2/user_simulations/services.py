@@ -1,9 +1,10 @@
 """Application services for native v2 user-simulation associations.
 
-Stage 12A anchors saved simulations on v1 simulation IDs. The owner always
-comes from the verified session principal (a signed-in user or a signed-out
-browser), and v1 references are checked in a short read-only v1 transaction
-before the v2 transaction opens. Reads never provision a browser's
+A saved simulation names a v2 simulation, a v1 simulation, or both. The owner
+always comes from the verified session principal (a signed-in user or a
+signed-out browser). Before the v2 transaction opens, a v1 reference is
+checked in a short read-only v1 transaction, and a v2 simulation with the
+simulation service, which owns v2 simulations. Reads never provision a browser's
 unauthenticated user; one that does not exist yet owns no records.
 """
 
@@ -13,6 +14,9 @@ from typing import TYPE_CHECKING
 
 from policyengine_api.services.v2.associations.services import (
     require_legacy_reference,
+)
+from policyengine_api.services.v2.associations.validators import (
+    require_simulation_reference_checker,
 )
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_for_read_in_session,
@@ -49,7 +53,10 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
     from policyengine_api.data.v2.models import UserSimulationAssociation
-    from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
+    from policyengine_api.services.v2.associations.types import (
+        LegacyReferenceChecker,
+        SimulationReferenceChecker,
+    )
     from policyengine_api.services.v2.identity.types import AccountPrincipal
     from policyengine_api.services.v2.user_simulations.database_session import (
         UserSimulationDatabaseSession,
@@ -100,25 +107,39 @@ class V2UserSimulationService:
         self,
         database_session: UserSimulationDatabaseSession,
         legacy_references: LegacyReferenceChecker | None = None,
+        simulation_references: SimulationReferenceChecker | None = None,
     ) -> None:
         """Open sessions through ``database_session``.
 
-        ``legacy_references`` checks v1 simulations before a write. Without it,
-        creating a saved simulation or repointing one raises
-        LegacyReferenceCheckUnavailableError.
+        ``legacy_references`` checks v1 simulations and
+        ``simulation_references`` v2 simulations before a write. Saving or
+        repointing to a reference whose checker is missing raises
+        LegacyReferenceCheckUnavailableError or
+        SimulationReferenceCheckUnavailableError.
         """
         self._database_session = database_session
         self._legacy_references = legacy_references
+        self._simulation_references = simulation_references
 
-    def _require_legacy_simulation(
-        self, *, country_id: str, legacy_simulation_id: int
+    def _require_references(
+        self,
+        *,
+        country_id: str,
+        simulation_id: UUID | None,
+        legacy_simulation_id: int | None,
     ) -> None:
-        require_legacy_reference(
-            self._legacy_references,
-            LegacyRecordKind.SIMULATION,
-            country_id=country_id,
-            legacy_id=legacy_simulation_id,
-        )
+        """Check each supplied simulation reference before the v2 transaction."""
+        if legacy_simulation_id is not None:
+            require_legacy_reference(
+                self._legacy_references,
+                LegacyRecordKind.SIMULATION,
+                country_id=country_id,
+                legacy_id=legacy_simulation_id,
+            )
+        if simulation_id is not None:
+            require_simulation_reference_checker(
+                self._simulation_references
+            ).require_simulation(country_id=country_id, simulation_id=simulation_id)
 
     def create_user_simulation(
         self,
@@ -126,14 +147,16 @@ class V2UserSimulationService:
         principal: AccountPrincipal,
         association_input: UserSimulationCreateFields,
     ) -> UserSimulationRead:
-        """Save a v1 simulation for the principal, provisioning its v2 user if needed.
+        """Save a simulation for the principal, provisioning its v2 user if needed.
 
-        The v1 simulation is checked first, in a read-only v1 transaction, and
-        LegacyReferenceNotFoundError is raised if it does not exist in the
-        country.
+        Each supplied reference is checked first: a v1 simulation in a
+        read-only v1 transaction (LegacyReferenceNotFoundError), and a v2
+        simulation with the simulation service
+        (SimulationReferenceNotFoundError), each in the country.
         """
-        self._require_legacy_simulation(
+        self._require_references(
             country_id=association_input.country_id,
+            simulation_id=association_input.simulation_id,
             legacy_simulation_id=association_input.legacy_simulation_id,
         )
         with self._database_session.transaction() as session:
@@ -220,15 +243,15 @@ class V2UserSimulationService:
     ) -> UserSimulationRead:
         """Update the supplied fields of one of the principal's associations.
 
-        A new ``legacy_simulation_id`` is checked in v1 first, as on create. Raise
-        UserSimulationNotFoundError if the principal has no such association in
-        this country.
+        A new ``simulation_id`` or ``legacy_simulation_id`` is checked first,
+        as on create. Raise UserSimulationNotFoundError if the principal has no
+        such association in this country.
         """
-        if association_input.legacy_simulation_id is not None:
-            self._require_legacy_simulation(
-                country_id=country_id,
-                legacy_simulation_id=association_input.legacy_simulation_id,
-            )
+        self._require_references(
+            country_id=country_id,
+            simulation_id=association_input.simulation_id,
+            legacy_simulation_id=association_input.legacy_simulation_id,
+        )
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
                 session, principal, country_id=country_id

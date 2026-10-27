@@ -389,7 +389,12 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                 "name",
                 "description",
             ),
-            patch_fields=("legacy_simulation_id", "name", "description"),
+            patch_fields=(
+                "simulation_id",
+                "legacy_simulation_id",
+                "name",
+                "description",
+            ),
         ),
     ),
     WorkflowContract(

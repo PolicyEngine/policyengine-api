@@ -12,7 +12,10 @@ import pytest
 from pydantic import ValidationError
 from sqlmodel import select
 
-from policyengine_api.data.v2.models import UserReportAssociation
+from policyengine_api.data.v2.models import (
+    UserReportAssociation,
+    UserSimulationAssociation,
+)
 from policyengine_api.services.v2.economy_reports.types import (
     SimulationServiceUnavailableError,
 )
@@ -33,10 +36,22 @@ from policyengine_api.services.v2.user_reports.types import (
     UserReportCreateFields,
     UserReportUpdateInput,
 )
+from policyengine_api.services.v2.user_simulations.database_session import (
+    UserSimulationDatabaseSession,
+)
+from policyengine_api.services.v2.user_simulations.services import (
+    V2UserSimulationService,
+)
+from policyengine_api.services.v2.user_simulations.types import (
+    UserSimulationCreateFields,
+    UserSimulationUpdateInput,
+)
 from tests.unit.v2.economy_report_support import (
+    BASELINE_SIMULATION_ID,
     REPORT_ID,
     FakeEconomyReportSimulation,
     report_record,
+    simulation_record,
 )
 from tests.unit.v2.user_service_support import (
     ALICE,
@@ -45,6 +60,7 @@ from tests.unit.v2.user_service_support import (
 )
 
 OTHER_REPORT_ID = UUID("00000000-0000-4000-8000-000000000199")
+UK_SIMULATION_ID = UUID("00000000-0000-4000-8000-000000000196")
 
 
 @pytest.fixture
@@ -198,3 +214,103 @@ def test_a_shared_report_shows_its_v2_report(store, entrypoint) -> None:
     shared = service.get_shared_user_report(country_id="us", association_id=saved.id)
 
     assert shared.report_id == REPORT_ID
+
+
+@pytest.fixture
+def simulation_entrypoint() -> FakeEconomyReportSimulation:
+    entrypoint = FakeEconomyReportSimulation()
+    entrypoint.simulations = {
+        BASELINE_SIMULATION_ID: simulation_record(BASELINE_SIMULATION_ID),
+        UK_SIMULATION_ID: simulation_record(UK_SIMULATION_ID, country_id="uk"),
+    }
+    return entrypoint
+
+
+def _simulation_service(store, entrypoint) -> V2UserSimulationService:
+    return V2UserSimulationService(
+        UserSimulationDatabaseSession(store.sessions),
+        default_legacy_references(),
+        SimulationReferenceService(entrypoint),
+    )
+
+
+def _saved_simulations(store) -> list[UserSimulationAssociation]:
+    with store.sessions() as session:
+        return list(session.exec(select(UserSimulationAssociation)).all())
+
+
+def test_a_simulation_of_the_country_is_saved_by_its_v2_id(
+    store, simulation_entrypoint
+) -> None:
+    saved = _simulation_service(store, simulation_entrypoint).create_user_simulation(
+        principal=ALICE,
+        association_input=UserSimulationCreateFields(
+            country_id="us", simulation_id=BASELINE_SIMULATION_ID
+        ),
+    )
+
+    assert saved.simulation_id == BASELINE_SIMULATION_ID
+    assert saved.legacy_simulation_id is None
+    assert simulation_entrypoint.calls == [("get_simulation", BASELINE_SIMULATION_ID)]
+
+
+@pytest.mark.parametrize(
+    "simulation_id",
+    [UK_SIMULATION_ID, UUID("00000000-0000-4000-8000-000000000197")],
+    ids=["other-country", "unknown"],
+)
+def test_a_simulation_the_entrypoint_lacks_in_the_country_is_not_saved(
+    store, simulation_entrypoint, simulation_id
+) -> None:
+    with pytest.raises(SimulationReferenceNotFoundError) as raised:
+        _simulation_service(store, simulation_entrypoint).create_user_simulation(
+            principal=ALICE,
+            association_input=UserSimulationCreateFields(
+                country_id="us", simulation_id=simulation_id
+            ),
+        )
+
+    assert str(raised.value) == (
+        f"v2 simulation {simulation_id} was not found for country us"
+    )
+    assert _saved_simulations(store) == []
+
+
+def test_a_saved_simulation_is_repointed_to_a_checked_v2_simulation(
+    store, simulation_entrypoint
+) -> None:
+    service = _simulation_service(store, simulation_entrypoint)
+    saved = service.create_user_simulation(
+        principal=ALICE,
+        association_input=UserSimulationCreateFields(
+            country_id="us", legacy_simulation_id=613
+        ),
+    )
+
+    repointed = service.patch_user_simulation(
+        principal=ALICE,
+        country_id="us",
+        association_id=saved.id,
+        association_input=UserSimulationUpdateInput(
+            simulation_id=BASELINE_SIMULATION_ID
+        ),
+    )
+    with pytest.raises(SimulationReferenceNotFoundError):
+        service.patch_user_simulation(
+            principal=ALICE,
+            country_id="us",
+            association_id=saved.id,
+            association_input=UserSimulationUpdateInput(simulation_id=UK_SIMULATION_ID),
+        )
+
+    assert (repointed.simulation_id, repointed.legacy_simulation_id) == (
+        BASELINE_SIMULATION_ID,
+        613,
+    )
+
+
+def test_a_saved_simulation_needs_a_simulation_reference() -> None:
+    with pytest.raises(ValidationError):
+        UserSimulationCreateFields(country_id="us")
+    with pytest.raises(ValidationError):
+        UserSimulationUpdateInput(simulation_id=None)

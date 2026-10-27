@@ -98,12 +98,13 @@ def build_v2_user_simulation_router(
         "/user-simulations",
         response_model=UserSimulationDetailResponse,
         status_code=201,
-        summary="Save a v1 simulation for the current user",
+        summary="Save a simulation for the current user",
         description=(
             "Requires a bearer access token or the PolicyEngine-Unauthenticated-User "
             "header; the owner is taken from that credential. "
-            "Stage 12A accepts legacy_simulation_id only, checked in the v1 "
-            "database."
+            "The body names a v2 simulation (simulation_id), checked with the "
+            "simulation service, a v1 simulation (legacy_simulation_id), checked "
+            "in the v1 database, or both."
         ),
     )
     def create_user_simulation(

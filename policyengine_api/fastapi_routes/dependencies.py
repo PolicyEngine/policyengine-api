@@ -1015,6 +1015,7 @@ def _default_v2_user_simulation_service_factory() -> V2UserSimulationResourceSer
     return V2UserSimulationService(
         UserSimulationDatabaseSession(get_v2_session_factory()),
         _default_legacy_reference_checker(),
+        _default_simulation_reference_checker(),
     )
 
 
