@@ -32,7 +32,9 @@ export POLICYENGINE_DB_MIGRATION_PASSWORD="${migration_password}"
 # Never allow a job-level URL to bypass the credentials fetched for this release.
 unset STAGE7_EXISTING_DATABASE_URL ALEMBIC_DATABASE_URL
 
-database_state="$(python scripts/v1_database_migration.py --mode state)"
+# Every Python command runs in the environment uv.lock defines; the workflow
+# installs it with uv sync --frozen.
+database_state="$(uv run --frozen python scripts/v1_database_migration.py --mode state)"
 echo "Detected v1 database state: ${database_state}"
 
 case "${database_state}" in
@@ -40,7 +42,7 @@ case "${database_state}" in
     ;;
   pending)
     backup_id="$(bash .github/scripts/create_cloud_sql_backup.sh)"
-    python scripts/v1_database_migration.py \
+    uv run --frozen python scripts/v1_database_migration.py \
       --mode upgrade \
       --backup-id "${backup_id}"
     ;;
@@ -54,4 +56,4 @@ case "${database_state}" in
     ;;
 esac
 
-python scripts/v1_database_migration.py --mode verify-head
+uv run --frozen python scripts/v1_database_migration.py --mode verify-head
