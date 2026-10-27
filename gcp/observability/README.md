@@ -136,8 +136,13 @@ corresponding rejected points in that interval.
 The `Telemetry error issues` workflow
 (`.github/workflows/telemetry-error-issues.yml`) runs at 00:45 US Eastern each
 day. It reports the previous Eastern calendar day, from midnight to midnight,
-which lasts 23 or 25 hours on the days the clocks change. The script it runs,
-`.github/scripts/sync_telemetry_error_issues.py`:
+which lasts 23 or 25 hours on the days the clocks change. It runs
+`.github/scripts/sync_telemetry_error_issues.py`, a short entry point that calls
+the `telemetry_error_issues` package beside it in `.github/scripts/`. The package's
+`cli` module reads the arguments and settings and runs each step; `bigquery`
+runs the queries, `records` and `groups` choose, fingerprint and measure the
+failures, `rendering` writes the issue text, and `sync` updates the issues
+through `github_client`. Each run:
 
 1. Queries the central bucket through its linked BigQuery dataset
    `observability_logs`. It reads the `_AllLogs` view for ERROR records with
