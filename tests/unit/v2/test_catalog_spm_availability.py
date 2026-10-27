@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
+
 import httpx
 import pytest
 
@@ -9,6 +13,9 @@ from policyengine_api.data.v2.catalog import spm_availability
 from policyengine_api.data.v2.catalog.publication_types import CatalogPublicationError
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.spm import SPMSelection
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 POLICYENGINE_VERSION = "6.10.0"
 DEFAULTS = {
@@ -19,8 +26,9 @@ DEFAULTS = {
     "county_vintage": "2020",
     "as_of": None,
 }
+ROUTES = {"latest": POLICYENGINE_VERSION, POLICYENGINE_VERSION: "policyengine-v6-10-0"}
 VERSIONS = {
-    "policyengine": {"latest": POLICYENGINE_VERSION},
+    "policyengine": ROUTES,
     "spm_capabilities": {
         POLICYENGINE_VERSION: {
             "contract_version": "canonical-spm-v1",
@@ -46,38 +54,38 @@ def test_a_us_version_with_a_certified_capability_offers_spm() -> None:
     ("country_id", "policyengine_version", "versions"),
     [
         ("uk", POLICYENGINE_VERSION, VERSIONS),
-        ("us", "6.11.0", VERSIONS),
-        ("us", POLICYENGINE_VERSION, {}),
-        ("us", POLICYENGINE_VERSION, {"spm_capabilities": []}),
+        ("us", POLICYENGINE_VERSION, {"policyengine": ROUTES}),
+        ("us", POLICYENGINE_VERSION, {"policyengine": ROUTES, "spm_capabilities": []}),
         (
             "us",
             POLICYENGINE_VERSION,
             {
+                "policyengine": ROUTES,
                 "spm_capabilities": {
                     POLICYENGINE_VERSION: {
                         "contract_version": "canonical-spm-v0",
                         "defaults": DEFAULTS,
                     }
-                }
+                },
             },
         ),
         (
             "us",
             POLICYENGINE_VERSION,
             {
+                "policyengine": ROUTES,
                 "spm_capabilities": {
                     POLICYENGINE_VERSION: {
                         "contract_version": "canonical-spm-v1",
                         "defaults": {**DEFAULTS, "scenario": None},
                     }
-                }
+                },
             },
         ),
     ],
     ids=[
         "uk",
-        "unlisted-version",
-        "no-capabilities",
+        "no-capability",
         "malformed-capabilities",
         "other-contract",
         "unpinned-defaults",
@@ -89,6 +97,71 @@ def test_anything_else_offers_no_spm(
     assert spm_availability.spm_availability(
         country_id, policyengine_version, versions
     ) == {"available": False}
+
+
+@pytest.mark.parametrize(
+    "versions",
+    [
+        {**VERSIONS, "policyengine": {"latest": "6.11.0", "6.11.0": "app"}},
+        {"spm_capabilities": VERSIONS["spm_capabilities"]},
+        [],
+    ],
+    ids=["version-not-served", "no-route-map", "not-an-object"],
+)
+def test_a_us_version_the_service_does_not_serve_is_not_known_yet(
+    versions: object,
+) -> None:
+    assert (
+        spm_availability.spm_availability("us", POLICYENGINE_VERSION, versions) is None
+    )
+
+
+class RecordingEngine:
+    """An engine whose transactions are only counted."""
+
+    def __init__(self) -> None:
+        """Start with no transaction."""
+        self.transactions = 0
+
+    @contextmanager
+    def begin(self) -> Iterator[str]:
+        """Count one transaction and hand out a placeholder connection."""
+        self.transactions += 1
+        yield "connection"
+
+
+def test_publication_records_only_what_is_known(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        spm_availability,
+        "record_spm_availability",
+        lambda _connection, *, model_name, version, availability: recorded.append(
+            (model_name, dict(availability))
+        ),
+    )
+    catalog = SimpleNamespace(
+        policyengine_version=POLICYENGINE_VERSION,
+        countries=[
+            SimpleNamespace(
+                country_id=country_id,
+                model=SimpleNamespace(name=f"policyengine-{country_id}"),
+                model_version=SimpleNamespace(version="1.0.0"),
+            )
+            for country_id in ("uk", "us")
+        ],
+    )
+    not_served = {"policyengine": {"latest": "6.11.0", "6.11.0": "app"}}
+
+    spm_availability.record_published_spm_availability(
+        RecordingEngine(),
+        catalog,
+        {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
+        fetch_versions=lambda _url: not_served,
+    )
+
+    assert recorded == [("policyengine-uk", {"available": False})]
 
 
 def test_the_versions_come_from_the_simulation_services_public_route() -> None:

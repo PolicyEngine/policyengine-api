@@ -140,7 +140,10 @@ EXPLICIT_VERSION_MAX_AGE_SECONDS = 86_400
 
 A published catalog version never changes, so such a response stays valid
 until its code's response format changes; the ETag lets a client revalidate
-it cheaply after that.
+it cheaply after that. The one exception is a version's SPM availability in
+``/v2/model-catalog``, recorded once after publication: until a later
+publication run records it, a response may say the version offers no SPM
+settings, and a reused response can keep saying so for up to this long.
 """
 RUNNING_VERSION_MAX_AGE_SECONDS = 300
 """How long a response for the running catalog version may be reused.

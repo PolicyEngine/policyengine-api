@@ -42,8 +42,10 @@ version offers SPM settings for a household: `available`, and when it does,
 `defaults` (the certified selection). Catalog publication records it from the
 simulation service's public `GET /versions`: a US version offers SPM when the
 service lists a canonical capability with pinned defaults for its
-PolicyEngine.py version, and other countries never do. A version whose
-availability is not recorded yet offers none. The result names the
+PolicyEngine.py version, and other countries never do. A US version the
+service does not serve yet stays unrecorded until a later publication run, and
+a version whose availability is not recorded yet offers none; a response read
+before then, and reused for up to a day, keeps saying so. The result names the
 selected PolicyEngine.py version, so a client that starts without a version
 learns the running one and requests every other part for that exact version.
 The query uses the shared `CatalogQuery` model: unknown and repeated
@@ -192,10 +194,15 @@ must execute in this order:
    Alembic chain, confirms all heads are current, and detects ungenerated model
    changes.
 3. Remove the migration URL from the command environment.
-4. Supply only `V2_DATA_WRITE_DATABASE_URL`, the same target identity and
+4. Supply only `V2_DATA_WRITE_DATABASE_URL`, the same target identity,
    `HUGGING_FACE_TOKEN` (from the organization secret
-   `PE_UK_PRIVATE_HF_READ_TOKEN`), then run
-   `uv run python scripts/publish_v2_metadata_catalog.py`. Before publishing a
+   `PE_UK_PRIVATE_HF_READ_TOKEN`) and `SIMULATION_ENTRYPOINT_URL` (from the
+   environment secret of the same name), then run
+   `uv run python scripts/publish_v2_metadata_catalog.py`. After publishing, the
+   command reads the simulation service's public `GET /versions` to record each
+   version's SPM availability, and fails if the URL is unset or the answer
+   cannot be read; the catalog itself is already published by then, and the
+   next run records the availability. Before publishing a
    catalog version that is not stored yet, the command reads the certified data
    artifacts its regions' filters use and stops if one cannot select a region.
    It stops before reading anything if a UK version needs checking and
