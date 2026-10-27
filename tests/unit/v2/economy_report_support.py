@@ -18,7 +18,7 @@ from policyengine_api.services.v2.economy_reports.database_session import (
 from policyengine_api.services.v2.economy_reports.services import (
     V2EconomyReportService,
 )
-from policyengine_api.services.v2.economy_reports.types import (
+from policyengine_api.services.v2.simulation_entrypoint.types import (
     ComparisonRecord,
     EconomyReportRecord,
     EconomyReportRunRecord,
@@ -30,7 +30,7 @@ from policyengine_api.services.v2.economy_reports.types import (
 from tests.fixtures.v2_countries import add_listed_countries
 
 if TYPE_CHECKING:
-    from policyengine_api.services.v2.economy_reports.types import (
+    from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportSubmission,
         RunTrigger,
     )

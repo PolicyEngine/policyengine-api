@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models import Country
-    from policyengine_api.services.v2.economy_reports.types import (
+    from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportRecord,
     )
 

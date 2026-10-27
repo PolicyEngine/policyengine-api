@@ -9,10 +9,10 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
-from policyengine_api.services.v2.economy_reports.types import ReportStatus
+from policyengine_api.services.v2.simulation_entrypoint.types import ReportStatus
 
 if TYPE_CHECKING:
-    from policyengine_api.services.v2.economy_reports.types import (
+    from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportRecord,
         EconomyReportRunRecord,
     )

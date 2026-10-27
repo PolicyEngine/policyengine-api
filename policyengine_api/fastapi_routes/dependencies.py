@@ -13,7 +13,7 @@ from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBea
 from policyengine_api.fastapi_routes.v2.user_auth import authenticate_account_request
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.readiness import is_ready
-from policyengine_api.services.v2.economy_reports.types import (
+from policyengine_api.services.v2.simulation_entrypoint.types import (
     SimulationServiceUnavailableError,
 )
 
@@ -27,12 +27,7 @@ if TYPE_CHECKING:
         SimulationReferenceChecker,
     )
     from policyengine_api.services.v2.countries.types import CountryRead
-    from policyengine_api.services.v2.economy_reports.types import (
-        EconomyReportFields,
-        EconomyReportRecord,
-        EconomyReportRunRecord,
-        EconomyReportSimulation,
-    )
+    from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
     from policyengine_api.services.v2.households.types import (
         HouseholdPage,
         HouseholdRead,
@@ -63,6 +58,11 @@ if TYPE_CHECKING:
         NativePolicyCreationInput,
         PolicyPage,
         PolicyRead,
+    )
+    from policyengine_api.services.v2.simulation_entrypoint.types import (
+        EconomyReportRecord,
+        EconomyReportRunRecord,
+        EconomyReportSimulation,
     )
     from policyengine_api.services.v2.user_accounts.types import (
         AccountDeletion,

@@ -31,13 +31,11 @@ from policyengine_api.services.v2.economy_reports.database_session import (
 from policyengine_api.services.v2.economy_reports.services import (
     V2EconomyReportService,
 )
-from policyengine_api.services.v2.economy_reports.types import (
-    EconomyReportFields,
-    SimulationChoice,
-)
+from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
 from policyengine_api.services.v2.economy_reports.validators import (
     EconomyReportsUnsupportedError,
 )
+from policyengine_api.services.v2.simulation_entrypoint.types import SimulationChoice
 from tests.unit.v2.economy_report_support import (
     CURRENT_POLICYENGINE_VERSION,
     REPORT_ID,

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from policyengine_api.services.v2.economy_reports.types import (
+from policyengine_api.services.v2.simulation_entrypoint.types import (
     SimulationRecordNotFoundError,
 )
 from policyengine_api.services.v2.simulation_refs.validators import (
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.associations.types import (
         SimulationReferenceChecker,
     )
-    from policyengine_api.services.v2.economy_reports.types import (
+    from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportSimulation,
     )
 

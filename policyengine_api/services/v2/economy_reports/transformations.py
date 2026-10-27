@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from policyengine_api.services.v2.economy_reports.types import EconomyReportSubmission
+from policyengine_api.services.v2.simulation_entrypoint.types import (
+    EconomyReportSubmission,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from policyengine_api.services.v2.economy_reports.types import (
-        EconomyReportFields,
+    from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
+    from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportRecord,
     )
 

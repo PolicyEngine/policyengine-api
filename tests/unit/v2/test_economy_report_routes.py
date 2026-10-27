@@ -27,7 +27,7 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
     infer_route_group,
 )
-from policyengine_api.services.v2.economy_reports.types import (
+from policyengine_api.services.v2.simulation_entrypoint.types import (
     ReportStatus,
     SimulationRequestRefusedError,
     SimulationServiceUnavailableError,

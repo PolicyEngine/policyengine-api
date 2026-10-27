@@ -1,14 +1,15 @@
 """Application services for v2 economy reports.
 
-The Simulation Entrypoint owns economy reports. This service checks what API
-v1 decides itself, then asks the entrypoint through ``EconomyReportSimulation``:
+The Simulation Entrypoint owns economy reports. This service checks what the
+Public API decides itself, then asks the entrypoint through
+``EconomyReportSimulation``:
 
 - A country's ``countries`` row must allow economy (society-wide) reports. A
   household-only country is refused before anything is sent to the
-  entrypoint, and API v1 writes nothing for a report.
+  entrypoint, and the Public API writes nothing for a report.
 - Reports run on the current catalog version: the one published for the
-  PolicyEngine.py version API v1 runs, which is also the catalog its v2
-  metadata routes serve by default.
+  PolicyEngine.py version the Public API runs, which is also the catalog its
+  v2 metadata routes serve by default.
 - Every report is read within a country: a report of another country is not
   found.
 - A report with no run (one migrated from v1) is calculated the first time
@@ -27,16 +28,16 @@ from policyengine_api.services.v2.economy_reports.transformations import (
     economy_report_submission,
     reports_of_country,
 )
-from policyengine_api.services.v2.economy_reports.types import (
-    RunTrigger,
-    SimulationRecordNotFoundError,
-    SimulationRequestRefusedError,
-)
 from policyengine_api.services.v2.economy_reports.validators import (
     economy_reports_supported,
     report_not_found,
     require_economy_reports_supported,
     require_report_in_country,
+)
+from policyengine_api.services.v2.simulation_entrypoint.types import (
+    RunTrigger,
+    SimulationRecordNotFoundError,
+    SimulationRequestRefusedError,
 )
 
 if TYPE_CHECKING:
@@ -46,8 +47,8 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.economy_reports.database_session import (
         EconomyReportDatabaseSession,
     )
-    from policyengine_api.services.v2.economy_reports.types import (
-        EconomyReportFields,
+    from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
+    from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportRecord,
         EconomyReportRunRecord,
         EconomyReportSimulation,

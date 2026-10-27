@@ -6,17 +6,17 @@ from uuid import UUID
 
 import pytest
 
-from policyengine_api.services.v2.economy_reports.types import (
-    EconomyReportFields,
+from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
+from policyengine_api.services.v2.economy_reports.validators import (
+    EconomyReportNotFoundError,
+    EconomyReportsUnsupportedError,
+)
+from policyengine_api.services.v2.simulation_entrypoint.types import (
     EconomyReportSubmission,
     ReportStatus,
     RunTrigger,
     SimulationChoice,
     SimulationRequestRefusedError,
-)
-from policyengine_api.services.v2.economy_reports.validators import (
-    EconomyReportNotFoundError,
-    EconomyReportsUnsupportedError,
 )
 from tests.unit.v2.economy_report_support import (
     CURRENT_POLICYENGINE_VERSION,

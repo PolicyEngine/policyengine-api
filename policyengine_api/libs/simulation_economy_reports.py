@@ -63,7 +63,7 @@ from policyengine_api.request_context import (
     current_observability_id,
     current_request_id,
 )
-from policyengine_api.services.v2.economy_reports.types import (
+from policyengine_api.services.v2.simulation_entrypoint.types import (
     ComparisonRecord,
     EconomyReportRecord,
     EconomyReportRunRecord,
@@ -87,7 +87,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api_simulation_client.types import Response
 
-    from policyengine_api.services.v2.economy_reports.types import (
+    from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportSubmission,
         RunTrigger,
         SimulationChoice,

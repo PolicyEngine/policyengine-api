@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 class EconomyReportDatabaseSession:
     """Open the read sessions the economy report service uses.
 
-    Reports themselves live in the Simulation Entrypoint; API v1 reads only
-    what each country supports.
+    Reports themselves live in the Simulation Entrypoint; the Public API reads
+    only what each country supports.
     """
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:

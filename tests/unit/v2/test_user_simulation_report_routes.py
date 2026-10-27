@@ -11,11 +11,11 @@ import pytest
 from policyengine_api.services.v2.associations.validators import (
     AssociationLinkNotFoundError,
 )
-from policyengine_api.services.v2.economy_reports.types import (
-    SimulationServiceUnavailableError,
-)
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
+)
+from policyengine_api.services.v2.simulation_entrypoint.types import (
+    SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.simulation_refs.validators import (
     SimulationReferenceNotFoundError,

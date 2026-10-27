@@ -25,7 +25,7 @@ from policyengine_api.libs.simulation_economy_reports import (
     simulation_entrypoint_economy_reports,
 )
 from policyengine_api.request_context import _asgi_request_id
-from policyengine_api.services.v2.economy_reports.types import (
+from policyengine_api.services.v2.simulation_entrypoint.types import (
     ComparisonRecord,
     EconomyReportRecord,
     EconomyReportRunRecord,

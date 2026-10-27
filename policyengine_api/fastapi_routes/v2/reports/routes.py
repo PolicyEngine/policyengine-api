@@ -50,13 +50,13 @@ from policyengine_api.query_parameters import (
     ReportCreateQuery,
     ReportDetailQuery,
 )
-from policyengine_api.services.v2.economy_reports.types import (
-    SimulationRequestRefusedError,
-    SimulationServiceUnavailableError,
-)
 from policyengine_api.services.v2.economy_reports.validators import (
     EconomyReportNotFoundError,
     EconomyReportsUnsupportedError,
+)
+from policyengine_api.services.v2.simulation_entrypoint.types import (
+    SimulationRequestRefusedError,
+    SimulationServiceUnavailableError,
 )
 
 if TYPE_CHECKING:
@@ -66,7 +66,7 @@ if TYPE_CHECKING:
         NativeRouteDependencies,
         V2EconomyReportResourceService,
     )
-    from policyengine_api.services.v2.economy_reports.types import (
+    from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportRecord,
         EconomyReportRunRecord,
     )

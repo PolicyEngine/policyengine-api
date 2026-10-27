@@ -16,11 +16,11 @@ from policyengine_api.data.v2.models import (
     UserReportAssociation,
     UserSimulationAssociation,
 )
-from policyengine_api.services.v2.economy_reports.types import (
-    SimulationServiceUnavailableError,
-)
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
+)
+from policyengine_api.services.v2.simulation_entrypoint.types import (
+    SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.simulation_refs.services import (
     SimulationReferenceService,
