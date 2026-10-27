@@ -1,3 +1,5 @@
+import json
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,6 +18,15 @@ from policyengine_api.country import (
     _serialize_axis_result,
     get_requested_computations,
 )
+
+AREA_LIST_DIRECTORY = Path(__file__).parents[2] / "policyengine_api" / "data"
+RECORDED_UK_REGION_OPTIONS_PATH = (
+    Path(__file__).parents[1] / "data" / "uk_economy_region_options.json"
+)
+
+
+def _names_by_code(area_list: pd.DataFrame) -> dict[str, str]:
+    return dict(zip(area_list["code"], area_list["name"], strict=True))
 
 
 class ExampleEnum(Enum):
@@ -307,9 +318,27 @@ class TestUKCountryMetadata:
 
     def test__uk_metadata_is_json_serializable(self, uk_country):
         """Verify metadata does not leak filesystem paths or other non-JSON values."""
-        import json
-
         json.dumps(uk_country.metadata)
+
+    def test__region_options_equal_the_recorded_list(self, uk_regions):
+        """The region options equal the recorded list, entry by entry, in order.
+
+        The recording holds the national entry, the four countries, the 650
+        constituencies and the 361 local authorities, each with its name,
+        label and type. A change to the packaged area lists, or to how they
+        are read, must leave the offered regions as recorded.
+        """
+        recorded_regions = json.loads(
+            RECORDED_UK_REGION_OPTIONS_PATH.read_text(encoding="utf-8")
+        )
+
+        assert Counter(region["type"] for region in recorded_regions) == {
+            "national": 1,
+            "country": 4,
+            "constituency": 650,
+            "local_authority": 361,
+        }
+        assert uk_regions == recorded_regions
 
 
 class TestLocalAuthoritiesDataFile:
@@ -317,57 +346,25 @@ class TestLocalAuthoritiesDataFile:
 
     @pytest.fixture
     def local_authorities_df(self):
-        path = (
-            Path(__file__).parents[2]
-            / "policyengine_api"
-            / "data"
-            / "local_authorities_2021.csv"
-        )
-        return pd.read_csv(path)
+        return pd.read_csv(AREA_LIST_DIRECTORY / "local_authorities_2021.csv")
 
-    def test__file_has_correct_columns(self, local_authorities_df):
-        """Verify the CSV has the expected columns."""
-        expected_columns = {"code", "name", "x", "y"}
-        assert expected_columns == set(local_authorities_df.columns)
+    def test__file_has_only_code_and_name_columns(self, local_authorities_df):
+        """The file holds each authority's code and name, and no hex-map position."""
+        assert list(local_authorities_df.columns) == ["code", "name"]
 
     def test__file_has_361_local_authorities(self, local_authorities_df):
         """Verify the correct number of local authorities in file."""
         assert len(local_authorities_df) == 361
 
     def test__file_matches_the_installed_policyengine_list(self, local_authorities_df):
-        """Codes, names and hex positions equal .py's packaged 2023 list.
+        """Codes and names equal .py's packaged 2023 list.
 
         .py's list is read from the installed package, so a .py update that
-        changes the area frame makes this test fail until the file follows.
+        changes a code or a name makes this test fail until the file follows.
         """
         policyengine_list = pd.read_csv(packaged_uk_area_list_path("local_authority"))
 
-        def by_code(frame: pd.DataFrame) -> dict[str, tuple[str, float, float]]:
-            return {
-                row.code: (row.name, float(row.x), float(row.y))
-                for row in frame.itertuples(index=False)
-            }
-
-        assert by_code(local_authorities_df) == by_code(policyengine_list)
-
-    def test__april_2023_unitaries_leave_the_origin_placeholder(
-        self, local_authorities_df
-    ):
-        """The four unitaries created in April 2023 have their own hex positions.
-
-        They used to share the (0, 0) placeholder. Another authority may still
-        sit at (0, 0) when .py's list puts it there; the comparison with .py's
-        list above covers every position.
-        """
-        april_2023_unitaries = local_authorities_df[
-            local_authorities_df["code"].isin(
-                ["E06000063", "E06000064", "E06000065", "E06000066"]
-            )
-        ]
-        assert len(april_2023_unitaries) == 4
-        assert not (
-            (april_2023_unitaries["x"] == 0) & (april_2023_unitaries["y"] == 0)
-        ).any()
+        assert _names_by_code(local_authorities_df) == _names_by_code(policyengine_list)
 
     def test__all_codes_are_valid_ons_codes(self, local_authorities_df):
         """Verify all codes follow ONS local authority code patterns."""
@@ -380,11 +377,6 @@ class TestLocalAuthoritiesDataFile:
         """Verify all local authority names are non-empty."""
         for name in local_authorities_df["name"]:
             assert len(str(name)) > 0
-
-    def test__coordinates_are_numeric(self, local_authorities_df):
-        """Verify x and y coordinates are numeric."""
-        assert local_authorities_df["x"].dtype in ["float64", "int64"]
-        assert local_authorities_df["y"].dtype in ["float64", "int64"]
 
     def test__english_local_authorities_have_e_prefix(self, local_authorities_df):
         """Verify English local authorities have E prefix codes."""
