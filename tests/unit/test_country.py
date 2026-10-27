@@ -413,6 +413,31 @@ class TestLocalAuthoritiesDataFile:
         assert "N09000011" in set(northern_irish_las["code"])
 
 
+class TestConstituenciesDataFile:
+    """Tests for the 2024 constituencies CSV data file."""
+
+    @pytest.fixture
+    def constituencies_df(self):
+        return pd.read_csv(AREA_LIST_DIRECTORY / "constituencies_2024.csv")
+
+    def test__file_has_only_code_and_name_columns(self, constituencies_df):
+        """The file holds each constituency's code and name, and no hex-map position."""
+        assert list(constituencies_df.columns) == ["code", "name"]
+
+    def test__file_has_650_constituencies(self, constituencies_df):
+        assert len(constituencies_df) == 650
+
+    def test__file_matches_the_installed_policyengine_list(self, constituencies_df):
+        """Codes and names equal .py's packaged 2024 constituency list.
+
+        .py's list is read from the installed package, so a .py update that
+        changes a code or a name makes this test fail until the file follows.
+        """
+        policyengine_list = pd.read_csv(packaged_uk_area_list_path("constituency"))
+
+        assert _names_by_code(constituencies_df) == _names_by_code(policyengine_list)
+
+
 class TestSimulationCompatibility:
     def test__create_simulation_uses_legacy_tax_benefit_system_signature(self):
         class LegacySimulation:
