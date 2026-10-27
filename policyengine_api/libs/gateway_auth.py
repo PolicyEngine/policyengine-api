@@ -296,3 +296,25 @@ class GatewayBearerAuth(httpx.Auth):
         self._token_provider.invalidate()
         request.headers["Authorization"] = f"Bearer {self._token_provider.get_token()}"
         yield request
+
+
+def gateway_bearer_auth_from_environment() -> GatewayBearerAuth | None:
+    """Return bearer auth from the ``GATEWAY_AUTH_*`` variables, or None.
+
+    None means no variable is set and ``GATEWAY_AUTH_REQUIRED`` is not
+    enabled. Raise GatewayAuthError when the variables are only partly set, or
+    when auth is required but not configured.
+    """
+    _require_all_or_none_gateway_auth_env()
+    token_provider = GatewayAuthTokenProvider()
+    if token_provider.configured:
+        return GatewayBearerAuth(token_provider)
+    if gateway_auth_required():
+        msg = (
+            "Gateway auth is required in this runtime: set "
+            f"{GATEWAY_AUTH_ISSUER_ENV}, {GATEWAY_AUTH_AUDIENCE_ENV}, "
+            f"{GATEWAY_AUTH_CLIENT_ID_ENV}, and "
+            f"{GATEWAY_AUTH_CLIENT_SECRET_ENV}."
+        )
+        raise GatewayAuthError(msg)
+    return None

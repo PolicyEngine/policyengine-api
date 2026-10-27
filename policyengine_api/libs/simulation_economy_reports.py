@@ -20,10 +20,8 @@ OpenAPI document describes. Its refusals (404, 422 with a text ``detail``,
 
 from __future__ import annotations
 
-import os
 from functools import cache
 from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
-from urllib.parse import urlparse
 
 import httpx
 from policyengine_api_simulation_client import AuthenticatedClient
@@ -51,18 +49,13 @@ from policyengine_observability import instrument_httpx
 
 from policyengine_api.libs.gateway_auth import (
     GatewayAuthError,
-    GatewayAuthTokenProvider,
-    GatewayBearerAuth,
-    _require_all_or_none_gateway_auth_env,
-    gateway_auth_required,
+    gateway_bearer_auth_from_environment,
+)
+from policyengine_api.libs.simulation_http import (
+    attach_request_identifiers,
+    required_base_url,
 )
 from policyengine_api.observability import get_runtime
-from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
-from policyengine_api.request_context import (
-    REQUEST_ID_HEADER,
-    current_observability_id,
-    current_request_id,
-)
 from policyengine_api.services.v2.simulation_entrypoint.types import (
     ComparisonRecord,
     EconomyReportRecord,
@@ -96,16 +89,6 @@ if TYPE_CHECKING:
 SIMULATION_ENTRYPOINT_URL_ENV = "SIMULATION_ENTRYPOINT_URL"
 REQUEST_TIMEOUT_SECONDS = 30.0
 ParsedT = TypeVar("ParsedT")
-
-
-def _attach_request_identifiers(request: httpx.Request) -> None:
-    """Send the current API request's correlation identifiers with the request."""
-    request_id = current_request_id()
-    if request_id is not None:
-        request.headers[REQUEST_ID_HEADER] = request_id
-    observability_id = current_observability_id()
-    if observability_id is not None:
-        request.headers[OBSERVABILITY_ID_HEADER] = observability_id
 
 
 def _refusal_reason(response: httpx.Response) -> str:
@@ -382,7 +365,7 @@ def simulation_entrypoint_economy_reports(
         auth=auth,
         transport=transport,
         event_hooks={
-            "request": [_attach_request_identifiers],
+            "request": [attach_request_identifiers],
             "response": [_raise_for_refusal],
         },
     )
@@ -396,40 +379,18 @@ def simulation_entrypoint_economy_reports(
 
 
 def _entrypoint_url() -> str:
-    value = os.environ.get(SIMULATION_ENTRYPOINT_URL_ENV, "").strip()
-    parsed = urlparse(value)
-    if (
-        parsed.scheme not in {"http", "https"}
-        or not parsed.hostname
-        or parsed.username
-        or parsed.password
-        or parsed.query
-        or parsed.fragment
-    ):
-        msg = (
-            f"{SIMULATION_ENTRYPOINT_URL_ENV} must name the Simulation Entrypoint as "
-            "an absolute HTTP(S) URL without credentials, a query or a fragment"
-        )
-        raise SimulationServiceUnavailableError(msg)
-    return value.rstrip("/")
+    try:
+        return required_base_url(SIMULATION_ENTRYPOINT_URL_ENV)
+    except ValueError as error:
+        raise SimulationServiceUnavailableError(str(error)) from error
 
 
 def _gateway_auth() -> httpx.Auth | None:
     """Return the gateway bearer auth, or None where it may be left unconfigured."""
     try:
-        _require_all_or_none_gateway_auth_env()
+        return gateway_bearer_auth_from_environment()
     except GatewayAuthError as error:
         raise SimulationServiceUnavailableError(str(error)) from error
-    token_provider = GatewayAuthTokenProvider()
-    if token_provider.configured:
-        return GatewayBearerAuth(token_provider)
-    if gateway_auth_required():
-        msg = (
-            "Gateway auth is required in this runtime: set GATEWAY_AUTH_ISSUER, "
-            "GATEWAY_AUTH_AUDIENCE, GATEWAY_AUTH_CLIENT_ID and a client secret."
-        )
-        raise SimulationServiceUnavailableError(msg)
-    return None
 
 
 def economy_reports_from_environment() -> SimulationEntrypointEconomyReports:

@@ -21,6 +21,7 @@ from policyengine_api.libs.gateway_auth import (
     GatewayBearerAuth,
     _require_all_or_none_gateway_auth_env,
     gateway_auth_required,
+    gateway_bearer_auth_from_environment,
 )
 
 ISSUER = "https://policyengine.uk.auth0.com"
@@ -485,3 +486,34 @@ class TestGatewayBearerAuth:
             flow.send(httpx.Response(200, request=request))
 
         provider.invalidate.assert_not_called()
+
+
+def _set_complete_gateway_auth(monkeypatch) -> None:
+    monkeypatch.setenv("GATEWAY_AUTH_ISSUER", ISSUER)
+    monkeypatch.setenv("GATEWAY_AUTH_AUDIENCE", AUDIENCE)
+    monkeypatch.setenv("GATEWAY_AUTH_CLIENT_ID", CLIENT_ID)
+    monkeypatch.setenv(GATEWAY_AUTH_CLIENT_SECRET_ENV, CLIENT_SECRET)
+
+
+def test_the_environment_selects_bearer_auth_when_it_is_complete(monkeypatch) -> None:
+    _set_complete_gateway_auth(monkeypatch)
+
+    assert isinstance(gateway_bearer_auth_from_environment(), GatewayBearerAuth)
+
+
+def test_the_environment_selects_no_auth_where_auth_is_not_required() -> None:
+    assert gateway_bearer_auth_from_environment() is None
+
+
+def test_required_auth_must_be_configured(monkeypatch) -> None:
+    monkeypatch.setenv(GATEWAY_AUTH_REQUIRED_ENV, "1")
+
+    with pytest.raises(GatewayAuthError, match="GATEWAY_AUTH_ISSUER"):
+        gateway_bearer_auth_from_environment()
+
+
+def test_partly_configured_auth_is_refused(monkeypatch) -> None:
+    monkeypatch.setenv("GATEWAY_AUTH_ISSUER", ISSUER)
+
+    with pytest.raises(GatewayAuthError, match="partially configured"):
+        gateway_bearer_auth_from_environment()
