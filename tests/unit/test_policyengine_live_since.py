@@ -117,22 +117,29 @@ def test_new_version_goes_live_with_this_deploy(tmp_path):
     assert _outputs(result)["POLICYENGINE_VERSION_LIVE_SINCE"] == NOW
 
 
-@pytest.mark.parametrize(
-    "case",
-    ["revision without a recorded date", "first deploy", "describe fails"],
-)
-def test_unknown_history_goes_live_with_this_deploy(tmp_path, case):
-    kwargs = {
-        "revision without a recorded date": {"revision_env": {}},
-        "first deploy": {"previous": "", "revision_env": {}},
-        "describe fails": {"revision_env": None},
-    }[case]
+def test_a_first_deploy_goes_live_with_this_deploy(tmp_path):
+    result = _resolve(tmp_path, previous="", revision_env={})
 
-    result = _resolve(tmp_path, **kwargs)
+    assert _outputs(result)["POLICYENGINE_VERSION_LIVE_SINCE"] == NOW
+
+
+@pytest.mark.parametrize(
+    "revision_env",
+    [
+        pytest.param({}, id="revision from before versions were recorded"),
+        pytest.param(
+            {"DEPLOYED_POLICYENGINE_VERSION": "6.11.1"},
+            id="same version without a recorded date",
+        ),
+        pytest.param(None, id="describe fails"),
+    ],
+)
+def test_an_unknown_start_stays_unknown_rather_than_wrong(tmp_path, revision_env):
+    result = _resolve(tmp_path, revision_env=revision_env)
 
     assert _outputs(result) == {
         "DEPLOYED_POLICYENGINE_VERSION": "6.11.1",
-        "POLICYENGINE_VERSION_LIVE_SINCE": NOW,
+        "POLICYENGINE_VERSION_LIVE_SINCE": "",
     }
 
 

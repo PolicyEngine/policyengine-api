@@ -12,7 +12,11 @@
 # POLICYENGINE_LIVE_SINCE_NOW override the lock path and the clock for tests.
 #
 # Prints DEPLOYED_POLICYENGINE_VERSION=... and POLICYENGINE_VERSION_LIVE_SINCE=...
-# A failed lookup falls back to the deploy time; it never fails the deploy.
+# The date is recorded only when this deploy is the event (a new .py version
+# or a first deploy). When the serving revision has the same version but no
+# date (deployed before dates were recorded), or cannot be read, the date is
+# left empty (unknown) rather than set to a later, wrong time. A failed lookup
+# never fails the deploy.
 
 set -euo pipefail
 
@@ -48,11 +52,16 @@ if [[ -n "${previous}" && "${CLOUD_RUN_DRY_RUN:-0}" != "1" ]]; then
     }
     previous_version="$(revision_env DEPLOYED_POLICYENGINE_VERSION)"
     previous_since="$(revision_env POLICYENGINE_VERSION_LIVE_SINCE)"
-    if [[ "${previous_version}" == "${version}" && -n "${previous_since}" ]]; then
+    if [[ "${previous_version}" == "${version}" ]]; then
       live_since="${previous_since}"
+    elif [[ -z "${previous_version}" ]]; then
+      # A revision from before versions were recorded may already serve this
+      # version, so its start is unknown.
+      live_since=""
     fi
   else
-    echo "Could not read ${previous}; .py ${version} is live since this deploy" >&2
+    echo "Could not read ${previous}; when .py ${version} went live is unknown" >&2
+    live_since=""
   fi
 fi
 
