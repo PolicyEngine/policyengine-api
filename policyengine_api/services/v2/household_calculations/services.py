@@ -83,7 +83,7 @@ class V2HouseholdCalculationService:
                     country_id=country_id, policy_id=calculation.policy_id
                 )
             )
-        year = calculation_year(calculation.year, household.default_year)
+        year = calculation_year(household.default_year)
         try:
             catalog = self._catalogs.get_model_by_country(country_id)
         finally:
@@ -117,7 +117,9 @@ class V2HouseholdCalculationService:
                 ),
                 "add_missing_variables": calculation.add_missing_variables,
             },
-            "force": calculation.force,
+            # A calculation is reused for 28 days after it succeeded; callers
+            # without an account must not start new Modal calls at will.
+            "force": False,
             "trigger": "initial",
         }
         spm = saved_spm_choice(household.household_data)

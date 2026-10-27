@@ -12,12 +12,12 @@ class HouseholdCalculationRequest(HouseholdCalculationInput):
 
     ``household_id`` and ``policy_id`` name records of ``country_id`` stored
     through ``/v2/households`` and ``/v2/policies``; without ``policy_id`` the
-    household is calculated under current law. ``year`` defaults to the
-    household's ``default_year``. Each group in ``axes`` varies its inputs
-    together across ``count`` points; several groups form a grid.
+    household is calculated under current law, for the household's
+    ``default_year``. Each group in ``axes`` varies its inputs together across
+    ``count`` points; several groups form a grid of at most 10,000 points.
     ``add_missing_variables`` adds every variable the household lacks before
-    calculating, and ``force`` calculates again even when a recent identical
-    calculation exists.
+    calculating. An identical calculation that succeeded in the last 28 days
+    is returned again instead of being repeated.
     """
 
     def to_service_input(self) -> HouseholdCalculationInput:

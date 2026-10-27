@@ -226,7 +226,8 @@ def test_a_simulation_service_that_cannot_calculate_answers_503(
         },
         {"country_id": "ca"},
         {"unexpected": True},
-        {"year": 1800},
+        {"year": 2026},
+        {"force": True},
     ],
     ids=[
         "axis-count",
@@ -235,6 +236,7 @@ def test_a_simulation_service_that_cannot_calculate_answers_503(
         "country",
         "unknown-field",
         "year",
+        "force",
     ],
 )
 def test_a_malformed_request_is_refused_before_anything_is_read(changes) -> None:

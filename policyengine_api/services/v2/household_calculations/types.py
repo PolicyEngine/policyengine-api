@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
-from policyengine_api.query_parameters import CountryId, DefaultYear
+from policyengine_api.query_parameters import CountryId
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -60,23 +60,21 @@ AxisGroup = Annotated[
 class HouseholdCalculationInput(StrictCalculationModel):
     """A stored household to calculate under a stored policy, or current law.
 
-    ``year`` defaults to the household's default year. ``axes`` vary inputs
+    The calculation's year is the household's default year, the year its
+    values name. ``axes`` vary inputs
     across points: the axes of one group vary together, so they share one
     point count, and the groups form a grid of at most 10,000 points.
     ``add_missing_variables`` adds every yearly, monthly and
     eternal variable the household lacks, as ``/calculate-full`` does.
-    ``force`` calculates again even when a recent calculation can be reused.
     """
 
     country_id: CountryId
     household_id: UUID
     policy_id: UUID | None = None
-    year: DefaultYear | None = None
     axes: Annotated[list[AxisGroup], Field(max_length=MAXIMUM_AXIS_GROUPS)] | None = (
         None
     )
     add_missing_variables: bool = False
-    force: bool = False
 
     @field_validator("axes")
     @classmethod

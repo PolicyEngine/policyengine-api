@@ -261,8 +261,10 @@ for immediate rollback.
 
 `POST /v2/household-calculations` calculates a household stored through
 `/v2/households`, under a policy stored through `/v2/policies` or, without
-`policy_id`, under current law. The body may add `year` (the household's
-`default_year` otherwise), `axes`, `add_missing_variables` and `force`. The
+`policy_id`, under current law, for the household's `default_year`. The body
+may add `axes` and `add_missing_variables`. An identical calculation that
+succeeded in the last 28 days is returned again; callers cannot force a new
+one. The
 Public API checks the country's `countries` row allows household calculations
 (422 otherwise; a household-only country is accepted), reads the household and
 policy through the same services as their routes (404 when either is not
@@ -273,6 +275,13 @@ tables. The answer is 202 with the calculation's `calculation_id` and
 `status`. Poll `GET /v2/household-calculations/{calculation_id}` until
 `status` is `succeeded`, with `result`, or `failed`, with `error`. A US result
 carries `spm_config` and `spm_provenance`.
+
+With `add_missing_variables`, the v2 household function adds each missing
+variable for the year it would choose for `/calculate-full`: the first period
+of the age of a person named `you`, else the current calendar year (UTC). The
+Public API names people by their record IDs, so for a household whose
+`default_year` is not the current year the added variables are requested for
+the current year until the household function takes the calculation's year.
 
 The simulation service stores every calculation as a simulation run, so a
 calculation no account saved is still stored, with no report. Neither route

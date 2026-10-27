@@ -15,7 +15,7 @@ class HouseholdCalculationCountryError(ValueError):
 
 
 class HouseholdCalculationYearError(ValueError):
-    """The request names no year and the household has no default year."""
+    """The household has no default year to calculate."""
 
 
 class HouseholdCalculationNotFoundError(LookupError):
@@ -37,11 +37,9 @@ def require_household_country(
     raise HouseholdCalculationCountryError(msg)
 
 
-def calculation_year(requested_year: int | None, default_year: int | None) -> int:
-    """Return the requested year, or else the household's default year."""
-    if requested_year is not None:
-        return requested_year
+def calculation_year(default_year: int | None) -> int:
+    """Return the household's default year, the year its values name."""
     if default_year is None:
-        msg = "This household has no default year; send the year to calculate."
+        msg = "This household has no default year to calculate."
         raise HouseholdCalculationYearError(msg)
     return default_year

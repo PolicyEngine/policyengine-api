@@ -78,7 +78,7 @@ def test_a_calculation_sends_the_stored_household_policy_and_catalog() -> None:
     parts = Parts()
 
     calculation = parts.service.submit_calculation(
-        calculation_input(axes=AXES, add_missing_variables=True, force=True)
+        calculation_input(axes=AXES, add_missing_variables=True)
     )
 
     (submission,) = parts.simulation.submissions
@@ -99,7 +99,7 @@ def test_a_calculation_sends_the_stored_household_policy_and_catalog() -> None:
             },
         },
         "options": {"axes": AXES, "add_missing_variables": True},
-        "force": True,
+        "force": False,
         "trigger": "initial",
     }
     assert calculation.calculation_id == CALCULATION_ID
@@ -124,17 +124,26 @@ def test_current_law_and_no_saved_choice_send_neither() -> None:
     assert submission["options"] == {"axes": None, "add_missing_variables": False}
 
 
-def test_the_year_is_the_requested_one_or_the_households_default() -> None:
+def test_the_year_is_the_households_default_year() -> None:
     parts = Parts()
+    parts.households.households[("us", HOUSEHOLD_ID)] = household_read(
+        default_year=2027
+    )
 
-    parts.service.submit_calculation(calculation_input(year=2027))
+    parts.service.submit_calculation(calculation_input())
+
+    assert parts.simulation.submissions[0]["year"] == 2027
+
+
+def test_a_household_without_a_default_year_is_refused() -> None:
+    parts = Parts()
     parts.households.households[("us", HOUSEHOLD_ID)] = household_read(
         default_year=None
     )
 
     with pytest.raises(HouseholdCalculationYearError):
         parts.service.submit_calculation(calculation_input())
-    assert [submission["year"] for submission in parts.simulation.submissions] == [2027]
+    assert parts.simulation.submissions == []
 
 
 def test_a_country_without_household_calculations_is_refused_by_name() -> None:

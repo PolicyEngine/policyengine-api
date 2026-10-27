@@ -116,16 +116,12 @@ def calculate(
     client: httpx.Client,
     household: LiveHousehold,
     household_id: str,
-    *,
-    force: bool = False,
 ) -> FinishedCalculation:
     """Submit the stored household's calculation and poll until it finishes."""
     started = time.monotonic()
     body: dict[str, Any] = {
         "country_id": household.country_id,
         "household_id": household_id,
-        "year": int(YEAR),
-        "force": force,
     }
     if household.axes is not None:
         body["axes"] = household.axes
