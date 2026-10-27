@@ -430,6 +430,18 @@ def _uk_request(options: dict, region: str = "uk") -> EconomicImpactRequest:
     )
 
 
+def _us_request(region: str) -> EconomicImpactRequest:
+    return EconomicImpactRequest(
+        country_id="us",
+        policy_id=MOCK_POLICY_ID,
+        baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+        region=region,
+        dataset="default",
+        options={},
+        api_version=MOCK_API_VERSION,
+    )
+
+
 def _submitted_payload_fields(payload: dict) -> dict:
     """Return a submitted payload without its metadata and telemetry."""
     return {
@@ -779,6 +791,102 @@ def test_a_failed_national_job_is_still_replayed(
     mock_simulation_entrypoint.get_execution_by_id.assert_called_once()
     stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
     assert [impact.status for impact in stored] == ["error"]
+
+
+US_STATE_RETRY_NOTE = (
+    "A new run for this state can be requested 2 minutes after this failure."
+)
+
+
+# A bare state code is the legacy spelling of the same region.
+@pytest.mark.parametrize("region", ["state/ca", "ca"])
+def test_a_failed_us_state_job_is_returned_for_two_minutes_then_resubmitted(
+    economy_service, mock_simulation_entrypoint, reform_impact_backend, region
+):
+    mock_simulation_entrypoint.get_execution_id.side_effect = [
+        "first-state-job",
+        "second-state-job",
+    ]
+    _finish_jobs_with(
+        mock_simulation_entrypoint, status="failed", error="out of memory"
+    )
+    request = _us_request(region)
+
+    economy_service.get_economic_impact(request, time_period="2025")
+    failed = economy_service.get_economic_impact(request, time_period="2025")
+    reform_impact_backend.advance(60)
+    within_two_minutes = economy_service.get_economic_impact(
+        request, time_period="2025"
+    )
+    reform_impact_backend.advance(61)
+    retried = economy_service.get_economic_impact(request, time_period="2025")
+
+    expected = EconomicImpactResult.error(
+        f"Simulation entrypoint execution failed: out of memory. {US_STATE_RETRY_NOTE}"
+    )
+    assert failed == expected
+    # Within two minutes the stored failure is returned without a new job.
+    assert within_two_minutes == expected
+    mock_simulation_entrypoint.get_execution_by_id.assert_called_once_with(
+        "first-state-job"
+    )
+    # After that the record has expired and the next request submits again.
+    assert retried == EconomicImpactResult.computing()
+    assert mock_simulation_entrypoint.run.call_count == 2
+    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    assert [
+        (impact.region, impact.execution_id, impact.status) for impact in stored
+    ] == [("state/ca", "second-state-job", "computing")]
+
+
+def test_a_failed_us_national_job_is_still_replayed(
+    economy_service, mock_simulation_entrypoint, reform_impact_backend
+):
+    _finish_jobs_with(
+        mock_simulation_entrypoint, status="failed", error="out of memory"
+    )
+    request = _us_request("us")
+
+    economy_service.get_economic_impact(request, time_period="2025")
+    failed = economy_service.get_economic_impact(request, time_period="2025")
+    reform_impact_backend.advance(121)
+    replayed = economy_service.get_economic_impact(request, time_period="2025")
+
+    expected = EconomicImpactResult.error(
+        "Simulation entrypoint execution failed: out of memory"
+    )
+    assert failed == expected
+    assert replayed == expected
+    mock_simulation_entrypoint.run.assert_called_once()
+    mock_simulation_entrypoint.get_execution_by_id.assert_called_once()
+    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    assert [impact.status for impact in stored] == ["error"]
+
+
+def test_a_failed_us_district_job_is_still_replayed(
+    economy_service, mock_simulation_entrypoint, reform_impact_backend
+):
+    _finish_jobs_with(
+        mock_simulation_entrypoint, status="failed", error="out of memory"
+    )
+    request = _us_request("congressional_district/CA-37")
+
+    economy_service.get_economic_impact(request, time_period="2025")
+    failed = economy_service.get_economic_impact(request, time_period="2025")
+    reform_impact_backend.advance(121)
+    replayed = economy_service.get_economic_impact(request, time_period="2025")
+
+    expected = EconomicImpactResult.error(
+        "Simulation entrypoint execution failed: out of memory"
+    )
+    assert failed == expected
+    assert replayed == expected
+    mock_simulation_entrypoint.run.assert_called_once()
+    mock_simulation_entrypoint.get_execution_by_id.assert_called_once()
+    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    assert [(impact.region, impact.status) for impact in stored] == [
+        ("congressional_district/CA-37", "error")
+    ]
 
 
 @pytest.mark.usefixtures("uk_package_versions")
