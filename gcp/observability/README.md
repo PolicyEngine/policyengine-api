@@ -167,6 +167,13 @@ through `github_client`. Each run:
    label, when production failures that start 24 hours after it closed meet
    the same thresholds.
 
+An issue's "Error rate on affected routes" compares the group's failed
+requests with the `request.completed` records counted on the same route
+templates. Failures with no route, or with a placeholder route such as
+`<unmatched>` (which a service logs for a request that matched none of its
+routes), count in neither. When more requests failed than were logged as
+completed, the rate shows n/a with both counts instead of a percentage.
+
 This repository is public, so issues, workflow logs and job summaries hold
 only fingerprints, counts, service names, exception class names, route
 templates and a Logs Explorer link. Error messages, stack text and

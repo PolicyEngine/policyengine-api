@@ -148,7 +148,17 @@ def window_text(window: ReportingWindow) -> str:
 
 
 def _error_rate(measures: EnvironmentMeasures) -> str:
+    """Return the error rate as a percentage with its counts, or n/a.
+
+    When more requests failed than were logged as completed, a percentage
+    would exceed 100%, so n/a is shown with the two counts instead.
+    """
     if measures.error_rate is None:
+        if 0 < measures.route_requests < measures.route_affected_requests:
+            return (
+                f"{NOT_AVAILABLE} ({measures.route_affected_requests:,} affected "
+                f"requests, only {measures.route_requests:,} logged as completed)"
+            )
         return NOT_AVAILABLE
     return (
         f"{measures.error_rate:.2%} ({measures.route_affected_requests:,} of "

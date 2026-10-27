@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from telemetry_error_issues.normalization import (
     environment_class,
+    is_route_template,
     public_error_type,
     public_family,
     public_operation,
@@ -153,6 +154,17 @@ def _related_fingerprints(
     return related
 
 
+def _error_rate(affected_requests: int, completed_requests: int) -> float | None:
+    """Return the share of completed requests that failed, or None.
+
+    There is no share without completed requests, or when more requests failed
+    than were logged as completed, which means completion records are missing.
+    """
+    if completed_requests == 0 or affected_requests > completed_requests:
+        return None
+    return affected_requests / completed_requests
+
+
 def _environment_measures(
     occurrences: list[Occurrence],
     environment: str,
@@ -165,9 +177,10 @@ def _environment_measures(
     before_window = len(in_environment) - len(in_window)
     affected_requests = len({item.affected_key for item in in_window})
     # The error rate compares failed requests with completed requests on the
-    # same routes, so failures without a route, such as background
-    # operations, are left out of both.
-    on_routes = [item for item in in_window if item.route]
+    # same route templates. Failures without a route, such as background
+    # operations, and failures on a placeholder route, such as "<unmatched>",
+    # are left out of both.
+    on_routes = [item for item in in_window if is_route_template(item.route)]
     route_affected_requests = len({item.affected_key for item in on_routes})
     routes = {item.route for item in on_routes}
     requests = route_requests.total(family, environment, routes)
@@ -180,7 +193,7 @@ def _environment_measures(
         ),
         route_affected_requests=route_affected_requests,
         route_requests=requests,
-        error_rate=route_affected_requests / requests if requests else None,
+        error_rate=_error_rate(route_affected_requests, requests),
         hourly_rate=len(in_window) / window.hours,
         previous_hourly_rate=before_window / window.lookback_hours,
         first_seen=min(timestamps, default=None),
