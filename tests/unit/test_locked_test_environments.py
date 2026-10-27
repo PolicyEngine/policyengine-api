@@ -5,8 +5,8 @@ The Cloud Run image installs with ``uv sync --frozen`` from uv.lock
 (scripts/rules/locked_installs.py, docs/engineering/skills/dependencies.md)
 reports every install and test command in the repository that bypasses
 uv.lock; these tests check what it does not: the Make targets CI calls, the
-Python version each test job selects, and the operational jobs that keep an
-explicit install.
+Python version each test job selects, and how the operational database jobs
+install and run their scripts.
 """
 
 from __future__ import annotations
@@ -38,14 +38,21 @@ EXPECTED_TEST_JOBS = {
     ("push.yml", "parallel-live-simulation-tests-staging-cloud-run"),
     ("v2-integration-check.yml", "catalog-runtime-integration"),
 }
-# Operational jobs that run application code against real databases with the
-# interpreter setup-python provides. They keep an explicit unlocked install
-# until moving them to uv.lock is verified on its own.
-UNLOCKED_OPERATIONAL_JOBS = {
+# Operational jobs that run application code against the staging and
+# production databases. They install the runtime dependencies from uv.lock, as
+# the Cloud Run image does, and run every Python script through uv run --frozen.
+OPERATIONAL_DATABASE_JOBS = {
     ("migrate-v1-cloud-sql.yml", "migrate"),
+}
+# An operational job that still installs unlocked, under a registered
+# exception, until moving it to uv.lock is verified on its own.
+UNLOCKED_OPERATIONAL_JOBS = {
     ("process-v1-household-mirror-event.yml", "process-event"),
 }
 EXPLICIT_UNLOCKED_INSTALL = 'pip install -e ".[dev]"'
+RUNTIME_LOCKED_SYNC = "uv sync --frozen"
+LOCKED_SCRIPT_RUN = "uv run --frozen python scripts/"
+PYTHON_SCRIPT_COMMAND = re.compile(r"\bpython\s+scripts/")
 
 
 class WorkflowJob(NamedTuple):
@@ -135,16 +142,58 @@ def test_test_job_selects_the_production_python_version(job):
     assert PRODUCTION_PYTHON_SETTING in job.job_text
 
 
+def _operational_job(workflow: str, job_id: str) -> WorkflowJob:
+    jobs = {(job.workflow, job.job_id): job for job in _workflow_jobs()}
+    return jobs[(workflow, job_id)]
+
+
 @pytest.mark.parametrize(
     ("workflow", "job_id"), sorted(UNLOCKED_OPERATIONAL_JOBS), ids=str
 )
 def test_operational_job_keeps_an_explicit_install_for_its_python(workflow, job_id):
-    jobs = {(job.workflow, job.job_id): job for job in _workflow_jobs()}
-    executed = jobs[(workflow, job_id)].executed_lines
+    executed = _operational_job(workflow, job_id).executed_lines
 
     # make install now syncs .venv, which the job's bare python never reads.
     assert EXPLICIT_UNLOCKED_INSTALL in executed
     assert "make install" not in executed
+
+
+@pytest.mark.parametrize(
+    ("workflow", "job_id"), sorted(OPERATIONAL_DATABASE_JOBS), ids=str
+)
+def test_operational_job_installs_the_locked_runtime_dependencies(workflow, job_id):
+    executed = [
+        executed_line.strip()
+        for executed_line in _operational_job(workflow, job_id).executed_lines
+    ]
+
+    assert RUNTIME_LOCKED_SYNC in executed
+    assert not [
+        executed_line for executed_line in executed if "pip install" in executed_line
+    ]
+
+
+@pytest.mark.parametrize(
+    ("workflow", "job_id"), sorted(OPERATIONAL_DATABASE_JOBS), ids=str
+)
+def test_operational_job_runs_every_python_script_through_the_lock(workflow, job_id):
+    script_commands = [
+        executed_line
+        for executed_line in _operational_job(workflow, job_id).executed_lines
+        if PYTHON_SCRIPT_COMMAND.search(executed_line)
+    ]
+
+    assert script_commands, f"{workflow} {job_id} runs no Python script"
+    assert all(
+        LOCKED_SCRIPT_RUN in script_command for script_command in script_commands
+    ), script_commands
+
+
+@pytest.mark.parametrize(
+    ("workflow", "job_id"), sorted(OPERATIONAL_DATABASE_JOBS), ids=str
+)
+def test_operational_job_selects_the_production_python_version(workflow, job_id):
+    assert PRODUCTION_PYTHON_SETTING in _operational_job(workflow, job_id).job_text
 
 
 def _setup_uv_version(workflow: str, job_id: str) -> str:
@@ -161,5 +210,16 @@ def test_lock_check_uses_the_uv_version_that_locks_releases():
     # quality-guards runs uv lock --check; a different uv can read or write
     # another lock revision than the versioning job's uv lock does.
     assert _setup_uv_version("pr.yml", "quality-guards") == _setup_uv_version(
+        "push.yml", "versioning"
+    )
+
+
+@pytest.mark.parametrize(
+    ("workflow", "job_id"), sorted(OPERATIONAL_DATABASE_JOBS), ids=str
+)
+def test_operational_job_uses_the_uv_version_that_locks_releases(workflow, job_id):
+    # A different uv can read another lock revision than the one the
+    # versioning job's uv lock writes.
+    assert _setup_uv_version(workflow, job_id) == _setup_uv_version(
         "push.yml", "versioning"
     )
