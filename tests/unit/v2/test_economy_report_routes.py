@@ -35,6 +35,7 @@ from policyengine_api.services.v2.economy_reports.validators import (
 from policyengine_api.services.v2.simulation_entrypoint.types import (
     ReportStatus,
     SimulationChoice,
+    SimulationRecordUnreadableError,
     SimulationRequestRefusedError,
     SimulationServiceUnavailableError,
 )
@@ -676,3 +677,18 @@ def test_a_household_only_submission_is_a_422_even_without_the_client(
     assert response.json()["message"] == (
         "Economy reports are not available for country 'us'"
     )
+
+
+def test_a_report_whose_result_cannot_be_read_back_is_a_bad_gateway() -> None:
+    simulation = FakeEconomyReportSimulation(report_record(run=report_run_record()))
+    simulation.error = SimulationRecordUnreadableError(
+        "The report's stored result cannot be read back."
+    )
+
+    response = _client(simulation).get(f"/v2/reports/{REPORT_ID}?country_id=us")
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "status": "error",
+        "message": "The simulation service cannot read back this report's result",
+    }

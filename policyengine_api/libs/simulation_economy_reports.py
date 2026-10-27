@@ -13,9 +13,15 @@ so requests always go to ``SIMULATION_ENTRYPOINT_URL``, whichever entrypoint
 token, which needs ``simulation:submit`` to submit and ``simulation:read``
 to read.
 
-The generated client parses only the success answers the entrypoint's
-OpenAPI document describes. Its refusals (404, 422 with a text ``detail``,
-503) are read by a response hook before the generated parser sees them.
+The entrypoint's OpenAPI document declares its error answers, so the
+generated client parses them too: 404 (no such record), 422 (it cannot run
+the request, with its reason or the refused fields), 503 (it is not
+configured), and, for report reads, 500 (a succeeded run's stored result
+cannot be read back). Each becomes one of the protocol's errors. A 404 whose
+``detail`` is exactly "Not Found" is FastAPI's answer for a route the
+entrypoint does not serve, such as a revision without these routes, so it
+means the entrypoint cannot be used rather than that the record is missing;
+the entrypoint's own 404s name the missing record.
 """
 
 from __future__ import annotations
@@ -34,6 +40,8 @@ from policyengine_api_simulation_client.api.default import (
     submit_economy_report,
 )
 from policyengine_api_simulation_client.models import (
+    EconomyErrorResponse,
+    EconomyRefusalResponse,
     EconomyReportResponse,
     EconomyReportRunRequest,
     EconomyReportRunRequestTrigger,
@@ -64,6 +72,7 @@ from policyengine_api.services.v2.simulation_entrypoint.types import (
     RunError,
     SimulationRecord,
     SimulationRecordNotFoundError,
+    SimulationRecordUnreadableError,
     SimulationRequestRefusedError,
     SimulationRunRecord,
     SimulationServiceUnavailableError,
@@ -87,48 +96,34 @@ if TYPE_CHECKING:
     )
 
 SIMULATION_ENTRYPOINT_URL_ENV = "SIMULATION_ENTRYPOINT_URL"
+# FastAPI's 404 detail for a route the application does not serve.
+UNSERVED_ROUTE_DETAIL = "Not Found"
 REQUEST_TIMEOUT_SECONDS = 30.0
 ParsedT = TypeVar("ParsedT")
 
 
-def _refusal_reason(response: httpx.Response) -> str:
-    """Return the ``detail`` of an error answer as text."""
-    try:
-        detail = response.json().get("detail")
-    except (ValueError, AttributeError):
-        return response.text[:500] or f"HTTP {response.status_code}"
-    if isinstance(detail, str) and detail:
-        return detail
-    if isinstance(detail, list) and detail:
-        return "; ".join(
-            ".".join(str(part) for part in problem.get("loc", ()))
-            + f": {problem.get('msg', '')}"
-            if isinstance(problem, dict)
-            else str(problem)
-            for problem in detail
-        )
-    return f"HTTP {response.status_code}"
+def _refusal_reason(refusal: EconomyRefusalResponse) -> str:
+    """Return a 422's reason: the entrypoint's text, or each refused field."""
+    if isinstance(refusal.detail, str):
+        return refusal.detail
+    return "; ".join(
+        ".".join(str(part) for part in field_error.loc) + f": {field_error.msg}"
+        for field_error in refusal.detail
+    )
 
 
-def _raise_for_refusal(response: httpx.Response) -> None:
-    """Raise the typed error for an error answer, before the generated parser runs.
-
-    A 401 passes, so the gateway auth can fetch a new token and send the request
-    again; a second 401 reaches ``_parsed`` and is reported as unavailable.
-    """
-    if response.status_code < httpx.codes.BAD_REQUEST:
+def _raise_declared_error(status_code: int, answer: object) -> None:
+    """Raise the protocol's error for one of the entrypoint's declared answers."""
+    if isinstance(answer, EconomyRefusalResponse):
+        raise SimulationRequestRefusedError(_refusal_reason(answer))
+    if not isinstance(answer, EconomyErrorResponse):
         return
-    if response.status_code == httpx.codes.UNAUTHORIZED:
-        return
-    response.read()
-    reason = _refusal_reason(response)
-    if response.status_code == httpx.codes.NOT_FOUND:
-        raise SimulationRecordNotFoundError(reason)
-    if response.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
-        raise SimulationRequestRefusedError(reason)
+    if status_code == httpx.codes.NOT_FOUND and answer.detail != UNSERVED_ROUTE_DETAIL:
+        raise SimulationRecordNotFoundError(answer.detail)
+    if status_code == httpx.codes.INTERNAL_SERVER_ERROR:
+        raise SimulationRecordUnreadableError(answer.detail)
     msg = (
-        f"the Simulation Entrypoint answered HTTP {response.status_code}: "
-        f"{reason[:200]}"
+        f"the Simulation Entrypoint answered HTTP {status_code}: {answer.detail[:200]}"
     )
     raise SimulationServiceUnavailableError(msg)
 
@@ -136,17 +131,12 @@ def _raise_for_refusal(response: httpx.Response) -> None:
 def _parsed(call: Callable[[], Response[Any]], expected: type[ParsedT]) -> ParsedT:
     """Run one generated route call and return its parsed success answer.
 
-    Network failures, a gateway token that cannot be fetched, other answers
-    and answers that do not parse mean the entrypoint cannot be used now.
+    A declared error answer raises its protocol error. Network failures, a
+    gateway token that cannot be fetched, undeclared answers and answers that
+    do not parse mean the entrypoint cannot be used now.
     """
     try:
         response = call()
-    except (
-        SimulationRecordNotFoundError,
-        SimulationRequestRefusedError,
-        SimulationServiceUnavailableError,
-    ):
-        raise
     except httpx.HTTPError as error:
         msg = f"the Simulation Entrypoint could not be reached: {type(error).__name__}"
         raise SimulationServiceUnavailableError(msg) from error
@@ -155,13 +145,14 @@ def _parsed(call: Callable[[], Response[Any]], expected: type[ParsedT]) -> Parse
         raise SimulationServiceUnavailableError(msg) from error
     except (KeyError, TypeError, ValueError, AttributeError) as error:
         _raise_unreadable(error)
-    if not isinstance(response.parsed, expected):
-        msg = (
-            "the Simulation Entrypoint answered HTTP "
-            f"{int(response.status_code)} without the expected body"
-        )
-        raise SimulationServiceUnavailableError(msg)
-    return response.parsed
+    if isinstance(response.parsed, expected):
+        return response.parsed
+    _raise_declared_error(int(response.status_code), response.parsed)
+    msg = (
+        "the Simulation Entrypoint answered HTTP "
+        f"{int(response.status_code)} without the expected body"
+    )
+    raise SimulationServiceUnavailableError(msg)
 
 
 def _raise_unreadable(error: Exception) -> NoReturn:
@@ -364,10 +355,7 @@ def simulation_entrypoint_economy_reports(
         timeout=REQUEST_TIMEOUT_SECONDS,
         auth=auth,
         transport=transport,
-        event_hooks={
-            "request": [attach_request_identifiers],
-            "response": [_raise_for_refusal],
-        },
+        event_hooks={"request": [attach_request_identifiers]},
     )
     instrument_httpx(http_client, get_runtime())
     # The httpx client carries the refreshing gateway token, so the generated

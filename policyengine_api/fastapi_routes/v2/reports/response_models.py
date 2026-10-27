@@ -228,6 +228,13 @@ REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": "The operation could not be completed.",
     },
+    502: {
+        "model": V2ErrorResponse,
+        "description": (
+            "The simulation service has the report but cannot read back its "
+            "stored result."
+        ),
+    },
     503: {
         "model": V2ErrorResponse,
         "description": "The simulation service or the v2 database is unavailable.",

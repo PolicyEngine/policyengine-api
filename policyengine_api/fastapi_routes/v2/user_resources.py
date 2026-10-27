@@ -32,6 +32,7 @@ from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
 )
 from policyengine_api.services.v2.simulation_entrypoint.types import (
+    SimulationRecordUnreadableError,
     SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.simulation_refs.validators import (
@@ -221,6 +222,12 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
         (IntegrityError,), 409, "The record conflicts with stored state"
     ),
     UserResourceFailure((AccountIdentityDeletionError,), 502),
+    UserResourceFailure(
+        (SimulationRecordUnreadableError,),
+        502,
+        "The simulation service cannot read back this report",
+        logged_event="v2_user_simulation_record_unreadable",
+    ),
     UserResourceFailure((AccountDeletionUnavailableError,), 503),
     UserResourceFailure(
         (SimulationServiceUnavailableError,),

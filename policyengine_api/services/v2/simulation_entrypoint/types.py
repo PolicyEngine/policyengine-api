@@ -171,6 +171,13 @@ class SimulationRecordNotFoundError(LookupError):
     """The Simulation Entrypoint has no such report or simulation."""
 
 
+class SimulationRecordUnreadableError(RuntimeError):
+    """The Simulation Entrypoint has the report but cannot read back its result.
+
+    It answers this when a succeeded run's stored result cannot be rebuilt.
+    """
+
+
 class SimulationRequestRefusedError(ValueError):
     """The Simulation Entrypoint cannot run the request; the message says why.
 
@@ -192,7 +199,9 @@ class EconomyReportSimulation(Protocol):
     """The Simulation Entrypoint's economy report routes.
 
     Every method raises ``SimulationServiceUnavailableError`` when the
-    entrypoint cannot be used.
+    entrypoint cannot be used, and the methods that read a report raise
+    ``SimulationRecordUnreadableError`` when its stored result cannot be read
+    back.
     """
 
     def submit_report(self, submission: EconomyReportSubmission) -> EconomyReportRecord:

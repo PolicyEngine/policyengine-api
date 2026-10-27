@@ -55,6 +55,7 @@ from policyengine_api.services.v2.economy_reports.validators import (
     EconomyReportsUnsupportedError,
 )
 from policyengine_api.services.v2.simulation_entrypoint.types import (
+    SimulationRecordUnreadableError,
     SimulationRequestRefusedError,
     SimulationServiceUnavailableError,
 )
@@ -104,6 +105,11 @@ REPORT_REFUSALS: tuple[type[Exception], ...] = (
 )
 REPORT_ERROR_MAPPINGS = (
     V2ErrorMapping((EconomyReportNotFoundError,), 404),
+    V2ErrorMapping(
+        (SimulationRecordUnreadableError,),
+        502,
+        "The simulation service cannot read back this report's result",
+    ),
     V2ErrorMapping(
         (EconomyReportsUnsupportedError, SimulationRequestRefusedError), 422
     ),

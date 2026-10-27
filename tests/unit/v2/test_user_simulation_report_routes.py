@@ -17,6 +17,7 @@ from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
 )
 from policyengine_api.services.v2.simulation_entrypoint.types import (
+    SimulationRecordUnreadableError,
     SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.simulation_refs.validators import (
@@ -295,6 +296,7 @@ def test_report_create_rejects_invalid_v3_payloads(changes: dict) -> None:
         (SimulationReferenceNotFoundError("v2 report was not found"), 422),
         (UserReportNotFoundError("association was not found"), 404),
         (SimulationServiceUnavailableError("HTTP 503"), 503),
+        (SimulationRecordUnreadableError("stored result cannot be read back"), 502),
         (
             AssociationReferenceConflictError(
                 "v2 report was not migrated from v1 report 616"
@@ -549,3 +551,13 @@ def test_a_simulation_is_repointed_by_its_v2_id_but_never_left_without_one() -> 
     assert simulations.calls[0][1]["association_input"].model_fields_set == {
         "simulation_id"
     }
+
+
+def test_openapi_declares_the_unreadable_report_answer_where_it_can_occur() -> None:
+    client, _simulations, _reports = _clients()
+
+    paths = client.get("/v2/openapi.json").json()["paths"]
+
+    assert "502" in paths["/v2/user-reports"]["post"]["responses"]
+    assert "502" in paths["/v2/user-reports/{association_id}"]["patch"]["responses"]
+    assert "502" not in paths["/v2/user-reports/{association_id}"]["get"]["responses"]

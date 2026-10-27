@@ -36,6 +36,7 @@ from policyengine_api.services.v2.simulation_entrypoint.types import (
     SimulationChoice,
     SimulationRecord,
     SimulationRecordNotFoundError,
+    SimulationRecordUnreadableError,
     SimulationRequestRefusedError,
     SimulationRunRecord,
     SimulationServiceUnavailableError,
@@ -377,14 +378,62 @@ def test_a_simulation_reads_back() -> None:
 def test_an_unknown_report_or_simulation_is_not_found() -> None:
     entrypoint = SimulationEntrypointStub(
         httpx.Response(404, json={"detail": f"no economy report {REPORT_ID}"}),
-        httpx.Response(404, json={"detail": "no simulation"}),
+        httpx.Response(404, json={"detail": "no economy report 615"}),
+        httpx.Response(404, json={"detail": f"no report {REPORT_ID}"}),
+        httpx.Response(404, json={"detail": f"no economy report {REPORT_ID}"}),
+        httpx.Response(404, json={"detail": f"no simulation {REFORM_SIMULATION_ID}"}),
+    )
+    adapter = entrypoint.adapter()
+    reads = (
+        lambda: adapter.get_report(REPORT_ID),
+        lambda: adapter.get_report_by_legacy_id(615),
+        lambda: adapter.run_report(
+            REPORT_ID,
+            policyengine_version="6.7.5",
+            trigger=RunTrigger.MANUAL,
+            force=False,
+        ),
+        lambda: adapter.list_report_runs(REPORT_ID),
+        lambda: adapter.get_simulation(REFORM_SIMULATION_ID),
+    )
+
+    for read in reads:
+        with pytest.raises(SimulationRecordNotFoundError):
+            read()
+
+
+def test_a_route_the_entrypoint_does_not_serve_means_it_is_unavailable() -> None:
+    """FastAPI answers 404 "Not Found" for a route sim does not serve."""
+    entrypoint = SimulationEntrypointStub(
+        *(httpx.Response(404, json={"detail": "Not Found"}) for _ in range(3))
     )
     adapter = entrypoint.adapter()
 
-    with pytest.raises(SimulationRecordNotFoundError):
-        adapter.get_report(REPORT_ID)
-    with pytest.raises(SimulationRecordNotFoundError):
-        adapter.get_simulation(REFORM_SIMULATION_ID)
+    for read in (
+        lambda: adapter.get_report(REPORT_ID),
+        lambda: adapter.get_simulation(REFORM_SIMULATION_ID),
+        lambda: adapter.submit_report(_submission()),
+    ):
+        with pytest.raises(SimulationServiceUnavailableError) as raised:
+            read()
+        assert "404" in str(raised.value)
+
+
+def test_a_stored_result_that_cannot_be_read_back_is_reported() -> None:
+    detail = "The report's stored result cannot be read back."
+    entrypoint = SimulationEntrypointStub(
+        httpx.Response(500, json={"detail": detail}),
+        httpx.Response(500, json={"detail": detail}),
+    )
+    adapter = entrypoint.adapter()
+
+    for read in (
+        lambda: adapter.get_report(REPORT_ID),
+        lambda: adapter.get_report_by_legacy_id(615),
+    ):
+        with pytest.raises(SimulationRecordUnreadableError) as raised:
+            read()
+        assert str(raised.value) == detail
 
 
 def test_a_refusal_carries_the_entrypoint_reason() -> None:
