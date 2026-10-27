@@ -256,3 +256,39 @@ Apply the reviewed schema revisions and application image only to independently
 verified production targets. Enable native v2 use and v1 create copying as
 separate operational decisions and retain the preceding application revision
 for immediate rollback.
+
+## Household Calculations
+
+`POST /v2/household-calculations` calculates a household stored through
+`/v2/households`, under a policy stored through `/v2/policies` or, without
+`policy_id`, under current law. The body may add `year` (the household's
+`default_year` otherwise), `axes`, `add_missing_variables` and `force`. The
+Public API checks the country's `countries` row allows household calculations
+(422 otherwise; a household-only country is accepted), reads the household and
+policy through the same services as their routes (404 when either is not
+stored in that country), selects the country's running catalog version, and
+sends the household in the situation shape, its saved SPM choice and the
+policy's parameter values to the simulation service, which cannot read these
+tables. The answer is 202 with the calculation's `calculation_id` and
+`status`. Poll `GET /v2/household-calculations/{calculation_id}` until
+`status` is `succeeded`, with `result`, or `failed`, with `error`. A US result
+carries `spm_config` and `spm_provenance`.
+
+The simulation service stores every calculation as a simulation run, so a
+calculation no account saved is still stored, with no report. Neither route
+needs an account.
+
+The routes always call the Cloud Run Simulation Entrypoint, whatever
+`SIM_ENTRYPOINT` selects, because only it serves v2 calculations. They read:
+
+- `SIMULATION_ENTRYPOINT_URL`: the `staging` and `production` environment
+  secret of the same name, passed to the deployment job's `env:` and written
+  to the Cloud Run revision by `deploy_cloud_run_candidate.sh` when set.
+- `GATEWAY_AUTH_ISSUER`, `GATEWAY_AUTH_AUDIENCE`, `GATEWAY_AUTH_CLIENT_ID` and
+  `GATEWAY_AUTH_CLIENT_SECRET_RESOURCE`: the organization secrets already used
+  for every simulation call, with `GATEWAY_AUTH_REQUIRED=1`.
+
+Without the URL, or with gateway auth partly configured, both routes answer
+503. They also answer 503 when the simulation service cannot be reached,
+answers with an error, or refuses the calculation (for example when no v2
+worker is deployed for the catalog version's PolicyEngine.py version).

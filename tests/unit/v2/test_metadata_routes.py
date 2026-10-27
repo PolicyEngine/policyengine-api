@@ -642,6 +642,8 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/countries",
         "/v2/households",
         "/v2/households/{household_id}",
+        "/v2/household-calculations",
+        "/v2/household-calculations/{calculation_id}",
         "/v2/policies",
         "/v2/policies/{policy_id}",
         "/v2/user-households",

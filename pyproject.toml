@@ -64,6 +64,7 @@ dependencies = [
     "psycopg[binary]>=3.3,<4",
     "pyjwt[crypto]>=2.10,<3",
     "typing-extensions>=4.4,<5",
+    "policyengine-api-simulation-client>=0.20261027.288",
 ]
 
 [project.optional-dependencies]
@@ -249,6 +250,7 @@ runtime-evaluated-base-classes = [
     "policyengine_api.data.v2.models.base.TimestampedModel",
     "policyengine_api.data.v2.models.comparison_runs.Stage12RunTimestamps",
     "policyengine_api.data.v2.models.reports.GeographicImpactBase",
+    "policyengine_api.fastapi_routes.v2.household_calculations.response_models.StrictHouseholdCalculationAPIModel",
     "policyengine_api.fastapi_routes.v2.households.document_models.HouseholdEntityRecord",
     "policyengine_api.fastapi_routes.v2.households.document_models.StrictHouseholdDocumentModel",
     "policyengine_api.fastapi_routes.v2.households.response_models.HouseholdSuccessResponse",
@@ -273,6 +275,8 @@ runtime-evaluated-base-classes = [
     "policyengine_api.query_parameters.PaginationQuery",
     "policyengine_api.query_parameters.StrictQueryParameters",
     "policyengine_api.services.v2.associations.types.StrictAssociationModel",
+    "policyengine_api.services.v2.household_calculations.types.HouseholdCalculationInput",
+    "policyengine_api.services.v2.household_calculations.types.StrictCalculationModel",
     "policyengine_api.services.v2.households.types.HouseholdCreationInput",
     "policyengine_api.services.v2.households.types.StrictHouseholdInput",
     "policyengine_api.services.v2.metadata.types.MetadataModelVersion",
