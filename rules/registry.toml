@@ -64,6 +64,7 @@ guard_test_globs = [
 ]
 extra_guard_tests = [
   "tests/unit/v2/test_catalog_extraction.py::test_extractor_has_no_direct_core_country_or_v1_metadata_imports",
+  "tests/unit/v2/test_catalog_extraction.py::test_extractor_modules_have_no_direct_core_country_or_v1_metadata_imports",
   "tests/unit/v2/test_catalog_initialization.py::test_initializer_is_not_imported_by_application_startup_modules",
   "tests/unit/v2/test_metadata_service.py::test_read_modules_import_no_policyengine_or_v1_metadata_source",
   "tests/unit/v2/test_model_persistence.py::test_v2_models_do_not_create_a_parallel_sqlalchemy_orm_layer",
@@ -514,7 +515,10 @@ status = "enforced"
 autofix = false
 [rule.enforcer]
 kind = "pytest"
-nodes = ["tests/unit/v2/test_catalog_extraction.py::test_extractor_has_no_direct_core_country_or_v1_metadata_imports"]
+nodes = [
+  "tests/unit/v2/test_catalog_extraction.py::test_extractor_has_no_direct_core_country_or_v1_metadata_imports",
+  "tests/unit/v2/test_catalog_extraction.py::test_extractor_modules_have_no_direct_core_country_or_v1_metadata_imports",
+]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "test"
@@ -1042,6 +1046,8 @@ paths = [
   "policyengine_api/query_parameters.py",
   "policyengine_api/fastapi_routes/query_parameters.py",
   "policyengine_api/fastapi_routes/dependencies.py",
+  "policyengine_api/fastapi_routes/metadata_protocols.py",
+  "policyengine_api/fastapi_routes/resource_service_protocols.py",
   "policyengine_api/fastapi_routes/v2",
   "policyengine_api/services/v2",
   "policyengine_api/libs/user_auth.py",
@@ -1104,7 +1110,7 @@ job = "quality-guards"
 invocation = "run_quality_guards.py"
 [rule.baseline]
 file = "rules/baselines/file-length.txt"
-count = 3
+count = 1
 [rule.proof]
 bad_fixture = "rules/fixtures/api.quality.file-length/bad_tree.toml"
 good_fixture = "rules/fixtures/api.quality.file-length/good_tree.toml"
