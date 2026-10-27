@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 import dpath
-import pandas as pd
 from policyengine_core.model_api import Enum, Reform, Variable
 from policyengine_core.parameters import (
     Parameter,
@@ -30,6 +29,7 @@ from policyengine_core.types import ArrayLike
 from policyengine_api.constants import (
     UK_COUNTRY_REGIONS,
     get_bundle_default_dataset_option,
+    get_py_uk_area_names,
 )
 from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
@@ -197,11 +197,6 @@ class PolicyEngineCountry:
         #   time_period: [{ name: 2022, label: "2022", ... }] }
         options = {}
         if self.country_id == "uk":
-            constituency_names_path = (
-                Path(__file__).parent / "data" / "constituencies_2024.csv"
-            )
-            constituency_names = pd.read_csv(constituency_names_path)
-            constituency_names = constituency_names.sort_values("name")
             region = [
                 {"name": "uk", "label": "the UK", "type": "national"},
                 *(
@@ -209,26 +204,16 @@ class PolicyEngineCountry:
                     for name, label in UK_COUNTRY_REGIONS
                 ),
             ]
+            # Constituencies, then local authorities, each sorted by name, from
+            # the area lists .py builds its UK region registry from.
             region.extend(
                 {
-                    "name": f"constituency/{constituency_names.iloc[i]['name']}",
-                    "label": constituency_names.iloc[i]["name"],
-                    "type": "constituency",
+                    "name": f"{area_type}/{area_name}",
+                    "label": area_name,
+                    "type": area_type,
                 }
-                for i in range(len(constituency_names))
-            )
-            local_authority_names_path = (
-                Path(__file__).parent / "data" / "local_authorities_2021.csv"
-            )
-            local_authority_names = pd.read_csv(local_authority_names_path)
-            local_authority_names = local_authority_names.sort_values("name")
-            region.extend(
-                {
-                    "name": f"local_authority/{local_authority_names.iloc[i]['name']}",
-                    "label": local_authority_names.iloc[i]["name"],
-                    "type": "local_authority",
-                }
-                for i in range(len(local_authority_names))
+                for area_type in ("constituency", "local_authority")
+                for area_name in sorted(get_py_uk_area_names(area_type))
             )
             time_period = [
                 {"name": 2024, "label": "2024"},

@@ -1,14 +1,13 @@
 import json
 from collections import Counter
 from datetime import date, datetime
+from importlib.metadata import distribution
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-import pandas as pd
 import pytest
 from policyengine.countries.uk.regions import build_uk_region_registry
-from policyengine.data.uk_geography_assets import packaged_uk_area_list_path
 from policyengine_core.enums import EnumArray
 from policyengine_core.model_api import Enum
 
@@ -19,14 +18,20 @@ from policyengine_api.country import (
     get_requested_computations,
 )
 
-AREA_LIST_DIRECTORY = Path(__file__).parents[2] / "policyengine_api" / "data"
 RECORDED_UK_REGION_OPTIONS_PATH = (
     Path(__file__).parents[1] / "data" / "uk_economy_region_options.json"
 )
+UK_AREA_TYPES = ("constituency", "local_authority")
 
 
-def _names_by_code(area_list: pd.DataFrame) -> dict[str, str]:
-    return dict(zip(area_list["code"], area_list["name"], strict=True))
+class _InstalledWheelStandIn:
+    """Stands in for an installed wheel whose files are under ``root``."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+
+    def locate_file(self, path: str) -> Path:
+        return self.root / path
 
 
 class ExampleEnum(Enum):
@@ -209,7 +214,7 @@ class TestAxisResults:
 
 
 class TestUKCountryMetadata:
-    """Tests for UK country metadata, specifically local authority loading."""
+    """Tests for UK country metadata, specifically its region options."""
 
     @pytest.fixture
     def uk_country(self):
@@ -241,30 +246,90 @@ class TestUKCountryMetadata:
             "type": "local_authority",
         } in uk_regions
 
-    def test__every_local_authority_resolves_in_the_policyengine_registry(
-        self, uk_regions
-    ):
-        """Each offered name matches a .py registry label, ignoring case.
+    def test__area_regions_equal_the_policyengine_registry(self, uk_regions):
+        """The constituency and local-authority options are .py's registry areas.
 
-        The simulation API resolves ``local_authority/{name}`` to the registry
-        code whose label matches the name, ignoring case.
+        Each option's name is ``<type>/<label>`` and its label is the registry
+        label, with each type's areas sorted by label. The simulation API
+        resolves ``<type>/<label>`` to the registry code with that label.
         """
         registry = build_uk_region_registry(
-            include_constituencies=False, include_local_authorities=True
+            include_constituencies=True, include_local_authorities=True
         )
-        registry_labels = {
-            region.label.casefold(): region.code
-            for region in registry.get_by_type("local_authority")
-        }
-        offered = [
-            region["label"]
-            for region in uk_regions
-            if region.get("type") == "local_authority"
+        registry_areas = [
+            {"name": f"{area_type}/{label}", "label": label, "type": area_type}
+            for area_type in UK_AREA_TYPES
+            for label in sorted(
+                region.label for region in registry.get_by_type(area_type)
+            )
         ]
-        assert [
-            label for label in offered if label.casefold() not in registry_labels
-        ] == []
-        assert registry_labels["ards and north down"] == "local_authority/N09000011"
+
+        offered_areas = [
+            region for region in uk_regions if region["type"] in UK_AREA_TYPES
+        ]
+
+        assert len(offered_areas) == 650 + 361
+        assert offered_areas == registry_areas
+
+    def test__area_regions_follow_the_installed_policyengine_area_lists(
+        self, uk_country, monkeypatch, tmp_path
+    ):
+        """The area options come from the area lists in the installed .py wheel.
+
+        A stand-in wheel lists two areas of each type, out of name order. The
+        options offer exactly those areas, sorted by name.
+        """
+        area_list_directory = tmp_path / "policyengine" / "data" / "uk_geography"
+        area_list_directory.mkdir(parents=True)
+        (area_list_directory / "constituencies_2024.csv").write_text(
+            "code,name,x,y\n"
+            "E14999998,Zeta Test Constituency,1,2\n"
+            "E14999999,Alpha Test Constituency,3,4\n",
+            encoding="utf-8",
+        )
+        (area_list_directory / "local_authorities_2023.csv").write_text(
+            "code,name,x,y\n"
+            "E06999998,Zeta Test Authority,1,2\n"
+            'E06999999,"Alpha Test Authority, City of",3,4\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            "policyengine_api.constants.distribution",
+            lambda name: (
+                _InstalledWheelStandIn(tmp_path)
+                if name == "policyengine"
+                else distribution(name)
+            ),
+        )
+
+        area_options = [
+            region
+            for region in uk_country.build_microsimulation_options()["region"]
+            if region["type"] in UK_AREA_TYPES
+        ]
+
+        assert area_options == [
+            {
+                "name": "constituency/Alpha Test Constituency",
+                "label": "Alpha Test Constituency",
+                "type": "constituency",
+            },
+            {
+                "name": "constituency/Zeta Test Constituency",
+                "label": "Zeta Test Constituency",
+                "type": "constituency",
+            },
+            {
+                "name": "local_authority/Alpha Test Authority, City of",
+                "label": "Alpha Test Authority, City of",
+                "type": "local_authority",
+            },
+            {
+                "name": "local_authority/Zeta Test Authority",
+                "label": "Zeta Test Authority",
+                "type": "local_authority",
+            },
+        ]
 
     def test__local_authority_regions_have_correct_name_format(self, uk_regions):
         """Verify local authority region names have the correct prefix."""
@@ -339,103 +404,6 @@ class TestUKCountryMetadata:
             "local_authority": 361,
         }
         assert uk_regions == recorded_regions
-
-
-class TestLocalAuthoritiesDataFile:
-    """Tests for the local authorities CSV data file."""
-
-    @pytest.fixture
-    def local_authorities_df(self):
-        return pd.read_csv(AREA_LIST_DIRECTORY / "local_authorities_2021.csv")
-
-    def test__file_has_only_code_and_name_columns(self, local_authorities_df):
-        """The file holds each authority's code and name, and no hex-map position."""
-        assert list(local_authorities_df.columns) == ["code", "name"]
-
-    def test__file_has_361_local_authorities(self, local_authorities_df):
-        """Verify the correct number of local authorities in file."""
-        assert len(local_authorities_df) == 361
-
-    def test__file_matches_the_installed_policyengine_list(self, local_authorities_df):
-        """Codes and names equal .py's packaged 2023 list.
-
-        .py's list is read from the installed package, so a .py update that
-        changes a code or a name makes this test fail until the file follows.
-        """
-        policyengine_list = pd.read_csv(packaged_uk_area_list_path("local_authority"))
-
-        assert _names_by_code(local_authorities_df) == _names_by_code(policyengine_list)
-
-    def test__all_codes_are_valid_ons_codes(self, local_authorities_df):
-        """Verify all codes follow ONS local authority code patterns."""
-        for code in local_authorities_df["code"]:
-            # ONS codes start with E (England), S (Scotland), W (Wales), or N
-            # (Northern Ireland)
-            assert code[0] in ["E", "S", "W", "N"]
-
-    def test__all_names_are_non_empty(self, local_authorities_df):
-        """Verify all local authority names are non-empty."""
-        for name in local_authorities_df["name"]:
-            assert len(str(name)) > 0
-
-    def test__english_local_authorities_have_e_prefix(self, local_authorities_df):
-        """Verify English local authorities have E prefix codes."""
-        english_las = local_authorities_df[
-            local_authorities_df["code"].str.startswith("E")
-        ]
-        # England has 296 local authorities (majority of the 361 total)
-        assert len(english_las) == 296
-
-    def test__scottish_local_authorities_have_s_prefix(self, local_authorities_df):
-        """Verify Scottish local authorities have S prefix codes."""
-        scottish_las = local_authorities_df[
-            local_authorities_df["code"].str.startswith("S")
-        ]
-        # Scotland has 32 council areas
-        assert len(scottish_las) == 32
-
-    def test__welsh_local_authorities_have_w_prefix(self, local_authorities_df):
-        """Verify Welsh local authorities have W prefix codes."""
-        welsh_las = local_authorities_df[
-            local_authorities_df["code"].str.startswith("W")
-        ]
-        # Wales has 22 principal areas
-        assert len(welsh_las) == 22
-
-    def test__northern_irish_local_authorities_have_n_prefix(
-        self, local_authorities_df
-    ):
-        """Verify all 11 Northern Ireland districts have N prefix codes."""
-        northern_irish_las = local_authorities_df[
-            local_authorities_df["code"].str.startswith("N")
-        ]
-        assert len(northern_irish_las) == 11
-        assert "N09000011" in set(northern_irish_las["code"])
-
-
-class TestConstituenciesDataFile:
-    """Tests for the 2024 constituencies CSV data file."""
-
-    @pytest.fixture
-    def constituencies_df(self):
-        return pd.read_csv(AREA_LIST_DIRECTORY / "constituencies_2024.csv")
-
-    def test__file_has_only_code_and_name_columns(self, constituencies_df):
-        """The file holds each constituency's code and name, and no hex-map position."""
-        assert list(constituencies_df.columns) == ["code", "name"]
-
-    def test__file_has_650_constituencies(self, constituencies_df):
-        assert len(constituencies_df) == 650
-
-    def test__file_matches_the_installed_policyengine_list(self, constituencies_df):
-        """Codes and names equal .py's packaged 2024 constituency list.
-
-        .py's list is read from the installed package, so a .py update that
-        changes a code or a name makes this test fail until the file follows.
-        """
-        policyengine_list = pd.read_csv(packaged_uk_area_list_path("constituency"))
-
-        assert _names_by_code(constituencies_df) == _names_by_code(policyengine_list)
 
 
 class TestSimulationCompatibility:
