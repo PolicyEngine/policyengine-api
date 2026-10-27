@@ -1,3 +1,10 @@
+## [5.10.2] - 2026-10-27
+
+### Changed
+
+- Added a daily workflow that relocks uv.lock, holding the PolicyEngine bundle and the packages it pins, and opens or updates a pull request with the version changes.
+
+
 ## [5.10.1] - 2026-10-26
 
 ### Changed
