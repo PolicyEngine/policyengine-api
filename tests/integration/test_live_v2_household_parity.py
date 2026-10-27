@@ -1,10 +1,12 @@
 """Live staging parity of v2 household calculations with API v1's ``/calculate``.
 
-Each household is stored through ``/v2/households``, calculated through
-``/v2/household-calculations`` (the v2 household function on Modal) and, as
-the same situation, through API v1's in-process ``/calculate`` on the same
-candidate. Every calculated value must match, axes included. A run-specific
-input makes each household new, so no earlier calculation is reused.
+Each household is stored through ``/v2/households`` (and its reform through
+``/v2/policies``), calculated through ``/v2/household-calculations`` (the v2
+household function on Modal) and, as the same situation and policy, through
+API v1's in-process ``/calculate`` (``/calculate-full`` when it adds missing
+variables) on the same candidate. Every calculated value must match, axes,
+reforms and added variables included. A run-specific input makes each
+household new, so no earlier calculation is reused.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from tests.fixtures.integration.live_household_calculations import (
     household_differences,
     probe_amount,
     store_household,
+    store_reform,
 )
 
 CALCULATED = {YEAR: None}
@@ -78,6 +81,19 @@ def _parity_households(run_amount: int) -> list[LiveHousehold]:
             ],
         ),
         LiveHousehold(
+            name="us-single-reform-added-variables",
+            country_id="us",
+            people={
+                "adult": {
+                    "age": {YEAR: 29},
+                    "employment_income": {YEAR: 61_000 + run_amount},
+                }
+            },
+            groups={"household": {"state_name": {YEAR: "NY"}}},
+            reform={"gov.irs.deductions.standard.amount.SINGLE": 20_000},
+            add_missing_variables=True,
+        ),
+        LiveHousehold(
             name="uk-single",
             country_id="uk",
             people={
@@ -89,6 +105,19 @@ def _parity_households(run_amount: int) -> list[LiveHousehold]:
                 }
             },
             groups={"household": {"household_net_income": CALCULATED}},
+        ),
+        LiveHousehold(
+            name="uk-single-reform",
+            country_id="uk",
+            people={
+                "adult": {
+                    "age": {YEAR: 41},
+                    "employment_income": {YEAR: 36_000 + run_amount},
+                    "income_tax": CALCULATED,
+                }
+            },
+            groups={"household": {"household_net_income": CALCULATED}},
+            reform={"gov.hmrc.income_tax.allowances.personal_allowance.amount": 15_000},
         ),
         LiveHousehold(
             name="uk-couple-child-axes",
@@ -136,8 +165,9 @@ def test_a_v2_household_calculation_matches_api_v1(
         if candidate.name == household_name
     ]
     household_id = store_household(api_client, household)
+    policy_id = store_reform(api_client, household)
 
-    finished = calculate(api_client, household, household_id)
+    finished = calculate(api_client, household, household_id, policy_id)
     v1_answer = calculate_with_v1(api_client, household)
 
     assert finished.item["status"] == "succeeded", finished.item["error"]

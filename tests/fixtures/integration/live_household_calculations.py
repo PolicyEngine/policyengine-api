@@ -25,6 +25,8 @@ POLL_INTERVAL_SECONDS = float(
 TRANSIENT_STATUS_CODES = {500, 502, 503, 504}
 FINISHED_STATUSES = {"succeeded", "failed"}
 YEAR = "2026"
+REFORM_START = f"{YEAR}-01-01"
+OPEN_END = "2100-12-31"
 COLLECTIONS = {
     "us": {
         "household": "households",
@@ -43,7 +45,10 @@ class LiveHousehold:
 
     ``people`` and ``groups`` map variable names to values by period; a null
     value asks for the variable to be calculated. ``axes`` vary inputs across
-    points, as in a ``/calculate`` situation.
+    points, as in a ``/calculate`` situation. ``reform`` sets each named
+    parameter to a value from the start of ``YEAR`` with no end, through a
+    policy stored with ``/v2/policies``. ``add_missing_variables`` calculates
+    every variable the household lacks, as ``/calculate-full`` does.
     """
 
     name: str
@@ -51,6 +56,8 @@ class LiveHousehold:
     people: dict[str, dict[str, Any]]
     groups: dict[str, dict[str, Any]] = field(default_factory=dict)
     axes: list[list[dict[str, Any]]] | None = None
+    reform: dict[str, int | float] | None = None
+    add_missing_variables: bool = False
 
     def document(self) -> dict[str, Any]:
         """Return the household as ``/v2/households`` stores it."""
@@ -117,16 +124,59 @@ def store_household(client: httpx.Client, household: LiveHousehold) -> str:
     return response.json()["result"]["item"]["id"]
 
 
+def _one_catalog_item(
+    client: httpx.Client, resource: str, country_id: str, **filters: str
+) -> dict[str, Any]:
+    response = client.get(
+        f"/v2/{resource}", params={"country_id": country_id, "limit": 1, **filters}
+    )
+    assert response.status_code == 200, response.text[:500]
+    (item,) = response.json()["result"]["items"]
+    return item
+
+
+def store_reform(client: httpx.Client, household: LiveHousehold) -> str | None:
+    """Store the household's reform through ``/v2/policies``; return its ID."""
+    if household.reform is None:
+        return None
+    country_id = household.country_id
+    model = _one_catalog_item(client, "tax-benefit-models", country_id)
+    parameter_values = [
+        {
+            "parameter_id": _one_catalog_item(
+                client, "parameters", country_id, name=parameter_name
+            )["id"],
+            "value": value,
+            "start_date": f"{REFORM_START}T00:00:00Z",
+        }
+        for parameter_name, value in household.reform.items()
+    ]
+    response = client.post(
+        "/v2/policies",
+        params={"country_id": country_id},
+        json={
+            "country_id": country_id,
+            "tax_benefit_model_id": model["id"],
+            "parameter_values": parameter_values,
+        },
+    )
+    assert response.status_code in {200, 201}, response.text[:500]
+    return response.json()["result"]["item"]["id"]
+
+
 def calculate(
     client: httpx.Client,
     household: LiveHousehold,
     household_id: str,
+    policy_id: str | None = None,
 ) -> FinishedCalculation:
     """Submit the stored household's calculation and poll until it finishes."""
     started = time.monotonic()
     body: dict[str, Any] = {
         "country_id": household.country_id,
         "household_id": household_id,
+        "policy_id": policy_id,
+        "add_missing_variables": household.add_missing_variables,
     }
     if household.axes is not None:
         body["axes"] = household.axes
@@ -156,11 +206,19 @@ def calculate(
 
 
 def calculate_with_v1(client: httpx.Client, household: LiveHousehold) -> dict:
-    """Return API v1's ``/calculate`` answer for the same household."""
-    response = client.post(
-        f"/{household.country_id}/calculate",
-        json={"household": household.situation()},
-    )
+    """Return API v1's answer for the same household and reform.
+
+    ``/calculate-full`` answers when the household adds missing variables,
+    ``/calculate`` otherwise.
+    """
+    route = "calculate-full" if household.add_missing_variables else "calculate"
+    request: dict[str, Any] = {"household": household.situation()}
+    if household.reform is not None:
+        request["policy"] = {
+            parameter_name: {f"{REFORM_START}.{OPEN_END}": value}
+            for parameter_name, value in household.reform.items()
+        }
+    response = client.post(f"/{household.country_id}/{route}", json=request)
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["status"] == "ok", payload

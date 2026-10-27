@@ -10,7 +10,8 @@ staging v2 database:
   ``STAGING_HOUSEHOLD_SUBMIT_LIMIT_SECONDS`` and finished within
   ``STAGING_HOUSEHOLD_FINISH_LIMIT_SECONDS``;
 - a memory check: a household varied across 401 points of employment income,
-  every variable calculated at each point, which must finish without failing.
+  with its net income calculated at each point, which must finish without
+  failing; a household function that runs out of memory fails it.
 
 The measured times are reported as a warning, so the job log keeps them.
 """
