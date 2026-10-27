@@ -418,6 +418,7 @@ nodes = [
   "tests/unit/services/test_local_data_service_boundaries.py::test_local_service_public_methods_do_not_accept_persistence",
   "tests/unit/services/test_local_data_service_boundaries.py::test_reform_impact_route_does_not_manage_sessions",
   "tests/unit/services/test_local_data_service_boundaries.py::test_economy_service_delegates_persistence_without_opening_sessions",
+  "tests/unit/services/test_local_data_service_boundaries.py::test_economy_service_modules_delegate_persistence_without_opening_sessions",
 ]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
@@ -1103,7 +1104,7 @@ job = "quality-guards"
 invocation = "run_quality_guards.py"
 [rule.baseline]
 file = "rules/baselines/file-length.txt"
-count = 5
+count = 3
 [rule.proof]
 bad_fixture = "rules/fixtures/api.quality.file-length/bad_tree.toml"
 good_fixture = "rules/fixtures/api.quality.file-length/good_tree.toml"

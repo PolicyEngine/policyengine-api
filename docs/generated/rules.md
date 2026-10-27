@@ -66,7 +66,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Ratcheted (existing violations still tolerated)
 
-- `api.quality.file-length`: 5 remaining in `rules/baselines/file-length.txt`
+- `api.quality.file-length`: 3 remaining in `rules/baselines/file-length.txt`
 
 ### Exceptions and review dates
 

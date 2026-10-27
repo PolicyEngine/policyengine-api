@@ -54,7 +54,7 @@ candidate endpoints, add the relevant focused service tests. For budget-window
 simulation compatibility, run:
 
 ```bash
-FLASK_DEBUG=1 python -m pytest tests/unit/services/test_economy_service.py::TestEconomyService::TestGetBudgetWindowEconomicImpact -q
+FLASK_DEBUG=1 python -m pytest tests/unit/services/test_economy_service_budget_window_*.py -q
 ```
 
 Regenerate and review `docs/engineering/migration-contracts.md` when
