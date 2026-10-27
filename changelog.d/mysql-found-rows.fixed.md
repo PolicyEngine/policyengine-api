@@ -1,0 +1,1 @@
+Cloud SQL connections now set MySQL's `CLIENT_FOUND_ROWS` flag, so an UPDATE reports the rows it matched rather than the rows whose values changed. Without it, SQLAlchemy raised `StaleDataError` when the ORM wrote values a row already held, which failed report saves (`PATCH /<country_id>/report`) with a 500.

@@ -90,6 +90,8 @@ jobs:
         run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_stage12_comparison_persistence.py tests/integration/test_v2_privilege_reconciliation.py
       - name: Test v2 household persistence and immediate v1 copying
         run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_household_persistence.py tests/integration/test_v1_household_dual_write.py tests/integration/test_mysql_household_spm_dual_write.py
+      - name: Test the row counts v1 ORM updates report on MySQL
+        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_mysql_update_row_counts.py
       - name: Qualify production-scale v2 metadata publication
         run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication_qualification.py
         env:

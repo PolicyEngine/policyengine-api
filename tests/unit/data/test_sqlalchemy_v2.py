@@ -1,36 +1,49 @@
 from pathlib import Path
+from typing import NamedTuple
 from unittest.mock import Mock
 
+import pytest
 import sqlalchemy
+from pymysql.constants import CLIENT
 
 from policyengine_api.data import orm
 
 
-def test_sqlalchemy_v2_or_newer_is_installed():
-    assert int(sqlalchemy.__version__.split(".")[0]) >= 2
+class FakeCloudSqlConnector:
+    """Records the options it is built with and every connect call it receives."""
+
+    def __init__(self, **connector_options):
+        self.connector_options = connector_options
+        self.connect_calls = []
+
+    def connect(self, **connect_options):
+        self.connect_calls.append(connect_options)
+        return object()
+
+    def close(self):
+        pass
 
 
-def test_remote_engine_delegates_connections_and_pooling_to_sqlalchemy(monkeypatch):
-    connector_calls = []
+class RemoteEngineBuild(NamedTuple):
+    """What _build_remote_engine returned and what it passed to its dependencies."""
+
+    engine: object
+    connector: FakeCloudSqlConnector
+    create_engine_calls: list
+
+
+@pytest.fixture
+def remote_engine_build(monkeypatch):
+    """Build the remote engine with a fake connector and a recording create_engine."""
+    connectors = []
     engine_calls = []
 
-    class FakeConnector:
-        def __init__(self, **options):
-            self.options = options
-
-        def connect(self, **options):
-            connector_calls.append(options)
-            return object()
-
-        def close(self):
-            pass
-
-    connector = FakeConnector()
-
-    def connector_factory(**options):
-        connector.options = options
+    def connector_factory(**connector_options):
+        connector = FakeCloudSqlConnector(**connector_options)
+        connectors.append(connector)
         return connector
 
+    monkeypatch.setattr(orm, "_cloud_sql_state", orm._CloudSqlState())
     monkeypatch.setattr(orm, "Connector", connector_factory)
     monkeypatch.setattr(
         orm,
@@ -46,29 +59,60 @@ def test_remote_engine_delegates_connections_and_pooling_to_sqlalchemy(monkeypat
 
     engine = orm._build_remote_engine()
 
-    assert engine == "engine"
-    assert connector.options == {
+    [connector] = connectors
+    return RemoteEngineBuild(engine, connector, engine_calls)
+
+
+def test_sqlalchemy_v2_or_newer_is_installed():
+    assert int(sqlalchemy.__version__.split(".")[0]) >= 2
+
+
+def test_remote_engine_delegates_connections_and_pooling_to_sqlalchemy(
+    remote_engine_build,
+):
+    connector = remote_engine_build.connector
+
+    assert remote_engine_build.engine == "engine"
+    assert connector.connector_options == {
         "ip_type": orm.IPTypes.PUBLIC,
         "refresh_strategy": "LAZY",
     }
-    url, options = engine_calls[0]
+    url, options = remote_engine_build.create_engine_calls[0]
     assert url == "mysql+pymysql://"
     assert options["pool_pre_ping"] is True
     assert options["pool_recycle"] == 1800
     assert options["pool_size"] == 5
     assert options["max_overflow"] == 2
     assert options["pool_timeout"] == 30
-    assert connector_calls == []
+    assert connector.connect_calls == []
     options["creator"]()
-    assert connector_calls == [
+    assert connector.connect_calls == [
         {
             "instance_connection_string": "project:region:instance",
             "driver": "pymysql",
             "db": "database",
             "user": "user",
             "password": "password",
+            "client_flag": CLIENT.FOUND_ROWS,
         }
     ]
+
+
+def test_remote_engine_connections_report_rows_matched_by_updates(
+    remote_engine_build,
+):
+    """SQLAlchemy checks UPDATE row counts and needs MySQL to count matched rows.
+
+    SQLAlchemy sets CLIENT.FOUND_ROWS itself only when it opens a connection
+    from a URL. Through creator= it does not, so the connector call must.
+    """
+    _url, options = remote_engine_build.create_engine_calls[0]
+
+    options["creator"]()
+
+    [connect_options] = remote_engine_build.connector.connect_calls
+    client_flag = connect_options.get("client_flag", 0)
+    assert client_flag & CLIENT.FOUND_ROWS == CLIENT.FOUND_ROWS
 
 
 def test_production_orm_has_no_sqlite_debug_or_local_schema_path():
