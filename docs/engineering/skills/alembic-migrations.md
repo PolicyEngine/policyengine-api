@@ -59,7 +59,11 @@ Alembic revisions.
 
 - API v1 builds its Cloud SQL engine in `policyengine_api/data/orm.py`. The
   Cloud SQL connector is passed to `create_engine` as `creator=`, so SQLAlchemy
-  opens and pools the connections.
+  opens and pools the connections. SQLAlchemy does not add its MySQL connection
+  arguments to connections a `creator=` function opens, so the connector call
+  passes MySQL's `CLIENT_FOUND_ROWS` flag in `client_flag` itself; with it an
+  UPDATE reports the rows it matched rather than the rows whose values changed,
+  which SQLAlchemy needs to check UPDATE row counts.
 - API v2 builds its SQLModel engine from a `postgresql+psycopg` URL in
   `policyengine_api/data/v2/database.py`.
 - Take connections and sessions from those engines, never from
