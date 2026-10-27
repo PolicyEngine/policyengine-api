@@ -21,14 +21,20 @@ from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import (
     NativeRouteDependencies,
     _default_economy_report_simulation,
+    _default_v2_economy_report_service_factory,
 )
 from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
     infer_route_group,
 )
+from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
+from policyengine_api.services.v2.economy_reports.validators import (
+    EconomyReportsUnsupportedError,
+)
 from policyengine_api.services.v2.simulation_entrypoint.types import (
     ReportStatus,
+    SimulationChoice,
     SimulationRequestRefusedError,
     SimulationServiceUnavailableError,
 )
@@ -37,6 +43,7 @@ from tests.unit.v2.economy_report_support import (
     BASELINE_SIMULATION_ID,
     CATALOG_VERSION_ID,
     CURRENT_POLICYENGINE_VERSION,
+    HOUSEHOLD_ONLY_COUNTRY,
     REFORM_POLICY_ID,
     REFORM_RUN_ID,
     REFORM_SIMULATION_ID,
@@ -616,3 +623,56 @@ def test_openapi_publishes_the_listing_contract() -> None:
     assert report_ids["schema"]["maxItems"] == 25
     item = schema["components"]["schemas"]["ReportSummaryItem"]
     assert "result" not in item["properties"]
+
+
+def _without_the_generated_client(monkeypatch: pytest.MonkeyPatch, sessions) -> None:
+    """Make the default factory's client import fail, and read countries from SQLite."""
+    from policyengine_api.data.v2 import database
+
+    monkeypatch.delitem(
+        sys.modules, "policyengine_api.libs.simulation_economy_reports", raising=False
+    )
+    monkeypatch.setitem(sys.modules, "policyengine_api_simulation_client", None)
+    monkeypatch.setattr(database, "get_v2_session_factory", lambda: sessions)
+
+
+def test_the_default_service_refuses_a_household_only_country_without_the_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _without_the_generated_client(monkeypatch, countries_store(HOUSEHOLD_ONLY_COUNTRY))
+    service = _default_v2_economy_report_service_factory()
+    report_input = EconomyReportFields(
+        kind="economy",
+        year=2026,
+        region_code="state/ca",
+        baseline=SimulationChoice(),
+        reform=SimulationChoice(),
+    )
+
+    with pytest.raises(EconomyReportsUnsupportedError):
+        service.submit_report(country_id="zz", report_input=report_input)
+    with pytest.raises(EconomyReportsUnsupportedError):
+        service.run_report(country_id="zz", report_id=REPORT_ID, force=False)
+    with pytest.raises(SimulationServiceUnavailableError):
+        service.submit_report(country_id="us", report_input=report_input)
+
+
+def test_a_household_only_submission_is_a_422_even_without_the_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sessions = countries_store()
+    with sessions() as session:
+        united_states = session.exec(select(Country).where(Country.id == "us")).one()
+        united_states.society_wide_enabled = False
+        session.commit()
+    _without_the_generated_client(monkeypatch, sessions)
+
+    response = _client(
+        FakeEconomyReportSimulation(),
+        service_factory=_default_v2_economy_report_service_factory,
+    ).post("/v2/reports?country_id=us", json=SUBMISSION)
+
+    assert response.status_code == 422
+    assert response.json()["message"] == (
+        "Economy reports are not available for country 'us'"
+    )

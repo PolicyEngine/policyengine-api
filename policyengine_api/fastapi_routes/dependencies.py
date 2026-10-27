@@ -855,6 +855,19 @@ def _default_economy_report_simulation() -> EconomyReportSimulation:
     return shared_economy_reports()
 
 
+def _deferred_economy_report_simulation() -> EconomyReportSimulation:
+    """Build the adapter only when a request reaches the simulation service.
+
+    Checks the Public API makes itself, such as the household-only refusal,
+    then answer without the simulation client or its settings.
+    """
+    from policyengine_api.services.v2.simulation_entrypoint.services import (
+        DeferredEconomyReportSimulation,
+    )
+
+    return DeferredEconomyReportSimulation(_default_economy_report_simulation)
+
+
 def _default_v2_economy_report_service_factory() -> V2EconomyReportResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -868,7 +881,7 @@ def _default_v2_economy_report_service_factory() -> V2EconomyReportResourceServi
 
     return V2EconomyReportService(
         EconomyReportDatabaseSession(get_v2_session_factory()),
-        _default_economy_report_simulation(),
+        _deferred_economy_report_simulation(),
         current_policyengine_version=_running_policyengine_version(),
     )
 
@@ -960,13 +973,10 @@ def _default_legacy_reference_checker() -> LegacyReferenceChecker:
 def _default_simulation_reference_checker() -> SimulationReferenceChecker:
     """Defer the simulation client until a request checks a v2 reference."""
     from policyengine_api.services.v2.simulation_refs.services import (
-        DeferredSimulationReferenceService,
         SimulationReferenceService,
     )
 
-    return DeferredSimulationReferenceService(
-        lambda: SimulationReferenceService(_default_economy_report_simulation())
-    )
+    return SimulationReferenceService(_deferred_economy_report_simulation())
 
 
 def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:

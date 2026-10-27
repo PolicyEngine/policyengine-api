@@ -18,12 +18,8 @@ from policyengine_api.services.v2.simulation_refs.validators import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
     from uuid import UUID
 
-    from policyengine_api.services.v2.associations.types import (
-        SimulationReferenceChecker,
-    )
     from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportSimulation,
     )
@@ -64,32 +60,4 @@ class SimulationReferenceService:
             kind="simulation",
             reference_id=simulation_id,
             country_id=country_id,
-        )
-
-
-class DeferredSimulationReferenceService:
-    """Build the reference service only when a v2 reference is checked.
-
-    Most saved-record routes never check one, so they must not depend on the
-    simulation client or the entrypoint's configuration.
-    """
-
-    def __init__(self, build: Callable[[], SimulationReferenceChecker]) -> None:
-        """Call ``build`` at the first check and reuse its service afterwards."""
-        self._build = build
-        self._service: SimulationReferenceChecker | None = None
-
-    def _resolved(self) -> SimulationReferenceChecker:
-        if self._service is None:
-            self._service = self._build()
-        return self._service
-
-    def require_report(self, *, country_id: str, report_id: UUID) -> None:
-        """Raise ``SimulationReferenceNotFoundError`` unless the country has it."""
-        self._resolved().require_report(country_id=country_id, report_id=report_id)
-
-    def require_simulation(self, *, country_id: str, simulation_id: UUID) -> None:
-        """Raise ``SimulationReferenceNotFoundError`` unless the country has it."""
-        self._resolved().require_simulation(
-            country_id=country_id, simulation_id=simulation_id
         )
