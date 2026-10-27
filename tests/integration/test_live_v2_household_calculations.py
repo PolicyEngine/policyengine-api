@@ -29,6 +29,7 @@ from tests.fixtures.integration.live_household_calculations import (
     FinishedCalculation,
     LiveHousehold,
     calculate,
+    probe_amount,
     store_household,
 )
 
@@ -65,12 +66,8 @@ def _us_household(name: str, employment_income: int) -> LiveHousehold:
     )
 
 
-def _probe_amount(integration_probe_id: str) -> int:
-    return int(integration_probe_id.rsplit("-", 1)[-1], 16) % 997
-
-
 def test_a_us_household_is_submitted_polled_and_read(api_client, integration_probe_id):
-    household = _us_household("cycle", 51_000 + _probe_amount(integration_probe_id))
+    household = _us_household("cycle", 51_000 + probe_amount(integration_probe_id))
     household_id = store_household(api_client, household)
 
     finished = calculate(api_client, household, household_id)
@@ -96,9 +93,9 @@ def test_a_us_household_is_submitted_polled_and_read(api_client, integration_pro
 def test_parallel_calculations_finish_within_the_latency_limits(
     api_base_url, integration_probe_id
 ):
-    probe_amount = _probe_amount(integration_probe_id)
+    run_amount = probe_amount(integration_probe_id)
     households = [
-        _us_household(f"parallel-{index}", 20_000 + 1_000 * index + probe_amount)
+        _us_household(f"parallel-{index}", 20_000 + 1_000 * index + run_amount)
         for index in range(PARALLEL_CALCULATIONS)
     ]
 
@@ -145,7 +142,7 @@ def test_a_household_across_many_points_finishes(api_client, integration_probe_i
                     "name": "employment_income",
                     "count": MEMORY_CHECK_POINTS,
                     "min": 0,
-                    "max": 400_000 + _probe_amount(integration_probe_id),
+                    "max": 400_000 + probe_amount(integration_probe_id),
                     "period": YEAR,
                 }
             ]

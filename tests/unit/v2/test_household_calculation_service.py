@@ -52,15 +52,21 @@ class Parts:
         self.countries = countries or FakeCountries()
         self.households = FakeHouseholds()
         self.policies = FakePolicies()
-        self.catalogs = FakeCatalogs()
+        self.catalog_readers: list[FakeCatalogs] = []
         self.simulation = FakeSimulation()
         self.service = V2HouseholdCalculationService(
             countries=self.countries,
             households=self.households,
             policies=self.policies,
-            catalogs=self.catalogs,
+            catalog_reader_factory=self.open_catalog_reader,
             simulation=self.simulation,
         )
+
+    def open_catalog_reader(self) -> FakeCatalogs:
+        """Open and keep a new catalog reader."""
+        reader = FakeCatalogs()
+        self.catalog_readers.append(reader)
+        return reader
 
 
 def calculation_input(**changes: object) -> HouseholdCalculationInput:
@@ -105,7 +111,8 @@ def test_a_calculation_sends_the_stored_household_policy_and_catalog() -> None:
     assert calculation.calculation_id == CALCULATION_ID
     assert calculation.status == "running"
     assert calculation.result is None
-    assert parts.catalogs.closed
+    (catalog_reader,) = parts.catalog_readers
+    assert catalog_reader.closed
 
 
 def test_current_law_and_no_saved_choice_send_neither() -> None:
@@ -253,3 +260,14 @@ def test_an_unreachable_simulation_service_is_reported() -> None:
 
     with pytest.raises(SimulationServiceUnavailableError):
         parts.service.submit_calculation(calculation_input())
+
+
+def test_a_refused_submission_and_a_read_open_no_catalog_reader() -> None:
+    parts = Parts()
+    parts.simulation.read_answers[CALCULATION_ID] = succeeded_calculation()
+
+    with pytest.raises(HouseholdNotFoundError):
+        parts.service.submit_calculation(calculation_input(household_id=uuid4()))
+    parts.service.get_calculation(CALCULATION_ID)
+
+    assert parts.catalog_readers == []

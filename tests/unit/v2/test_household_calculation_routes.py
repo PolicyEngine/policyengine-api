@@ -51,7 +51,7 @@ class App:
             countries=countries or FakeCountries(),
             households=self.households,
             policies=FakePolicies(),
-            catalogs=FakeCatalogs(),
+            catalog_reader_factory=FakeCatalogs,
             simulation=self.simulation,
         )
         dependencies = NativeRouteDependencies(

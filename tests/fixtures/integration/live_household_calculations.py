@@ -97,6 +97,11 @@ class FinishedCalculation:
     total_seconds: float
 
 
+def probe_amount(integration_probe_id: str) -> int:
+    """Return a small run-specific amount that makes each household new."""
+    return int(integration_probe_id.rsplit("-", 1)[-1], 16) % 997
+
+
 def store_household(client: httpx.Client, household: LiveHousehold) -> str:
     """Store the household through ``/v2/households`` and return its ID."""
     response = client.post(

@@ -31,6 +31,7 @@ from policyengine_api.services.v2.household_calculations.validators import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from uuid import UUID
 
     from policyengine_api.services.v2.household_calculations.types import (
@@ -52,14 +53,18 @@ class V2HouseholdCalculationService:
         countries: CountrySource,
         households: HouseholdSource,
         policies: PolicySource,
-        catalogs: CatalogSource,
+        catalog_reader_factory: Callable[[], CatalogSource],
         simulation: SimulationHouseholdCalculations,
     ) -> None:
-        """Read through these services for one request."""
+        """Read through these services for one request.
+
+        ``catalog_reader_factory`` opens a catalog reader, with its own
+        database session, only once a submission needs the catalog version.
+        """
         self._countries = countries
         self._households = households
         self._policies = policies
-        self._catalogs = catalogs
+        self._catalog_reader_factory = catalog_reader_factory
         self._simulation = simulation
 
     def submit_calculation(
@@ -84,10 +89,11 @@ class V2HouseholdCalculationService:
                 )
             )
         year = calculation_year(household.default_year)
+        catalog_reader = self._catalog_reader_factory()
         try:
-            catalog = self._catalogs.get_model_by_country(country_id)
+            catalog = catalog_reader.get_model_by_country(country_id)
         finally:
-            self._catalogs.close()
+            catalog_reader.close()
         submission: dict[str, Any] = {
             "country": country_id,
             "catalog_version_id": str(catalog.model_version.id),

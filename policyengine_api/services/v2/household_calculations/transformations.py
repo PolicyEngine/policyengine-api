@@ -18,21 +18,25 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from policyengine_api.services.v2.households.transformations import (
+    LEGACY_COLLECTION_NAMES,
+)
+from policyengine_api.services.v2.households.validators import (
+    SUPPORTED_ENTITY_COLLECTIONS,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from policyengine_api.services.v2.policies.types import PolicyRead
 
-# Each country's stored group collections and their plural in the situation.
+# Each country's stored group collections, as the households service accepts
+# them, and their plural in the situation.
 GROUP_COLLECTIONS: dict[str, dict[str, str]] = {
-    "us": {
-        "household": "households",
-        "family": "families",
-        "tax_unit": "tax_units",
-        "spm_unit": "spm_units",
-        "marital_unit": "marital_units",
-    },
-    "uk": {"household": "households", "benunit": "benunits"},
+    country_id: {
+        collection: LEGACY_COLLECTION_NAMES[collection] for collection in collections
+    }
+    for country_id, collections in SUPPORTED_ENTITY_COLLECTIONS.items()
 }
 OPEN_END_DATE = "2100-12-31"
 

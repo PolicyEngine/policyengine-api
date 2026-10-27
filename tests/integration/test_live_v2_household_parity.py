@@ -17,18 +17,14 @@ from tests.fixtures.integration.live_household_calculations import (
     calculate,
     calculate_with_v1,
     household_differences,
+    probe_amount,
     store_household,
 )
 
 CALCULATED = {YEAR: None}
 
 
-def _probe_amount(integration_probe_id: str) -> int:
-    """Return a small run-specific amount that makes each household new."""
-    return int(integration_probe_id.rsplit("-", 1)[-1], 16) % 997
-
-
-def _parity_households(probe_amount: int) -> list[LiveHousehold]:
+def _parity_households(run_amount: int) -> list[LiveHousehold]:
     return [
         LiveHousehold(
             name="us-single-california",
@@ -36,7 +32,7 @@ def _parity_households(probe_amount: int) -> list[LiveHousehold]:
             people={
                 "adult": {
                     "age": {YEAR: 35},
-                    "employment_income": {YEAR: 42_000 + probe_amount},
+                    "employment_income": {YEAR: 42_000 + run_amount},
                     "income_tax": CALCULATED,
                 }
             },
@@ -56,7 +52,7 @@ def _parity_households(probe_amount: int) -> list[LiveHousehold]:
                 "first-adult": {"age": {YEAR: 38}},
                 "second-adult": {
                     "age": {YEAR: 36},
-                    "employment_income": {YEAR: 15_000 + probe_amount},
+                    "employment_income": {YEAR: 15_000 + run_amount},
                 },
                 "first-child": {"age": {YEAR: 7}},
                 "second-child": {"age": {YEAR: 3}},
@@ -87,7 +83,7 @@ def _parity_households(probe_amount: int) -> list[LiveHousehold]:
             people={
                 "adult": {
                     "age": {YEAR: 30},
-                    "employment_income": {YEAR: 28_000 + probe_amount},
+                    "employment_income": {YEAR: 28_000 + run_amount},
                     "income_tax": CALCULATED,
                     "national_insurance": CALCULATED,
                 }
@@ -101,7 +97,7 @@ def _parity_households(probe_amount: int) -> list[LiveHousehold]:
                 "first-adult": {"age": {YEAR: 34}},
                 "second-adult": {
                     "age": {YEAR: 33},
-                    "employment_income": {YEAR: 9_000 + probe_amount},
+                    "employment_income": {YEAR: 9_000 + run_amount},
                 },
                 "child": {"age": {YEAR: 4}},
             },
@@ -136,7 +132,7 @@ def test_a_v2_household_calculation_matches_api_v1(
 ):
     (household,) = [
         candidate
-        for candidate in _parity_households(_probe_amount(integration_probe_id))
+        for candidate in _parity_households(probe_amount(integration_probe_id))
         if candidate.name == household_name
     ]
     household_id = store_household(api_client, household)
