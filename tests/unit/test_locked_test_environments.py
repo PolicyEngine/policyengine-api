@@ -43,13 +43,8 @@ EXPECTED_TEST_JOBS = {
 # the Cloud Run image does, and run every Python script through uv run --frozen.
 OPERATIONAL_DATABASE_JOBS = {
     ("migrate-v1-cloud-sql.yml", "migrate"),
-}
-# An operational job that still installs unlocked, under a registered
-# exception, until moving it to uv.lock is verified on its own.
-UNLOCKED_OPERATIONAL_JOBS = {
     ("process-v1-household-mirror-event.yml", "process-event"),
 }
-EXPLICIT_UNLOCKED_INSTALL = 'pip install -e ".[dev]"'
 RUNTIME_LOCKED_SYNC = "uv sync --frozen"
 LOCKED_SCRIPT_RUN = "uv run --frozen python scripts/"
 PYTHON_SCRIPT_COMMAND = re.compile(r"\bpython\s+scripts/")
@@ -145,17 +140,6 @@ def test_test_job_selects_the_production_python_version(job):
 def _operational_job(workflow: str, job_id: str) -> WorkflowJob:
     jobs = {(job.workflow, job.job_id): job for job in _workflow_jobs()}
     return jobs[(workflow, job_id)]
-
-
-@pytest.mark.parametrize(
-    ("workflow", "job_id"), sorted(UNLOCKED_OPERATIONAL_JOBS), ids=str
-)
-def test_operational_job_keeps_an_explicit_install_for_its_python(workflow, job_id):
-    executed = _operational_job(workflow, job_id).executed_lines
-
-    # make install now syncs .venv, which the job's bare python never reads.
-    assert EXPLICIT_UNLOCKED_INSTALL in executed
-    assert "make install" not in executed
 
 
 @pytest.mark.parametrize(
