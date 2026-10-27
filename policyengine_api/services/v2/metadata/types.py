@@ -326,14 +326,29 @@ class MetadataEconomyOptions(StrictResponseModel):
     datasets: list[MetadataDatasetOption]
 
 
+class MetadataSPMAvailability(StrictResponseModel):
+    """Whether a catalog version offers SPM settings for a household.
+
+    When ``available``, ``settings_schema`` is the JSON schema of a
+    household's ``spm`` selection and ``defaults`` the certified selection
+    that applies to every field a household leaves out. A version without
+    them (any country but the US, or a bundle without certified SPM support)
+    is not available, and both are null.
+    """
+
+    available: bool
+    settings_schema: dict[str, JsonValue] | None = None
+    defaults: dict[str, JsonValue] | None = None
+
+
 class MetadataModelCatalogResult(StrictResponseModel):
     """The small parts of one catalog version, read when a client starts.
 
     policyengine_version names the selected catalog version, so a client can
     request its other parts for that exact version. catalog_format is null,
     and entities and basic_inputs are empty, for a version published before
-    catalog format 2. Variables, parameters and their values are served by
-    their own routes.
+    catalog format 2. ``spm`` says whether the version offers SPM settings.
+    Variables, parameters and their values are served by their own routes.
     """
 
     policyengine_version: str
@@ -345,6 +360,7 @@ class MetadataModelCatalogResult(StrictResponseModel):
     regions: list[MetadataRegion]
     datasets: list[MetadataDataset]
     economy_options: MetadataEconomyOptions
+    spm: MetadataSPMAvailability
 
 
 class MetadataDatedValue(StrictResponseModel):

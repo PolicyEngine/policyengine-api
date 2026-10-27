@@ -1651,7 +1651,8 @@
             "result.basic_inputs",
             "result.regions",
             "result.datasets",
-            "result.economy_options"
+            "result.economy_options",
+            "result.spm"
           ]
         },
         {

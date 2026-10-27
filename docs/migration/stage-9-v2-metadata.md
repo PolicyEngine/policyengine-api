@@ -36,7 +36,14 @@ version (with the current-law policy id and the years offered), the entities
 input dataset, and the economy choices. A catalog without regions, such as a
 household-only country's, has empty region, dataset and economy-choice lists
 rather than an error. A version published before catalog format 2 has a null
-`catalog_format` and empty entities and basic inputs. The result names the
+`catalog_format` and empty entities and basic inputs. `spm` says whether the
+version offers SPM settings for a household: `available`, and when it does,
+`settings_schema` (the JSON schema of a household's `spm` selection) and
+`defaults` (the certified selection). Catalog publication records it from the
+simulation service's public `GET /versions`: a US version offers SPM when the
+service lists a canonical capability with pinned defaults for its
+PolicyEngine.py version, and other countries never do. A version whose
+availability is not recorded yet offers none. The result names the
 selected PolicyEngine.py version, so a client that starts without a version
 learns the running one and requests every other part for that exact version.
 The query uses the shared `CatalogQuery` model: unknown and repeated

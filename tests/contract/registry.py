@@ -703,6 +703,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                     "result.regions",
                     "result.datasets",
                     "result.economy_options",
+                    "result.spm",
                 ),
                 route_group="metadata",
             ),

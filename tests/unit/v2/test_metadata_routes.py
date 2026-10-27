@@ -51,6 +51,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataParameterSummary,
     MetadataRegion,
     MetadataRegionOption,
+    MetadataSPMAvailability,
     MetadataTimePeriodOption,
     MetadataVariable,
     ParameterFilter,
@@ -272,6 +273,11 @@ def _resource_results() -> tuple[dict[str, object], dict[str, object]]:
                             name="populace_us_2024", label="Microcosm"
                         )
                     ],
+                ),
+                spm=MetadataSPMAvailability(
+                    available=True,
+                    settings_schema={"type": "object"},
+                    defaults={"scenario": "ce_trend"},
                 ),
             ),
             "get_economy_options": MetadataEconomyOptionsResult(
@@ -789,6 +795,11 @@ def test_model_catalog_route_serves_the_small_parts_of_the_selected_version() ->
     assert result["basic_inputs"] == ["employment_income"]
     assert [region["code"] for region in result["regions"]] == ["us"]
     assert result["economy_options"]["datasets"][0]["default"] is True
+    assert result["spm"] == {
+        "available": True,
+        "settings_schema": {"type": "object"},
+        "defaults": {"scenario": "ce_trend"},
+    }
     assert reader.calls == [("get_model_catalog", ("us", None), {})]
     assert reader.closed
 
