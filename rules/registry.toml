@@ -271,6 +271,7 @@ nodes = [
   "tests/unit/data/test_runtime_sql_boundaries.py::test_runtime_sql_is_confined_to_the_data_access_layer",
   "tests/unit/data/test_runtime_sql_boundaries.py::test_ordinary_runtime_modules_no_longer_use_raw_sql_facade",
   "tests/unit/data/test_runtime_sql_boundaries.py::test_report_orchestration_uses_sessions_and_models_not_raw_sql",
+  "tests/unit/data/test_runtime_sql_boundaries.py::test_report_run_history_uses_sessions_and_models_not_raw_sql",
 ]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"

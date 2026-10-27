@@ -8,7 +8,8 @@ SERVICE_ROOT = Path(__file__).parents[3] / "policyengine_api" / "services"
 
 
 @pytest.mark.parametrize(
-    "module_name", ["simulation_service.py", "report_output_service.py"]
+    "module_name",
+    ["simulation_service.py", "report_output_service.py", "report_output_runs.py"],
 )
 def test_orchestration_services_do_not_access_database_connections(module_name):
     source = (SERVICE_ROOT / module_name).read_text(encoding="utf-8")
