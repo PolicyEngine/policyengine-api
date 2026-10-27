@@ -237,3 +237,26 @@ def test_a_gateway_token_that_cannot_be_fetched_is_unavailable() -> None:
         client.submit(SUBMISSION)
     with pytest.raises(SimulationServiceUnavailableError):
         client.read(CALCULATION_ID)
+
+
+def test_the_household_keeps_its_key_order_both_ways() -> None:
+    requests: list[httpx.Request] = []
+    answer = succeeded_calculation()
+    client = client_answering(200, answer, requests)
+    submit_client = client_answering(202, answer, requests)
+
+    submitted = submit_client.submit(SUBMISSION)
+    read = client.read(CALCULATION_ID)
+
+    sent_household = json.loads(requests[0].content)["household"]
+    assert list(sent_household) == list(SITUATION)
+    assert list(sent_household["households"]["household-1"]) == list(
+        SITUATION["households"]["household-1"]
+    )
+    for calculation in (submitted, read):
+        assert calculation is not None
+        returned_household = calculation["result"]["household"]
+        assert list(returned_household) == list(answer["result"]["household"])
+        assert list(returned_household["households"]["household-1"]) == list(
+            answer["result"]["household"]["households"]["household-1"]
+        )

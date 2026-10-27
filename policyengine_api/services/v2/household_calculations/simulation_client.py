@@ -1,11 +1,17 @@
 """The simulation service's household calculation routes, through its client.
 
 Calls go to the Cloud Run Simulation Entrypoint (``SIMULATION_ENTRYPOINT_URL``),
-the only simulation service with these routes, with the gateway credentials
-the Public API already uses (``GATEWAY_AUTH_*``) and the request's
-correlation headers. Answers are read through the client's generated models:
-a 400 is a refusal, whose reason the service gives; a 422 lists what the
-service finds invalid in the household or its options; anything else,
+the only simulation service with these routes, through the generated client's
+HTTP client, with the gateway credentials the Public API already uses
+(``GATEWAY_AUTH_*``) and the request's correlation headers.
+
+The submission is checked against the generated submission model and sent as
+built, and each answer is checked against the generated model for its status
+and returned as decoded, both in their original key order: the household
+function lists warnings and calculated values in the household's key order,
+as API v1 does, and the generated models write their keys in their own
+order. A 400 is a refusal, whose reason the service gives; a 422 lists what
+the service finds invalid in the household or its options; anything else,
 including a 503, no answer, an answer of another shape, a gateway token that
 cannot be fetched or missing configuration, means the service is unavailable.
 
@@ -16,14 +22,11 @@ reused across requests.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, TypeVar
+from http import HTTPStatus
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from policyengine_api_simulation_client import AuthenticatedClient
-from policyengine_api_simulation_client.api.default import (
-    get_household_calculation,
-    submit_household_calculation,
-)
 from policyengine_api_simulation_client.models.household_calculation_response import (
     HouseholdCalculationResponse,
 )
@@ -62,29 +65,41 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from uuid import UUID
 
-    from policyengine_api_simulation_client.types import Response
-
-ParsedT = TypeVar("ParsedT")
+CALCULATIONS_PATH = "/v2/household-calculations"
 
 REQUEST_TIMEOUT_SECONDS = 30.0
 CLOUD_RUN_SIMULATION_ENTRYPOINT = "cloud_run_simulation_entrypoint"
 
 
-def _call(send: Callable[[], Response[ParsedT]]) -> Response[ParsedT]:
-    """Send one request; raise SimulationServiceUnavailableError if it cannot be read.
-
-    The generated routes decode the body for each status they document, so a
-    body that is not JSON or not of the documented shape raises while
-    decoding.
-    """
+def _send(send: Callable[[], httpx.Response]) -> httpx.Response:
+    """Send one request; raise SimulationServiceUnavailableError if none answers."""
     try:
         return send()
     except (httpx.HTTPError, GatewayAuthError) as error:
         msg = "The simulation service could not be reached."
         raise SimulationServiceUnavailableError(msg) from error
-    except (ValueError, KeyError, TypeError) as error:
+
+
+def _decoded(response: httpx.Response, model: Any) -> tuple[Any, Any]:  # noqa: ANN401  # a generated model class and its instance
+    """Return the decoded body and the generated model read from it.
+
+    Raise SimulationServiceUnavailableError when the body is not JSON or not
+    of the model's shape.
+    """
+    try:
+        body = response.json()
+        return body, model.from_dict(body)
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
         msg = "The simulation service's answer could not be read."
         raise SimulationServiceUnavailableError(msg) from error
+
+
+def _calculation(response: httpx.Response) -> dict[str, Any]:
+    body, _calculation_model = _decoded(response, HouseholdCalculationResponse)
+    if not isinstance(body, dict):
+        msg = "The simulation service's answer could not be read."
+        raise SimulationServiceUnavailableError(msg)
+    return body
 
 
 def _invalid_request_reason(error: HTTPValidationError) -> str:
@@ -165,32 +180,29 @@ class SimulationHouseholdClient:
 
     def submit(self, submission: dict[str, Any]) -> dict[str, Any]:
         """Submit a calculation and return the service's calculation answer."""
-        body = HouseholdCalculationSubmission.from_dict(submission)
-        response = _call(
-            lambda: submit_household_calculation.sync_detailed(
-                client=self._client, body=body
-            )
-        )
-        answer = response.parsed
-        if isinstance(answer, HouseholdCalculationResponse):
-            return answer.to_dict()
-        if isinstance(answer, HTTPValidationError):
-            raise SimulationServiceInvalidRequestError(_invalid_request_reason(answer))
-        if isinstance(answer, HouseholdRouteError) and response.status_code == 400:  # noqa: PLR2004  # the service's refusal status
-            raise SimulationServiceRefusedError(answer.detail)
+        HouseholdCalculationSubmission.from_dict(submission)
+        http_client = self._client.get_httpx_client()
+        response = _send(lambda: http_client.post(CALCULATIONS_PATH, json=submission))
+        if response.status_code == HTTPStatus.ACCEPTED:
+            return _calculation(response)
+        if response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
+            _body, invalid = _decoded(response, HTTPValidationError)
+            raise SimulationServiceInvalidRequestError(_invalid_request_reason(invalid))
+        if response.status_code == HTTPStatus.BAD_REQUEST:
+            _body, refusal = _decoded(response, HouseholdRouteError)
+            raise SimulationServiceRefusedError(refusal.detail)
         raise _unavailable(response.status_code)
 
     def read(self, calculation_id: UUID) -> dict[str, Any] | None:
         """Return the service's calculation answer, or None when it has none."""
-        response = _call(
-            lambda: get_household_calculation.sync_detailed(
-                calculation_id, client=self._client
-            )
+        http_client = self._client.get_httpx_client()
+        response = _send(
+            lambda: http_client.get(f"{CALCULATIONS_PATH}/{calculation_id}")
         )
-        answer = response.parsed
-        if isinstance(answer, HouseholdCalculationResponse):
-            return answer.to_dict()
-        if isinstance(answer, HouseholdRouteError) and response.status_code == 404:  # noqa: PLR2004  # the service's unknown-calculation status
+        if response.status_code == HTTPStatus.OK:
+            return _calculation(response)
+        if response.status_code == HTTPStatus.NOT_FOUND:
+            _decoded(response, HouseholdRouteError)
             return None
         raise _unavailable(response.status_code)
 
