@@ -14,6 +14,7 @@ from policyengine_api.services.v2.economy_reports.types import ReportStatus
 if TYPE_CHECKING:
     from policyengine_api.services.v2.economy_reports.types import (
         EconomyReportRecord,
+        EconomyReportRunRecord,
     )
 
 
@@ -104,6 +105,11 @@ class ReportRunItem(StrictReportAPIModel):
     comparison: ComparisonItem
     created_at: datetime
 
+    @classmethod
+    def from_record(cls, record: EconomyReportRunRecord) -> ReportRunItem:
+        """Build the response item from the service's report run record."""
+        return cls.model_validate(record)
+
 
 class ReportItem(StrictReportAPIModel):
     """An economy report comparing a baseline and a reform simulation.
@@ -139,6 +145,18 @@ class ReportDetailResult(StrictReportAPIModel):
     item: ReportItem
 
 
+class ReportRunDetailResult(StrictReportAPIModel):
+    """Result holding one report run in ``item``."""
+
+    item: ReportRunItem
+
+
+class ReportRunListResult(StrictReportAPIModel):
+    """A report's runs in ``items``, newest first."""
+
+    items: list[ReportRunItem]
+
+
 ResultT = TypeVar("ResultT")
 
 
@@ -152,6 +170,14 @@ class ReportSuccessResponse(StrictReportAPIModel, Generic[ResultT]):
 
 class ReportDetailResponse(ReportSuccessResponse[ReportDetailResult]):
     """Success response holding one report."""
+
+
+class ReportRunDetailResponse(ReportSuccessResponse[ReportRunDetailResult]):
+    """Success response holding one report run."""
+
+
+class ReportRunListResponse(ReportSuccessResponse[ReportRunListResult]):
+    """Success response holding a report's runs."""
 
 
 REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {

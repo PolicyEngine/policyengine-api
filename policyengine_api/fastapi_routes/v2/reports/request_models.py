@@ -1,7 +1,10 @@
 """Strict HTTP request models for v2 economy reports."""
 
 from policyengine_api.query_parameters import CountryId
-from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
+from policyengine_api.services.v2.economy_reports.types import (
+    EconomyReportFields,
+    EconomyReportRunFields,
+)
 
 
 class EconomyReportCreateRequest(EconomyReportFields):
@@ -12,3 +15,10 @@ class EconomyReportCreateRequest(EconomyReportFields):
     """
 
     country_id: CountryId
+
+
+class EconomyReportRunRequest(EconomyReportRunFields):
+    """A re-run on the current catalog version; ``{}`` reuses existing runs.
+
+    With ``force``, both simulations are calculated again as new attempts.
+    """

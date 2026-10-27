@@ -212,3 +212,86 @@ def test_an_unknown_v1_number_is_not_found() -> None:
     assert str(raised.value) == (
         "Economy report migrated from v1 report 616 was not found in country 'us'"
     )
+
+
+def test_a_rerun_runs_on_the_current_catalog_with_the_manual_trigger() -> None:
+    simulation = FakeEconomyReportSimulation(report_record(run=report_run_record()))
+
+    run = economy_report_service(simulation).run_report(
+        country_id="us", report_id=REPORT_ID, force=True
+    )
+
+    assert simulation.calls == [
+        ("get_report", REPORT_ID),
+        (
+            "run_report",
+            {
+                "report_id": REPORT_ID,
+                "policyengine_version": CURRENT_POLICYENGINE_VERSION,
+                "trigger": RunTrigger.MANUAL,
+                "force": True,
+            },
+        ),
+    ]
+    assert run.trigger == "manual"
+
+
+def test_a_rerun_in_a_household_only_country_is_refused_before_the_entrypoint() -> None:
+    simulation = FakeEconomyReportSimulation(report_record(country_id="zz"))
+
+    with pytest.raises(EconomyReportsUnsupportedError) as raised:
+        economy_report_service(simulation).run_report(
+            country_id="zz", report_id=REPORT_ID, force=False
+        )
+
+    assert "'zz'" in str(raised.value)
+    assert simulation.calls == []
+
+
+@pytest.mark.parametrize(
+    "reports",
+    [(), (report_record(country_id="uk"),)],
+    ids=["unknown", "other-country"],
+)
+def test_a_rerun_of_a_report_not_in_the_country_is_not_found(reports) -> None:
+    simulation = FakeEconomyReportSimulation(*reports)
+
+    with pytest.raises(EconomyReportNotFoundError):
+        economy_report_service(simulation).run_report(
+            country_id="us", report_id=REPORT_ID, force=False
+        )
+
+    assert [name for name, _ in simulation.calls] == ["get_report"]
+
+
+def test_a_rerun_the_entrypoint_refuses_reaches_the_caller() -> None:
+    simulation = FakeEconomyReportSimulation(report_record(run=report_run_record()))
+    reason = "us has no catalog for PolicyEngine.py 6.7.5"
+    simulation.run_error = SimulationRequestRefusedError(reason)
+
+    with pytest.raises(SimulationRequestRefusedError, match=reason):
+        economy_report_service(simulation).run_report(
+            country_id="us", report_id=REPORT_ID, force=False
+        )
+
+
+def test_a_reports_runs_are_listed_newest_first() -> None:
+    simulation = FakeEconomyReportSimulation(report_record())
+    service = economy_report_service(simulation)
+    service.get_report(country_id="us", report_id=REPORT_ID)
+    service.run_report(country_id="us", report_id=REPORT_ID, force=True)
+
+    runs = service.list_report_runs(country_id="us", report_id=REPORT_ID)
+
+    assert [run.trigger for run in runs] == ["manual", "system"]
+
+
+def test_the_runs_of_a_report_not_in_the_country_are_not_found() -> None:
+    simulation = FakeEconomyReportSimulation(report_record(country_id="uk"))
+
+    with pytest.raises(EconomyReportNotFoundError):
+        economy_report_service(simulation).list_report_runs(
+            country_id="us", report_id=REPORT_ID
+        )
+
+    assert [name for name, _ in simulation.calls] == ["get_report"]

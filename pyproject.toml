@@ -278,6 +278,7 @@ runtime-evaluated-base-classes = [
     "policyengine_api.query_parameters.StrictQueryParameters",
     "policyengine_api.services.v2.associations.types.StrictAssociationModel",
     "policyengine_api.services.v2.economy_reports.types.EconomyReportFields",
+    "policyengine_api.services.v2.economy_reports.types.EconomyReportRunFields",
     "policyengine_api.services.v2.economy_reports.types.StrictEconomyReportInput",
     "policyengine_api.services.v2.households.types.HouseholdCreationInput",
     "policyengine_api.services.v2.households.types.StrictHouseholdInput",

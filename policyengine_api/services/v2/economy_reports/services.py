@@ -33,6 +33,7 @@ from policyengine_api.services.v2.economy_reports.types import (
 )
 from policyengine_api.services.v2.economy_reports.validators import (
     economy_reports_supported,
+    report_not_found,
     require_economy_reports_supported,
     require_report_in_country,
 )
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.economy_reports.types import (
         EconomyReportFields,
         EconomyReportRecord,
+        EconomyReportRunRecord,
         EconomyReportSimulation,
     )
 
@@ -129,11 +131,10 @@ class V2EconomyReportService:
                 trigger=RunTrigger.SYSTEM,
                 force=False,
             )
-        except SimulationRecordNotFoundError:
-            require_report_in_country(
-                None, country_id=report.country_id, reference=str(report.id)
-            )
-            raise
+        except SimulationRecordNotFoundError as error:
+            raise report_not_found(
+                country_id=report.country_id, reference=str(report.id)
+            ) from error
         except SimulationRequestRefusedError as error:
             logger.warning(
                 "v2_economy_report_first_run_refused",
@@ -181,3 +182,53 @@ class V2EconomyReportService:
                 reference=f"migrated from v1 report {legacy_report_id}",
             )
         )
+
+    def run_report(
+        self, *, country_id: str, report_id: UUID, force: bool
+    ) -> EconomyReportRunRecord:
+        """Run a report of the country again on the current catalog version.
+
+        The run has the ``manual`` trigger and reuses existing simulation runs
+        unless ``force`` is set. Raise ``EconomyReportsUnsupportedError`` for a
+        country without economy reports, before the entrypoint is asked,
+        ``EconomyReportNotFoundError`` when the country has no such report, and
+        ``SimulationRequestRefusedError`` when the entrypoint cannot run it.
+        """
+        self._require_economy_reports(country_id)
+        reference = str(report_id)
+        self._report_in_country(
+            lambda: self._simulation.get_report(report_id),
+            country_id=country_id,
+            reference=reference,
+        )
+        try:
+            return self._simulation.run_report(
+                report_id,
+                policyengine_version=self._current_policyengine_version,
+                trigger=RunTrigger.MANUAL,
+                force=force,
+            )
+        except SimulationRecordNotFoundError as error:
+            raise report_not_found(
+                country_id=country_id, reference=reference
+            ) from error
+
+    def list_report_runs(
+        self, *, country_id: str, report_id: UUID
+    ) -> tuple[EconomyReportRunRecord, ...]:
+        """Return a report's runs, newest first, each with its catalog version.
+
+        Raise ``EconomyReportNotFoundError`` when the country has no such report.
+        """
+        reference = str(report_id)
+        self._report_in_country(
+            lambda: self._simulation.get_report(report_id),
+            country_id=country_id,
+            reference=reference,
+        )
+        try:
+            return self._simulation.list_report_runs(report_id)
+        except SimulationRecordNotFoundError as error:
+            raise report_not_found(
+                country_id=country_id, reference=reference
+            ) from error

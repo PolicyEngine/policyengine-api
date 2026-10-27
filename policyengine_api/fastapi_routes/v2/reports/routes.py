@@ -27,12 +27,18 @@ from policyengine_api.fastapi_routes.v2.errors import (
 )
 from policyengine_api.fastapi_routes.v2.reports.request_models import (
     EconomyReportCreateRequest,
+    EconomyReportRunRequest,
 )
 from policyengine_api.fastapi_routes.v2.reports.response_models import (
     REPORT_ERROR_RESPONSES,
     ReportDetailResponse,
     ReportDetailResult,
     ReportItem,
+    ReportRunDetailResponse,
+    ReportRunDetailResult,
+    ReportRunItem,
+    ReportRunListResponse,
+    ReportRunListResult,
 )
 from policyengine_api.fastapi_routes.v2.user_resources import request_size_limit
 from policyengine_api.query_parameters import (
@@ -55,6 +61,10 @@ if TYPE_CHECKING:
     from policyengine_api.fastapi_routes.dependencies import (
         NativeRouteDependencies,
         V2EconomyReportResourceService,
+    )
+    from policyengine_api.services.v2.economy_reports.types import (
+        EconomyReportRecord,
+        EconomyReportRunRecord,
     )
 
 logger = logging.getLogger(__name__)
@@ -147,6 +157,28 @@ def _service_factory(
     return _default_v2_economy_report_service_factory
 
 
+def _report_detail(report: EconomyReportRecord) -> ReportDetailResponse:
+    return ReportDetailResponse(
+        result=ReportDetailResult(item=ReportItem.from_record(report))
+    )
+
+
+def _report_run_detail(report_run: EconomyReportRunRecord) -> ReportRunDetailResponse:
+    return ReportRunDetailResponse(
+        result=ReportRunDetailResult(item=ReportRunItem.from_record(report_run))
+    )
+
+
+def _report_run_list(
+    runs: tuple[EconomyReportRunRecord, ...],
+) -> ReportRunListResponse:
+    return ReportRunListResponse(
+        result=ReportRunListResult(
+            items=[ReportRunItem.from_record(run) for run in runs]
+        )
+    )
+
+
 def build_v2_report_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
@@ -174,16 +206,13 @@ def build_v2_report_router(
     ) -> ReportDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
             return v2_error_response(400, "Body country_id must match query country_id")
-
-        def submit() -> ReportDetailResponse:
-            report = service_factory().submit_report(
-                country_id=query.country_id, report_input=body
+        return _report_operation(
+            lambda: _report_detail(
+                service_factory().submit_report(
+                    country_id=query.country_id, report_input=body
+                )
             )
-            return ReportDetailResponse(
-                result=ReportDetailResult(item=ReportItem.from_record(report))
-            )
-
-        return _report_operation(submit)
+        )
 
     @router.get(
         "/reports/by-legacy-number/{legacy_report_id}",
@@ -199,15 +228,13 @@ def build_v2_report_router(
         legacy_report_id: LegacyReportNumber,
         query: ReportDetailQueryDependency,
     ) -> ReportDetailResponse | JSONResponse:
-        def read() -> ReportDetailResponse:
-            report = service_factory().get_report_by_legacy_number(
-                country_id=query.country_id, legacy_report_id=legacy_report_id
+        return _report_operation(
+            lambda: _report_detail(
+                service_factory().get_report_by_legacy_number(
+                    country_id=query.country_id, legacy_report_id=legacy_report_id
+                )
             )
-            return ReportDetailResponse(
-                result=ReportDetailResult(item=ReportItem.from_record(report))
-            )
-
-        return _report_operation(read)
+        )
 
     @router.get(
         "/reports/{report_id}",
@@ -226,14 +253,60 @@ def build_v2_report_router(
         report_id: UUID,
         query: ReportDetailQueryDependency,
     ) -> ReportDetailResponse | JSONResponse:
-        def read() -> ReportDetailResponse:
-            report = service_factory().get_report(
-                country_id=query.country_id, report_id=report_id
+        return _report_operation(
+            lambda: _report_detail(
+                service_factory().get_report(
+                    country_id=query.country_id, report_id=report_id
+                )
             )
-            return ReportDetailResponse(
-                result=ReportDetailResult(item=ReportItem.from_record(report))
-            )
+        )
 
-        return _report_operation(read)
+    @router.post(
+        "/reports/{report_id}/runs",
+        response_model=ReportRunDetailResponse,
+        status_code=201,
+        summary="Run an economy report again",
+        description=(
+            "Runs the report on the country's current catalog version with the "
+            "manual trigger. Simulation runs that already exist for that version "
+            "and year are reused unless force is set, which calculates both "
+            "simulations again. A country without economy reports is refused "
+            "with 422 before the simulation service is asked."
+        ),
+    )
+    def run_report(
+        report_id: UUID,
+        body: EconomyReportRunRequest,
+        query: ReportDetailQueryDependency,
+        _size: Annotated[None, Depends(enforce_report_request_size)],
+    ) -> ReportRunDetailResponse | JSONResponse:
+        return _report_operation(
+            lambda: _report_run_detail(
+                service_factory().run_report(
+                    country_id=query.country_id, report_id=report_id, force=body.force
+                )
+            )
+        )
+
+    @router.get(
+        "/reports/{report_id}/runs",
+        response_model=ReportRunListResponse,
+        summary="List an economy report's runs",
+        description=(
+            "Every run of the report, newest first, each with the catalog version "
+            "and PolicyEngine.py version it ran on."
+        ),
+    )
+    def list_report_runs(
+        report_id: UUID,
+        query: ReportDetailQueryDependency,
+    ) -> ReportRunListResponse | JSONResponse:
+        return _report_operation(
+            lambda: _report_run_list(
+                service_factory().list_report_runs(
+                    country_id=query.country_id, report_id=report_id
+                )
+            )
+        )
 
     return router

@@ -451,3 +451,106 @@ def test_openapi_publishes_the_read_contracts() -> None:
         if parameter["name"] == "legacy_report_id"
     )
     assert legacy_number["schema"]["minimum"] == 1
+
+
+def test_a_rerun_answers_with_the_new_run() -> None:
+    simulation = FakeEconomyReportSimulation(report_record(run=report_run_record()))
+
+    response = _client(simulation).post(
+        f"/v2/reports/{REPORT_ID}/runs?country_id=us", json={"force": True}
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "status": "ok",
+        "message": None,
+        "result": {"item": {**PENDING_RUN_ITEM, "trigger": "manual"}},
+    }
+    assert simulation.calls[-1][1]["force"] is True
+
+
+def test_a_rerun_reuses_simulation_runs_unless_forced() -> None:
+    simulation = FakeEconomyReportSimulation(report_record(run=report_run_record()))
+
+    response = _client(simulation).post(
+        f"/v2/reports/{REPORT_ID}/runs?country_id=us", json={}
+    )
+
+    assert response.status_code == 201
+    assert simulation.calls[-1][1]["force"] is False
+
+
+def test_a_rerun_in_a_household_only_country_is_refused_naming_it() -> None:
+    sessions = countries_store()
+    with sessions() as session:
+        united_states = session.exec(select(Country).where(Country.id == "us")).one()
+        united_states.society_wide_enabled = False
+        session.commit()
+    simulation = FakeEconomyReportSimulation(report_record(run=report_run_record()))
+
+    response = _client(simulation, sessions=sessions).post(
+        f"/v2/reports/{REPORT_ID}/runs?country_id=us", json={}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["message"] == (
+        "Economy reports are not available for country 'us'"
+    )
+    assert simulation.calls == []
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"force": "yes"}, {"force": None}, {"trigger": "system"}, None],
+    ids=["text", "null", "trigger", "no-body"],
+)
+def test_a_rerun_body_outside_the_contract_is_refused(body) -> None:
+    simulation = FakeEconomyReportSimulation(report_record(run=report_run_record()))
+
+    response = _client(simulation).post(
+        f"/v2/reports/{REPORT_ID}/runs?country_id=us", json=body
+    )
+
+    assert response.status_code == 422
+    assert simulation.calls == []
+
+
+def test_a_reports_runs_are_listed() -> None:
+    simulation = FakeEconomyReportSimulation(report_record())
+    client = _client(simulation)
+    client.get(f"/v2/reports/{REPORT_ID}?country_id=us")
+    client.post(f"/v2/reports/{REPORT_ID}/runs?country_id=us", json={})
+
+    response = client.get(f"/v2/reports/{REPORT_ID}/runs?country_id=us")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "message": None,
+        "result": {
+            "items": [
+                {**PENDING_RUN_ITEM, "trigger": "manual"},
+                {**PENDING_RUN_ITEM, "trigger": "system"},
+            ]
+        },
+    }
+
+
+def test_the_runs_of_an_unknown_report_are_not_found() -> None:
+    response = _client(FakeEconomyReportSimulation()).get(
+        f"/v2/reports/{REPORT_ID}/runs?country_id=us"
+    )
+
+    assert response.status_code == 404
+
+
+def test_openapi_publishes_the_run_contracts() -> None:
+    schema = _client(FakeEconomyReportSimulation()).get("/v2/openapi.json").json()
+
+    runs = schema["paths"]["/v2/reports/{report_id}/runs"]
+    assert set(runs) == {"get", "post"}
+    assert "201" in runs["post"]["responses"]
+    assert set(runs["get"]["responses"]) >= {"200", "404", "422", "503"}
+    body = schema["components"]["schemas"]["EconomyReportRunRequest"]
+    assert body["additionalProperties"] is False
+    assert body["properties"]["force"]["default"] is False

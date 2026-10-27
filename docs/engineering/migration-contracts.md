@@ -8,7 +8,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | ---: |
 | route group count | 9 |
 | workflow count | 18 |
-| request count | 93 |
+| request count | 95 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -209,6 +209,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `POST` | `/v2/reports?country_id=us` | 201 | `report` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.kind`, `result.item.year`, `result.item.baseline_simulation`, `result.item.reform_simulation`, `result.item.status`, `result.item.run`, `result.item.result` |
 | `GET` | `/v2/reports/{report_id}?country_id=us` | 200 | `report` | none | `status`, `message`, `result.item.id`, `result.item.legacy_report_id`, `result.item.status`, `result.item.run`, `result.item.result` |
 | `GET` | `/v2/reports/by-legacy-number/{legacy_report_id}?country_id=us` | 200 | `report` | none | `status`, `message`, `result.item.id`, `result.item.legacy_report_id`, `result.item.status` |
+| `POST` | `/v2/reports/{report_id}/runs?country_id=us` | 201 | `report` | none | `status`, `message`, `result.item.id`, `result.item.trigger`, `result.item.tax_benefit_model_version_id`, `result.item.policyengine_version`, `result.item.status` |
+| `GET` | `/v2/reports/{report_id}/runs?country_id=us` | 200 | `report` | none | `status`, `message`, `result.items` |
 
 ### `metadata_resources_v2_preview`
 

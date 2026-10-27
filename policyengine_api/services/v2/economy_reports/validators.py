@@ -46,6 +46,12 @@ def require_report_in_country(
     own list. ``reference`` names the requested report in the message.
     """
     if report is None or report.country_id != country_id:
-        msg = f"Economy report {reference} was not found in country {country_id!r}"
-        raise EconomyReportNotFoundError(msg)
+        raise report_not_found(country_id=country_id, reference=reference)
     return report
+
+
+def report_not_found(*, country_id: str, reference: str) -> EconomyReportNotFoundError:
+    """Build the error for a report the country does not have."""
+    return EconomyReportNotFoundError(
+        f"Economy report {reference} was not found in country {country_id!r}"
+    )

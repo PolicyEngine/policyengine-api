@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictBool
 
 from policyengine_api.query_parameters import ResourceId
 
@@ -79,7 +79,7 @@ class EconomyReportFields(StrictEconomyReportInput):
 class EconomyReportRunFields(StrictEconomyReportInput):
     """A re-run; ``force`` calculates both simulations again instead of reusing runs."""
 
-    force: bool = False
+    force: StrictBool = False
 
 
 @dataclass(frozen=True)

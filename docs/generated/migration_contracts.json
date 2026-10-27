@@ -1,7 +1,7 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 93,
+    "request_count": 95,
     "route_group_count": 9,
     "sim_flow_count": 3,
     "workflow_count": 18
@@ -1422,6 +1422,34 @@
             "result.item.id",
             "result.item.legacy_report_id",
             "result.item.status"
+          ]
+        },
+        {
+          "expected_status": 201,
+          "headers": [],
+          "method": "POST",
+          "path": "/v2/reports/{report_id}/runs?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.trigger",
+            "result.item.tax_benefit_model_version_id",
+            "result.item.policyengine_version",
+            "result.item.status"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/reports/{report_id}/runs?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items"
           ]
         }
       ]

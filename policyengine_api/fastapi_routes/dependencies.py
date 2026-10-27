@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.economy_reports.types import (
         EconomyReportFields,
         EconomyReportRecord,
+        EconomyReportRunRecord,
         EconomyReportSimulation,
     )
     from policyengine_api.services.v2.households.types import (
@@ -356,6 +357,27 @@ class V2EconomyReportResourceService(Protocol):
         """Return the report migrated from a v1 report output number, as ``get_report``.
 
         Raise ``EconomyReportNotFoundError`` when none of the country's was.
+        """
+        ...
+
+    def run_report(
+        self, *, country_id: str, report_id: UUID, force: bool
+    ) -> EconomyReportRunRecord:
+        """Run a report again on the current catalog version (trigger ``manual``).
+
+        Existing simulation runs are reused unless ``force`` is set. Raise
+        ``EconomyReportsUnsupportedError`` for a country without economy
+        reports, ``EconomyReportNotFoundError`` for an unknown report and
+        ``SimulationRequestRefusedError`` when the entrypoint cannot run it.
+        """
+        ...
+
+    def list_report_runs(
+        self, *, country_id: str, report_id: UUID
+    ) -> tuple[EconomyReportRunRecord, ...]:
+        """Return a report's runs, newest first.
+
+        Raise ``EconomyReportNotFoundError`` when the country has no such report.
         """
         ...
 
