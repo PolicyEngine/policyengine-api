@@ -1,0 +1,11 @@
+name: Relock
+on:
+  # Manual only: nothing relocks uv.lock on a schedule.
+  workflow_dispatch:
+jobs:
+  relock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Relock
+        run: bash .github/scripts/relock.sh

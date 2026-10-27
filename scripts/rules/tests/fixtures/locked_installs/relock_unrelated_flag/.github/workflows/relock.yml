@@ -1,0 +1,16 @@
+name: Relock
+on:
+  schedule:
+    - cron: "0 7 * * *"
+jobs:
+  relock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The -U belongs to pip, not to uv lock: nothing is upgraded.
+      - name: Upgrade pip
+        run: pip install -U pip
+      - name: Lock
+        run: uv lock
+      - name: Open the pull request
+        run: gh pr create --title "Relock" --body "Relock"

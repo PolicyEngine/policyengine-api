@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 55 | 0 | 1 | 13 | 69 |
+| mechanical | 59 | 0 | 1 | 13 | 73 |
 | metric | 0 | 0 | 0 | 0 | 0 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 55 of 70 rules.
+**Blocking:** 59 of 74 rules.
 
 ## Gaps
 
@@ -70,7 +70,14 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Exceptions and review dates
 
-- None.
+- `api.dependencies.install-from-lock`: exception for `.github/scripts/install_locked_ruff.sh` (`pip install "ruff==`) allowed as a pinned-tool (Installs the ruff version uv.lock pins, read from uv.lock, without installing the whole project for the lint job.)
+- `api.dependencies.install-from-lock`: exception for `.github/scripts/verify_observability_collector.sh` (`uv run --no-project --with grpcio --with opentelemetry-proto`) until the deploy job syncs the project with uv sync --frozen and the check runs through uv run --frozen (The collector check runs in the deploy job without installing the project; grpcio and opentelemetry-proto are locked only as transitive dependencies of the project.)
+- `api.dependencies.install-from-lock`: exception for `.github/workflows/migrate-v1-cloud-sql.yml` (`pip install -e ".[dev]"`) until the job installs with uv sync --frozen and runs its scripts through uv run --frozen, after a run against the staging database succeeds (The migration scripts run with the bare python setup-python provides, against the production and staging Cloud SQL databases; moving them to uv run --frozen has not been tested against those databases.)
+- `api.dependencies.install-from-lock`: exception for `.github/workflows/pr.yml` (`pip install "shellcheck-py==`) allowed as a pinned-tool (shellcheck is a command-line tool the ci-scripts guard runs; it is not a dependency of the project.)
+- `api.dependencies.install-from-lock`: exception for `.github/workflows/process-v1-household-mirror-event.yml` (`pip install -e ".[dev]"`) until the job installs with uv sync --frozen and runs its script through uv run --frozen, after a run against the staging database succeeds (The operator script runs with the bare python setup-python provides, against the production and staging databases; moving it to uv run --frozen has not been tested against those databases.)
+- `api.dependencies.install-from-lock`: exception for `.github/workflows/push.yml` (`pip install "shellcheck-py==`) allowed as a pinned-tool (shellcheck is a command-line tool the ci-scripts guard runs; it is not a dependency of the project.)
+- `api.dependencies.install-from-lock`: exception for `.github/workflows/update-policyengine-bundle.yaml` (`pip install requests uv`) until the workflow installs uv with astral-sh/setup-uv at a pinned version and runs its Python through uv run --frozen (The bundle updater changes uv.lock, so it runs before a matching lock exists; it installs uv itself and requests for its inline Python with setup-python's interpreter.)
+- `api.dependencies.install-from-lock`: exception for `docker/Dockerfile` (`pip install "policyengine[models]==`) until the image installs from uv.lock (uv sync --frozen, or uv export --frozen piped to pip install --no-deps), or is removed (The image packages the PolicyEngine .py bundle for interactive use, not this project; uv.lock locks this project. The bundle updater keeps the pin equal to pyproject.toml's, but ipython and the bundle's own dependencies are not pinned.)
 
 ## API v2 layer boundaries
 
@@ -423,6 +430,30 @@ flowchart LR
   e_quality_guard_ci_scripts --> j_CI_pr_yml_quality_guards
   r_api_ci_shell_scripts_pass_shellcheck --> e_quality_guard_ci_scripts
   r_api_ci_workflow_scripts_tested --> e_quality_guard_ci_scripts
+```
+
+## Dependencies and uv.lock
+
+| Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `api.dependencies.install-from-lock` | Every install of Python packages in a workflow, a shell script, a Makefile, a Dockerfile or a Modal image installs exactly what uv.lock pins (uv sync --frozen, uv run --frozen), unless it is a registered exception. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards` | yes |
+| `api.dependencies.lock-committed` | Every directory with a pyproject.toml has a committed uv.lock beside it, and a pull request CI job runs uv lock --check for it. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards`, `pr.yml:quality-guards` | yes |
+| `api.dependencies.scheduled-relock` | A workflow on a schedule relocks every uv.lock with upgrades and opens or updates a pull request with the result. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards` | yes |
+| `api.dependencies.test-from-lock` | Every test command in a workflow, a shell script, a Makefile or a Dockerfile runs inside the uv.lock environment, through uv run --frozen. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards` | yes |
+
+```mermaid
+flowchart LR
+  r_api_dependencies_install_from_lock("api.dependencies.install-from-lock (enforced)")
+  e_quality_guard_locked_installs["quality guard locked-installs"]
+  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
+  r_api_dependencies_lock_committed("api.dependencies.lock-committed (enforced)")
+  r_api_dependencies_scheduled_relock("api.dependencies.scheduled-relock (enforced)")
+  r_api_dependencies_test_from_lock("api.dependencies.test-from-lock (enforced)")
+  r_api_dependencies_install_from_lock --> e_quality_guard_locked_installs
+  e_quality_guard_locked_installs --> j_CI_pr_yml_quality_guards
+  r_api_dependencies_lock_committed --> e_quality_guard_locked_installs
+  r_api_dependencies_scheduled_relock --> e_quality_guard_locked_installs
+  r_api_dependencies_test_from_lock --> e_quality_guard_locked_installs
 ```
 
 ## Process and repository hygiene
