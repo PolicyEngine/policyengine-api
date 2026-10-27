@@ -262,7 +262,8 @@ for immediate rollback.
 `POST /v2/household-calculations` calculates a household stored through
 `/v2/households`, under a policy stored through `/v2/policies` or, without
 `policy_id`, under current law, for the household's `default_year`. The body
-may add `axes` and `add_missing_variables`. An identical calculation that
+may add `axes` (an axis without a `period` varies the household's
+`default_year`) and `add_missing_variables`. An identical calculation that
 succeeded in the last 28 days is returned again; callers cannot force a new
 one. The
 Public API checks the country's `countries` row allows household calculations

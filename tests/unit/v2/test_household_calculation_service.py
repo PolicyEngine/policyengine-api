@@ -104,7 +104,10 @@ def test_a_calculation_sends_the_stored_household_policy_and_catalog() -> None:
                 }
             },
         },
-        "options": {"axes": AXES, "add_missing_variables": True},
+        "options": {
+            "axes": [[{**AXES[0][0], "period": "2026"}]],
+            "add_missing_variables": True,
+        },
         "force": False,
         "trigger": "initial",
     }
@@ -309,3 +312,12 @@ def test_requests_refused_by_the_public_api_need_no_simulation_service() -> None
         available_country.submit_calculation(calculation_input(household_id=uuid4()))
     with pytest.raises(SimulationServiceUnavailableError):
         available_country.submit_calculation(calculation_input())
+
+
+def test_an_axis_keeps_its_own_period() -> None:
+    parts = Parts()
+    axes = [[{**AXES[0][0], "period": "2025-03"}]]
+
+    parts.service.submit_calculation(calculation_input(axes=axes))
+
+    assert parts.simulation.submissions[0]["options"]["axes"] == axes

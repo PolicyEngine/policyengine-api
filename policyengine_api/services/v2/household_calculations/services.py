@@ -44,6 +44,28 @@ if TYPE_CHECKING:
     )
 
 
+def _axes_in_year(
+    calculation: HouseholdCalculationInput, year: int
+) -> list[list[dict[str, Any]]] | None:
+    """Return the axes as sent, each without a period varying ``year``.
+
+    The country model would otherwise vary its own default period, the
+    current year, rather than the year the household's values name.
+    """
+    if calculation.axes is None:
+        return None
+    sent_axes = []
+    for group in calculation.axes:
+        sent_group = []
+        for axis in group:
+            sent_axis = axis.model_dump(mode="json", exclude_unset=True)
+            if sent_axis.get("period") is None:
+                sent_axis["period"] = str(year)
+            sent_group.append(sent_axis)
+        sent_axes.append(sent_group)
+    return sent_axes
+
+
 class V2HouseholdCalculationService:
     """Submit household calculations to the simulation service and read them."""
 
@@ -114,17 +136,7 @@ class V2HouseholdCalculationService:
                 "parameters": parameters,
             },
             "options": {
-                "axes": (
-                    None
-                    if calculation.axes is None
-                    else [
-                        [
-                            axis.model_dump(mode="json", exclude_unset=True)
-                            for axis in group
-                        ]
-                        for group in calculation.axes
-                    ]
-                ),
+                "axes": _axes_in_year(calculation, year),
                 "add_missing_variables": calculation.add_missing_variables,
             },
             # A calculation is reused for 28 days after it succeeded; callers

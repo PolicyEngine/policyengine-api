@@ -39,7 +39,7 @@ class HouseholdCalculationAxis(StrictCalculationModel):
     """One input varied across points.
 
     The variable ``name`` takes ``count`` evenly spaced values from ``min`` to
-    ``max`` in ``period`` (the household's default period when omitted), for
+    ``max`` in ``period`` (the household's ``default_year`` when omitted), for
     the entity member at position ``index`` (the first when omitted).
     """
 

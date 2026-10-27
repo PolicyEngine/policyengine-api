@@ -106,7 +106,9 @@ def test_a_calculation_with_axes_sends_them() -> None:
     response = app.client.post(PATH, json=body(axes=axes))
 
     assert response.status_code == 202
-    assert app.simulation.submissions[0]["options"]["axes"] == axes
+    assert app.simulation.submissions[0]["options"]["axes"] == [
+        [{**axes[0][0], "period": "2026"}]
+    ]
 
 
 def test_a_succeeded_us_calculation_reads_back_its_spm_choice() -> None:
