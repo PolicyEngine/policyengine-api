@@ -1,3 +1,15 @@
+## [5.13.1] - 2026-10-27
+
+### Changed
+
+- Enforced the file-length rule now that no Python file is over its limit, deleted its empty baseline, and registered it in the metric tier, the tier for a number crossing a threshold.
+
+### Fixed
+
+- The daily telemetry error issues compute the error rate only from failures on route templates, leaving out placeholder routes such as `<unmatched>`, and show n/a with the counts instead of a rate above 100% when more requests failed than were logged as completed.
+- The daily telemetry error report gives the same error groups, counts and issues for the same log records whatever order BigQuery returns them in: records that tie on preference or time are now ordered by their own values.
+
+
 ## [5.13.0] - 2026-10-27
 
 ### Added

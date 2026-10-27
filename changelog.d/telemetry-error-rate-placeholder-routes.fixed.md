@@ -1,1 +1,0 @@
-The daily telemetry error issues compute the error rate only from failures on route templates, leaving out placeholder routes such as `<unmatched>`, and show n/a with the counts instead of a rate above 100% when more requests failed than were logged as completed.
