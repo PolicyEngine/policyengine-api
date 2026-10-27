@@ -345,8 +345,14 @@ completes without `kind: "local_areas"`, also returns HTTP 502. Its result is
 not stored. Its error is kept for two minutes on that job's own record, so
 every request in that time gets the same error, which says when a new
 breakdown can be requested; then the record expires and the next request
-submits a new job. Other jobs' records are not changed. A failed national job
-is still stored and returned again for the cache lifetime of 30 days.
+submits a new job. Other jobs' records are not changed. A failed US state job
+(`country_id` `us` with region `state/...`, or a bare state code) keeps its
+error for two minutes in the same way, with a message that says when the
+state can be requested again, so a client can retry one state of a
+nationwide report's congressional districts. Any other failed job, such as
+a national, congressional district or place job, is still stored and
+returned again for the cache lifetime of 30 days, and so is a typed SPM
+failure.
 
 Before cache access or submission,
 the API validates the selected worker application's `canonical-spm-v1` capability

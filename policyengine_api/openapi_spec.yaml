@@ -951,7 +951,7 @@ paths:
                   message:
                     type: string
         502:
-          description: The calculation failed, or the simulation API refused a breakdown=local_areas request it cannot run. The message gives the reason. A failed breakdown=local_areas job, or one whose result is not kind local_areas, keeps its error for two minutes only; after that the next request submits a new job.
+          description: The calculation failed, or the simulation API refused a breakdown=local_areas request it cannot run. The message gives the reason. A failed breakdown=local_areas job, or one whose result is not kind local_areas, keeps its error for two minutes only; after that the next request submits a new job. A failed US state job (country_id us with region state/..., or a bare state code) also keeps its error for two minutes only; failed US national, congressional district and place jobs keep theirs for 30 days.
           content:
             application/json:
               schema:

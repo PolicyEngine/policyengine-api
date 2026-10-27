@@ -115,14 +115,22 @@ BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES = {400, 422}
 # 400 from a gateway whose routed .py release does not declare breakdowns, and
 # 422 from an entry deployment that does not know the field.
 LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES = frozenset({400, 422})
-# How long a failed breakdown's error is returned before the next request may
-# submit a new job. Short, so the app's Retry works soon, but long enough that
-# a client retrying on every 502 does not start a run on the large local-area
-# dataset each time.
-LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS = 120
+# How long the error of a failed local-area breakdown or US state job is
+# returned before the next request may submit a new job. Both run on large
+# local-area datasets, where a timeout or memory failure may not repeat, and
+# the app offers Retry for both: for a UK breakdown, and for each state it runs
+# for a US nationwide report's congressional districts. Short, so Retry works
+# soon, but long enough that a client retrying on every 502 does not start a
+# run on that dataset each time. Every other failed job's error is kept for the
+# cache lifetime of 30 days.
+RETRYABLE_FAILURE_SECONDS = 120
 LOCAL_AREA_BREAKDOWN_RETRY_NOTE = (
     "A new local-area breakdown can be requested "
-    f"{LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS // 60} minutes after this failure."
+    f"{RETRYABLE_FAILURE_SECONDS // 60} minutes after this failure."
+)
+US_STATE_RETRY_NOTE = (
+    "A new run for this state can be requested "
+    f"{RETRYABLE_FAILURE_SECONDS // 60} minutes after this failure."
 )
 # The telemetry simulation_kind of a breakdown run. The simulation API's
 # telemetry envelope forbids extra fields, so the run is marked here rather
@@ -1569,8 +1577,11 @@ class EconomyService:
             raw_result = self._simulation_gateway.get_execution_result(execution)
             kind_error = self._breakdown_result_kind_error(setup_options, raw_result)
             if kind_error is not None:
-                return self._record_breakdown_failure(
-                    setup_options, reform_impact, kind_error
+                return self._record_retryable_failure(
+                    setup_options,
+                    reform_impact,
+                    kind_error,
+                    retry_note=LOCAL_AREA_BREAKDOWN_RETRY_NOTE,
                 )
             result = self._with_policyengine_bundle(
                 result=raw_result,
@@ -1604,9 +1615,13 @@ class EconomyService:
                 error_message = (
                     f"Simulation entrypoint execution failed: {execution.error}"
                 )
-            if setup_options.options.get("breakdown") is not None:
-                return self._record_breakdown_failure(
-                    setup_options, reform_impact, error_message
+            retry_note = self._failure_retry_note(setup_options)
+            if retry_note is not None:
+                return self._record_retryable_failure(
+                    setup_options,
+                    reform_impact,
+                    error_message,
+                    retry_note=retry_note,
                 )
 
             self._set_reform_impact_error(
@@ -1655,31 +1670,51 @@ class EconomyService:
             f"{LOCAL_AREA_BREAKDOWN!r}; the result was not stored"
         )
 
-    def _record_breakdown_failure(
+    @staticmethod
+    def _failure_retry_note(setup_options: EconomicImpactSetupOptions) -> str | None:
+        """Return the retry note for a failed job whose error is kept briefly.
+
+        A local-area breakdown job and a US state job (region ``state/...``,
+        already normalized from a bare state code) get a note; every other
+        failed job, including US national, congressional district and place
+        jobs, gets None, and its error is kept for the cache lifetime.
+        """
+        if setup_options.options.get("breakdown") is not None:
+            return LOCAL_AREA_BREAKDOWN_RETRY_NOTE
+        if setup_options.country_id == "us" and setup_options.region.startswith(
+            "state/"
+        ):
+            return US_STATE_RETRY_NOTE
+        return None
+
+    def _record_retryable_failure(
         self,
         setup_options: EconomicImpactSetupOptions,
         reform_impact: CachedReformImpact,
         reason: str,
+        *,
+        retry_note: str,
     ) -> EconomicImpactResult:
-        """Keep a failed breakdown job's error for two minutes, then let it go.
+        """Keep a failed job's error for two minutes, then let it go.
 
-        A breakdown runs on the large local-area dataset, where a timeout or
-        memory failure may not repeat, so its failure is not kept for the usual
-        30 days. This job's own record, found by its execution ID, becomes an
-        error that expires after ``LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS``.
-        Until then every request gets the same error, which says when to try
-        again; after it, the next request finds no record and submits a new
-        job. No other job's record is read or changed, and no submission claim
-        is held at this point: it was released once the job was handed off.
-        Failures of requests without a breakdown are stored as before.
+        Used for local-area breakdown and US state jobs, which run on large
+        local-area datasets, where a timeout or memory failure may not repeat,
+        so their failures are not kept for the usual 30 days. This job's own
+        record, found by its execution ID, becomes an error that expires after
+        ``RETRYABLE_FAILURE_SECONDS``. Until then every request gets the same
+        error, which ends with ``retry_note`` to say when to try again; after
+        it, the next request finds no record and submits a new job. No other
+        job's record is read or changed, and no submission claim is held at
+        this point: it was released once the job was handed off. Other failed
+        jobs, and typed SPM failures, are stored as before.
         """
-        message = f"{reason}. {LOCAL_AREA_BREAKDOWN_RETRY_NOTE}"
+        message = f"{reason}. {retry_note}"
         if reform_impact.execution_id:
             self._set_reform_impact_error(
                 setup_options=setup_options,
                 message=message,
                 execution_id=reform_impact.execution_id,
-                keep_seconds=LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS,
+                keep_seconds=RETRYABLE_FAILURE_SECONDS,
             )
         return EconomicImpactResult.error(message=message)
 
