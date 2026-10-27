@@ -9,7 +9,9 @@ from uuid import UUID
 import pytest
 
 from policyengine_api.services.v2.associations.validators import (
+    AssociationConflictError,
     AssociationLinkNotFoundError,
+    AssociationReferenceConflictError,
 )
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
@@ -293,6 +295,13 @@ def test_report_create_rejects_invalid_v3_payloads(changes: dict) -> None:
         (SimulationReferenceNotFoundError("v2 report was not found"), 422),
         (UserReportNotFoundError("association was not found"), 404),
         (SimulationServiceUnavailableError("HTTP 503"), 503),
+        (
+            AssociationReferenceConflictError(
+                "v2 report was not migrated from v1 report 616"
+            ),
+            400,
+        ),
+        (AssociationConflictError("association changed; try again"), 409),
     ],
 )
 def test_report_failures_map_to_contract_statuses(

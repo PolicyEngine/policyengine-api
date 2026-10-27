@@ -127,8 +127,10 @@ def build_v2_user_report_router(
             "header; the owner is taken from that credential. "
             "The body names a v2 report (report_id), checked with the simulation "
             "service, a v1 report output (legacy_report_id), checked in the v1 "
-            "database, or both. An optional user_policy_id must name the same "
-            "user's saved policy in the same country."
+            "database, or both; with both, the v2 report must be the one migrated "
+            "from that v1 report output (400 otherwise). An optional "
+            "user_policy_id must name the same user's saved policy in the same "
+            "country."
         ),
     )
     def create_user_report(

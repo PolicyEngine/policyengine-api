@@ -16,6 +16,10 @@ from policyengine_api.data.v2.models import (
     UserReportAssociation,
     UserSimulationAssociation,
 )
+from policyengine_api.services.v2.associations.validators import (
+    AssociationConflictError,
+    AssociationReferenceConflictError,
+)
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
 )
@@ -60,13 +64,15 @@ from tests.unit.v2.user_service_support import (
 )
 
 OTHER_REPORT_ID = UUID("00000000-0000-4000-8000-000000000199")
+NOT_MIGRATED_REPORT_ID = UUID("00000000-0000-4000-8000-000000000195")
 UK_SIMULATION_ID = UUID("00000000-0000-4000-8000-000000000196")
 
 
 @pytest.fixture
 def entrypoint() -> FakeEconomyReportSimulation:
     return FakeEconomyReportSimulation(
-        report_record(),
+        report_record(legacy_report_id=615),
+        report_record(report_id=NOT_MIGRATED_REPORT_ID),
         report_record(report_id=OTHER_REPORT_ID, country_id="uk"),
     )
 
@@ -314,3 +320,114 @@ def test_a_saved_simulation_needs_a_simulation_reference() -> None:
         UserSimulationCreateFields(country_id="us")
     with pytest.raises(ValidationError):
         UserSimulationUpdateInput(simulation_id=None)
+
+
+@pytest.mark.parametrize(
+    ("report_id", "legacy_report_id"),
+    [(REPORT_ID, 616), (NOT_MIGRATED_REPORT_ID, 615)],
+    ids=["migrated-from-another", "not-migrated"],
+)
+def test_both_references_must_name_the_same_report(
+    store, entrypoint, report_id, legacy_report_id
+) -> None:
+    with pytest.raises(AssociationReferenceConflictError) as raised:
+        _service(store, entrypoint).create_user_report(
+            principal=ALICE,
+            association_input=UserReportCreateFields(
+                country_id="us", report_id=report_id, legacy_report_id=legacy_report_id
+            ),
+        )
+
+    assert str(raised.value) == (
+        f"v2 report {report_id} was not migrated from v1 report {legacy_report_id}"
+    )
+    assert _saved_reports(store) == []
+
+
+def _saved_report(service, **references):
+    return service.create_user_report(
+        principal=ALICE,
+        association_input=UserReportCreateFields(country_id="us", **references),
+    )
+
+
+def _patch(service, saved, **changes):
+    return service.patch_user_report(
+        principal=ALICE,
+        country_id="us",
+        association_id=saved.id,
+        association_input=UserReportUpdateInput(**changes),
+    )
+
+
+def test_a_repointed_reference_must_match_the_stored_one(store, entrypoint) -> None:
+    service = _service(store, entrypoint)
+    v1_only = _saved_report(service, legacy_report_id=616)
+    v2_only = _saved_report(service, report_id=REPORT_ID)
+
+    with pytest.raises(AssociationReferenceConflictError):
+        _patch(service, v1_only, report_id=REPORT_ID)
+    with pytest.raises(AssociationReferenceConflictError):
+        _patch(service, v2_only, legacy_report_id=616)
+    paired = _patch(service, v2_only, legacy_report_id=615)
+
+    stored = {report.id: report for report in _saved_reports(store)}
+    assert (stored[v1_only.id].report_id, stored[v1_only.id].legacy_report_id) == (
+        None,
+        616,
+    )
+    assert (paired.report_id, paired.legacy_report_id) == (REPORT_ID, 615)
+
+
+def test_a_patch_that_keeps_both_references_asks_nothing(store, entrypoint) -> None:
+    service = _service(store, entrypoint)
+    saved = _saved_report(service, report_id=REPORT_ID, legacy_report_id=615)
+    entrypoint.calls.clear()
+
+    renamed = _patch(service, saved, name="Child tax credit")
+
+    assert renamed.name == "Child tax credit"
+    assert entrypoint.calls == []
+
+
+class ChangingReferenceChecker:
+    """Check references, then change the saved report as a concurrent patch would."""
+
+    def __init__(self, checker, store, association_id) -> None:
+        self._checker = checker
+        self._store = store
+        self._association_id = association_id
+
+    def require_report(self, *, country_id, report_id, legacy_report_id=None) -> None:
+        self._checker.require_report(
+            country_id=country_id,
+            report_id=report_id,
+            legacy_report_id=legacy_report_id,
+        )
+        with self._store.sessions.begin() as session:
+            association = session.get(UserReportAssociation, self._association_id)
+            association.legacy_report_id = 616
+
+    def require_simulation(self, *, country_id, simulation_id) -> None:
+        self._checker.require_simulation(
+            country_id=country_id, simulation_id=simulation_id
+        )
+
+
+def test_a_report_changed_while_its_reference_is_checked_is_not_repointed(
+    store, entrypoint
+) -> None:
+    saved = _saved_report(_service(store, entrypoint), legacy_report_id=615)
+    service = V2UserReportService(
+        UserReportDatabaseSession(store.sessions),
+        default_legacy_references(),
+        ChangingReferenceChecker(
+            SimulationReferenceService(entrypoint), store, saved.id
+        ),
+    )
+
+    with pytest.raises(AssociationConflictError):
+        _patch(service, saved, report_id=REPORT_ID)
+
+    (stored,) = _saved_reports(store)
+    assert (stored.report_id, stored.legacy_report_id) == (None, 616)

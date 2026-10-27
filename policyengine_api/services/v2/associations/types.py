@@ -85,8 +85,18 @@ class SimulationReferenceChecker(Protocol):
     when it cannot be asked.
     """
 
-    def require_report(self, *, country_id: str, report_id: UUID) -> None:
-        """Raise unless the country has the report."""
+    def require_report(
+        self,
+        *,
+        country_id: str,
+        report_id: UUID,
+        legacy_report_id: int | None = None,
+    ) -> None:
+        """Raise unless the country has the report.
+
+        With ``legacy_report_id``, also raise ``AssociationReferenceConflictError``
+        unless the report was migrated from that v1 report output.
+        """
         ...
 
     def require_simulation(self, *, country_id: str, simulation_id: UUID) -> None:

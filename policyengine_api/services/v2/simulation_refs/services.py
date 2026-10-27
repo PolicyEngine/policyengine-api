@@ -14,6 +14,7 @@ from policyengine_api.services.v2.simulation_entrypoint.types import (
     SimulationRecordNotFoundError,
 )
 from policyengine_api.services.v2.simulation_refs.validators import (
+    require_migrated_from,
     require_reference_in_country,
 )
 
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from policyengine_api.services.v2.simulation_entrypoint.types import (
+        EconomyReportRecord,
         EconomyReportSimulation,
     )
 
@@ -32,20 +34,35 @@ class SimulationReferenceService:
         """Read reports and simulations through ``simulation``."""
         self._simulation = simulation
 
-    def require_report(self, *, country_id: str, report_id: UUID) -> None:
-        """Raise ``SimulationReferenceNotFoundError`` unless the country has it."""
+    def require_report(
+        self,
+        *,
+        country_id: str,
+        report_id: UUID,
+        legacy_report_id: int | None = None,
+    ) -> None:
+        """Raise ``SimulationReferenceNotFoundError`` unless the country has it.
+
+        With ``legacy_report_id``, also raise
+        ``AssociationReferenceConflictError`` unless the report was migrated
+        from that v1 report output.
+        """
         try:
-            found_country_id: str | None = self._simulation.get_report(
-                report_id
-            ).country_id
+            report: EconomyReportRecord | None = self._simulation.get_report(report_id)
         except SimulationRecordNotFoundError:
-            found_country_id = None
+            report = None
         require_reference_in_country(
-            found_country_id,
+            None if report is None else report.country_id,
             kind="report",
             reference_id=report_id,
             country_id=country_id,
         )
+        if report is not None and legacy_report_id is not None:
+            require_migrated_from(
+                report.legacy_report_id,
+                report_id=report_id,
+                legacy_report_id=legacy_report_id,
+            )
 
     def require_simulation(self, *, country_id: str, simulation_id: UUID) -> None:
         """Raise ``SimulationReferenceNotFoundError`` unless the country has it."""

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from policyengine_api.services.v2.user_reports.types import (
+    ReportReferences,
     SharedBaselineReformRead,
     SharedUserReportRead,
     UserReportCreateFields,
@@ -121,3 +122,32 @@ def user_report_update_values(
     if "validation" in association_input.model_fields_set:
         values["validation"] = stored_validation(association_input.validation)
     return values
+
+
+def stored_report_references(association: UserReportAssociation) -> ReportReferences:
+    """Return the references a stored saved report holds."""
+    return ReportReferences(
+        report_id=association.report_id,
+        legacy_report_id=association.legacy_report_id,
+    )
+
+
+def repointed_report_references(
+    stored: ReportReferences, association_input: UserReportUpdateInput
+) -> ReportReferences:
+    """Return the references a saved report holds once the update applies.
+
+    Neither reference can be cleared, so a supplied one replaces the stored one.
+    """
+    return ReportReferences(
+        report_id=(
+            stored.report_id
+            if association_input.report_id is None
+            else association_input.report_id
+        ),
+        legacy_report_id=(
+            stored.legacy_report_id
+            if association_input.legacy_report_id is None
+            else association_input.legacy_report_id
+        ),
+    )

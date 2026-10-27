@@ -199,7 +199,9 @@ class UserReportCreateFields(_ReportPresentationFields):
     """Caller-supplied fields; the owner comes from the session.
 
     The saved report names a v2 report (``report_id``), a v1 report output
-    (``legacy_report_id``), or both; each is checked before it is saved.
+    (``legacy_report_id``), or both; each is checked before it is saved, and
+    with both, the v2 report must be the one migrated from that v1 report
+    output.
     """
 
     country_id: CountryId
@@ -355,3 +357,11 @@ class UserReportPage:
     offset: int
     limit: int
     has_more: bool
+
+
+@dataclass(frozen=True)
+class ReportReferences:
+    """The v2 report and v1 report output a saved report names; either may be None."""
+
+    report_id: UUID | None
+    legacy_report_id: int | None

@@ -172,10 +172,12 @@ class UserPolicy(TimestampedModel, table=True):
 
 
 class UserSimulationAssociation(TimestampedModel, table=True):
-    """A user's saved v1 simulation; ``simulation_id`` is a logical reference.
+    """A user's saved simulation: a v2 simulation, a v1 simulation, or both.
 
-    Simulations are owned by the Simulation Entrypoint, so the v2 reference
-    deliberately has no cross-service foreign key.
+    Simulations are owned by the Simulation Entrypoint, so ``simulation_id`` is
+    a logical reference with no cross-service foreign key; the Public API asks
+    the entrypoint whether it exists before saving it.
+    ``legacy_simulation_id`` is the v1 simulation.
     """
 
     __tablename__ = "user_simulation_associations"
@@ -225,11 +227,15 @@ class UserSimulationAssociation(TimestampedModel, table=True):
 
 
 class UserReportAssociation(TimestampedModel, table=True):
-    """A user's saved v1 report; ``report_id`` is a logical reference.
+    """A user's saved report: a v2 report, a v1 report output, or both.
 
-    ``legacy_report_id`` is the requested v1 report output identifier. The
-    optional ``user_policy_id`` links a v3 report to the same owner's saved
-    reform and is cleared when that reform is deleted.
+    Reports are owned by the Simulation Entrypoint, so ``report_id`` is a
+    logical reference with no cross-service foreign key; the Public API asks
+    the entrypoint whether it exists before saving it. ``legacy_report_id`` is
+    the requested v1 report output identifier. A row holding both records that
+    the v2 report was migrated from that v1 report output. The optional
+    ``user_policy_id`` links a v3 report to the same owner's saved reform and
+    is cleared when that reform is deleted.
     """
 
     __tablename__ = "user_report_associations"
