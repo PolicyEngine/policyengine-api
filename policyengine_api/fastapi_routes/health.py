@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from importlib import metadata as importlib_metadata
 from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, HTTPException
@@ -25,6 +27,19 @@ class SimulationGatewayHealthResponse(BaseModel):
     simulation_gateway: Literal["healthy"]
 
 
+class DeploymentResponse(BaseModel):
+    """The policyengine.py version this revision serves, and since when.
+
+    ``policyengine_version_live_since`` is when this .py version first went
+    live: redeploys that keep the version keep the date. It is null on a
+    revision deployed before the deploy recorded it, or outside Cloud Run.
+    """
+
+    policyengine_version: str
+    policyengine_version_live_since: str | None
+    revision: str | None
+
+
 def build_core_health_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
@@ -34,6 +49,16 @@ def build_core_health_router(
     @router.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         return HealthResponse(status="healthy")
+
+    @router.get("/deployment", response_model=DeploymentResponse)
+    def deployment() -> DeploymentResponse:
+        return DeploymentResponse(
+            policyengine_version=importlib_metadata.version("policyengine"),
+            policyengine_version_live_since=(
+                os.environ.get("POLICYENGINE_VERSION_LIVE_SINCE") or None
+            ),
+            revision=os.environ.get("K_REVISION") or None,
+        )
 
     @router.get(
         "/simulation-gateway-check",

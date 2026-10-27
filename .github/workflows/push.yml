@@ -308,6 +308,7 @@ jobs:
       - name: Deploy tagged Cloud Run staging candidate
         run: bash .github/scripts/deploy_cloud_run_candidate.sh
         env:
+          PREVIOUS_CLOUD_RUN_REVISION: ${{ steps.previous.outputs.revision }}
           CLOUD_RUN_IMAGE_TAG: ${{ steps.cloud_run.outputs.image_tag }}
           CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
           CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: policyengine-api-cr-staging@policyengine-api.iam.gserviceaccount.com
@@ -577,6 +578,7 @@ jobs:
       - name: Deploy tagged Cloud Run candidate
         run: bash .github/scripts/deploy_cloud_run_candidate.sh
         env:
+          PREVIOUS_CLOUD_RUN_REVISION: ${{ steps.previous.outputs.revision }}
           CLOUD_RUN_IMAGE_TAG: ${{ steps.cloud_run.outputs.image_tag }}
           CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
           CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
