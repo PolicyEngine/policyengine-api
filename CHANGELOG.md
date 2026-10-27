@@ -1,3 +1,10 @@
+## [5.11.0] - 2026-10-27
+
+### Added
+
+- Registered rules, checked by a new quality guard, that every project has a committed `uv.lock` checked in pull request CI, that every install and test command uses `uv.lock` unless it is a registered exception, and that a scheduled workflow relocks `uv.lock`.
+
+
 ## [5.10.2] - 2026-10-27
 
 ### Changed
