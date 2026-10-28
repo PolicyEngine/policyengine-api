@@ -27,6 +27,7 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
             "simulation-gateway-check",
             "liveness-check",
             "readiness-check",
+            "deployment",
         ),
     ),
     RouteGroupConfig(

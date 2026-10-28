@@ -7,6 +7,10 @@ cloud_run_set_defaults
 
 bash .github/scripts/validate_cloud_run_deploy_env.sh
 
+# DEPLOYED_POLICYENGINE_VERSION and POLICYENGINE_VERSION_LIVE_SINCE, reported
+# by GET /deployment.
+live_since_vars="$(bash .github/scripts/resolve_policyengine_live_since.sh)"
+
 env_vars=(
   "APP_ENVIRONMENT=${DEPLOYMENT_ENVIRONMENT}"
   "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=${POLICYENGINE_DB_INSTANCE_CONNECTION_NAME}"
@@ -48,6 +52,9 @@ env_vars=(
   "PUBLIC_API_AUTH_ISSUER=${PUBLIC_API_AUTH_ISSUER:-}"
   "PUBLIC_API_AUTH_AUDIENCE=${PUBLIC_API_AUTH_AUDIENCE:-}"
 )
+while IFS= read -r live_since_var; do
+  env_vars+=("${live_since_var}")
+done <<<"${live_since_vars}"
 
 # Optional: account deletion removes the Auth0 user only when the Management
 # API client is configured. Validation requires all three values or none.

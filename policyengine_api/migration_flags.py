@@ -51,6 +51,7 @@ ROUTE_GROUP_BY_PATH = {
     "/simulation-gateway-check": "health",
     "/liveness-check": "health",
     "/readiness-check": "health",
+    "/deployment": "health",
     "/specification": "specification",
     "/v2/openapi.json": "specification",
 }
