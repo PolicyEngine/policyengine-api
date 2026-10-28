@@ -294,3 +294,36 @@ def test_axis_groups_within_the_point_limit_are_accepted() -> None:
     response = app.client.post(PATH, json=body(axes=axes))
 
     assert response.status_code == 202
+
+
+@pytest.mark.parametrize(
+    "refusal_body",
+    [
+        {"detail": None},
+        {"detail": {"reason": "x"}},
+        {"detail": 7},
+        {"detail": ["the household is refused"]},
+        {"detail": [{"loc": ["body", "options"], "msg": "Field required"}]},
+    ],
+    ids=["null", "object", "number", "list-of-strings", "entry-without-type"],
+)
+def test_a_simulation_refusal_of_another_shape_answers_503(refusal_body) -> None:
+    def answer(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(422, json=refusal_body)
+
+    app = App()
+    app.service = V2HouseholdCalculationService(
+        countries=FakeCountries(),
+        households=app.households,
+        policies=FakePolicies(),
+        catalog_reader_factory=FakeCatalogs,
+        simulation_factory=lambda: SimulationHouseholdClient(
+            "https://simulation.example",
+            httpx_args={"transport": httpx.MockTransport(answer)},
+        ),
+    )
+
+    response = app.client.post(PATH, json=body())
+
+    assert response.status_code == 503

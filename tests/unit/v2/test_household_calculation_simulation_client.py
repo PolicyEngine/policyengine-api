@@ -269,3 +269,21 @@ def test_the_household_keeps_its_key_order_as_answered() -> None:
         assert list(returned_household["households"]["household-1"]) == list(
             answer["result"]["household"]["households"]["household-1"]
         )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"detail": None},
+        {"detail": {"reason": "x"}},
+        {"detail": 7},
+        {"detail": ["the household is refused"]},
+        {"detail": [{"loc": ["body", "options"], "msg": "Field required"}]},
+    ],
+    ids=["null", "object", "number", "list-of-strings", "entry-without-type"],
+)
+def test_a_refusal_of_another_shape_is_unavailable(body) -> None:
+    client = client_answering(422, body, [])
+
+    with pytest.raises(SimulationServiceUnavailableError, match="could not be read"):
+        client.submit(SUBMISSION)

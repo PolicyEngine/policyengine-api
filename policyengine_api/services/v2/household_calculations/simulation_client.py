@@ -44,6 +44,9 @@ from policyengine_api_simulation_client.models.household_calculation_submission 
 from policyengine_api_simulation_client.models.household_refusal_response import (
     HouseholdRefusalResponse,
 )
+from policyengine_api_simulation_client.models.household_request_field_error import (
+    HouseholdRequestFieldError,
+)
 from policyengine_api_simulation_client.models.household_route_error import (
     HouseholdRouteError,
 )
@@ -120,13 +123,24 @@ def _calculation(response: httpx.Response) -> dict[str, Any]:
 def _invalid_request_reason(refusal: HouseholdRefusalResponse) -> str:
     """Return the service's reason, or each refused field and why.
 
-    A field's location is given without the request's ``body`` prefix.
+    A field's location is given without the request's ``body`` prefix. Raise
+    SimulationServiceUnavailableError for a refusal of another shape: the
+    generated model keeps a ``detail`` it cannot read as text or fields.
     """
-    if isinstance(refusal.detail, str):
-        reason = refusal.detail
+    detail: object = refusal.detail
+    if isinstance(detail, str):
+        reason = detail
     else:
+        fields = (
+            [item for item in detail if isinstance(item, HouseholdRequestFieldError)]
+            if isinstance(detail, list)
+            else []
+        )
+        if not isinstance(detail, list) or len(fields) != len(detail):
+            msg = "The simulation service's answer could not be read."
+            raise SimulationServiceUnavailableError(msg)
         reasons = []
-        for item in refusal.detail:
+        for item in fields:
             location = [str(part) for part in item.loc]
             if location[:1] == ["body"]:
                 location = location[1:]
