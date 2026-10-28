@@ -17,7 +17,11 @@ from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
-from tests.fixtures.libs.simulation_entrypoint import MOCK_LOCAL_AREA_BREAKDOWN_RESULT
+from tests.fixtures.libs.simulation_entrypoint import (
+    MOCK_LOCAL_AREA_BREAKDOWN_RESULT,
+    MOCK_LOCAL_AREA_BREAKDOWN_RESULT_WITH_NULL_WITHHELD_CODES,
+    MOCK_LOCAL_AREA_BREAKDOWN_RESULT_WITH_WITHHELD_CODES,
+)
 
 
 @pytest.fixture(params=[False, True], ids=["annual", "budget-window"])
@@ -542,20 +546,32 @@ def test_annual_route_returns_502_when_the_simulation_api_refuses_a_breakdown(
     assert gateway.run.call_args.args[0]["breakdown"] == "local_areas"
 
 
+@pytest.mark.parametrize(
+    "simulation_result",
+    [
+        MOCK_LOCAL_AREA_BREAKDOWN_RESULT_WITH_WITHHELD_CODES,
+        MOCK_LOCAL_AREA_BREAKDOWN_RESULT_WITH_NULL_WITHHELD_CODES,
+        MOCK_LOCAL_AREA_BREAKDOWN_RESULT,
+    ],
+    ids=["withheld-codes", "null-withheld-codes", "no-withheld-codes"],
+)
 def test_annual_route_stores_and_returns_a_completed_breakdown_unchanged(
-    economy_service_http,
+    economy_service_http, simulation_result
 ):
     """A finished breakdown job is polled once, stored, and then read back.
 
     The second request polls the job (``_handle_execution_state``); the third
     reads the stored record (``_handle_completed_impact``) without polling.
+    The withheld area codes come back as the simulation API sent them, and a
+    result without them, from a simulation API that doesn't report them,
+    comes back without them.
     """
     client, gateway = economy_service_http
     breakdown_query = [*UK_ANNUAL_QUERY, ("breakdown", "local_areas")]
     gateway.get_execution_by_id.return_value = ModalSimulationExecution(
         job_id="submitted-job",
         status="complete",
-        result=MOCK_LOCAL_AREA_BREAKDOWN_RESULT,
+        result=simulation_result,
         resolved_app_name="policyengine-simulation-test",
     )
     gateway.get_execution_status.side_effect = lambda execution: execution.status
@@ -571,13 +587,11 @@ def test_annual_route_stores_and_returns_a_completed_breakdown_unchanged(
         assert response.status_code == 200, response.get_json()
         body = response.get_json()
         assert body["status"] == "ok"
-        result = body["result"]
+        returned = body["result"]
         # The breakdown's own fields come back unchanged; the service adds
         # only the bundle identity it adds to every economy result.
-        assert {
-            key: result[key] for key in MOCK_LOCAL_AREA_BREAKDOWN_RESULT
-        } == MOCK_LOCAL_AREA_BREAKDOWN_RESULT
-        assert set(result) - set(MOCK_LOCAL_AREA_BREAKDOWN_RESULT) == {
+        assert {key: returned[key] for key in simulation_result} == simulation_result
+        assert set(returned) - set(simulation_result) == {
             "policyengine_bundle",
             "resolved_app_name",
         }
