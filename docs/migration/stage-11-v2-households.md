@@ -267,12 +267,16 @@ may add `axes` (an axis without a `period` varies the household's
 succeeded in the last 28 days is returned again; callers cannot force a new
 one. The
 Public API checks the country's `countries` row allows household calculations
-(422 otherwise; a household-only country is accepted), reads the household and
-policy through the same services as their routes (404 when either is not
-stored in that country), selects the country's running catalog version, and
-sends the household in the situation shape, its saved SPM choice and the
-policy's parameter values to the simulation service, which cannot read these
-tables. The answer is 202 with the calculation's `calculation_id` and
+(422 otherwise; a household-only country is accepted), checks the household
+and policy exist through the same services as their routes (404 when either
+is not stored in that country), selects the country's running catalog
+version, and sends the simulation service the household's and policy's IDs,
+the options and that version's PolicyEngine.py version. The simulation
+service reads the household, the policy's parameter values and the catalog
+version from these tables itself, through its own `SELECT` grant, and
+refuses a policy changing a parameter the catalog version lacks, which the
+Public API answers with 503. The answer is 202 with the calculation's
+`calculation_id` and
 `status`. Poll `GET /v2/household-calculations/{calculation_id}` until
 `status` is `succeeded`, with `result`, or `failed`, with `error`. A US result
 carries `spm_config` and `spm_provenance`.

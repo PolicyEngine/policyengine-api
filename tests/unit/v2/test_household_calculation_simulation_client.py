@@ -22,10 +22,8 @@ from policyengine_api.services.v2.household_calculations.types import (
 )
 from tests.unit.v2.household_calculation_support import (
     CALCULATION_ID,
-    CATALOG_VERSION_ID,
     HOUSEHOLD_ID,
     POLICYENGINE_VERSION,
-    SITUATION,
     simulation_calculation,
     succeeded_calculation,
 )
@@ -33,14 +31,13 @@ from tests.unit.v2.household_calculation_support import (
 BASE_URL = "https://simulation.example"
 SUBMISSION = {
     "country": "us",
-    "catalog_version_id": str(CATALOG_VERSION_ID),
     "policyengine_version": POLICYENGINE_VERSION,
-    "year": 2026,
     "household_id": str(HOUSEHOLD_ID),
-    "household": SITUATION,
-    "spm": {"scenario": "ce_trend"},
-    "policy": {"policy_id": None, "parameters": {}},
-    "options": {"axes": None, "add_missing_variables": False},
+    "policy_id": None,
+    "options": {
+        "axes": [[{"name": "employment_income", "count": 3, "min": 0, "max": 1}]],
+        "add_missing_variables": False,
+    },
     "force": False,
     "trigger": "initial",
 }
@@ -239,7 +236,7 @@ def test_a_gateway_token_that_cannot_be_fetched_is_unavailable() -> None:
         client.read(CALCULATION_ID)
 
 
-def test_the_household_keeps_its_key_order_both_ways() -> None:
+def test_the_household_keeps_its_key_order_as_answered() -> None:
     requests: list[httpx.Request] = []
     answer = succeeded_calculation()
     client = client_answering(200, answer, requests)
@@ -248,11 +245,7 @@ def test_the_household_keeps_its_key_order_both_ways() -> None:
     submitted = submit_client.submit(SUBMISSION)
     read = client.read(CALCULATION_ID)
 
-    sent_household = json.loads(requests[0].content)["household"]
-    assert list(sent_household) == list(SITUATION)
-    assert list(sent_household["households"]["household-1"]) == list(
-        SITUATION["households"]["household-1"]
-    )
+    assert json.loads(requests[0].content) == SUBMISSION
     for calculation in (submitted, read):
         assert calculation is not None
         returned_household = calculation["result"]["household"]

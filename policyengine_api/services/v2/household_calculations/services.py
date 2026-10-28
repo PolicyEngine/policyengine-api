@@ -1,13 +1,15 @@
 """Calculate stored households through the simulation service, and read them.
 
 Submitting a calculation checks the country's ``countries`` row allows
-household calculations (a household-only country does), reads the stored
-household and policy through the same services as ``/v2/households`` and
-``/v2/policies`` (so a household or policy of another country, or none, is
-not found), selects the country's running catalog version, and sends the
-simulation service everything it needs: it cannot read these tables. The
-simulation service records every calculation, so one not saved to an
-account is still stored, as a simulation run with no report.
+household calculations (a household-only country does), checks the stored
+household and policy exist in that country through the same services as
+``/v2/households`` and ``/v2/policies`` (so one of another country, or none,
+is not found), selects the country's running catalog version, and sends the
+simulation service their IDs and that version's PolicyEngine.py version.
+The simulation service reads the household, the policy's parameter values
+and the catalog version from the Public API's tables itself, and calculates
+the household's default year. It records every calculation, so one not
+saved to an account is still stored, as a simulation run with no report.
 
 Reading a calculation asks the simulation service for it as it stands.
 """
@@ -16,11 +18,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from policyengine_api.services.v2.household_calculations.transformations import (
-    household_situation,
-    policy_parameters,
-    saved_spm_choice,
-)
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationRead,
 )
@@ -107,12 +104,9 @@ class V2HouseholdCalculationService:
         household = self._households.get_household(
             country_id=country_id, household_id=calculation.household_id
         )
-        parameters: dict[str, dict[str, Any]] = {}
         if calculation.policy_id is not None:
-            parameters = policy_parameters(
-                self._policies.get_policy(
-                    country_id=country_id, policy_id=calculation.policy_id
-                )
+            self._policies.get_policy(
+                country_id=country_id, policy_id=calculation.policy_id
             )
         year = calculation_year(household.default_year)
         catalog_reader = self._catalog_reader_factory()
@@ -122,19 +116,11 @@ class V2HouseholdCalculationService:
             catalog_reader.close()
         submission: dict[str, Any] = {
             "country": country_id,
-            "catalog_version_id": str(catalog.model_version.id),
             "policyengine_version": catalog.policyengine_version,
-            "year": year,
             "household_id": str(household.id),
-            "household": household_situation(country_id, household.household_data),
-            "policy": {
-                "policy_id": (
-                    None
-                    if calculation.policy_id is None
-                    else str(calculation.policy_id)
-                ),
-                "parameters": parameters,
-            },
+            "policy_id": (
+                None if calculation.policy_id is None else str(calculation.policy_id)
+            ),
             "options": {
                 "axes": _axes_in_year(calculation, year),
                 "add_missing_variables": calculation.add_missing_variables,
@@ -144,9 +130,6 @@ class V2HouseholdCalculationService:
             "force": False,
             "trigger": "initial",
         }
-        spm = saved_spm_choice(household.household_data)
-        if spm is not None:
-            submission["spm"] = spm
         return HouseholdCalculationRead.from_simulation(
             self._simulation_factory().submit(submission)
         )

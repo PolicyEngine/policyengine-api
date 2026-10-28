@@ -23,12 +23,9 @@ from policyengine_api.services.v2.households.validators import HouseholdNotFound
 from policyengine_api.services.v2.policies.validators import PolicyNotFoundError
 from tests.unit.v2.household_calculation_support import (
     CALCULATION_ID,
-    CATALOG_VERSION_ID,
     HOUSEHOLD_ID,
     POLICY_ID,
     POLICYENGINE_VERSION,
-    SITUATION,
-    SPM_CHOICE,
     SPM_CONFIG,
     SPM_PROVENANCE,
     FakeCatalogs,
@@ -80,7 +77,8 @@ def calculation_input(**changes: object) -> HouseholdCalculationInput:
     return HouseholdCalculationInput.model_validate(values)
 
 
-def test_a_calculation_sends_the_stored_household_policy_and_catalog() -> None:
+def test_a_calculation_sends_the_household_and_policy_ids_and_the_version() -> None:
+    """The simulation service reads the household, policy and catalog version."""
     parts = Parts()
 
     calculation = parts.service.submit_calculation(
@@ -90,20 +88,9 @@ def test_a_calculation_sends_the_stored_household_policy_and_catalog() -> None:
     (submission,) = parts.simulation.submissions
     assert submission == {
         "country": "us",
-        "catalog_version_id": str(CATALOG_VERSION_ID),
         "policyengine_version": POLICYENGINE_VERSION,
-        "year": 2026,
         "household_id": str(HOUSEHOLD_ID),
-        "household": SITUATION,
-        "spm": SPM_CHOICE,
-        "policy": {
-            "policy_id": str(POLICY_ID),
-            "parameters": {
-                "gov.irs.credits.ctc.amount.base[0].amount": {
-                    "2026-01-01.2100-12-31": 3000
-                }
-            },
-        },
+        "policy_id": str(POLICY_ID),
         "options": {
             "axes": [[{**AXES[0][0], "period": "2026"}]],
             "add_missing_variables": True,
@@ -118,31 +105,27 @@ def test_a_calculation_sends_the_stored_household_policy_and_catalog() -> None:
     assert catalog_reader.closed
 
 
-def test_current_law_and_no_saved_choice_send_neither() -> None:
+def test_current_law_sends_no_policy() -> None:
     parts = Parts()
-    stored = household_read()
-    data = {key: value for key, value in stored.household_data.items() if key != "spm"}
-    parts.households.households[("us", HOUSEHOLD_ID)] = stored.__class__(
-        **{**stored.__dict__, "household_data": data}
-    )
 
     parts.service.submit_calculation(calculation_input(policy_id=None))
 
     (submission,) = parts.simulation.submissions
-    assert "spm" not in submission
-    assert submission["policy"] == {"policy_id": None, "parameters": {}}
+    assert submission["policy_id"] is None
     assert submission["options"] == {"axes": None, "add_missing_variables": False}
 
 
-def test_the_year_is_the_households_default_year() -> None:
+def test_an_axis_without_a_period_varies_the_households_default_year() -> None:
     parts = Parts()
     parts.households.households[("us", HOUSEHOLD_ID)] = household_read(
         default_year=2027
     )
 
-    parts.service.submit_calculation(calculation_input())
+    parts.service.submit_calculation(calculation_input(axes=AXES))
 
-    assert parts.simulation.submissions[0]["year"] == 2027
+    assert parts.simulation.submissions[0]["options"]["axes"] == [
+        [{**AXES[0][0], "period": "2027"}]
+    ]
 
 
 def test_a_household_without_a_default_year_is_refused() -> None:
@@ -202,7 +185,7 @@ def test_a_household_only_country_is_accepted() -> None:
 
     (submission,) = parts.simulation.submissions
     assert submission["country"] == "uk"
-    assert set(submission["household"]) == {"people", "households", "benunits"}
+    assert submission["policy_id"] is None
 
 
 def test_an_unknown_household_or_policy_sends_nothing() -> None:
