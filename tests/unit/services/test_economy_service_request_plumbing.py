@@ -7,7 +7,7 @@ the service's steps shows up as a difference here.
 
 import json
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -32,7 +32,10 @@ from policyengine_api.services.economy_service import (
     ImpactStatus,
     RuntimeBundleIdentity,
 )
-from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from policyengine_api.services.reform_impacts_service import (
+    ReformImpactExecution,
+    ReformImpactsService,
+)
 from tests.fixtures.libs.simulation_entrypoint import MOCK_LOCAL_AREA_BREAKDOWN_RESULT
 from tests.fixtures.services.economy_service import (
     MOCK_API_VERSION,
@@ -412,7 +415,16 @@ UK_BUNDLE_HASH_FIELDS = (
     f"&policyengine_version={MOCK_POLICYENGINE_VERSION}"
 )
 UK_NATIONAL_LOOKUP_HASH = f"[{UK_BUNDLE_HASH_FIELDS}]"
-UK_BREAKDOWN_LOOKUP_HASH = f"[breakdown=local_areas&{UK_BUNDLE_HASH_FIELDS}]"
+# A breakdown's hash names the version of the breakdown result it holds, so
+# breakdowns cached before the result listed its withheld area codes are not
+# served. Hashes without a breakdown have no such field and keep their values.
+UK_BREAKDOWN_LOOKUP_HASH = (
+    f"[breakdown=local_areas&{UK_BUNDLE_HASH_FIELDS}&breakdown_schema=2]"
+)
+# The hash a breakdown had before that version was added.
+UK_BREAKDOWN_LOOKUP_HASH_BEFORE_WITHHELD_CODES = (
+    f"[breakdown=local_areas&{UK_BUNDLE_HASH_FIELDS}]"
+)
 
 
 def _stored_options_hash(lookup_hash: str) -> str:
@@ -559,6 +571,139 @@ def test_national_and_breakdown_hashes_never_match_each_others_lookup(
         assert _like_matches(_stored_options_hash(lookup_hash), pattern)
         assert not _like_matches(other_hash, pattern)
         assert not _like_matches(_stored_options_hash(other_hash), pattern)
+
+
+# The hashes a request without a breakdown stored before breakdowns had a
+# result version, written out so that any change to them shows here.
+UK_STORED_HASH_WITHOUT_BREAKDOWN = (
+    "[dataset=default&model_version=1.2.3&policyengine_version=3.4.0"
+    "&runtime_app_name=policyengine-simulation-us1-2-3-uk2-7-8]"
+)
+
+
+@pytest.mark.usefixtures("uk_package_versions")
+@pytest.mark.parametrize(
+    ("country_id", "region", "options", "stored_hash"),
+    [
+        ("uk", "uk", {}, UK_STORED_HASH_WITHOUT_BREAKDOWN),
+        ("uk", "country/scotland", {}, UK_STORED_HASH_WITHOUT_BREAKDOWN),
+        ("uk", "country/ni", {}, UK_STORED_HASH_WITHOUT_BREAKDOWN),
+        ("us", "us", MOCK_OPTIONS, MOCK_OPTIONS_HASH),
+        ("us", "ca", MOCK_OPTIONS, MOCK_OPTIONS_HASH),
+    ],
+    ids=[
+        "uk-national",
+        "uk-nation-scotland",
+        "uk-nation-ni",
+        "us-national",
+        "us-state",
+    ],
+)
+def test_requests_without_a_breakdown_keep_their_stored_hashes(
+    economy_service, country_id, region, options, stored_hash
+):
+    economy_service.get_economic_impact(
+        EconomicImpactRequest(
+            country_id=country_id,
+            policy_id=MOCK_POLICY_ID,
+            baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+            region=region,
+            dataset="default",
+            options=options,
+            api_version=MOCK_API_VERSION,
+        ),
+        time_period="2025",
+    )
+
+    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    assert [impact.options_hash for impact in stored] == [stored_hash]
+
+
+def _store_completed_uk_impact(
+    service: EconomyService,
+    *,
+    options: dict,
+    options_hash: str,
+    job_id: str,
+    result: dict,
+) -> None:
+    """Store a finished impact for the UK in 2026 under this options hash."""
+    service._reform_impacts.set_reform_impact(
+        identity=ReformImpactIdentity(
+            scope=ReformImpactScope(
+                country_id="uk",
+                reform_policy_id=MOCK_POLICY_ID,
+                baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                region="uk",
+                dataset="default",
+                time_period="2026",
+            ),
+            api_version=CACHE_VERSION,
+            options_hash=options_hash,
+        ),
+        execution=ReformImpactExecution(
+            execution_id=job_id,
+            start_time=datetime(2026, 10, 1, 12, 0),
+            observability_id=MOCK_OBSERVABILITY_ID,
+        ),
+        options=options,
+        status="computing",
+        reform_impact_json={},
+    )
+    service._reform_impacts.set_complete_reform_impact(
+        execution_id=job_id,
+        reform_impact_json={**result, "resolved_app_name": MOCK_RESOLVED_APP_NAME},
+    )
+
+
+UK_NATIONAL_RESULT = {"budget": {"budgetary_impact": 1.0}}
+
+
+@pytest.mark.usefixtures("uk_package_versions")
+def test_a_breakdown_cached_before_the_withheld_codes_is_recomputed_but_not_national(
+    economy_service, mock_simulation_entrypoint
+):
+    _store_completed_uk_impact(
+        economy_service,
+        options={"breakdown": "local_areas"},
+        options_hash=_stored_options_hash(
+            UK_BREAKDOWN_LOOKUP_HASH_BEFORE_WITHHELD_CODES
+        ),
+        job_id="breakdown-job-before-withheld-codes",
+        result=MOCK_LOCAL_AREA_BREAKDOWN_RESULT,
+    )
+    _store_completed_uk_impact(
+        economy_service,
+        options={},
+        options_hash=_stored_options_hash(UK_NATIONAL_LOOKUP_HASH),
+        job_id="national-job",
+        result=UK_NATIONAL_RESULT,
+    )
+
+    national = economy_service.get_economic_impact(_uk_request({}), time_period="2026")
+    breakdown = economy_service.get_economic_impact(
+        _uk_request({"breakdown": "local_areas"}), time_period="2026"
+    )
+
+    # The national result is still read from its cache entry.
+    assert national.status == ImpactStatus.OK
+    assert national.data is not None
+    assert national.data["budget"] == UK_NATIONAL_RESULT["budget"]
+    # The breakdown stored without the withheld codes is not: a new job runs.
+    assert breakdown == EconomicImpactResult.computing()
+    submitted = [
+        call.args[0].get("breakdown")
+        for call in mock_simulation_entrypoint.run.call_args_list
+    ]
+    assert submitted == ["local_areas"]
+    stored = economy_service._reform_impacts.get_recent_reform_impacts(5)
+    assert {impact.execution_id: impact.options_hash for impact in stored} == {
+        "breakdown-job-before-withheld-codes": _stored_options_hash(
+            UK_BREAKDOWN_LOOKUP_HASH_BEFORE_WITHHELD_CODES
+        ),
+        "national-job": _stored_options_hash(UK_NATIONAL_LOOKUP_HASH),
+        MOCK_MODAL_JOB_ID: _stored_options_hash(UK_BREAKDOWN_LOOKUP_HASH),
+    }
 
 
 @pytest.mark.usefixtures("uk_package_versions")
@@ -875,6 +1020,20 @@ def test_options_hash_marks_spm_provenance_schema():
     assert options_hash == (
         "[spm={'scenario': 'x'}&dataset=default&model_version=1"
         "&spm_provenance_schema=canonical-spm-comparison-v2&runtime_app_name=app]"
+    )
+
+
+def test_options_hash_marks_the_breakdown_result_schema():
+    options_hash = EconomyService()._build_options_hash(
+        options={"breakdown": "local_areas"},
+        bundle=RuntimeBundleIdentity(
+            dataset="default", model_version="1", runtime_app_name="app"
+        ),
+    )
+
+    assert options_hash == (
+        "[breakdown=local_areas&dataset=default&model_version=1"
+        "&breakdown_schema=2&runtime_app_name=app]"
     )
 
 

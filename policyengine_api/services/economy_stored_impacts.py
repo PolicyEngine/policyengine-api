@@ -13,6 +13,7 @@ from policyengine_api.runtime_cache.reform_impacts import (
     ReformImpactStartClaim,
 )
 from policyengine_api.services.economy_impact_types import (
+    LOCAL_AREA_BREAKDOWN_RESULT_SCHEMA_VERSION,
     EconomicImpactSetupOptions,
     ImpactAction,
     ImpactStatus,
@@ -234,6 +235,10 @@ class StoredImpactMixin:
             bundle_parts.append(f"policyengine_version={bundle.policyengine_version}")
         if options.get("spm") is not None:
             bundle_parts.append("spm_provenance_schema=canonical-spm-comparison-v2")
+        if options.get("breakdown") is not None:
+            bundle_parts.append(
+                f"breakdown_schema={LOCAL_AREA_BREAKDOWN_RESULT_SCHEMA_VERSION}"
+            )
         if bundle.runtime_app_name:
             bundle_parts.append(f"runtime_app_name={bundle.runtime_app_name}")
         return "[" + "&".join([option_pairs, *bundle_parts]).strip("&") + "]"
