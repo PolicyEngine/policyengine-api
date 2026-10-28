@@ -293,17 +293,10 @@ def test_requests_refused_by_the_public_api_need_no_simulation_service() -> None
         available_country.submit_calculation(calculation_input())
 
 
-def test_an_axis_keeps_its_own_period() -> None:
-    parts = Parts()
-    axes = [[{**AXES[0][0], "period": "2025-03"}]]
-
-    parts.service.submit_calculation(calculation_input(axes=axes))
-
-    assert parts.simulation.submissions[0]["options"]["axes"] == axes
-
-
 @pytest.mark.parametrize(
-    "period", ["2025", None], ids=["explicit-period", "null-period"]
+    "period",
+    ["2025", "2025-03", None],
+    ids=["explicit-year", "explicit-month", "null-period"],
 )
 def test_an_axis_period_is_forwarded_unchanged(period) -> None:
     parts = Parts()

@@ -109,8 +109,9 @@ HOUSEHOLD_CALCULATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": (
             "The simulation service, the country's catalog version or v2 "
-            "storage is unavailable, or the simulation service cannot "
-            "calculate this household."
+            "storage is unavailable; the simulation service's answer cannot "
+            "be read; or it refuses a reference the Public API has already "
+            "checked, or has no v2 worker for the catalog version."
         ),
     },
 }

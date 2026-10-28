@@ -9,10 +9,13 @@ household that adds missing variables must therefore name its person
 
 from __future__ import annotations
 
+import json
 from datetime import date
 
+import httpx
+
 from policyengine_api.services import household_calculation_service
-from tests.fixtures.integration.live_household_calculations import YEAR
+from tests.fixtures.integration.live_household_calculations import store_household
 from tests.integration.test_live_v2_household_parity import parity_households
 
 
@@ -40,5 +43,22 @@ def test_households_that_add_variables_use_one_year_on_both_sides(
         v1_year = household_calculation_service.get_household_year(
             household.situation()
         )
-        # The v2 side calculates the stored household's default year, YEAR.
-        assert str(v1_year) == YEAR, household.name
+        # The v2 side calculates the default year the household is stored with.
+        assert str(v1_year) == str(_stored_default_year(household)), household.name
+
+
+def _stored_default_year(household) -> int:
+    """Return the default year the live check stores the household with."""
+    sent: list[dict] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(201, json={"result": {"item": {"id": "stored"}}})
+
+    with httpx.Client(
+        base_url="https://public-api.example",
+        transport=httpx.MockTransport(answer),
+    ) as client:
+        store_household(client, household)
+    (request,) = sent
+    return request["default_year"]

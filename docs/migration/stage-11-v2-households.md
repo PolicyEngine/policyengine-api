@@ -310,7 +310,8 @@ contract before it writes anything, and the caller's data it refuses gets
 422 with its reason: a policy changing a parameter the catalog version
 lacks, a stored policy value it cannot take (such as an object), or a stored
 household it cannot take (such as a group no person belongs to, which
-`/v2/households` accepts).
+`/v2/households` accepts). A request field it refuses, such as an invalid
+option, gets 422 with each refused field and why.
 
 ### Staging checks
 
