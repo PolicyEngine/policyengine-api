@@ -13,6 +13,9 @@ from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBea
 from policyengine_api.fastapi_routes.v2.user_auth import authenticate_account_request
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.readiness import is_ready
+from policyengine_api.services.v2.simulation_entrypoint.services import (
+    DeferredEconomyReportSimulation,
+)
 from policyengine_api.services.v2.simulation_entrypoint.types import (
     SimulationServiceUnavailableError,
 )
@@ -861,10 +864,6 @@ def _deferred_economy_report_simulation() -> EconomyReportSimulation:
     Checks the Public API makes itself, such as the household-only refusal,
     then answer without the simulation client or its settings.
     """
-    from policyengine_api.services.v2.simulation_entrypoint.services import (
-        DeferredEconomyReportSimulation,
-    )
-
     return DeferredEconomyReportSimulation(_default_economy_report_simulation)
 
 

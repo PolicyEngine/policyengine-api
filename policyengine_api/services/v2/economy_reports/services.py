@@ -34,9 +34,13 @@ from policyengine_api.services.v2.economy_reports.validators import (
     require_economy_reports_supported,
     require_report_in_country,
 )
+from policyengine_api.services.v2.simulation_entrypoint.services import (
+    read_report_country,
+)
 from policyengine_api.services.v2.simulation_entrypoint.types import (
     RunTrigger,
     SimulationRecordNotFoundError,
+    SimulationRecordUnreadableError,
     SimulationRequestRefusedError,
 )
 
@@ -185,6 +189,28 @@ class V2EconomyReportService:
             )
         )
 
+    def _runs_in_country(
+        self, *, country_id: str, report_id: UUID
+    ) -> tuple[EconomyReportRunRecord, ...]:
+        """Return a report's runs, once it is known to be the country's.
+
+        The country is read from the report's simulations, so a report whose
+        stored result cannot be read back can still run again or list its
+        runs. Raise ``EconomyReportNotFoundError`` when the country has no
+        such report.
+        """
+        reference = str(report_id)
+        try:
+            runs = self._simulation.list_report_runs(report_id)
+            found_country_id = read_report_country(self._simulation, report_id, runs)
+        except SimulationRecordNotFoundError as error:
+            raise report_not_found(
+                country_id=country_id, reference=reference
+            ) from error
+        if found_country_id != country_id:
+            raise report_not_found(country_id=country_id, reference=reference)
+        return runs
+
     def run_report(
         self, *, country_id: str, report_id: UUID, force: bool
     ) -> EconomyReportRunRecord:
@@ -197,12 +223,7 @@ class V2EconomyReportService:
         ``SimulationRequestRefusedError`` when the entrypoint cannot run it.
         """
         self._require_economy_reports(country_id)
-        reference = str(report_id)
-        self._report_in_country(
-            lambda: self._simulation.get_report(report_id),
-            country_id=country_id,
-            reference=reference,
-        )
+        self._runs_in_country(country_id=country_id, report_id=report_id)
         try:
             return self._simulation.run_report(
                 report_id,
@@ -212,7 +233,7 @@ class V2EconomyReportService:
             )
         except SimulationRecordNotFoundError as error:
             raise report_not_found(
-                country_id=country_id, reference=reference
+                country_id=country_id, reference=str(report_id)
             ) from error
 
     def list_report_runs(
@@ -222,23 +243,23 @@ class V2EconomyReportService:
 
         Raise ``EconomyReportNotFoundError`` when the country has no such report.
         """
-        reference = str(report_id)
-        self._report_in_country(
-            lambda: self._simulation.get_report(report_id),
-            country_id=country_id,
-            reference=reference,
-        )
-        try:
-            return self._simulation.list_report_runs(report_id)
-        except SimulationRecordNotFoundError as error:
-            raise report_not_found(
-                country_id=country_id, reference=reference
-            ) from error
+        return self._runs_in_country(country_id=country_id, report_id=report_id)
 
     def _report_or_none(self, report_id: UUID) -> EconomyReportRecord | None:
+        """Read a listed report; leave out an unknown one or an unreadable one.
+
+        A report whose stored result cannot be read back is logged and left out
+        of listings, as the caller can tell from the IDs it asked for.
+        """
         try:
             return self._simulation.get_report(report_id)
         except SimulationRecordNotFoundError:
+            return None
+        except SimulationRecordUnreadableError:
+            logger.warning(
+                "v2_economy_report_unreadable_in_listing",
+                extra={"policyengine_attributes": {"report_id": str(report_id)}},
+            )
             return None
 
     def list_reports(
@@ -246,8 +267,9 @@ class V2EconomyReportService:
     ) -> tuple[EconomyReportRecord, ...]:
         """Return the country's reports among ``report_ids``, in that order, once each.
 
-        Unknown reports and other countries' are left out. Listing a report
-        with no run does not start one; reading it does.
+        Unknown reports, other countries' and reports whose stored result
+        cannot be read back are left out. Listing a report with no run does not
+        start one; reading it does.
         """
         return reports_of_country(
             (

@@ -6,7 +6,7 @@ import threading
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -27,6 +27,7 @@ from policyengine_api.services.v2.simulation_entrypoint.types import (
     RunTrigger,
     SimulationRecord,
     SimulationRecordNotFoundError,
+    SimulationRecordUnreadableError,
     SimulationRunRecord,
 )
 from tests.fixtures.v2_countries import add_listed_countries
@@ -119,7 +120,18 @@ def report_record(
     run: EconomyReportRunRecord | None = None,
     legacy_report_id: int | None = None,
 ) -> EconomyReportRecord:
-    """Build a report: not run without a run, with a result once it succeeded."""
+    """Build a report: not run without a run, with a result once it succeeded.
+
+    Each report has its own two simulations, which its run names.
+    """
+    baseline_id, reform_id = _simulation_ids(report_id)
+    if run is not None:
+        run = replace(
+            run,
+            report_id=report_id,
+            baseline_run=replace(run.baseline_run, simulation_id=baseline_id),
+            reform_run=replace(run.reform_run, simulation_id=reform_id),
+        )
     status = ReportStatus.NOT_RUN if run is None else run.status
     return EconomyReportRecord(
         id=report_id,
@@ -128,11 +140,9 @@ def report_record(
         options={},
         legacy_report_id=legacy_report_id,
         created_at=CREATED_AT,
-        baseline_simulation=simulation_record(
-            BASELINE_SIMULATION_ID, country_id=country_id
-        ),
+        baseline_simulation=simulation_record(baseline_id, country_id=country_id),
         reform_simulation=simulation_record(
-            REFORM_SIMULATION_ID, policy_id=REFORM_POLICY_ID, country_id=country_id
+            reform_id, policy_id=REFORM_POLICY_ID, country_id=country_id
         ),
         status=status,
         run=run,
@@ -140,20 +150,38 @@ def report_record(
     )
 
 
+def _simulation_ids(report_id: UUID) -> tuple[UUID, UUID]:
+    """Return a report's baseline and reform simulation IDs."""
+    if report_id == REPORT_ID:
+        return BASELINE_SIMULATION_ID, REFORM_SIMULATION_ID
+    return (
+        uuid5(NAMESPACE_URL, f"{report_id}/baseline"),
+        uuid5(NAMESPACE_URL, f"{report_id}/reform"),
+    )
+
+
 class FakeEconomyReportSimulation:
     """An in-memory Simulation Entrypoint that records every call.
 
     ``reports`` and ``simulations`` hold what it knows; ``error`` is raised by
-    every call while set, and ``run_error`` by run starts only. As the
-    entrypoint does, a ``system`` run of a report that has a run returns its
-    newest run instead of adding one, under a lock, so simultaneous first
-    runs record one run.
+    every call while set, and ``run_error`` by run starts only. Reading a
+    report in ``unreadable_results`` fails as the entrypoint does when it
+    cannot rebuild a stored result. As the entrypoint does, a ``system`` run
+    of a report that has a run returns its newest run instead of adding one,
+    under a lock, so simultaneous first runs record one run.
     """
 
     def __init__(self, *reports: EconomyReportRecord) -> None:
         self.reports = {report.id: report for report in reports}
-        self.simulations: dict[UUID, SimulationRecord] = {}
-        self.runs: dict[UUID, list[EconomyReportRunRecord]] = {}
+        self.simulations: dict[UUID, SimulationRecord] = {
+            simulation.id: simulation
+            for report in reports
+            for simulation in (report.baseline_simulation, report.reform_simulation)
+        }
+        self.runs: dict[UUID, list[EconomyReportRunRecord]] = {
+            report.id: [report.run] for report in reports if report.run is not None
+        }
+        self.unreadable_results: set[UUID] = set()
         self.calls: list[tuple[str, object]] = []
         self.error: Exception | None = None
         self.run_error: Exception | None = None
@@ -169,6 +197,10 @@ class FakeEconomyReportSimulation:
         self._record("submit_report", submission)
         report = report_record(country_id=submission.country_id, run=self.next_run)
         self.reports[report.id] = report
+        for simulation in (report.baseline_simulation, report.reform_simulation):
+            self.simulations[simulation.id] = simulation
+        if report.run is not None:
+            self.runs[report.id] = [report.run]
         return report
 
     def get_report(self, report_id: UUID) -> EconomyReportRecord:
@@ -176,6 +208,9 @@ class FakeEconomyReportSimulation:
         if report_id not in self.reports:
             msg = f"no economy report {report_id}"
             raise SimulationRecordNotFoundError(msg)
+        if report_id in self.unreadable_results:
+            msg = "The report's stored result cannot be read back."
+            raise SimulationRecordUnreadableError(msg)
         return self.reports[report_id]
 
     def get_report_by_legacy_id(self, legacy_report_id: int) -> EconomyReportRecord:

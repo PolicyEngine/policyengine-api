@@ -1,4 +1,9 @@
-"""Build the Simulation Entrypoint adapter only when it is first needed."""
+"""Ways of using the Simulation Entrypoint shared by the Public API's v2 services.
+
+``DeferredEconomyReportSimulation`` builds the adapter only when it is first
+needed, and ``read_report_country`` finds a report's country without making
+the entrypoint rebuild the report's stored result.
+"""
 
 from __future__ import annotations
 
@@ -72,3 +77,20 @@ class DeferredEconomyReportSimulation:
     def get_simulation(self, simulation_id: UUID) -> SimulationRecord:
         """Return a simulation."""
         return self._resolved().get_simulation(simulation_id)
+
+
+def read_report_country(
+    simulation: EconomyReportSimulation,
+    report_id: UUID,
+    runs: tuple[EconomyReportRunRecord, ...],
+) -> str:
+    """Return a report's country, given its runs, without reading its result.
+
+    A run names the report's simulations, whose country is the report's. A
+    report with no run has no stored result to rebuild, so reading it is
+    cheap, and reading a report whose stored result cannot be rebuilt is
+    avoided. Raise ``SimulationRecordNotFoundError`` for an unknown report.
+    """
+    if runs:
+        return simulation.get_simulation(runs[0].baseline_run.simulation_id).country_id
+    return simulation.get_report(report_id).country_id

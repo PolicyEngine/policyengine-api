@@ -21,6 +21,7 @@ from policyengine_api.services.v2.simulation_entrypoint.types import (
     SimulationRequestRefusedError,
 )
 from tests.unit.v2.economy_report_support import (
+    BASELINE_SIMULATION_ID,
     CURRENT_POLICYENGINE_VERSION,
     REFORM_POLICY_ID,
     REPORT_ID,
@@ -226,7 +227,8 @@ def test_a_rerun_runs_on_the_current_catalog_with_the_manual_trigger() -> None:
     )
 
     assert simulation.calls == [
-        ("get_report", REPORT_ID),
+        ("list_report_runs", REPORT_ID),
+        ("get_simulation", BASELINE_SIMULATION_ID),
         (
             "run_report",
             {
@@ -265,7 +267,7 @@ def test_a_rerun_of_a_report_not_in_the_country_is_not_found(reports) -> None:
             country_id="us", report_id=REPORT_ID, force=False
         )
 
-    assert [name for name, _ in simulation.calls] == ["get_report"]
+    assert "run_report" not in [name for name, _ in simulation.calls]
 
 
 def test_a_rerun_the_entrypoint_refuses_reaches_the_caller() -> None:
@@ -297,8 +299,6 @@ def test_the_runs_of_a_report_not_in_the_country_are_not_found() -> None:
         economy_report_service(simulation).list_report_runs(
             country_id="us", report_id=REPORT_ID
         )
-
-    assert [name for name, _ in simulation.calls] == ["get_report"]
 
 
 def test_listed_reports_keep_the_asked_order_and_only_the_countrys() -> None:
@@ -368,3 +368,62 @@ def test_simultaneous_first_reads_share_one_system_run() -> None:
         simulation.runs[REPORT_ID][0].id
     }
     assert all(report.status is ReportStatus.PENDING for report in reports)
+
+
+def _unreadable_succeeded_report(country_id: str = "us"):
+    simulation = FakeEconomyReportSimulation(
+        report_record(
+            country_id=country_id,
+            run=report_run_record(status=ReportStatus.SUCCEEDED),
+        )
+    )
+    simulation.unreadable_results.add(REPORT_ID)
+    return simulation
+
+
+def test_a_report_whose_result_cannot_be_read_back_can_run_again() -> None:
+    """Re-running is how such a report becomes readable again."""
+    simulation = _unreadable_succeeded_report()
+
+    run = economy_report_service(simulation).run_report(
+        country_id="us", report_id=REPORT_ID, force=False
+    )
+
+    assert run.trigger == "manual"
+    assert "get_report" not in [name for name, _ in simulation.calls]
+
+
+def test_the_runs_of_a_report_whose_result_cannot_be_read_back_are_listed() -> None:
+    simulation = _unreadable_succeeded_report()
+
+    runs = economy_report_service(simulation).list_report_runs(
+        country_id="us", report_id=REPORT_ID
+    )
+
+    assert [run.status for run in runs] == [ReportStatus.SUCCEEDED]
+    assert "get_report" not in [name for name, _ in simulation.calls]
+
+
+def test_a_report_of_another_country_with_runs_is_not_found() -> None:
+    simulation = FakeEconomyReportSimulation(
+        report_record(country_id="uk", run=report_run_record())
+    )
+
+    with pytest.raises(EconomyReportNotFoundError):
+        economy_report_service(simulation).run_report(
+            country_id="us", report_id=REPORT_ID, force=True
+        )
+
+    assert "run_report" not in [name for name, _ in simulation.calls]
+
+
+def test_a_listing_leaves_out_a_report_whose_result_cannot_be_read_back() -> None:
+    readable_id = UUID("00000000-0000-4000-8000-000000000204")
+    simulation = _unreadable_succeeded_report()
+    simulation.reports[readable_id] = report_record(report_id=readable_id)
+
+    reports = economy_report_service(simulation).list_reports(
+        country_id="us", report_ids=[REPORT_ID, readable_id]
+    )
+
+    assert [report.id for report in reports] == [readable_id]

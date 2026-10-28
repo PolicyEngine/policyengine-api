@@ -24,6 +24,7 @@ from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
 )
 from policyengine_api.services.v2.simulation_entrypoint.types import (
+    ReportStatus,
     SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.simulation_refs.services import (
@@ -55,6 +56,7 @@ from tests.unit.v2.economy_report_support import (
     REPORT_ID,
     FakeEconomyReportSimulation,
     report_record,
+    report_run_record,
     simulation_record,
 )
 from tests.unit.v2.user_service_support import (
@@ -104,7 +106,10 @@ def test_a_report_of_the_country_is_saved_by_its_v2_id(store, entrypoint) -> Non
 
     assert saved.report_id == REPORT_ID
     assert saved.legacy_report_id is None
-    assert entrypoint.calls == [("get_report", REPORT_ID)]
+    assert entrypoint.calls == [
+        ("list_report_runs", REPORT_ID),
+        ("get_report", REPORT_ID),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -431,3 +436,20 @@ def test_a_report_changed_while_its_reference_is_checked_is_not_repointed(
 
     (stored,) = _saved_reports(store)
     assert (stored.report_id, stored.legacy_report_id) == (None, 616)
+
+
+def test_a_report_whose_result_cannot_be_read_back_is_saved_by_its_v2_id(
+    store,
+) -> None:
+    entrypoint = FakeEconomyReportSimulation(
+        report_record(run=report_run_record(status=ReportStatus.SUCCEEDED))
+    )
+    entrypoint.unreadable_results.add(REPORT_ID)
+
+    saved = _service(store, entrypoint).create_user_report(
+        principal=ALICE,
+        association_input=UserReportCreateFields(country_id="us", report_id=REPORT_ID),
+    )
+
+    assert saved.report_id == REPORT_ID
+    assert "get_report" not in [name for name, _ in entrypoint.calls]
