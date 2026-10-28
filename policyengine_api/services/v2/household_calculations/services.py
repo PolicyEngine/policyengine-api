@@ -41,28 +41,6 @@ if TYPE_CHECKING:
     )
 
 
-def _axes_in_year(
-    calculation: HouseholdCalculationInput, year: int
-) -> list[list[dict[str, Any]]] | None:
-    """Return the axes as sent, each without a period varying ``year``.
-
-    The country model would otherwise vary its own default period, the
-    current year, rather than the year the household's values name.
-    """
-    if calculation.axes is None:
-        return None
-    sent_axes = []
-    for group in calculation.axes:
-        sent_group = []
-        for axis in group:
-            sent_axis = axis.model_dump(mode="json", exclude_unset=True)
-            if sent_axis.get("period") is None:
-                sent_axis["period"] = str(year)
-            sent_group.append(sent_axis)
-        sent_axes.append(sent_group)
-    return sent_axes
-
-
 class V2HouseholdCalculationService:
     """Submit household calculations to the simulation service and read them."""
 
@@ -108,7 +86,9 @@ class V2HouseholdCalculationService:
             self._policies.get_policy(
                 country_id=country_id, policy_id=calculation.policy_id
             )
-        year = calculation_year(household.default_year)
+        # The simulation service calculates the household's default year;
+        # one without it is refused here, with 422.
+        calculation_year(household.default_year)
         catalog_reader = self._catalog_reader_factory()
         try:
             catalog = catalog_reader.get_model_by_country(country_id)
@@ -122,7 +102,19 @@ class V2HouseholdCalculationService:
                 None if calculation.policy_id is None else str(calculation.policy_id)
             ),
             "options": {
-                "axes": _axes_in_year(calculation, year),
+                # The household function varies the run's year, the
+                # household's default year, along an axis without a period.
+                "axes": (
+                    None
+                    if calculation.axes is None
+                    else [
+                        [
+                            axis.model_dump(mode="json", exclude_unset=True)
+                            for axis in group
+                        ]
+                        for group in calculation.axes
+                    ]
+                ),
                 "add_missing_variables": calculation.add_missing_variables,
             },
             # A calculation is reused for 28 days after it succeeded; callers

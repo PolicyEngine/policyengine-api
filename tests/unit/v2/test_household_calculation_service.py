@@ -92,7 +92,7 @@ def test_a_calculation_sends_the_household_and_policy_ids_and_the_version() -> N
         "household_id": str(HOUSEHOLD_ID),
         "policy_id": str(POLICY_ID),
         "options": {
-            "axes": [[{**AXES[0][0], "period": "2026"}]],
+            "axes": AXES,
             "add_missing_variables": True,
         },
         "force": False,
@@ -115,17 +115,13 @@ def test_current_law_sends_no_policy() -> None:
     assert submission["options"] == {"axes": None, "add_missing_variables": False}
 
 
-def test_an_axis_without_a_period_varies_the_households_default_year() -> None:
+def test_an_axis_without_a_period_is_sent_as_given() -> None:
+    """The simulation service varies the household's default year for it."""
     parts = Parts()
-    parts.households.households[("us", HOUSEHOLD_ID)] = household_read(
-        default_year=2027
-    )
 
     parts.service.submit_calculation(calculation_input(axes=AXES))
 
-    assert parts.simulation.submissions[0]["options"]["axes"] == [
-        [{**AXES[0][0], "period": "2027"}]
-    ]
+    assert parts.simulation.submissions[0]["options"]["axes"] == AXES
 
 
 def test_a_household_without_a_default_year_is_refused() -> None:

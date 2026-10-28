@@ -281,12 +281,11 @@ Public API answers with 503. The answer is 202 with the calculation's
 `status` is `succeeded`, with `result`, or `failed`, with `error`. A US result
 carries `spm_config` and `spm_provenance`.
 
-With `add_missing_variables`, the v2 household function adds each missing
-variable for the year it would choose for `/calculate-full`: the first period
-of the age of a person named `you`, else the current calendar year (UTC). The
-Public API names people by their record IDs, so for a household whose
-`default_year` is not the current year the added variables are requested for
-the current year until the household function takes the calculation's year.
+The simulation service sends the household function the household's
+`default_year` as the calculation's year: the year of the variables
+`add_missing_variables` adds, and of values and axes the household gives
+without a period. (`/calculate-full` takes that year from the first age
+period of a person named `you`, or else the current year.)
 
 The simulation service stores every calculation as a simulation run, so a
 calculation no account saved is still stored, with no report. Neither route
