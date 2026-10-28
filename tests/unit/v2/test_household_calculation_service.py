@@ -300,3 +300,15 @@ def test_an_axis_keeps_its_own_period() -> None:
     parts.service.submit_calculation(calculation_input(axes=axes))
 
     assert parts.simulation.submissions[0]["options"]["axes"] == axes
+
+
+@pytest.mark.parametrize(
+    "period", ["2025", None], ids=["explicit-period", "null-period"]
+)
+def test_an_axis_period_is_forwarded_unchanged(period) -> None:
+    parts = Parts()
+    axes = [[{**AXES[0][0], "period": period}]]
+
+    parts.service.submit_calculation(calculation_input(axes=axes))
+
+    assert parts.simulation.submissions[0]["options"]["axes"] == axes

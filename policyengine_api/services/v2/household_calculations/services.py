@@ -23,7 +23,7 @@ from policyengine_api.services.v2.household_calculations.types import (
 )
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationNotFoundError,
-    calculation_year,
+    require_default_year,
     require_household_country,
 )
 
@@ -88,7 +88,7 @@ class V2HouseholdCalculationService:
             )
         # The simulation service calculates the household's default year;
         # one without it is refused here, with 422.
-        calculation_year(household.default_year)
+        require_default_year(household.default_year)
         catalog_reader = self._catalog_reader_factory()
         try:
             catalog = catalog_reader.get_model_by_country(country_id)

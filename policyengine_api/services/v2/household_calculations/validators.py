@@ -37,9 +37,11 @@ def require_household_country(
     raise HouseholdCalculationCountryError(msg)
 
 
-def calculation_year(default_year: int | None) -> int:
-    """Return the household's default year, the year its values name."""
+def require_default_year(default_year: int | None) -> None:
+    """Raise HouseholdCalculationYearError unless the household has a default year.
+
+    The simulation service calculates that year, the year its values name.
+    """
     if default_year is None:
         msg = "This household has no default year to calculate."
         raise HouseholdCalculationYearError(msg)
-    return default_year
