@@ -34,20 +34,19 @@ def require_reference_in_country(
 
 
 def require_migrated_from(
-    found_legacy_report_id: int | None,
+    found_legacy_id: int | None,
     *,
-    report_id: UUID,
-    legacy_report_id: int,
+    kind: str,
+    record_id: UUID,
+    legacy_id: int,
 ) -> None:
-    """Raise unless the v2 report was migrated from that v1 report output.
+    """Raise unless the v2 report or simulation was migrated from that v1 one.
 
-    ``found_legacy_report_id`` is the v1 report output the simulation service
-    records the report was migrated from, or None for a report created on v2.
-    Raise ``AssociationReferenceConflictError`` when they differ, because a
-    saved report holding both references records that migration.
+    ``found_legacy_id`` is the v1 record the simulation service records the
+    v2 record was migrated from, or None for one created on v2. Raise
+    ``AssociationReferenceConflictError`` when they differ, because a saved
+    record holding both references records that migration.
     """
-    if found_legacy_report_id != legacy_report_id:
-        msg = (
-            f"v2 report {report_id} was not migrated from v1 report {legacy_report_id}"
-        )
+    if found_legacy_id != legacy_id:
+        msg = f"v2 {kind} {record_id} was not migrated from v1 {kind} {legacy_id}"
         raise AssociationReferenceConflictError(msg)

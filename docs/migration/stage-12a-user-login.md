@@ -596,9 +596,9 @@ for that record, outside the v2 transaction, as it checks a v1 ID in the v1
 database:
 
 - an unknown record, or one of another country, is a 422;
-- a saved report holding both IDs records a migration, so its v2 report must
-  be the one the entrypoint records as migrated from that v1 report output,
-  or the request is a 400. A `PATCH` that sets one ID is checked against the
-  other one the saved report keeps, and is a 409 if the saved report changes
-  during that check;
+- a saved report or simulation holding both IDs records a migration, so its
+  v2 record must be the one the entrypoint records as migrated from that v1
+  record, or the request is a 400. A `PATCH` that sets one ID is checked
+  against the other one the saved record keeps, and is a 409 if the saved
+  record changes during that check;
 - an entrypoint that cannot be used is a 503, and nothing is saved.

@@ -21,8 +21,13 @@ from typing import TYPE_CHECKING
 from policyengine_api.services.v2.associations.services import (
     require_legacy_reference,
 )
+from policyengine_api.services.v2.associations.transformations import (
+    repointed_references,
+)
+from policyengine_api.services.v2.associations.types import RecordReferences
 from policyengine_api.services.v2.associations.validators import (
     require_simulation_reference_checker,
+    require_unchanged_references,
 )
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_for_read_in_session,
@@ -48,20 +53,15 @@ from policyengine_api.services.v2.user_reports.database_connectors.updates impor
 )
 from policyengine_api.services.v2.user_reports.transformations import (
     owned_user_report_input,
-    repointed_report_references,
     shared_user_report_read,
     stored_report_references,
     user_report_page,
     user_report_read,
     user_report_update_values,
 )
-from policyengine_api.services.v2.user_reports.types import (
-    ReportReferences,
-    UserReportListing,
-)
+from policyengine_api.services.v2.user_reports.types import UserReportListing
 from policyengine_api.services.v2.user_reports.validators import (
     require_owned_user_policy,
-    require_unchanged_references,
     require_user_report,
 )
 
@@ -168,7 +168,7 @@ class V2UserReportService:
         self,
         *,
         country_id: str,
-        references: ReportReferences,
+        references: RecordReferences,
         check_legacy_report: bool,
     ) -> None:
         """Check a saved report's references before the v2 transaction opens.
@@ -177,25 +177,25 @@ class V2UserReportService:
         v2 report is checked whenever there is one, and when there are both,
         it must be the report migrated from that v1 report output.
         """
-        if check_legacy_report and references.legacy_report_id is not None:
+        if check_legacy_report and references.legacy_id is not None:
             require_legacy_reference(
                 self._legacy_references,
                 LegacyRecordKind.REPORT,
                 country_id=country_id,
-                legacy_id=references.legacy_report_id,
+                legacy_id=references.legacy_id,
             )
-        if references.report_id is not None:
+        if references.v2_id is not None:
             require_simulation_reference_checker(
                 self._simulation_references
             ).require_report(
                 country_id=country_id,
-                report_id=references.report_id,
-                legacy_report_id=references.legacy_report_id,
+                report_id=references.v2_id,
+                legacy_report_id=references.legacy_id,
             )
 
     def _stored_references(
         self, *, principal: AccountPrincipal, country_id: str, association_id: UUID
-    ) -> ReportReferences:
+    ) -> RecordReferences:
         """Read the references the principal's saved report holds now."""
         with self._database_session.read() as session:
             owner = resolve_principal_user_for_read_in_session(
@@ -227,9 +227,9 @@ class V2UserReportService:
         """
         self._require_references(
             country_id=association_input.country_id,
-            references=ReportReferences(
-                report_id=association_input.report_id,
-                legacy_report_id=association_input.legacy_report_id,
+            references=RecordReferences(
+                v2_id=association_input.report_id,
+                legacy_id=association_input.legacy_report_id,
             ),
             check_legacy_report=True,
         )
@@ -364,7 +364,7 @@ class V2UserReportService:
         country. Raise UserReportNotFoundError if the principal has no such
         report in this country.
         """
-        checked: ReportReferences | None = None
+        checked: RecordReferences | None = None
         if (
             association_input.report_id is not None
             or association_input.legacy_report_id is not None
@@ -376,7 +376,11 @@ class V2UserReportService:
             )
             self._require_references(
                 country_id=country_id,
-                references=repointed_report_references(stored, association_input),
+                references=repointed_references(
+                    stored,
+                    v2_id=association_input.report_id,
+                    legacy_id=association_input.legacy_report_id,
+                ),
                 check_legacy_report=association_input.legacy_report_id is not None,
             )
             checked = stored
@@ -391,7 +395,11 @@ class V2UserReportService:
                 association_id=association_id,
             )
             if checked is not None:
-                require_unchanged_references(association, checked=checked)
+                require_unchanged_references(
+                    stored_report_references(association),
+                    checked=checked,
+                    association_id=association_id,
+                )
             for link_field in ("user_policy_id", "baseline_user_policy_id"):
                 if link_field in association_input.model_fields_set:
                     validate_linked_user_policy(

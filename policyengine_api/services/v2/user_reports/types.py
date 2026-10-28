@@ -357,11 +357,3 @@ class UserReportPage:
     offset: int
     limit: int
     has_more: bool
-
-
-@dataclass(frozen=True)
-class ReportReferences:
-    """The v2 report and v1 report output a saved report names; either may be None."""
-
-    report_id: UUID | None
-    legacy_report_id: int | None

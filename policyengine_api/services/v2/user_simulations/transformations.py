@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from policyengine_api.services.v2.associations.types import RecordReferences
 from policyengine_api.services.v2.user_simulations.types import (
     UserSimulationCreateFields,
     UserSimulationCreationInput,
@@ -59,3 +60,12 @@ def owned_user_simulation_input(
 ) -> UserSimulationCreationInput:
     """Add the owner resolved from the session principal to the caller's fields."""
     return UserSimulationCreationInput(**fields.model_dump(), user_id=user_id)
+
+
+def stored_simulation_references(
+    association: UserSimulationAssociation,
+) -> RecordReferences:
+    """Return the v2 simulation and v1 simulation a stored saved simulation names."""
+    return RecordReferences(
+        v2_id=association.simulation_id, legacy_id=association.legacy_simulation_id
+    )

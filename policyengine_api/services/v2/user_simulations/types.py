@@ -37,7 +37,8 @@ class UserSimulationCreateFields(StrictUserSimulationInput):
 
     The saved simulation names a v2 simulation (``simulation_id``), a v1
     simulation (``legacy_simulation_id``), or both; each is checked before it
-    is saved.
+    is saved, and with both, the v2 simulation must be the one migrated from
+    that v1 simulation.
     """
 
     country_id: CountryId

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Protocol, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, FiniteFloat, StringConstraints
@@ -99,6 +100,29 @@ class SimulationReferenceChecker(Protocol):
         """
         ...
 
-    def require_simulation(self, *, country_id: str, simulation_id: UUID) -> None:
-        """Raise unless the country has the simulation."""
+    def require_simulation(
+        self,
+        *,
+        country_id: str,
+        simulation_id: UUID,
+        legacy_simulation_id: int | None = None,
+    ) -> None:
+        """Raise unless the country has the simulation.
+
+        With ``legacy_simulation_id``, also raise
+        ``AssociationReferenceConflictError`` unless the simulation was
+        migrated from that v1 simulation.
+        """
         ...
+
+
+@dataclass(frozen=True)
+class RecordReferences:
+    """The v2 record and the v1 record a saved association names.
+
+    Either may be None, not both. When both are set, the v2 record is the one
+    migrated from the v1 record.
+    """
+
+    v2_id: UUID | None
+    legacy_id: int | None

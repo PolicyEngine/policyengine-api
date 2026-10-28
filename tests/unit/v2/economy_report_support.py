@@ -59,6 +59,7 @@ def simulation_record(
     *,
     policy_id: UUID | None = None,
     country_id: str = "us",
+    legacy_simulation_id: int | None = None,
 ) -> SimulationRecord:
     return SimulationRecord(
         id=simulation_id,
@@ -68,7 +69,7 @@ def simulation_record(
         dynamic_id=None,
         region_code="state/ca",
         dataset_name=None,
-        legacy_simulation_id=None,
+        legacy_simulation_id=legacy_simulation_id,
         created_at=CREATED_AT,
     )
 

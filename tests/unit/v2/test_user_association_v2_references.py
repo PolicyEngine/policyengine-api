@@ -231,7 +231,9 @@ def test_a_shared_report_shows_its_v2_report(store, entrypoint) -> None:
 def simulation_entrypoint() -> FakeEconomyReportSimulation:
     entrypoint = FakeEconomyReportSimulation()
     entrypoint.simulations = {
-        BASELINE_SIMULATION_ID: simulation_record(BASELINE_SIMULATION_ID),
+        BASELINE_SIMULATION_ID: simulation_record(
+            BASELINE_SIMULATION_ID, legacy_simulation_id=613
+        ),
         UK_SIMULATION_ID: simulation_record(UK_SIMULATION_ID, country_id="uk"),
     }
     return entrypoint
@@ -453,3 +455,141 @@ def test_a_report_whose_result_cannot_be_read_back_is_saved_by_its_v2_id(
 
     assert saved.report_id == REPORT_ID
     assert "get_report" not in [name for name, _ in entrypoint.calls]
+
+
+MIGRATED_SIMULATION_ID = UUID("00000000-0000-4000-8000-000000000194")
+
+
+@pytest.fixture
+def migrated_simulation_entrypoint() -> FakeEconomyReportSimulation:
+    entrypoint = FakeEconomyReportSimulation()
+    entrypoint.simulations = {
+        BASELINE_SIMULATION_ID: simulation_record(BASELINE_SIMULATION_ID),
+        MIGRATED_SIMULATION_ID: simulation_record(
+            MIGRATED_SIMULATION_ID, legacy_simulation_id=613
+        ),
+    }
+    return entrypoint
+
+
+@pytest.mark.parametrize(
+    ("simulation_id", "legacy_simulation_id"),
+    [(MIGRATED_SIMULATION_ID, 614), (BASELINE_SIMULATION_ID, 613)],
+    ids=["migrated-from-another", "not-migrated"],
+)
+def test_both_simulation_references_must_name_the_same_simulation(
+    store, migrated_simulation_entrypoint, simulation_id, legacy_simulation_id
+) -> None:
+    with pytest.raises(AssociationReferenceConflictError) as raised:
+        _simulation_service(
+            store, migrated_simulation_entrypoint
+        ).create_user_simulation(
+            principal=ALICE,
+            association_input=UserSimulationCreateFields(
+                country_id="us",
+                simulation_id=simulation_id,
+                legacy_simulation_id=legacy_simulation_id,
+            ),
+        )
+
+    assert str(raised.value) == (
+        f"v2 simulation {simulation_id} was not migrated from v1 simulation "
+        f"{legacy_simulation_id}"
+    )
+    assert _saved_simulations(store) == []
+
+
+def _saved_simulation(service, **references):
+    return service.create_user_simulation(
+        principal=ALICE,
+        association_input=UserSimulationCreateFields(country_id="us", **references),
+    )
+
+
+def _patch_simulation(service, saved, **changes):
+    return service.patch_user_simulation(
+        principal=ALICE,
+        country_id="us",
+        association_id=saved.id,
+        association_input=UserSimulationUpdateInput(**changes),
+    )
+
+
+def test_a_repointed_simulation_reference_must_match_the_stored_one(
+    store, migrated_simulation_entrypoint
+) -> None:
+    service = _simulation_service(store, migrated_simulation_entrypoint)
+    v1_only = _saved_simulation(service, legacy_simulation_id=614)
+    v2_only = _saved_simulation(service, simulation_id=MIGRATED_SIMULATION_ID)
+
+    with pytest.raises(AssociationReferenceConflictError):
+        _patch_simulation(service, v1_only, simulation_id=MIGRATED_SIMULATION_ID)
+    with pytest.raises(AssociationReferenceConflictError):
+        _patch_simulation(service, v2_only, legacy_simulation_id=614)
+    paired = _patch_simulation(service, v2_only, legacy_simulation_id=613)
+    migrated_entrypoint_calls = len(migrated_simulation_entrypoint.calls)
+    renamed = _patch_simulation(service, paired, name="Baseline")
+
+    stored = {row.id: row for row in _saved_simulations(store)}
+    assert (
+        stored[v1_only.id].simulation_id,
+        stored[v1_only.id].legacy_simulation_id,
+    ) == (None, 614)
+    assert (paired.simulation_id, paired.legacy_simulation_id) == (
+        MIGRATED_SIMULATION_ID,
+        613,
+    )
+    assert renamed.name == "Baseline"
+    assert len(migrated_simulation_entrypoint.calls) == migrated_entrypoint_calls
+
+
+class ChangingSimulationReferenceChecker:
+    """Check references, then change the saved simulation as another patch would."""
+
+    def __init__(self, checker, store, association_id) -> None:
+        self._checker = checker
+        self._store = store
+        self._association_id = association_id
+
+    def require_report(self, *, country_id, report_id, legacy_report_id=None) -> None:
+        self._checker.require_report(
+            country_id=country_id,
+            report_id=report_id,
+            legacy_report_id=legacy_report_id,
+        )
+
+    def require_simulation(
+        self, *, country_id, simulation_id, legacy_simulation_id=None
+    ) -> None:
+        self._checker.require_simulation(
+            country_id=country_id,
+            simulation_id=simulation_id,
+            legacy_simulation_id=legacy_simulation_id,
+        )
+        with self._store.sessions.begin() as session:
+            association = session.get(UserSimulationAssociation, self._association_id)
+            association.legacy_simulation_id = 614
+
+
+def test_a_simulation_changed_while_its_reference_is_checked_is_not_repointed(
+    store, migrated_simulation_entrypoint
+) -> None:
+    saved = _saved_simulation(
+        _simulation_service(store, migrated_simulation_entrypoint),
+        legacy_simulation_id=613,
+    )
+    service = V2UserSimulationService(
+        UserSimulationDatabaseSession(store.sessions),
+        default_legacy_references(),
+        ChangingSimulationReferenceChecker(
+            SimulationReferenceService(migrated_simulation_entrypoint),
+            store,
+            saved.id,
+        ),
+    )
+
+    with pytest.raises(AssociationConflictError):
+        _patch_simulation(service, saved, simulation_id=MIGRATED_SIMULATION_ID)
+
+    (stored,) = _saved_simulations(store)
+    assert (stored.simulation_id, stored.legacy_simulation_id) == (None, 614)

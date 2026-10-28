@@ -15,8 +15,13 @@ from typing import TYPE_CHECKING
 from policyengine_api.services.v2.associations.services import (
     require_legacy_reference,
 )
+from policyengine_api.services.v2.associations.transformations import (
+    repointed_references,
+)
+from policyengine_api.services.v2.associations.types import RecordReferences
 from policyengine_api.services.v2.associations.validators import (
     require_simulation_reference_checker,
+    require_unchanged_references,
 )
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_for_read_in_session,
@@ -39,6 +44,7 @@ from policyengine_api.services.v2.user_simulations.database_connectors.updates i
 )
 from policyengine_api.services.v2.user_simulations.transformations import (
     owned_user_simulation_input,
+    stored_simulation_references,
     user_simulation_page,
     user_simulation_read,
 )
@@ -125,21 +131,47 @@ class V2UserSimulationService:
         self,
         *,
         country_id: str,
-        simulation_id: UUID | None,
-        legacy_simulation_id: int | None,
+        references: RecordReferences,
+        check_legacy_simulation: bool,
     ) -> None:
-        """Check each supplied simulation reference before the v2 transaction."""
-        if legacy_simulation_id is not None:
+        """Check a saved simulation's references before the v2 transaction opens.
+
+        The v1 simulation is checked when ``check_legacy_simulation`` is set.
+        The v2 simulation is checked whenever there is one, and when there are
+        both, it must be the simulation migrated from that v1 simulation.
+        """
+        if check_legacy_simulation and references.legacy_id is not None:
             require_legacy_reference(
                 self._legacy_references,
                 LegacyRecordKind.SIMULATION,
                 country_id=country_id,
-                legacy_id=legacy_simulation_id,
+                legacy_id=references.legacy_id,
             )
-        if simulation_id is not None:
+        if references.v2_id is not None:
             require_simulation_reference_checker(
                 self._simulation_references
-            ).require_simulation(country_id=country_id, simulation_id=simulation_id)
+            ).require_simulation(
+                country_id=country_id,
+                simulation_id=references.v2_id,
+                legacy_simulation_id=references.legacy_id,
+            )
+
+    def _stored_references(
+        self, *, principal: AccountPrincipal, country_id: str, association_id: UUID
+    ) -> RecordReferences:
+        """Read the references the principal's saved simulation holds now."""
+        with self._database_session.read() as session:
+            owner = resolve_principal_user_for_read_in_session(
+                session, principal, country_id=country_id
+            )
+            return stored_simulation_references(
+                read_owned_user_simulation(
+                    session,
+                    user_id=None if owner is None else owner.user_id,
+                    country_id=country_id,
+                    association_id=association_id,
+                )
+            )
 
     def create_user_simulation(
         self,
@@ -156,8 +188,11 @@ class V2UserSimulationService:
         """
         self._require_references(
             country_id=association_input.country_id,
-            simulation_id=association_input.simulation_id,
-            legacy_simulation_id=association_input.legacy_simulation_id,
+            references=RecordReferences(
+                v2_id=association_input.simulation_id,
+                legacy_id=association_input.legacy_simulation_id,
+            ),
+            check_legacy_simulation=True,
         )
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
@@ -244,29 +279,53 @@ class V2UserSimulationService:
         """Update the supplied fields of one of the principal's associations.
 
         A new ``simulation_id`` or ``legacy_simulation_id`` is checked first,
-        as on create. Raise UserSimulationNotFoundError if the principal has no
-        such association in this country.
+        as on create, together with the reference the saved simulation keeps:
+        when it will hold both, the v2 simulation must be the one migrated from
+        that v1 simulation (AssociationReferenceConflictError). If the saved
+        simulation changes during that check, AssociationConflictError is
+        raised. Raise UserSimulationNotFoundError if the principal has no such
+        association in this country.
         """
-        self._require_references(
-            country_id=country_id,
-            simulation_id=association_input.simulation_id,
-            legacy_simulation_id=association_input.legacy_simulation_id,
-        )
+        checked: RecordReferences | None = None
+        if (
+            association_input.simulation_id is not None
+            or association_input.legacy_simulation_id is not None
+        ):
+            stored = self._stored_references(
+                principal=principal,
+                country_id=country_id,
+                association_id=association_id,
+            )
+            self._require_references(
+                country_id=country_id,
+                references=repointed_references(
+                    stored,
+                    v2_id=association_input.simulation_id,
+                    legacy_id=association_input.legacy_simulation_id,
+                ),
+                check_legacy_simulation=(
+                    association_input.legacy_simulation_id is not None
+                ),
+            )
+            checked = stored
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
                 session, principal, country_id=country_id
             )
-            return user_simulation_read(
-                update_user_simulation(
-                    session,
-                    read_owned_user_simulation(
-                        session,
-                        user_id=owner.user_id,
-                        country_id=country_id,
-                        association_id=association_id,
-                    ),
-                    association_input,
+            association = read_owned_user_simulation(
+                session,
+                user_id=owner.user_id,
+                country_id=country_id,
+                association_id=association_id,
+            )
+            if checked is not None:
+                require_unchanged_references(
+                    stored_simulation_references(association),
+                    checked=checked,
+                    association_id=association_id,
                 )
+            return user_simulation_read(
+                update_user_simulation(session, association, association_input)
             )
 
     def delete_user_simulation(

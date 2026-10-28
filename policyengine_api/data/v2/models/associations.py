@@ -177,7 +177,8 @@ class UserSimulationAssociation(TimestampedModel, table=True):
     Simulations are owned by the Simulation Entrypoint, so ``simulation_id`` is
     a logical reference with no cross-service foreign key; the Public API asks
     the entrypoint whether it exists before saving it.
-    ``legacy_simulation_id`` is the v1 simulation.
+    ``legacy_simulation_id`` is the v1 simulation. A row holding both records
+    that the v2 simulation was migrated from that v1 simulation.
     """
 
     __tablename__ = "user_simulation_associations"

@@ -104,7 +104,8 @@ def build_v2_user_simulation_router(
             "header; the owner is taken from that credential. "
             "The body names a v2 simulation (simulation_id), checked with the "
             "simulation service, a v1 simulation (legacy_simulation_id), checked "
-            "in the v1 database, or both."
+            "in the v1 database, or both; with both, the v2 simulation must be "
+            "the one migrated from that v1 simulation (400 otherwise)."
         ),
     )
     def create_user_simulation(

@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportRecord,
         EconomyReportSimulation,
+        SimulationRecord,
     )
 
 
@@ -68,8 +69,9 @@ class SimulationReferenceService:
         if report is not None:
             require_migrated_from(
                 report.legacy_report_id,
-                report_id=report_id,
-                legacy_report_id=legacy_report_id,
+                kind="report",
+                record_id=report_id,
+                legacy_id=legacy_report_id,
             )
 
     def _require_report_country(self, *, country_id: str, report_id: UUID) -> None:
@@ -88,17 +90,35 @@ class SimulationReferenceService:
             country_id=country_id,
         )
 
-    def require_simulation(self, *, country_id: str, simulation_id: UUID) -> None:
-        """Raise ``SimulationReferenceNotFoundError`` unless the country has it."""
+    def require_simulation(
+        self,
+        *,
+        country_id: str,
+        simulation_id: UUID,
+        legacy_simulation_id: int | None = None,
+    ) -> None:
+        """Raise ``SimulationReferenceNotFoundError`` unless the country has it.
+
+        With ``legacy_simulation_id``, also raise
+        ``AssociationReferenceConflictError`` unless the simulation was
+        migrated from that v1 simulation.
+        """
         try:
-            found_country_id: str | None = self._simulation.get_simulation(
+            simulation: SimulationRecord | None = self._simulation.get_simulation(
                 simulation_id
-            ).country_id
+            )
         except SimulationRecordNotFoundError:
-            found_country_id = None
+            simulation = None
         require_reference_in_country(
-            found_country_id,
+            None if simulation is None else simulation.country_id,
             kind="simulation",
             reference_id=simulation_id,
             country_id=country_id,
         )
+        if simulation is not None and legacy_simulation_id is not None:
+            require_migrated_from(
+                simulation.legacy_simulation_id,
+                kind="simulation",
+                record_id=simulation_id,
+                legacy_id=legacy_simulation_id,
+            )
