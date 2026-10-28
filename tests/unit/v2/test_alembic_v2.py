@@ -235,6 +235,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        "fbb7488ebe8a",
         "91af4fc8d8c1",
         "60d6518b6a98",
         "439303be14fe",
@@ -495,7 +496,6 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
         / "migrations/v2/versions/fbb7488ebe8a_link_signed_in_users_to_v1_anchored_.py"
     ).read_text(encoding="utf-8")
 
-    assert V2_ALEMBIC_HEAD_REVISION == "fbb7488ebe8a"
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
@@ -563,6 +563,47 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
     assert (
         '"users", "primary_country", existing_type=sa.VARCHAR(length=2), nullable=True'
     ) in upgrade
+
+
+AREA_IMPACT_COORDINATE_COLUMNS = frozenset(
+    (table_name, column_name)
+    for table_name in ("constituency_impacts", "local_authority_impacts")
+    for column_name in ("x", "y")
+)
+
+
+def test_area_impact_coordinate_removal_is_generated_and_reversible() -> None:
+    revision = (
+        REPO
+        / "migrations/v2/versions/e86f19a6c4da_drop_uk_area_impact_map_coordinates.py"
+    ).read_text(encoding="utf-8")
+
+    assert V2_ALEMBIC_HEAD_REVISION == "e86f19a6c4da"
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "fbb7488ebe8a"' in revision
+    assert "Post-generation" not in revision
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+    # The upgrade drops the four map coordinate columns and does nothing else.
+    assert len(re.findall(r"\bop\.\w+\(", upgrade)) == 4
+    dropped_columns = re.findall(
+        r'op\.drop_column\(\s*"(\w+)",\s*"(\w+)"\s*\)', upgrade
+    )
+    assert frozenset(dropped_columns) == AREA_IMPACT_COORDINATE_COLUMNS
+    # The downgrade adds each one back as the baseline created it: a required
+    # integer without a server default.
+    assert len(re.findall(r"\bop\.\w+\(", downgrade)) == 4
+    restored_columns = re.findall(
+        r'op\.add_column\(\s*"(\w+)",\s*sa\.Column\(\s*"(\w+)",\s*'
+        r"sa\.INTEGER\(\),\s*autoincrement=False,\s*nullable=False,?\s*\),?\s*\)",
+        downgrade,
+    )
+    assert frozenset(restored_columns) == AREA_IMPACT_COORDINATE_COLUMNS
 
 
 def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -> None:

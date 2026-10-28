@@ -606,7 +606,7 @@ class CongressionalDistrictImpact(GeographicImpactBase, table=True):
 
 
 class ConstituencyImpact(GeographicImpactBase, table=True):
-    """Household income change in one UK constituency, with its map coordinates.
+    """Household income change in one UK constituency.
 
     One row per run and constituency code.
     """
@@ -622,14 +622,12 @@ class ConstituencyImpact(GeographicImpactBase, table=True):
 
     constituency_code: str = Field(max_length=64)
     constituency_name: str = Field(max_length=255)
-    x: int
-    y: int
 
     report_run: ReportRun = Relationship(back_populates="constituency_impacts")
 
 
 class LocalAuthorityImpact(GeographicImpactBase, table=True):
-    """Household income change in one UK local authority, with its map coordinates.
+    """Household income change in one UK local authority.
 
     One row per run and local authority code.
     """
@@ -645,7 +643,5 @@ class LocalAuthorityImpact(GeographicImpactBase, table=True):
 
     local_authority_code: str = Field(max_length=64)
     local_authority_name: str = Field(max_length=255)
-    x: int
-    y: int
 
     report_run: ReportRun = Relationship(back_populates="local_authority_impacts")
