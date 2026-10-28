@@ -1,3 +1,14 @@
+## [5.14.0] - 2026-10-28
+
+### Added
+
+- `GET /deployment` reports the policyengine.py version the API serves and when it went live; the candidate deploy keeps that date across redeploys of the same version.
+
+### Fixed
+
+- A society-wide (economy) calculation for a year the simulation service's model cannot project its dataset to, such as a UK year after 2032, now returns 400 with the code `DATASET_YEAR_UNAVAILABLE` and a readable message such as "UK results are available for 2024 to 2032", instead of a 502. The failure is stored and replayed as a typed error, like the SPM input errors. The UK years in the country metadata now run to the last year the installed policyengine-uk projects its dataset to (2032), instead of stopping at 2030.
+
+
 ## [5.13.3] - 2026-10-27
 
 ### Changed
