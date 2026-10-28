@@ -9,10 +9,19 @@ from uuid import UUID
 import pytest
 
 from policyengine_api.services.v2.associations.validators import (
+    AssociationConflictError,
     AssociationLinkNotFoundError,
+    AssociationReferenceConflictError,
 )
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
+)
+from policyengine_api.services.v2.simulation_entrypoint.types import (
+    SimulationRecordUnreadableError,
+    SimulationServiceUnavailableError,
+)
+from policyengine_api.services.v2.simulation_refs.validators import (
+    SimulationReferenceNotFoundError,
 )
 from policyengine_api.services.v2.user_reports.types import (
     UserReportPage,
@@ -157,7 +166,7 @@ def _clients():
     return client, simulations, reports
 
 
-def test_simulation_routes_require_v1_references_and_scope_to_the_user() -> None:
+def test_simulation_routes_take_v1_or_v2_references_and_scope_to_the_user() -> None:
     client, simulations, _reports = _clients()
 
     created = client.post(
@@ -189,18 +198,22 @@ def test_simulation_routes_require_v1_references_and_scope_to_the_user() -> None
         "created_at": "2026-01-01T00:00:00Z",
         "updated_at": "2026-01-01T00:00:01Z",
     }
-    assert v2_reference.status_code == 422
+    assert v2_reference.status_code == 201
     assert listed.status_code == 200
     assert patched.status_code == 200
     assert deleted.status_code == 204
     assert [call[0] for call in simulations.calls] == [
+        "create_user_simulation",
         "create_user_simulation",
         "list_user_simulations",
         "patch_user_simulation",
         "delete_user_simulation",
     ]
     assert all(call[1]["principal"] == PRINCIPAL for call in simulations.calls)
-    assert simulations.calls[1][1]["legacy_simulation_id"] == 613
+    assert simulations.calls[1][1]["association_input"].simulation_id == (
+        SIMULATION_ASSOCIATION_ID
+    )
+    assert simulations.calls[2][1]["legacy_simulation_id"] == 613
 
 
 def test_report_routes_round_trip_v3_fields() -> None:
@@ -243,7 +256,7 @@ def test_report_routes_round_trip_v3_fields() -> None:
 @pytest.mark.parametrize(
     "changes",
     [
-        {"report_id": str(REPORT_ASSOCIATION_ID)},
+        {"report_id": "not-a-uuid"},
         {"legacy_report_id": None},
         {"user_id": str(OWNER_ID)},
         {"last_run_at": "2026-02-01T12:00:00"},
@@ -280,7 +293,17 @@ def test_report_create_rejects_invalid_v3_payloads(changes: dict) -> None:
     [
         (AssociationLinkNotFoundError("user-policy association was not found"), 422),
         (LegacyReferenceNotFoundError("v1 report 615 was not found"), 422),
+        (SimulationReferenceNotFoundError("v2 report was not found"), 422),
         (UserReportNotFoundError("association was not found"), 404),
+        (SimulationServiceUnavailableError("HTTP 503"), 503),
+        (SimulationRecordUnreadableError("stored result cannot be read back"), 502),
+        (
+            AssociationReferenceConflictError(
+                "v2 report was not migrated from v1 report 616"
+            ),
+            400,
+        ),
+        (AssociationConflictError("association changed; try again"), 409),
     ],
 )
 def test_report_failures_map_to_contract_statuses(
@@ -457,3 +480,84 @@ def test_stored_snapshots_outside_input_bounds_still_serialize() -> None:
     assert first["validation"]["calibration"]["geography"] == long_label
     assert "retired_key" not in first["validation"]
     assert second["validation"] == VALIDATION
+
+
+V2_REPORT_ID = UUID("00000000-0000-4000-8000-000000000101")
+
+
+def test_a_report_is_saved_and_repointed_by_its_v2_id() -> None:
+    client, _simulations, reports = _clients()
+
+    created = client.post(
+        "/v2/user-reports?country_id=us",
+        json={"country_id": "us", "report_id": str(V2_REPORT_ID)},
+    )
+    both = client.post(
+        "/v2/user-reports?country_id=us",
+        json={
+            "country_id": "us",
+            "report_id": str(V2_REPORT_ID),
+            "legacy_report_id": 615,
+        },
+    )
+    neither = client.post(
+        "/v2/user-reports?country_id=us", json={"country_id": "us", "name": "x"}
+    )
+    repointed = client.patch(
+        f"/v2/user-reports/{REPORT_ASSOCIATION_ID}?country_id=us",
+        json={"report_id": str(V2_REPORT_ID)},
+    )
+    cleared = client.patch(
+        f"/v2/user-reports/{REPORT_ASSOCIATION_ID}?country_id=us",
+        json={"report_id": None},
+    )
+
+    assert [response.status_code for response in (created, both, repointed)] == [
+        201,
+        201,
+        200,
+    ]
+    assert neither.status_code == 422
+    assert cleared.status_code == 422
+    assert [name for name, _ in reports.calls] == [
+        "create_user_report",
+        "create_user_report",
+        "patch_user_report",
+    ]
+    assert reports.calls[0][1]["association_input"].report_id == V2_REPORT_ID
+    assert reports.calls[0][1]["association_input"].legacy_report_id is None
+    assert reports.calls[2][1]["association_input"].model_fields_set == {"report_id"}
+
+
+def test_a_simulation_is_repointed_by_its_v2_id_but_never_left_without_one() -> None:
+    client, simulations, _reports = _clients()
+
+    repointed = client.patch(
+        f"/v2/user-simulations/{SIMULATION_ASSOCIATION_ID}?country_id=us",
+        json={"simulation_id": str(V2_REPORT_ID)},
+    )
+    cleared = client.patch(
+        f"/v2/user-simulations/{SIMULATION_ASSOCIATION_ID}?country_id=us",
+        json={"simulation_id": None},
+    )
+    neither = client.post(
+        "/v2/user-simulations?country_id=us", json={"country_id": "us"}
+    )
+
+    assert repointed.status_code == 200
+    assert cleared.status_code == 422
+    assert neither.status_code == 422
+    assert [name for name, _ in simulations.calls] == ["patch_user_simulation"]
+    assert simulations.calls[0][1]["association_input"].model_fields_set == {
+        "simulation_id"
+    }
+
+
+def test_openapi_declares_the_unreadable_report_answer_where_it_can_occur() -> None:
+    client, _simulations, _reports = _clients()
+
+    paths = client.get("/v2/openapi.json").json()["paths"]
+
+    assert "502" in paths["/v2/user-reports"]["post"]["responses"]
+    assert "502" in paths["/v2/user-reports/{association_id}"]["patch"]["responses"]
+    assert "502" not in paths["/v2/user-reports/{association_id}"]["get"]["responses"]

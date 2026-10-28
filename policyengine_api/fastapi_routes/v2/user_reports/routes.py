@@ -46,6 +46,16 @@ from policyengine_api.query_parameters import (
 )
 from policyengine_api.services.v2.identity.types import AccountPrincipal
 
+# Saving or repointing to a v2 report reads it from the simulation service.
+UNREADABLE_REPORT_RESPONSES: dict[int | str, dict[str, Any]] = {
+    502: {
+        "model": V2ErrorResponse,
+        "description": (
+            "The simulation service has the v2 report but cannot read it back."
+        ),
+    },
+}
+
 SHARED_REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {
         "model": V2ErrorResponse,
@@ -121,13 +131,17 @@ def build_v2_user_report_router(
         "/user-reports",
         response_model=UserReportDetailResponse,
         status_code=201,
-        summary="Save a v1 report for the current user",
+        responses=UNREADABLE_REPORT_RESPONSES,
+        summary="Save a report for the current user",
         description=(
             "Requires a bearer access token or the PolicyEngine-Unauthenticated-User "
             "header; the owner is taken from that credential. "
-            "Stage 12A accepts legacy_report_id only (the requested v1 report "
-            "output ID), checked in the v1 database. An optional user_policy_id "
-            "must name the same user's saved policy in the same country."
+            "The body names a v2 report (report_id), checked with the simulation "
+            "service, a v1 report output (legacy_report_id), checked in the v1 "
+            "database, or both; with both, the v2 report must be the one migrated "
+            "from that v1 report output (400 otherwise). An optional "
+            "user_policy_id must name the same user's saved policy in the same "
+            "country."
         ),
     )
     def create_user_report(
@@ -183,6 +197,7 @@ def build_v2_user_report_router(
     @router.patch(
         "/user-reports/{association_id}",
         response_model=UserReportDetailResponse,
+        responses=UNREADABLE_REPORT_RESPONSES,
         summary="Update or repoint one of the current user's saved reports",
     )
     def patch_user_report_route(

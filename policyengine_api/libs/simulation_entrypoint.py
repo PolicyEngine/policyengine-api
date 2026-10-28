@@ -1,77 +1,37 @@
 """HTTP client for the configured PolicyEngine Simulation Entrypoint."""
 
-import os
 import sys
 from dataclasses import dataclass, field
 from http import HTTPStatus
-from urllib.parse import urlparse
 
 import httpx
 from policyengine_observability import instrument_httpx
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 
 from policyengine_api.gcp_logging import logger
-from policyengine_api.libs.gateway_auth import (
-    GatewayAuthError,
-    GatewayAuthTokenProvider,
-    GatewayBearerAuth,
-    _require_all_or_none_gateway_auth_env,
-    gateway_auth_required,
+from policyengine_api.libs.gateway_auth import gateway_bearer_auth_from_environment
+from policyengine_api.libs.simulation_http import (
+    attach_request_identifiers,
+    required_base_url,
 )
 from policyengine_api.migration_flags import get_sim_entrypoint
 from policyengine_api.observability import get_runtime
-from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
 from policyengine_api.request_context import (
-    REQUEST_ID_HEADER,
     current_observability_id,
-    current_request_id,
 )
 from policyengine_api.spm import SPMValidationError
 from policyengine_api.worker_spm import raise_worker_spm_error, validate_worker_spm
-
-
-def _required_base_url(env_name: str) -> str:
-    value = os.environ.get(env_name, "").strip()
-    if not value:
-        msg = f"{env_name} is required"
-        raise ValueError(msg)
-
-    parsed = urlparse(value)
-    if (
-        parsed.scheme not in {"http", "https"}
-        or not parsed.hostname
-        or parsed.username
-        or parsed.password
-        or parsed.query
-        or parsed.fragment
-    ):
-        msg = (
-            f"{env_name} must be an absolute HTTP(S) base URL without "
-            "credentials, a query, or a fragment"
-        )
-        raise ValueError(msg)
-    return value.rstrip("/")
 
 
 def resolve_simulation_entrypoint_url(entrypoint: str | None = None) -> str:
     """Resolve old/new upstream URLs without conflating their configuration."""
     selected_entrypoint = entrypoint or get_sim_entrypoint()
     if selected_entrypoint == "old_gateway_direct":
-        return _required_base_url("OLD_SIMULATION_GATEWAY_URL")
+        return required_base_url("OLD_SIMULATION_GATEWAY_URL")
     if selected_entrypoint == "cloud_run_simulation_entrypoint":
-        return _required_base_url("SIMULATION_ENTRYPOINT_URL")
+        return required_base_url("SIMULATION_ENTRYPOINT_URL")
     msg = f"Unsupported simulation entrypoint: {selected_entrypoint!r}"
     raise ValueError(msg)
-
-
-def _attach_current_request_id(request: httpx.Request) -> None:
-    """Attach the active API request ID to an outbound simulation request."""
-    request_id = current_request_id()
-    if request_id is not None:
-        request.headers[REQUEST_ID_HEADER] = request_id
-    observability_id = current_observability_id()
-    if observability_id is not None:
-        request.headers[OBSERVABILITY_ID_HEADER] = observability_id
 
 
 class SimulationRunSegments(BaseModel):
@@ -223,22 +183,8 @@ class SimulationEntrypointClient:
         """
         self.entrypoint = entrypoint or get_sim_entrypoint()
         self.base_url = resolve_simulation_entrypoint_url(self.entrypoint)
-        self._token_provider = GatewayAuthTokenProvider()
-        _require_all_or_none_gateway_auth_env()
-        auth = (
-            GatewayBearerAuth(self._token_provider)
-            if self._token_provider.configured
-            else None
-        )
+        auth = gateway_bearer_auth_from_environment()
         if auth is None:
-            if gateway_auth_required():
-                msg = (
-                    "Gateway auth is required in this runtime: set "
-                    "GATEWAY_AUTH_ISSUER, GATEWAY_AUTH_AUDIENCE, "
-                    "GATEWAY_AUTH_CLIENT_ID, and "
-                    "GATEWAY_AUTH_CLIENT_SECRET."
-                )
-                raise GatewayAuthError(msg)
             print(  # noqa: T201  # the unauthenticated-client warning goes to stderr whatever the logging setup
                 "SimulationEntrypointClient initialized without gateway auth; "
                 "all GATEWAY_AUTH_* env vars are unset and "
@@ -249,7 +195,7 @@ class SimulationEntrypointClient:
         self.client = httpx.Client(
             timeout=30.0,
             auth=auth,
-            event_hooks={"request": [_attach_current_request_id]},
+            event_hooks={"request": [attach_request_identifiers]},
         )
         instrument_httpx(self.client, get_runtime())
 

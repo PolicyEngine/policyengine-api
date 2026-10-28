@@ -1,10 +1,10 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 90,
+    "request_count": 96,
     "route_group_count": 9,
     "sim_flow_count": 3,
-    "workflow_count": 17
+    "workflow_count": 18
   },
   "route_groups": [
     {
@@ -90,6 +90,7 @@
       "name": "report",
       "path_segments": [
         "report",
+        "reports",
         "user-reports",
         "shared-reports"
       ],
@@ -802,6 +803,7 @@
             "status",
             "message",
             "result.item.id",
+            "result.item.simulation_id",
             "result.item.legacy_simulation_id",
             "result.item.name",
             "result.item.description",
@@ -891,6 +893,7 @@
             "status",
             "message",
             "result.item.id",
+            "result.item.simulation_id",
             "result.item.legacy_simulation_id",
             "result.item.name",
             "result.item.description",
@@ -1001,6 +1004,7 @@
             "status",
             "message",
             "result.item.id",
+            "result.item.report_id",
             "result.item.legacy_report_id",
             "result.item.name",
             "result.item.description",
@@ -1111,6 +1115,7 @@
             "status",
             "message",
             "result.item.id",
+            "result.item.report_id",
             "result.item.legacy_report_id",
             "result.item.name",
             "result.item.description",
@@ -1145,6 +1150,7 @@
             "message",
             "result.item.id",
             "result.item.country_id",
+            "result.item.report_id",
             "result.item.legacy_report_id",
             "result.item.name",
             "result.item.source_note",
@@ -1360,6 +1366,103 @@
           "method": "GET",
           "path": "/v2/countries",
           "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_resources",
+      "future_owner_pr": "Economy reports on v2",
+      "name": "economy_reports_v2",
+      "requests": [
+        {
+          "expected_status": 201,
+          "headers": [],
+          "method": "POST",
+          "path": "/v2/reports?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.kind",
+            "result.item.year",
+            "result.item.baseline_simulation",
+            "result.item.reform_simulation",
+            "result.item.status",
+            "result.item.run",
+            "result.item.result"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/reports?country_id=us&report_id={report_id}",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/reports/{report_id}?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.legacy_report_id",
+            "result.item.status",
+            "result.item.run",
+            "result.item.result"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/reports/by-legacy-number/{legacy_report_id}?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.legacy_report_id",
+            "result.item.status"
+          ]
+        },
+        {
+          "expected_status": 201,
+          "headers": [],
+          "method": "POST",
+          "path": "/v2/reports/{report_id}/runs?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.trigger",
+            "result.item.tax_benefit_model_version_id",
+            "result.item.policyengine_version",
+            "result.item.status"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/reports/{report_id}/runs?country_id=us",
+          "route_group": "report",
           "stable_response_fields": [
             "status",
             "message",

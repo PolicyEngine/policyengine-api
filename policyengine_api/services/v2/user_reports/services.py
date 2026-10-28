@@ -1,9 +1,10 @@
 """Application services for native v2 user-report associations.
 
-Stage 12A anchors saved reports on the requested v1 report output ID. The
-owner always comes from the verified session principal (a signed-in user or a
-signed-out browser), and v1 references are checked in a short read-only v1
-transaction before the v2 transaction opens. Reads never provision a
+A saved report names a v2 report, a v1 report output, or both. The owner
+always comes from the verified session principal (a signed-in user or a
+signed-out browser). Before the v2 transaction opens, a v1 reference is
+checked in a short read-only v1 transaction, and a v2 report with the
+simulation service, which owns v2 reports. Reads never provision a
 browser's unauthenticated user; one that does not exist yet owns no records.
 An optional ``user_policy_id`` (the saved reform the report was run from) and
 an optional ``baseline_user_policy_id`` (the saved reform it was compared with)
@@ -19,6 +20,14 @@ from typing import TYPE_CHECKING
 
 from policyengine_api.services.v2.associations.services import (
     require_legacy_reference,
+)
+from policyengine_api.services.v2.associations.transformations import (
+    repointed_references,
+)
+from policyengine_api.services.v2.associations.types import RecordReferences
+from policyengine_api.services.v2.associations.validators import (
+    require_simulation_reference_checker,
+    require_unchanged_references,
 )
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_for_read_in_session,
@@ -45,6 +54,7 @@ from policyengine_api.services.v2.user_reports.database_connectors.updates impor
 from policyengine_api.services.v2.user_reports.transformations import (
     owned_user_report_input,
     shared_user_report_read,
+    stored_report_references,
     user_report_page,
     user_report_read,
     user_report_update_values,
@@ -61,7 +71,10 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
     from policyengine_api.data.v2.models import UserReportAssociation
-    from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
+    from policyengine_api.services.v2.associations.types import (
+        LegacyReferenceChecker,
+        SimulationReferenceChecker,
+    )
     from policyengine_api.services.v2.identity.types import AccountPrincipal
     from policyengine_api.services.v2.user_reports.database_session import (
         UserReportDatabaseSession,
@@ -81,8 +94,12 @@ def read_owned_user_report(
     user_id: UUID | None,
     country_id: str,
     association_id: UUID,
+    lock: bool = False,
 ) -> UserReportAssociation:
-    """``user_id`` is None for an unauthenticated user that owns nothing yet."""
+    """``user_id`` is None for an unauthenticated user that owns nothing yet.
+
+    With ``lock``, the row stays locked until the session's transaction ends.
+    """
     return require_user_report(
         None
         if user_id is None
@@ -91,6 +108,7 @@ def read_owned_user_report(
             user_id=user_id,
             country_id=country_id,
             association_id=association_id,
+            lock=lock,
         ),
         association_id=association_id,
     )
@@ -137,23 +155,65 @@ class V2UserReportService:
         self,
         database_session: UserReportDatabaseSession,
         legacy_references: LegacyReferenceChecker | None = None,
+        simulation_references: SimulationReferenceChecker | None = None,
     ) -> None:
         """Open sessions through ``database_session``.
 
-        ``legacy_references`` checks v1 report outputs before a write. Without
-        it, creating a saved report or repointing one raises
-        LegacyReferenceCheckUnavailableError.
+        ``legacy_references`` checks v1 report outputs and
+        ``simulation_references`` v2 reports before a write. Saving or
+        repointing to a reference whose checker is missing raises
+        LegacyReferenceCheckUnavailableError or
+        SimulationReferenceCheckUnavailableError.
         """
         self._database_session = database_session
         self._legacy_references = legacy_references
+        self._simulation_references = simulation_references
 
-    def _require_legacy_report(self, *, country_id: str, legacy_report_id: int) -> None:
-        require_legacy_reference(
-            self._legacy_references,
-            LegacyRecordKind.REPORT,
-            country_id=country_id,
-            legacy_id=legacy_report_id,
-        )
+    def _require_references(
+        self,
+        *,
+        country_id: str,
+        references: RecordReferences,
+        check_legacy_report: bool,
+    ) -> None:
+        """Check a saved report's references before the v2 transaction opens.
+
+        The v1 report output is checked when ``check_legacy_report`` is set. The
+        v2 report is checked whenever there is one, and when there are both,
+        it must be the report migrated from that v1 report output.
+        """
+        if check_legacy_report and references.legacy_id is not None:
+            require_legacy_reference(
+                self._legacy_references,
+                LegacyRecordKind.REPORT,
+                country_id=country_id,
+                legacy_id=references.legacy_id,
+            )
+        if references.v2_id is not None:
+            require_simulation_reference_checker(
+                self._simulation_references
+            ).require_report(
+                country_id=country_id,
+                report_id=references.v2_id,
+                legacy_report_id=references.legacy_id,
+            )
+
+    def _stored_references(
+        self, *, principal: AccountPrincipal, country_id: str, association_id: UUID
+    ) -> RecordReferences:
+        """Read the references the principal's saved report holds now."""
+        with self._database_session.read() as session:
+            owner = resolve_principal_user_for_read_in_session(
+                session, principal, country_id=country_id
+            )
+            return stored_report_references(
+                read_owned_user_report(
+                    session,
+                    user_id=None if owner is None else owner.user_id,
+                    country_id=country_id,
+                    association_id=association_id,
+                )
+            )
 
     def create_user_report(
         self,
@@ -161,16 +221,22 @@ class V2UserReportService:
         principal: AccountPrincipal,
         association_input: UserReportCreateFields,
     ) -> UserReportRead:
-        """Save a v1 report for the principal, provisioning its v2 user if needed.
+        """Save a report for the principal, provisioning its v2 user if needed.
 
-        The v1 report is checked first, in a read-only v1 transaction, and
-        LegacyReferenceNotFoundError is raised if it does not exist in the
-        country. Each saved-reform link must name the owner's saved policy in
-        the same country, or AssociationLinkNotFoundError is raised.
+        Each supplied reference is checked first: a v1 report output in a
+        read-only v1 transaction (LegacyReferenceNotFoundError), and a v2
+        report with the simulation service (SimulationReferenceNotFoundError),
+        each in the country. Each saved-reform link must name the owner's
+        saved policy in the same country, or AssociationLinkNotFoundError is
+        raised.
         """
-        self._require_legacy_report(
+        self._require_references(
             country_id=association_input.country_id,
-            legacy_report_id=association_input.legacy_report_id,
+            references=RecordReferences(
+                v2_id=association_input.report_id,
+                legacy_id=association_input.legacy_report_id,
+            ),
+            check_legacy_report=True,
         )
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
@@ -294,16 +360,35 @@ class V2UserReportService:
     ) -> UserReportRead:
         """Update the supplied fields of one of the principal's saved reports.
 
-        A new ``legacy_report_id`` is checked in v1 first, as on create, and a
+        A new ``report_id`` or ``legacy_report_id`` is checked first, as on
+        create, together with the reference the saved report keeps: when it
+        will hold both, the v2 report must be the one migrated from that v1
+        report output (AssociationReferenceConflictError). If the saved report
+        changes during that check, AssociationConflictError is raised. A
         supplied saved-reform link must name the owner's saved policy in this
         country. Raise UserReportNotFoundError if the principal has no such
         report in this country.
         """
-        if association_input.legacy_report_id is not None:
-            self._require_legacy_report(
+        checked: RecordReferences | None = None
+        if (
+            association_input.report_id is not None
+            or association_input.legacy_report_id is not None
+        ):
+            stored = self._stored_references(
+                principal=principal,
                 country_id=country_id,
-                legacy_report_id=association_input.legacy_report_id,
+                association_id=association_id,
             )
+            self._require_references(
+                country_id=country_id,
+                references=repointed_references(
+                    stored,
+                    v2_id=association_input.report_id,
+                    legacy_id=association_input.legacy_report_id,
+                ),
+                check_legacy_report=association_input.legacy_report_id is not None,
+            )
+            checked = stored
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
                 session, principal, country_id=country_id
@@ -313,7 +398,14 @@ class V2UserReportService:
                 user_id=owner.user_id,
                 country_id=country_id,
                 association_id=association_id,
+                lock=checked is not None,
             )
+            if checked is not None:
+                require_unchanged_references(
+                    stored_report_references(association),
+                    checked=checked,
+                    association_id=association_id,
+                )
             for link_field in ("user_policy_id", "baseline_user_policy_id"):
                 if link_field in association_input.model_fields_set:
                     validate_linked_user_policy(

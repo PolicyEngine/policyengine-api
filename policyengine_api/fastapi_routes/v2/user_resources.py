@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import traceback
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 # FastAPI reads the request-size dependency's annotations when routes are
@@ -17,6 +16,7 @@ from policyengine_api.fastapi_routes.v2.errors import (
     BEARER_CHALLENGE,
     V2ErrorResponse,
     V2RequestTooLargeError,
+    failure_log_attributes,
     v2_error_response,
 )
 from policyengine_api.services.v2.associations.validators import (
@@ -30,6 +30,13 @@ from policyengine_api.services.v2.identity.validators import (
 )
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
+)
+from policyengine_api.services.v2.simulation_entrypoint.types import (
+    SimulationRecordUnreadableError,
+    SimulationServiceUnavailableError,
+)
+from policyengine_api.services.v2.simulation_refs.validators import (
+    SimulationReferenceNotFoundError,
 )
 from policyengine_api.services.v2.user_accounts.validators import (
     AccountDeletionUnavailableError,
@@ -123,8 +130,8 @@ USER_RESOURCE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: {
         "model": V2ErrorResponse,
         "description": (
-            "The request does not match the schema, or a referenced v1 artifact "
-            "or linked record does not exist."
+            "The request does not match the schema, or a referenced v1 artifact, "
+            "v2 report or simulation, or linked record does not exist."
         ),
     },
     500: {
@@ -133,7 +140,9 @@ USER_RESOURCE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
     503: {
         "model": V2ErrorResponse,
-        "description": "User authentication or persistence is unavailable.",
+        "description": (
+            "User authentication, persistence or the simulation service is unavailable."
+        ),
     },
 }
 
@@ -151,19 +160,9 @@ def _log_failure(event: str, error: Exception) -> None:
     """
     # Observability must not alter the response.
     with contextlib.suppress(Exception):
-        frames = traceback.extract_tb(error.__traceback__)[-8:]
         logger.error(
             event,
-            extra={
-                "policyengine_attributes": {
-                    "error_type": type(error).__name__,
-                    "error_frames": "; ".join(
-                        f"{frame.filename.rsplit('/', 1)[-1]}:{frame.lineno} "
-                        f"in {frame.name}"
-                        for frame in frames
-                    ),
-                }
-            },
+            extra={"policyengine_attributes": failure_log_attributes(error)},
         )
 
 
@@ -192,7 +191,12 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
     UserResourceFailure((AccountEditRequiresSignInError,), 403),
     UserResourceFailure((AssociationReferenceConflictError,), 400),
     UserResourceFailure(
-        (LegacyReferenceNotFoundError, AssociationLinkNotFoundError), 422
+        (
+            LegacyReferenceNotFoundError,
+            SimulationReferenceNotFoundError,
+            AssociationLinkNotFoundError,
+        ),
+        422,
     ),
     UserResourceFailure(
         (
@@ -208,7 +212,19 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
         (IntegrityError,), 409, "The record conflicts with stored state"
     ),
     UserResourceFailure((AccountIdentityDeletionError,), 502),
+    UserResourceFailure(
+        (SimulationRecordUnreadableError,),
+        502,
+        "The simulation service cannot read back this report",
+        logged_event="v2_user_simulation_record_unreadable",
+    ),
     UserResourceFailure((AccountDeletionUnavailableError,), 503),
+    UserResourceFailure(
+        (SimulationServiceUnavailableError,),
+        503,
+        "The simulation service is unavailable",
+        logged_event="v2_user_simulation_service_unavailable",
+    ),
     # Schema drift and rejected data surface here too, so keep a record.
     UserResourceFailure(
         (V2ConfigurationError, SQLAlchemyError),

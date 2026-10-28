@@ -26,8 +26,9 @@ class StrictUserSimulationAPIModel(BaseModel):
 class UserSimulationItem(StrictUserSimulationAPIModel):
     """A simulation saved by a user, with the user's name and description for it.
 
-    ``legacy_simulation_id`` is the v1 simulation it saves. Associations can be
-    renamed, pointed at another v1 simulation of the same country, or deleted.
+    ``simulation_id`` is the v2 simulation it saves and ``legacy_simulation_id``
+    the v1 simulation. Associations can be renamed, pointed at another
+    simulation of the same country, or deleted.
     """
 
     id: UUID

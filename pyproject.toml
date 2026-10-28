@@ -205,8 +205,10 @@ showcontent = true
 # never at module level (TID253 enforces it; TYPE_CHECKING imports are fine):
 # policyengine and spm_calculator load country models, the v2 database module
 # registers an exit hook at import, the v2 database sessions and services load
-# persistence only when a default factory runs, and Auth0 Management and the
-# Google Secret Manager client load only when a secret is read. Ruff's PLC0415
+# persistence only when a default factory runs, Auth0 Management and the
+# Google Secret Manager client load only when a secret is read, and the
+# economy report adapter needs the generated simulation client, which is not
+# yet a dependency, only when an economy report route runs. Ruff's PLC0415
 # accepts in-function imports of these without a suppression. A module belongs
 # here only if no application module imports it at module level.
 banned-module-level-imports = [
@@ -214,8 +216,11 @@ banned-module-level-imports = [
     "policyengine",
     "policyengine_api.data.v2.database",
     "policyengine_api.libs.auth0_management",
+    "policyengine_api.libs.simulation_economy_reports",
     "policyengine_api.services.v2.countries.database_session",
     "policyengine_api.services.v2.countries.services",
+    "policyengine_api.services.v2.economy_reports.database_session",
+    "policyengine_api.services.v2.economy_reports.services",
     "policyengine_api.services.v2.households.database_session",
     "policyengine_api.services.v2.households.services",
     "policyengine_api.services.v2.legacy_refs.database_session",
@@ -224,6 +229,7 @@ banned-module-level-imports = [
     "policyengine_api.services.v2.metadata.services",
     "policyengine_api.services.v2.policies.database_session",
     "policyengine_api.services.v2.policies.services",
+    "policyengine_api.services.v2.simulation_refs.services",
     "policyengine_api.services.v2.user_accounts.database_session",
     "policyengine_api.services.v2.user_accounts.services",
     "policyengine_api.services.v2.user_households.database_session",
@@ -255,6 +261,8 @@ runtime-evaluated-base-classes = [
     "policyengine_api.fastapi_routes.v2.metadata.response_models.MetadataResourceSuccessResponse",
     "policyengine_api.fastapi_routes.v2.policies.response_models.PolicySuccessResponse",
     "policyengine_api.fastapi_routes.v2.policies.response_models.StrictPolicyAPIModel",
+    "policyengine_api.fastapi_routes.v2.reports.response_models.ReportSuccessResponse",
+    "policyengine_api.fastapi_routes.v2.reports.response_models.StrictReportAPIModel",
     "policyengine_api.fastapi_routes.v2.user_households.response_models.StrictUserHouseholdAPIModel",
     "policyengine_api.fastapi_routes.v2.user_households.response_models.UserHouseholdSuccessResponse",
     "policyengine_api.fastapi_routes.v2.user_policies.response_models.StrictUserPolicyAPIModel",
@@ -270,6 +278,9 @@ runtime-evaluated-base-classes = [
     "policyengine_api.query_parameters.PaginationQuery",
     "policyengine_api.query_parameters.StrictQueryParameters",
     "policyengine_api.services.v2.associations.types.StrictAssociationModel",
+    "policyengine_api.services.v2.economy_reports.types.EconomyReportFields",
+    "policyengine_api.services.v2.economy_reports.types.EconomyReportRunFields",
+    "policyengine_api.services.v2.economy_reports.types.StrictEconomyReportInput",
     "policyengine_api.services.v2.households.types.HouseholdCreationInput",
     "policyengine_api.services.v2.households.types.StrictHouseholdInput",
     "policyengine_api.services.v2.metadata.types.MetadataModelVersion",

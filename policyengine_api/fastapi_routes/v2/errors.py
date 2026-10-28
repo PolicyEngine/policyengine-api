@@ -1,5 +1,6 @@
 """Shared error response contract for all native API v2 routes."""
 
+import traceback
 from collections.abc import Callable, Mapping, Sequence
 from typing import Annotated, Literal, NamedTuple, TypeVar
 
@@ -94,3 +95,19 @@ def run_v2_operation(
                 message = str(error) if mapping.message is None else mapping.message
                 return v2_error_response(mapping.status_code, message)
         return v2_error_response(500, fallback_message)
+
+
+def failure_log_attributes(error: BaseException) -> dict[str, str]:
+    """Describe a failure for a log record without its message.
+
+    Exception messages can carry bound SQL parameters or token claims, so the
+    record holds the error's type and the locations of its innermost frames.
+    """
+    frames = traceback.extract_tb(error.__traceback__)[-8:]
+    return {
+        "error_type": type(error).__name__,
+        "error_frames": "; ".join(
+            f"{frame.filename.rsplit('/', 1)[-1]}:{frame.lineno} in {frame.name}"
+            for frame in frames
+        ),
+    }

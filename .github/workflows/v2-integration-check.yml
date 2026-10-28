@@ -77,12 +77,12 @@ jobs:
         run: uv run coverage run --branch -m pytest -q tests/integration/test_v2_catalog_installed.py
         env:
           RUN_V2_CATALOG_COMPATIBILITY: "1"
-      - name: Test v2 metadata publication, resource routes and the countries list
-        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication.py tests/integration/test_v2_metadata_routes.py tests/integration/test_v2_country_routes.py
+      - name: Test v2 metadata publication, resource routes, the countries list and economy reports
+        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication.py tests/integration/test_v2_metadata_routes.py tests/integration/test_v2_country_routes.py tests/integration/test_v2_economy_reports.py
       - name: Test v2 policy persistence and immediate v1 mirroring
         run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_policy_persistence.py tests/integration/test_v1_policy_dual_write.py tests/integration/test_mysql_policy_dual_write.py tests/integration/test_v2_user_policy_mirroring.py tests/integration/test_v1_user_policy_dual_write.py
       - name: Test signed-in identity provisioning and user associations
-        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_user_identity_persistence.py
+        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_user_identity_persistence.py tests/integration/test_v2_saved_reference_updates.py
       - name: Test comparison-run persistence and privilege reconciliation as the managed roles
         run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_stage12_comparison_persistence.py tests/integration/test_v2_privilege_reconciliation.py
       - name: Test v2 household persistence and immediate v1 copying

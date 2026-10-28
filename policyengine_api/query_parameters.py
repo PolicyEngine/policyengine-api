@@ -39,6 +39,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
 DEFAULT_QUERY_LIMIT = 100
+# Each listed report is one read from the simulation service.
+MAXIMUM_LISTED_REPORTS = 25
 MAXIMUM_QUERY_LIMIT = 500
 MAXIMUM_USER_ID_LENGTH = 255
 
@@ -280,6 +282,30 @@ class UserSimulationCollectionQuery(CountryQuery, PaginationQuery):
     """Query contract for the signed-in user's simulation associations."""
 
     legacy_simulation_id: LegacyResourceId | None = None
+
+
+class ReportCreateQuery(CountryQuery):
+    """Query contract for submitting an economy report."""
+
+
+class ReportDetailQuery(CountryQuery):
+    """Query contract for reading one report, or acting on it, in a country."""
+
+
+class ReportCollectionQuery(CountryQuery):
+    """Query contract for listing chosen reports of a country.
+
+    ``report_id`` is repeated once per report, at most 25 times.
+    """
+
+    report_id: Annotated[
+        list[ResourceId],
+        Field(
+            min_length=1,
+            max_length=MAXIMUM_LISTED_REPORTS,
+            description="A report to list; repeat for each report",
+        ),
+    ]
 
 
 class UserReportCollectionQuery(CountryQuery, PaginationQuery):

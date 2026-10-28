@@ -13,16 +13,24 @@ from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBea
 from policyengine_api.fastapi_routes.v2.user_auth import authenticate_account_request
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.readiness import is_ready
+from policyengine_api.services.v2.simulation_entrypoint.services import (
+    DeferredEconomyReportSimulation,
+)
+from policyengine_api.services.v2.simulation_entrypoint.types import (
+    SimulationServiceUnavailableError,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from uuid import UUID
 
     from policyengine_api.json_types import JSONObject
     from policyengine_api.services.v2.associations.types import (
         LegacyReferenceChecker,
+        SimulationReferenceChecker,
     )
     from policyengine_api.services.v2.countries.types import CountryRead
+    from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
     from policyengine_api.services.v2.households.types import (
         HouseholdPage,
         HouseholdRead,
@@ -53,6 +61,11 @@ if TYPE_CHECKING:
         NativePolicyCreationInput,
         PolicyPage,
         PolicyRead,
+    )
+    from policyengine_api.services.v2.simulation_entrypoint.types import (
+        EconomyReportRecord,
+        EconomyReportRunRecord,
+        EconomyReportSimulation,
     )
     from policyengine_api.services.v2.user_accounts.types import (
         AccountDeletion,
@@ -321,6 +334,64 @@ class V2CountryResourceService(Protocol):
         ...
 
 
+class V2EconomyReportResourceService(Protocol):
+    """Router-facing economy report operations, run by the Simulation Entrypoint."""
+
+    def submit_report(
+        self, *, country_id: str, report_input: EconomyReportFields
+    ) -> EconomyReportRecord:
+        """Create a report and its first run on the current catalog version.
+
+        Raise ``EconomyReportsUnsupportedError`` for a country without economy
+        reports and ``SimulationRequestRefusedError`` when the entrypoint
+        cannot run it.
+        """
+        ...
+
+    def get_report(self, *, country_id: str, report_id: UUID) -> EconomyReportRecord:
+        """Return a report of the country, starting its first run if it has none.
+
+        Raise ``EconomyReportNotFoundError`` when the country has no such report.
+        """
+        ...
+
+    def get_report_by_legacy_number(
+        self, *, country_id: str, legacy_report_id: int
+    ) -> EconomyReportRecord:
+        """Return the report migrated from a v1 report output number, as ``get_report``.
+
+        Raise ``EconomyReportNotFoundError`` when none of the country's was.
+        """
+        ...
+
+    def run_report(
+        self, *, country_id: str, report_id: UUID, force: bool
+    ) -> EconomyReportRunRecord:
+        """Run a report again on the current catalog version (trigger ``manual``).
+
+        Existing simulation runs are reused unless ``force`` is set. Raise
+        ``EconomyReportsUnsupportedError`` for a country without economy
+        reports, ``EconomyReportNotFoundError`` for an unknown report and
+        ``SimulationRequestRefusedError`` when the entrypoint cannot run it.
+        """
+        ...
+
+    def list_reports(
+        self, *, country_id: str, report_ids: Sequence[UUID]
+    ) -> tuple[EconomyReportRecord, ...]:
+        """Return the country's reports among ``report_ids``, in order, once each."""
+        ...
+
+    def list_report_runs(
+        self, *, country_id: str, report_id: UUID
+    ) -> tuple[EconomyReportRunRecord, ...]:
+        """Return a report's runs, newest first.
+
+        Raise ``EconomyReportNotFoundError`` when the country has no such report.
+        """
+        ...
+
+
 class V2PolicyResourceService(Protocol):
     """Route-independent native policy operations for one request."""
 
@@ -519,7 +590,12 @@ class V2UserSimulationResourceService(Protocol):
         principal: AccountPrincipal,
         association_input: UserSimulationCreateFields,
     ) -> UserSimulationRead:
-        """Save a v1 simulation for the caller, provisioning their user if needed."""
+        """Save a simulation for the caller, provisioning their user if needed.
+
+        It names a v2 simulation, checked with the simulation service, a v1
+        simulation, or both; with both, the v2 simulation must be the one
+        migrated from that v1 simulation.
+        """
         ...
 
     def get_user_simulation(
@@ -554,7 +630,10 @@ class V2UserSimulationResourceService(Protocol):
     ) -> UserSimulationRead:
         """Update the supplied fields of the caller's association and return it.
 
-        A new ``legacy_simulation_id`` repoints it to another v1 simulation.
+        A new ``simulation_id`` or ``legacy_simulation_id`` repoints it; it is
+        checked as on create, together with the reference the association
+        keeps, and AssociationConflictError is raised if the association
+        changes during that check.
         """
         ...
 
@@ -578,9 +657,11 @@ class V2UserReportResourceService(Protocol):
         principal: AccountPrincipal,
         association_input: UserReportCreateFields,
     ) -> UserReportRead:
-        """Save a v1 report for the caller, provisioning their user if needed.
+        """Save a report for the caller, provisioning their user if needed.
 
-        Linked saved reforms must be the caller's own.
+        It names a v2 report, checked with the simulation service, a v1 report
+        output, or both; with both, the v2 report must be the one migrated from
+        that v1 report output. Linked saved reforms must be the caller's own.
         """
         ...
 
@@ -626,7 +707,13 @@ class V2UserReportResourceService(Protocol):
         association_id: UUID,
         association_input: UserReportUpdateInput,
     ) -> UserReportRead:
-        """Update the supplied fields of the caller's association and return it."""
+        """Update the supplied fields of the caller's association and return it.
+
+        A new ``report_id`` or ``legacy_report_id`` repoints it; it is checked
+        as on create, together with the reference the association keeps, and
+        AssociationConflictError is raised if the association changes during
+        that check.
+        """
         ...
 
     def delete_user_report(
@@ -763,6 +850,57 @@ def _default_v2_country_service_factory() -> V2CountryResourceService:
     return V2CountryService(CountryDatabaseSession(get_v2_session_factory()))
 
 
+SIMULATION_CLIENT_PACKAGE = "policyengine_api_simulation_client"
+
+
+def _default_economy_report_simulation() -> EconomyReportSimulation:
+    """Return the process's adapter for the entrypoint's economy report routes.
+
+    Raise ``SimulationServiceUnavailableError`` when the generated client is
+    not installed, or the entrypoint URL or gateway auth is unusable.
+    """
+    try:
+        from policyengine_api.libs.simulation_economy_reports import (
+            shared_economy_reports,
+        )
+    except ModuleNotFoundError as error:
+        if (error.name or "").split(".")[0] != SIMULATION_CLIENT_PACKAGE:
+            raise
+        msg = (
+            "the generated simulation client (policyengine-api-simulation-client) "
+            "is not installed"
+        )
+        raise SimulationServiceUnavailableError(msg) from error
+    return shared_economy_reports()
+
+
+def _deferred_economy_report_simulation() -> EconomyReportSimulation:
+    """Build the adapter only when a request reaches the simulation service.
+
+    Checks the Public API makes itself, such as the household-only refusal,
+    then answer without the simulation client or its settings.
+    """
+    return DeferredEconomyReportSimulation(_default_economy_report_simulation)
+
+
+def _default_v2_economy_report_service_factory() -> V2EconomyReportResourceService:
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.economy_reports.database_session import (
+        EconomyReportDatabaseSession,
+    )
+    from policyengine_api.services.v2.economy_reports.services import (
+        V2EconomyReportService,
+    )
+
+    return V2EconomyReportService(
+        EconomyReportDatabaseSession(get_v2_session_factory()),
+        _deferred_economy_report_simulation(),
+        current_policyengine_version=_running_policyengine_version(),
+    )
+
+
 def _default_v2_policy_service_factory() -> V2PolicyResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -847,6 +985,15 @@ def _default_legacy_reference_checker() -> LegacyReferenceChecker:
     return DeferredLegacyReferenceService(_build_v1_legacy_reference_service)
 
 
+def _default_simulation_reference_checker() -> SimulationReferenceChecker:
+    """Defer the simulation client until a request checks a v2 reference."""
+    from policyengine_api.services.v2.simulation_refs.services import (
+        SimulationReferenceService,
+    )
+
+    return SimulationReferenceService(_deferred_economy_report_simulation())
+
+
 def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -893,6 +1040,7 @@ def _default_v2_user_simulation_service_factory() -> V2UserSimulationResourceSer
     return V2UserSimulationService(
         UserSimulationDatabaseSession(get_v2_session_factory()),
         _default_legacy_reference_checker(),
+        _default_simulation_reference_checker(),
     )
 
 
@@ -908,6 +1056,7 @@ def _default_v2_user_report_service_factory() -> V2UserReportResourceService:
     return V2UserReportService(
         UserReportDatabaseSession(get_v2_session_factory()),
         _default_legacy_reference_checker(),
+        _default_simulation_reference_checker(),
     )
 
 
@@ -939,6 +1088,9 @@ class NativeRouteDependencies:
     specification_provider: Callable[[], JSONObject]
     v2_metadata_reader_factory: Callable[[], V2MetadataResourceReader] | None = None
     v2_country_service_factory: Callable[[], V2CountryResourceService] | None = None
+    v2_economy_report_service_factory: (
+        Callable[[], V2EconomyReportResourceService] | None
+    ) = None
     v2_policy_service_factory: Callable[[], V2PolicyResourceService] | None = None
     v2_household_service_factory: Callable[[], V2HouseholdResourceService] | None = None
     v2_user_policy_service_factory: Callable[[], V2UserPolicyResourceService] | None = (
@@ -970,6 +1122,9 @@ class NativeRouteDependencies:
             specification_provider=_default_specification_provider,
             v2_metadata_reader_factory=_default_v2_metadata_reader_factory,
             v2_country_service_factory=_default_v2_country_service_factory,
+            v2_economy_report_service_factory=(
+                _default_v2_economy_report_service_factory
+            ),
             v2_policy_service_factory=_default_v2_policy_service_factory,
             v2_household_service_factory=_default_v2_household_service_factory,
             v2_user_policy_service_factory=(_default_v2_user_policy_service_factory),

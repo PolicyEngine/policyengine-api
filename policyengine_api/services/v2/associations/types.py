@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Protocol, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, FiniteFloat, StringConstraints
@@ -15,6 +16,7 @@ ASSOCIATION_DESCRIPTION_MAX_LENGTH = 10_000
 # does); Pydantic needs TypeAliasType to build the recursive validator.
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping
+    from uuid import UUID
 
     from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 
@@ -74,3 +76,53 @@ class LegacyReferenceChecker(Protocol):
     ) -> None:
         """Raise ``LegacyReferenceNotFoundError`` if any requested ID is missing."""
         ...
+
+
+class SimulationReferenceChecker(Protocol):
+    """Existence checks of v2 reports and simulations, run before a v2 transaction.
+
+    Both raise ``SimulationReferenceNotFoundError`` when the simulation service
+    has no such record in the country, and ``SimulationServiceUnavailableError``
+    when it cannot be asked.
+    """
+
+    def require_report(
+        self,
+        *,
+        country_id: str,
+        report_id: UUID,
+        legacy_report_id: int | None = None,
+    ) -> None:
+        """Raise unless the country has the report.
+
+        With ``legacy_report_id``, also raise ``AssociationReferenceConflictError``
+        unless the report was migrated from that v1 report output.
+        """
+        ...
+
+    def require_simulation(
+        self,
+        *,
+        country_id: str,
+        simulation_id: UUID,
+        legacy_simulation_id: int | None = None,
+    ) -> None:
+        """Raise unless the country has the simulation.
+
+        With ``legacy_simulation_id``, also raise
+        ``AssociationReferenceConflictError`` unless the simulation was
+        migrated from that v1 simulation.
+        """
+        ...
+
+
+@dataclass(frozen=True)
+class RecordReferences:
+    """The v2 record and the v1 record a saved association names.
+
+    Either may be None, not both. When both are set, the v2 record is the one
+    migrated from the v1 record.
+    """
+
+    v2_id: UUID | None
+    legacy_id: int | None

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from policyengine_api.services.v2.associations.types import RecordReferences
 from policyengine_api.services.v2.user_reports.types import (
     SharedBaselineReformRead,
     SharedUserReportRead,
@@ -58,6 +59,7 @@ def shared_user_report_read(
     return SharedUserReportRead(
         id=association.id,
         country_id=association.country_id,
+        report_id=association.report_id,
         legacy_report_id=association.legacy_report_id,
         name=association.name,
         source_note=association.source_note,
@@ -120,3 +122,10 @@ def user_report_update_values(
     if "validation" in association_input.model_fields_set:
         values["validation"] = stored_validation(association_input.validation)
     return values
+
+
+def stored_report_references(association: UserReportAssociation) -> RecordReferences:
+    """Return the v2 report and v1 report output a stored saved report names."""
+    return RecordReferences(
+        v2_id=association.report_id, legacy_id=association.legacy_report_id
+    )

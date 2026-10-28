@@ -187,13 +187,34 @@ class _ReportPresentationFields(StrictUserReportModel):
         return self
 
 
+def _require_report_reference(
+    report_id: object | None, legacy_report_id: object | None
+) -> None:
+    if report_id is None and legacy_report_id is None:
+        msg = "At least one of report_id or legacy_report_id is required"
+        raise ValueError(msg)
+
+
 class UserReportCreateFields(_ReportPresentationFields):
-    """Caller-supplied fields; Stage 12A accepts only v1 report references."""
+    """Caller-supplied fields; the owner comes from the session.
+
+    The saved report names a v2 report (``report_id``), a v1 report output
+    (``legacy_report_id``), or both; each is checked before it is saved, and
+    with both, the v2 report must be the one migrated from that v1 report
+    output.
+    """
 
     country_id: CountryId
-    legacy_report_id: LegacyRecordId
+    report_id: ResourceId | None = None
+    legacy_report_id: LegacyRecordId | None = None
     user_policy_id: ResourceId | None = None
     baseline_user_policy_id: ResourceId | None = None
+
+    @model_validator(mode="after")
+    def require_report_reference(self) -> UserReportCreateFields:
+        """Require a v2 report_id, a v1 legacy_report_id, or both."""
+        _require_report_reference(self.report_id, self.legacy_report_id)
+        return self
 
 
 class UserReportCreationInput(StrictUserReportModel):
@@ -201,7 +222,8 @@ class UserReportCreationInput(StrictUserReportModel):
 
     country_id: CountryId
     user_id: UserId
-    legacy_report_id: LegacyRecordId
+    report_id: ResourceId | None = None
+    legacy_report_id: LegacyRecordId | None = None
     name: AssociationName | None = None
     description: str | None = None
     user_policy_id: ResourceId | None = None
@@ -212,23 +234,32 @@ class UserReportCreationInput(StrictUserReportModel):
     budget_window_years: int | None = None
     last_run_at: AwareDatetime | None = None
 
+    @model_validator(mode="after")
+    def require_report_reference(self) -> UserReportCreationInput:
+        """Require a v2 report_id, a v1 legacy_report_id, or both."""
+        _require_report_reference(self.report_id, self.legacy_report_id)
+        return self
+
 
 class UserReportUpdateInput(_ReportPresentationFields):
     """A partial update of a saved report; only supplied fields change.
 
-    At least one field must be supplied. ``legacy_report_id`` repoints the saved
-    report to another v1 report output and cannot be cleared; the saved-reform
-    links are cleared with null.
+    At least one field must be supplied. ``report_id`` repoints the saved
+    report to a v2 report and ``legacy_report_id`` to another v1 report
+    output; neither can be cleared. The saved-reform links are cleared with
+    null.
     """
 
+    report_id: ResourceId | None = None
     legacy_report_id: LegacyRecordId | None = None
     user_policy_id: ResourceId | None = None
     baseline_user_policy_id: ResourceId | None = None
 
     @model_validator(mode="after")
     def require_valid_supplied_field(self) -> UserReportUpdateInput:
-        """Require a supplied field and reject a null ``legacy_report_id``."""
+        """Require a supplied field and reject a null report reference."""
         mutable_fields = {
+            "report_id",
             "legacy_report_id",
             "name",
             "description",
@@ -244,9 +275,10 @@ class UserReportUpdateInput(_ReportPresentationFields):
         if not supplied:
             msg = "At least one mutable user-report field must be supplied"
             raise ValueError(msg)
-        if "legacy_report_id" in supplied and self.legacy_report_id is None:
-            msg = "legacy_report_id must not be null"
-            raise ValueError(msg)
+        for reference in ("report_id", "legacy_report_id"):
+            if reference in supplied and getattr(self, reference) is None:
+                msg = f"{reference} must not be null"
+                raise ValueError(msg)
         return self
 
 
@@ -293,6 +325,7 @@ class SharedUserReportRead:
 
     id: UUID
     country_id: str
+    report_id: UUID | None
     legacy_report_id: int | None
     name: str | None
     source_note: str | None

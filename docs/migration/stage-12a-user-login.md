@@ -241,9 +241,9 @@ contract shared with `policyengine-app-v2`. The generated route inventory is in
 
 A saved report's ID is its shareable link, so `GET /v2/shared-reports/{id}`
 takes no credential and sits outside the authenticated user-report router. It
-never provisions a user. Its item is `{id, country_id, legacy_report_id, name,
-source_note, provisions, validation, budget_window_years, baseline_reform,
-last_run_at, created_at, updated_at}`:
+never provisions a user. Its item is `{id, country_id, report_id,
+legacy_report_id, name, source_note, provisions, validation,
+budget_window_years, baseline_reform, last_run_at, created_at, updated_at}`:
 
 - `user_id`, `user_policy_id`, and `baseline_user_policy_id` are left out;
   the owner and the owner's saved reforms stay private.
@@ -583,5 +583,22 @@ The disposable-Postgres suite proves the following:
 - A retention policy for unauthenticated users whose browsers never return.
   Nothing expires them today.
 - An explicit claim flow for legacy-app users (`POST /v2/me/legacy-claims`).
-- Accepting v2 `simulation_id` / `report_id` once the Simulation Entrypoint owns
-  those records.
+
+## v2 report and simulation IDs
+
+Saved reports and saved simulations also accept the v2 IDs of the
+Simulation Entrypoint's reports and simulations: `report_id` on
+`/v2/user-reports` and `simulation_id` on `/v2/user-simulations`, on create
+(alone or with the v1 ID) and on `PATCH` (to repoint; neither ID can be
+cleared). The Simulation Entrypoint owns those records, so the columns keep
+no foreign key; before a v2 ID is saved, the Public API asks the entrypoint
+for that record, outside the v2 transaction, as it checks a v1 ID in the v1
+database:
+
+- an unknown record, or one of another country, is a 422;
+- a saved report or simulation holding both IDs records a migration, so its
+  v2 record must be the one the entrypoint records as migrated from that v1
+  record, or the request is a 400. A `PATCH` that sets one ID is checked
+  against the other one the saved record keeps, and is a 409 if the saved
+  record changes during that check;
+- an entrypoint that cannot be used is a 503, and nothing is saved.
