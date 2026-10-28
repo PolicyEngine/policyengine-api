@@ -3,7 +3,7 @@
 The Simulation Entrypoint owns economy reports and their simulations: their
 definitions, runs and results live in its database, and only its routes
 create or read them. ``EconomyReportSimulation`` is those routes, with the
-records they answer and the three ways they fail.
+records they answer and the four errors they raise.
 ``policyengine_api.libs.simulation_economy_reports`` implements it with the
 generated simulation client, and tests replace it with a fake. The economy
 report routes and the checks of saved v2 report and simulation IDs both use it.

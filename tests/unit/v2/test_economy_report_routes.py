@@ -6,6 +6,7 @@ Simulation Entrypoint.
 
 from __future__ import annotations
 
+import logging
 import sys
 from uuid import UUID
 
@@ -339,7 +340,7 @@ def test_openapi_publishes_the_submit_contract() -> None:
     assert {parameter["name"] for parameter in operation["parameters"]} == {
         "country_id"
     }
-    assert set(operation["responses"]) >= {"201", "400", "404", "422", "503"}
+    assert set(operation["responses"]) >= {"201", "400", "422", "503"}
     request_schema = operation["requestBody"]["content"]["application/json"]["schema"]
     assert request_schema["$ref"].endswith("/EconomyReportCreateRequest")
     body = schema["components"]["schemas"]["EconomyReportCreateRequest"]
@@ -692,3 +693,74 @@ def test_a_report_whose_result_cannot_be_read_back_is_a_bad_gateway() -> None:
         "status": "error",
         "message": "The simulation service cannot read back this report's result",
     }
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "statuses"),
+    [
+        ("post", "/v2/reports", {"201", "400", "413", "422", "500", "503"}),
+        ("get", "/v2/reports", {"200", "422", "500", "503"}),
+        (
+            "get",
+            "/v2/reports/{report_id}",
+            {"200", "404", "422", "500", "502", "503"},
+        ),
+        (
+            "get",
+            "/v2/reports/by-legacy-number/{legacy_report_id}",
+            {"200", "404", "422", "500", "502", "503"},
+        ),
+        (
+            "post",
+            "/v2/reports/{report_id}/runs",
+            {"201", "404", "413", "422", "500", "503"},
+        ),
+        ("get", "/v2/reports/{report_id}/runs", {"200", "404", "422", "500", "503"}),
+    ],
+)
+def test_openapi_declares_only_the_answers_each_route_can_give(
+    method: str, path: str, statuses: set[str]
+) -> None:
+    schema = _client(FakeEconomyReportSimulation()).get("/v2/openapi.json").json()
+
+    assert set(schema["paths"][path][method]["responses"]) == statuses
+
+
+class RecordingHandler(logging.Handler):
+    """Keep every record logged to the logger it is attached to."""
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.DEBUG)
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+def test_an_unexpected_failure_is_logged_with_where_it_happened() -> None:
+    simulation = FakeEconomyReportSimulation()
+    simulation.error = RuntimeError("token=secret")
+    routes_logger = logging.getLogger(
+        "policyengine_api.fastapi_routes.v2.reports.routes"
+    )
+    handler = RecordingHandler()
+    # Alembic's logging configuration, run by earlier tests, disables loggers
+    # that already exist.
+    was_disabled = routes_logger.disabled
+    routes_logger.disabled = False
+    routes_logger.addHandler(handler)
+    try:
+        _client(simulation).post("/v2/reports?country_id=us", json=SUBMISSION)
+    finally:
+        routes_logger.removeHandler(handler)
+        routes_logger.disabled = was_disabled
+
+    (record,) = [
+        record
+        for record in handler.records
+        if record.getMessage() == "v2_report_operation_failed"
+    ]
+    attributes = record.policyengine_attributes
+    assert attributes["error_type"] == "RuntimeError"
+    assert "economy_report_support.py" in attributes["error_frames"]
+    assert "secret" not in str(attributes)

@@ -22,6 +22,7 @@ from policyengine_api.fastapi_routes.dependencies import (
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import (
     V2ErrorMapping,
+    failure_log_attributes,
     run_v2_operation,
     v2_error_response,
 )
@@ -30,7 +31,11 @@ from policyengine_api.fastapi_routes.v2.reports.request_models import (
     EconomyReportRunRequest,
 )
 from policyengine_api.fastapi_routes.v2.reports.response_models import (
+    READ_RESPONSES,
     REPORT_ERROR_RESPONSES,
+    REPORT_NOT_FOUND_RESPONSE,
+    RUN_RESPONSES,
+    SUBMIT_RESPONSES,
     ReportDetailResponse,
     ReportDetailResult,
     ReportItem,
@@ -131,11 +136,13 @@ OperationT = TypeVar("OperationT")
 def _log_failure(error: Exception) -> None:
     """Record why an operation failed, unless it was a refusal the caller sees.
 
-    Database errors are recorded by type only, because their messages can
-    carry bound SQL parameters. Logging never changes the response.
+    Errors are recorded by type and the locations of their innermost frames,
+    not their messages, which can carry bound SQL parameters; only the
+    simulation service's unavailability adds its reason. Logging never
+    changes the response.
     """
     with contextlib.suppress(Exception):
-        attributes = {"error_type": type(error).__name__}
+        attributes = failure_log_attributes(error)
         if isinstance(error, SimulationServiceUnavailableError):
             attributes["reason"] = str(error)[:500]
         logger.warning(
@@ -211,6 +218,7 @@ def build_v2_report_router(
         "/reports",
         response_model=ReportDetailResponse,
         status_code=201,
+        responses=SUBMIT_RESPONSES,
         summary="Submit an economy report",
         description=(
             "Creates the baseline and reform simulations, the report and its "
@@ -261,6 +269,7 @@ def build_v2_report_router(
     @router.get(
         "/reports/by-legacy-number/{legacy_report_id}",
         response_model=ReportDetailResponse,
+        responses=READ_RESPONSES,
         summary="Find the report migrated from a v1 report number",
         description=(
             "Answers as reading the report by its ID, including starting the "
@@ -283,6 +292,7 @@ def build_v2_report_router(
     @router.get(
         "/reports/{report_id}",
         response_model=ReportDetailResponse,
+        responses=READ_RESPONSES,
         summary="Read an economy report",
         description=(
             "Returns the report, its newest run and, once that run succeeded, its "
@@ -309,6 +319,7 @@ def build_v2_report_router(
         "/reports/{report_id}/runs",
         response_model=ReportRunDetailResponse,
         status_code=201,
+        responses=RUN_RESPONSES,
         summary="Run an economy report again",
         description=(
             "Runs the report on the country's current catalog version with the "
@@ -335,6 +346,7 @@ def build_v2_report_router(
     @router.get(
         "/reports/{report_id}/runs",
         response_model=ReportRunListResponse,
+        responses=REPORT_NOT_FOUND_RESPONSE,
         summary="List an economy report's runs",
         description=(
             "Every run of the report, newest first, each with the catalog version "

@@ -202,41 +202,38 @@ class ReportRunListResponse(ReportSuccessResponse[ReportRunListResult]):
     """Success response holding a report's runs."""
 
 
+def _error(description: str) -> dict[str, Any]:
+    return {"model": V2ErrorResponse, "description": description}
+
+
+# Every report route can answer these.
 REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    400: {
-        "model": V2ErrorResponse,
-        "description": "The body and query name different countries.",
-    },
-    404: {
-        "model": V2ErrorResponse,
-        "description": "No report has this ID or v1 number in this country.",
-    },
-    413: {
-        "model": V2ErrorResponse,
-        "description": "The request body exceeds 16 KiB.",
-    },
-    422: {
-        "model": V2ErrorResponse,
-        "description": (
-            "The request does not match the schema, the country does not have "
-            "economy reports, or the simulation service cannot run the report "
-            "(for example, no such region or dataset in the current catalog "
-            "version); the message says which."
-        ),
-    },
-    500: {
-        "model": V2ErrorResponse,
-        "description": "The operation could not be completed.",
-    },
-    502: {
-        "model": V2ErrorResponse,
-        "description": (
-            "The simulation service has the report but cannot read back its "
-            "stored result."
-        ),
-    },
-    503: {
-        "model": V2ErrorResponse,
-        "description": "The simulation service or the v2 database is unavailable.",
-    },
+    422: _error(
+        "The request does not match the schema, the country does not have "
+        "economy reports, or the simulation service cannot run the report "
+        "(for example, no such region or dataset in the current catalog "
+        "version); the message says which."
+    ),
+    500: _error("The operation could not be completed."),
+    503: _error("The simulation service or the v2 database is unavailable."),
+}
+REPORT_NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
+    404: _error("No report has this ID or v1 number in this country."),
+}
+REPORT_BODY_RESPONSE: dict[int | str, dict[str, Any]] = {
+    413: _error("The request body exceeds 16 KiB."),
+}
+SUBMIT_RESPONSES: dict[int | str, dict[str, Any]] = {
+    400: _error("The body and query name different countries."),
+    **REPORT_BODY_RESPONSE,
+}
+READ_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **REPORT_NOT_FOUND_RESPONSE,
+    502: _error(
+        "The simulation service has the report but cannot read back its stored result."
+    ),
+}
+RUN_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **REPORT_NOT_FOUND_RESPONSE,
+    **REPORT_BODY_RESPONSE,
 }

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import traceback
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 # FastAPI reads the request-size dependency's annotations when routes are
@@ -17,6 +16,7 @@ from policyengine_api.fastapi_routes.v2.errors import (
     BEARER_CHALLENGE,
     V2ErrorResponse,
     V2RequestTooLargeError,
+    failure_log_attributes,
     v2_error_response,
 )
 from policyengine_api.services.v2.associations.validators import (
@@ -160,19 +160,9 @@ def _log_failure(event: str, error: Exception) -> None:
     """
     # Observability must not alter the response.
     with contextlib.suppress(Exception):
-        frames = traceback.extract_tb(error.__traceback__)[-8:]
         logger.error(
             event,
-            extra={
-                "policyengine_attributes": {
-                    "error_type": type(error).__name__,
-                    "error_frames": "; ".join(
-                        f"{frame.filename.rsplit('/', 1)[-1]}:{frame.lineno} "
-                        f"in {frame.name}"
-                        for frame in frames
-                    ),
-                }
-            },
+            extra={"policyengine_attributes": failure_log_attributes(error)},
         )
 
 
