@@ -34,6 +34,13 @@ YEAR_ERROR = {
     "code": "SPM_YEAR_UNAVAILABLE",
     "message": "Forecast has no entry for 2036",
 }
+DATASET_YEAR_ERROR = {
+    "code": "DATASET_YEAR_UNAVAILABLE",
+    "message": (
+        "US results are available for 2024 to 2035. 2036 is outside the years "
+        "the current US model and data cover."
+    ),
+}
 
 
 def segmented_result(year, invalid_side=None):
@@ -367,6 +374,77 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
             assert replacement.options_json == setup.options
             assert stack.annual_cache.get_by_execution_id(job_id).status == "error"
             assert worker.received.count(("POST", "/simulate/economy/comparison")) == 1
+
+    assert worker.received.count(("GET", job_path)) == 1
+
+
+@pytest.mark.parametrize("budget_window", [False, True], ids=["annual", "window"])
+def test_a_dataset_year_error_returns_400_and_replays_from_storage(
+    monkeypatch, budget_window
+):
+    """A year the worker's model cannot project is a caller error, not a 502.
+
+    The simulation service answers the poll with 400 and the stable code
+    DATASET_YEAR_UNAVAILABLE. The route returns that code and its readable
+    message, and later polls replay the stored typed failure without asking
+    the worker again.
+    """
+    _patch_spm_release(monkeypatch)
+    job_id = "dataset-year-job"
+    job_path = f"/budget-window-jobs/{job_id}" if budget_window else f"/jobs/{job_id}"
+    worker = _FailingJobWorker(
+        job_path=job_path,
+        failure=400,
+        typed_error=DATASET_YEAR_ERROR,
+        worker_result=None,
+    )
+
+    gateway = _worker_gateway()
+    backend = InMemoryCacheBackend()
+    namespace = CacheNamespace("test", "dataset-year-worker-polling")
+    stack = _install_economy_stack(monkeypatch, gateway, backend, namespace)
+    app = _economy_app()
+
+    with httpx.Client(transport=httpx.MockTransport(worker)) as gateway.client:
+        setup = _setup_options(stack.service, budget_window=budget_window)
+        if budget_window:
+            cache_key = stack.service._build_budget_window_cache_key(setup)
+            stack.window_cache.store_submitted(
+                cache_key,
+                job_id,
+                setup.observability_id,
+            )
+        else:
+            _store_annual_impact(
+                stack,
+                setup,
+                status="computing",
+                reform_impact_json={},
+                execution_id=job_id,
+            )
+        url, query = _economy_request(budget_window=budget_window)
+
+        worker.received.clear()
+        for _ in range(2):
+            response = _get_economy(app, url, query)
+            assert response.status_code == 400, response.json
+            assert response.json == {
+                "status": "error",
+                "result": None,
+                "message": DATASET_YEAR_ERROR["message"],
+                "errors": [DATASET_YEAR_ERROR],
+            }
+            if budget_window:
+                _assert_window_failure_recorded(
+                    stack.window_cache.get_state(cache_key), DATASET_YEAR_ERROR, setup
+                )
+            else:
+                _assert_annual_failure_recorded(
+                    stack.annual_cache.get_by_execution_id(job_id),
+                    DATASET_YEAR_ERROR,
+                    setup,
+                )
+            stack = _install_economy_stack(monkeypatch, gateway, backend, namespace)
 
     assert worker.received.count(("GET", job_path)) == 1
 

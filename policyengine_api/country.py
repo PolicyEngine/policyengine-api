@@ -34,6 +34,7 @@ from policyengine_api.constants import (
 from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
 )
+from policyengine_api.economy_years import uk_economy_years
 from policyengine_api.services.household_calculation_service import CalculationResult
 from policyengine_api.spm import (
     SPM_INPUT_ERROR_CODES,
@@ -231,13 +232,8 @@ class PolicyEngineCountry:
                 for i in range(len(local_authority_names))
             )
             time_period = [
-                {"name": 2024, "label": "2024"},
-                {"name": 2025, "label": "2025"},
-                {"name": 2026, "label": "2026"},
-                {"name": 2027, "label": "2027"},
-                {"name": 2028, "label": "2028"},
-                {"name": 2029, "label": "2029"},
-                {"name": 2030, "label": "2030"},
+                {"name": year, "label": str(year)}
+                for year in uk_economy_years(self.tax_benefit_system.parameters)
             ]
             datasets = [get_bundle_default_dataset_option("uk")]
             options["region"] = region

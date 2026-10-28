@@ -354,7 +354,12 @@ def build_spm_comparison_provenance(
 
 
 class SPMValidationError(ValueError):
-    """An SPM request/configuration error safe for the API's 4xx envelope."""
+    """An SPM request/configuration error safe for the API's 4xx envelope.
+
+    It also carries the simulation service's other typed input errors, such
+    as ``DATASET_YEAR_UNAVAILABLE`` (see ``worker_spm.WORKER_INPUT_ERROR_CODES``),
+    so they are stored and replayed with their code in the same way.
+    """
 
     def __init__(self, code: str, message: str) -> None:
         """Record a stable machine-readable error code and the client-facing message."""
