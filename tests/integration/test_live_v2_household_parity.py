@@ -27,7 +27,7 @@ from tests.fixtures.integration.live_household_calculations import (
 CALCULATED = {YEAR: None}
 
 
-def _parity_households(run_amount: int) -> list[LiveHousehold]:
+def parity_households(run_amount: int) -> list[LiveHousehold]:
     return [
         LiveHousehold(
             name="us-single-california",
@@ -86,8 +86,10 @@ def _parity_households(run_amount: int) -> list[LiveHousehold]:
         LiveHousehold(
             name="us-single-reform-added-variables",
             country_id="us",
+            # /calculate-full adds variables for the age year of a person
+            # named ``you``; the v2 path for the household's default year.
             people={
-                "adult": {
+                "you": {
                     "age": {YEAR: 29},
                     "employment_income": {YEAR: 61_000 + run_amount},
                 }
@@ -155,7 +157,7 @@ def _parity_households(run_amount: int) -> list[LiveHousehold]:
     ]
 
 
-PARITY_NAMES = [household.name for household in _parity_households(0)]
+PARITY_NAMES = [household.name for household in parity_households(0)]
 
 
 @pytest.mark.parametrize("household_name", PARITY_NAMES)
@@ -164,7 +166,7 @@ def test_a_v2_household_calculation_matches_api_v1(
 ):
     (household,) = [
         candidate
-        for candidate in _parity_households(probe_amount(integration_probe_id))
+        for candidate in parity_households(probe_amount(integration_probe_id))
         if candidate.name == household_name
     ]
     household_id = store_household(api_client, household)
