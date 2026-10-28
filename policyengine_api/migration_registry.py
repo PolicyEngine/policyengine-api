@@ -37,6 +37,7 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
         name="metadata",
         path_segments=(
             "metadata",
+            "countries",
             "datasets",
             "economy-options",
             "model-catalog",
@@ -59,6 +60,7 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
         path_segments=(
             "household",
             "households",
+            "household-calculations",
             "user-household",
             "user-households",
             "calculate",

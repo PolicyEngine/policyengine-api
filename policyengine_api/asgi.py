@@ -10,6 +10,7 @@ from policyengine_api.data.orm import close_v1_engines
 from policyengine_api.observability import get_runtime
 from policyengine_api.readiness import mark_not_ready, mark_ready
 from policyengine_api.runtime_cache.client import close_runtime_cache_clients
+from policyengine_api.startup_country_check import check_countries_table_at_startup
 from policyengine_api.warmup import run_startup_warmup
 
 
@@ -23,6 +24,10 @@ app = application = create_asgi_app(
     flask_app,
     shutdown_callback=_close_runtime_resources,
 )
+
+# Refuse to start when the v2 countries table and the country list in code
+# disagree (see policyengine_api.startup_country_check).
+check_countries_table_at_startup()
 
 # Warm the simulation machinery before serving (see policyengine_api.warmup).
 # POLICYENGINE_API_STARTUP_WARMUP=0 skips it.

@@ -28,6 +28,11 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.associations.types import (
         LegacyReferenceChecker,
     )
+    from policyengine_api.services.v2.countries.types import CountryRead
+    from policyengine_api.services.v2.household_calculations.types import (
+        HouseholdCalculationInput,
+        HouseholdCalculationRead,
+    )
     from policyengine_api.services.v2.households.types import (
         HouseholdPage,
         HouseholdRead,
@@ -364,6 +369,14 @@ class V2MetadataResourceReader(Protocol):
         ...
 
 
+class V2CountryResourceService(Protocol):
+    """Route-independent countries list read for one request."""
+
+    def list_countries(self) -> list[CountryRead]:
+        """Return every served country and its capability, ordered by ID."""
+        ...
+
+
 class V2PolicyResourceService(Protocol):
     """Route-independent native policy operations for one request."""
 
@@ -432,6 +445,29 @@ class V2HouseholdResourceService(Protocol):
         limit: int,
     ) -> HouseholdPage:
         """Return a page of the country's households, optionally of one default year."""
+        ...
+
+
+class V2HouseholdCalculationResourceService(Protocol):
+    """Route-independent household calculation operations for one request."""
+
+    def submit_calculation(
+        self, calculation: HouseholdCalculationInput
+    ) -> HouseholdCalculationRead:
+        """Send a stored household's calculation to the simulation service.
+
+        Raise ``HouseholdCalculationCountryError`` for a country without
+        household calculations, ``HouseholdNotFoundError`` or
+        ``PolicyNotFoundError`` for a record not stored in that country, and
+        the simulation service errors when it cannot calculate.
+        """
+        ...
+
+    def get_calculation(self, calculation_id: UUID) -> HouseholdCalculationRead:
+        """Return the calculation as it stands on the simulation service.
+
+        Raise ``HouseholdCalculationNotFoundError`` when it has none.
+        """
         ...
 
 
@@ -807,6 +843,18 @@ def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     )
 
 
+def _default_v2_country_service_factory() -> V2CountryResourceService:
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.countries.database_session import (
+        CountryDatabaseSession,
+    )
+    from policyengine_api.services.v2.countries.services import V2CountryService
+
+    return V2CountryService(CountryDatabaseSession(get_v2_session_factory()))
+
+
 def _default_v2_policy_service_factory() -> V2PolicyResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -833,6 +881,25 @@ def _default_v2_household_service_factory() -> V2HouseholdResourceService:
 
     return V2HouseholdService(
         HouseholdDatabaseSession(get_v2_session_factory()),
+    )
+
+
+def _default_v2_household_calculation_service_factory() -> (
+    V2HouseholdCalculationResourceService
+):
+    from policyengine_api.services.v2.household_calculations.services import (  # noqa: PLC0415  # loaded on the first calculation request only
+        V2HouseholdCalculationService,
+    )
+    from policyengine_api.services.v2.household_calculations.simulation_client import (  # noqa: PLC0415  # imports the generated simulation client on first use only
+        process_simulation_household_client,
+    )
+
+    return V2HouseholdCalculationService(
+        countries=_default_v2_country_service_factory(),
+        households=_default_v2_household_service_factory(),
+        policies=_default_v2_policy_service_factory(),
+        catalog_reader_factory=_default_v2_metadata_reader_factory,
+        simulation_factory=process_simulation_household_client,
     )
 
 
@@ -982,8 +1049,12 @@ class NativeRouteDependencies:
     metadata_reader_factory: Callable[[], MetadataReader]
     specification_provider: Callable[[], JSONObject]
     v2_metadata_reader_factory: Callable[[], V2MetadataResourceReader] | None = None
+    v2_country_service_factory: Callable[[], V2CountryResourceService] | None = None
     v2_policy_service_factory: Callable[[], V2PolicyResourceService] | None = None
     v2_household_service_factory: Callable[[], V2HouseholdResourceService] | None = None
+    v2_household_calculation_service_factory: (
+        Callable[[], V2HouseholdCalculationResourceService] | None
+    ) = None
     v2_user_policy_service_factory: Callable[[], V2UserPolicyResourceService] | None = (
         None
     )
@@ -1016,8 +1087,12 @@ class NativeRouteDependencies:
             specification_provider=_default_specification_provider,
             v2_metadata_reader_factory=_default_v2_metadata_reader_factory,
             v2_metadata_response_cache=_process_metadata_response_cache(),
+            v2_country_service_factory=_default_v2_country_service_factory,
             v2_policy_service_factory=_default_v2_policy_service_factory,
             v2_household_service_factory=_default_v2_household_service_factory,
+            v2_household_calculation_service_factory=(
+                _default_v2_household_calculation_service_factory
+            ),
             v2_user_policy_service_factory=(_default_v2_user_policy_service_factory),
             v2_user_household_service_factory=(
                 _default_v2_user_household_service_factory

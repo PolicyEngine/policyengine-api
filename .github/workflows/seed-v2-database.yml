@@ -69,3 +69,6 @@ jobs:
           # Reads the certified UK data release, whose repository is private,
           # to check each new catalog version's region filters.
           HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}
+          # Each version's SPM availability comes from this environment's
+          # simulation service's public versions answer.
+          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}

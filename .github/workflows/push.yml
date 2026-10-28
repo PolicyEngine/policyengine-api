@@ -73,11 +73,14 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: staging
     env:
+      DEPLOYMENT_ENVIRONMENT: staging
       SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+      - name: Check the simulation service belongs to staging
+        run: bash .github/scripts/check_simulation_entrypoint_environment.sh
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Set up uv for installed bundle validation
@@ -339,7 +342,7 @@ jobs:
   parallel-live-simulation-tests-staging-cloud-run:
     name: Run live simulations against the staging candidate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: deploy-cloud-run-staging
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
@@ -438,11 +441,14 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: production
     env:
+      DEPLOYMENT_ENVIRONMENT: production
       SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+      - name: Check the simulation service belongs to production
+        run: bash .github/scripts/check_simulation_entrypoint_environment.sh
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Set up uv for installed bundle validation

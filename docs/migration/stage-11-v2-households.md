@@ -256,3 +256,97 @@ Apply the reviewed schema revisions and application image only to independently
 verified production targets. Enable native v2 use and v1 create copying as
 separate operational decisions and retain the preceding application revision
 for immediate rollback.
+
+## Household Calculations
+
+`POST /v2/household-calculations` calculates a household stored through
+`/v2/households`, under a policy stored through `/v2/policies` or, without
+`policy_id`, under current law, for the household's `default_year`. The body
+may add `axes` (an axis without a `period` varies the household's
+`default_year`) and `add_missing_variables`. An identical calculation that
+succeeded in the last 28 days is returned again; callers cannot force a new
+one. The
+Public API checks the country's `countries` row allows household calculations
+(422 otherwise; a household-only country is accepted), checks the household
+and policy exist through the same services as their routes (404 when either
+is not stored in that country), selects the country's running catalog
+version, and sends the simulation service the household's and policy's IDs,
+the options and that version's PolicyEngine.py version. The simulation
+service reads the household, the policy's parameter values and the catalog
+version from these tables itself, through its own `SELECT` grant. The
+answer is 202 with the calculation's `calculation_id` and `status`. Poll `GET /v2/household-calculations/{calculation_id}` until
+`status` is `succeeded`, with `result`, or `failed`, with `error`. A US result
+carries `spm_config` and `spm_provenance`.
+
+The simulation service sends the household function the household's
+`default_year` as the calculation's year: the year of the variables
+`add_missing_variables` adds, and of values and axes the household gives
+without a period. (`/calculate-full` takes that year from the first age
+period of a person named `you`, or else the current year.)
+
+The simulation service stores every calculation as a simulation run, so a
+calculation no account saved is still stored, with no report. Neither route
+needs an account.
+
+The routes always call the Cloud Run Simulation Entrypoint, whatever
+`SIM_ENTRYPOINT` selects, because only it serves v2 calculations. They read:
+
+- `SIMULATION_ENTRYPOINT_URL`: the `staging` and `production` environment
+  secret of the same name, passed to the deployment job's `env:` and written
+  to the Cloud Run revision by `deploy_cloud_run_candidate.sh` when set.
+- `GATEWAY_AUTH_ISSUER`, `GATEWAY_AUTH_AUDIENCE`, `GATEWAY_AUTH_CLIENT_ID` and
+  `GATEWAY_AUTH_CLIENT_SECRET_RESOURCE`: the organization secrets already used
+  for every simulation call, with `GATEWAY_AUTH_REQUIRED=1`.
+
+Without the URL, or with gateway auth partly configured, both routes answer
+503. They also answer 503 when the simulation service cannot be reached, its
+gateway token cannot be fetched, it answers with an error or with a body of
+another shape, or it refuses the calculation (for example when no v2 worker is
+deployed for the catalog version's PolicyEngine.py version, or when it
+cannot find a household, policy or catalog version the Public API has just
+found, which means the two services disagree). The simulation service checks
+every stored household and policy value against the household functions'
+contract before it writes anything, and the caller's data it refuses gets
+422 with its reason: a policy changing a parameter the catalog version
+lacks, a stored policy value it cannot take (such as an object), or a stored
+household it cannot take (such as a group no person belongs to, which
+`/v2/households` accepts). A request field it refuses, such as an invalid
+option, gets 422 with each refused field and why.
+
+### Staging checks
+
+The parallel live staging job (`run_live_staging_tests.sh`) runs two modules
+against each tagged staging candidate, through staging API v1, the staging
+Simulation Entrypoint, the v2 household functions on Modal and the staging v2
+database:
+
+- `test_live_v2_household_calculations.py`: a submit, poll and result cycle
+  for a new US household; six calculations submitted at once, each accepted
+  within 10 seconds and finished within 300 seconds; and one household varied
+  across 401 points of employment income, which must finish. The measured
+  times appear in the job log as `HouseholdCalculationMeasurement` warnings.
+- `test_live_v2_household_parity.py`: three US and three UK households, one
+  of each with axes and one of each under a reform stored through
+  `/v2/policies` (the US one also adding missing variables), calculated
+  through `/v2/household-calculations` and through API v1's `/calculate`
+  (`/calculate-full` when adding missing variables); every calculated value
+  and warning must match.
+
+A calculation's submission and each poll are sent again while they get 502,
+503 or 504 for at most 90 seconds in a row; any other failure, or a longer
+run of such answers, fails the check with the answer's body. The Public API
+also answers 503 for failures that do not pass, such as a simulation service
+without these routes, so those take about 90 seconds to fail. Every other
+request in the checks fails at once. Warnings are compared regardless of order, because the v2
+database orders each stored record's keys itself; one US household has a
+deprecated input, so both calculations warn.
+
+`STAGING_HOUSEHOLD_PARALLEL_COUNT`, `STAGING_HOUSEHOLD_SUBMIT_LIMIT_SECONDS`,
+`STAGING_HOUSEHOLD_FINISH_LIMIT_SECONDS`,
+`STAGING_HOUSEHOLD_CALCULATION_TIMEOUT_SECONDS` (600 seconds per calculation)
+and `STAGING_HOUSEHOLD_TRANSIENT_LIMIT_SECONDS` change those limits; none is
+set in the workflow. The checks see neither the
+number of Simulation Entrypoint instances that served the calculations nor
+the household functions' memory use: a calculation that runs out of memory
+fails, and so fails the check. Both modules fail until the staging Simulation
+Entrypoint serves `/v2/household-calculations`.

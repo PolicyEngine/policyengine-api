@@ -113,6 +113,11 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
     catalog_format: int | None = None
     entities: list[CatalogEntity] | None = Field(default=None, sa_type=sa.JSON)
     basic_inputs: list[str] | None = Field(default=None, sa_type=sa.JSON)
+    # Whether this version offers SPM settings, with their schema and the
+    # certified defaults, as the simulation service reports its bundle's SPM
+    # support: {available, settings_schema, defaults}. Recorded after the
+    # catalog is published, so a version briefly has none.
+    spm_availability: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
 
     model: TaxBenefitModel = Relationship(back_populates="versions")
     variables: list["Variable"] = Relationship(

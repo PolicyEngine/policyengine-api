@@ -2794,6 +2794,7 @@ dependencies = [
     { name = "openai" },
     { name = "packaging" },
     { name = "policyengine", extra = ["models"] },
+    { name = "policyengine-api-simulation-client" },
     { name = "policyengine-canada" },
     { name = "policyengine-il" },
     { name = "policyengine-ng" },
@@ -2851,6 +2852,7 @@ requires-dist = [
     { name = "openai" },
     { name = "packaging", specifier = ">=24,<27" },
     { name = "policyengine", extras = ["models"], specifier = "==6.10.0" },
+    { name = "policyengine-api-simulation-client", specifier = ">=0.20261027.288" },
     { name = "policyengine-canada", specifier = "==0.96.3" },
     { name = "policyengine-il", specifier = "==0.1.0" },
     { name = "policyengine-ng", specifier = "==0.5.1" },
@@ -2875,6 +2877,19 @@ requires-dist = [
     { name = "werkzeug" },
 ]
 provides-extras = ["dev"]
+
+[[package]]
+name = "policyengine-api-simulation-client"
+version = "0.20261027.288"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/46/21/145e238dec20e79a1ce7fb4818271e08603fab88656ce4d7e5c7307ab90e/policyengine_api_simulation_client-0.20261027.288.tar.gz", hash = "sha256:5129724a3e5ba4b0dc257d421c32dd1be7f5c4a1ae3c1a9b60b20d7fab58f9f5", size = 44777, upload-time = "2026-10-27T17:02:39.052Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b7/27/85e9da0f0561d0548cbe23ec46e4bf63a4b814d7adbe1f0932c514b52191/policyengine_api_simulation_client-0.20261027.288-py3-none-any.whl", hash = "sha256:82b4aacb954de0b8c747b313c1b92ea1d6a028402618f3d819c8298b87977486", size = 99950, upload-time = "2026-10-27T17:02:37.398Z" },
+]
 
 [[package]]
 name = "policyengine-canada"

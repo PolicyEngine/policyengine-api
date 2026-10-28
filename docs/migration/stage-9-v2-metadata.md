@@ -36,7 +36,18 @@ version (with the current-law policy id and the years offered), the entities
 input dataset, and the economy choices. A catalog without regions, such as a
 household-only country's, has empty region, dataset and economy-choice lists
 rather than an error. A version published before catalog format 2 has a null
-`catalog_format` and empty entities and basic inputs. The result names the
+`catalog_format` and empty entities and basic inputs. `spm` says whether the
+version offers SPM settings for a household: `available`, and when it does,
+`settings_schema` (the JSON schema of a household's `spm` selection) and
+`defaults` (the certified selection). Catalog publication records it from the
+simulation service's public `GET /versions`: a US version offers SPM when the
+service lists a canonical capability with pinned defaults for its
+PolicyEngine.py version, and other countries never do. A US version the
+service does not serve yet stays unrecorded until a later publication run, and
+a version whose availability is not recorded yet offers none. An API instance
+that read the version before it was recorded keeps that answer until it
+restarts, normally at the deployment after the next publication run, and a
+client may reuse it for up to a day after that. The result names the
 selected PolicyEngine.py version, so a client that starts without a version
 learns the running one and requests every other part for that exact version.
 The query uses the shared `CatalogQuery` model: unknown and repeated
@@ -185,10 +196,15 @@ must execute in this order:
    Alembic chain, confirms all heads are current, and detects ungenerated model
    changes.
 3. Remove the migration URL from the command environment.
-4. Supply only `V2_DATA_WRITE_DATABASE_URL`, the same target identity and
+4. Supply only `V2_DATA_WRITE_DATABASE_URL`, the same target identity,
    `HUGGING_FACE_TOKEN` (from the organization secret
-   `PE_UK_PRIVATE_HF_READ_TOKEN`), then run
-   `uv run python scripts/publish_v2_metadata_catalog.py`. Before publishing a
+   `PE_UK_PRIVATE_HF_READ_TOKEN`) and `SIMULATION_ENTRYPOINT_URL` (from the
+   environment secret of the same name), then run
+   `uv run python scripts/publish_v2_metadata_catalog.py`. The command stops
+   before extraction if `SIMULATION_ENTRYPOINT_URL` is unset. After publishing,
+   it reads the simulation service's public `GET /versions` to record each
+   version's SPM availability; if the answer cannot be read, it logs a warning,
+   records none, and the next run records them. Before publishing a
    catalog version that is not stored yet, the command reads the certified data
    artifacts its regions' filters use and stops if one cannot select a region.
    It stops before reading anything if a UK version needs checking and
