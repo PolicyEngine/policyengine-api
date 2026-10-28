@@ -53,6 +53,17 @@ LOCAL_AREA_BREAKDOWN_RETRY_NOTE = (
 # telemetry envelope forbids extra fields, so the run is marked here rather
 # than by a new field; geography_type and geography_code still name its region.
 LOCAL_AREA_BREAKDOWN_SIMULATION_KIND = "local_area_breakdown"
+# The version of the local-area breakdown result that a breakdown request's
+# options hash names, as breakdown_schema. A breakdown result cached under an
+# earlier version, or before the hash named one, is not served, and the next
+# request computes it again. Requests without a breakdown have no such field,
+# so their hashes and cache entries don't change. Raise it when the simulation
+# API's local-area result gains or changes fields, since a simulation API
+# deploy that keeps the same .py version doesn't change any other part of the
+# cache identity.
+# 2: each level lists the ONS codes of the areas the run estimated but
+# disclosure control withheld (PolicyEngine/policyengine-sim-api#968).
+LOCAL_AREA_BREAKDOWN_RESULT_SCHEMA_VERSION = 2
 BUDGET_WINDOW_CLAIM_ATTEMPTS = 3
 REFORM_IMPACT_START_CLAIM_ATTEMPTS = 3
 # A budget-window progress message names this many computing years and counts

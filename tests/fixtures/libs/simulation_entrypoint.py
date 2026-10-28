@@ -83,6 +83,20 @@ MOCK_LOCAL_AREA_BREAKDOWN_RESULT = {
         }
     ],
 }
+# The same result from a simulation API that lists, for each level, the ONS
+# codes of the areas the run estimated but disclosure control withheld, sorted
+# (PolicyEngine/policyengine-sim-api#968). An empty list means none were.
+MOCK_LOCAL_AREA_BREAKDOWN_RESULT_WITH_WITHHELD_CODES = {
+    **MOCK_LOCAL_AREA_BREAKDOWN_RESULT,
+    "constituency_withheld_codes": ["E14001172", "S14000021"],
+    "local_authority_withheld_codes": [],
+}
+# A result that doesn't report its withheld areas, with null for each level.
+MOCK_LOCAL_AREA_BREAKDOWN_RESULT_WITH_NULL_WITHHELD_CODES = {
+    **MOCK_LOCAL_AREA_BREAKDOWN_RESULT,
+    "constituency_withheld_codes": None,
+    "local_authority_withheld_codes": None,
+}
 MOCK_POLICYENGINE_BUNDLE = {
     "model_version": "1.459.0",
     "policyengine_version": "3.4.0",

@@ -335,7 +335,19 @@ accepted only for the UK, with `region` exactly `uk` or one UK country
 requests, including other spellings of those regions, return HTTP 400 before
 anything is read from the cache or submitted. The API sends `"breakdown": "local_areas"` to the simulation API,
 which computes the impacts in a run separate from the national result, and
-returns its result (`kind: "local_areas"`) like any other economy result. If
+returns its result (`kind: "local_areas"`) like any other economy result.
+Besides `constituency_impact` and `local_authority_impact`, the result has
+`constituency_withheld_codes` and `local_authority_withheld_codes`: the ONS
+codes, sorted, of each level's areas that the run estimated but disclosure
+control withheld, which the impact lists leave out. `[]` means none were
+withheld. `null` or an absent field means the result doesn't report them, as
+in results computed before the simulation API reported them. An area the run
+never estimated, such as one with no households in the dataset, is not listed.
+The API stores and returns these fields unchanged. A breakdown's options hash
+also includes `breakdown_schema=2`, the version of the breakdown result, so a
+breakdown cached before the result reported withheld codes is not returned and
+the next request computes it again; hashes of requests without `breakdown`
+don't include it. If
 the simulation API refuses the request with HTTP 400 or 422, because the
 deployed simulation API or the .py release it routes to cannot run breakdowns,
 the route returns HTTP 502 with the simulation API's reason and stores

@@ -90,6 +90,27 @@ def test_economy_query_and_receipt_schemas_match_public_http_contract():
     }
 
 
+def test_annual_economy_result_declares_the_breakdown_withheld_area_codes():
+    """A local-area breakdown result lists each level's withheld ONS codes."""
+    operation = load_specification()["paths"][
+        "/{country_id}/economy/{policy_id}/over/{baseline_policy_id}"
+    ]["get"]
+    completed = operation["responses"]["200"]
+    result = completed["content"]["application/json"]["schema"]["properties"]["result"][
+        "properties"
+    ]
+    for field_name in (
+        "constituency_withheld_codes",
+        "local_authority_withheld_codes",
+    ):
+        assert field_name in completed["description"]
+        field = result[field_name]
+        assert field["type"] == "array"
+        assert field["items"] == {"type": "string"}
+        assert field["nullable"] is True
+        assert field["description"].startswith("breakdown=local_areas only.")
+
+
 def test_metadata_discovery_and_selection_constraints_are_published():
     spec = load_specification()
     metadata = spec["paths"]["/{country_id}/metadata"]["get"]["responses"]["200"][

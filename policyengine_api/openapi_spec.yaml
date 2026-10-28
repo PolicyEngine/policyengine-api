@@ -884,7 +884,7 @@ paths:
         # Query parameters are generated from policyengine_api.query_parameters.
       responses:
         200:
-          description: Annual economic impact, progress, or persisted error state. Canonical completed results include actual baseline/reform receipts containing the selected SPM configuration. While computing, the optional stage fields come from the simulation entrypoint and appear only when its worker reports stages. With breakdown=local_areas, a completed result is the simulation API's local-area breakdown instead, with kind local_areas, the constituency_impact and local_authority_impact lists, and the dataset and version fields.
+          description: Annual economic impact, progress, or persisted error state. Canonical completed results include actual baseline/reform receipts containing the selected SPM configuration. While computing, the optional stage fields come from the simulation entrypoint and appear only when its worker reports stages. With breakdown=local_areas, a completed result is the simulation API's local-area breakdown instead, with kind local_areas, the constituency_impact and local_authority_impact lists, constituency_withheld_codes and local_authority_withheld_codes, and the dataset and version fields. A breakdown result cached before the simulation API reported withheld codes is not returned; the next request computes the breakdown again.
           content:
             application/json:
               schema:
@@ -902,6 +902,18 @@ paths:
                     properties:
                       spm_provenance:
                         $ref: '#/components/schemas/SPMComparisonProvenance'
+                      constituency_withheld_codes:
+                        type: array
+                        nullable: true
+                        items:
+                          type: string
+                        description: breakdown=local_areas only. The ONS codes, sorted, of the constituencies the run estimated but disclosure control withheld, which constituency_impact leaves out. An empty list means none were withheld. Null or an absent field means the result doesn't report them, as in results computed before the simulation API reported them, so a constituency missing from constituency_impact may or may not have been withheld. An area the run never estimated, such as one with no households in the dataset, is not listed.
+                      local_authority_withheld_codes:
+                        type: array
+                        nullable: true
+                        items:
+                          type: string
+                        description: breakdown=local_areas only. The ONS codes, sorted, of the local authorities the run estimated but disclosure control withheld, which local_authority_impact leaves out. An empty list means none were withheld. Null or an absent field means the result doesn't report them, as in results computed before the simulation API reported them, so a local authority missing from local_authority_impact may or may not have been withheld. An area the run never estimated, such as one with no households in the dataset, is not listed.
                   stage:
                     type: string
                     description: Current stage of a computing run, such as queued, loading_data, baseline, reform, simulating or outputs. Later versions may add stages; clients must accept a value they do not know.
