@@ -94,8 +94,12 @@ def read_owned_user_report(
     user_id: UUID | None,
     country_id: str,
     association_id: UUID,
+    lock: bool = False,
 ) -> UserReportAssociation:
-    """``user_id`` is None for an unauthenticated user that owns nothing yet."""
+    """``user_id`` is None for an unauthenticated user that owns nothing yet.
+
+    With ``lock``, the row stays locked until the session's transaction ends.
+    """
     return require_user_report(
         None
         if user_id is None
@@ -104,6 +108,7 @@ def read_owned_user_report(
             user_id=user_id,
             country_id=country_id,
             association_id=association_id,
+            lock=lock,
         ),
         association_id=association_id,
     )
@@ -393,6 +398,7 @@ class V2UserReportService:
                 user_id=owner.user_id,
                 country_id=country_id,
                 association_id=association_id,
+                lock=checked is not None,
             )
             if checked is not None:
                 require_unchanged_references(

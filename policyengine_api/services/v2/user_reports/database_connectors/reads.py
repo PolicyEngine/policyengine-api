@@ -20,15 +20,21 @@ def read_owned_user_report_row(
     user_id: UUID,
     country_id: str,
     association_id: UUID,
+    lock: bool = False,
 ) -> UserReportAssociation | None:
-    """Return the user's association with this id in this country, or None."""
-    return session.exec(
-        select(UserReportAssociation).where(
-            UserReportAssociation.id == association_id,
-            UserReportAssociation.country_id == country_id,
-            UserReportAssociation.user_id == user_id,
-        )
-    ).one_or_none()
+    """Return the user's association with this id in this country, or None.
+
+    With ``lock``, the row is selected FOR UPDATE, so updates of one saved
+    report take turns and each sees the row as the one before it left it.
+    """
+    statement = select(UserReportAssociation).where(
+        UserReportAssociation.id == association_id,
+        UserReportAssociation.country_id == country_id,
+        UserReportAssociation.user_id == user_id,
+    )
+    if lock:
+        statement = statement.with_for_update()
+    return session.exec(statement).one_or_none()
 
 
 def read_user_report_row(
