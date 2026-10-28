@@ -590,7 +590,12 @@ class V2UserSimulationResourceService(Protocol):
         principal: AccountPrincipal,
         association_input: UserSimulationCreateFields,
     ) -> UserSimulationRead:
-        """Save a v1 simulation for the caller, provisioning their user if needed."""
+        """Save a simulation for the caller, provisioning their user if needed.
+
+        It names a v2 simulation, checked with the simulation service, a v1
+        simulation, or both; with both, the v2 simulation must be the one
+        migrated from that v1 simulation.
+        """
         ...
 
     def get_user_simulation(
@@ -625,7 +630,10 @@ class V2UserSimulationResourceService(Protocol):
     ) -> UserSimulationRead:
         """Update the supplied fields of the caller's association and return it.
 
-        A new ``legacy_simulation_id`` repoints it to another v1 simulation.
+        A new ``simulation_id`` or ``legacy_simulation_id`` repoints it; it is
+        checked as on create, together with the reference the association
+        keeps, and AssociationConflictError is raised if the association
+        changes during that check.
         """
         ...
 
@@ -649,9 +657,11 @@ class V2UserReportResourceService(Protocol):
         principal: AccountPrincipal,
         association_input: UserReportCreateFields,
     ) -> UserReportRead:
-        """Save a v1 report for the caller, provisioning their user if needed.
+        """Save a report for the caller, provisioning their user if needed.
 
-        Linked saved reforms must be the caller's own.
+        It names a v2 report, checked with the simulation service, a v1 report
+        output, or both; with both, the v2 report must be the one migrated from
+        that v1 report output. Linked saved reforms must be the caller's own.
         """
         ...
 
@@ -697,7 +707,13 @@ class V2UserReportResourceService(Protocol):
         association_id: UUID,
         association_input: UserReportUpdateInput,
     ) -> UserReportRead:
-        """Update the supplied fields of the caller's association and return it."""
+        """Update the supplied fields of the caller's association and return it.
+
+        A new ``report_id`` or ``legacy_report_id`` repoints it; it is checked
+        as on create, together with the reference the association keeps, and
+        AssociationConflictError is raised if the association changes during
+        that check.
+        """
         ...
 
     def delete_user_report(

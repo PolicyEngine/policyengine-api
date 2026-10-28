@@ -208,14 +208,18 @@ def _error(description: str) -> dict[str, Any]:
 
 # Every report route can answer these.
 REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    422: _error(
-        "The request does not match the schema, the country does not have "
-        "economy reports, or the simulation service cannot run the report "
-        "(for example, no such region or dataset in the current catalog "
-        "version); the message says which."
-    ),
+    422: _error("The request does not match the schema."),
     500: _error("The operation could not be completed."),
     503: _error("The simulation service or the v2 database is unavailable."),
+}
+# Submitting or re-running a report can also be refused for the report itself.
+REPORT_REFUSAL_RESPONSE: dict[int | str, dict[str, Any]] = {
+    422: _error(
+        "The request does not match the schema, the country does not have "
+        "economy reports (such as a household-only country), or the simulation "
+        "service cannot run the report (for example, no such region or "
+        "dataset in the current catalog version); the message says which."
+    ),
 }
 REPORT_NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
     404: _error("No report has this ID or v1 number in this country."),
@@ -226,6 +230,7 @@ REPORT_BODY_RESPONSE: dict[int | str, dict[str, Any]] = {
 SUBMIT_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: _error("The body and query name different countries."),
     **REPORT_BODY_RESPONSE,
+    **REPORT_REFUSAL_RESPONSE,
 }
 READ_RESPONSES: dict[int | str, dict[str, Any]] = {
     **REPORT_NOT_FOUND_RESPONSE,
@@ -236,4 +241,5 @@ READ_RESPONSES: dict[int | str, dict[str, Any]] = {
 RUN_RESPONSES: dict[int | str, dict[str, Any]] = {
     **REPORT_NOT_FOUND_RESPONSE,
     **REPORT_BODY_RESPONSE,
+    **REPORT_REFUSAL_RESPONSE,
 }

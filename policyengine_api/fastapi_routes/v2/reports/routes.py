@@ -145,7 +145,7 @@ def _log_failure(error: Exception) -> None:
         attributes = failure_log_attributes(error)
         if isinstance(error, SimulationServiceUnavailableError):
             attributes["reason"] = str(error)[:500]
-        logger.warning(
+        logger.error(
             "v2_report_operation_failed",
             extra={"policyengine_attributes": attributes},
         )

@@ -761,6 +761,28 @@ def test_an_unexpected_failure_is_logged_with_where_it_happened() -> None:
         if record.getMessage() == "v2_report_operation_failed"
     ]
     attributes = record.policyengine_attributes
+    assert record.levelno == logging.ERROR
     assert attributes["error_type"] == "RuntimeError"
     assert "economy_report_support.py" in attributes["error_frames"]
     assert "secret" not in str(attributes)
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "refuses_runs"),
+    [
+        ("post", "/v2/reports", True),
+        ("post", "/v2/reports/{report_id}/runs", True),
+        ("get", "/v2/reports", False),
+        ("get", "/v2/reports/{report_id}", False),
+        ("get", "/v2/reports/by-legacy-number/{legacy_report_id}", False),
+        ("get", "/v2/reports/{report_id}/runs", False),
+    ],
+)
+def test_openapi_says_which_routes_refuse_a_report_that_cannot_run(
+    method: str, path: str, *, refuses_runs: bool
+) -> None:
+    schema = _client(FakeEconomyReportSimulation()).get("/v2/openapi.json").json()
+
+    description = schema["paths"][path][method]["responses"]["422"]["description"]
+
+    assert ("economy reports" in description) is refuses_runs
