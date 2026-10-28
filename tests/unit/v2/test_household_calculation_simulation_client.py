@@ -165,15 +165,31 @@ def test_the_configured_service_is_called_without_auth_when_none_is_set(
     assert client.base_url == BASE_URL
 
 
-def test_a_household_the_service_finds_invalid_is_reported_with_its_reasons() -> None:
+STORED_HOUSEHOLD_REFUSAL = (
+    "the household 00000000-0000-4000-8000-0000000000a1 cannot be calculated: "
+    "benunits.benunit-2.members: List should have at least 1 item after validation"
+)
+
+
+def test_caller_data_the_service_refuses_is_reported_with_its_reason() -> None:
+    """The service refuses a stored household or policy value with 422 and text."""
+    client = client_answering(422, {"detail": STORED_HOUSEHOLD_REFUSAL}, [])
+
+    with pytest.raises(
+        SimulationServiceInvalidRequestError, match=r"benunit-2\.members"
+    ):
+        client.submit(SUBMISSION)
+
+
+def test_request_fields_the_service_refuses_are_reported_one_by_one() -> None:
     client = client_answering(
         422,
         {
             "detail": [
                 {
-                    "loc": ["body", "household", "households", "h", "members"],
-                    "msg": "List should have at least 1 item after validation",
-                    "type": "too_short",
+                    "loc": ["body", "options", "axes", 0, 0, "count"],
+                    "msg": "Input should be greater than or equal to 1",
+                    "type": "greater_than_equal",
                 }
             ]
         },
@@ -182,7 +198,7 @@ def test_a_household_the_service_finds_invalid_is_reported_with_its_reasons() ->
 
     with pytest.raises(
         SimulationServiceInvalidRequestError,
-        match=r"household\.households\.h\.members: List should have at least 1 item",
+        match=r"options\.axes\.0\.0\.count: Input should be greater",
     ):
         client.submit(SUBMISSION)
 

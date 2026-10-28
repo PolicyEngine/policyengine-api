@@ -177,9 +177,12 @@ class SimulationServiceRefusedError(RuntimeError):
 
 
 class SimulationServiceInvalidRequestError(ValueError):
-    """The simulation service finds the household or its options invalid.
+    """The simulation service refuses the caller's data.
 
-    The message lists each invalid field and why, as the service reports it.
+    Such as a policy changing a parameter the catalog version lacks, a stored
+    policy value or household the household functions cannot take, or an
+    invalid option. The message gives the service's reason, or each refused
+    field and why.
     """
 
 

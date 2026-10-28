@@ -273,11 +273,8 @@ is not stored in that country), selects the country's running catalog
 version, and sends the simulation service the household's and policy's IDs,
 the options and that version's PolicyEngine.py version. The simulation
 service reads the household, the policy's parameter values and the catalog
-version from these tables itself, through its own `SELECT` grant, and
-refuses a policy changing a parameter the catalog version lacks, which the
-Public API answers with 503. The answer is 202 with the calculation's
-`calculation_id` and
-`status`. Poll `GET /v2/household-calculations/{calculation_id}` until
+version from these tables itself, through its own `SELECT` grant. The
+answer is 202 with the calculation's `calculation_id` and `status`. Poll `GET /v2/household-calculations/{calculation_id}` until
 `status` is `succeeded`, with `result`, or `failed`, with `error`. A US result
 carries `spm_config` and `spm_provenance`.
 
@@ -305,9 +302,15 @@ Without the URL, or with gateway auth partly configured, both routes answer
 503. They also answer 503 when the simulation service cannot be reached, its
 gateway token cannot be fetched, it answers with an error or with a body of
 another shape, or it refuses the calculation (for example when no v2 worker is
-deployed for the catalog version's PolicyEngine.py version). A household or
-options the simulation service finds invalid, such as a group no person
-belongs to, get 422 with each invalid field and why.
+deployed for the catalog version's PolicyEngine.py version, or when it
+cannot find a household, policy or catalog version the Public API has just
+found, which means the two services disagree). The simulation service checks
+every stored household and policy value against the household functions'
+contract before it writes anything, and the caller's data it refuses gets
+422 with its reason: a policy changing a parameter the catalog version
+lacks, a stored policy value it cannot take (such as an object), or a stored
+household it cannot take (such as a group no person belongs to, which
+`/v2/households` accepts).
 
 ### Staging checks
 

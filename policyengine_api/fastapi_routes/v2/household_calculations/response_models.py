@@ -95,8 +95,10 @@ HOUSEHOLD_CALCULATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "description": (
             "The request does not match the schema, the country does not offer "
             "household calculations, the household has no default year, or the "
-            "simulation service finds the household or its options invalid "
-            "(the message lists why)."
+            "simulation service refuses the caller's data, with its reason in "
+            "the message: a policy changing a parameter the catalog version "
+            "lacks, a stored policy value or household it cannot calculate "
+            "(such as a group no person belongs to), or an invalid option."
         ),
     },
     500: {

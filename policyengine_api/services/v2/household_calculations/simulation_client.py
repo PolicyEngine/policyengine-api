@@ -14,8 +14,13 @@ key order. The household's key order is the stored household's as the v2
 database returns it, which orders each record's keys itself, so it can
 differ from the order a caller sent.
 
-A 400 is a refusal, whose reason the service gives; a 422 lists what the
-service finds invalid in the household or its options; anything else,
+A 400 is a refusal, whose reason the service gives (a household, policy or
+catalog version it cannot find, or a household without a default year,
+which the Public API checks first, or no household function for the
+version); a 422 is the caller's data the service refuses, with its reason
+as text (a parameter the catalog version lacks, or a stored policy value or
+household the household functions cannot take) or one entry per request
+field it refuses; anything else,
 including a 503, no answer, an answer of another shape, a gateway token that
 cannot be fetched or missing configuration, means the service is unavailable.
 
@@ -36,11 +41,11 @@ from policyengine_api_simulation_client.models.household_calculation_response im
 from policyengine_api_simulation_client.models.household_calculation_submission import (
     HouseholdCalculationSubmission,
 )
+from policyengine_api_simulation_client.models.household_refusal_response import (
+    HouseholdRefusalResponse,
+)
 from policyengine_api_simulation_client.models.household_route_error import (
     HouseholdRouteError,
-)
-from policyengine_api_simulation_client.models.http_validation_error import (
-    HTTPValidationError,
 )
 from policyengine_observability import (  # type: ignore[import-untyped]  # the package has no type information
     instrument_httpx,
@@ -112,17 +117,22 @@ def _calculation(response: httpx.Response) -> dict[str, Any]:
     return body
 
 
-def _invalid_request_reason(error: HTTPValidationError) -> str:
-    """Return each invalid field and why, without the request's ``body`` prefix."""
-    reasons = []
-    for item in error.detail if isinstance(error.detail, list) else []:
-        location = [str(part) for part in item.loc]
-        if location[:1] == ["body"]:
-            location = location[1:]
-        reasons.append(f"{'.'.join(location)}: {item.msg}")
-    return "The simulation service cannot calculate this household: " + (
-        "; ".join(reasons) or "the request is invalid"
-    )
+def _invalid_request_reason(refusal: HouseholdRefusalResponse) -> str:
+    """Return the service's reason, or each refused field and why.
+
+    A field's location is given without the request's ``body`` prefix.
+    """
+    if isinstance(refusal.detail, str):
+        reason = refusal.detail
+    else:
+        reasons = []
+        for item in refusal.detail:
+            location = [str(part) for part in item.loc]
+            if location[:1] == ["body"]:
+                location = location[1:]
+            reasons.append(f"{'.'.join(location)}: {item.msg}")
+        reason = "; ".join(reasons) or "the request is invalid"
+    return f"The simulation service cannot calculate this household: {reason}"
 
 
 def _unavailable(status_code: int) -> SimulationServiceUnavailableError:
@@ -191,7 +201,7 @@ class SimulationHouseholdClient:
         if response.status_code == HTTPStatus.ACCEPTED:
             return _calculation(response)
         if response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-            _body, invalid = _decoded(response, HTTPValidationError.from_dict)
+            _body, invalid = _decoded(response, HouseholdRefusalResponse.from_dict)
             raise SimulationServiceInvalidRequestError(_invalid_request_reason(invalid))
         if response.status_code == HTTPStatus.BAD_REQUEST:
             _body, refusal = _decoded(response, HouseholdRouteError.from_dict)

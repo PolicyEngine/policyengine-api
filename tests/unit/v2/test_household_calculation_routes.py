@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from flask import Flask
@@ -18,8 +19,10 @@ from policyengine_api.services.v2.countries.types import CountryRead
 from policyengine_api.services.v2.household_calculations.services import (
     V2HouseholdCalculationService,
 )
+from policyengine_api.services.v2.household_calculations.simulation_client import (
+    SimulationHouseholdClient,
+)
 from policyengine_api.services.v2.household_calculations.types import (
-    SimulationServiceInvalidRequestError,
     SimulationServiceRefusedError,
     SimulationServiceUnavailableError,
 )
@@ -248,17 +251,34 @@ def test_a_malformed_request_is_refused_before_anything_is_read(changes) -> None
     assert app.simulation.submissions == []
 
 
-def test_a_household_the_simulation_service_finds_invalid_gets_422_with_why() -> None:
+def test_a_stored_household_with_a_group_no_person_belongs_to_gets_422() -> None:
+    """The simulation service's 422 reaches the caller with its reason."""
+    refusal = (
+        f"the household {HOUSEHOLD_ID} cannot be calculated: "
+        "benunits.benunit-2.members: List should have at least 1 item after "
+        "validation"
+    )
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(422, json={"detail": refusal})
+
     app = App()
-    app.simulation.error = SimulationServiceInvalidRequestError(
-        "The simulation service cannot calculate this household: "
-        "household.households.household-1.members: List should have at least 1 item"
+    app.service = V2HouseholdCalculationService(
+        countries=FakeCountries(),
+        households=app.households,
+        policies=FakePolicies(),
+        catalog_reader_factory=FakeCatalogs,
+        simulation_factory=lambda: SimulationHouseholdClient(
+            "https://simulation.example",
+            httpx_args={"transport": httpx.MockTransport(answer)},
+        ),
     )
 
     response = app.client.post(PATH, json=body())
 
     assert response.status_code == 422
-    assert "members" in response.json()["message"]
+    assert refusal in response.json()["message"]
 
 
 def test_axis_groups_within_the_point_limit_are_accepted() -> None:
