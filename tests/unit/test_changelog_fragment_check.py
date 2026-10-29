@@ -464,6 +464,43 @@ def test_a_released_fragment_beside_the_pull_requests_own_still_fails(
     assert result.stdout == ALREADY_RELEASED
 
 
+def test_a_new_fragment_that_reuses_a_released_fragments_name_counts(
+    repository: Path,
+):
+    _write(repository, "changelog.d/fix-typo.fixed.md", "Fix the household form.\n")
+    _commit(repository, "This pull request, with its fragment")
+    _git(repository, "checkout", "--quiet", "-b", "other", "master")
+    _write(repository, "changelog.d/fix-typo.fixed.md", "Fix the report title.\n")
+    _commit(repository, "Another pull request, with a fragment of the same name")
+    _git(repository, "checkout", "--quiet", "master")
+    _git(repository, "merge", "--quiet", "--no-ff", "-m", "Merge the other", "other")
+    _git(repository, "rm", "--quiet", PENDING_FRAGMENT, "changelog.d/fix-typo.fixed.md")
+    _commit(repository, "Update PolicyEngine API")
+    _merge_into_master(repository)
+
+    result = _run_check(repository, _master(repository))
+
+    assert result.returncode == 0, result.stdout
+    assert result.stdout == (
+        "This pull request adds 1 changelog fragment: "
+        "changelog.d/fix-typo.fixed.md (fixed).\n"
+    )
+
+
+def test_a_released_fragment_is_not_listed_as_on_the_base_branch(
+    repository: Path,
+):
+    _squash_merge_and_release_the_lower_pull_request(repository)
+    _merge_into_master(repository)
+
+    result = _run_check(repository, _master(repository))
+
+    no_own_fragment = next(
+        line for line in result.stdout.splitlines() if NO_OWN_FRAGMENT in line
+    )
+    assert "Fragments already on the base branch" not in no_own_fragment
+
+
 def test_a_shallow_clone_fails_and_says_to_fetch_the_history(
     repository: Path, tmp_path: Path
 ):
@@ -540,10 +577,26 @@ def test_the_paths_a_pull_request_adds(
     assert definition.added_paths(changes) == expected_added_paths
 
 
-def test_the_released_paths_are_read_from_git_logs_nul_separated_names():
-    assert fragments_module.parse_paths(
-        b"changelog.d/a.added.md\0\nchangelog.d/b.fixed.md\0\0"
-    ) == {"changelog.d/a.added.md", "changelog.d/b.fixed.md"}
+def test_the_released_fragments_are_read_from_git_logs_raw_deletions():
+    removed_blob = "212c395e8d8e25de20d96d1d6f24f6a42cdecd1c"
+    other_blob = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+    raw_log = (
+        f":100644 000000 {removed_blob} {'0' * 40} D\0changelog.d/a.added.md\0"
+        f"\n:100644 000000 {other_blob} {'0' * 40} D\0changelog.d/b.fixed.md\0"
+    ).encode()
+
+    assert fragments_module.parse_removed_blobs(raw_log) == {
+        "changelog.d/a.added.md": {removed_blob},
+        "changelog.d/b.fixed.md": {other_blob},
+    }
+
+
+def test_a_files_git_blob_id_is_computed_as_git_hash_object_does(tmp_path: Path):
+    fragment = tmp_path / "4114.fixed.md"
+    fragment.write_bytes(b"A change.\n")
+    expected_blob = _git(tmp_path, "hash-object", str(fragment))
+
+    assert fragments_module.git_blob_id(fragment, len(expected_blob)) == expected_blob
 
 
 def test_name_status_output_that_ends_mid_record_is_refused():
