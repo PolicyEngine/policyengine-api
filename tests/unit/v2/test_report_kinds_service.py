@@ -237,3 +237,24 @@ def test_an_unavailable_economy_rerun_asks_no_household_report() -> None:
         service.run_report(country_id="us", report_id=HOUSEHOLD_REPORT_ID, force=False)
 
     assert household_simulation.calls == []
+
+
+def test_an_unreadable_economy_report_in_a_listing_is_no_household_lookup() -> None:
+    """An economy report whose result cannot be read back is left out, as before.
+
+    It is not missing, so its ID is not looked for among household reports:
+    an unavailable household route leaves the listing as the economy one was.
+    """
+    economy_simulation = FakeEconomyReportSimulation(
+        report_record(run=report_run_record())
+    )
+    economy_simulation.unreadable_results.add(REPORT_ID)
+    household_simulation = FakeHouseholdReportSimulation()
+    household_simulation.error = SimulationServiceUnavailableError("unreachable")
+
+    reports = _service(economy_simulation, household_simulation).list_reports(
+        country_id="us", report_ids=[REPORT_ID]
+    )
+
+    assert reports == ()
+    assert household_simulation.calls == []

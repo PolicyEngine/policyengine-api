@@ -8,7 +8,10 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from uuid import UUID
 
-    from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
+    from policyengine_api.services.v2.economy_reports.types import (
+        EconomyReportFields,
+        EconomyReportListing,
+    )
     from policyengine_api.services.v2.household_reports.types import (
         HouseholdReportFields,
         HouseholdReportRecord,
@@ -45,10 +48,10 @@ class EconomyReportOperations(Protocol):
         """Run a report again on the current catalog version."""
         ...
 
-    def list_reports(
+    def find_reports(
         self, *, country_id: str, report_ids: Sequence[UUID]
-    ) -> tuple[EconomyReportRecord, ...]:
-        """Return the country's reports among ``report_ids``, in order, once each."""
+    ) -> EconomyReportListing:
+        """List the country's reports among ``report_ids``, naming the unreadable."""
         ...
 
     def list_report_runs(

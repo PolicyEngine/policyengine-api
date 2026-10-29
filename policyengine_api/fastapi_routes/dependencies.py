@@ -30,7 +30,10 @@ if TYPE_CHECKING:
         SimulationReferenceChecker,
     )
     from policyengine_api.services.v2.countries.types import CountryRead
-    from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
+    from policyengine_api.services.v2.economy_reports.types import (
+        EconomyReportFields,
+        EconomyReportListing,
+    )
     from policyengine_api.services.v2.household_reports.types import (
         HouseholdReportSimulation,
     )
@@ -386,6 +389,12 @@ class V2EconomyReportResourceService(Protocol):
         self, *, country_id: str, report_ids: Sequence[UUID]
     ) -> tuple[EconomyReportRecord, ...]:
         """Return the country's reports among ``report_ids``, in order, once each."""
+        ...
+
+    def find_reports(
+        self, *, country_id: str, report_ids: Sequence[UUID]
+    ) -> EconomyReportListing:
+        """List the country's reports among ``report_ids``, naming the unreadable."""
         ...
 
     def list_report_runs(

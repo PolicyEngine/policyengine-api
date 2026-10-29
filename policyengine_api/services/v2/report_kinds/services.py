@@ -151,16 +151,22 @@ class V2ReportService:
         """Return the country's reports of both kinds among ``report_ids``.
 
         They are in that order, once each. IDs that are not economy reports
-        of the country are looked for among its household reports.
+        the simulation service has are looked for among the country's
+        household reports; an economy report whose stored result cannot be
+        read back is left out, as before, without that lookup.
         """
         requested = tuple(dict.fromkeys(report_ids))
+        economy_listing = self._economy_reports().find_reports(
+            country_id=country_id, report_ids=requested
+        )
         found: dict[UUID, EconomyReportRecord | HouseholdReportRecord] = {
-            report.id: report
-            for report in self._economy_reports().list_reports(
-                country_id=country_id, report_ids=requested
-            )
+            report.id: report for report in economy_listing.reports
         }
-        remaining = [report_id for report_id in requested if report_id not in found]
+        # An economy report whose result cannot be read back is not missing.
+        not_missing = set(found) | set(economy_listing.unreadable_report_ids)
+        remaining = [
+            report_id for report_id in requested if report_id not in not_missing
+        ]
         if remaining:
             found.update(
                 (report.id, report)
