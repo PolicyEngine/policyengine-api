@@ -1,4 +1,4 @@
-"""UK economy regions are checked against .py's UK region registry up front.
+"""UK economy regions are checked up front against the regions .py resolves.
 
 A region the simulation service cannot resolve is refused while the request is
 set up, before any cached result is written or any simulation is submitted.
@@ -7,7 +7,6 @@ set up, before any cached result is written or any simulation is submitted.
 from unittest.mock import MagicMock, patch
 
 import pytest
-from policyengine.countries.uk.regions import build_uk_region_registry
 
 from policyengine_api.services.economic_impact_request import EconomicImpactRequest
 from policyengine_api.services.economy_service import EconomyService
@@ -21,7 +20,8 @@ from tests.fixtures.services.economy_service import (
 pytest_plugins = ("tests.fixtures.services.economy_service",)
 pytestmark = pytest.mark.usefixtures("stable_observability_lifecycle")
 
-REGISTRY_LOADER = "policyengine_api.data.uk_regions.load_uk_region_registry"
+RELEASE_LOOKUP = "policyengine_api.data.uk_regions.get_bundle_data_release"
+REGION_CHECK = "policyengine_api.services.economy_simulation_requests.resolve_uk_region"
 
 # Production clients sent these on 2026-10-28. The Public API accepted them,
 # and the simulation service then failed to resolve them.
@@ -169,13 +169,12 @@ def test_a_breakdown_request_for_an_unresolvable_region_stores_and_submits_nothi
 
 def test_a_bundle_without_local_areas_refuses_area_regions():
     # .py registers constituencies and local authorities only when the bundle's
-    # regional_release_kind is local_area; this is its registry otherwise.
-    national_first_registry = build_uk_region_registry(
-        include_constituencies=False, include_local_authorities=False
-    )
+    # regional_release_kind is local_area.
     service, _collaborators = _service_with_recorded_collaborators()
 
-    with patch(REGISTRY_LOADER, return_value=national_first_registry):
+    with patch(
+        RELEASE_LOOKUP, return_value={"regional_release_kind": "area_coded_national"}
+    ):
         accepted = service._build_economic_impact_setup_options(
             _uk_request("country/wales"), time_period=MOCK_TIME_PERIOD
         )
@@ -192,18 +191,7 @@ def test_a_bundle_without_local_areas_refuses_area_regions():
     )
 
 
-def test_the_national_region_needs_no_registry():
-    service, _collaborators = _service_with_recorded_collaborators()
-
-    with patch(REGISTRY_LOADER, side_effect=AssertionError("registry loaded")):
-        setup_options = service._build_economic_impact_setup_options(
-            _uk_request("uk"), time_period=MOCK_TIME_PERIOD
-        )
-
-    assert setup_options.region == "uk"
-
-
-def test_a_us_request_is_not_checked_against_the_uk_registry():
+def test_a_us_request_is_not_checked_against_the_uk_regions():
     service, _collaborators = _service_with_recorded_collaborators()
     us_request = EconomicImpactRequest(
         country_id="us",
@@ -216,7 +204,7 @@ def test_a_us_request_is_not_checked_against_the_uk_registry():
     )
 
     with (
-        patch(REGISTRY_LOADER, side_effect=AssertionError("registry loaded")),
+        patch(REGION_CHECK, side_effect=AssertionError("UK region checked")),
         # A US request also checks the worker's SPM capability, which this
         # test does not exercise.
         patch(
