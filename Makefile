@@ -20,8 +20,10 @@ debug-asgi:
 test-env-vars:
 	uv run --frozen --extra dev pytest tests/env_variables
 
+# The two integration files need no database, network or credentials. The
+# second runs the installed US model, in both the pull request and release runs.
 test:
-	MAX_HOUSEHOLDS=1000 uv run --frozen --extra dev --group telemetry-error-issues coverage run -a --branch -m pytest tests/to_refactor tests/unit tests/contract tests/integration/test_budget_window_in_flight_dedupe.py --disable-pytest-warnings
+	MAX_HOUSEHOLDS=1000 uv run --frozen --extra dev --group telemetry-error-issues coverage run -a --branch -m pytest tests/to_refactor tests/unit tests/contract tests/integration/test_budget_window_in_flight_dedupe.py tests/integration/test_installed_us_model_spm.py --disable-pytest-warnings
 	uv run --frozen --extra dev coverage xml -i
 
 quality-guards:
