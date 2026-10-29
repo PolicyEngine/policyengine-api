@@ -1,14 +1,20 @@
-"""Strict HTTP response models for v2 economy reports."""
+"""Strict HTTP response models for v2 economy reports, and both kinds' envelopes.
+
+Household reports' own items are in ``household_response_models``.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Annotated, Any, Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
+from policyengine_api.fastapi_routes.v2.reports.household_response_models import (
+    HouseholdReportItem,
+)
 from policyengine_api.services.v2.simulation_entrypoint.types import ReportStatus
 
 if TYPE_CHECKING:
@@ -151,10 +157,15 @@ class ReportItem(ReportSummaryItem):
         return cls.model_validate(record)
 
 
-class ReportDetailResult(StrictReportAPIModel):
-    """Result holding one report in ``item``."""
+ReportDetailItem = Annotated[
+    ReportItem | HouseholdReportItem, Field(discriminator="kind")
+]
 
-    item: ReportItem
+
+class ReportDetailResult(StrictReportAPIModel):
+    """Result holding one report, of either kind, in ``item``."""
+
+    item: ReportDetailItem
 
 
 class ReportListResult(StrictReportAPIModel):
@@ -215,10 +226,12 @@ REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 # Submitting or re-running a report can also be refused for the report itself.
 REPORT_REFUSAL_RESPONSE: dict[int | str, dict[str, Any]] = {
     422: _error(
-        "The request does not match the schema, the country does not have "
-        "economy reports (such as a household-only country), or the simulation "
+        "The request does not match the schema; the country does not have "
+        "economy reports (such as a household-only country) or household "
+        "calculations; the household has no default year; or the simulation "
         "service cannot run the report (for example, no such region or "
-        "dataset in the current catalog version); the message says which."
+        "dataset in the current catalog version, or a policy changing a "
+        "parameter that version lacks); the message says which."
     ),
 }
 REPORT_NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
@@ -229,6 +242,10 @@ REPORT_BODY_RESPONSE: dict[int | str, dict[str, Any]] = {
 }
 SUBMIT_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: _error("The body and query name different countries."),
+    404: _error(
+        "A household report's household or one of its policies does not exist "
+        "in this country."
+    ),
     **REPORT_BODY_RESPONSE,
     **REPORT_REFUSAL_RESPONSE,
 }

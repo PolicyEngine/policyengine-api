@@ -342,7 +342,9 @@ def test_openapi_publishes_the_submit_contract() -> None:
     }
     assert set(operation["responses"]) >= {"201", "400", "422", "503"}
     request_schema = operation["requestBody"]["content"]["application/json"]["schema"]
-    assert request_schema["$ref"].endswith("/EconomyReportCreateRequest")
+    assert request_schema["discriminator"]["mapping"]["economy"].endswith(
+        "/EconomyReportCreateRequest"
+    )
     body = schema["components"]["schemas"]["EconomyReportCreateRequest"]
     assert set(body["required"]) == {
         "country_id",
@@ -698,7 +700,8 @@ def test_a_report_whose_result_cannot_be_read_back_is_a_bad_gateway() -> None:
 @pytest.mark.parametrize(
     ("method", "path", "statuses"),
     [
-        ("post", "/v2/reports", {"201", "400", "413", "422", "500", "503"}),
+        # 404: a household report's household or policy is not the country's.
+        ("post", "/v2/reports", {"201", "400", "404", "413", "422", "500", "503"}),
         ("get", "/v2/reports", {"200", "422", "500", "503"}),
         (
             "get",

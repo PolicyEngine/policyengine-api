@@ -1,7 +1,9 @@
-"""Native FastAPI routes for v2 economy reports.
+"""Native FastAPI routes for v2 reports: economy reports and household reports.
 
 Reports are calculated and stored by the Simulation Entrypoint; these routes
 need no user credential. A user keeps a report through ``/v2/user-reports``.
+A submission names its kind; ``V2ReportService`` sends each operation to the
+economy or household report service.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from starlette.responses import JSONResponse
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import (
     _default_v2_economy_report_service_factory,
+    _default_v2_household_report_service_factory,
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors import (
@@ -26,9 +29,12 @@ from policyengine_api.fastapi_routes.v2.errors import (
     run_v2_operation,
     v2_error_response,
 )
+from policyengine_api.fastapi_routes.v2.reports.household_response_models import (
+    HouseholdReportItem,
+)
 from policyengine_api.fastapi_routes.v2.reports.request_models import (
-    EconomyReportCreateRequest,
     EconomyReportRunRequest,
+    ReportCreateRequest,
 )
 from policyengine_api.fastapi_routes.v2.reports.response_models import (
     READ_RESPONSES,
@@ -59,6 +65,17 @@ from policyengine_api.services.v2.economy_reports.validators import (
     EconomyReportNotFoundError,
     EconomyReportsUnsupportedError,
 )
+from policyengine_api.services.v2.household_reports.types import (
+    HouseholdReportRecord,
+)
+from policyengine_api.services.v2.household_reports.validators import (
+    HouseholdReportNotFoundError,
+    HouseholdReportsUnsupportedError,
+    HouseholdReportYearError,
+)
+from policyengine_api.services.v2.households.validators import HouseholdNotFoundError
+from policyengine_api.services.v2.policies.validators import PolicyNotFoundError
+from policyengine_api.services.v2.report_kinds.services import V2ReportService
 from policyengine_api.services.v2.simulation_entrypoint.types import (
     SimulationRecordUnreadableError,
     SimulationRequestRefusedError,
@@ -70,7 +87,6 @@ if TYPE_CHECKING:
 
     from policyengine_api.fastapi_routes.dependencies import (
         NativeRouteDependencies,
-        V2EconomyReportResourceService,
     )
     from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportRecord,
@@ -107,16 +123,35 @@ REPORT_REFUSALS: tuple[type[Exception], ...] = (
     EconomyReportsUnsupportedError,
     SimulationRequestRefusedError,
     EconomyReportNotFoundError,
+    HouseholdReportsUnsupportedError,
+    HouseholdReportYearError,
+    HouseholdReportNotFoundError,
+    HouseholdNotFoundError,
+    PolicyNotFoundError,
 )
 REPORT_ERROR_MAPPINGS = (
-    V2ErrorMapping((EconomyReportNotFoundError,), 404),
+    V2ErrorMapping(
+        (
+            EconomyReportNotFoundError,
+            HouseholdReportNotFoundError,
+            HouseholdNotFoundError,
+            PolicyNotFoundError,
+        ),
+        404,
+    ),
     V2ErrorMapping(
         (SimulationRecordUnreadableError,),
         502,
         "The simulation service cannot read back this report's result",
     ),
     V2ErrorMapping(
-        (EconomyReportsUnsupportedError, SimulationRequestRefusedError), 422
+        (
+            EconomyReportsUnsupportedError,
+            HouseholdReportsUnsupportedError,
+            HouseholdReportYearError,
+            SimulationRequestRefusedError,
+        ),
+        422,
     ),
     V2ErrorMapping(
         (SimulationServiceUnavailableError,),
@@ -171,16 +206,29 @@ def _report_operation(
 
 def _service_factory(
     dependencies: NativeRouteDependencies,
-) -> Callable[[], V2EconomyReportResourceService]:
-    if dependencies.v2_economy_report_service_factory is not None:
-        return dependencies.v2_economy_report_service_factory
-    return _default_v2_economy_report_service_factory
-
-
-def _report_detail(report: EconomyReportRecord) -> ReportDetailResponse:
-    return ReportDetailResponse(
-        result=ReportDetailResult(item=ReportItem.from_record(report))
+) -> Callable[[], V2ReportService]:
+    economy_factory = (
+        dependencies.v2_economy_report_service_factory
+        or _default_v2_economy_report_service_factory
     )
+    household_factory = (
+        dependencies.v2_household_report_service_factory
+        or _default_v2_household_report_service_factory
+    )
+    return lambda: V2ReportService(
+        economy_reports=economy_factory, household_reports=household_factory
+    )
+
+
+def _report_detail(
+    report: EconomyReportRecord | HouseholdReportRecord,
+) -> ReportDetailResponse:
+    item = (
+        HouseholdReportItem.from_record(report)
+        if isinstance(report, HouseholdReportRecord)
+        else ReportItem.from_record(report)
+    )
+    return ReportDetailResponse(result=ReportDetailResult(item=item))
 
 
 def _report_list(reports: tuple[EconomyReportRecord, ...]) -> ReportListResponse:
@@ -210,7 +258,7 @@ def _report_run_list(
 def build_v2_report_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
-    """Build the economy report routes without opening a connection."""
+    """Build the report routes without opening a connection."""
     router = APIRouter(prefix="/v2", responses=REPORT_ERROR_RESPONSES)
     service_factory = _service_factory(dependencies)
 
@@ -219,17 +267,24 @@ def build_v2_report_router(
         response_model=ReportDetailResponse,
         status_code=201,
         responses=SUBMIT_RESPONSES,
-        summary="Submit an economy report",
+        summary="Submit an economy or household report",
         description=(
-            "Creates the baseline and reform simulations, the report and its "
-            "first run in the simulation service, on the country's current "
-            "catalog version, and starts the run. Read the report to follow it. "
-            "A country without economy reports, such as a household-only one, "
-            "is refused with 422 before anything is created."
+            "Creates the report, its simulations and its first run in the "
+            "simulation service, on the country's current catalog version, and "
+            "starts the run. Read the report to follow it. An economy report "
+            "(kind economy) compares two policies across a region; a country "
+            "without economy reports, such as a household-only one, is refused "
+            "with 422 before anything is created. A household report (kind "
+            "household) calculates a household stored through /v2/households "
+            "under a baseline and an optional reform, for the household's "
+            "default year; it needs the country's household calculations, which "
+            "a household-only country has, and a household and policies of the "
+            "country (404 otherwise) with a default year (422 otherwise), all "
+            "checked before anything is created."
         ),
     )
     def submit_report(
-        body: EconomyReportCreateRequest,
+        body: ReportCreateRequest,
         query: ReportCreateQueryDependency,
         _size: Annotated[None, Depends(enforce_report_request_size)],
     ) -> ReportDetailResponse | JSONResponse:

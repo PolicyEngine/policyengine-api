@@ -210,7 +210,7 @@ def _calculation(
                 detail=_optional_object(failure.detail),
             )
         ),
-        output=(
+        result=(
             None
             if result is None
             else HouseholdCalculationOutput(

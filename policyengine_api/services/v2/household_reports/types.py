@@ -106,7 +106,7 @@ class HouseholdCalculationRecord:
     """One calculation of the household under one policy: a simulation run.
 
     ``status`` is ``pending``, ``dispatching``, ``running``, ``succeeded`` or
-    ``failed``; ``attempt`` counts forced recalculations. ``output`` is set
+    ``failed``; ``attempt`` counts forced recalculations. ``result`` is set
     once it succeeded and ``error`` once it failed.
     """
 
@@ -117,7 +117,7 @@ class HouseholdCalculationRecord:
     attempt: int
     trigger: str
     error: HouseholdCalculationError | None
-    output: HouseholdCalculationOutput | None
+    result: HouseholdCalculationOutput | None
     dispatched_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
@@ -199,4 +199,29 @@ class HouseholdReportSimulation(Protocol):
         ``SimulationRequestRefusedError`` when the entrypoint refuses the
         caller's data.
         """
+        ...
+
+
+class StoredHousehold(Protocol):
+    """A household stored through ``/v2/households``, as far as a report needs it."""
+
+    @property
+    def default_year(self) -> int | None:
+        """The year the household's values name, which a report calculates."""
+        ...
+
+
+class HouseholdSource(Protocol):
+    """Read stored households, as ``/v2/households`` does (``V2HouseholdService``)."""
+
+    def get_household(self, *, country_id: str, household_id: UUID) -> StoredHousehold:
+        """Return the country's household, or raise ``HouseholdNotFoundError``."""
+        ...
+
+
+class PolicySource(Protocol):
+    """Read stored policies, as ``/v2/policies`` does (``V2PolicyService``)."""
+
+    def get_policy(self, *, country_id: str, policy_id: UUID) -> object:
+        """Return the country's policy, or raise ``PolicyNotFoundError``."""
         ...

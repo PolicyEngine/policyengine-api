@@ -136,7 +136,7 @@ def _calculation_record(
         attempt=1,
         trigger="initial",
         error=None,
-        output=HouseholdCalculationOutput(
+        result=HouseholdCalculationOutput(
             household=CALCULATED_HOUSEHOLD,
             warnings=("employment_income was capped",),
             spm_config=SPM_CONFIG,
@@ -242,10 +242,10 @@ def test_a_calculated_household_keeps_the_key_order_it_was_sent_in() -> None:
     report = entrypoint.adapter().get_report(REPORT_ID)
 
     assert report.run is not None
-    output = report.run.baseline.output
-    assert output is not None
-    assert list(output.household) == ["people", "households"]
-    assert list(output.household["people"]["you"]) == ["age", "employment_income"]
+    calculated = report.run.baseline.result
+    assert calculated is not None
+    assert list(calculated.household) == ["people", "households"]
+    assert list(calculated.household["people"]["you"]) == ["age", "employment_income"]
 
 
 def test_a_report_before_its_first_run_reads_as_not_run() -> None:
@@ -282,7 +282,7 @@ def test_a_report_before_its_first_run_reads_as_not_run() -> None:
         ("running", ReportStatus.RUNNING),
     ],
 )
-def test_an_unfinished_run_reads_without_outputs(
+def test_an_unfinished_run_reads_without_results(
     entrypoint_status: str, report_status: ReportStatus
 ) -> None:
     entrypoint = SimulationEntrypointStub(
@@ -312,7 +312,7 @@ def test_an_unfinished_run_reads_without_outputs(
     assert report.run is not None
     assert report.run.status is report_status
     assert report.run.baseline.status == entrypoint_status
-    assert report.run.baseline.output is None
+    assert report.run.baseline.result is None
 
 
 def test_a_failed_calculation_reads_with_its_error() -> None:
