@@ -77,7 +77,7 @@ The `spm` object accepts only these fields:
 Unknown fields and invalid selections are rejected. Only the household's
 `county_fips` input identifies a local county. Computed county, state, first county
 in state and congressional district do not identify an SPM area. The full
-canonical artifact supplies 2022–2035 measurements; no consumer CPI extrapolation
+canonical artifact supplies 2022–2036 measurements; no consumer CPI extrapolation
 or congressional-district geographic factors are introduced.
 
 `POST /us/calculate` and `/us/calculate-full` take settings beside the existing
