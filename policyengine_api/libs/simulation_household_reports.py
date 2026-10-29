@@ -22,10 +22,13 @@ reads them itself. Its declared answers become the protocol's errors:
 - 422: the caller's data it cannot calculate (a parameter the catalog version
   lacks, a stored policy value or household the household functions refuse),
   with its reason, or the request fields it refused.
-- 400: a household, policy or catalog version it does not have, or a
-  household without a default year. The Public API checks those itself
-  before sending, so a 400 means the two services disagree, and the
-  entrypoint cannot be used for this request.
+- 400: a household, policy or catalog version it does not have, a household
+  without a default year, or no household function for the PolicyEngine.py
+  version. The Public API checks the household, the policies and the default
+  year itself before sending; the catalog version and the household function
+  are those of the version the Public API runs, which the entrypoint must
+  serve. So a 400 means the two services disagree, and the entrypoint cannot
+  be used for this request.
 - 503, any other answer, an answer that does not parse, no answer or a
   gateway token that cannot be fetched: the entrypoint cannot be used now.
 """
@@ -263,6 +266,25 @@ def _report(report: HouseholdReportResponse) -> HouseholdReportRecord:
     )
 
 
+def _report_answer(call: Callable[[], Response[Any]]) -> HouseholdReportRecord:
+    """Run one report route call and return the report it answered.
+
+    The generated client keeps a nested value it cannot parse as it came,
+    such as a run status it does not know or a calculation of another shape,
+    so the record is built here under the same rule as the parse: an answer
+    that does not parse means the entrypoint cannot be used.
+    """
+    answer = _parsed(call, HouseholdReportResponse)
+    try:
+        return _report(answer)
+    except (AttributeError, KeyError, TypeError, ValueError) as error:
+        msg = (
+            "the Simulation Entrypoint's answer could not be read: "
+            f"{type(error).__name__}"
+        )
+        raise SimulationServiceUnavailableError(msg) from error
+
+
 def _policy_choice(choice: HouseholdPolicyChoice) -> GeneratedPolicyChoice:
     return GeneratedPolicyChoice(policy_id=choice.policy_id)
 
@@ -289,24 +311,16 @@ class SimulationEntrypointHouseholdReports:
             ),
             trigger=GeneratedRunTrigger.INITIAL,
         )
-        return _report(
-            _parsed(
-                lambda: submit_household_report.sync_detailed(
-                    client=self._client, body=body
-                ),
-                HouseholdReportResponse,
+        return _report_answer(
+            lambda: submit_household_report.sync_detailed(
+                client=self._client, body=body
             )
         )
 
     def get_report(self, report_id: UUID) -> HouseholdReportRecord:
         """Return a report with its newest run and that run's calculations."""
-        return _report(
-            _parsed(
-                lambda: get_household_report.sync_detailed(
-                    report_id, client=self._client
-                ),
-                HouseholdReportResponse,
-            )
+        return _report_answer(
+            lambda: get_household_report.sync_detailed(report_id, client=self._client)
         )
 
     def run_report(
@@ -323,12 +337,9 @@ class SimulationEntrypointHouseholdReports:
             trigger=GeneratedRunTrigger(trigger.value),
             force=force,
         )
-        return _report(
-            _parsed(
-                lambda: run_household_report.sync_detailed(
-                    report_id, client=self._client, body=body
-                ),
-                HouseholdReportResponse,
+        return _report_answer(
+            lambda: run_household_report.sync_detailed(
+                report_id, client=self._client, body=body
             )
         )
 

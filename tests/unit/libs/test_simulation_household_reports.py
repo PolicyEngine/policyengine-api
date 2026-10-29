@@ -564,3 +564,30 @@ def test_partial_gateway_auth_is_refused(monkeypatch: pytest.MonkeyPatch) -> Non
         household_reports_from_environment()
 
     assert "partially configured" in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        _report_body(status="paused"),
+        _report_body(baseline={"calculation_id": str(BASELINE_RUN_ID)}),
+        _report_body(
+            baseline=_calculation_body(
+                BASELINE_RUN_ID, BASELINE_SIMULATION_ID, None, status="paused"
+            )
+        ),
+    ],
+    ids=[
+        "unknown-report-status",
+        "malformed-calculation",
+        "unknown-calculation-status",
+    ],
+)
+def test_a_success_answer_that_does_not_parse_means_the_entrypoint_is_unavailable(
+    answer: dict,
+) -> None:
+    """The generated client keeps a nested value it cannot parse as it came."""
+    entrypoint = SimulationEntrypointStub(httpx.Response(200, json=answer))
+
+    with pytest.raises(SimulationServiceUnavailableError):
+        entrypoint.adapter().get_report(REPORT_ID)

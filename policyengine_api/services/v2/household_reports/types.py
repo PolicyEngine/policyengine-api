@@ -128,9 +128,10 @@ class HouseholdReportRunRecord:
     """One calculation of a household report: the baseline's and the reform's.
 
     ``tax_benefit_model_version_id`` is the catalog version it ran on and
-    ``policyengine_version`` that version's PolicyEngine.py version, which the
-    Public API reads from its own catalog. ``reform`` is None for a report of
-    the baseline alone.
+    ``policyengine_version`` that version's PolicyEngine.py version: the one
+    the Public API sent, for a run it just started, or the one its own
+    catalog records, for a run read back (None if the catalog lacks it).
+    ``reform`` is None for a report of the baseline alone.
     """
 
     id: UUID
