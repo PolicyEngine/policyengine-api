@@ -25,6 +25,7 @@ from policyengine_api.runtime_cache.household_calculations import (
     HouseholdCalculationCache,
     HouseholdCalculationIdentity,
 )
+from policyengine_api.services.policy_service import PolicyNotFoundError
 from policyengine_api.spm import (
     normalize_spm_selection,
     resolved_spm_configuration,
@@ -91,10 +92,6 @@ class PreparedHouseholdCalculation:
 
 class HouseholdNotFoundError(LookupError):
     """Raised when the stored household does not exist in the requested country."""
-
-
-class PolicyNotFoundError(LookupError):
-    """Raised when the stored policy does not exist in the requested country."""
 
 
 class InvalidHouseholdInputsError(ValueError):

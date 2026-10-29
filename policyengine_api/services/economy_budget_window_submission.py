@@ -25,6 +25,7 @@ from policyengine_api.services.economy_impact_types import (
     BudgetWindowEconomicImpactResult,
     BudgetWindowYearProgress,
     EconomicImpactSetupOptions,
+    ImpactPolicies,
     SimulationOptions,
 )
 from policyengine_api.utils import budget_window as budget_window_utils
@@ -114,9 +115,16 @@ class BudgetWindowSubmissionMixin:
     ) -> BudgetWindowEconomicImpactResult:
         """Submit the batch job if this request wins the claim, and report it queued.
 
-        A request that loses the claim reports the window queued without
+        Both policies load first, so a request naming a policy its country does
+        not have raises PolicyNotFoundError before it claims the submission. A
+        request that loses the claim reports the window queued without
         submitting; a submission the gateway rejects as invalid is a failed result.
         """
+        policies = self._get_policy_jsons(
+            setup_options.country_id,
+            setup_options.baseline_policy_id,
+            setup_options.reform_policy_id,
+        )
         years = budget_window_setup.years
         cache_status = "starting-claim-hit"
         observability_id_candidate = resolve_observability_id(
@@ -136,6 +144,7 @@ class BudgetWindowSubmissionMixin:
                 cache_key,
                 budget_window_setup,
                 max_active_years=max_active_years,
+                policies=policies,
             )
             if rejected_result is not None:
                 return rejected_result
@@ -157,6 +166,7 @@ class BudgetWindowSubmissionMixin:
         budget_window_setup: budget_window_utils.BudgetWindowRequestSetup,
         *,
         max_active_years: int,
+        policies: ImpactPolicies,
     ) -> BudgetWindowEconomicImpactResult | None:
         """Submit the batch this request claimed and record its job ID.
 
@@ -170,6 +180,7 @@ class BudgetWindowSubmissionMixin:
                 start_year=budget_window_setup.start_year,
                 window_size=budget_window_setup.window_size,
                 max_parallel=max_active_years,
+                policies=policies,
             )
             self._budget_window_cache.store_submitted(
                 cache_key,
@@ -270,16 +281,12 @@ class BudgetWindowSubmissionMixin:
         start_year: str,
         window_size: int,
         max_parallel: int,
+        policies: ImpactPolicies,
     ) -> dict[str, Any]:
-        baseline_policy, reform_policy = self._get_policy_jsons(
-            setup_options.country_id,
-            setup_options.baseline_policy_id,
-            setup_options.reform_policy_id,
-        )
         sim_config: SimulationOptions = self._setup_sim_options(
             setup_options,
-            reform_policy=reform_policy,
-            baseline_policy=baseline_policy,
+            reform_policy=policies.reform,
+            baseline_policy=policies.baseline,
             time_period=start_year,
             include_cliffs=False,
         )
@@ -301,12 +308,14 @@ class BudgetWindowSubmissionMixin:
         start_year: str,
         window_size: int,
         max_parallel: int,
+        policies: ImpactPolicies,
     ) -> ModalBudgetWindowBatchExecution:
         sim_params = self._build_budget_window_batch_payload(
             setup_options=setup_options,
             start_year=start_year,
             window_size=window_size,
             max_parallel=max_parallel,
+            policies=policies,
         )
 
         logger.log_struct(

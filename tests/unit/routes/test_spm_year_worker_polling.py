@@ -16,6 +16,7 @@ from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
 from policyengine_api.services import economy_service as economy_module
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.economic_impact_request import EconomicImpactRequest
+from policyengine_api.services.economy_impact_types import ImpactPolicies
 from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactExecution,
@@ -365,7 +366,11 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
             # Preserve the existing retry policy: only a newly resolved worker
             # creates a fresh canonical cache identity and permits submission.
             worker.app_name = "replacement-worker"
-            monkeypatch.setattr(stack.service, "_get_policy_jsons", lambda *_: ({}, {}))
+            monkeypatch.setattr(
+                stack.service,
+                "_get_policy_jsons",
+                lambda *_: ImpactPolicies(baseline={}, reform={}),
+            )
             response = _get_economy(app, url, query)
             assert response.status_code == 200, response.json
             assert response.json["status"] == "computing"

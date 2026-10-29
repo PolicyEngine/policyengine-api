@@ -31,8 +31,10 @@ from policyengine_api.services.economy_impact_types import (
     LOCAL_AREA_BREAKDOWN_SIMULATION_KIND,
     EconomicImpactResult,
     EconomicImpactSetupOptions,
+    ImpactPolicies,
     SimulationOptions,
 )
+from policyengine_api.services.policy_service import PolicyNotFoundError
 
 
 class SimulationRequestMixin:
@@ -44,7 +46,14 @@ class SimulationRequestMixin:
         country_id: str,
         baseline_policy_id: int,
         reform_policy_id: int,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+    ) -> ImpactPolicies:
+        """Return the baseline and reform policies' JSON objects.
+
+        A policy ID belongs to one country. Raise PolicyNotFoundError with the
+        reform policy's ID, then the baseline policy's, for each one this
+        country does not have, so callers can check before they claim or
+        submit any work.
+        """
         baseline = self._policies.get_policy_json(
             country_id,
             baseline_policy_id,
@@ -53,9 +62,20 @@ class SimulationRequestMixin:
             country_id,
             reform_policy_id,
         )
-        return (
-            self._parse_json_object(baseline),
-            self._parse_json_object(reform),
+        missing_policy_ids = [
+            policy_id
+            for policy_id, policy_json in (
+                (reform_policy_id, reform),
+                (baseline_policy_id, baseline),
+            )
+            if policy_json is None
+        ]
+        if missing_policy_ids:
+            # dict.fromkeys drops a repeated ID and keeps the order.
+            raise PolicyNotFoundError(*dict.fromkeys(missing_policy_ids))
+        return ImpactPolicies(
+            baseline=self._parse_json_object(baseline),
+            reform=self._parse_json_object(reform),
         )
 
     @staticmethod
