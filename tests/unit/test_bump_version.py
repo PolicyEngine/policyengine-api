@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from typing import TYPE_CHECKING
 
 import pytest
@@ -252,3 +253,61 @@ def test_the_script_stops_at_pull_request_4084s_fragment(tmp_path: Path):
     assert result.returncode == 1, result.stdout
     assert "Move it to changelog.d/4083.added.md." in result.stderr
     assert _project_version(root) == version_before
+
+
+def _towncrier_draft(root: Path) -> subprocess.CompletedProcess[str]:
+    """Run the locked Towncrier's draft build in ``root``, as the release builds."""
+    (root / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
+    return subprocess.run(
+        [sys.executable, "-m", "towncrier", "build", "--draft", "--version", "9.9.9"],
+        cwd=root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_towncrier_is_set_to_stop_at_files_it_cannot_read():
+    towncrier = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))[
+        "tool"
+    ]["towncrier"]
+
+    assert towncrier["ignore"] == [".gitkeep"]
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "invalid_name"),
+    [
+        ("changelog.d/added/4083.md", "added"),
+        ("changelog.d/4083.feature.md", "4083.feature.md"),
+        ("changelog.d/4083.Added.md", "4083.Added.md"),
+    ],
+    ids=["pull-request-4084", "unknown-type", "uppercase-type"],
+)
+def test_the_locked_towncrier_stops_at_a_file_it_cannot_read(
+    repository: Path, relative_path: str, invalid_name: str
+):
+    _write(repository, "changelog.d/2.fixed.md")
+    _write(repository, relative_path)
+
+    result = _towncrier_draft(repository)
+
+    assert result.returncode != 0, result.stdout
+    assert f"Invalid news fragment name: {invalid_name}" in result.stderr
+
+
+def test_the_locked_towncrier_builds_the_fragments_the_definition_accepts(
+    repository: Path,
+):
+    _write(repository, "changelog.d/2.fixed.md", "Fix the second thing.\n")
+    _write(
+        repository,
+        "changelog.d/update-policyengine-bundle-6.11.1.changed.md",
+        "Update the bundle.\n",
+    )
+
+    result = _towncrier_draft(repository)
+
+    assert result.returncode == 0, result.stderr
+    assert "### Changed\n\n- Update the bundle.\n" in result.stdout
+    assert "### Fixed\n\n- Fix the second thing.\n" in result.stdout
