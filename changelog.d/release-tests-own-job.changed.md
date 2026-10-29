@@ -1,1 +1,0 @@
-The release run's test suite runs in its own job, beside the checks and the staging database jobs, so the staging Cloud Run deploy starts about 17 minutes sooner; the deploy still waits for the tests to pass.

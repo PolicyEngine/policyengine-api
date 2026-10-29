@@ -1,3 +1,20 @@
+## [5.15.0] - 2026-10-29
+
+### Added
+
+- The v2 policy routes (`GET /v2/policies/{policy_id}`, `GET /v2/policies` and `POST /v2/policies`) now return `missing_parameters` with each policy: the parameter paths it sets that the catalog of the running PolicyEngine.py version no longer has, or null when that catalog is not published. `GET /{country}/policy/{policy_id}` returns the same field, checked against the country model the Public API runs; it reads nothing from Supabase.
+
+### Changed
+
+- The live staging tests in a release run each get their own pytest worker, so the step takes about as long as the longest test instead of the tests on the busier of two workers.
+- The release run's test suite runs in its own job, beside the checks and the staging database jobs, so the staging Cloud Run deploy starts about 17 minutes sooner; the deploy still waits for the tests to pass.
+
+### Fixed
+
+- A household calculation whose axes policyengine-core cannot expand, such as an axis with no `max` or with a null or non-numeric `min`, `max` or `count`, now returns 400 instead of a 500. This covers `/calculate`, `/calculate-full` and a stored household calculated under a stored policy. Each problem is listed in `errors` with the type `household_axis`, and the message names the axis and the field.
+- Dual-write now copies a v1 policy to v2 whatever country package version it was saved under, as long as every parameter it sets exists in the running catalog. Before, every policy saved under an older release was refused, which included each `POST /{country}/policy` that matched an existing policy. A v1 policy that already has a v2 copy now returns that copy without being translated again, so writing it again after a PolicyEngine.py or country package upgrade no longer fails. Each failed policy or saved-policy copy now logs a fixed `failure_reason` next to its `failure_category`, such as `missing_parameters`.
+
+
 ## [5.14.3] - 2026-10-29
 
 ### Fixed
