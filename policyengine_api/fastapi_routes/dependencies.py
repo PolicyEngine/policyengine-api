@@ -1042,11 +1042,19 @@ def _default_legacy_reference_checker() -> LegacyReferenceChecker:
 
 def _default_simulation_reference_checker() -> SimulationReferenceChecker:
     """Defer the simulation client until a request checks a v2 reference."""
+    from policyengine_api.services.v2.household_reports.services import (
+        DeferredHouseholdReportSimulation,
+    )
     from policyengine_api.services.v2.simulation_refs.services import (
         SimulationReferenceService,
     )
 
-    return SimulationReferenceService(_deferred_economy_report_simulation())
+    return SimulationReferenceService(
+        _deferred_economy_report_simulation(),
+        household_reports=DeferredHouseholdReportSimulation(
+            _default_household_report_simulation
+        ),
+    )
 
 
 def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:

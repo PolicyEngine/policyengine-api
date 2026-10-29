@@ -3,7 +3,9 @@
 Reports and simulations live in the Simulation Entrypoint's database, so the
 v2 tables that save them keep no foreign key to them. Before a v2 ID is
 saved, the entrypoint is asked whether that record exists in the country.
-The check runs before the caller opens its v2 transaction.
+The check runs before the caller opens its v2 transaction. A report ID that
+is not one of the country's economy reports may be one of its household
+reports, which the entrypoint serves through other routes.
 """
 
 from __future__ import annotations
@@ -24,6 +26,9 @@ from policyengine_api.services.v2.simulation_refs.validators import (
 if TYPE_CHECKING:
     from uuid import UUID
 
+    from policyengine_api.services.v2.household_reports.types import (
+        HouseholdReportSimulation,
+    )
     from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportRecord,
         EconomyReportSimulation,
@@ -32,11 +37,36 @@ if TYPE_CHECKING:
 
 
 class SimulationReferenceService:
-    """Existence checks of v2 reports and simulations, one entrypoint read each."""
+    """Existence checks of v2 reports and simulations with the entrypoint."""
 
-    def __init__(self, simulation: EconomyReportSimulation) -> None:
-        """Read reports and simulations through ``simulation``."""
+    def __init__(
+        self,
+        simulation: EconomyReportSimulation,
+        *,
+        household_reports: HouseholdReportSimulation | None = None,
+    ) -> None:
+        """Read economy reports and simulations through ``simulation``.
+
+        With ``household_reports``, a report ID that is not one of the
+        country's economy reports is also looked for among its household
+        reports.
+        """
         self._simulation = simulation
+        self._household_reports = household_reports
+
+    @property
+    def checks_household_reports(self) -> bool:
+        """Whether a saved report may name a household report."""
+        return self._household_reports is not None
+
+    def _household_report_country(self, report_id: UUID) -> str | None:
+        """Return a household report's country, or None without one."""
+        if self._household_reports is None:
+            return None
+        try:
+            return self._household_reports.get_report(report_id).country_id
+        except SimulationRecordNotFoundError:
+            return None
 
     def require_report(
         self,
@@ -60,19 +90,23 @@ class SimulationReferenceService:
             report: EconomyReportRecord | None = self._simulation.get_report(report_id)
         except SimulationRecordNotFoundError:
             report = None
-        require_reference_in_country(
-            None if report is None else report.country_id,
-            kind="report",
-            reference_id=report_id,
-            country_id=country_id,
-        )
-        if report is not None:
-            require_migrated_from(
-                report.legacy_report_id,
+        if report is None or report.country_id != country_id:
+            # A household report is never migrated from a v1 report output.
+            require_reference_in_country(
+                self._household_report_country(report_id),
                 kind="report",
-                record_id=report_id,
-                legacy_id=legacy_report_id,
+                reference_id=report_id,
+                country_id=country_id,
             )
+            found_legacy_id = None
+        else:
+            found_legacy_id = report.legacy_report_id
+        require_migrated_from(
+            found_legacy_id,
+            kind="report",
+            record_id=report_id,
+            legacy_id=legacy_report_id,
+        )
 
     def _require_report_country(self, *, country_id: str, report_id: UUID) -> None:
         try:
@@ -83,6 +117,8 @@ class SimulationReferenceService:
             )
         except SimulationRecordNotFoundError:
             found_country_id = None
+        if found_country_id != country_id:
+            found_country_id = self._household_report_country(report_id)
         require_reference_in_country(
             found_country_id,
             kind="report",
