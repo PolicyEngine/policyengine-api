@@ -140,6 +140,7 @@ def test_workflows_scope_simulation_routing_config_to_github_environments():
             "ensure-staging-model-version-aligns-with-sim-api",
             "staging",
         ),
+        (push_workflow, "release-tests", "staging"),
         (push_workflow, "deploy-cloud-run-staging", "staging"),
         (
             push_workflow,
@@ -273,12 +274,10 @@ def test_push_workflow_syncs_environment_specific_secrets_before_deployment():
     workflow = _push_workflow()
     cloud_run_staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
-    test_step_start = cloud_run_staging.index("- name: Run release tests")
-    test_step_end = cloud_run_staging.index(
-        "- name: GCP authentication",
-        test_step_start,
-    )
-    release_test_step = cloud_run_staging[test_step_start:test_step_end]
+    release_test_step = _workflow_job_block(workflow, "release-tests")
+    release_test_step = release_test_step[
+        release_test_step.index("- name: Run release tests") :
+    ]
     staging_sync_start = cloud_run_staging.index(
         "- name: Synchronize shared Cloud Run runtime secrets"
     )
