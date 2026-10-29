@@ -17,7 +17,9 @@ in ``[tool.towncrier]`` in pyproject.toml: changelog.d) named
   underscores, such as ``4083`` or ``update-policyengine-bundle-6.11.1``;
 - ``<type>`` is the ``directory`` of one of the ``[[tool.towncrier.type]]``
   entries: breaking, added, changed, fixed or removed;
-- its text, read as UTF-8, is not empty or only whitespace.
+- its text, read as UTF-8, has at least one visible character: it is not
+  empty, only whitespace or only invisible characters such as a zero-width
+  space.
 
 ``.gitkeep``, which keeps the directory in git once a release has removed every
 fragment, is the only other file allowed there. Pull request #4084 added
@@ -41,6 +43,7 @@ import argparse
 import re
 import sys
 import tomllib
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
@@ -58,6 +61,10 @@ FRAGMENT_FILE_NAME = re.compile(
 )
 TYPE_NAME = re.compile(r"[a-z]+")
 BYTE_ORDER_MARK = "\ufeff"
+# Unicode general category groups a reader can see: letters, marks, numbers,
+# punctuation and symbols. Separators (Z) and other characters (C: controls and
+# format characters such as a zero-width space or a byte-order mark) aren't.
+VISIBLE_CATEGORY_GROUPS = frozenset("LMNPS")
 NAME_TERMS = (
     "<name> is letters and digits, in groups joined by single dots, hyphens or "
     "underscores"
@@ -161,11 +168,22 @@ def _content_problem(path: str, file: Path) -> str | None:
         text = file.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return f"{path} is not UTF-8 text. Save it as UTF-8."
-    if text.removeprefix(BYTE_ORDER_MARK).strip():
+    if any(
+        unicodedata.category(character)[0] in VISIBLE_CATEGORY_GROUPS
+        for character in text
+    ):
         return None
-    emptiness = "is empty" if not text else "holds only whitespace"
+    if not text:
+        emptiness = "is empty."
+    elif not text.removeprefix(BYTE_ORDER_MARK).strip():
+        emptiness = "holds only whitespace."
+    else:
+        emptiness = (
+            "holds no visible text, only invisible characters such as zero-width "
+            "spaces."
+        )
     return (
-        f"{path} {emptiness}. Write a sentence or two in it saying what changed: "
+        f"{path} {emptiness} Write a sentence or two in it saying what changed: "
         "Towncrier would publish an empty entry."
     )
 

@@ -26,8 +26,8 @@ Every PR adds at least one changelog fragment of its own
   `report-live-since`. A branch name with a `/` in it makes a folder, which
   doesn't count.
 - The file holds a sentence or two, in UTF-8, saying what changed for people
-  who use or run the Public API. An empty file, or one with only whitespace,
-  fails.
+  who use or run the Public API. An empty file, or one with only whitespace
+  or invisible characters such as a zero-width space, fails.
 
 For example:
 
