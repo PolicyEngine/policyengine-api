@@ -6,10 +6,21 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from flask import Flask
 
 from policyengine_api import country as country_module
 from policyengine_api import spm
 from policyengine_api.country import COUNTRIES, PolicyEngineCountry
+from policyengine_api.extensions import cache
+from policyengine_api.routes import household_routes
+from policyengine_api.runtime_cache.core import CacheNamespace
+from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
+from policyengine_api.runtime_cache.household_calculations import (
+    HouseholdCalculationCache,
+)
+from policyengine_api.services.household_calculation_service import (
+    HouseholdCalculationService,
+)
 
 # An axes request expands every recognized variable, so a stub system must name
 # the ones these households carry; anything else (entity membership) is skipped.
@@ -22,6 +33,45 @@ HOUSEHOLD_VARIABLES = {
     "spm_unit_spm_threshold",
 }
 AXIS_POINTS = 2
+SPM_INPUT_MESSAGE = "Missing or unavailable explicit SPM input"
+# What a stand-in simulation calculates for every variable it does not refuse.
+CALCULATED_VALUE = 1234.0
+
+
+def _yearly_variable(name, entity, *, default=None):
+    """Describe a yearly variable as country metadata does; a default makes an input."""
+    return {
+        "name": name,
+        "entity": entity,
+        "definitionPeriod": "year",
+        "isInputVariable": default is not None,
+        "defaultValue": default,
+    }
+
+
+# The metadata the household routes validate and complete a household against.
+STAND_IN_METADATA = {
+    "variables": {
+        variable["name"]: variable
+        for variable in (
+            _yearly_variable("age", "person", default=0),
+            _yearly_variable("employment_income", "person", default=0),
+            _yearly_variable("state_code", "household", default="CA"),
+            _yearly_variable("spm_unit_federal_tax", "spm_unit"),
+            _yearly_variable("spm_unit_net_income", "spm_unit"),
+            _yearly_variable("spm_unit_spm_threshold", "spm_unit"),
+        )
+    },
+    "entities": {
+        "person": {"plural": "people", "roles": {}},
+        "household": {
+            "plural": "households",
+            "roles": {"member": {"plural": "members"}},
+        },
+        "spm_unit": {"plural": "spm_units", "roles": {"member": {"plural": "members"}}},
+    },
+    "parameters": {},
+}
 
 
 def requested_household(variable="spm_unit_spm_threshold", *, axes=False):
@@ -68,10 +118,36 @@ def _country_raising(monkeypatch, error):
     return country
 
 
-def _failing_country(monkeypatch, code):
-    error = ValueError("Missing or unavailable explicit SPM input")
+def _spm_input_error(code):
+    """Return the typed ValueError a country raises for a missing input."""
+    error = ValueError(SPM_INPUT_MESSAGE)
     error.code = code
+    return error
+
+
+def _failing_country(monkeypatch, code):
+    error = _spm_input_error(code)
     return _country_raising(monkeypatch, error), error
+
+
+def country_receipt(selection, years=()):
+    """Return the rich receipt a country reports for `selection` over `years`."""
+    return {
+        "forecast_id": "test-artifact",
+        "forecast_sha256": selection["forecast_content_sha256"],
+        "scenario": selection["scenario"],
+        "geography_kind": selection["geography_kind"],
+        "runtime_versions": {
+            "policyengine": "test",
+            "policyengine-core": "test",
+            "policyengine-us": "test",
+            "spm-calculator": "test",
+        },
+        "years": {year: {} for year in years},
+        "geographies": [],
+        "composition_method": "test adult classification",
+        "storage_method": "test final cast",
+    }
 
 
 @pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
@@ -203,22 +279,7 @@ def test_tax_only_result_reads_provenance_without_calculating_spm(monkeypatch):
         county_vintage="2020",
         as_of=None,
     ).model_dump()
-    receipt = {
-        "forecast_id": "test-artifact",
-        "forecast_sha256": "a" * 64,
-        "scenario": "baseline",
-        "geography_kind": "national",
-        "runtime_versions": {
-            "policyengine": "test",
-            "policyengine-core": "test",
-            "policyengine-us": "test",
-            "spm-calculator": "test",
-        },
-        "years": {},
-        "geographies": [],
-        "composition_method": "test adult classification",
-        "storage_method": "test final cast",
-    }
+    receipt = country_receipt(selection)
 
     def calculate(variable, _period):
         calculations.append(variable)
@@ -256,6 +317,214 @@ def test_tax_only_result_reads_provenance_without_calculating_spm(monkeypatch):
         "years": [],
         "runtime_versions": receipt["runtime_versions"],
     }
+
+
+def _country_calculating(monkeypatch, calculate, *, spm_years=()):
+    """Return a US country over stand-in simulations, and the selections they get.
+
+    Each simulation calculates with `calculate`, keeps the SPM selection it was
+    built with, and reports a receipt for it that measures `spm_years`.
+    """
+    country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+    country.country_id = "us"
+    country.metadata = STAND_IN_METADATA
+    selections = []
+
+    def create_simulation(_household, _reform, spm=None):
+        selections.append(spm)
+        simulation = SimpleNamespace(
+            calculate=calculate,
+            get_population=lambda _entity: SimpleNamespace(
+                get_index=lambda _entity_id: 0, count=AXIS_POINTS
+            ),
+            spm_config=spm,
+            spm_provenance=lambda: country_receipt(spm, spm_years),
+        )
+        system = SimpleNamespace(
+            get_variable=lambda _name: SimpleNamespace(value_type=float),
+            variables=HOUSEHOLD_VARIABLES,
+        )
+        return simulation, system
+
+    monkeypatch.setattr(country, "_create_simulation", create_simulation)
+    return country, selections
+
+
+def _calculate_refusing_net_income(code):
+    """Calculate every variable except net income, which raises an SPM input error."""
+    error = _spm_input_error(code)
+
+    def calculate(variable, _period):
+        if variable == "spm_unit_net_income":
+            raise error
+        return np.full(AXIS_POINTS, CALCULATED_VALUE)
+
+    return calculate
+
+
+@pytest.fixture
+def certified_bundle(monkeypatch):
+    """Stand in for a certified bundle and its forecast, as the route tests do."""
+    bundle = {
+        "measurements": {
+            "spm": {"forecast_content_sha256": "a" * 64, "scenario": "baseline"}
+        }
+    }
+    monkeypatch.setattr(spm, "_current_bundle", lambda: bundle)
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _simulation_type: True)
+    monkeypatch.setattr(
+        spm,
+        "_selected_forecast",
+        lambda _expected_sha256: SimpleNamespace(
+            years=[2022],
+            entry=lambda *_args, **_kwargs: {},
+            geography_factor=lambda *_args, **_kwargs: 1.0,
+        ),
+    )
+
+
+@pytest.fixture
+def http_client_for(monkeypatch, certified_bundle):
+    """Return a factory of Flask clients whose household routes use one country."""
+
+    def client_for(country):
+        service = HouseholdCalculationService(
+            cache=HouseholdCalculationCache(
+                InMemoryCacheBackend(), CacheNamespace("test", "country-spm")
+            ),
+            country_provider=lambda: {"us": country},
+        )
+        monkeypatch.setattr(household_routes, "household_calculation_service", service)
+        app = Flask(__name__)
+        app.config.update(TESTING=True, CACHE_TYPE="SimpleCache")
+        cache.init_app(app)
+        app.register_blueprint(household_routes.household_bp)
+        return app.test_client()
+
+    return client_for
+
+
+@pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
+@pytest.mark.parametrize("axes", [False, True])
+def test_http_reports_a_chosen_measurements_missing_input_as_a_400(
+    monkeypatch, http_client_for, code, axes
+):
+    """The request sends `spm`, so the caller chose the measurement it asked for."""
+    country, _ = _country_calculating(monkeypatch, _calculate_refusing_net_income(code))
+    response = http_client_for(country).post(
+        "/us/calculate",
+        json={
+            "household": requested_household("spm_unit_net_income", axes=axes),
+            "spm": {"geography_kind": "national"},
+        },
+    )
+    assert response.status_code == 400, response.json
+    assert response.json == {
+        "status": "error",
+        "message": SPM_INPUT_MESSAGE,
+        "result": None,
+        "errors": [{"code": code, "message": SPM_INPUT_MESSAGE}],
+    }
+
+
+@pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
+@pytest.mark.parametrize("axes", [False, True])
+def test_http_returns_an_inherited_measurements_dependants_as_null(
+    monkeypatch, http_client_for, code, axes
+):
+    """The same household, without `spm`, keeps HTTP 200 and loses only a dependant.
+
+    An axes request spells the null as one per axis point, beside a warning.
+    """
+    country, _ = _country_calculating(monkeypatch, _calculate_refusing_net_income(code))
+    household = requested_household("spm_unit_net_income", axes=axes)
+    household["spm_units"]["spm_unit"]["spm_unit_federal_tax"] = {"2024": None}
+    response = http_client_for(country).post(
+        "/us/calculate", json={"household": household}
+    )
+    assert response.status_code == 200, response.json
+    assert response.json["status"] == "ok"
+    unit = response.json["result"]["spm_units"]["spm_unit"]
+    assert unit["spm_unit_net_income"]["2024"] == (
+        [None] * AXIS_POINTS if axes else None
+    )
+    assert unit["spm_unit_federal_tax"]["2024"] == (
+        [CALCULATED_VALUE] * AXIS_POINTS if axes else CALCULATED_VALUE
+    )
+    warnings = response.json.get("warnings", [])
+    assert any("spm_unit_net_income" in warning for warning in warnings) is axes
+    assert response.json["spm_provenance"]["geography_kind"] == "county"
+
+
+def test_http_tax_only_result_carries_a_receipt_that_measured_no_year(
+    monkeypatch, http_client_for
+):
+    """Only the requested tax is calculated, and its receipt names the chosen area."""
+    calculations = []
+
+    def calculate(variable, _period):
+        calculations.append(variable)
+        return np.full(AXIS_POINTS, CALCULATED_VALUE)
+
+    country, _ = _country_calculating(monkeypatch, calculate)
+    response = http_client_for(country).post(
+        "/us/calculate",
+        json={
+            "household": requested_household("spm_unit_federal_tax"),
+            "spm": {"geography_kind": "metro", "geography_id": "test-area"},
+        },
+    )
+    assert response.status_code == 200, response.json
+    assert calculations == ["spm_unit_federal_tax"]
+    unit = response.json["result"]["spm_units"]["spm_unit"]
+    assert unit["spm_unit_federal_tax"]["2024"] == CALCULATED_VALUE
+    receipt = response.json["spm_provenance"]
+    assert receipt["geography_kind"] == "metro"
+    assert receipt["geography_id"] == "test-area"
+    assert receipt["years"] == []
+
+
+def test_http_full_calculation_adds_omitted_variables_under_the_chosen_measurement(
+    monkeypatch, http_client_for
+):
+    """`/calculate-full` asks the country for every yearly variable left out.
+
+    The installed model's full output set is calculated once, in
+    tests/integration/test_installed_us_model_spm.py.
+    """
+    calculations = []
+
+    def calculate(variable, period):
+        calculations.append((variable, period))
+        return np.full(AXIS_POINTS, CALCULATED_VALUE)
+
+    country, selections = _country_calculating(
+        monkeypatch, calculate, spm_years=("2024",)
+    )
+    household = {
+        "people": {"you": {"age": {"2024": 40}}},
+        "households": {"household": {"members": ["you"]}},
+        "spm_units": {"spm_unit": {"members": ["you"]}},
+    }
+    response = http_client_for(country).post(
+        "/us/calculate-full",
+        json={"household": household, "spm": {"geography_kind": "national"}},
+    )
+    assert response.status_code == 200, response.json
+    assert sorted(calculations) == [
+        ("spm_unit_federal_tax", "2024"),
+        ("spm_unit_net_income", "2024"),
+        ("spm_unit_spm_threshold", "2024"),
+    ]
+    result = response.json["result"]
+    assert result["people"]["you"]["employment_income"] == {"2024": 0}
+    assert result["households"]["household"]["state_code"] == {"2024": "CA"}
+    assert result["spm_units"]["spm_unit"]["spm_unit_spm_threshold"] == {
+        "2024": CALCULATED_VALUE
+    }
+    assert [selection["geography_kind"] for selection in selections] == ["national"]
+    assert response.json["spm_provenance"]["geography_kind"] == "national"
+    assert response.json["spm_provenance"]["years"] == ["2024"]
 
 
 @pytest.fixture
