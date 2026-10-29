@@ -27,7 +27,7 @@ class StrictHouseholdReportAPIModel(BaseModel):
     )
 
 
-class HouseholdCalculationErrorItem(StrictHouseholdReportAPIModel):
+class HouseholdReportCalculationErrorItem(StrictHouseholdReportAPIModel):
     """Why a household calculation failed.
 
     ``code`` is ``household_calculation_failed`` when the household function
@@ -40,7 +40,7 @@ class HouseholdCalculationErrorItem(StrictHouseholdReportAPIModel):
     detail: dict[str, JsonValue] | None
 
 
-class HouseholdCalculationResultItem(StrictHouseholdReportAPIModel):
+class HouseholdReportCalculationResultItem(StrictHouseholdReportAPIModel):
     """The household with each requested value filled in, in its own key order.
 
     ``spm_config`` is the SPM selection applied and ``spm_provenance`` its
@@ -53,7 +53,7 @@ class HouseholdCalculationResultItem(StrictHouseholdReportAPIModel):
     spm_provenance: dict[str, JsonValue] | None
 
 
-class HouseholdCalculationItem(StrictHouseholdReportAPIModel):
+class HouseholdReportCalculationItem(StrictHouseholdReportAPIModel):
     """One calculation of the household under one policy (a simulation run).
 
     A null ``policy_id`` means current law. ``status`` is ``pending``,
@@ -68,8 +68,8 @@ class HouseholdCalculationItem(StrictHouseholdReportAPIModel):
     status: str
     attempt: int
     trigger: str
-    error: HouseholdCalculationErrorItem | None
-    result: HouseholdCalculationResultItem | None
+    error: HouseholdReportCalculationErrorItem | None
+    result: HouseholdReportCalculationResultItem | None
     dispatched_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
@@ -99,8 +99,8 @@ class HouseholdReportRunItem(HouseholdReportRunSummaryItem):
     ``reform`` is null for a report of the baseline alone.
     """
 
-    baseline: HouseholdCalculationItem
-    reform: HouseholdCalculationItem | None
+    baseline: HouseholdReportCalculationItem
+    reform: HouseholdReportCalculationItem | None
 
     @classmethod
     def from_record(cls, record: HouseholdReportRunRecord) -> HouseholdReportRunItem:

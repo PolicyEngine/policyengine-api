@@ -468,3 +468,23 @@ def test_openapi_describes_both_kinds_of_run() -> None:
         "properties"
     ]["item"]
     assert set(item_schema["discriminator"]["mapping"]) == {"economy", "household"}
+
+
+def test_household_report_schemas_are_named_for_household_reports() -> None:
+    """Name the report's calculations for household reports.
+
+    The household calculation routes have their own ``HouseholdCalculation*``
+    schemas, so both sets can be served side by side.
+    """
+    schemas = (
+        _client(FakeHouseholdReportSimulation())
+        .get("/v2/openapi.json")
+        .json()["components"]["schemas"]
+    )
+
+    assert {
+        "HouseholdReportCalculationItem",
+        "HouseholdReportCalculationErrorItem",
+        "HouseholdReportCalculationResultItem",
+    } <= set(schemas)
+    assert not {name for name in schemas if name.startswith("HouseholdCalculation")}
