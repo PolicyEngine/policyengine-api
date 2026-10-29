@@ -314,7 +314,7 @@ from the final SQLModel metadata. It has no post-generation corrections.
   "Rollback").
 
 The models drop the `user_associations` relationships from v2 simulations and
-reports. `V2_ALEMBIC_HEAD_REVISION` is `fbb7488ebe8a`.
+reports. Stage 12A set `V2_ALEMBIC_HEAD_REVISION` to `fbb7488ebe8a`.
 
 ### Reshape safety
 
@@ -402,9 +402,9 @@ row with a NULL `primary_country` does not fail there.
 
 The lifecycle test `test_stage_12a_schema_serves_the_previous_revision`
 exercises this rather than only comparing columns. It reflects the schema at
-the parent revision with SQLAlchemy and upgrades to head. Then, through the
-reflected parent tables, it does the following for every table the parent
-revision maps:
+the parent revision with SQLAlchemy and upgrades to `fbb7488ebe8a`. Then,
+through the reflected parent tables, it does the following for every table the
+parent revision maps:
 
 - inserts a row that supplies only the parent's required columns (plus the
   nullable values that the parent's own check constraints demand);
@@ -412,13 +412,13 @@ revision maps:
 - rewrites every non-key column;
 - deletes the row.
 
-Rows of the two dormant tables are inserted through head's tables, since only
-new code writes them, and are then read, rewritten, and deleted through the
-parent's. The test also deletes, through the parent's `users` table, a user who
-owns rows in all four association tables and a `user_identities` row, and it
-checks that every one of them cascades away. It fails if head drops a parent
-column, or adds a required column without a server default to a table the
-parent revision writes.
+Rows of the two dormant tables are inserted through the Stage 12A tables,
+since only new code writes them, and are then read, rewritten, and deleted
+through the parent's. The test also deletes, through the parent's `users`
+table, a user who owns rows in all four association tables and a
+`user_identities` row, and it checks that every one of them cascades away. It
+fails if Stage 12A drops a parent column, or adds a required column without a
+server default to a table the parent revision writes.
 
 ## Settings
 
@@ -571,8 +571,8 @@ The disposable-Postgres suite proves the following:
 - `MATCH SIMPLE` composite keys accept NULL v2 references;
 - account deletion cascades after removing legacy mappings;
 - NaN and Infinity never reach JSONB;
-- the parent revision's table usage works against head (see "Schema
-  compatibility");
+- the parent revision's table usage works against the Stage 12A schema (see
+  "Schema compatibility");
 - the qualification transaction is read-only.
 
 ## Deferred

@@ -30,7 +30,10 @@ STAGE_11_PREVIOUS_REVISION = "af34023a728f"
 STAGE_12_PREVIOUS_REVISION = "724b1b11a33e"
 STAGE_12_COMPARISON_PREVIOUS_REVISION = "439303be14fe"
 STAGE_12A_PREVIOUS_REVISION = "91af4fc8d8c1"
+STAGE_12A_REVISION = "fbb7488ebe8a"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
+AREA_IMPACT_TABLES = ("constituency_impacts", "local_authority_impacts")
+MAP_COORDINATE_COLUMNS = ("x", "y")
 
 
 def _disposable_url() -> str:
@@ -98,6 +101,8 @@ def _assert_head(engine) -> None:
         "legacy_user_mappings",
         "legacy_user_policy_mappings",
     } <= set(inspect(engine).get_table_names(schema="public"))
+    for table_name in AREA_IMPACT_TABLES:
+        assert set(MAP_COORDINATE_COLUMNS).isdisjoint(_columns(engine, table_name))
 
 
 def _columns(engine, table_name: str) -> dict[str, dict]:
@@ -105,6 +110,17 @@ def _columns(engine, table_name: str) -> dict[str, dict]:
         column["name"]: column
         for column in inspect(engine).get_columns(table_name, schema="public")
     }
+
+
+def _assert_area_impact_coordinates_restored(engine: Engine) -> None:
+    """Check the Stage 12A revision's map coordinates are required integers."""
+    _assert_revision(engine, STAGE_12A_REVISION)
+    for table_name in AREA_IMPACT_TABLES:
+        columns = _columns(engine, table_name)
+        for column_name in MAP_COORDINATE_COLUMNS:
+            assert isinstance(columns[column_name]["type"], sa.Integer)
+            assert not columns[column_name]["nullable"]
+            assert columns[column_name]["default"] is None
 
 
 def _assert_pre_stage_12a_association_shape(engine) -> None:
@@ -365,6 +381,10 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
 
         _upgrade_and_assert_head(config, engine)
 
+        command.downgrade(config, STAGE_12A_REVISION)
+        _assert_area_impact_coordinates_restored(engine)
+        _upgrade_and_assert_head(config, engine)
+
         command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
         _assert_revision(engine, STAGE_12A_PREVIOUS_REVISION)
         _assert_pre_stage_12a_association_shape(engine)
@@ -597,14 +617,14 @@ def _assert_user_deletion_cascades(
 
 
 def test_stage_12a_schema_serves_the_previous_revision() -> None:
-    """Run the previous Public API revision's table usage against head.
+    """Run the previous Public API revision's table usage against Stage 12A.
 
-    The parent revision's schema is reflected and then used, after upgrading,
-    to insert a row into every table it maps (supplying only what it
-    requires), read the row back with every mapped column, rewrite those
-    columns, delete it, and delete a user who owns Stage 12A rows so the
-    cascades run. Head may not give any table the parent revision writes a
-    new required column without a server default.
+    The parent revision's schema is reflected and then used, after upgrading
+    to the Stage 12A revision, to insert a row into every table it maps
+    (supplying only what it requires), read the row back with every mapped
+    column, rewrite those columns, delete it, and delete a user who owns Stage
+    12A rows so the cascades run. Stage 12A may not give any table the parent
+    revision writes a new required column without a server default.
     """
     database_url = _disposable_url()
     config = _config()
@@ -614,9 +634,9 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
         command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
         parent = sa.MetaData()
         parent.reflect(engine)
-        command.upgrade(config, "head")
-        head = sa.MetaData()
-        head.reflect(engine)
+        command.upgrade(config, STAGE_12A_REVISION)
+        stage_12a = sa.MetaData()
+        stage_12a.reflect(engine)
         parent_tables = [
             table for table in parent.sorted_tables if table.name != "alembic_version"
         ]
@@ -625,14 +645,16 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
             f"{table.name}.{column.name}"
             for table in parent_tables
             for column in table.columns
-            if table.name not in head.tables
-            or column.name not in head.tables[table.name].columns
+            if table.name not in stage_12a.tables
+            or column.name not in stage_12a.tables[table.name].columns
         )
         assert dropped_columns == []
         tables_with_new_required_columns = {
-            table.name: sorted(_new_required_columns(table, head.tables[table.name]))
+            table.name: sorted(
+                _new_required_columns(table, stage_12a.tables[table.name])
+            )
             for table in parent_tables
-            if _new_required_columns(table, head.tables[table.name])
+            if _new_required_columns(table, stage_12a.tables[table.name])
         }
         assert set(tables_with_new_required_columns) <= (
             PARENT_REVISION_READ_ONLY_TABLES
@@ -644,8 +666,8 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
             try:
                 stored_rows: dict[str, dict] = {}
                 for table in parent_tables:
-                    head_table = (
-                        head.tables[table.name]
+                    stage_12a_table = (
+                        stage_12a.tables[table.name]
                         if table.name in PARENT_REVISION_READ_ONLY_TABLES
                         else None
                     )
@@ -653,14 +675,14 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
                         connection,
                         table,
                         _row_values(
-                            table, stored_rows, sequence, head_table=head_table
+                            table, stored_rows, sequence, head_table=stage_12a_table
                         ),
-                        insert_table=head_table,
+                        insert_table=stage_12a_table,
                     )
                     _rewrite_mapped_columns(connection, table, stored_rows[table.name])
 
                 _assert_user_deletion_cascades(
-                    connection, parent, head, stored_rows, sequence
+                    connection, parent, stage_12a, stored_rows, sequence
                 )
 
                 for table in reversed(parent_tables):
@@ -672,6 +694,50 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
                     assert result.rowcount == 1, table.name
             finally:
                 transaction.rollback()
+    finally:
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_area_impact_coordinate_removal_changes_nothing_else() -> None:
+    """Check that head's only change from Stage 12A drops the map coordinates.
+
+    The previous Public API revision still maps those four columns, but it
+    can't read or write either table: no managed database role holds any
+    privilege on them (``policyengine_api/data/v2/privileges.py``). Every
+    table it can use keeps every column.
+    """
+    database_url = _disposable_url()
+    config = _config()
+    engine = create_engine(database_url)
+
+    try:
+        command.downgrade(config, STAGE_12A_REVISION)
+        parent = sa.MetaData()
+        parent.reflect(engine)
+        command.upgrade(config, "head")
+        head = sa.MetaData()
+        head.reflect(engine)
+
+        assert set(head.tables) == set(parent.tables)
+        dropped_columns = sorted(
+            f"{table.name}.{column.name}"
+            for table in parent.tables.values()
+            for column in table.columns
+            if column.name not in head.tables[table.name].columns
+        )
+        added_columns = sorted(
+            f"{table.name}.{column.name}"
+            for table in head.tables.values()
+            for column in table.columns
+            if column.name not in parent.tables[table.name].columns
+        )
+        assert dropped_columns == sorted(
+            f"{table_name}.{column_name}"
+            for table_name in AREA_IMPACT_TABLES
+            for column_name in MAP_COORDINATE_COLUMNS
+        )
+        assert added_columns == []
     finally:
         command.upgrade(config, "head")
         engine.dispose()

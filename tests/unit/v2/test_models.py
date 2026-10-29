@@ -440,6 +440,11 @@ def test_run_outputs_reference_report_runs_not_base_reports() -> None:
         assert foreign_key.ondelete == "CASCADE"
 
 
+def test_uk_area_impacts_store_no_map_coordinates() -> None:
+    for table_name in ("constituency_impacts", "local_authority_impacts"):
+        assert {"x", "y"}.isdisjoint(V2_METADATA.tables[table_name].c.keys())
+
+
 def test_report_rerun_constraints_allow_same_versions_but_deduplicate_requests() -> (
     None
 ):
