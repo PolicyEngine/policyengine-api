@@ -215,7 +215,15 @@ def test_a_us_request_is_not_checked_against_the_uk_registry():
         api_version=MOCK_API_VERSION,
     )
 
-    with patch(REGISTRY_LOADER, side_effect=AssertionError("registry loaded")):
+    with (
+        patch(REGISTRY_LOADER, side_effect=AssertionError("registry loaded")),
+        # A US request also checks the worker's SPM capability, which this
+        # test does not exercise.
+        patch(
+            "policyengine_api.services.economy_service.validate_worker_spm",
+            return_value=None,
+        ),
+    ):
         setup_options = service._build_economic_impact_setup_options(
             us_request, time_period=MOCK_TIME_PERIOD
         )

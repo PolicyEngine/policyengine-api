@@ -222,6 +222,7 @@ class EconomyService(
             msg = "Custom datasets are not supported for economy calculations"
             raise ValueError(msg)
         self._validate_breakdown(impact_request)
+        self._validate_uk_region(impact_request)
         resolved_spm = validate_worker_spm(
             country_id,
             options.get("spm"),
