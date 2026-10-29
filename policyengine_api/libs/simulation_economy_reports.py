@@ -1,7 +1,8 @@
 """The Simulation Entrypoint's economy report routes, through its generated client.
 
-This is the only module that imports ``policyengine_api_simulation_client``,
-the client generated from the Simulation Entrypoint's OpenAPI document.
+This module and ``policyengine_api.libs.simulation_household_reports`` are
+the only modules that import ``policyengine_api_simulation_client``, the
+client generated from the Simulation Entrypoint's OpenAPI document.
 Everything else uses ``EconomyReportSimulation``, which this module
 implements, so the rest of the code and its tests do not need the client.
 Nothing imports this module at module level, so the application starts
