@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 
-# Run the release test suite (make test) before the staging deploy.
+# Run the release test suite (make test) in push.yml's release-tests job,
+# which the staging deploy needs.
 #
-# The deploy job's environment carries deployment settings (route
-# implementations, database policies, Cloud Run and v2 database targets, and
-# signed-in user authentication) that must not leak into the tests, so they are
-# removed here. The local Redis runtime-cache settings come from the step's env.
+# Deployment settings (route implementations, database policies, Cloud Run and
+# v2 database targets, and signed-in user authentication) must not leak into
+# the tests. The release-tests job sets none of them, and this script removes
+# them anyway, as it did when the tests ran inside the staging deploy job. The
+# local Redis runtime-cache settings come from the step's env.
 
 set -euo pipefail
 

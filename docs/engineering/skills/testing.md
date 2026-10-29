@@ -147,11 +147,17 @@ updated. The tests must assert that only the API server is supervised, no
 container-local Redis process is launched, and deployed configuration selects
 managed Redis without a localhost fallback.
 
-The Cloud Run staging deployment job must run the platform-neutral release test
-suite with local Redis before GCP authentication, image publication, or
-candidate deployment. Staging deployment checks run the live integration suite
-against the tagged Cloud Run staging URL before promoting the exact tested
-revision to the service URL. No production deployment may begin until the
+The platform-neutral release test suite must pass, with local Redis, before
+GCP authentication, image publication, or candidate deployment. It runs in
+`push.yml`'s `release-tests` job, which starts with the release run, beside the
+checks and the staging database jobs; the Cloud Run staging deployment job
+needs it, so none of its steps start until the tests pass. The job keeps the
+`staging` environment and the variables the tests read when they ran inside
+the deployment job, and has no GCP credentials.
+
+Staging deployment checks run the live integration suite against the tagged
+Cloud Run staging URL before promoting the exact tested revision to the
+service URL. No production deployment may begin until the
 staging integration, exact-revision promotion, and stable-URL health check
 pass. Production Cloud Run promotion should happen only after tagged candidate
 smoke tests pass. Both environments must capture

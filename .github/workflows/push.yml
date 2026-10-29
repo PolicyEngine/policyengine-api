@@ -184,6 +184,64 @@ jobs:
       deployment_environment: staging
     secrets: inherit
 
+  release-tests:
+    # The release test suite (make test) on the release commit: the only run
+    # of it on the merged code, because pull requests need not be up to date
+    # with master to merge. It starts with the run, beside the checks and the
+    # staging database jobs, and the staging deploy needs it, so the tests pass
+    # before GCP authentication, image publication or candidate deployment.
+    # It keeps the staging environment and the variables the tests read when
+    # they ran inside the staging deploy job.
+    name: Run release tests
+    runs-on: ubuntu-latest
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: staging
+    env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
+      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
+      POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: ${{ vars.POLICYENGINE_DB_INSTANCE_CONNECTION_NAME }}
+      PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET: ${{ vars.PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET }}
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Update package lists
+        run: sudo apt-get update
+      - name: Install release test dependencies
+        run: sudo apt-get install -y redis-server
+      - name: Start release test Redis
+        run: sudo systemctl start redis-server
+      - name: Install locked application dependencies
+        run: make install
+      - name: Run release tests
+        run: bash .github/scripts/run_release_tests.sh
+        env:
+          RUNTIME_CACHE_MODE: local
+          RUNTIME_CACHE_URL: redis://127.0.0.1:6379/0
+          RUNTIME_CACHE_ENVIRONMENT: test
+          RUNTIME_CACHE_SERVICE: api
+          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
+          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Compatibility name required by PolicyEngine Core.
+          HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}
+          GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
+          GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
+          GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
+          GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
+
   deploy-cloud-run-staging:
     name: Deploy and test staging Cloud Run candidate
     runs-on: ubuntu-latest
@@ -192,6 +250,7 @@ jobs:
       - publish-git-tag
       - migrate-v1-staging-cloud-sql
       - seed-v2-staging-database
+      - release-tests
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -253,30 +312,9 @@ jobs:
           python-version: "3.12"
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
-      - name: Update package lists
-        run: sudo apt-get update
-      - name: Install release test dependencies
-        run: sudo apt-get install -y redis-server
-      - name: Start release test Redis
-        run: sudo systemctl start redis-server
+      # The staging integration tests below run from uv.lock.
       - name: Install locked application dependencies
         run: make install
-      - name: Run release tests
-        run: bash .github/scripts/run_release_tests.sh
-        env:
-          RUNTIME_CACHE_MODE: local
-          RUNTIME_CACHE_URL: redis://127.0.0.1:6379/0
-          RUNTIME_CACHE_ENVIRONMENT: test
-          RUNTIME_CACHE_SERVICE: api
-          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
-          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # Compatibility name required by PolicyEngine Core.
-          HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}
-          GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
-          GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
-          GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
-          GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
       - name: GCP authentication
         uses: "google-github-actions/auth@v2"
         with:
