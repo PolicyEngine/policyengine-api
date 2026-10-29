@@ -1,10 +1,10 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 96,
+    "request_count": 99,
     "route_group_count": 9,
     "sim_flow_count": 3,
-    "workflow_count": 18
+    "workflow_count": 19
   },
   "route_groups": [
     {
@@ -1467,6 +1467,66 @@
             "status",
             "message",
             "result.items"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_resources",
+      "future_owner_pr": "Household reports on v2",
+      "name": "household_reports_v2",
+      "requests": [
+        {
+          "expected_status": 201,
+          "headers": [],
+          "method": "POST",
+          "path": "/v2/reports?country_id=uk",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.kind",
+            "result.item.year",
+            "result.item.household_id",
+            "result.item.baseline_simulation_id",
+            "result.item.reform_simulation_id",
+            "result.item.status",
+            "result.item.run"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/reports/{report_id}?country_id=uk",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.kind",
+            "result.item.status",
+            "result.item.run.baseline.result",
+            "result.item.run.reform.result"
+          ]
+        },
+        {
+          "expected_status": 201,
+          "headers": [],
+          "method": "POST",
+          "path": "/v2/reports/{report_id}/runs?country_id=uk",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.kind",
+            "result.item.id",
+            "result.item.trigger",
+            "result.item.tax_benefit_model_version_id",
+            "result.item.policyengine_version",
+            "result.item.status"
           ]
         }
       ]

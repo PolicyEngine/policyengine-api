@@ -22,6 +22,7 @@ def test_app_v2_workflow_contract_registry_is_complete():
         "region_selection",
         "country_selection_v2",
         "economy_reports_v2",
+        "household_reports_v2",
         "metadata_resources_v2_preview",
         "simulation_submit_poll",
         "report_create_poll",
@@ -35,6 +36,7 @@ def test_app_v2_workflow_contract_registry_is_complete():
             in {
                 "country_selection_v2",
                 "economy_reports_v2",
+                "household_reports_v2",
                 "metadata_resources_v2_preview",
                 "policy_resources_v2",
                 "user_policy_associations_v2",
