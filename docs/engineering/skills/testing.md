@@ -22,6 +22,25 @@ versions the Cloud Run image installs (`gcp/cloud_run/Dockerfile`):
   and `api.dependencies.test-from-lock`
   ([dependencies.md](dependencies.md)) check every install and test command.
 
+## Tests That Run a Country Model
+
+A unit test stands in for the country model: a calculation with the installed
+policyengine-us takes seconds, and one of every variable takes most of a
+minute. Unit tests never use `COUNTRIES["us"]`, `load_forecast()` or a real
+`Simulation`. `tests/unit/test_country_spm.py` checks the country adapter's
+SPM handling, and the household routes' SPM responses, over stand-in
+simulations that raise the installed model's errors and report its receipts.
+Add each new SPM case there.
+
+`tests/integration/test_installed_us_model_spm.py` holds two tests against
+the installed US model: a chosen county returns a threshold and a receipt for
+the pinned forecast, and a state-only household is null when it chose
+nothing and a 400 when it chose a county. Which code the model raises for
+each missing input is policyengine-us's to test. The file's fixtures build
+the Flask app and its calculation service once per session. It needs no
+database, network or credentials, so `make test` runs it after the unit
+tests, in the pull request `Test` job and in the release tests.
+
 ## Migration Test Layout
 
 - Put API migration compatibility tests under `tests/contract/`.
