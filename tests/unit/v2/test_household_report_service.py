@@ -6,10 +6,18 @@ policies, and a fake Simulation Entrypoint.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
 
+from policyengine_api.services.v2.household_reports.database_session import (
+    HouseholdReportDatabaseSession,
+)
+from policyengine_api.services.v2.household_reports.services import (
+    V2HouseholdReportService,
+)
 from policyengine_api.services.v2.household_reports.types import (
     HouseholdPolicyChoice,
     HouseholdReportFields,
@@ -38,10 +46,18 @@ from tests.unit.v2.household_report_support import (
     UNKNOWN_CATALOG_VERSION_ID,
     FakeHouseholdReportSimulation,
     FakeHouseholds,
+    FakePolicies,
     household_report_record,
     household_report_service,
+    household_report_store,
+    on_catalog_version,
     stored_household,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlmodel import Session
 
 
 def _fields(*, reform_policy_id=HOUSEHOLD_REFORM_POLICY_ID, household_id=HOUSEHOLD_ID):
@@ -81,24 +97,75 @@ def test_a_report_is_submitted_by_ids_on_the_current_version() -> None:
     assert report.run.policyengine_version == CURRENT_POLICYENGINE_VERSION
 
 
-def test_a_run_names_the_policyengine_version_of_its_catalog_version() -> None:
-    simulation = FakeHouseholdReportSimulation()
-    simulation.next_catalog_version_id = OLDER_CATALOG_VERSION_ID
+class CountingDatabaseSession(HouseholdReportDatabaseSession):
+    """Count the read sessions the service opens."""
 
-    report = household_report_service(simulation).submit_report(
+    def __init__(self) -> None:
+        super().__init__(household_report_store())
+        self.reads = 0
+
+    @contextmanager
+    def read(self) -> Iterator[Session]:
+        self.reads += 1
+        with super().read() as session:
+            yield session
+
+
+def _service_on(
+    database_session: HouseholdReportDatabaseSession,
+    simulation: FakeHouseholdReportSimulation,
+) -> V2HouseholdReportService:
+    return V2HouseholdReportService(
+        database_session,
+        households=FakeHouseholds(stored_household()),
+        policies=FakePolicies({HOUSEHOLD_REFORM_POLICY_ID: "us"}),
+        simulation=simulation,
+        current_policyengine_version=CURRENT_POLICYENGINE_VERSION,
+    )
+
+
+def test_a_submission_names_the_version_it_sent_without_reading_the_catalog() -> None:
+    """The first run is on the catalog version of the version sent.
+
+    So once the entrypoint has created the report, no database read can fail
+    the answer.
+    """
+    database_session = CountingDatabaseSession()
+    simulation = FakeHouseholdReportSimulation()
+    simulation.next_catalog_version_id = UNKNOWN_CATALOG_VERSION_ID
+
+    report = _service_on(database_session, simulation).submit_report(
         country_id="us", report_input=_fields()
+    )
+
+    assert report.run is not None
+    assert report.run.policyengine_version == CURRENT_POLICYENGINE_VERSION
+    # Only the countries row, before the entrypoint is asked.
+    assert database_session.reads == 1
+
+
+def test_a_read_run_names_the_policyengine_version_of_its_catalog_version() -> None:
+    simulation = FakeHouseholdReportSimulation(
+        on_catalog_version(household_report_record(), OLDER_CATALOG_VERSION_ID)
+    )
+
+    report = household_report_service(simulation).get_report(
+        country_id="us", report_id=HOUSEHOLD_REPORT_ID
     )
 
     assert report.run is not None
     assert report.run.policyengine_version == OLDER_POLICYENGINE_VERSION
 
 
-def test_a_run_on_a_catalog_version_the_public_api_lacks_names_no_version() -> None:
-    simulation = FakeHouseholdReportSimulation()
-    simulation.next_catalog_version_id = UNKNOWN_CATALOG_VERSION_ID
+def test_a_read_run_on_a_catalog_version_the_public_api_lacks_names_no_version() -> (
+    None
+):
+    simulation = FakeHouseholdReportSimulation(
+        on_catalog_version(household_report_record(), UNKNOWN_CATALOG_VERSION_ID)
+    )
 
-    report = household_report_service(simulation).submit_report(
-        country_id="us", report_input=_fields()
+    report = household_report_service(simulation).get_report(
+        country_id="us", report_id=HOUSEHOLD_REPORT_ID
     )
 
     assert report.run is not None
@@ -277,9 +344,9 @@ def test_a_rerun_runs_on_the_current_version_and_answers_the_new_run(
     simulation = FakeHouseholdReportSimulation(
         household_report_record(status=ReportStatus.SUCCEEDED)
     )
-    simulation.next_catalog_version_id = OLDER_CATALOG_VERSION_ID
+    database_session = CountingDatabaseSession()
 
-    run = household_report_service(simulation).run_report(
+    run = _service_on(database_session, simulation).run_report(
         country_id="us", report_id=HOUSEHOLD_REPORT_ID, force=force
     )
 
@@ -297,7 +364,9 @@ def test_a_rerun_runs_on_the_current_version_and_answers_the_new_run(
     ]
     assert run.trigger == "manual"
     assert run.status is ReportStatus.PENDING
-    assert run.policyengine_version == OLDER_POLICYENGINE_VERSION
+    assert run.policyengine_version == CURRENT_POLICYENGINE_VERSION
+    # Only the countries row, before the entrypoint is asked to run it.
+    assert database_session.reads == 1
 
 
 @pytest.mark.parametrize(
@@ -316,7 +385,7 @@ def test_a_rerun_of_a_report_the_country_lacks_is_not_found(reports) -> None:
     assert [name for name, _argument in simulation.calls] == ["get_report"]
 
 
-def test_a_rerun_in_a_country_without_household_calculations_is_refused() -> None:
+def test_a_rerun_in_a_country_without_household_calculations_is_refused_first() -> None:
     simulation = FakeHouseholdReportSimulation(household_report_record(country_id="xx"))
 
     with pytest.raises(HouseholdReportsUnsupportedError, match="'xx'"):
@@ -324,4 +393,4 @@ def test_a_rerun_in_a_country_without_household_calculations_is_refused() -> Non
             country_id="xx", report_id=HOUSEHOLD_REPORT_ID, force=False
         )
 
-    assert [name for name, _argument in simulation.calls] == ["get_report"]
+    assert simulation.calls == []

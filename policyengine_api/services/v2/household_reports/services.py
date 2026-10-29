@@ -12,8 +12,9 @@ services as ``/v2/households`` and ``/v2/policies``:
 - The household must have a default year, the year the report calculates.
 
 Reports run on the current catalog version: the one published for the
-PolicyEngine.py version the Public API runs, as economy reports do. A run's
-PolicyEngine.py version is read from the Public API's own catalog.
+PolicyEngine.py version the Public API runs, as economy reports do. A run
+this service starts is on that version; the PolicyEngine.py version of a run
+read back is looked up in the Public API's own catalog.
 """
 
 from __future__ import annotations
@@ -134,6 +135,21 @@ class V2HouseholdReportService:
             country = read_country(session, country_id)
         require_household_reports_supported(country, country_id=country_id)
 
+    def _with_current_version(
+        self, report: HouseholdReportRecord
+    ) -> HouseholdReportRecord:
+        """Name the version a run this service just started runs on.
+
+        The entrypoint runs it on the catalog version of the PolicyEngine.py
+        version sent, so no database read follows the entrypoint's work.
+        """
+        if report.run is None:
+            return report
+        catalog_version_id = report.run.tax_benefit_model_version_id
+        return with_policyengine_version(
+            report, {catalog_version_id: self._current_policyengine_version}
+        )
+
     def _with_policyengine_versions(
         self, reports: tuple[HouseholdReportRecord, ...]
     ) -> tuple[HouseholdReportRecord, ...]:
@@ -167,15 +183,15 @@ class V2HouseholdReportService:
                     country_id=country_id, policy_id=choice.policy_id
                 )
         require_default_year(household.default_year)
-        report = self._simulation.submit_report(
-            household_report_submission(
-                report_input,
-                country_id=country_id,
-                policyengine_version=self._current_policyengine_version,
+        return self._with_current_version(
+            self._simulation.submit_report(
+                household_report_submission(
+                    report_input,
+                    country_id=country_id,
+                    policyengine_version=self._current_policyengine_version,
+                )
             )
         )
-        (report,) = self._with_policyengine_versions((report,))
-        return report
 
     def _report_or_none(self, report_id: UUID) -> HouseholdReportRecord | None:
         try:
@@ -224,18 +240,18 @@ class V2HouseholdReportService:
         The run has the ``manual`` trigger. The entrypoint reuses runs that are
         unfinished or succeeded within the last 28 days unless ``force`` is
         set, and reads the report's household and policies again. Raise
-        ``HouseholdReportNotFoundError`` when the country has no such report,
         ``HouseholdReportsUnsupportedError`` for a country without household
-        calculations, before the entrypoint is asked to run it, and
-        ``SimulationRequestRefusedError`` when the entrypoint refuses the
+        calculations before the entrypoint is asked, as for economy reports;
+        ``HouseholdReportNotFoundError`` when the country has no such report;
+        and ``SimulationRequestRefusedError`` when the entrypoint refuses the
         household or a policy.
         """
+        self._require_household_reports(country_id)
         require_report_in_country(
             self._report_or_none(report_id),
             country_id=country_id,
             report_id=report_id,
         )
-        self._require_household_reports(country_id)
         try:
             report = self._simulation.run_report(
                 report_id,
@@ -245,11 +261,9 @@ class V2HouseholdReportService:
             )
         except SimulationRecordNotFoundError:
             report = None
-        (report,) = self._with_policyengine_versions(
-            (
-                require_report_in_country(
-                    report, country_id=country_id, report_id=report_id
-                ),
+        report = self._with_current_version(
+            require_report_in_country(
+                report, country_id=country_id, report_id=report_id
             )
         )
         if report.run is None:

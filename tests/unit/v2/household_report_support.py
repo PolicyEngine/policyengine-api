@@ -212,6 +212,18 @@ def household_report_record(
     )
 
 
+def on_catalog_version(
+    report: HouseholdReportRecord, catalog_version_id: UUID
+) -> HouseholdReportRecord:
+    """Return the report with its run on another catalog version."""
+    if report.run is None:
+        return report
+    return replace(
+        report,
+        run=replace(report.run, tax_benefit_model_version_id=catalog_version_id),
+    )
+
+
 class FakeHouseholdReportSimulation:
     """An in-memory Simulation Entrypoint for household reports.
 
@@ -235,14 +247,7 @@ class FakeHouseholdReportSimulation:
     def _on_next_catalog_version(
         self, report: HouseholdReportRecord
     ) -> HouseholdReportRecord:
-        if report.run is None:
-            return report
-        return replace(
-            report,
-            run=replace(
-                report.run, tax_benefit_model_version_id=self.next_catalog_version_id
-            ),
-        )
+        return on_catalog_version(report, self.next_catalog_version_id)
 
     def submit_report(
         self, submission: HouseholdReportSubmission
