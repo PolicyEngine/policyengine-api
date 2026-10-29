@@ -24,11 +24,22 @@ fragment, is the only other file allowed there. Pull request #4084 added
 changelog.d/added/4083.md: the old check counted every file under changelog.d/,
 so it passed, and the release, which reads only files directly in changelog.d/,
 found no fragment.
+
+Commands, run from the repository root:
+
+  directory           print the fragment directory
+  check-pull-request  read ``git diff --find-renames --name-status -z`` output
+                      for the fragment directory on stdin, from the pull
+                      request's base to the checked-out commit, and exit 1
+                      unless the pull request adds a fragment of its own and
+                      every file in the directory is a fragment
 """
 
 from __future__ import annotations
 
+import argparse
 import re
+import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -46,10 +57,17 @@ FRAGMENT_FILE_NAME = re.compile(
     rf"(?P<name>{NAME_PATTERN})\.(?P<type>[^.]+)\.{FRAGMENT_EXTENSION}"
 )
 TYPE_NAME = re.compile(r"[a-z]+")
-BYTE_ORDER_MARK = "﻿"
+BYTE_ORDER_MARK = "\ufeff"
 NAME_TERMS = (
     "<name> is letters and digits, in groups joined by single dots, hyphens or "
     "underscores"
+)
+# git diff --name-status statuses that name two paths: the source, then the
+# destination. Every other status names one.
+TWO_PATH_STATUSES = frozenset({"R", "C"})
+ON_THE_BASE_BRANCH = (
+    "It is already on the base branch, so the next release fails until a pull "
+    "request fixes it."
 )
 
 
@@ -67,15 +85,32 @@ class Fragment:
 
 
 @dataclass(frozen=True)
-class Scan:
-    """What the fragment directory holds: its fragments, and every other file.
+class Change:
+    """One file a pull request changes, from ``git diff --name-status``.
 
-    ``problems`` maps each other path, from the repository root, to why the
-    release can't read it.
+    ``status`` is git's status letter: A added, C copied, D deleted, M
+    modified, R renamed, T changed type. ``source`` is the path a renamed or
+    copied file came from.
+    """
+
+    status: str
+    path: str
+    source: str | None = None
+
+
+@dataclass(frozen=True)
+class Scan:
+    """What the fragment directory holds: its fragments, and everything else.
+
+    ``problems`` maps each other file and symbolic link, by its path from the
+    repository root, to why the release can't read it. ``empty_folders`` lists
+    the empty folders, which git can't commit: a checkout has one only when a
+    local command left it behind or a submodule is there.
     """
 
     fragments: tuple[Fragment, ...]
     problems: dict[str, str] = field(default_factory=dict)
+    empty_folders: tuple[str, ...] = ()
 
 
 def _listed(names: tuple[str, ...]) -> str:
@@ -302,6 +337,30 @@ class FragmentDefinition:
             or _content_problem(path, file)
         )
 
+    def names_a_fragment(self, path: str) -> bool:
+        """Return whether ``path`` is where and how a fragment is named.
+
+        This looks only at the path, not at a file's text.
+        """
+        return self._name_problem(path) is None
+
+    def added_paths(self, changes: list[Change]) -> set[str]:
+        """Return the paths a pull request adds a file at, by its ``changes``.
+
+        A renamed file counts only when its old path was not a fragment name:
+        renaming a fragment already on the base branch adds no release note,
+        but moving a file the release couldn't read into place does.
+        """
+        added = set()
+        for change in changes:
+            if change.status in {"A", "C"} or (
+                change.status == "R"
+                and change.source is not None
+                and not self.names_a_fragment(change.source)
+            ):
+                added.add(change.path)
+        return added
+
     def _fragment(self, path: str) -> Fragment:
         """Return the fragment at ``path``, a name ``problem_with`` accepted."""
         match = FRAGMENT_FILE_NAME.fullmatch(PurePosixPath(path).name)
@@ -312,25 +371,18 @@ class FragmentDefinition:
             path=path, name=match.group("name"), fragment_type=match.group("type")
         )
 
-    def _folder_problems(self, root: Path, folder: Path) -> dict[str, str]:
-        """Return a problem for each file, link and empty folder under ``folder``."""
-        problems = {}
-        for entry in _nested_entries(folder):
-            path = entry.relative_to(root).as_posix()
-            if entry.is_dir() and not entry.is_symlink():
-                problems[path] = (
-                    f"{path} is an empty folder inside {self.directory}/. "
-                    f"{self._stops_the_release()} Delete it."
-                )
-            else:
-                problems[path] = self._nested_problem(PurePosixPath(path))
-        return problems
+    def empty_folder_problem(self, path: str) -> str:
+        """Return why the release can't build with an empty folder at ``path``."""
+        return (
+            f"{path} is an empty folder or a submodule inside {self.directory}/. "
+            f"{self._stops_the_release()} Delete it."
+        )
 
     def scan(self, root: Path) -> Scan:
         """Return the fragments in ``root``'s fragment directory, and every other file.
 
-        Every file, symbolic link and empty folder in a folder inside the
-        directory is a problem: Towncrier stops at a folder there.
+        Every file and symbolic link in a folder inside the directory is a
+        problem: Towncrier stops at a folder there.
         """
         directory = root / self.directory
         if not directory.exists() and not directory.is_symlink():
@@ -347,10 +399,18 @@ class FragmentDefinition:
             )
         fragments: list[Fragment] = []
         problems: dict[str, str] = {}
+        empty_folders: list[str] = []
         for entry in sorted(directory.iterdir()):
             path = f"{self.directory}/{entry.name}"
             if entry.is_dir() and not entry.is_symlink():
-                problems.update(self._folder_problems(root, entry))
+                for nested_entry in _nested_entries(entry):
+                    nested_path = nested_entry.relative_to(root).as_posix()
+                    if nested_entry.is_dir() and not nested_entry.is_symlink():
+                        empty_folders.append(nested_path)
+                    else:
+                        problems[nested_path] = self._nested_problem(
+                            PurePosixPath(nested_path)
+                        )
                 continue
             if entry.name == KEEP_FILE:
                 kind_problem = _file_kind_problem(path, entry)
@@ -362,4 +422,155 @@ class FragmentDefinition:
                 fragments.append(self._fragment(path))
             else:
                 problems[path] = problem
-        return Scan(fragments=tuple(fragments), problems=problems)
+        return Scan(
+            fragments=tuple(fragments),
+            problems=problems,
+            empty_folders=tuple(empty_folders),
+        )
+
+
+def parse_name_status(output: bytes) -> list[Change]:
+    """Return the changes in ``git diff --name-status -z`` output.
+
+    Paths that aren't UTF-8 keep their bytes as surrogate escapes, as
+    ``os.fsdecode`` decodes them on Linux.
+    """
+    fields = [
+        output_field.decode("utf-8", errors="surrogateescape")
+        for output_field in output.split(b"\0")
+    ]
+    if fields and not fields[-1]:
+        fields.pop()
+    changes = []
+    index = 0
+    while index < len(fields):
+        status = fields[index][:1]
+        path_count = 2 if status in TWO_PATH_STATUSES else 1
+        paths = fields[index + 1 : index + 1 + path_count]
+        if not status or len(paths) != path_count:
+            msg = (
+                f"git diff --name-status output ends in the middle of a change: "
+                f"{fields[index:]!r}"
+            )
+            raise ValueError(msg)
+        if path_count == 1:
+            changes.append(Change(status=status, path=paths[0]))
+        else:
+            changes.append(Change(status=status, path=paths[1], source=paths[0]))
+        index += 1 + path_count
+    return changes
+
+
+def annotation_message(message: str) -> str:
+    """Escape ``message`` so the Actions runner reads it as one annotation message."""
+    return message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def annotation_property(value: str) -> str:
+    """Escape ``value`` for an annotation property such as ``file=``."""
+    return annotation_message(value).replace(":", "%3A").replace(",", "%2C")
+
+
+def _print_error(message: str, path: str | None = None) -> None:
+    """Print ``message`` as an error annotation, on ``path`` when one is given."""
+    location = f" file={annotation_property(path)}" if path else ""
+    print(f"::error{location}::{annotation_message(message)}")
+
+
+def _no_own_fragment_message(
+    definition: FragmentDefinition, scan: Scan, changes: list[Change]
+) -> str:
+    """Return the error for a pull request that adds no fragment of its own."""
+    sentences = ["This pull request adds no changelog fragment of its own."]
+    pending = [fragment.path for fragment in scan.fragments]
+    if pending:
+        sentences.append(
+            "Fragments already on the base branch belong to the pull requests "
+            f"that added them: {', '.join(pending)}."
+        )
+    sentences.extend(
+        "Renaming a fragment that is already on the base branch "
+        f"({change.source} to {change.path}) doesn't add one."
+        for change in changes
+        if change.status == "R"
+        and change.source is not None
+        and definition.names_a_fragment(change.source)
+    )
+    sentences.append(definition.accepted_form())
+    return " ".join(sentences)
+
+
+def check_pull_request(root: Path, changes: list[Change]) -> int:
+    """Check the checkout in ``root`` of a pull request that makes ``changes``.
+
+    Print an error annotation for each file in the fragment directory that is
+    not a fragment, and one if the pull request adds no fragment of its own;
+    return the exit status.
+    """
+    definition = FragmentDefinition.load(root)
+    scan = definition.scan(root)
+    changed_paths = {change.path for change in changes if change.status != "D"}
+    problems = {
+        path: problem if path in changed_paths else f"{problem} {ON_THE_BASE_BRANCH}"
+        for path, problem in scan.problems.items()
+    }
+    # A path the pull request changed that is neither a fragment, the keep
+    # file nor a problem holds no file in the checkout: it is a submodule. An
+    # empty folder the pull request didn't change was left by a local command,
+    # since git can't commit one.
+    read_paths = {fragment.path for fragment in scan.fragments} | set(problems)
+    keep_path = f"{definition.directory}/{KEEP_FILE}"
+    if (root / keep_path).is_file() and not (root / keep_path).is_symlink():
+        read_paths.add(keep_path)
+    problems.update(
+        (path, definition.empty_folder_problem(path))
+        for path in sorted(changed_paths - read_paths)
+    )
+    for path, problem in problems.items():
+        _print_error(problem, path)
+
+    added_paths = definition.added_paths(changes)
+    own_fragments = [
+        fragment for fragment in scan.fragments if fragment.path in added_paths
+    ]
+    if not own_fragments:
+        _print_error(_no_own_fragment_message(definition, scan, changes))
+    if problems or not own_fragments:
+        return 1
+
+    count = (
+        "1 changelog fragment"
+        if len(own_fragments) == 1
+        else f"{len(own_fragments)} changelog fragments"
+    )
+    listed = ", ".join(
+        f"{fragment.path} ({fragment.fragment_type})" for fragment in own_fragments
+    )
+    print(f"This pull request adds {count}: {listed}.")
+    return 0
+
+
+def main(arguments: list[str] | None = None) -> int:
+    """Run the command named in ``arguments``; return the exit status."""
+    parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("directory", help="print the fragment directory")
+    commands.add_parser(
+        "check-pull-request",
+        help="check a pull request; git diff --name-status -z output on stdin",
+    )
+    options = parser.parse_args(arguments)
+    root = Path.cwd()
+    try:
+        if options.command == "directory":
+            print(FragmentDefinition.load(root).directory)
+            return 0
+        changes = parse_name_status(sys.stdin.buffer.read())
+        return check_pull_request(root, changes)
+    except (ConfigurationError, ValueError) as error:
+        _print_error(str(error))
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
