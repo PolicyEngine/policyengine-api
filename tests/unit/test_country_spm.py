@@ -6,6 +6,7 @@ tests check what the API makes of it. Two checks against the installed model
 are in tests/integration/test_installed_us_model_spm.py.
 """
 
+from copy import deepcopy
 from dataclasses import dataclass
 from types import SimpleNamespace
 
@@ -623,6 +624,22 @@ def test_http_explicit_geography_returns_the_threshold_and_its_receipt(
     assert [chosen["geography_kind"] for chosen in selections] == [
         selection["geography_kind"]
     ]
+
+
+@pytest.mark.usefixtures("certified_bundle")
+def test_calculate_leaves_the_callers_household_unchanged():
+    """The country writes results into its own copy of the household."""
+    country, _ = _country_calculating(_calculate_any_variable, spm_years=("2024",))
+    household = requested_household()
+    original = deepcopy(household)
+
+    result = country.calculate(
+        household, None, spm={"geography_kind": "national"}, spm_requested=True
+    )
+
+    assert household == original
+    unit = result.household["spm_units"]["spm_unit"]
+    assert unit["spm_unit_spm_threshold"]["2024"] == CALCULATED_VALUE
 
 
 def test_http_tax_only_result_carries_a_receipt_that_measured_no_year(http_client_for):
