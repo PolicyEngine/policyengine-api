@@ -29,6 +29,15 @@ PR_WORKFLOW = REPO / ".github/workflows/pr.yml"
 PENDING_FRAGMENT = "changelog.d/telemetry-rank-cause-copies.fixed.md"
 OWN_FRAGMENT = "changelog.d/4114.fixed.md"
 PULL_REQUEST_4084_FRAGMENT = "changelog.d/added/4083.md"
+LOWER_FRAGMENT = "changelog.d/4200.added.md"
+ALREADY_RELEASED = (
+    f"::error file={LOWER_FRAGMENT}::{LOWER_FRAGMENT} is a fragment the base "
+    "branch has already released: a release removed it after this branch left "
+    "the base branch, so merging would publish it again. This happens when a "
+    "pull request lower in a stack merged; rebase this branch onto the base "
+    "branch without that pull request's commits. If it is a new note that "
+    "reuses the name, rename it.\n"
+)
 FRAGMENT_TEXT = "Report when the deployed version went live.\n"
 NO_OWN_FRAGMENT = "::error::This pull request adds no changelog fragment of its own."
 ON_THE_BASE_BRANCH = (
@@ -390,6 +399,71 @@ def test_a_pull_request_stacked_on_another_needs_its_own_fragment(
     assert NO_OWN_FRAGMENT in result.stdout
 
 
+def _squash_merge_and_release_the_lower_pull_request(repository: Path) -> None:
+    """Leave the pull request branch on top of a lower one that merged and released.
+
+    The lower pull request added LOWER_FRAGMENT in two commits. Master
+    squash-merged it, then the release commit removed every fragment. The pull
+    request branch, cut from the lower one and not rebased, still holds the
+    lower pull request's commits.
+    """
+    _git(repository, "checkout", "--quiet", "-B", "lower", "master")
+    _write(repository, "code.txt", "The lower change.\n")
+    _write(repository, LOWER_FRAGMENT, "Lower change.\n")
+    _commit(repository, "The lower pull request")
+    _write(repository, LOWER_FRAGMENT, "Lower change, reworded.\n")
+    _commit(repository, "Reword the lower pull request's fragment")
+    _git(repository, "checkout", "--quiet", "-B", "pull-request")
+    _write(repository, "upper.txt", "The upper change.\n")
+    _commit(repository, "The upper pull request, without a fragment")
+    _git(repository, "checkout", "--quiet", "master")
+    _git(repository, "merge", "--quiet", "--squash", "lower")
+    _commit(repository, "Squash-merge the lower pull request")
+    _git(repository, "rm", "--quiet", PENDING_FRAGMENT, LOWER_FRAGMENT)
+    _commit(repository, "Update PolicyEngine API")
+    _git(repository, "checkout", "--quiet", "pull-request")
+
+
+def test_on_the_merge_commit_a_fragment_already_released_does_not_count(
+    repository: Path,
+):
+    _squash_merge_and_release_the_lower_pull_request(repository)
+    _merge_into_master(repository)
+
+    result = _run_check(repository, _master(repository))
+
+    assert (repository / LOWER_FRAGMENT).is_file()
+    assert result.returncode == 1, result.stdout
+    assert ALREADY_RELEASED in result.stdout
+    assert NO_OWN_FRAGMENT in result.stdout
+
+
+def test_at_the_pull_requests_head_a_fragment_already_released_does_not_count(
+    repository: Path,
+):
+    _squash_merge_and_release_the_lower_pull_request(repository)
+
+    result = _run_check(repository, _master(repository))
+
+    assert result.returncode == 1, result.stdout
+    assert ALREADY_RELEASED in result.stdout
+    assert NO_OWN_FRAGMENT in result.stdout
+
+
+def test_a_released_fragment_beside_the_pull_requests_own_still_fails(
+    repository: Path,
+):
+    _squash_merge_and_release_the_lower_pull_request(repository)
+    _write(repository, OWN_FRAGMENT)
+    _commit(repository, "Add the upper pull request's fragment")
+    _merge_into_master(repository)
+
+    result = _run_check(repository, _master(repository))
+
+    assert result.returncode == 1, result.stdout
+    assert result.stdout == ALREADY_RELEASED
+
+
 def test_a_shallow_clone_fails_and_says_to_fetch_the_history(
     repository: Path, tmp_path: Path
 ):
@@ -464,6 +538,12 @@ def test_the_paths_a_pull_request_adds(
     changes = fragments_module.parse_name_status(name_status)
 
     assert definition.added_paths(changes) == expected_added_paths
+
+
+def test_the_released_paths_are_read_from_git_logs_nul_separated_names():
+    assert fragments_module.parse_paths(
+        b"changelog.d/a.added.md\0\nchangelog.d/b.fixed.md\0\0"
+    ) == {"changelog.d/a.added.md", "changelog.d/b.fixed.md"}
 
 
 def test_name_status_output_that_ends_mid_record_is_refused():
