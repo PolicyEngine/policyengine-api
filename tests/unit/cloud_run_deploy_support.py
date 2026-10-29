@@ -8,6 +8,8 @@ import re
 import subprocess
 from pathlib import Path
 
+import yaml
+
 REPO = Path(__file__).resolve().parents[2]
 
 
@@ -301,6 +303,26 @@ def push_workflow() -> str:
 
 def pr_workflow() -> str:
     return (REPO / ".github/workflows/pr.yml").read_text(encoding="utf-8")
+
+
+def push_workflow_jobs() -> dict[str, dict]:
+    """Return push.yml's jobs, parsed, keyed by job id."""
+    return yaml.safe_load(push_workflow())["jobs"]
+
+
+def job_needs(job: dict) -> list[str]:
+    """Return the ids of the jobs ``job`` needs, as a list."""
+    needs = job.get("needs") or []
+    if isinstance(needs, str):
+        return [needs]
+    return list(needs)
+
+
+def job_step(job: dict, step_name: str) -> dict:
+    """Return the step of ``job`` named ``step_name``."""
+    matching_steps = [step for step in job["steps"] if step.get("name") == step_name]
+    assert len(matching_steps) == 1, f"expected one step named {step_name}"
+    return matching_steps[0]
 
 
 def workflow_job_block(workflow: str, job_name: str) -> str:

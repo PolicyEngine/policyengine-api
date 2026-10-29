@@ -8,6 +8,9 @@ from tests.unit.cloud_run_deploy_support import (
     PRODUCTION_CLOUD_RUN_SERVICE,
     REPO,
     STAGING_CLOUD_RUN_SERVICE,
+    job_needs,
+    job_step,
+    push_workflow_jobs,
 )
 from tests.unit.cloud_run_deploy_support import (
     push_workflow as _push_workflow,
@@ -22,6 +25,41 @@ CLOUD_RUN_SERVICE_SCRIPTS = (
     "scripts/resolve_cloud_run_candidate_state.sh",
     "scripts/set_cloud_run_revision.sh",
 )
+RELEASE_TESTS_JOB = "release-tests"
+RELEASE_TESTS_STEP = "Run release tests"
+RELEASE_TESTS_COMMAND = "bash .github/scripts/run_release_tests.sh"
+# The variables the release tests read when they ran inside the staging deploy
+# job: that job's env, less the deployment settings run_release_tests.sh
+# removes. The release-tests job keeps them, so the tests see the same inputs.
+RELEASE_TESTS_JOB_ENV = {
+    "SIM_ENTRYPOINT": "${{ vars.SIM_ENTRYPOINT }}",
+    "SIMULATION_ENTRYPOINT_URL": "${{ secrets.SIMULATION_ENTRYPOINT_URL }}",
+    "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": (
+        "${{ vars.POLICYENGINE_DB_INSTANCE_CONNECTION_NAME }}"
+    ),
+    "PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET": (
+        "${{ vars.PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET }}"
+    ),
+    "UV_PYTHON": "3.12",
+}
+RELEASE_TESTS_STEP_ENV = {
+    "RUNTIME_CACHE_MODE": "local",
+    "RUNTIME_CACHE_URL": "redis://127.0.0.1:6379/0",
+    "RUNTIME_CACHE_ENVIRONMENT": "test",
+    "RUNTIME_CACHE_SERVICE": "api",
+    "POLICYENGINE_DB_PASSWORD": "${{ secrets.POLICYENGINE_DB_PASSWORD }}",
+    "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": (
+        "${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}"
+    ),
+    "OPENAI_API_KEY": "${{ secrets.OPENAI_API_KEY }}",
+    "HUGGING_FACE_TOKEN": "${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}",
+    "GATEWAY_AUTH_ISSUER": "${{ secrets.GATEWAY_AUTH_ISSUER }}",
+    "GATEWAY_AUTH_AUDIENCE": "${{ secrets.GATEWAY_AUTH_AUDIENCE }}",
+    "GATEWAY_AUTH_CLIENT_ID": "${{ secrets.GATEWAY_AUTH_CLIENT_ID }}",
+    "GATEWAY_AUTH_CLIENT_SECRET_RESOURCE": (
+        "${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}"
+    ),
+}
 
 
 def test_staging_and_production_use_distinct_cloud_run_runtime_identities():
@@ -109,16 +147,12 @@ def test_only_production_job_promotes_the_production_cloud_run_service():
         )
 
 
-def _assert_staging_deploy_runs_release_and_integration_tests(
+def _assert_staging_deploy_tests_its_candidate(
     cloud_run_deploy: str, cloud_run_test_command: str
 ) -> None:
-    assert "bash .github/scripts/run_release_tests.sh" in cloud_run_deploy
-    assert cloud_run_deploy.index(
-        "bash .github/scripts/run_release_tests.sh"
-    ) < cloud_run_deploy.index('uses: "google-github-actions/auth@v2"')
-    assert cloud_run_deploy.index(
-        "bash .github/scripts/run_release_tests.sh"
-    ) < cloud_run_deploy.index("Build and push Cloud Run image")
+    # The release tests run in their own job, which this one needs.
+    assert RELEASE_TESTS_COMMAND not in cloud_run_deploy
+    assert "redis-server" not in cloud_run_deploy
     assert cloud_run_test_command in cloud_run_deploy
     assert "API_BASE_URL: ${{ steps.candidate.outputs.url }}" in cloud_run_deploy
     assert "environment: staging" in cloud_run_deploy
@@ -204,7 +238,7 @@ def _assert_promotion_verifies_the_tested_candidate(
     )
 
 
-def test_push_workflow_runs_release_and_cloud_run_staging_tests_in_deploy_job():
+def test_push_workflow_tests_the_staging_candidate_before_promoting_it():
     workflow = _push_workflow()
     cloud_run_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
     parallel_live_tests = _workflow_job_block(
@@ -223,9 +257,7 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests_in_deploy_job():
     )
     live_test_script = (REPO / ".github/scripts/run_live_staging_tests.sh").read_text()
 
-    _assert_staging_deploy_runs_release_and_integration_tests(
-        cloud_run_deploy, cloud_run_test_command
-    )
+    _assert_staging_deploy_tests_its_candidate(cloud_run_deploy, cloud_run_test_command)
     _assert_live_tests_run_in_parallel_after_readiness(
         workflow, parallel_live_tests, live_test_script
     )
@@ -234,17 +266,53 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests_in_deploy_job():
     )
 
 
-def test_push_workflow_uses_local_redis_for_predeployment_test_suite():
-    staging = _workflow_job_block(_push_workflow(), "deploy-cloud-run-staging")
-    test_step_start = staging.index("- name: Run release tests")
-    test_step_end = staging.index("- name: GCP authentication", test_step_start)
-    test_step = staging[test_step_start:test_step_end]
+def test_release_tests_run_in_their_own_job_before_the_staging_deploy():
+    jobs = push_workflow_jobs()
+    release_tests = jobs[RELEASE_TESTS_JOB]
+    staging_deploy = jobs["deploy-cloud-run-staging"]
 
-    assert "RUNTIME_CACHE_MODE: local" in test_step
-    assert "RUNTIME_CACHE_URL: redis://127.0.0.1:6379/0" in test_step
-    assert "RUNTIME_CACHE_ENVIRONMENT: test" in test_step
-    assert "RUNTIME_CACHE_SERVICE: api" in test_step
-    assert "run: bash .github/scripts/run_release_tests.sh" in test_step
+    # The staging deploy needs the release tests, so they pass before GCP
+    # authentication, image publication and candidate deployment.
+    assert RELEASE_TESTS_JOB in job_needs(staging_deploy)
+    # They start with the run, beside the checks and the staging database jobs,
+    # on the same release commits as the deploy.
+    assert job_needs(release_tests) == []
+    assert release_tests["if"] == staging_deploy["if"]
+    # No GCP credentials: the tests ran before GCP authentication in the deploy
+    # job too.
+    assert release_tests["permissions"] == {"contents": "read"}
+    for step in release_tests["steps"]:
+        assert "google-github-actions" not in step.get("uses", "")
+
+
+def test_release_tests_job_keeps_the_inputs_the_tests_read_in_the_deploy_job():
+    release_tests = push_workflow_jobs()[RELEASE_TESTS_JOB]
+    release_tests_step = job_step(release_tests, RELEASE_TESTS_STEP)
+
+    assert release_tests["environment"] == "staging"
+    assert release_tests["env"] == RELEASE_TESTS_JOB_ENV
+    assert release_tests_step["run"] == RELEASE_TESTS_COMMAND
+    assert release_tests_step["env"] == RELEASE_TESTS_STEP_ENV
+
+
+def test_push_workflow_uses_local_redis_for_predeployment_test_suite():
+    release_tests = push_workflow_jobs()[RELEASE_TESTS_JOB]
+    step_names = [step.get("name") for step in release_tests["steps"]]
+    test_step = job_step(release_tests, RELEASE_TESTS_STEP)
+
+    assert job_step(release_tests, "Install release test dependencies")["run"] == (
+        "sudo apt-get install -y redis-server"
+    )
+    assert job_step(release_tests, "Start release test Redis")["run"] == (
+        "sudo systemctl start redis-server"
+    )
+    assert step_names.index("Start release test Redis") < step_names.index(
+        RELEASE_TESTS_STEP
+    )
+    assert test_step["env"]["RUNTIME_CACHE_MODE"] == "local"
+    assert test_step["env"]["RUNTIME_CACHE_URL"] == "redis://127.0.0.1:6379/0"
+    assert test_step["env"]["RUNTIME_CACHE_ENVIRONMENT"] == "test"
+    assert test_step["env"]["RUNTIME_CACHE_SERVICE"] == "api"
     release_tests = (REPO / ".github/scripts/run_release_tests.sh").read_text(
         encoding="utf-8"
     )
@@ -378,9 +446,10 @@ def test_push_workflow_wires_user_auth_settings_and_staging_test_user():
         assert line in production
     assert "AUTH0_MANAGEMENT" not in staging
 
-    test_step_start = staging.index("- name: Run release tests")
-    test_step = staging[test_step_start : staging.index("- name: GCP", test_step_start)]
-    assert "run: bash .github/scripts/run_release_tests.sh" in test_step
+    # The release tests never see the signed-in user settings.
+    release_tests_job = _workflow_job_block(workflow, RELEASE_TESTS_JOB)
+    assert "PUBLIC_API_AUTH" not in release_tests_job
+    assert f"run: {RELEASE_TESTS_COMMAND}" in release_tests_job
     release_tests = (REPO / ".github/scripts/run_release_tests.sh").read_text(
         encoding="utf-8"
     )

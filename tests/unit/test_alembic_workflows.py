@@ -259,7 +259,7 @@ def test_v2_integration_check_grants_and_verifies_privileges_before_tests():
     assert schema_upgrade < grant < verify < first_test
 
 
-def test_release_migration_fails_closed_before_tests_and_cloud_run_deploy():
+def test_release_migration_fails_closed_before_cloud_run_deploy():
     workflow = _workflow("push.yml")
     orchestration_script = (
         REPO / ".github" / "scripts" / "migrate_v1_cloud_sql.sh"
@@ -275,14 +275,12 @@ def test_release_migration_fails_closed_before_tests_and_cloud_run_deploy():
 
     cloud_run_job = workflow[workflow.index("  deploy-cloud-run-staging:") :]
     cloud_run_job = re.split(r"\n(?=  \S)", cloud_run_job, maxsplit=1)[0]
-    assert "migrate-v1-staging-cloud-sql" in cloud_run_job
-    assert "bash .github/scripts/run_release_tests.sh" in cloud_run_job
-    assert cloud_run_job.index(
-        "bash .github/scripts/run_release_tests.sh"
-    ) < cloud_run_job.index('uses: "google-github-actions/auth@v2"')
-    assert cloud_run_job.index(
-        "bash .github/scripts/run_release_tests.sh"
-    ) < cloud_run_job.index("Build and push Cloud Run image")
+    # The staging deploy needs the schema upgrade and the release tests, which
+    # run in their own job beside it
+    # (tests/unit/test_cloud_run_push_workflow.py).
+    assert "- migrate-v1-staging-cloud-sql" in cloud_run_job
+    assert "- release-tests" in cloud_run_job
+    assert "bash .github/scripts/run_release_tests.sh" not in cloud_run_job
 
 
 def test_cloud_sql_workflow_uses_oidc_and_separate_database_credentials():
