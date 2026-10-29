@@ -32,6 +32,9 @@ FORM_TERMS = (
     f"<type> is {LISTED_TYPES}, and <name> is letters and digits, in groups "
     "joined by single dots, hyphens or underscores"
 )
+INVISIBLE_ONLY = (
+    "holds no visible text, only invisible characters such as zero-width spaces."
+)
 GENERIC_RENAME = f"Rename it to changelog.d/<name>.<type>.md, where {FORM_TERMS}."
 
 
@@ -302,8 +305,19 @@ def test_a_file_not_named_name_type_md_is_a_problem(
             "\ufeff\n",
             f"changelog.d/4083.added.md holds only whitespace. {EMPTY_ENTRY}",
         ),
+        ("\u200b\n", f"changelog.d/4083.added.md {INVISIBLE_ONLY} {EMPTY_ENTRY}"),
+        (
+            "\ufeff\u2060\u200d \u00ad\n",
+            f"changelog.d/4083.added.md {INVISIBLE_ONLY} {EMPTY_ENTRY}",
+        ),
     ],
-    ids=["empty", "whitespace-only", "byte-order-mark-only"],
+    ids=[
+        "empty",
+        "whitespace-only",
+        "byte-order-mark-only",
+        "zero-width-space-only",
+        "format-characters-only",
+    ],
 )
 def test_a_fragment_without_text_is_a_problem(
     repository: Path, text: str, expected_problem: str
@@ -314,6 +328,20 @@ def test_a_fragment_without_text_is_a_problem(
 
     assert scan.fragments == ()
     assert scan.problems == {"changelog.d/4083.added.md": expected_problem}
+
+
+@pytest.mark.parametrize(
+    "text", ["\u200bFixed.\n", "\u00e9\n", "\u2014\n", "7\n", "\u4e2d\u6587\n"]
+)
+def test_a_fragment_with_any_visible_character_is_read(repository: Path, text: str):
+    _write(repository, "changelog.d/4083.added.md", text)
+
+    scan = _definition().scan(repository)
+
+    assert scan.problems == {}
+    assert [fragment.path for fragment in scan.fragments] == [
+        "changelog.d/4083.added.md"
+    ]
 
 
 def test_a_fragment_that_is_not_utf8_is_a_problem(repository: Path):
