@@ -220,6 +220,7 @@ def test_submit_sends_the_household_and_policies_and_reads_the_new_report() -> N
         "household_id": str(HOUSEHOLD_ID),
         "baseline": {"policy_id": None},
         "reform": {"policy_id": str(REFORM_POLICY_ID)},
+        "options": {"add_missing_variables": False},
         "force": False,
         "trigger": "initial",
     }
@@ -683,3 +684,21 @@ def test_a_well_formed_answer_passes_the_type_checks_unchanged() -> None:
         completed_at=None,
         created_at=CREATED_AT_VALUE,
     )
+
+
+def test_a_report_of_every_variable_asks_for_the_missing_ones() -> None:
+    entrypoint = SimulationEntrypointStub(httpx.Response(202, json=_report_body()))
+    submission = HouseholdReportSubmission(
+        country_id="us",
+        policyengine_version="6.7.5",
+        household_id=HOUSEHOLD_ID,
+        baseline=HouseholdPolicyChoice(),
+        reform=None,
+        add_missing_variables=True,
+    )
+
+    entrypoint.adapter().submit_report(submission)
+
+    assert json.loads(entrypoint.requests[0].content)["options"] == {
+        "add_missing_variables": True
+    }

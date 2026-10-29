@@ -89,6 +89,7 @@ def test_a_report_is_submitted_by_ids_on_the_current_version() -> None:
                 household_id=HOUSEHOLD_ID,
                 baseline=HouseholdPolicyChoice(),
                 reform=HouseholdPolicyChoice(policy_id=HOUSEHOLD_REFORM_POLICY_ID),
+                add_missing_variables=False,
             ),
         )
     ]
@@ -394,3 +395,22 @@ def test_a_rerun_in_a_country_without_household_calculations_is_refused_first() 
         )
 
     assert simulation.calls == []
+
+
+def test_a_report_can_ask_for_every_variable_the_household_lacks() -> None:
+    simulation = FakeHouseholdReportSimulation()
+
+    household_report_service(simulation).submit_report(
+        country_id="us",
+        report_input=HouseholdReportFields(
+            kind="household",
+            household_id=HOUSEHOLD_ID,
+            baseline=HouseholdPolicyChoice(),
+            reform=None,
+            add_missing_variables=True,
+        ),
+    )
+
+    ((_name, submission),) = simulation.calls
+    assert isinstance(submission, HouseholdReportSubmission)
+    assert submission.add_missing_variables is True

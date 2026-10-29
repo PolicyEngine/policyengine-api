@@ -48,15 +48,16 @@ from policyengine_api_simulation_client.api.default import (
     submit_household_report,
 )
 from policyengine_api_simulation_client.models import (
-    HouseholdPolicyChoice as GeneratedPolicyChoice,
-)
-from policyengine_api_simulation_client.models import (
+    HouseholdCalculationOptions,
     HouseholdRefusalResponse,
     HouseholdReportResponse,
     HouseholdReportRunSubmission,
     HouseholdReportSubmissionCountry,
     HouseholdRequestFieldError,
     HouseholdRouteError,
+)
+from policyengine_api_simulation_client.models import (
+    HouseholdPolicyChoice as GeneratedPolicyChoice,
 )
 from policyengine_api_simulation_client.models import (
     HouseholdReportSubmission as GeneratedSubmission,
@@ -334,6 +335,9 @@ class SimulationEntrypointHouseholdReports:
             baseline=_policy_choice(submission.baseline),
             reform=(
                 None if submission.reform is None else _policy_choice(submission.reform)
+            ),
+            options=HouseholdCalculationOptions(
+                add_missing_variables=submission.add_missing_variables
             ),
             trigger=GeneratedRunTrigger.INITIAL,
         )

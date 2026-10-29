@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictBool
 
 from policyengine_api.query_parameters import ResourceId
 
@@ -49,13 +49,17 @@ class HouseholdReportFields(StrictHouseholdReportInput):
 
     ``household_id`` names a household stored through ``/v2/households``.
     ``reform`` is null for a report of the baseline alone. The report is for
-    the household's ``default_year``.
+    the household's ``default_year``. With ``add_missing_variables``, each
+    calculation adds every yearly, monthly and eternal variable the household
+    lacks, as ``/calculate-full`` does; otherwise it fills in only the values
+    the household asks for.
     """
 
     kind: Literal["household"]
     household_id: ResourceId
     baseline: HouseholdPolicyChoice
     reform: HouseholdPolicyChoice | None = None
+    add_missing_variables: StrictBool = False
 
 
 @dataclass(frozen=True)
@@ -70,6 +74,7 @@ class HouseholdReportSubmission:
     household_id: UUID
     baseline: HouseholdPolicyChoice
     reform: HouseholdPolicyChoice | None
+    add_missing_variables: bool = False
 
 
 @dataclass(frozen=True)

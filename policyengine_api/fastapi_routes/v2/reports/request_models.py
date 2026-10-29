@@ -29,7 +29,9 @@ class HouseholdReportCreateRequest(HouseholdReportFields):
 
     ``baseline`` and ``reform`` each name a v2 policy of the country, and an
     empty object means current law; ``reform`` is null for a report of the
-    baseline alone. It is calculated for the household's ``default_year``.
+    baseline alone. It is calculated for the household's ``default_year``;
+    with ``add_missing_variables``, each calculation also adds every variable
+    the household lacks, as ``/calculate-full`` does.
     """
 
     country_id: CountryId

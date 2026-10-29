@@ -504,3 +504,20 @@ def test_openapi_describes_a_rerun_of_either_kind() -> None:
 
     run_request = schema["components"]["schemas"]["EconomyReportRunRequest"]
     assert "household report" in run_request["description"]
+
+
+@pytest.mark.parametrize(
+    ("value", "status"), [(True, 201), (False, 201), ("yes", 422), (None, 422)]
+)
+def test_a_household_report_may_ask_for_every_variable(value, status: int) -> None:
+    simulation = FakeHouseholdReportSimulation()
+
+    response = _client(simulation).post(
+        "/v2/reports?country_id=us",
+        json={**SUBMISSION, "add_missing_variables": value},
+    )
+
+    assert response.status_code == status, response.text
+    if status == 201:
+        ((_name, submission),) = simulation.calls
+        assert submission.add_missing_variables is value

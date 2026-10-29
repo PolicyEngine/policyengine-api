@@ -32,6 +32,7 @@ def household_report_submission(
         household_id=report_input.household_id,
         baseline=report_input.baseline,
         reform=report_input.reform,
+        add_missing_variables=report_input.add_missing_variables,
     )
 
 
