@@ -35,8 +35,10 @@ reads them itself. Its declared answers become the protocol's errors:
 
 from __future__ import annotations
 
+from datetime import datetime
 from functools import cache
 from typing import TYPE_CHECKING, Any, NoReturn, Protocol, TypeVar
+from uuid import UUID
 
 import httpx
 from policyengine_api_simulation_client import AuthenticatedClient
@@ -89,7 +91,6 @@ from policyengine_api.services.v2.simulation_entrypoint.types import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from uuid import UUID
 
     from policyengine_api_simulation_client.models import (
         HouseholdCalculationResponse,
@@ -193,23 +194,47 @@ def _optional_object(value: _GeneratedObject | None) -> dict[str, Any] | None:
     return None if value is None else value.to_dict()
 
 
+CheckedT = TypeVar("CheckedT")
+
+
+def _checked(value: object, expected: type[CheckedT]) -> CheckedT:
+    """Return ``value`` if it has the type the generated model declares for it.
+
+    The generated models copy some fields as they came, such as a nullable
+    UUID or date-time, or a list of text, so the record checks them; raise
+    TypeError otherwise.
+    """
+    if not isinstance(value, expected) or (expected is int and isinstance(value, bool)):
+        msg = f"expected {expected.__name__}, got {type(value).__name__}"
+        raise TypeError(msg)
+    return value
+
+
+def _optional(value: object, expected: type[CheckedT]) -> CheckedT | None:
+    return None if value is None else _checked(value, expected)
+
+
+def _warnings(warnings: object) -> tuple[str, ...]:
+    return tuple(_checked(warning, str) for warning in _checked(warnings, list))
+
+
 def _calculation(
     calculation: HouseholdCalculationResponse,
 ) -> HouseholdCalculationRecord:
     result, failure = calculation.result, calculation.error
     return HouseholdCalculationRecord(
-        id=calculation.calculation_id,
-        simulation_id=calculation.simulation_id,
-        policy_id=calculation.policy_id,
+        id=_checked(calculation.calculation_id, UUID),
+        simulation_id=_checked(calculation.simulation_id, UUID),
+        policy_id=_optional(calculation.policy_id, UUID),
         status=calculation.status.value,
-        attempt=calculation.attempt,
+        attempt=_checked(calculation.attempt, int),
         trigger=calculation.trigger.value,
         error=(
             None
             if failure is None
             else HouseholdCalculationError(
-                code=failure.code,
-                message=failure.message,
+                code=_checked(failure.code, str),
+                message=_checked(failure.message, str),
                 detail=_optional_object(failure.detail),
             )
         ),
@@ -218,14 +243,14 @@ def _calculation(
             if result is None
             else HouseholdCalculationOutput(
                 household=result.household.to_dict(),
-                warnings=tuple(result.warnings),
+                warnings=_warnings(result.warnings),
                 spm_config=_optional_object(result.spm_config),
                 spm_provenance=_optional_object(result.spm_provenance),
             )
         ),
-        dispatched_at=calculation.dispatched_at,
-        completed_at=calculation.completed_at,
-        created_at=calculation.created_at,
+        dispatched_at=_optional(calculation.dispatched_at, datetime),
+        completed_at=_optional(calculation.completed_at, datetime),
+        created_at=_checked(calculation.created_at, datetime),
     )
 
 
@@ -240,12 +265,12 @@ def _report_run(report: HouseholdReportResponse) -> HouseholdReportRunRecord | N
     ):
         return None
     return HouseholdReportRunRecord(
-        id=report.report_run_id,
-        report_id=report.report_id,
+        id=_checked(report.report_run_id, UUID),
+        report_id=_checked(report.report_id, UUID),
         trigger=report.trigger.value,
-        tax_benefit_model_version_id=report.catalog_version_id,
+        tax_benefit_model_version_id=_checked(report.catalog_version_id, UUID),
         policyengine_version=None,
-        year=report.year,
+        year=_checked(report.year, int),
         status=REPORT_STATUSES[report.status.value],
         baseline=_calculation(report.baseline),
         reform=None if report.reform is None else _calculation(report.reform),
@@ -255,12 +280,12 @@ def _report_run(report: HouseholdReportResponse) -> HouseholdReportRunRecord | N
 def _report(report: HouseholdReportResponse) -> HouseholdReportRecord:
     run = _report_run(report)
     return HouseholdReportRecord(
-        id=report.report_id,
-        country_id=report.country,
-        year=report.year,
-        household_id=report.household_id,
-        baseline_simulation_id=report.baseline_simulation_id,
-        reform_simulation_id=report.reform_simulation_id,
+        id=_checked(report.report_id, UUID),
+        country_id=_checked(report.country, str),
+        year=_checked(report.year, int),
+        household_id=_optional(report.household_id, UUID),
+        baseline_simulation_id=_checked(report.baseline_simulation_id, UUID),
+        reform_simulation_id=_optional(report.reform_simulation_id, UUID),
         status=ReportStatus.NOT_RUN if run is None else run.status,
         run=run,
     )
@@ -270,9 +295,10 @@ def _report_answer(call: Callable[[], Response[Any]]) -> HouseholdReportRecord:
     """Run one report route call and return the report it answered.
 
     The generated client keeps a nested value it cannot parse as it came,
-    such as a run status it does not know or a calculation of another shape,
-    so the record is built here under the same rule as the parse: an answer
-    that does not parse means the entrypoint cannot be used.
+    such as a run status it does not know, a calculation of another shape or
+    a nullable UUID that is not one, so the record is built and checked here
+    under the same rule as the parse: an answer that does not parse means the
+    entrypoint cannot be used.
     """
     answer = _parsed(call, HouseholdReportResponse)
     try:

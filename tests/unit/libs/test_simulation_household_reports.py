@@ -591,3 +591,95 @@ def test_a_success_answer_that_does_not_parse_means_the_entrypoint_is_unavailabl
 
     with pytest.raises(SimulationServiceUnavailableError):
         entrypoint.adapter().get_report(REPORT_ID)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        _report_body(household_id="not-a-uuid"),
+        _report_body(report_run_id="not-a-uuid"),
+        _report_body(catalog_version_id="not-a-uuid"),
+        _report_body(reform_simulation_id="not-a-uuid"),
+        _report_body(country=7),
+        _report_body(
+            baseline={
+                **_calculation_body(BASELINE_RUN_ID, BASELINE_SIMULATION_ID, None),
+                "policy_id": "not-a-uuid",
+            }
+        ),
+        _report_body(
+            baseline=_calculation_body(
+                BASELINE_RUN_ID, BASELINE_SIMULATION_ID, None, dispatched_at="yesterday"
+            )
+        ),
+        _report_body(
+            baseline={
+                **_calculation_body(BASELINE_RUN_ID, BASELINE_SIMULATION_ID, None),
+                "result": {
+                    "household": CALCULATED_HOUSEHOLD,
+                    "warnings": [7],
+                    "spm_config": None,
+                    "spm_provenance": None,
+                    "bundle": None,
+                },
+            }
+        ),
+    ],
+    ids=[
+        "household-id",
+        "report-run-id",
+        "catalog-version-id",
+        "reform-simulation-id",
+        "country",
+        "policy-id",
+        "dispatched-at",
+        "warnings",
+    ],
+)
+def test_a_value_the_client_passes_unchecked_means_the_entrypoint_is_unavailable(
+    answer: dict,
+) -> None:
+    """The generated client copies some fields without checking their type."""
+    entrypoint = SimulationEntrypointStub(httpx.Response(200, json=answer))
+
+    with pytest.raises(SimulationServiceUnavailableError):
+        entrypoint.adapter().get_report(REPORT_ID)
+
+
+def test_a_well_formed_answer_passes_the_type_checks_unchanged() -> None:
+    failure = {
+        "code": "worker_timeout",
+        "message": "The call timed out.",
+        "detail": None,
+    }
+    answer = _report_body(
+        status="failed",
+        reform=_calculation_body(
+            REFORM_RUN_ID,
+            REFORM_SIMULATION_ID,
+            REFORM_POLICY_ID,
+            status="failed",
+            error=failure,
+        ),
+    )
+    entrypoint = SimulationEntrypointStub(httpx.Response(200, json=answer))
+
+    report = entrypoint.adapter().get_report(REPORT_ID)
+
+    assert report.run is not None
+    assert report.run.baseline == SUCCEEDED_REPORT.run.baseline
+    assert report.run.reform == HouseholdCalculationRecord(
+        id=REFORM_RUN_ID,
+        simulation_id=REFORM_SIMULATION_ID,
+        policy_id=REFORM_POLICY_ID,
+        status="failed",
+        attempt=1,
+        trigger="initial",
+        error=HouseholdCalculationError(
+            code="worker_timeout", message="The call timed out.", detail=None
+        ),
+        result=None,
+        dispatched_at=CREATED_AT_VALUE,
+        completed_at=None,
+        created_at=CREATED_AT_VALUE,
+    )
