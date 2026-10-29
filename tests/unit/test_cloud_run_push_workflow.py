@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import sys
 
 from tests.unit.cloud_run_deploy_support import (
     PRODUCTION_CLOUD_RUN_SERVICE,
@@ -25,6 +28,8 @@ CLOUD_RUN_SERVICE_SCRIPTS = (
     "scripts/resolve_cloud_run_candidate_state.sh",
     "scripts/set_cloud_run_revision.sh",
 )
+LIVE_TESTS_STEP = "Run live staging tests, one pytest worker per test"
+LIVE_TESTS_SCRIPT = REPO / ".github/scripts/run_live_staging_tests.sh"
 RELEASE_TESTS_JOB = "release-tests"
 RELEASE_TESTS_STEP = "Run release tests"
 RELEASE_TESTS_COMMAND = "bash .github/scripts/run_release_tests.sh"
@@ -181,9 +186,8 @@ def _assert_live_tests_run_in_parallel_after_readiness(
     ) < parallel_live_tests.index(live_readiness_command)
     assert parallel_live_tests.index(
         live_readiness_command
-    ) < parallel_live_tests.index("Run live staging tests in two pytest workers")
+    ) < parallel_live_tests.index(LIVE_TESTS_STEP)
     assert "bash .github/scripts/run_live_staging_tests.sh" in parallel_live_tests
-    assert "-n 2" in live_test_script
     assert "--dist load" in live_test_script
     assert "--maxschedchunk=1" in live_test_script
     assert "tests/integration/test_live_budget_window_cache.py" in live_test_script
@@ -196,6 +200,59 @@ def _assert_live_tests_run_in_parallel_after_readiness(
     )
     assert "github.run_id" in parallel_live_tests
     assert "github.run_attempt" in parallel_live_tests
+
+
+def _live_test_worker_count(live_test_script: str) -> int:
+    worker_counts = re.findall(r"^\s*-n (\S+) \\$", live_test_script, re.MULTILINE)
+    assert len(worker_counts) == 1, "the live test script must pass -n once"
+    assert worker_counts[0].isdigit(), "the live test worker count must be a number"
+    return int(worker_counts[0])
+
+
+def _collected_live_tests(live_test_script: str) -> list[str]:
+    test_files = re.findall(r"tests/integration/test_live_\w+\.py", live_test_script)
+    collection_env = {
+        name: value for name, value in os.environ.items() if name != "API_BASE_URL"
+    }
+    collection = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            *test_files,
+        ],
+        cwd=REPO,
+        env=collection_env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert collection.returncode == 0, collection.stdout + collection.stderr
+    return [
+        collected_line
+        for collected_line in collection.stdout.splitlines()
+        if "::" in collected_line
+    ]
+
+
+def test_live_staging_tests_get_one_pytest_worker_each():
+    live_test_script = LIVE_TESTS_SCRIPT.read_text(encoding="utf-8")
+    worker_count = _live_test_worker_count(live_test_script)
+    collected_tests = _collected_live_tests(live_test_script)
+
+    # Each test waits on its own requests, so with one worker each the step
+    # takes about as long as the longest test. A new live test needs -n raised
+    # with it, after checking the staging candidate's capacity: one Cloud Run
+    # instance admits 6 requests at a time (cloud_run_env.sh), each test sends
+    # one at a time, and further requests wait at the Cloud Run front end.
+    assert worker_count == len(collected_tests), (
+        f"run_live_staging_tests.sh runs {len(collected_tests)} tests in "
+        f"{worker_count} pytest workers; give each test its own worker"
+    )
 
 
 def _assert_promotion_verifies_the_tested_candidate(
