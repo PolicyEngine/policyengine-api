@@ -1,3 +1,14 @@
+## [5.14.2] - 2026-10-29
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.11.1.
+
+### Fixed
+
+- The changelog fragment check on pull requests accepts only fragments the release reads: the pull request must add a non-empty file directly in `changelog.d/`, named `<name>.<type>.md` with one of the types in `[tool.towncrier]`. Fragments other pull requests left on master no longer count, and the version bump and Towncrier stop at any file in `changelog.d/` they can't read instead of leaving it out.
+
+
 ## [5.14.1] - 2026-10-29
 
 ### Fixed
