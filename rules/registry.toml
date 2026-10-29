@@ -1401,9 +1401,14 @@ kind = "none"
 [[rule]]
 id = "api.process.changelog-fragment"
 category = "process"
-statement = "Every PR adds a changelog.d fragment."
-rationale = "docs/engineering/skills/github-prs.md"
-scope = ["changelog.d"]
+statement = "Every PR adds, relative to its base commit, at least one changelog fragment of its own, a non-empty file directly in changelog.d/ named `<name>.<type>.md` with a type from [tool.towncrier] in pyproject.toml, and leaves nothing else there but .gitkeep; the PR check and the release's version bump read fragments through one definition, .github/changelog_fragments.py."
+rationale = "docs/engineering/skills/github-prs.md#changelog-fragments"
+scope = [
+  "changelog.d",
+  ".github/changelog_fragments.py",
+  ".github/bump_version.py",
+  ".github/scripts/check_changelog_fragment.sh",
+]
 tier = "mechanical"
 status = "enforced"
 autofix = false
@@ -1413,6 +1418,17 @@ kind = "workflow-job"
 workflow = ".github/workflows/pr.yml"
 job = "check-changelog"
 invocation = "check_changelog_fragment.sh"
+[[rule.ci]]
+workflow = ".github/workflows/push.yml"
+job = "versioning"
+invocation = "bump_version.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.process.changelog-fragment/bad"
+good_fixture = "rules/fixtures/api.process.changelog-fragment/good"
+test = "tests/unit/test_changelog_fragments.py::test_rule_proof_changelog_fragment"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
 
 [[rule]]
 id = "api.process.docker-image-builds"
