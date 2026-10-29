@@ -28,6 +28,8 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
   printf '::add-mask::%s\n' "${migration_password}"
 fi
 
+# The command runs in the environment uv.lock defines; the workflow installs
+# it with uv sync --frozen.
 POLICYENGINE_DB_PROXY_PORT="3307" \
   POLICYENGINE_DB_PASSWORD="${migration_password}" \
-  python scripts/process_v1_household_mirror_event.py "$@"
+  uv run --frozen python scripts/process_v1_household_mirror_event.py "$@"

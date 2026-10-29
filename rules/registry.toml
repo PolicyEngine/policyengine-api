@@ -1266,18 +1266,6 @@ category = "pinned-tool"
 reason = "Installs the ruff version uv.lock pins, read from uv.lock, without installing the whole project for the lint job."
 
 [[rule.exception]]
-path = ".github/workflows/migrate-v1-cloud-sql.yml"
-match = 'pip install -e ".[dev]"'
-reason = "The migration scripts run with the bare python setup-python provides, against the production and staging Cloud SQL databases; moving them to uv run --frozen has not been tested against those databases."
-removal = "the job installs with uv sync --frozen and runs its scripts through uv run --frozen, after a run against the staging database succeeds"
-
-[[rule.exception]]
-path = ".github/workflows/process-v1-household-mirror-event.yml"
-match = 'pip install -e ".[dev]"'
-reason = "The operator script runs with the bare python setup-python provides, against the production and staging databases; moving it to uv run --frozen has not been tested against those databases."
-removal = "the job installs with uv sync --frozen and runs its script through uv run --frozen, after a run against the staging database succeeds"
-
-[[rule.exception]]
 path = ".github/workflows/update-policyengine-bundle.yaml"
 match = "pip install requests uv"
 reason = "The bundle updater changes uv.lock, so it runs before a matching lock exists; it installs uv itself and requests for its inline Python with setup-python's interpreter."
