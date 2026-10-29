@@ -18,6 +18,12 @@
 # base. Checked out at the pull request's own head, it is what the branch has
 # added since it left the base branch.
 #
+# It also lists the fragments the base branch removed after the pull
+# request's branch left it; a release removes each fragment it builds. A
+# branch that still holds the commits of a lower pull request in a stack,
+# squash-merged and released since, would add that fragment back, so it must
+# not count.
+#
 # Run from the repository root, in a clone with the base branch's history
 # (actions/checkout with fetch-depth: 0).
 #
@@ -50,5 +56,20 @@ if ! fragment_directory="$("${python_bin}" "${fragments_module}" directory)"; th
   exit 1
 fi
 
+# The pull request's own head: the second parent of GitHub's test merge
+# commit, or HEAD when HEAD is the head itself.
+pull_request_head="HEAD"
+if git rev-parse --verify --quiet "HEAD^2" >/dev/null \
+  && [[ "$(git rev-parse "HEAD^1")" == "$(git rev-parse "${base_revision}^{commit}")" ]]; then
+  pull_request_head="HEAD^2"
+fi
+branch_point="$(git merge-base "${base_revision}" "${pull_request_head}")"
+
+released_paths_file="$(mktemp)"
+trap 'rm -f "${released_paths_file}"' EXIT
+git log --diff-filter=D --no-renames --name-only -z --format= \
+  "${branch_point}..${base_revision}" -- "${fragment_directory}" >"${released_paths_file}"
+
 git diff --find-renames --name-status -z "${base_commit}" HEAD -- "${fragment_directory}" \
-  | "${python_bin}" "${fragments_module}" check-pull-request
+  | "${python_bin}" "${fragments_module}" check-pull-request \
+    --released-paths "${released_paths_file}"

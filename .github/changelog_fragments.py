@@ -34,7 +34,10 @@ Commands, run from the repository root:
                       for the fragment directory on stdin, from the pull
                       request's base to the checked-out commit, and exit 1
                       unless the pull request adds a fragment of its own and
-                      every file in the directory is a fragment
+                      every file in the directory is a fragment.
+                      ``--released-paths FILE`` names the fragments the base
+                      branch removed after the pull request's branch left it,
+                      NUL-separated, as ``git log --name-only -z`` prints them
 """
 
 from __future__ import annotations
@@ -75,6 +78,13 @@ TWO_PATH_STATUSES = frozenset({"R", "C"})
 ON_THE_BASE_BRANCH = (
     "It is already on the base branch, so the next release fails until a pull "
     "request fixes it."
+)
+ALREADY_RELEASED = (
+    "is a fragment the base branch has already released: a release removed it "
+    "after this branch left the base branch, so merging would publish it again. "
+    "This happens when a pull request lower in a stack merged; rebase this "
+    "branch onto the base branch without that pull request's commits. If it is "
+    "a new note that reuses the name, rename it."
 )
 
 
@@ -479,6 +489,18 @@ def parse_name_status(output: bytes) -> list[Change]:
     return changes
 
 
+def parse_paths(output: bytes) -> set[str]:
+    """Return the NUL-separated paths in ``output``, as ``git log -z`` prints them.
+
+    git separates one commit's paths from the next with a newline as well.
+    """
+    return {
+        path.strip(b"\n").decode("utf-8", errors="surrogateescape")
+        for path in output.split(b"\0")
+        if path.strip(b"\n")
+    }
+
+
 def annotation_message(message: str) -> str:
     """Escape ``message`` so the Actions runner reads it as one annotation message."""
     return message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
@@ -518,12 +540,16 @@ def _no_own_fragment_message(
     return " ".join(sentences)
 
 
-def check_pull_request(root: Path, changes: list[Change]) -> int:
+def check_pull_request(
+    root: Path, changes: list[Change], released_paths: set[str] | None = None
+) -> int:
     """Check the checkout in ``root`` of a pull request that makes ``changes``.
 
-    Print an error annotation for each file in the fragment directory that is
-    not a fragment, and one if the pull request adds no fragment of its own;
-    return the exit status.
+    ``released_paths`` are the fragments the base branch removed after the pull
+    request's branch left it: one the pull request adds back is a problem, not
+    a fragment of its own. Print an error annotation for each file in the
+    fragment directory that is not a fragment, and one if the pull request
+    adds no fragment of its own; return the exit status.
     """
     definition = FragmentDefinition.load(root)
     scan = definition.scan(root)
@@ -544,13 +570,18 @@ def check_pull_request(root: Path, changes: list[Change]) -> int:
         (path, definition.empty_folder_problem(path))
         for path in sorted(changed_paths - read_paths)
     )
+    added_paths = definition.added_paths(changes)
+    resurrected_paths = added_paths & (released_paths or set())
+    problems.update(
+        (path, f"{path} {ALREADY_RELEASED}") for path in sorted(resurrected_paths)
+    )
+    own_fragments = [
+        fragment
+        for fragment in scan.fragments
+        if fragment.path in added_paths - resurrected_paths
+    ]
     for path, problem in problems.items():
         _print_error(problem, path)
-
-    added_paths = definition.added_paths(changes)
-    own_fragments = [
-        fragment for fragment in scan.fragments if fragment.path in added_paths
-    ]
     if not own_fragments:
         _print_error(_no_own_fragment_message(definition, scan, changes))
     if problems or not own_fragments:
@@ -573,9 +604,14 @@ def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("directory", help="print the fragment directory")
-    commands.add_parser(
+    check_parser = commands.add_parser(
         "check-pull-request",
         help="check a pull request; git diff --name-status -z output on stdin",
+    )
+    check_parser.add_argument(
+        "--released-paths",
+        type=Path,
+        help="file of fragments the base branch removed since the branch left it",
     )
     options = parser.parse_args(arguments)
     root = Path.cwd()
@@ -584,7 +620,12 @@ def main(arguments: list[str] | None = None) -> int:
             print(FragmentDefinition.load(root).directory)
             return 0
         changes = parse_name_status(sys.stdin.buffer.read())
-        return check_pull_request(root, changes)
+        released_paths = (
+            parse_paths(options.released_paths.read_bytes())
+            if options.released_paths
+            else set()
+        )
+        return check_pull_request(root, changes, released_paths)
     except (ConfigurationError, ValueError) as error:
         _print_error(str(error))
         return 1

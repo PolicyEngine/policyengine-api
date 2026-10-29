@@ -41,7 +41,12 @@ commit (`github.event.pull_request.base.sha`):
 - It fails unless the PR adds such a file. Fragments already on master don't
   count: they belong to the PRs that added them until the next release removes
   them. Editing, deleting or renaming one of them doesn't count either, but
-  moving a file the release couldn't read to a fragment name does.
+  moving a file the release couldn't read to a fragment name does. git decides
+  what is a rename: a file deleted and one added with mostly the same text.
+- A fragment the base branch has already released doesn't count, and fails.
+  When a lower PR in a stack is squash-merged, the release removes its
+  fragment; an upper branch that still holds the lower PR's commits would add
+  it back. Rebase the upper branch onto master without those commits.
 - It fails on every file in `changelog.d/` the release can't read: a file in a
   folder (#4084's `changelog.d/added/4083.md` belonged at
   `changelog.d/4083.added.md`), another name, an unknown or uppercase type, an
