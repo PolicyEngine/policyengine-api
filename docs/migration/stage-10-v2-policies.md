@@ -174,6 +174,28 @@ request headers used by v1 and v2, exposes `X-PolicyEngine-Request-Id`, and
 applies CORS headers to typed errors and service-unavailable responses. Route
 functions do not implement separate preflight behavior.
 
+## Missing parameters
+
+A policy can set parameters that a later country package release renamed or
+removed. Policy reads report them as `missing_parameters`, so a client can
+tell its user and not run the policy:
+
+- `GET /{country}/policy/{policy_id}` checks the v1 policy's parameter paths
+  against the leaf parameters of the country model the Public API runs. It
+  reads nothing from Supabase, so v1 reads stay on Cloud SQL. The field is
+  null for a stored policy that is not a parameter-path object.
+- `GET /v2/policies/{policy_id}`, `GET /v2/policies` and `POST /v2/policies`
+  check each policy against the catalog of the running PolicyEngine.py
+  version. The field is null when that catalog is not published.
+
+Both use the comparison the v2 copy uses (`parameters_missing_from_model`),
+and the v2 catalog of a release holds the same leaf parameters as that
+release's country model. So a v1 policy reported with missing parameters
+is one a first copy under the running release refuses as
+`missing_parameters`. A policy copied before a release removed its
+parameter keeps that copy, since an existing copy is not translated again;
+it is still reported as missing on both routes.
+
 ## Monitoring
 
 Monitor structured events with metric names `v1_policy_mirror_operations` and

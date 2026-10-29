@@ -16,6 +16,7 @@ from policyengine_api.country import (
     _serialize_axis_result,
     get_requested_computations,
 )
+from policyengine_api.services.policy_parameter_service import PolicyParameterService
 
 
 class ExampleEnum(Enum):
@@ -521,3 +522,26 @@ class TestSimulationCompatibility:
         assert simulation.tax_benefit_system == "modern-system"
         assert simulation.reform is None
         assert simulation.situation == {"households": {"household": {}}}
+
+
+def test_loaded_model_parameter_names_are_its_leaf_parameters() -> None:
+    names = COUNTRIES["us"].parameter_names
+
+    assert "gov.dol.minimum_wage" in names
+    assert "gov.irs.credits.ctc.amount.base[0].amount" in names
+    # A node holds parameters but is not one a policy can set.
+    assert "gov.irs.credits.ctc.amount" not in names
+    # Renamed to SURVIVING_SPOUSE in a later policyengine-us release.
+    assert "gov.irs.income.bracket.thresholds.1.WIDOW" not in names
+
+
+def test_policy_parameter_service_checks_against_the_loaded_model() -> None:
+    missing = PolicyParameterService().missing_parameters(
+        "us",
+        {
+            "gov.dol.minimum_wage": {"2026-01-01.2100-12-31": 9},
+            "gov.irs.income.bracket.thresholds.1.WIDOW": {"2026": 0},
+        },
+    )
+
+    assert missing == ["gov.irs.income.bracket.thresholds.1.WIDOW"]

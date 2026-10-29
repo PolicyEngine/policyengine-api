@@ -46,8 +46,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 
 | Method | Path | Status | Route group | Required headers | Stable response fields |
 | --- | --- | ---: | --- | --- | --- |
-| `POST` | `/v2/policies?country_id=us` | 201 | `policy` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.tax_benefit_model_id`, `result.item.parameter_values`, `result.item.created_at`, `result.item.updated_at` |
-| `GET` | `/v2/policies/{policy_id}?country_id=us` | 200 | `policy` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.tax_benefit_model_id`, `result.item.parameter_values`, `result.item.created_at`, `result.item.updated_at` |
+| `POST` | `/v2/policies?country_id=us` | 201 | `policy` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.tax_benefit_model_id`, `result.item.parameter_values`, `result.item.created_at`, `result.item.updated_at`, `result.item.missing_parameters` |
+| `GET` | `/v2/policies/{policy_id}?country_id=us` | 200 | `policy` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.tax_benefit_model_id`, `result.item.parameter_values`, `result.item.created_at`, `result.item.updated_at`, `result.item.missing_parameters` |
 | `GET` | `/v2/policies?country_id=us` | 200 | `policy` | none | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
 
 ### `saved_policy_v1_compatibility`

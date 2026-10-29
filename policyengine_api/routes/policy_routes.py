@@ -28,6 +28,7 @@ from policyengine_api.services.policy_mirroring import (
     PolicyMirrorUnavailableError,
     mirror_policy_after_commit,
 )
+from policyengine_api.services.policy_parameter_service import PolicyParameterService
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.user_policy_mirroring import (
     UserPolicyMirrorCollaborators,
@@ -48,6 +49,7 @@ from policyengine_api.utils.payload_validators import (
 
 policy_bp = Blueprint("policy", __name__)
 policy_service = PolicyService()
+policy_parameter_service = PolicyParameterService()
 user_policy_service = UserPolicyService()
 
 # v1 policy and saved-policy IDs are MySQL signed INT values.
@@ -254,8 +256,11 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
         policy_id (int | str): ID of the stored policy; cast to int.
 
     Returns:
-        Response: The policy as JSON under ``result``. An unknown ID gives 404,
-        and an invalid policy read-source setting gives 503.
+        Response: The policy as JSON under ``result``, with
+        ``missing_parameters``: the parameter paths it sets that the country
+        model the Public API runs no longer has (sorted, empty when it has
+        them all), or null when they cannot be checked. An unknown ID gives
+        404, and an invalid policy read-source setting gives 503.
 
     """
     try:
@@ -267,11 +272,15 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
     policy_id = int(policy_id)
 
     policy = policy_service.get_policy(country_id, policy_id)
-    result = None if policy is None else _serialize_policy(policy)
-
-    if result is None:
+    if policy is None:
         msg = f"Policy #{policy_id} not found."
         raise NotFound(msg)
+    result = {
+        **_serialize_policy(policy),
+        "missing_parameters": policy_parameter_service.missing_parameters(
+            country_id, policy.policy_json
+        ),
+    }
 
     return Response(
         json.dumps({"status": "ok", "message": None, "result": result}),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import fields as dataclass_fields
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -14,6 +15,7 @@ from policyengine_core.periods import (  # type: ignore[import-untyped]
 
 from policyengine_api.services.v2.policies.types import (
     CanonicalPolicyContent,
+    CheckedPolicyRead,
     LegacyPolicySnapshot,
     LegacyPolicyTranslationReason,
     PolicyCreationInput,
@@ -31,7 +33,7 @@ from policyengine_api.services.v2.policies.validators import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Container, Mapping
     from uuid import UUID
 
     from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
@@ -181,6 +183,38 @@ def policy_parameter_values_by_policy(
             )
         )
     return {policy_id: tuple(values) for policy_id, values in grouped.items()}
+
+
+def policy_missing_parameters(
+    policy: PolicyRead,
+    *,
+    running_model_version_id: UUID,
+    running_parameter_names: Container[str],
+) -> tuple[str, ...]:
+    """Return the parameters a stored policy sets that the running catalog lacks.
+
+    A policy bound to the running catalog version lacks none: its values can
+    only name that version's parameters.
+    """
+    if policy.tax_benefit_model_version_id == running_model_version_id:
+        return ()
+    return parameters_missing_from_model(
+        (value.parameter_name for value in policy.parameter_values),
+        running_parameter_names,
+    )
+
+
+def checked_policy_read(
+    policy: PolicyRead, missing_parameters: tuple[str, ...] | None
+) -> CheckedPolicyRead:
+    """Return the policy read with the result of its missing-parameter check."""
+    return CheckedPolicyRead(
+        **{
+            field.name: getattr(policy, field.name)
+            for field in dataclass_fields(PolicyRead)
+        },
+        missing_parameters=missing_parameters,
+    )
 
 
 def policy_read(

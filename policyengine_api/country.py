@@ -7,6 +7,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime
+from functools import cached_property
 from importlib.metadata import version as get_package_version
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -149,6 +150,19 @@ class PolicyEngineCountry:
             self.country_package.CountryTaxBenefitSystem()
         )
         self.build_metadata()
+
+    @cached_property
+    def parameter_names(self) -> frozenset[str]:
+        """Return the path of every leaf parameter, the parameters a policy can set.
+
+        Nodes (which hold parameters) and the scales and brackets above leaf
+        parameters are left out, as the v2 catalog leaves them out.
+        """
+        return frozenset(
+            parameter.name
+            for parameter in self.tax_benefit_system.parameters.get_descendants()
+            if isinstance(parameter, Parameter)
+        )
 
     def build_metadata(self) -> None:
         """Build the JSON-safe metadata document served by the metadata endpoints."""

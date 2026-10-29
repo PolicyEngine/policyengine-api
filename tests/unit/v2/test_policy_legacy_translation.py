@@ -10,6 +10,9 @@ from pydantic import ValidationError
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine
 
+from policyengine_api.data.v2.catalog.catalog_selection import (
+    MetadataCatalogNotPublishedError,
+)
 from policyengine_api.data.v2.models import (
     V2_METADATA,
     Parameter,
@@ -376,7 +379,9 @@ def test_reverse_legacy_range_is_rejected() -> None:
 def test_unknown_policyengine_version_never_falls_back() -> None:
     engine, session, _model, _version, _first, _second = _session_and_catalog()
     try:
-        with pytest.raises(Exception, match=r"running PolicyEngine\.py"):
+        with pytest.raises(
+            MetadataCatalogNotPublishedError, match=r"running PolicyEngine\.py"
+        ):
             _translate(
                 session,
                 _snapshot(),
