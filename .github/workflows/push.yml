@@ -407,7 +407,7 @@ jobs:
         run: make install
       - name: Wait for Cloud Run staging candidate health before live tests
         run: bash .github/scripts/health_check.sh "${{ needs.deploy-cloud-run-staging.outputs.url }}/readiness-check"
-      - name: Run live staging tests in two pytest workers
+      - name: Run live staging tests, one pytest worker per test
         run: bash .github/scripts/run_live_staging_tests.sh
         env:
           API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}
