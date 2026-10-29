@@ -325,34 +325,38 @@ def test_tax_only_result_reads_provenance_without_calculating_spm(monkeypatch):
     }
 
 
-def _country_calculating(monkeypatch, calculate, *, spm_years=()):
+def _country_calculating(calculate, *, spm_years=()):
     """Return a US country over stand-in simulations, and the selections they get.
 
-    Each simulation calculates with `calculate`, keeps the SPM selection it was
-    built with, and reports a receipt for it that measures `spm_years`.
+    The country's own `_create_simulation` resolves the selection and builds
+    each simulation through its package's `Simulation`. Each one calculates with
+    `calculate`, keeps the selection it was built with, and reports a receipt
+    for it that measures `spm_years`.
     """
+    selections = []
+    system = SimpleNamespace(
+        get_variable=lambda _name: SimpleNamespace(value_type=float),
+        variables=HOUSEHOLD_VARIABLES,
+    )
+
+    class StandInSimulation:
+        def __init__(self, *, tax_benefit_system, situation, spm=None):
+            selections.append(spm)
+            self.tax_benefit_system = system
+            self.spm_config = spm
+            self.calculate = calculate
+
+        def get_population(self, _entity):
+            return SimpleNamespace(get_index=lambda _entity_id: 0, count=AXIS_POINTS)
+
+        def spm_provenance(self):
+            return country_receipt(self.spm_config, spm_years)
+
     country = PolicyEngineCountry.__new__(PolicyEngineCountry)
     country.country_id = "us"
+    country.country_package = SimpleNamespace(Simulation=StandInSimulation)
+    country.tax_benefit_system = system
     country.metadata = STAND_IN_METADATA
-    selections = []
-
-    def create_simulation(_household, _reform, spm=None):
-        selections.append(spm)
-        simulation = SimpleNamespace(
-            calculate=calculate,
-            get_population=lambda _entity: SimpleNamespace(
-                get_index=lambda _entity_id: 0, count=AXIS_POINTS
-            ),
-            spm_config=spm,
-            spm_provenance=lambda: country_receipt(spm, spm_years),
-        )
-        system = SimpleNamespace(
-            get_variable=lambda _name: SimpleNamespace(value_type=float),
-            variables=HOUSEHOLD_VARIABLES,
-        )
-        return simulation, system
-
-    monkeypatch.setattr(country, "_create_simulation", create_simulation)
     return country, selections
 
 
@@ -504,12 +508,12 @@ def test_missing_input_cases_cover_every_spm_input_error_code():
 )
 @pytest.mark.parametrize("axes", [False, True])
 def test_http_reports_a_chosen_measurements_missing_input_as_a_400(
-    monkeypatch, http_client_for, case, axes
+    http_client_for, case, axes
 ):
     """The request sends `spm`, so the caller chose the measurement it asked for."""
     error = _spm_input_error(case.code, case.message)
     country, _ = _country_calculating(
-        monkeypatch, _calculate_refusing("spm_unit_spm_threshold", error)
+        _calculate_refusing("spm_unit_spm_threshold", error)
     )
     response = http_client_for(country).post(
         "/us/calculate",
@@ -532,7 +536,7 @@ def test_http_reports_a_chosen_measurements_missing_input_as_a_400(
 )
 @pytest.mark.parametrize("axes", [False, True])
 def test_http_returns_an_inherited_measurements_dependants_as_null(
-    monkeypatch, http_client_for, case, axes
+    http_client_for, case, axes
 ):
     """The same household, without `spm`, keeps HTTP 200 and loses only a dependant.
 
@@ -540,7 +544,7 @@ def test_http_returns_an_inherited_measurements_dependants_as_null(
     """
     error = _spm_input_error(case.code, case.message)
     country, _ = _country_calculating(
-        monkeypatch, _calculate_refusing("spm_unit_spm_threshold", error)
+        _calculate_refusing("spm_unit_spm_threshold", error)
     )
     response = http_client_for(country).post(
         "/us/calculate", json={"household": case.household(axes=axes)}
@@ -559,12 +563,10 @@ def test_http_returns_an_inherited_measurements_dependants_as_null(
     assert response.json["spm_provenance"]["geography_kind"] == "county"
 
 
-def test_http_reports_an_area_the_forecast_lacks_before_any_simulation(
-    monkeypatch, http_client_for
-):
+def test_http_reports_an_area_the_forecast_lacks_before_any_simulation(http_client_for):
     """The API checks a chosen area against the forecast before the country runs."""
     message = "SPM area is unavailable in the selected artifact: unknown-area"
-    country, selections = _country_calculating(monkeypatch, _calculate_any_variable)
+    country, selections = _country_calculating(_calculate_any_variable)
     response = http_client_for(country).post(
         "/us/calculate",
         json={
@@ -592,11 +594,11 @@ def test_http_reports_an_area_the_forecast_lacks_before_any_simulation(
     ids=["national", "county", "metro"],
 )
 def test_http_explicit_geography_returns_the_threshold_and_its_receipt(
-    monkeypatch, http_client_for, selection
+    http_client_for, selection
 ):
     """The response carries the compact receipt for the geography the caller chose."""
     country, selections = _country_calculating(
-        monkeypatch, _calculate_any_variable, spm_years=("2024",)
+        _calculate_any_variable, spm_years=("2024",)
     )
     household = requested_household()
     household["households"]["household"]["county_fips"] = {"2024": "06037"}
@@ -623,9 +625,7 @@ def test_http_explicit_geography_returns_the_threshold_and_its_receipt(
     ]
 
 
-def test_http_tax_only_result_carries_a_receipt_that_measured_no_year(
-    monkeypatch, http_client_for
-):
+def test_http_tax_only_result_carries_a_receipt_that_measured_no_year(http_client_for):
     """Only the requested tax is calculated, and its receipt names the chosen area."""
     calculations = []
 
@@ -633,7 +633,7 @@ def test_http_tax_only_result_carries_a_receipt_that_measured_no_year(
         calculations.append(variable)
         return np.full(AXIS_POINTS, CALCULATED_VALUE)
 
-    country, _ = _country_calculating(monkeypatch, calculate)
+    country, _ = _country_calculating(calculate)
     response = http_client_for(country).post(
         "/us/calculate",
         json={
@@ -652,7 +652,7 @@ def test_http_tax_only_result_carries_a_receipt_that_measured_no_year(
 
 
 def test_http_full_calculation_adds_omitted_variables_under_the_chosen_measurement(
-    monkeypatch, http_client_for
+    http_client_for,
 ):
     """`/calculate-full` asks the country for every yearly variable left out."""
     calculations = []
@@ -661,9 +661,7 @@ def test_http_full_calculation_adds_omitted_variables_under_the_chosen_measureme
         calculations.append((variable, period))
         return np.full(AXIS_POINTS, CALCULATED_VALUE)
 
-    country, selections = _country_calculating(
-        monkeypatch, calculate, spm_years=("2024",)
-    )
+    country, selections = _country_calculating(calculate, spm_years=("2024",))
     household = {
         "people": {"you": {"age": {"2024": 40}}},
         "households": {"household": {"members": ["you"]}},
@@ -691,7 +689,7 @@ def test_http_full_calculation_adds_omitted_variables_under_the_chosen_measureme
 
 
 def test_http_stored_household_replays_its_saved_selection_once_then_from_the_cache(
-    monkeypatch, http_client_for, orm_session_factory
+    http_client_for, orm_session_factory
 ):
     """A replay calculates the saved selection, and a second replay reads the cache."""
     with orm_session_factory.begin() as session:
@@ -705,7 +703,7 @@ def test_http_stored_household_replays_its_saved_selection_once_then_from_the_ca
             )
         )
     country, selections = _country_calculating(
-        monkeypatch, _calculate_any_variable, spm_years=("2024",)
+        _calculate_any_variable, spm_years=("2024",)
     )
     client = http_client_for(country)
     created = client.post(
