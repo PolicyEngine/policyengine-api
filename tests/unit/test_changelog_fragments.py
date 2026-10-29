@@ -202,18 +202,27 @@ def test_every_file_in_a_folder_inside_changelog_d_is_a_problem(
     assert expected_problem in scan.problems[relative_path]
 
 
-def test_an_empty_folder_inside_changelog_d_is_a_problem(repository: Path):
+def test_empty_folders_are_listed_apart_from_the_problems(repository: Path):
+    """Git can't commit an empty folder, so one is in a checkout only by accident.
+
+    A local ``git mv`` out of changelog.d/added/ leaves one behind; in a fresh
+    checkout, only a submodule makes one. The version bump treats each as a
+    problem, as Towncrier does; the PR check reports one only if the pull
+    request changed that path.
+    """
     (repository / "changelog.d/added").mkdir()
+    (repository / "changelog.d/notes/drafts").mkdir(parents=True)
 
-    scan = _definition().scan(repository)
+    definition = _definition()
+    scan = definition.scan(repository)
 
-    assert scan.problems == {
-        "changelog.d/added": (
-            "changelog.d/added is an empty folder inside changelog.d/. The "
-            "release reads only files directly in changelog.d/ and stops at "
-            "anything else there. Delete it."
-        )
-    }
+    assert scan.problems == {}
+    assert scan.empty_folders == ("changelog.d/added", "changelog.d/notes/drafts")
+    assert definition.empty_folder_problem("changelog.d/added") == (
+        "changelog.d/added is an empty folder or a submodule inside changelog.d/. "
+        "The release reads only files directly in changelog.d/ and stops at "
+        "anything else there. Delete it."
+    )
 
 
 @pytest.mark.parametrize(
@@ -290,7 +299,7 @@ def test_a_file_not_named_name_type_md_is_a_problem(
             f"changelog.d/4083.added.md holds only whitespace. {EMPTY_ENTRY}",
         ),
         (
-            "﻿\n",
+            "\ufeff\n",
             f"changelog.d/4083.added.md holds only whitespace. {EMPTY_ENTRY}",
         ),
     ],

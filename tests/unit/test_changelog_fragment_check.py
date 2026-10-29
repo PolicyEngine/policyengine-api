@@ -301,6 +301,29 @@ def test_emptying_a_pending_fragment_fails_even_with_a_fragment_of_its_own(
     assert ON_THE_BASE_BRANCH not in result.stdout
 
 
+def test_a_submodule_in_changelog_d_fails(repository: Path):
+    _write(repository, OWN_FRAGMENT)
+    _git(
+        repository,
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        f"160000,{_master(repository)},changelog.d/vendored.added.md",
+    )
+    _git(repository, "add", OWN_FRAGMENT)
+    # Commit the index as it stands: git add --all would stage the submodule's
+    # removal, since the working tree has no folder for it.
+    _git(repository, "commit", "--quiet", "-m", "Add a fragment and a submodule")
+
+    result = _run_check(repository, _master(repository))
+
+    assert result.returncode == 1, result.stdout
+    assert (
+        "::error file=changelog.d/vendored.added.md::changelog.d/vendored.added.md "
+        "is an empty folder or a submodule inside changelog.d/." in result.stdout
+    )
+
+
 def test_an_unreadable_file_already_on_master_fails_and_says_so(repository: Path):
     _git(repository, "checkout", "--quiet", "master")
     _write(repository, PULL_REQUEST_4084_FRAGMENT)
