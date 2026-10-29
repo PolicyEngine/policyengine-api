@@ -46,7 +46,8 @@ commit (`github.event.pull_request.base.sha`):
 - A fragment the base branch has already released doesn't count, and fails.
   When a lower PR in a stack is squash-merged, the release removes its
   fragment; an upper branch that still holds the lower PR's commits would add
-  it back. Rebase the upper branch onto master without those commits.
+  it back with the same text. Rebase the upper branch onto master without
+  those commits. A new fragment that only reuses a released one's name counts.
 - It fails on every file in `changelog.d/` the release can't read: a file in a
   folder (#4084's `changelog.d/added/4083.md` belonged at
   `changelog.d/4083.added.md`), another name, an unknown or uppercase type, an

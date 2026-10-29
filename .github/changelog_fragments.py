@@ -35,14 +35,15 @@ Commands, run from the repository root:
                       request's base to the checked-out commit, and exit 1
                       unless the pull request adds a fragment of its own and
                       every file in the directory is a fragment.
-                      ``--released-paths FILE`` names the fragments the base
-                      branch removed after the pull request's branch left it,
-                      NUL-separated, as ``git log --name-only -z`` prints them
+                      ``--released-fragments FILE`` holds the fragments the
+                      base branch removed after the pull request's branch left
+                      it, as ``git log --diff-filter=D --raw -z`` prints them
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 import tomllib
@@ -75,6 +76,8 @@ NAME_TERMS = (
 # git diff --name-status statuses that name two paths: the source, then the
 # destination. Every other status names one.
 TWO_PATH_STATUSES = frozenset({"R", "C"})
+# Hexadecimal digits in a SHA-256 git object id; a SHA-1 id has 40.
+SHA256_OBJECT_ID_LENGTH = 64
 ON_THE_BASE_BRANCH = (
     "It is already on the base branch, so the next release fails until a pull "
     "request fixes it."
@@ -489,16 +492,55 @@ def parse_name_status(output: bytes) -> list[Change]:
     return changes
 
 
-def parse_paths(output: bytes) -> set[str]:
-    """Return the NUL-separated paths in ``output``, as ``git log -z`` prints them.
+def parse_removed_blobs(output: bytes) -> dict[str, set[str]]:
+    """Return the blob ids each path held when deleted, from ``git log --raw -z``.
 
-    git separates one commit's paths from the next with a newline as well.
+    Each deletion is a ``:<mode> <mode> <old blob> <new blob> D`` record and
+    then its path, NUL-separated; git separates one commit's records from the
+    next with a newline as well.
     """
-    return {
-        path.strip(b"\n").decode("utf-8", errors="surrogateescape")
-        for path in output.split(b"\0")
-        if path.strip(b"\n")
-    }
+    fields = [
+        output_field.strip(b"\n")
+        for output_field in output.split(b"\0")
+        if output_field.strip(b"\n")
+    ]
+    if len(fields) % 2 or not all(record.startswith(b":") for record in fields[::2]):
+        msg = f"git log --raw output is not records and paths: {fields!r}"
+        raise ValueError(msg)
+    removed_blobs: dict[str, set[str]] = {}
+    for record, path in zip(fields[::2], fields[1::2], strict=True):
+        removed_blob = record.split()[2].decode("ascii")
+        decoded_path = path.decode("utf-8", errors="surrogateescape")
+        removed_blobs.setdefault(decoded_path, set()).add(removed_blob)
+    return removed_blobs
+
+
+def git_blob_id(file: Path, id_length: int) -> str:
+    """Return the id git gives ``file``'s bytes as a blob, as ``git hash-object``.
+
+    ``id_length`` is the length of the repository's object ids: 40 for SHA-1,
+    64 for SHA-256.
+    """
+    data = file.read_bytes()
+    blob = b"blob %d\0" % len(data) + data
+    if id_length == SHA256_OBJECT_ID_LENGTH:
+        return hashlib.sha256(blob).hexdigest()
+    return hashlib.sha1(blob, usedforsecurity=False).hexdigest()
+
+
+def _released_paths(
+    root: Path, added_paths: set[str], removed_blobs: dict[str, set[str]]
+) -> set[str]:
+    """Return the added paths whose text is a blob the base branch removed there."""
+    released = set()
+    for path in added_paths & set(removed_blobs):
+        file = root / path
+        if file.is_symlink() or not file.is_file():
+            continue
+        id_length = len(next(iter(removed_blobs[path])))
+        if git_blob_id(file, id_length) in removed_blobs[path]:
+            released.add(path)
+    return released
 
 
 def annotation_message(message: str) -> str:
@@ -518,11 +560,13 @@ def _print_error(message: str, path: str | None = None) -> None:
 
 
 def _no_own_fragment_message(
-    definition: FragmentDefinition, scan: Scan, changes: list[Change]
+    definition: FragmentDefinition, pending: list[str], changes: list[Change]
 ) -> str:
-    """Return the error for a pull request that adds no fragment of its own."""
+    """Return the error for a pull request that adds no fragment of its own.
+
+    ``pending`` lists the fragments already on the base branch.
+    """
     sentences = ["This pull request adds no changelog fragment of its own."]
-    pending = [fragment.path for fragment in scan.fragments]
     if pending:
         sentences.append(
             "Fragments already on the base branch belong to the pull requests "
@@ -541,15 +585,18 @@ def _no_own_fragment_message(
 
 
 def check_pull_request(
-    root: Path, changes: list[Change], released_paths: set[str] | None = None
+    root: Path,
+    changes: list[Change],
+    removed_blobs: dict[str, set[str]] | None = None,
 ) -> int:
     """Check the checkout in ``root`` of a pull request that makes ``changes``.
 
-    ``released_paths`` are the fragments the base branch removed after the pull
-    request's branch left it: one the pull request adds back is a problem, not
-    a fragment of its own. Print an error annotation for each file in the
-    fragment directory that is not a fragment, and one if the pull request
-    adds no fragment of its own; return the exit status.
+    ``removed_blobs`` maps each fragment the base branch removed after the
+    pull request's branch left it to the blobs it held. A fragment the pull
+    request adds back with that text is a problem, not a fragment of its own.
+    Print an error annotation for each file in the fragment directory that is
+    not a fragment, and one if the pull request adds no fragment of its own;
+    return the exit status.
     """
     definition = FragmentDefinition.load(root)
     scan = definition.scan(root)
@@ -571,7 +618,7 @@ def check_pull_request(
         for path in sorted(changed_paths - read_paths)
     )
     added_paths = definition.added_paths(changes)
-    resurrected_paths = added_paths & (released_paths or set())
+    resurrected_paths = _released_paths(root, added_paths, removed_blobs or {})
     problems.update(
         (path, f"{path} {ALREADY_RELEASED}") for path in sorted(resurrected_paths)
     )
@@ -583,7 +630,12 @@ def check_pull_request(
     for path, problem in problems.items():
         _print_error(problem, path)
     if not own_fragments:
-        _print_error(_no_own_fragment_message(definition, scan, changes))
+        pending = [
+            fragment.path
+            for fragment in scan.fragments
+            if fragment.path not in resurrected_paths
+        ]
+        _print_error(_no_own_fragment_message(definition, pending, changes))
     if problems or not own_fragments:
         return 1
 
@@ -609,9 +661,9 @@ def main(arguments: list[str] | None = None) -> int:
         help="check a pull request; git diff --name-status -z output on stdin",
     )
     check_parser.add_argument(
-        "--released-paths",
+        "--released-fragments",
         type=Path,
-        help="file of fragments the base branch removed since the branch left it",
+        help="git log --raw -z deletions on the base branch since the branch left it",
     )
     options = parser.parse_args(arguments)
     root = Path.cwd()
@@ -620,12 +672,12 @@ def main(arguments: list[str] | None = None) -> int:
             print(FragmentDefinition.load(root).directory)
             return 0
         changes = parse_name_status(sys.stdin.buffer.read())
-        released_paths = (
-            parse_paths(options.released_paths.read_bytes())
-            if options.released_paths
-            else set()
+        removed_blobs = (
+            parse_removed_blobs(options.released_fragments.read_bytes())
+            if options.released_fragments
+            else {}
         )
-        return check_pull_request(root, changes, released_paths)
+        return check_pull_request(root, changes, removed_blobs)
     except (ConfigurationError, ValueError) as error:
         _print_error(str(error))
         return 1
