@@ -1,42 +1,97 @@
 """Resolve UK economy regions the way the simulation service does.
 
 The simulation service runs a UK region only if .py's UK region registry
-holds it, after normalising the requested spelling. This module applies the
-same normalisation to the registry in the installed policyengine package, so
-the Public API can refuse a region before it stores or submits anything.
+holds it, after normalising the requested spelling. That registry holds the
+UK, its four countries and, when the installed bundle's
+``regional_release_kind`` is ``local_area``, the constituencies and local
+authorities from the area lists packaged with policyengine.
 
-The registry lists constituencies and local authorities only when the
-installed bundle's ``regional_release_kind`` is ``local_area``, so which area
-regions resolve follows the installed bundle.
+This module checks a region against the Public API's own copies of those
+lists, the ones its UK metadata offers, so the check and the metadata always
+agree and no part of .py is imported. Tests keep the copies equal to .py's
+packaged files and the countries equal to .py's registry.
 """
 
 from __future__ import annotations
 
-import importlib
-from typing import TYPE_CHECKING
+import csv
+from functools import cache
+from pathlib import Path
+from typing import NamedTuple
 
-if TYPE_CHECKING:
-    from policyengine.core.region import RegionRegistry
+from policyengine_api.constants import (
+    UK_COUNTRY_REGIONS,
+    UK_REGION_REGISTRY_CODES,
+    get_bundle_data_release,
+)
 
 UK_NATIONAL_REGION = "uk"
 UK_COUNTRY_REGION_TYPE = "country"
+# The release kind for which .py's registry lists constituencies and local
+# authorities.
+LOCAL_AREA_RELEASE_KIND = "local_area"
 # The region types matched by name as well as by GSS code, with the noun the
 # accepted-forms message uses for each.
 UK_AREA_REGION_NOUNS = {
     "constituency": "constituency",
     "local_authority": "local authority",
 }
+UK_AREA_LIST_PATHS = {
+    "constituency": Path(__file__).parent / "constituencies_2024.csv",
+    "local_authority": Path(__file__).parent / "local_authorities_2021.csv",
+}
 
 
-def load_uk_region_registry() -> RegionRegistry:
-    """Return .py's UK region registry from the installed policyengine package.
+class UKArea(NamedTuple):
+    """One constituency or local authority: its GSS code and its name."""
 
-    The package is imported on first use rather than at startup: importing it
-    also loads .py's country models.
+    code: str
+    name: str
+
+
+@cache
+def uk_areas(region_type: str) -> tuple[UKArea, ...]:
+    """Return the constituencies or local authorities, in file order.
+
+    The UK metadata and the region check both read the lists here, once per
+    process.
     """
-    regions_module = importlib.import_module("policyengine.countries.uk.regions")
-    registry: RegionRegistry = regions_module.uk_region_registry
-    return registry
+    with UK_AREA_LIST_PATHS[region_type].open(encoding="utf-8") as area_file:
+        return tuple(
+            UKArea(code=row["code"], name=row["name"])
+            for row in csv.DictReader(area_file)
+        )
+
+
+@cache
+def _area_codes_by_spelling(region_type: str) -> dict[str, str]:
+    """Map each area's GSS code and name, case-folded, to its region code."""
+    codes_by_spelling: dict[str, str] = {}
+    for area in uk_areas(region_type):
+        region_code = f"{region_type}/{area.code}"
+        codes_by_spelling.setdefault(area.code.casefold(), region_code)
+        codes_by_spelling.setdefault(area.name.casefold(), region_code)
+    return codes_by_spelling
+
+
+def uk_country_codes() -> tuple[str, ...]:
+    """Return the code the payload sends for each country the metadata offers."""
+    return tuple(
+        dict.fromkeys(
+            UK_REGION_REGISTRY_CODES.get(name, name)
+            for name, _label in UK_COUNTRY_REGIONS
+        )
+    )
+
+
+def area_regions_resolve() -> bool:
+    """Whether the installed bundle's release kind lets area regions resolve.
+
+    .py's registry lists constituencies and local authorities only when the
+    bundle manifest's ``regional_release_kind`` is ``local_area``.
+    """
+    release = get_bundle_data_release("uk")
+    return release.get("regional_release_kind") == LOCAL_AREA_RELEASE_KIND
 
 
 def normalise_uk_region(region: str) -> str:
@@ -72,16 +127,12 @@ def resolve_uk_region(region: str) -> str | None:
     code = normalise_uk_region(region)
     if code == UK_NATIONAL_REGION:
         return code
-    registry = load_uk_region_registry()
     region_type, _, value = code.partition("/")
     if region_type in UK_AREA_REGION_NOUNS:
-        requested = value.casefold()
-        for area in registry.get_by_type(region_type):
-            area_code = area.code.partition("/")[2]
-            if requested in {area_code.casefold(), area.label.casefold()}:
-                return area.code
-        return None
-    return code if code in registry else None
+        if not area_regions_resolve():
+            return None
+        return _area_codes_by_spelling(region_type).get(value.casefold())
+    return code if code in uk_country_codes() else None
 
 
 def _list_alternatives(names: list[str]) -> str:
@@ -93,17 +144,16 @@ def _list_alternatives(names: list[str]) -> str:
 
 
 def describe_accepted_uk_regions(*, country_aliases: tuple[str, ...] = ()) -> str:
-    """List the forms of UK region the installed registry resolves.
+    """List the forms of UK region the check accepts.
 
     ``country_aliases`` are other country names the Public API accepts and
     sends as a registry code.
     """
-    registry = load_uk_region_registry()
-    countries = [region.code for region in registry.get_by_type(UK_COUNTRY_REGION_TYPE)]
-    forms = [UK_NATIONAL_REGION, _list_alternatives([*countries, *country_aliases])]
-    forms.extend(
-        f"{region_type}/<{noun} name or GSS code>"
-        for region_type, noun in UK_AREA_REGION_NOUNS.items()
-        if registry.get_by_type(region_type)
-    )
+    countries = [*uk_country_codes(), *country_aliases]
+    forms = [UK_NATIONAL_REGION, _list_alternatives(countries)]
+    if area_regions_resolve():
+        forms.extend(
+            f"{region_type}/<{noun} name or GSS code>"
+            for region_type, noun in UK_AREA_REGION_NOUNS.items()
+        )
     return "; ".join(forms)

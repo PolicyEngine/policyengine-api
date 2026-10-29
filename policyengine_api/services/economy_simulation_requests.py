@@ -136,9 +136,11 @@ class SimulationRequestMixin:
     def _validate_uk_region(self, impact_request: EconomicImpactRequest) -> None:
         """Reject a UK region the simulation service cannot resolve.
 
-        Check the region the payload would send against .py's UK region
-        registry, with the simulation service's normalisation, so names,
-        lower-case codes and bare country names keep working. Raise
+        Check the region the payload would send against the regions .py's UK
+        region registry holds, using the UK metadata's lists (see
+        ``policyengine_api.data.uk_regions``) and the simulation service's
+        normalisation, so names, lower-case codes and bare country names keep
+        working. Raise
         ValueError, which the route returns as 400, before anything is stored
         or submitted. Other countries are unchanged.
         """
