@@ -33,7 +33,6 @@ from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationService,
     HouseholdNotFoundError,
     InvalidHouseholdInputsError,
-    PolicyNotFoundError,
 )
 from policyengine_api.services.household_mirroring import (
     HouseholdMirrorUnavailableError,
@@ -44,6 +43,7 @@ from policyengine_api.services.household_service import (
     HouseholdPersistenceError,
     HouseholdService,
 )
+from policyengine_api.services.policy_service import PolicyNotFoundError
 from policyengine_api.spm import (
     SPMValidationError,
     normalize_spm_selection,

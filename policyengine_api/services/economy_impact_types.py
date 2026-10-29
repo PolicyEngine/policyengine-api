@@ -83,6 +83,14 @@ class RuntimeBundleIdentity:
     runtime_app_name: str | None = None
 
 
+@dataclass(frozen=True)
+class ImpactPolicies:
+    """The stored JSON of the baseline and reform policies that an impact compares."""
+
+    baseline: dict[str, Any]
+    reform: dict[str, Any]
+
+
 class SimulationOptions(BaseModel):
     """The job payload sent to the Simulation entrypoint for one economy simulation."""
 

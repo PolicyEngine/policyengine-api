@@ -357,7 +357,17 @@ class EconomyService(
         setup_options: EconomicImpactSetupOptions,
         impact_action: ImpactAction,
     ) -> EconomicImpactResult:
-        """Submit a new simulation unless another request already owns submitting it."""
+        """Submit a new simulation unless another request already owns submitting it.
+
+        Both policies load first, so a request naming a policy its country does
+        not have raises PolicyNotFoundError before it claims the submission or
+        submits a job.
+        """
+        policies = self._get_policy_jsons(
+            setup_options.country_id,
+            setup_options.baseline_policy_id,
+            setup_options.reform_policy_id,
+        )
         existing_claim = self._claim_reform_impact_submission(setup_options)
 
         # The identifier above was selected while the runtime-resolution
@@ -391,6 +401,7 @@ class EconomyService(
         try:
             result = self._handle_create_impact(
                 setup_options=setup_options,
+                policies=policies,
             )
         except ReformImpactHandoffError:
             # The upstream job exists, but its polling pointer was not

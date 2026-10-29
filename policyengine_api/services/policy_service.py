@@ -26,6 +26,20 @@ class InvalidPolicyIdError(Exception):
     """Raised when a policy ID is not a non-negative integer."""
 
 
+class PolicyNotFoundError(LookupError):
+    """Raised when a stored policy does not exist in the requested country.
+
+    ``policy_ids`` holds the ID of each missing policy, so a route that names
+    several policies can say which ones were not found. It is empty when the
+    caller raised it without IDs because it already knows the policy it asked for.
+    """
+
+    def __init__(self, *policy_ids: int) -> None:
+        """Keep the IDs of the missing policies, in the order the caller gives."""
+        self.policy_ids = policy_ids
+        super().__init__(*policy_ids)
+
+
 @dataclass(frozen=True)
 class PolicySetResult:
     """Existing v1 return values and an optional detached mirror snapshot."""
