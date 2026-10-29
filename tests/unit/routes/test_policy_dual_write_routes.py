@@ -225,6 +225,16 @@ def test_destination_failure_returns_the_stored_policy_and_logs_an_error(
 ) -> None:
     """Run the real policy and copy services, with only the v2 write failing."""
     monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
+    # The real service creates only policies that set parameters the US model
+    # defines.
+    body = {
+        "label": "Legacy label",
+        "data": {
+            "gov.irs.credits.ctc.amount.base[0].amount": {
+                "2026-01-01.2026-12-31": 2500,
+            },
+        },
+    }
     failing_destination = MagicMock()
     failing_destination.mirror_legacy_policy.side_effect = LegacyPolicyTranslationError(
         "private parameter value",
@@ -237,7 +247,7 @@ def test_destination_failure_returns_the_stored_policy_and_logs_an_error(
         ),
         patch("policyengine_api.services.policy_mirroring.logger") as copy_logger,
     ):
-        response = _client().post("/us/policy", json=_body())
+        response = _client().post("/us/policy", json=body)
 
     assert response.status_code == 201
     assert response.json["message"] == "Policy created"

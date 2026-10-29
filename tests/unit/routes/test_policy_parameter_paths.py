@@ -94,7 +94,7 @@ def test_new_policy_400_lists_every_path_that_is_not_a_parameter(
         json={"label": "Several rejected paths", "data": requested_policy},
     )
 
-    _assert_rejected_paths(response, country_id, non_parameter_paths)
+    _assert_rejected_paths(response, country_id, sorted(non_parameter_paths))
     assert settable_path not in response.get_json()["message"]
     assert _stored_policies(orm_session_factory) == []
 

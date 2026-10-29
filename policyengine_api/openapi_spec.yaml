@@ -123,6 +123,41 @@ paths:
                     properties:
                       policy_id:
                         type: integer
+        "400":
+          description: >-
+            Invalid request body, or a new policy whose data names paths that
+            are not parameters in the country model, such as unknown paths and
+            parameter groups. For those paths, the message and the errors list
+            name every one. Re-saving a policy identical to a stored one returns
+            the stored policy without checking its paths.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                  result:
+                    type: object
+                    nullable: true
+                  errors:
+                    type: array
+                    description: Present when data names paths that are not parameters.
+                    items:
+                      type: object
+                      required: [type, name, path, message]
+                      properties:
+                        type:
+                          type: string
+                          enum: [policy_parameter]
+                        name:
+                          type: string
+                        path:
+                          type: string
+                        message:
+                          type: string
         404:
           description: Invalid country ID.
           content:

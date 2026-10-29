@@ -21,7 +21,7 @@ METADATA = {
         },
     },
     "parameters": {
-        "gov.irs.income.exemption.amount": {},
+        "gov.irs.income.exemption.amount": {"type": "parameter"},
     },
 }
 

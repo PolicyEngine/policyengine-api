@@ -205,7 +205,12 @@ def find_unrecognized_policy_inputs(
     policy: dict,
     metadata: dict,
 ) -> list[UnrecognizedInput]:
-    """Find policy keys that are not parameters in the country metadata."""
+    """Find policy keys that are not parameters in the country metadata.
+
+    The metadata's ``parameters`` also lists parameter groups, scales and scale
+    brackets, with the type ``parameterNode``. They hold no values of their own,
+    so a key naming one is reported like a name the model does not define.
+    """
     if not isinstance(policy, dict):
         return []
 
@@ -217,8 +222,16 @@ def find_unrecognized_policy_inputs(
             path=f"policy.{parameter_name}",
         )
         for parameter_name in policy
-        if parameter_name not in parameters
+        if not _is_settable_parameter(parameters.get(parameter_name))
     ]
+
+
+def _is_settable_parameter(parameter_metadata: object) -> bool:
+    """Say whether a metadata entry describes a parameter that holds values."""
+    return (
+        isinstance(parameter_metadata, dict)
+        and parameter_metadata.get("type") == "parameter"
+    )
 
 
 def format_invalid_inputs_message(errors: Sequence[InvalidInput]) -> str:

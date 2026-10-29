@@ -32,7 +32,7 @@ def parameter_catalog():
 def service(orm_session_factory, parameter_catalog):
     return PolicyService(
         orm_session_factory,
-        settable_parameter_names=parameter_catalog,
+        model_parameter_names=parameter_catalog,
     )
 
 
