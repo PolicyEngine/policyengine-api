@@ -42,7 +42,11 @@ ReportCreateRequest = Annotated[
 
 
 class EconomyReportRunRequest(EconomyReportRunFields):
-    """A re-run on the current catalog version; ``{}`` reuses existing runs.
+    """A re-run of an economy or household report on the current catalog version.
 
-    With ``force``, both simulations are calculated again as new attempts.
+    ``{}`` reuses existing runs: an economy report's simulation runs for that
+    version and year, or a household report's calculations that are
+    unfinished or succeeded within the last 28 days. With ``force``, each of
+    the report's simulations (one for a household report of the baseline
+    alone) is calculated again as a new attempt.
     """

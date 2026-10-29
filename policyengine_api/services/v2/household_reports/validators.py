@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from policyengine_api.data.v2.models import Country
     from policyengine_api.services.v2.household_reports.types import (
         HouseholdReportRecord,
@@ -45,7 +47,7 @@ def require_default_year(default_year: int | None) -> int:
 
 
 def require_report_in_country(
-    report: HouseholdReportRecord | None, *, country_id: str, report_id: object
+    report: HouseholdReportRecord | None, *, country_id: str, report_id: UUID
 ) -> HouseholdReportRecord:
     """Return the report, or raise ``HouseholdReportNotFoundError``.
 

@@ -258,3 +258,26 @@ def test_an_unreadable_economy_report_in_a_listing_is_no_household_lookup() -> N
 
     assert reports == ()
     assert household_simulation.calls == []
+
+
+def test_a_rerun_in_a_country_with_neither_kind_keeps_the_economy_refusal() -> None:
+    sessions = household_report_store()
+    set_country_support(
+        sessions, "us", household_enabled=False, society_wide_enabled=False
+    )
+    household_simulation = FakeHouseholdReportSimulation()
+    service = V2ReportService(
+        economy_reports=lambda: economy_report_service(
+            FakeEconomyReportSimulation(), sessions
+        ),
+        household_reports=lambda: household_report_service(
+            household_simulation, sessions=sessions
+        ),
+    )
+
+    with pytest.raises(
+        EconomyReportsUnsupportedError, match="Economy reports are not available"
+    ):
+        service.run_report(country_id="us", report_id=UNKNOWN_REPORT_ID, force=False)
+
+    assert household_simulation.calls == []

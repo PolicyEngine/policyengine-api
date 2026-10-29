@@ -497,3 +497,10 @@ def test_openapi_says_household_reports_do_not_list_their_runs() -> None:
         "404"
     ]["description"]
     assert "household report" in not_found
+
+
+def test_openapi_describes_a_rerun_of_either_kind() -> None:
+    schema = _client(FakeHouseholdReportSimulation()).get("/v2/openapi.json").json()
+
+    run_request = schema["components"]["schemas"]["EconomyReportRunRequest"]
+    assert "household report" in run_request["description"]

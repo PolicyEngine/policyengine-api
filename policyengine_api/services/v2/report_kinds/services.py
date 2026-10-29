@@ -20,6 +20,7 @@ from policyengine_api.services.v2.household_reports.types import (
 )
 from policyengine_api.services.v2.household_reports.validators import (
     HouseholdReportNotFoundError,
+    HouseholdReportsUnsupportedError,
 )
 from policyengine_api.services.v2.report_kinds.validators import report_not_found
 
@@ -138,9 +139,15 @@ class V2ReportService:
             return self._household_reports().run_report(
                 country_id=country_id, report_id=report_id, force=force
             )
-        except HouseholdReportNotFoundError as error:
+        except (
+            HouseholdReportNotFoundError,
+            HouseholdReportsUnsupportedError,
+        ) as error:
+            # A country with neither kind keeps the economy refusal it had.
             if isinstance(economy_refusal, EconomyReportsUnsupportedError):
                 raise economy_refusal from error
+            if isinstance(error, HouseholdReportsUnsupportedError):
+                raise
             raise report_not_found(
                 country_id=country_id, reference=str(report_id)
             ) from error
