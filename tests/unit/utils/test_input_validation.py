@@ -66,3 +66,31 @@ def test__find_unrecognized_inputs__reports_unknown_entity_variable_axis_and_pol
         "household.axes[0][0].name",
         "policy.gov.irs.income.exemption.amunt",
     ]
+
+
+def test__find_unrecognized_inputs__reports_policy_keys_that_are_parameter_groups():
+    metadata = {
+        **METADATA,
+        "parameters": {
+            "gov.irs.income.exemption": {"type": "parameterNode"},
+            "gov.irs.income.exemption.amount": {"type": "parameter"},
+        },
+    }
+    policy = {
+        "gov.irs.income.exemption": {"2025-01-01.2025-12-31": 100},
+        "gov.irs.income.exemption.amount": {"2025-01-01.2025-12-31": 100},
+    }
+
+    errors = find_unrecognized_inputs({}, policy, metadata)
+
+    assert [error.to_dict() for error in errors] == [
+        {
+            "type": "policy_parameter",
+            "name": "gov.irs.income.exemption",
+            "path": "policy.gov.irs.income.exemption",
+            "message": (
+                "Unrecognized policy parameter `gov.irs.income.exemption` at "
+                "`policy.gov.irs.income.exemption`."
+            ),
+        }
+    ]
