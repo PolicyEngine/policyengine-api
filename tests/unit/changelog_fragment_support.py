@@ -1,10 +1,10 @@
-"""Load .github/changelog_fragments.py and .github/bump_version.py for tests.
+"""Load .github/changelog_fragments.py and the modules that import it, for tests.
 
-``python .github/bump_version.py`` puts .github/ first on ``sys.path``, so the
-bump script imports ``changelog_fragments`` from the file beside it. These
-helpers load both files by path and register each under its module name, so
-the bump script's import finds the fragment module without a change to
-``sys.path``.
+``python .github/bump_version.py`` and ``python .github/release_commit.py``
+put .github/ first on ``sys.path``, so each imports ``changelog_fragments``
+from the file beside it. These helpers load the files by path and register
+each under its module name, so those imports find the fragment module without
+a change to ``sys.path``.
 """
 
 from __future__ import annotations
@@ -50,3 +50,9 @@ def bump_version() -> ModuleType:
     """Return .github/bump_version.py, after the fragment module it imports."""
     changelog_fragments()
     return load_github_module("bump_version")
+
+
+def release_commit() -> ModuleType:
+    """Return .github/release_commit.py, after the fragment module it imports."""
+    changelog_fragments()
+    return load_github_module("release_commit")

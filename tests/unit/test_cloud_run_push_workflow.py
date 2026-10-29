@@ -31,6 +31,10 @@ CLOUD_RUN_SERVICE_SCRIPTS = (
 LIVE_TESTS_STEP = "Run live staging tests, one pytest worker per test"
 LIVE_TESTS_SCRIPT = REPO / ".github/scripts/run_live_staging_tests.sh"
 RELEASE_TESTS_JOB = "release-tests"
+RELEASE_COMMIT_CONDITION = (
+    "(github.repository == 'PolicyEngine/policyengine-api')\n"
+    "&& (github.event.head_commit.message == 'Update PolicyEngine API')\n"
+)
 RELEASE_TESTS_STEP = "Run release tests"
 RELEASE_TESTS_COMMAND = "bash .github/scripts/run_release_tests.sh"
 # The variables the release tests read when they ran inside the staging deploy
@@ -334,7 +338,8 @@ def test_release_tests_run_in_their_own_job_before_the_staging_deploy():
     # They start with the run, beside the checks and the staging database jobs,
     # on the same release commits as the deploy.
     assert job_needs(release_tests) == []
-    assert release_tests["if"] == staging_deploy["if"]
+    assert release_tests["if"] == RELEASE_COMMIT_CONDITION
+    assert RELEASE_COMMIT_CONDITION.splitlines()[1] in staging_deploy["if"]
     # No GCP credentials: the tests ran before GCP authentication in the deploy
     # job too.
     assert release_tests["permissions"] == {"contents": "read"}
@@ -349,7 +354,13 @@ def test_release_tests_job_keeps_the_inputs_the_tests_read_in_the_deploy_job():
     assert release_tests["environment"] == "staging"
     assert release_tests["env"] == RELEASE_TESTS_JOB_ENV
     assert release_tests_step["run"] == RELEASE_TESTS_COMMAND
-    assert release_tests_step["env"] == RELEASE_TESTS_STEP_ENV
+    # Each shard also gets its index, the shard count and where to report
+    # (tests/unit/test_release_test_shards.py).
+    assert {
+        name: value
+        for name, value in release_tests_step["env"].items()
+        if not name.startswith("RELEASE_TEST_SHARD_")
+    } == RELEASE_TESTS_STEP_ENV
 
 
 def test_push_workflow_uses_local_redis_for_predeployment_test_suite():

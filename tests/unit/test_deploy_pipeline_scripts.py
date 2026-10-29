@@ -105,12 +105,21 @@ def _fake_make(tmp_path: Path, exit_code: int = 0) -> tuple[Path, Path]:
     return bin_dir, env_dump
 
 
+def _shard_env(tmp_path: Path) -> dict[str, str]:
+    return {
+        "RELEASE_TEST_SHARD_INDEX": "2",
+        "RELEASE_TEST_SHARD_COUNT": "6",
+        "RELEASE_TEST_SHARD_REPORT_DIRECTORY": str(tmp_path / "shard-report"),
+    }
+
+
 def test_release_tests_drop_deployment_settings(tmp_path: Path) -> None:
     bin_dir, env_dump = _fake_make(tmp_path)
 
     result = _run(
         "run_release_tests.sh",
         env={
+            **_shard_env(tmp_path),
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "ROUTE_IMPL_POLICY": "fastapi_native",
             "DB_WRITE_HOUSEHOLD": "dual",
@@ -137,6 +146,10 @@ def test_release_tests_drop_deployment_settings(tmp_path: Path) -> None:
     assert "PUBLIC_API_AUTH_AUDIENCE" not in names
     assert "RUNTIME_CACHE_MODE=local" in dumped
     assert "RUNTIME_CACHE_URL=redis://127.0.0.1:6379/0" in dumped
+    # make test runs this runner's shard of the suite.
+    assert "PYTEST_ADDOPTS=-p tests.release_test_shard_plugin" in dumped
+    assert "RELEASE_TEST_SHARD_INDEX=2" in dumped
+    assert "RELEASE_TEST_SHARD_COUNT=6" in dumped
 
 
 def test_release_tests_fail_when_make_test_fails(tmp_path: Path) -> None:
@@ -144,10 +157,26 @@ def test_release_tests_fail_when_make_test_fails(tmp_path: Path) -> None:
 
     result = _run(
         "run_release_tests.sh",
-        env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        env={
+            **_shard_env(tmp_path),
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        },
     )
 
     assert result.returncode == 3
+
+
+def test_release_tests_refuse_to_run_without_a_shard(tmp_path: Path) -> None:
+    bin_dir, env_dump = _fake_make(tmp_path)
+
+    result = _run(
+        "run_release_tests.sh",
+        env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+    )
+
+    assert result.returncode != 0
+    assert "RELEASE_TEST_SHARD_INDEX is required" in result.stderr
+    assert not env_dump.exists()
 
 
 # --- compute_cloud_run_metadata.sh ----------------------------------------
