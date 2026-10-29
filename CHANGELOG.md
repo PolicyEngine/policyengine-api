@@ -1,3 +1,10 @@
+## [5.15.1] - 2026-10-29
+
+### Changed
+
+- Unit tests check every canonical SPM case through the household routes with stand-in simulations, and two integration tests check the installed US model, so the pull request and release test suites no longer run the model for each combination of settings.
+
+
 ## [5.15.0] - 2026-10-29
 
 ### Added

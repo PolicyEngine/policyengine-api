@@ -1,1 +1,0 @@
-Unit tests check every canonical SPM case through the household routes with stand-in simulations, and two integration tests check the installed US model, so the pull request and release test suites no longer run the model for each combination of settings.
