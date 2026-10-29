@@ -1,3 +1,10 @@
+## [5.14.1] - 2026-10-29
+
+### Fixed
+
+- The daily telemetry error report counts a failed simulation worker or coordinator in its original exception's group. The simulation service also records each such failure as a redacted copy of class `Stage12FailureCause`, which carries the original's traceback and often its timestamp, and the report could choose either record, splitting one cause across two groups and two issues. The copy now ranks after the original exception, and is used only when the failure has no other exception.
+
+
 ## [5.14.0] - 2026-10-28
 
 ### Added
