@@ -41,8 +41,8 @@ from policyengine_api.fastapi_routes.v2.reports.request_models import (
 from policyengine_api.fastapi_routes.v2.reports.response_models import (
     READ_RESPONSES,
     REPORT_ERROR_RESPONSES,
-    REPORT_NOT_FOUND_RESPONSE,
     RUN_RESPONSES,
+    RUNS_NOT_FOUND_RESPONSE,
     SUBMIT_RESPONSES,
     ReportDetailResponse,
     ReportDetailResult,
@@ -426,7 +426,7 @@ def build_v2_report_router(
     @router.get(
         "/reports/{report_id}/runs",
         response_model=ReportRunListResponse,
-        responses=REPORT_NOT_FOUND_RESPONSE,
+        responses=RUNS_NOT_FOUND_RESPONSE,
         summary="List an economy report's runs",
         description=(
             "Every run of the report, newest first, each with the catalog version "

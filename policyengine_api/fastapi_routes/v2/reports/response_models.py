@@ -254,6 +254,12 @@ REPORT_REFUSAL_RESPONSE: dict[int | str, dict[str, Any]] = {
 REPORT_NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
     404: _error("No report has this ID or v1 number in this country."),
 }
+RUNS_NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
+    404: _error(
+        "No economy report has this ID in this country. A household report "
+        "does not list its runs; its newest run is in the report itself."
+    ),
+}
 REPORT_BODY_RESPONSE: dict[int | str, dict[str, Any]] = {
     413: _error("The request body exceeds 16 KiB."),
 }

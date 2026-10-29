@@ -488,3 +488,12 @@ def test_household_report_schemas_are_named_for_household_reports() -> None:
         "HouseholdReportCalculationResultItem",
     } <= set(schemas)
     assert not {name for name in schemas if name.startswith("HouseholdCalculation")}
+
+
+def test_openapi_says_household_reports_do_not_list_their_runs() -> None:
+    schema = _client(FakeHouseholdReportSimulation()).get("/v2/openapi.json").json()
+
+    not_found = schema["paths"]["/v2/reports/{report_id}/runs"]["get"]["responses"][
+        "404"
+    ]["description"]
+    assert "household report" in not_found
