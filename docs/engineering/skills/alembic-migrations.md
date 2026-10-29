@@ -344,6 +344,13 @@ shared or deployed database.
   unversioned or invalid history, takes a backup only when revisions are
   pending, upgrades under the advisory lock, and requires zero post-migration
   drift.
+- In each environment the v1 release migration and the v2 seeding job
+  (`seed-v2-database.yml`, which upgrades the v2 schema and publishes the
+  catalog) run side by side: the v1 job connects only to Cloud SQL and the
+  seeding job only to the v2 database. Each Cloud Run candidate deploy needs
+  both, so a candidate is never built until both databases are upgraded. When
+  one of them fails, the release stops with the other already applied; the
+  serving revision must work with either database upgraded on its own.
 - Database credentials and derived URLs must never be printed. The application
   runtime account must not be granted schema-migration privileges.
 - Production downgrades are never automatic. MySQL DDL is non-transactional, so
