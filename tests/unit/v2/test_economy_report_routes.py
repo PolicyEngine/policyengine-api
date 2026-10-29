@@ -58,6 +58,10 @@ from tests.unit.v2.economy_report_support import (
     report_record,
     report_run_record,
 )
+from tests.unit.v2.household_report_support import (
+    FakeHouseholdReportSimulation,
+    household_report_service,
+)
 
 SUBMISSION = {
     "country_id": "us",
@@ -83,12 +87,16 @@ def _client(
         return jsonify({"source": "flask", "resource": resource})
 
     service = economy_report_service(simulation, sessions)
+    # A report that is not an economy report is looked for among household
+    # reports, of which this entrypoint has none.
+    household_service = household_report_service(FakeHouseholdReportSimulation())
     dependencies = NativeRouteDependencies(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
         specification_provider=dict,
         v2_economy_report_service_factory=service_factory or (lambda: service),
+        v2_household_report_service_factory=lambda: household_service,
     )
     settings = RouteImplementationSettings(
         health=RouteImplementation.FLASK_FALLBACK,
@@ -397,7 +405,7 @@ def test_a_report_outside_the_country_is_not_found(reports) -> None:
     assert response.status_code == 404
     assert response.json() == {
         "status": "error",
-        "message": f"Economy report {REPORT_ID} was not found in country 'us'",
+        "message": f"Report {REPORT_ID} was not found in country 'us'",
     }
 
 

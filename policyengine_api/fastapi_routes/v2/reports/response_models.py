@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
 from policyengine_api.fastapi_routes.v2.reports.household_response_models import (
     HouseholdReportItem,
+    HouseholdReportSummaryItem,
 )
 from policyengine_api.services.v2.simulation_entrypoint.types import ReportStatus
 
@@ -168,10 +169,19 @@ class ReportDetailResult(StrictReportAPIModel):
     item: ReportDetailItem
 
 
-class ReportListResult(StrictReportAPIModel):
-    """The listed reports in ``items``, in the order asked, without results."""
+ReportSummary = Annotated[
+    ReportSummaryItem | HouseholdReportSummaryItem, Field(discriminator="kind")
+]
 
-    items: list[ReportSummaryItem]
+
+class ReportListResult(StrictReportAPIModel):
+    """The listed reports of both kinds in ``items``, in the order asked.
+
+    Economy reports are listed without their results and household reports
+    without their calculations.
+    """
+
+    items: list[ReportSummary]
 
 
 class ReportRunDetailResult(StrictReportAPIModel):

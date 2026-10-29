@@ -6,6 +6,8 @@ policies, and a fake Simulation Entrypoint.
 
 from __future__ import annotations
 
+from uuid import UUID
+
 import pytest
 
 from policyengine_api.services.v2.household_reports.types import (
@@ -14,6 +16,7 @@ from policyengine_api.services.v2.household_reports.types import (
     HouseholdReportSubmission,
 )
 from policyengine_api.services.v2.household_reports.validators import (
+    HouseholdReportNotFoundError,
     HouseholdReportsUnsupportedError,
     HouseholdReportYearError,
 )
@@ -28,11 +31,13 @@ from tests.unit.v2.household_report_support import (
     HOUSEHOLD_ID,
     HOUSEHOLD_ONLY_HOUSEHOLD_ID,
     HOUSEHOLD_REFORM_POLICY_ID,
+    HOUSEHOLD_REPORT_ID,
     OLDER_CATALOG_VERSION_ID,
     OLDER_POLICYENGINE_VERSION,
     UNKNOWN_CATALOG_VERSION_ID,
     FakeHouseholdReportSimulation,
     FakeHouseholds,
+    household_report_record,
     household_report_service,
     stored_household,
 )
@@ -196,3 +201,69 @@ def test_the_entrypoint_refusal_reaches_the_caller_unchanged() -> None:
         household_report_service(simulation).submit_report(
             country_id="us", report_input=_fields()
         )
+
+
+def test_a_report_is_read_with_its_runs_policyengine_version() -> None:
+    simulation = FakeHouseholdReportSimulation(
+        household_report_record(status=ReportStatus.SUCCEEDED)
+    )
+
+    report = household_report_service(simulation).get_report(
+        country_id="us", report_id=HOUSEHOLD_REPORT_ID
+    )
+
+    assert report.status is ReportStatus.SUCCEEDED
+    assert report.run is not None
+    assert report.run.policyengine_version == CURRENT_POLICYENGINE_VERSION
+    assert simulation.calls == [("get_report", HOUSEHOLD_REPORT_ID)]
+
+
+def test_a_report_before_its_first_run_is_read_without_a_catalog_read() -> None:
+    simulation = FakeHouseholdReportSimulation(household_report_record(status=None))
+
+    report = household_report_service(simulation).get_report(
+        country_id="us", report_id=HOUSEHOLD_REPORT_ID
+    )
+
+    assert report.status is ReportStatus.NOT_RUN
+    assert report.run is None
+
+
+@pytest.mark.parametrize(
+    "reports",
+    [(), (household_report_record(country_id="uk"),)],
+    ids=["unknown", "other-country"],
+)
+def test_a_report_the_country_lacks_is_not_found(reports) -> None:
+    simulation = FakeHouseholdReportSimulation(*reports)
+
+    with pytest.raises(HouseholdReportNotFoundError):
+        household_report_service(simulation).get_report(
+            country_id="us", report_id=HOUSEHOLD_REPORT_ID
+        )
+
+
+def test_reports_are_listed_in_the_order_asked_once_each() -> None:
+    second_report_id = UUID("00000000-0000-4000-8000-0000000003a1")
+    other_country_report_id = UUID("00000000-0000-4000-8000-0000000003a2")
+    unknown_report_id = UUID("00000000-0000-4000-8000-0000000003a3")
+    simulation = FakeHouseholdReportSimulation(
+        household_report_record(),
+        household_report_record(report_id=second_report_id, status=None),
+        household_report_record(report_id=other_country_report_id, country_id="uk"),
+    )
+
+    reports = household_report_service(simulation).list_reports(
+        country_id="us",
+        report_ids=[
+            second_report_id,
+            unknown_report_id,
+            HOUSEHOLD_REPORT_ID,
+            other_country_report_id,
+            second_report_id,
+        ],
+    )
+
+    assert [report.id for report in reports] == [second_report_id, HOUSEHOLD_REPORT_ID]
+    assert reports[1].run is not None
+    assert reports[1].run.policyengine_version == CURRENT_POLICYENGINE_VERSION

@@ -41,6 +41,7 @@ from tests.unit.v2.household_report_support import (
     REFORM_CALCULATION_ID,
     FakeHouseholdReportSimulation,
     FakeHouseholds,
+    household_report_record,
     household_report_service,
     household_report_store,
     household_simulation_ids,
@@ -351,3 +352,69 @@ def test_openapi_describes_both_kinds_of_report() -> None:
         "item"
     ]
     assert set(item_schema["discriminator"]["mapping"]) == {"economy", "household"}
+
+
+def test_a_household_report_is_read_by_its_id() -> None:
+    simulation = FakeHouseholdReportSimulation(household_report_record())
+
+    response = _client(simulation).get(
+        f"/v2/reports/{HOUSEHOLD_REPORT_ID}?country_id=us"
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["result"]["item"] == PENDING_REPORT_ITEM
+
+
+def test_a_report_of_neither_kind_is_404() -> None:
+    response = _client(FakeHouseholdReportSimulation()).get(
+        f"/v2/reports/{HOUSEHOLD_REPORT_ID}?country_id=us"
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["message"] == (
+        f"Report {HOUSEHOLD_REPORT_ID} was not found in country 'us'"
+    )
+
+
+def test_another_countrys_household_report_is_404() -> None:
+    simulation = FakeHouseholdReportSimulation(household_report_record(country_id="uk"))
+
+    response = _client(simulation).get(
+        f"/v2/reports/{HOUSEHOLD_REPORT_ID}?country_id=us"
+    )
+
+    assert response.status_code == 404, response.text
+
+
+def test_a_listing_summarizes_household_reports_without_their_calculations() -> None:
+    simulation = FakeHouseholdReportSimulation(
+        household_report_record(status=ReportStatus.SUCCEEDED)
+    )
+
+    response = _client(simulation).get(
+        f"/v2/reports?country_id=us&report_id={HOUSEHOLD_REPORT_ID}"
+    )
+
+    assert response.status_code == 200, response.text
+    (item,) = response.json()["result"]["items"]
+    assert item["kind"] == "household"
+    assert item["status"] == "succeeded"
+    assert item["run"] == {
+        "kind": "household",
+        "id": str(HOUSEHOLD_REPORT_RUN_ID),
+        "report_id": str(HOUSEHOLD_REPORT_ID),
+        "trigger": "initial",
+        "tax_benefit_model_version_id": str(HOUSEHOLD_CATALOG_VERSION_ID),
+        "policyengine_version": CURRENT_POLICYENGINE_VERSION,
+        "year": 2026,
+        "status": "succeeded",
+    }
+
+
+def test_openapi_lists_both_kinds_of_report_summary() -> None:
+    schema = _client(FakeHouseholdReportSimulation()).get("/v2/openapi.json").json()
+
+    items_schema = schema["components"]["schemas"]["ReportListResult"]["properties"][
+        "items"
+    ]["items"]
+    assert set(items_schema["discriminator"]["mapping"]) == {"economy", "household"}

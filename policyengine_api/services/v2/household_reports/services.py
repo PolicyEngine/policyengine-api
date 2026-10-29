@@ -32,10 +32,14 @@ from policyengine_api.services.v2.household_reports.transformations import (
 from policyengine_api.services.v2.household_reports.validators import (
     require_default_year,
     require_household_reports_supported,
+    require_report_in_country,
+)
+from policyengine_api.services.v2.simulation_entrypoint.types import (
+    SimulationRecordNotFoundError,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from uuid import UUID
 
     from policyengine_api.services.v2.household_reports.database_session import (
@@ -170,3 +174,42 @@ class V2HouseholdReportService:
         )
         (report,) = self._with_policyengine_versions((report,))
         return report
+
+    def _report_or_none(self, report_id: UUID) -> HouseholdReportRecord | None:
+        try:
+            return self._simulation.get_report(report_id)
+        except SimulationRecordNotFoundError:
+            return None
+
+    def get_report(self, *, country_id: str, report_id: UUID) -> HouseholdReportRecord:
+        """Return a household report of the country with its newest run.
+
+        Raise ``HouseholdReportNotFoundError`` when the entrypoint has no such
+        report in this country.
+        """
+        report = require_report_in_country(
+            self._report_or_none(report_id),
+            country_id=country_id,
+            report_id=report_id,
+        )
+        (report,) = self._with_policyengine_versions((report,))
+        return report
+
+    def list_reports(
+        self, *, country_id: str, report_ids: Sequence[UUID]
+    ) -> tuple[HouseholdReportRecord, ...]:
+        """Return the country's household reports among ``report_ids``.
+
+        They are in that order, once each; unknown reports and other
+        countries' are left out.
+        """
+        found = (
+            self._report_or_none(report_id) for report_id in dict.fromkeys(report_ids)
+        )
+        return self._with_policyengine_versions(
+            tuple(
+                report
+                for report in found
+                if report is not None and report.country_id == country_id
+            )
+        )

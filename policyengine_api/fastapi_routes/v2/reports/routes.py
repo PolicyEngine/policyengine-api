@@ -31,6 +31,7 @@ from policyengine_api.fastapi_routes.v2.errors import (
 )
 from policyengine_api.fastapi_routes.v2.reports.household_response_models import (
     HouseholdReportItem,
+    HouseholdReportSummaryItem,
 )
 from policyengine_api.fastapi_routes.v2.reports.request_models import (
     EconomyReportRunRequest,
@@ -76,6 +77,7 @@ from policyengine_api.services.v2.household_reports.validators import (
 from policyengine_api.services.v2.households.validators import HouseholdNotFoundError
 from policyengine_api.services.v2.policies.validators import PolicyNotFoundError
 from policyengine_api.services.v2.report_kinds.services import V2ReportService
+from policyengine_api.services.v2.report_kinds.validators import ReportNotFoundError
 from policyengine_api.services.v2.simulation_entrypoint.types import (
     SimulationRecordUnreadableError,
     SimulationRequestRefusedError,
@@ -128,10 +130,12 @@ REPORT_REFUSALS: tuple[type[Exception], ...] = (
     HouseholdReportNotFoundError,
     HouseholdNotFoundError,
     PolicyNotFoundError,
+    ReportNotFoundError,
 )
 REPORT_ERROR_MAPPINGS = (
     V2ErrorMapping(
         (
+            ReportNotFoundError,
             EconomyReportNotFoundError,
             HouseholdReportNotFoundError,
             HouseholdNotFoundError,
@@ -231,10 +235,17 @@ def _report_detail(
     return ReportDetailResponse(result=ReportDetailResult(item=item))
 
 
-def _report_list(reports: tuple[EconomyReportRecord, ...]) -> ReportListResponse:
+def _report_list(
+    reports: tuple[EconomyReportRecord | HouseholdReportRecord, ...],
+) -> ReportListResponse:
     return ReportListResponse(
         result=ReportListResult(
-            items=[ReportSummaryItem.from_record(report) for report in reports]
+            items=[
+                HouseholdReportSummaryItem.from_record(report)
+                if isinstance(report, HouseholdReportRecord)
+                else ReportSummaryItem.from_record(report)
+                for report in reports
+            ]
         )
     )
 
@@ -301,13 +312,14 @@ def build_v2_report_router(
     @router.get(
         "/reports",
         response_model=ReportListResponse,
-        summary="List chosen economy reports",
+        summary="List chosen reports",
         description=(
-            "Lists the country's reports among the report_id values (at most "
-            "25), in that order and once each, with their status and newest run "
-            "but without results. Unknown reports and other countries' are left "
-            "out. Listing does not start the first run of a report that has "
-            "none; reading it does."
+            "Lists the country's reports of both kinds among the report_id "
+            "values (at most 25), in that order and once each, with their "
+            "status and newest run but without economy results or household "
+            "calculations. Unknown reports and other countries' are left out. "
+            "Listing does not start the first run of an economy report that "
+            "has none; reading it does."
         ),
     )
     def list_reports(
@@ -348,14 +360,15 @@ def build_v2_report_router(
         "/reports/{report_id}",
         response_model=ReportDetailResponse,
         responses=READ_RESPONSES,
-        summary="Read an economy report",
+        summary="Read an economy or household report",
         description=(
             "Returns the report, its newest run and, once that run succeeded, its "
-            "result. A report with no run, such as one migrated from v1, is "
-            "calculated the first time it is read: the read starts a run with "
-            "the system trigger on the current catalog version and answers with "
-            "it. If the simulation service cannot run it, the report is "
-            "returned not run."
+            "result: an economy report's result, or a household report's "
+            "calculated households in the run's baseline and reform. An economy "
+            "report with no run, such as one migrated from v1, is calculated the "
+            "first time it is read: the read starts a run with the system "
+            "trigger on the current catalog version and answers with it. If the "
+            "simulation service cannot run it, the report is returned not run."
         ),
     )
     def get_report(

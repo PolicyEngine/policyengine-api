@@ -72,3 +72,16 @@ class HouseholdReportOperations(Protocol):
         and ``SimulationRequestRefusedError`` when the entrypoint refuses it.
         """
         ...
+
+    def get_report(self, *, country_id: str, report_id: UUID) -> HouseholdReportRecord:
+        """Return a household report of the country with its newest run.
+
+        Raise ``HouseholdReportNotFoundError`` when the country has no such one.
+        """
+        ...
+
+    def list_reports(
+        self, *, country_id: str, report_ids: Sequence[UUID]
+    ) -> tuple[HouseholdReportRecord, ...]:
+        """Return the country's household reports among ``report_ids``."""
+        ...

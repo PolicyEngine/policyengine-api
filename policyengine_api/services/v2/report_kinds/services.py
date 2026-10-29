@@ -1,16 +1,26 @@
 """Serve ``/v2/reports`` for both kinds of report: economy and household.
 
 A submission names its kind. Each kind's service, and the entrypoint's
-routes behind it, handle only reports of that kind.
+routes behind it, handle only reports of that kind, so a report read by its
+ID is looked for among economy reports first and then among household
+reports. A failure other than "not found", such as an unavailable
+simulation service, is never taken for a missing report.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from policyengine_api.services.v2.economy_reports.validators import (
+    EconomyReportNotFoundError,
+)
 from policyengine_api.services.v2.household_reports.types import (
     HouseholdReportFields,
 )
+from policyengine_api.services.v2.household_reports.validators import (
+    HouseholdReportNotFoundError,
+)
+from policyengine_api.services.v2.report_kinds.validators import report_not_found
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -73,11 +83,29 @@ class V2ReportService:
             country_id=country_id, report_input=report_input
         )
 
-    def get_report(self, *, country_id: str, report_id: UUID) -> EconomyReportRecord:
-        """Return an economy report of the country."""
-        return self._economy_reports().get_report(
-            country_id=country_id, report_id=report_id
-        )
+    def get_report(
+        self, *, country_id: str, report_id: UUID
+    ) -> EconomyReportRecord | HouseholdReportRecord:
+        """Return the country's report of either kind.
+
+        An economy report with no run starts its first run, as
+        ``V2EconomyReportService.get_report`` does. Raise
+        ``ReportNotFoundError`` when the country has neither kind by this ID.
+        """
+        try:
+            return self._economy_reports().get_report(
+                country_id=country_id, report_id=report_id
+            )
+        except EconomyReportNotFoundError:
+            pass
+        try:
+            return self._household_reports().get_report(
+                country_id=country_id, report_id=report_id
+            )
+        except HouseholdReportNotFoundError as error:
+            raise report_not_found(
+                country_id=country_id, reference=str(report_id)
+            ) from error
 
     def get_report_by_legacy_number(
         self, *, country_id: str, legacy_report_id: int
@@ -97,11 +125,28 @@ class V2ReportService:
 
     def list_reports(
         self, *, country_id: str, report_ids: Sequence[UUID]
-    ) -> tuple[EconomyReportRecord, ...]:
-        """Return the country's economy reports among ``report_ids``."""
-        return self._economy_reports().list_reports(
-            country_id=country_id, report_ids=report_ids
-        )
+    ) -> tuple[EconomyReportRecord | HouseholdReportRecord, ...]:
+        """Return the country's reports of both kinds among ``report_ids``.
+
+        They are in that order, once each. IDs that are not economy reports
+        of the country are looked for among its household reports.
+        """
+        requested = tuple(dict.fromkeys(report_ids))
+        found: dict[UUID, EconomyReportRecord | HouseholdReportRecord] = {
+            report.id: report
+            for report in self._economy_reports().list_reports(
+                country_id=country_id, report_ids=requested
+            )
+        }
+        remaining = [report_id for report_id in requested if report_id not in found]
+        if remaining:
+            found.update(
+                (report.id, report)
+                for report in self._household_reports().list_reports(
+                    country_id=country_id, report_ids=remaining
+                )
+            )
+        return tuple(found[report_id] for report_id in requested if report_id in found)
 
     def list_report_runs(
         self, *, country_id: str, report_id: UUID
