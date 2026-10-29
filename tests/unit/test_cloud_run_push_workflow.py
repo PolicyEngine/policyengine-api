@@ -392,7 +392,8 @@ def test_push_workflow_staging_precedes_all_production_deployments():
     docker_publish = _workflow_job_block(workflow, "docker")
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
 
-    assert "needs: seed-v2-production-database" in cloud_run_production
+    assert "- seed-v2-production-database" in cloud_run_production
+    assert "- migrate-v1-production-cloud-sql" in cloud_run_production
     assert "needs: deploy-cloud-run-candidate" in docker_publish
     assert "compute_cloud_run_metadata.sh stage3-prod" in cloud_run_production
     assert "Build and push Cloud Run image" not in cloud_run_production
