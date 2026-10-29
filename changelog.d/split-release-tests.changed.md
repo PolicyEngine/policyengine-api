@@ -1,0 +1,1 @@
+The release run splits its test suite across six runners and checks that each test ran exactly once, and skips lint, the quality guards, both Alembic checks and the cross-database integration tests when the release commit changes only release files and its merge run passed them; the staging deploy starts about 10 minutes sooner.
