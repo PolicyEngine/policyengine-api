@@ -13,7 +13,10 @@ from policyengine_api.data.v1_models import Policy
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.services.policy_mirroring import PolicyMirrorUnavailableError
 from policyengine_api.services.policy_service import PolicySetResult
-from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+from policyengine_api.services.v2.policies.types import (
+    LegacyPolicySnapshot,
+    LegacyPolicyTranslationReason,
+)
 from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyTranslationError,
 )
@@ -224,7 +227,8 @@ def test_destination_failure_returns_the_stored_policy_and_logs_an_error(
     monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
     failing_destination = MagicMock()
     failing_destination.mirror_legacy_policy.side_effect = LegacyPolicyTranslationError(
-        "private parameter value"
+        "private parameter value",
+        reason=LegacyPolicyTranslationReason.MISSING_PARAMETERS,
     )
     with (
         patch(
@@ -248,6 +252,7 @@ def test_destination_failure_returns_the_stored_policy_and_logs_an_error(
     assert logged_record["metric_name"] == "v1_policy_mirror_operations"
     assert logged_record["outcome"] == "error"
     assert logged_record["failure_category"] == "catalog_or_translation"
+    assert logged_record["failure_reason"] == "missing_parameters"
     assert logged_record["legacy_policy_id"] == stored_policy_id
     assert "private parameter value" not in json.dumps(logged_record)
 
@@ -281,6 +286,7 @@ def test_policy_without_a_mirror_snapshot_is_returned_and_logged(
     assert logged_record["metric_name"] == "v1_policy_mirror_operations"
     assert logged_record["outcome"] == "error"
     assert logged_record["failure_category"] == "missing_mirror_snapshot"
+    assert logged_record["failure_reason"] == "missing_mirror_snapshot"
     assert logged_record["country_id"] == "us"
     assert logged_record["legacy_policy_id"] == 42
     assert route_logger.log_struct.call_args.kwargs["severity"] == "ERROR"

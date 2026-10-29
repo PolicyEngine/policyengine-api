@@ -451,6 +451,7 @@ def test_unexpected_saved_policy_mirror_error_is_logged_and_the_record_returned(
     assert logged_record["metric_name"] == "v1_user_policy_mirror_operations"
     assert logged_record["outcome"] == "error"
     assert logged_record["failure_category"] == "unexpected"
+    assert logged_record["failure_reason"] == "unexpected"
     assert logged_record["legacy_user_policy_id"] == 10
     assert "secret" not in json.dumps(logged_record)
     assert route_logger.log_struct.call_args.kwargs["severity"] == "ERROR"
@@ -480,6 +481,7 @@ def test_saved_policy_without_a_mirror_revision_is_returned_and_logged(
     assert logged_record["metric_name"] == "v1_user_policy_mirror_operations"
     assert logged_record["outcome"] == "error"
     assert logged_record["failure_category"] == "missing_mirror_revision"
+    assert logged_record["failure_reason"] == "missing_mirror_revision"
     assert logged_record["legacy_user_policy_id"] == 10
 
 

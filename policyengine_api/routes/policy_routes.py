@@ -21,6 +21,10 @@ from policyengine_api.migration_flags import (
 from policyengine_api.request_context import current_request_id
 from policyengine_api.response_factory import _make_error_response
 from policyengine_api.services.policy_mirroring import (
+    MISSING_MIRROR_REVISION_FAILURE,
+    MISSING_MIRROR_SNAPSHOT_FAILURE,
+    UNEXPECTED_FAILURE,
+    PolicyCopyFailure,
     PolicyMirrorUnavailableError,
     mirror_policy_after_commit,
 )
@@ -68,7 +72,7 @@ def _log_uncopied_v1_write(
     legacy_id_field: str,
     legacy_id: int,
     country_id: str,
-    failure_category: str,
+    failure: PolicyCopyFailure,
 ) -> None:
     """Record a committed v1 write that has no v2 copy, without failing the request.
 
@@ -89,7 +93,8 @@ def _log_uncopied_v1_write(
                 legacy_id_field: _safe_legacy_integer_id(legacy_id),
                 "request_id": current_request_id(),
                 "outcome": "error",
-                "failure_category": failure_category,
+                "failure_category": failure.category.value,
+                "failure_reason": failure.reason.value,
             },
             severity="ERROR",
         )
@@ -111,7 +116,7 @@ def _copy_policy_to_v2(
             legacy_id_field="legacy_policy_id",
             legacy_id=policy_id,
             country_id=country_id,
-            failure_category="missing_mirror_snapshot",
+            failure=MISSING_MIRROR_SNAPSHOT_FAILURE,
         )
         return
     # mirror_policy_after_commit has already logged the failure and its category.
@@ -135,7 +140,7 @@ def _copy_saved_policy_events_to_v2(
             legacy_id_field="legacy_user_policy_id",
             legacy_id=legacy_user_policy_id,
             country_id=country_id,
-            failure_category="missing_mirror_revision",
+            failure=MISSING_MIRROR_REVISION_FAILURE,
         )
         return
     try:
@@ -157,7 +162,7 @@ def _copy_saved_policy_events_to_v2(
             legacy_id_field="legacy_user_policy_id",
             legacy_id=legacy_user_policy_id,
             country_id=country_id,
-            failure_category="unexpected",
+            failure=UNEXPECTED_FAILURE,
         )
 
 

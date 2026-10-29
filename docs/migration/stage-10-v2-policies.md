@@ -129,7 +129,12 @@ failure, retained-event processing, idempotent retries, and source/destination
 rollback using the same MySQL and PostgreSQL engines as the deployed databases.
 
 Under this selection, a core-policy mutation commits Cloud SQL first and then
-completes its policy transaction in Supabase. A saved-policy mutation commits
+completes its policy transaction in Supabase. The copy binds the v1 policy to
+the running catalog whatever country package version the v1 row was saved
+under (its stored `api_version`), the same way the Public API simulates an old
+policy with the running country package. A policy is copied when every
+parameter path it sets exists in the running catalog and its periods and values
+are valid. A saved-policy mutation commits
 its source row, incremented revision, and complete event in one Cloud SQL
 transaction. The same request then processes that source's pending events in
 revision order and records `processed_at` only after the corresponding
@@ -147,7 +152,12 @@ its `failure_category`, and the route returns its normal v1 response. A
 saved-policy event that failed stays pending, and the next mutation of the same
 saved policy replays it, with earlier retained events first. A core policy
 whose copy failed is copied again the next time any request writes the same
-policy. Destination revision and fingerprint checks make a replay safe if
+policy. A core policy that already has a copy returns that copy without being
+translated again, so writing it again after a PolicyEngine.py or country
+package upgrade does not fail. When two first copies of the same v1 policy run
+at once on revisions with different PolicyEngine.py versions, the mapping
+committed first is the copy; the other request's v2 policy commits without a
+mapping and its record reports `policy_created=false`. Destination revision and fingerprint checks make a replay safe if
 Supabase committed but the Cloud SQL processing marker did not. There is no
 background processor or reconciliation process.
 
@@ -168,7 +178,19 @@ functions do not implement separate preflight behavior.
 
 Monitor structured events with metric names `v1_policy_mirror_operations` and
 `v1_user_policy_mirror_operations`. Alert on `outcome=error`, grouped by
-`failure_category` and country. Events include the legacy integer ID,
+`failure_category` and country. Each failed copy also records a fixed
+`failure_reason`:
+
+| `failure_category` | `failure_reason` |
+| --- | --- |
+| `catalog_or_translation` | `missing_parameters` (the policy sets a parameter the running catalog lacks), `invalid_parameter_values`, `empty_parameter_values`, `invalid_period`, `conflicting_values`, `too_many_values` (more than 1,000 dated values), `catalog_absent` (no catalog for the running PolicyEngine.py version), `catalog_query_failed`, `catalog_version_not_found`, `catalog_mismatch` |
+| `integrity` | `mapping_conflict`, `content_hash_collision`, `stored_policy_integrity`, `saved_policy_integrity` (any integrity check of a saved-policy copy) |
+| `database` | `database_error` |
+| `configuration` | `configuration` |
+| `unexpected` | `missing_reform_policy` (a saved policy's v1 reform could not be loaded), `unexpected` |
+| `missing_mirror_snapshot`, `missing_mirror_revision` | the same value as the category |
+
+Events include the legacy integer ID,
 destination UUID when committed, attempted and completed database sources, and
 duration. They do not include policy JSON, presentation data, database URLs, or
 credentials.
@@ -177,7 +199,8 @@ The disposable and route-level tests verify that:
 
 - native policy and association create/read/list/update/delete operations use
   the initialized catalog and Supabase only;
-- both newly created and existing v1 policies receive durable mappings;
+- both newly created and existing v1 policies receive durable mappings,
+  including existing policies saved under an older country package version;
 - v1 saved-policy label updates change association `name`, while v1-only field
   updates change only the mapping fingerprint;
 - saved-policy event revisions are processed in ascending order, successful

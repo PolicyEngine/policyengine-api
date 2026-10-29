@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
+from policyengine_api.constants import POLICYENGINE_VERSION
 from policyengine_api.services.v2.policies.database_connectors.creates import (
     create_legacy_policy_mapping,
     create_parameter_values,
@@ -53,7 +53,7 @@ from policyengine_api.services.v2.policies.validators import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable
     from uuid import UUID
 
     from sqlmodel import Session
@@ -190,13 +190,15 @@ def mirror_legacy_policy_in_session(
     snapshot: LegacyPolicySnapshot,
     *,
     running_policyengine_version: str = POLICYENGINE_VERSION,
-    country_package_versions: Mapping[str, str] = COUNTRY_PACKAGE_VERSIONS,
 ) -> LegacyPolicyPersistenceResult:
     """Copy one committed v1 policy into v2 and map its v1 id to the result.
 
-    The policy is translated against the running catalog. Replaying the same v1
-    policy is idempotent. Raise LegacyPolicyMappingIntegrityError if the v1 id is
-    already mapped with a different source hash or to a different v2 policy.
+    The policy is translated against the running catalog, whichever country
+    package version it was saved under. A v1 policy that already has a v2 copy
+    returns that copy without being translated again, so writing it again after
+    a PolicyEngine.py or country package upgrade still succeeds. Raise
+    LegacyPolicyMappingIntegrityError if the v1 id is already mapped with a
+    different source hash.
     """
     existing = read_legacy_policy_mapping(
         session,
@@ -205,8 +207,15 @@ def mirror_legacy_policy_in_session(
         lock=True,
     )
     if existing is not None:
+        # v1 policies never change, so the same source hash means the mapped
+        # v2 policy is still the copy, whichever catalog is running now.
         verify_legacy_policy_mapping(
             existing, source_policy_hash=snapshot.source_policy_hash
+        )
+        return LegacyPolicyPersistenceResult(
+            policy_id=existing.policy_id,
+            policy_created=False,
+            mapping_created=False,
         )
 
     selected = read_policy_catalog(
@@ -227,21 +236,8 @@ def mirror_legacy_policy_in_session(
         snapshot,
         selected=selected,
         parameters=parameters,
-        country_package_versions=country_package_versions,
     )
     policy_result = create_resolved_policy(session, policy_input)
-    if existing is not None:
-        verify_legacy_policy_mapping(
-            existing,
-            source_policy_hash=snapshot.source_policy_hash,
-            expected_policy_id=policy_result.policy_id,
-        )
-        return LegacyPolicyPersistenceResult(
-            policy_id=existing.policy_id,
-            policy_created=False,
-            mapping_created=False,
-        )
-
     mapping_id = create_legacy_policy_mapping(
         session,
         country_id=snapshot.country_id,
@@ -264,10 +260,14 @@ def mirror_legacy_policy_in_session(
     if concurrent is None:
         msg = "legacy policy mapping conflict did not resolve to a stored row"
         raise LegacyPolicyMappingIntegrityError(msg)
+    # A concurrent copy mapped the policy first. As with a mapping found at the
+    # start, the same source hash makes its v2 policy the copy, even when it was
+    # translated with another catalog version than this one. If this copy's
+    # translation differed, the v2 policy it inserted commits without a mapping,
+    # and the result's policy_created is false because it reports the mapped
+    # policy, not that one.
     verify_legacy_policy_mapping(
-        concurrent,
-        source_policy_hash=snapshot.source_policy_hash,
-        expected_policy_id=policy_result.policy_id,
+        concurrent, source_policy_hash=snapshot.source_policy_hash
     )
     return LegacyPolicyPersistenceResult(
         policy_id=concurrent.policy_id,

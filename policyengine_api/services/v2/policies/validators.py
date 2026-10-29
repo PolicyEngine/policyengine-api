@@ -7,11 +7,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Container, Iterable
     from uuid import UUID
 
     from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
     from policyengine_api.data.v2.models import LegacyPolicyMapping
     from policyengine_api.services.v2.policies.types import (
+        LegacyPolicyTranslationReason,
         PolicyCreationInput,
         ResolvedPolicyCreationInput,
     )
@@ -42,7 +44,36 @@ class LegacyPolicyMappingIntegrityError(RuntimeError):
 
 
 class LegacyPolicyTranslationError(ValueError):
-    """Raised when committed v1 content cannot be interpreted exactly."""
+    """Raised when committed v1 content cannot be interpreted exactly.
+
+    ``reason`` is a fixed code that copy failure logs record; the message is
+    never logged.
+    """
+
+    def __init__(self, message: str, *, reason: LegacyPolicyTranslationReason) -> None:
+        """Keep the message for debugging and the fixed reason for logs."""
+        super().__init__(message)
+        self.reason = reason
+
+
+def parameters_missing_from_model(
+    policy_parameter_names: Iterable[str],
+    model_parameter_names: Container[str],
+) -> tuple[str, ...]:
+    """Return the parameter paths a policy sets that the model does not have.
+
+    Each absent path appears once, in sorted order; an empty tuple means every
+    path exists. The v2 copy of a v1 policy is refused when it is not empty.
+    """
+    return tuple(
+        sorted(
+            {
+                name
+                for name in policy_parameter_names
+                if name not in model_parameter_names
+            }
+        )
+    )
 
 
 def require_json_value(
@@ -137,12 +168,12 @@ def verify_legacy_policy_mapping(
     mapping: LegacyPolicyMapping,
     *,
     source_policy_hash: str,
-    expected_policy_id: UUID | None = None,
 ) -> None:
-    """Validate an existing mapping without performing SQL."""
+    """Require an existing mapping to come from the same v1 content, without SQL.
+
+    v1 policies never change, so a mapping with the same source hash is the
+    copy whichever catalog version translated it.
+    """
     if mapping.source_policy_hash != source_policy_hash:
         msg = "legacy policy identity was presented with a different source hash"
-        raise LegacyPolicyMappingIntegrityError(msg)
-    if expected_policy_id is not None and mapping.policy_id != expected_policy_id:
-        msg = "legacy policy mapping does not match translated immutable content"
         raise LegacyPolicyMappingIntegrityError(msg)

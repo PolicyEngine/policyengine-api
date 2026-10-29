@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -26,6 +27,19 @@ from policyengine_api.services.v2.policies.validators import (
 )
 
 StrictJsonValue = Annotated[JsonValue, BeforeValidator(require_json_value)]
+
+
+class LegacyPolicyTranslationReason(StrEnum):
+    """Why committed v1 content cannot be translated, as copy failure logs name it."""
+
+    MISSING_PARAMETERS = "missing_parameters"
+    INVALID_PARAMETER_VALUES = "invalid_parameter_values"
+    EMPTY_PARAMETER_VALUES = "empty_parameter_values"
+    INVALID_PERIOD = "invalid_period"
+    CONFLICTING_VALUES = "conflicting_values"
+    TOO_MANY_VALUES = "too_many_values"
+
+
 UtcDateTime = Annotated[datetime, AfterValidator(normalize_utc)]
 
 

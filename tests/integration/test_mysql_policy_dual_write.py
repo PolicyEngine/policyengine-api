@@ -48,9 +48,6 @@ from policyengine_api.services.v2.policies.types import (
     NativePolicyCreationInput,
     PolicyParameterValueInput,
 )
-from policyengine_api.services.v2.policies.validators import (
-    LegacyPolicyMappingIntegrityError,
-)
 from policyengine_api.utils import hash_object
 
 INPUT_VALUE = 0.04 + 3 / 1_000_000
@@ -379,7 +376,7 @@ def test_native_postgres_policies_preserve_the_distinct_input_number(
     assert postgres_destination.counts() == (2, 2, 1)
 
 
-def test_historical_pre_storage_mapping_is_rejected_without_repair(
+def test_historical_pre_storage_mapping_is_reused_without_repair(
     mysql_source, postgres_destination, record_property
 ) -> None:
     creation = mysql_source.create()
@@ -397,13 +394,13 @@ def test_historical_pre_storage_mapping_is_rejected_without_repair(
     assert retry.snapshot.legacy_policy_id == historical.legacy_policy_id
     assert retry.snapshot.policy_json != historical.policy_json
 
-    with pytest.raises(PolicyMirrorUnavailableError) as failure:
-        postgres_destination.mirror(retry)
-    assert isinstance(failure.value.__cause__, LegacyPolicyMappingIntegrityError)
-    assert "translated immutable content" in str(failure.value.__cause__)
+    # A v1 policy that already has a copy is not translated again: the retry
+    # returns the existing copy and neither repairs nor duplicates it.
+    reused = postgres_destination.mirror(retry)
+    assert reused.policy_id == original.policy_id
+    assert (reused.policy_created, reused.mapping_created) == (False, False)
     record_property("mysql_legacy_policy_id", creation.policy_id)
     record_property("postgres_historical_policy_id", str(original.policy_id))
-    record_property("retry_error", type(failure.value.__cause__).__name__)
     assert postgres_destination.counts() == (1, 1, 1)
     with postgres_destination.sessions() as session:
         mapping = session.scalar(
