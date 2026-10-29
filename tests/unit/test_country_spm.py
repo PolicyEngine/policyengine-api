@@ -1,9 +1,10 @@
 """Exercise the API country adapter's SPM handling over stand-in simulations.
 
-Nothing here loads the US model or its SPM forecast: each stand-in raises the
-error, or reports the receipt, the installed model does for that case, and the
-tests check what the API makes of it. Two checks against the installed model
-are in tests/integration/test_installed_us_model_spm.py.
+No test here calculates with the US model or reads its SPM forecast, although
+importing the country module loads both once per process. Each stand-in
+raises the error, or reports the receipt, that the installed model does for
+its case, and the tests check what the API makes of it. Two checks against the
+installed model are in tests/integration/test_installed_us_model_spm.py.
 """
 
 from copy import deepcopy
@@ -163,9 +164,7 @@ def test_country_never_swallows_spm_input_errors_for_a_chosen_measurement(
     monkeypatch, code, axes
 ):
     country, error = _failing_country(monkeypatch, code)
-    with pytest.raises(
-        ValueError, match="Missing or unavailable explicit SPM input"
-    ) as caught:
+    with pytest.raises(ValueError, match=SPM_INPUT_MESSAGE) as caught:
         country.calculate(
             requested_household("spm_unit_net_income", axes=axes),
             None,
@@ -202,13 +201,12 @@ def test_an_inherited_measurement_still_returns_the_rest_of_the_calculation(
     monkeypatch,
 ):
     """A missing primitive costs its dependants, not the whole calculation."""
-    error = ValueError("Missing or unavailable explicit SPM input")
-    error.code = "SPM_GEOGRAPHY_REQUIRED"
+    error = _spm_input_error("SPM_GEOGRAPHY_REQUIRED")
 
     def calculate(variable, _period):
         if variable == "spm_unit_net_income":
             raise error
-        return np.array([1234.0])
+        return np.array([CALCULATED_VALUE])
 
     simulation = SimpleNamespace(
         calculate=calculate,
@@ -228,7 +226,7 @@ def test_an_inherited_measurement_still_returns_the_rest_of_the_calculation(
 
     unit = result.household["spm_units"]["spm_unit"]
     assert unit["spm_unit_net_income"]["2024"] is None
-    assert unit["spm_unit_federal_tax"]["2024"] == 1234.0
+    assert unit["spm_unit_federal_tax"]["2024"] == CALCULATED_VALUE
 
 
 @pytest.mark.parametrize(
@@ -279,7 +277,7 @@ def test_country_passes_resolved_spm_and_uses_the_simulations_private_system(
 def test_tax_only_result_reads_provenance_without_calculating_spm(monkeypatch):
     calculations = []
     selection = spm.SPMSelection(
-        forecast_content_sha256="a" * 64,
+        forecast_content_sha256=FORECAST_SHA256,
         scenario="baseline",
         geography_kind="national",
         geography_id=None,
@@ -315,14 +313,14 @@ def test_tax_only_result_reads_provenance_without_calculating_spm(monkeypatch):
     assert result.spm_provenance == {
         "schema_version": "canonical-spm-provenance-v2",
         "forecast_id": "test-artifact",
-        "forecast_sha256": "a" * 64,
+        "forecast_sha256": FORECAST_SHA256,
         "scenario": "baseline",
         "geography_kind": "national",
         "geography_id": None,
         "county_vintage": "2020",
         "as_of": None,
         "years": [],
-        "runtime_versions": receipt["runtime_versions"],
+        "runtime_versions": STAND_IN_RUNTIME_VERSIONS,
     }
 
 

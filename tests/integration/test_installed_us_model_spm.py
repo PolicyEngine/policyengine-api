@@ -7,8 +7,9 @@ that the model, its forecast and the API still agree on those errors and
 receipts. Which code the model raises for each missing input is
 policyengine-us's to test.
 
-A real calculation takes seconds, so the Flask app and its calculation service
-are built once for the session.
+The Flask app and its calculation service are built once for the session.
+Importing the country module loads the US model and the Public API's copy of
+the forecast once per process.
 """
 
 from importlib.metadata import version
@@ -44,7 +45,7 @@ class InstalledModelHarness(NamedTuple):
 
 @pytest.fixture(scope="session")
 def installed_us_country() -> PolicyEngineCountry:
-    """Return the installed US model, certified by the installed bundle's manifest."""
+    """Return the installed US model, skipping when it lacks the SPM constructor."""
     country = COUNTRIES["us"]
     if not spm.simulation_supports_spm(country.country_package.Simulation):
         pytest.skip("Requires the coordinated canonical US model and calculator source")
@@ -131,11 +132,15 @@ def test_a_state_only_household_is_rejected_only_when_it_chose_the_measurement(
 ):
     """The commitment in docs/canonical-spm.md, against the installed model.
 
-    Without `spm` the household inherits the county default, so the threshold
-    it cannot price is null and the rest of the response stands. Sending the
-    same county choice makes the model's missing-county error a 400 with its
-    own code and text.
+    Without `spm` the household inherits the bundle's county default, so the
+    threshold it cannot price is null in an HTTP 200 response. Sending the same
+    county choice makes the model's missing-county error a 400 with its own
+    code and text.
     """
+    defaults = spm.normalize_spm_selection("us", None)
+    assert defaults["geography_kind"] == "county", (
+        "This test needs a bundle whose default SPM geography is a county"
+    )
     household = household_requesting_threshold()
 
     inherited = client.post("/us/calculate", json={"household": household})

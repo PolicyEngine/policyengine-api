@@ -24,13 +24,15 @@ versions the Cloud Run image installs (`gcp/cloud_run/Dockerfile`):
 
 ## Tests That Run a Country Model
 
-A unit test stands in for the country model: a calculation with the installed
-policyengine-us takes seconds, and one of every variable takes most of a
-minute. Unit tests never use `COUNTRIES["us"]`, `load_forecast()` or a real
-`Simulation`. `tests/unit/test_country_spm.py` checks the country adapter's
-SPM handling, and the household routes' SPM responses, over stand-in
-simulations that raise the installed model's errors and report its receipts.
-Add each new SPM case there.
+A new unit test stands in for the country model: a calculation with the
+installed policyengine-us takes seconds, and one of every variable takes most
+of a minute. `tests/unit/test_country_spm.py` uses no `COUNTRIES["us"]`,
+`load_forecast()` or real `Simulation`. It checks the country adapter's SPM
+handling, and the household routes' SPM responses, over stand-in simulations
+that raise the installed model's errors and report its receipts. Add a case
+about what the API does with a model's SPM error or receipt there. Route cases
+about storing, replaying and caching SPM selections, with a stand-in country,
+are in `tests/unit/routes/test_canonical_spm.py`.
 
 `tests/integration/test_installed_us_model_spm.py` holds two tests against
 the installed US model: a chosen county returns a threshold and a receipt for
