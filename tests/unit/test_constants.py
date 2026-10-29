@@ -21,6 +21,24 @@ from policyengine_api.constants import (
     get_py_manifest,
 )
 
+# Prepended to a subprocess script: any import of .py (the ``policyengine``
+# package) after this raises.
+BLOCK_POLICYENGINE_IMPORTS = """
+import importlib.abc
+import json
+import sys
+
+
+class BlockPolicyEngineImports(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "policyengine" or fullname.startswith("policyengine."):
+            raise AssertionError(f"Unexpected import: {fullname}")
+        return None
+
+
+sys.meta_path.insert(0, BlockPolicyEngineImports())
+"""
+
 
 class TestBundleDatasetDisplayLabels:
     @pytest.mark.parametrize(
@@ -188,21 +206,9 @@ class TestPolicyEngineBundleVersions:
         assert manifest_path.exists()
 
     def test__constants_load_from_manifest_without_importing_policyengine(self):
-        code = """
-import importlib.abc
-import json
-import sys
-
-
-class BlockPolicyEngineImports(importlib.abc.MetaPathFinder):
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname == "policyengine" or fullname.startswith("policyengine."):
-            raise AssertionError(f"Unexpected import: {fullname}")
-        return None
-
-
-sys.meta_path.insert(0, BlockPolicyEngineImports())
-
+        code = (
+            BLOCK_POLICYENGINE_IMPORTS
+            + """
 from policyengine_api.constants import (  # noqa: E402
     COUNTRY_PACKAGE_VERSIONS,
     POLICYENGINE_CORE_VERSION,
@@ -220,6 +226,7 @@ print(
     )
 )
 """
+        )
         result = subprocess.run(
             [sys.executable, "-c", code],
             text=True,
@@ -229,6 +236,45 @@ print(
 
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == self._expected_bundle_versions()
+
+    def test__uk_area_names_load_without_importing_policyengine(self):
+        """.py's packaged area lists are read in file order, without importing .py.
+
+        Importing any .py module builds .py's country models, which takes
+        several seconds and requests release manifests over the network.
+        """
+        code = (
+            BLOCK_POLICYENGINE_IMPORTS
+            + """
+from policyengine_api.constants import get_py_uk_area_names  # noqa: E402
+
+print(
+    json.dumps(
+        {
+            area_type: get_py_uk_area_names(area_type)
+            for area_type in ("constituency", "local_authority")
+        }
+    )
+)
+"""
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        from policyengine.countries.uk.regions import build_uk_region_registry
+
+        registry = build_uk_region_registry(
+            include_constituencies=True, include_local_authorities=True
+        )
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {
+            area_type: [region.label for region in registry.get_by_type(area_type)]
+            for area_type in ("constituency", "local_authority")
+        }
 
     def test__load_policyengine_bundle_rejects_missing_manifest(
         self, monkeypatch, tmp_path

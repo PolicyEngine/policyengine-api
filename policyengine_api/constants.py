@@ -1,11 +1,16 @@
-"""API version, country package versions and bundle metadata, resolved at import."""
+"""API version, country package versions and bundle metadata, resolved at import.
 
+Also reads the UK area lists packaged with .py.
+"""
+
+import csv
 import hashlib
+import io
 import json
 from datetime import datetime
 from importlib.metadata import distribution, distributions
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from policyengine_api.dataset_display import (
     DEFAULT_DATASET_DISPLAY_LABEL,
@@ -55,6 +60,28 @@ def get_py_manifest() -> Any:  # noqa: ANN401  # SimplePath, which open() reject
     return distribution("policyengine").locate_file(
         "policyengine/data/bundle/manifest.json"
     )
+
+
+UKAreaType = Literal["constituency", "local_authority"]
+PY_UK_AREA_LIST_FILES: dict[UKAreaType, str] = {
+    "constituency": "policyengine/data/uk_geography/constituencies_2024.csv",
+    "local_authority": "policyengine/data/uk_geography/local_authorities_2023.csv",
+}
+
+
+def get_py_uk_area_names(area_type: UKAreaType) -> list[str]:
+    """Return the area names in .py's packaged list for a UK area type, in file order.
+
+    .py builds its UK region registry from these files. They are read from the
+    installed policyengine wheel rather than through .py, because importing
+    any .py module builds .py's country models, which takes several seconds
+    and requests release manifests over the network.
+    """
+    area_list = distribution("policyengine").locate_file(
+        PY_UK_AREA_LIST_FILES[area_type]
+    )
+    rows = csv.DictReader(io.StringIO(area_list.read_text(encoding="utf-8")))
+    return [row["name"] for row in rows]
 
 
 def _load_policyengine_bundle() -> dict | None:
