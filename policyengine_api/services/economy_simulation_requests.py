@@ -8,10 +8,7 @@ from typing import Any
 
 import httpx
 
-from policyengine_api.constants import (
-    LOCAL_AREA_BREAKDOWN_REGIONS,
-    UK_REGION_REGISTRY_CODES,
-)
+from policyengine_api.constants import LOCAL_AREA_BREAKDOWN_REGIONS
 from policyengine_api.data.congressional_districts import (
     get_valid_congressional_districts,
     get_valid_state_codes,
@@ -133,25 +130,23 @@ class SimulationRequestMixin:
             msg = "breakdown=local_areas cannot be combined with target=cliff"
             raise ValueError(msg)
 
-    def _validate_uk_region(self, impact_request: EconomicImpactRequest) -> None:
+    @staticmethod
+    def _validate_uk_region(impact_request: EconomicImpactRequest) -> None:
         """Reject a UK region the simulation service cannot resolve.
 
-        Check the region the payload would send against the regions .py's UK
-        region registry holds, using the UK metadata's lists (see
+        Check the region the payload sends against the regions .py's UK region
+        registry holds, using the UK metadata's lists (see
         ``policyengine_api.data.uk_regions``) and the simulation service's
         normalisation, so names, lower-case codes and bare country names keep
-        working. Raise
-        ValueError, which the route returns as 400, before anything is stored
-        or submitted. Other countries are unchanged.
+        working. Raise ValueError, which the route returns as 400, before
+        anything is stored or submitted. Other countries are unchanged.
         """
         if impact_request.country_id != "uk":
             return
         region = impact_request.region
-        if resolve_uk_region(self._setup_region("uk", region)) is not None:
+        if resolve_uk_region(region) is not None:
             return
-        accepted = describe_accepted_uk_regions(
-            country_aliases=tuple(UK_REGION_REGISTRY_CODES)
-        )
+        accepted = describe_accepted_uk_regions()
         msg = f"Unknown UK region {region!r}. Accepted regions: {accepted}."
         raise ValueError(msg)
 
@@ -264,16 +259,14 @@ class SimulationRequestMixin:
         """Validate the region and return the code the simulation API expects.
 
         Assumes region has already been normalized (e.g., "ca" -> "state/ca").
-        Raises ValueError for invalid regions. The UK metadata names Northern
-        Ireland ``country/ni``, but .py's UK region registry names it
-        ``country/northern_ireland``, so the payload uses the registry's name.
+        Raises ValueError for invalid regions. A UK region is sent as
+        requested: request setup has already checked it against .py's UK
+        region registry.
         """
         # For US regions, validate (skip validation for national "us")
         if country_id == "us" and region != "us":
             self._validate_us_region(region)
 
-        if country_id == "uk":
-            return UK_REGION_REGISTRY_CODES.get(region, region)
         return region
 
     def _validate_us_region(self, region: str) -> None:

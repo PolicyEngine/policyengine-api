@@ -33,13 +33,6 @@ class TestEconomicImpactSetupOptions:
             result = service._setup_region("us", "us")
             assert result == "us"
 
-        def test__given_uk_northern_ireland__returns_the_region_registry_code(self):
-            # API v1's metadata publishes country/ni; .py's UK region registry
-            # names the region country/northern_ireland.
-            service = EconomyService()
-            result = service._setup_region("uk", "country/ni")
-            assert result == "country/northern_ireland"
-
         @pytest.mark.parametrize(
             "region",
             [
