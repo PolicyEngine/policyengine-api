@@ -911,18 +911,20 @@ def _default_household_report_simulation() -> HouseholdReportSimulation:
     """Return the process's adapter for the entrypoint's household report routes.
 
     Raise ``SimulationServiceUnavailableError`` when the generated client is
-    not installed, or the entrypoint URL or gateway auth is unusable.
+    not installed or has no household report routes (a client generated
+    before them, whose import fails with ``ImportError``), or the entrypoint
+    URL or gateway auth is unusable.
     """
     try:
         from policyengine_api.libs.simulation_household_reports import (
             shared_household_reports,
         )
-    except ModuleNotFoundError as error:
+    except ImportError as error:
         if (error.name or "").split(".")[0] != SIMULATION_CLIENT_PACKAGE:
             raise
         msg = (
             "the generated simulation client (policyengine-api-simulation-client) "
-            "is not installed"
+            "is not installed or has no household report routes"
         )
         raise SimulationServiceUnavailableError(msg) from error
     return shared_household_reports()

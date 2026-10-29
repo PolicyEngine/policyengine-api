@@ -2,8 +2,8 @@
 
 The client is generated from the Simulation Entrypoint's OpenAPI document and
 is not a dependency until a release contains the household report routes, so
-these tests skip when it is not installed. Requests go to an in-memory
-transport that answers as the entrypoint does.
+these tests skip when it is not installed or lacks those routes. Requests go
+to an in-memory transport that answers as the entrypoint does.
 """
 
 from __future__ import annotations
@@ -15,7 +15,10 @@ from uuid import UUID
 import httpx
 import pytest
 
-pytest.importorskip("policyengine_api_simulation_client")
+# A client generated before the household report routes lacks this module.
+pytest.importorskip(
+    "policyengine_api_simulation_client.api.default.get_household_report"
+)
 
 from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.libs.simulation_household_reports import (
