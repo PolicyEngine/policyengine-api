@@ -151,10 +151,15 @@ through `github_client`. Each run:
    `request.completed` records per route in the report day, for error rates.
    Each query is limited to 5 GiB billed.
 2. Chooses one record per failed request and service: the exception record,
-   else the error message, else the failed `request.completed` record. Records
-   that tie, such as two exceptions logged at the same moment, are ordered by
-   their own values, so the same records give the same report whatever order
-   the query returns them in.
+   else the error message, else the failed `request.completed` record. An
+   exception of class `Stage12FailureCause` ranks after any other exception
+   and before messages: the simulation service records it as a redacted copy
+   of a worker's or coordinator's original exception, carrying the original's
+   traceback and often its timestamp, so the original's class decides the
+   group, and a failure with only the copy still uses it.
+   Records that tie, such as two exceptions logged at the same moment, are
+   ordered by their own values, so the same records give the same report
+   whatever order the query returns them in.
 3. Groups failures by a 16-character HMAC-SHA256 fingerprint of the
    fingerprint algorithm number, the service family and either the exception
    type and innermost application stack frames, the route and message

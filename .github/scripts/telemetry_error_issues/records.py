@@ -35,6 +35,14 @@ REQUEST_COMPLETED_EVENT = "request.completed"
 FINGERPRINT_ALGORITHM = 2
 FINGERPRINT_LENGTH = 16
 MIN_FINGERPRINT_KEY_LENGTH = 32
+# Exception classes that only copy another exception of the same failure. When
+# a simulation worker or coordinator fails, the simulation service logs the
+# original exception, then ``record_failure_cause`` records a redacted copy
+# that carries the original's traceback: a handled ``exception.recorded``
+# event. A worker's copy often has the original's frames and timestamp. The
+# copy sets no event name or attribute of its own, so only its class tells it
+# apart from other handled exceptions.
+RECORDED_CAUSE_COPY_TYPES = frozenset({"Stage12FailureCause"})
 
 
 @dataclass(frozen=True)
@@ -89,17 +97,22 @@ class ErrorRecord:
 
 
 def _primary_preference(record: ErrorRecord) -> tuple[int, int, datetime]:
-    """Sort key: exceptions before messages before request completions.
+    """Sort key: exceptions, recorded-cause copies, messages, request completions.
 
+    A recorded-cause copy (see ``RECORDED_CAUSE_COPY_TYPES``) ranks after the
+    exception it copies, so the original's class decides the failure's group
+    whatever their timestamps; a failure with only the copy still uses it.
     Among exceptions, an unhandled one (the cause of an error response) comes
     first; otherwise the earliest record does.
     """
     if record.event_name == REQUEST_COMPLETED_EVENT:
-        source_rank = 2
+        source_rank = 3
+    elif record.error_type in RECORDED_CAUSE_COPY_TYPES:
+        source_rank = 1
     elif record.error_type:
         source_rank = 0
     else:
-        source_rank = 1
+        source_rank = 2
     handled_rank = 0 if record.error_handled is False else 1
     return source_rank, handled_rank, record.timestamp
 

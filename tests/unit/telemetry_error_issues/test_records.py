@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from itertools import permutations
 
 import pytest
 from telemetry_error_issues.records import (
+    ErrorRecord,
     fingerprint,
     fingerprint_key,
     fingerprint_parts,
@@ -21,6 +23,8 @@ from tests.unit.telemetry_error_issues.report_support import (
     extract_frames,
     failed_request_record,
     message_record,
+    original_worker_failure,
+    recorded_cause_copy,
 )
 
 
@@ -167,6 +171,62 @@ def test_primary_keeps_failures_of_different_services_separate() -> None:
     expected = [simulation_failure, api_failure]
     assert primary_records([api_failure, simulation_failure]) == expected
     assert primary_records([simulation_failure, api_failure]) == expected
+
+
+def _worker_failure_records() -> dict[str, ErrorRecord]:
+    """Return the records the simulation service logs for one worker failure.
+
+    The original exception and its recorded-cause copy share a timestamp, and
+    the worker's operation then fails with a RuntimeError of its own.
+    """
+    original = original_worker_failure()
+    return {
+        "original": original,
+        "copy": recorded_cause_copy(),
+        "operation": original_worker_failure(
+            event_name="operation.completed",
+            error_type="RuntimeError",
+            frames=original.frames[:1],
+            timestamp=original.timestamp + timedelta(seconds=1),
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    "record_order",
+    list(permutations(["original", "copy", "operation"])),
+    ids="-then-".join,
+)
+def test_primary_prefers_the_original_exception_over_its_recorded_cause_copy(
+    record_order: tuple[str, ...],
+) -> None:
+    records = _worker_failure_records()
+
+    primary = primary_records([records[name] for name in record_order])
+
+    assert [record.error_type for record in primary] == ["ValueError"]
+    assert primary == [records["original"]]
+
+
+@pytest.mark.parametrize(
+    "record_order",
+    list(permutations(["copy", "message", "failed_request"])),
+    ids="-then-".join,
+)
+def test_primary_uses_a_recorded_cause_copy_without_its_original(
+    record_order: tuple[str, ...],
+) -> None:
+    copy = recorded_cause_copy()
+    records = {
+        "copy": copy,
+        "message": message_record(service_name=copy.service_name),
+        "failed_request": failed_request_record(service_name=copy.service_name),
+    }
+
+    primary = primary_records([records[name] for name in record_order])
+
+    assert [record.error_type for record in primary] == ["Stage12FailureCause"]
+    assert primary == [copy]
 
 
 def test_fingerprint_exception_ignores_lines_path_prefixes_and_routes() -> None:
