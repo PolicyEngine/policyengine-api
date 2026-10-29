@@ -84,7 +84,7 @@ def _commit(repository: Path, message: str) -> str:
 
 @pytest.fixture
 def repository(tmp_path: Path) -> Path:
-    """Return a repository on a pull request branch cut from master.
+    """Return a repository on a pull request branch created from master.
 
     Master holds the repository's pyproject.toml, changelog.d/.gitkeep and one
     pending fragment from an earlier pull request.
@@ -404,7 +404,7 @@ def _squash_merge_and_release_the_lower_pull_request(repository: Path) -> None:
 
     The lower pull request added LOWER_FRAGMENT in two commits. Master
     squash-merged it, then the release commit removed every fragment. The pull
-    request branch, cut from the lower one and not rebased, still holds the
+    request branch, created from the lower one and not rebased, still holds the
     lower pull request's commits.
     """
     _git(repository, "checkout", "--quiet", "-B", "lower", "master")
