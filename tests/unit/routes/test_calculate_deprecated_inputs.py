@@ -226,13 +226,14 @@ def test__calculate__returns_400_for_unrecognized_axis_variable(calculate_client
     client, country = calculate_client
     household = {
         "people": {"you": {"age": {"2025": 49}}},
-        "axes": [[{"name": "employmnt_income", "count": 2}]],
+        "axes": [[{"name": "employmnt_income", "min": 0, "max": 100, "count": 2}]],
     }
 
     response = client.post("/us/calculate", json={"household": household})
 
     assert response.status_code == 400
     payload = response.get_json()
+    assert len(payload["errors"]) == 1
     assert payload["errors"][0]["type"] == "household_axis_variable"
     assert payload["errors"][0]["name"] == "employmnt_income"
     assert payload["errors"][0]["path"] == "household.axes[0][0].name"

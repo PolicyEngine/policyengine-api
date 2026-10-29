@@ -32,7 +32,7 @@ from policyengine_api.spm import (
     validate_spm_calculation_provenance,
 )
 from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
-from policyengine_api.utils.input_validation import find_unrecognized_inputs
+from policyengine_api.utils.input_validation import find_invalid_inputs
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -95,12 +95,16 @@ class HouseholdNotFoundError(LookupError):
 
 
 class InvalidHouseholdInputsError(ValueError):
-    """Raised when a household or policy has inputs the country model does not know."""
+    """Raised when a household or policy has inputs the country model cannot use.
+
+    These are names the country model does not know and axes policyengine-core
+    cannot expand.
+    """
 
     def __init__(self, invalid_inputs: list[Any]) -> None:
-        """Keep the unrecognised inputs so the route can report them."""
+        """Keep the invalid inputs so the route can report them."""
         self.invalid_inputs = invalid_inputs
-        super().__init__("Household or policy contains unrecognized inputs")
+        super().__init__("Household or policy contains invalid inputs")
 
 
 def _validated_spm_provenance(
@@ -327,7 +331,7 @@ class HouseholdCalculationService:
             )
             deprecated_inputs = drop_deprecated_inputs(household_json)
             household_json = deprecated_inputs.household
-            invalid_inputs = find_unrecognized_inputs(
+            invalid_inputs = find_invalid_inputs(
                 household_json,
                 policy.policy_json,
                 country.metadata,
@@ -421,7 +425,9 @@ class HouseholdCalculationService:
 
         deprecated_inputs = drop_deprecated_inputs(household_json)
         household_json = deprecated_inputs.household
-        invalid_inputs = find_unrecognized_inputs(
+        # The axes are checked as policyengine-core receives them, after the
+        # deprecated ones are dropped.
+        invalid_inputs = find_invalid_inputs(
             household_json,
             policy_json,
             country.metadata,

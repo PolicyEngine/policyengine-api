@@ -1,6 +1,9 @@
-"""Validate calculate payload input names before simulation creation."""
+"""Validate calculate payload inputs before simulation creation."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+
+from policyengine_api.utils.axis_validation import InvalidAxisInput, find_invalid_axes
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,27 @@ class UnrecognizedInput:
         if self.actual_entity_plural is not None:
             data["actual_entity_plural"] = self.actual_entity_plural
         return data
+
+
+# A calculate payload problem reported in an invalid-input response.
+InvalidInput = UnrecognizedInput | InvalidAxisInput
+
+
+def find_invalid_inputs(
+    household: dict,
+    policy: dict,
+    metadata: dict,
+) -> list[InvalidInput]:
+    """Return the calculate payload problems to report before simulation creation.
+
+    These are the parts of the household's axes that policyengine-core cannot
+    expand, then the names the country package cannot resolve.
+    """
+    axes = household.get("axes") if isinstance(household, dict) else None
+    return [
+        *find_invalid_axes(axes),
+        *find_unrecognized_inputs(household, policy, metadata),
+    ]
 
 
 def find_unrecognized_inputs(
@@ -197,11 +221,16 @@ def find_unrecognized_policy_inputs(
     ]
 
 
-def format_unrecognized_inputs_message(errors: list[UnrecognizedInput]) -> str:
-    """Join the problems' messages into one error message for the response."""
-    return "Unrecognized calculate input(s): " + "; ".join(
-        error.message for error in errors
-    )
+def format_invalid_inputs_message(errors: Sequence[InvalidInput]) -> str:
+    """Join the problems' messages into one error message for the response.
+
+    Unrecognized names alone keep the message's original "Unrecognized" wording.
+    """
+    if all(isinstance(error, UnrecognizedInput) for error in errors):
+        prefix = "Unrecognized calculate input(s): "
+    else:
+        prefix = "Invalid calculate input(s): "
+    return prefix + "; ".join(error.message for error in errors)
 
 
 def _find_unrecognized_axes(axes: object, variables: dict) -> list[UnrecognizedInput]:
@@ -235,11 +264,12 @@ def _find_unrecognized_axis(
     path: str,
     variables: dict,
 ) -> list[UnrecognizedInput]:
-    if not isinstance(axis, dict) or "name" not in axis:
+    if not isinstance(axis, dict):
         return []
 
-    variable_name = axis["name"]
-    if variable_name in variables:
+    variable_name = axis.get("name")
+    # find_invalid_axes reports a name that is missing or not a string.
+    if not isinstance(variable_name, str) or variable_name in variables:
         return []
     return [
         UnrecognizedInput(
