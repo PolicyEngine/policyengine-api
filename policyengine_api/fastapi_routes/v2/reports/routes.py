@@ -31,6 +31,7 @@ from policyengine_api.fastapi_routes.v2.errors import (
 )
 from policyengine_api.fastapi_routes.v2.reports.household_response_models import (
     HouseholdReportItem,
+    HouseholdReportRunItem,
     HouseholdReportSummaryItem,
 )
 from policyengine_api.fastapi_routes.v2.reports.request_models import (
@@ -68,6 +69,7 @@ from policyengine_api.services.v2.economy_reports.validators import (
 )
 from policyengine_api.services.v2.household_reports.types import (
     HouseholdReportRecord,
+    HouseholdReportRunRecord,
 )
 from policyengine_api.services.v2.household_reports.validators import (
     HouseholdReportNotFoundError,
@@ -250,10 +252,15 @@ def _report_list(
     )
 
 
-def _report_run_detail(report_run: EconomyReportRunRecord) -> ReportRunDetailResponse:
-    return ReportRunDetailResponse(
-        result=ReportRunDetailResult(item=ReportRunItem.from_record(report_run))
+def _report_run_detail(
+    report_run: EconomyReportRunRecord | HouseholdReportRunRecord,
+) -> ReportRunDetailResponse:
+    item = (
+        HouseholdReportRunItem.from_record(report_run)
+        if isinstance(report_run, HouseholdReportRunRecord)
+        else ReportRunItem.from_record(report_run)
     )
+    return ReportRunDetailResponse(result=ReportRunDetailResult(item=item))
 
 
 def _report_run_list(
@@ -388,13 +395,18 @@ def build_v2_report_router(
         response_model=ReportRunDetailResponse,
         status_code=201,
         responses=RUN_RESPONSES,
-        summary="Run an economy report again",
+        summary="Run an economy or household report again",
         description=(
             "Runs the report on the country's current catalog version with the "
-            "manual trigger. Simulation runs that already exist for that version "
-            "and year are reused unless force is set, which calculates both "
-            "simulations again. A country without economy reports is refused "
-            "with 422 before the simulation service is asked."
+            "manual trigger, and answers with the new run. Simulation runs that "
+            "already exist for that version and year are reused unless force is "
+            "set, which calculates both simulations again; a household report "
+            "reuses calculations that are unfinished or succeeded within the "
+            "last 28 days. A country without economy reports, such as a "
+            "household-only one, can run only its household reports again; its "
+            "other report IDs are refused with 422, and a country without "
+            "household calculations cannot run household reports again (422), "
+            "before the simulation service is asked to run them."
         ),
     )
     def run_report(
@@ -418,7 +430,8 @@ def build_v2_report_router(
         summary="List an economy report's runs",
         description=(
             "Every run of the report, newest first, each with the catalog version "
-            "and PolicyEngine.py version it ran on."
+            "and PolicyEngine.py version it ran on. Only economy reports list "
+            "their runs; a household report's newest run is in the report."
         ),
     )
     def list_report_runs(

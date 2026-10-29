@@ -35,7 +35,9 @@ from policyengine_api.services.v2.household_reports.validators import (
     require_report_in_country,
 )
 from policyengine_api.services.v2.simulation_entrypoint.types import (
+    RunTrigger,
     SimulationRecordNotFoundError,
+    SimulationServiceUnavailableError,
 )
 
 if TYPE_CHECKING:
@@ -48,12 +50,12 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.household_reports.types import (
         HouseholdReportFields,
         HouseholdReportRecord,
+        HouseholdReportRunRecord,
         HouseholdReportSimulation,
         HouseholdReportSubmission,
         HouseholdSource,
         PolicySource,
     )
-    from policyengine_api.services.v2.simulation_entrypoint.types import RunTrigger
 
 
 class DeferredHouseholdReportSimulation:
@@ -213,3 +215,44 @@ class V2HouseholdReportService:
                 if report is not None and report.country_id == country_id
             )
         )
+
+    def run_report(
+        self, *, country_id: str, report_id: UUID, force: bool
+    ) -> HouseholdReportRunRecord:
+        """Run a household report of the country again on the current version.
+
+        The run has the ``manual`` trigger. The entrypoint reuses runs that are
+        unfinished or succeeded within the last 28 days unless ``force`` is
+        set, and reads the report's household and policies again. Raise
+        ``HouseholdReportNotFoundError`` when the country has no such report,
+        ``HouseholdReportsUnsupportedError`` for a country without household
+        calculations, before the entrypoint is asked to run it, and
+        ``SimulationRequestRefusedError`` when the entrypoint refuses the
+        household or a policy.
+        """
+        require_report_in_country(
+            self._report_or_none(report_id),
+            country_id=country_id,
+            report_id=report_id,
+        )
+        self._require_household_reports(country_id)
+        try:
+            report = self._simulation.run_report(
+                report_id,
+                policyengine_version=self._current_policyengine_version,
+                trigger=RunTrigger.MANUAL,
+                force=force,
+            )
+        except SimulationRecordNotFoundError:
+            report = None
+        (report,) = self._with_policyengine_versions(
+            (
+                require_report_in_country(
+                    report, country_id=country_id, report_id=report_id
+                ),
+            )
+        )
+        if report.run is None:
+            msg = "the Simulation Entrypoint answered a re-run without its run"
+            raise SimulationServiceUnavailableError(msg)
+        return report.run

@@ -138,6 +138,7 @@ def _simulation_run_item(run_id, simulation_id) -> dict:
 
 
 PENDING_RUN_ITEM = {
+    "kind": "economy",
     "id": str(REPORT_RUN_ID),
     "report_id": str(REPORT_ID),
     "trigger": "initial",

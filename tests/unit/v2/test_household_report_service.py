@@ -24,6 +24,7 @@ from policyengine_api.services.v2.households.validators import HouseholdNotFound
 from policyengine_api.services.v2.policies.validators import PolicyNotFoundError
 from policyengine_api.services.v2.simulation_entrypoint.types import (
     ReportStatus,
+    RunTrigger,
     SimulationRequestRefusedError,
 )
 from tests.unit.v2.economy_report_support import CURRENT_POLICYENGINE_VERSION
@@ -267,3 +268,60 @@ def test_reports_are_listed_in_the_order_asked_once_each() -> None:
     assert [report.id for report in reports] == [second_report_id, HOUSEHOLD_REPORT_ID]
     assert reports[1].run is not None
     assert reports[1].run.policyengine_version == CURRENT_POLICYENGINE_VERSION
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_a_rerun_runs_on_the_current_version_and_answers_the_new_run(
+    *, force: bool
+) -> None:
+    simulation = FakeHouseholdReportSimulation(
+        household_report_record(status=ReportStatus.SUCCEEDED)
+    )
+    simulation.next_catalog_version_id = OLDER_CATALOG_VERSION_ID
+
+    run = household_report_service(simulation).run_report(
+        country_id="us", report_id=HOUSEHOLD_REPORT_ID, force=force
+    )
+
+    assert simulation.calls == [
+        ("get_report", HOUSEHOLD_REPORT_ID),
+        (
+            "run_report",
+            {
+                "report_id": HOUSEHOLD_REPORT_ID,
+                "policyengine_version": CURRENT_POLICYENGINE_VERSION,
+                "trigger": RunTrigger.MANUAL,
+                "force": force,
+            },
+        ),
+    ]
+    assert run.trigger == "manual"
+    assert run.status is ReportStatus.PENDING
+    assert run.policyengine_version == OLDER_POLICYENGINE_VERSION
+
+
+@pytest.mark.parametrize(
+    "reports",
+    [(), (household_report_record(country_id="uk"),)],
+    ids=["unknown", "other-country"],
+)
+def test_a_rerun_of_a_report_the_country_lacks_is_not_found(reports) -> None:
+    simulation = FakeHouseholdReportSimulation(*reports)
+
+    with pytest.raises(HouseholdReportNotFoundError):
+        household_report_service(simulation).run_report(
+            country_id="us", report_id=HOUSEHOLD_REPORT_ID, force=False
+        )
+
+    assert [name for name, _argument in simulation.calls] == ["get_report"]
+
+
+def test_a_rerun_in_a_country_without_household_calculations_is_refused() -> None:
+    simulation = FakeHouseholdReportSimulation(household_report_record(country_id="xx"))
+
+    with pytest.raises(HouseholdReportsUnsupportedError, match="'xx'"):
+        household_report_service(simulation).run_report(
+            country_id="xx", report_id=HOUSEHOLD_REPORT_ID, force=False
+        )
+
+    assert [name for name, _argument in simulation.calls] == ["get_report"]

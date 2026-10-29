@@ -21,6 +21,7 @@ from policyengine_api.migration_flags import (
 )
 from policyengine_api.services.v2.simulation_entrypoint.types import (
     ReportStatus,
+    RunTrigger,
     SimulationRequestRefusedError,
     SimulationServiceUnavailableError,
 )
@@ -418,3 +419,52 @@ def test_openapi_lists_both_kinds_of_report_summary() -> None:
         "items"
     ]["items"]
     assert set(items_schema["discriminator"]["mapping"]) == {"economy", "household"}
+
+
+@pytest.mark.parametrize("body", [{}, {"force": True}], ids=["reuse", "force"])
+def test_a_household_report_is_run_again_and_answered_with_the_new_run(
+    body: dict,
+) -> None:
+    simulation = FakeHouseholdReportSimulation(
+        household_report_record(status=ReportStatus.SUCCEEDED)
+    )
+
+    response = _client(simulation).post(
+        f"/v2/reports/{HOUSEHOLD_REPORT_ID}/runs?country_id=us", json=body
+    )
+
+    assert response.status_code == 201, response.text
+    item = response.json()["result"]["item"]
+    assert item["kind"] == "household"
+    assert item["trigger"] == "manual"
+    assert item["status"] == "pending"
+    assert item["baseline"]["trigger"] == "manual"
+    assert simulation.calls[-1] == (
+        "run_report",
+        {
+            "report_id": HOUSEHOLD_REPORT_ID,
+            "policyengine_version": CURRENT_POLICYENGINE_VERSION,
+            "trigger": RunTrigger.MANUAL,
+            "force": body.get("force", False),
+        },
+    )
+
+
+def test_a_rerun_of_neither_kind_is_404() -> None:
+    response = _client(FakeHouseholdReportSimulation()).post(
+        f"/v2/reports/{HOUSEHOLD_REPORT_ID}/runs?country_id=us", json={}
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["message"] == (
+        f"Report {HOUSEHOLD_REPORT_ID} was not found in country 'us'"
+    )
+
+
+def test_openapi_describes_both_kinds_of_run() -> None:
+    schema = _client(FakeHouseholdReportSimulation()).get("/v2/openapi.json").json()
+
+    item_schema = schema["components"]["schemas"]["ReportRunDetailResult"][
+        "properties"
+    ]["item"]
+    assert set(item_schema["discriminator"]["mapping"]) == {"economy", "household"}

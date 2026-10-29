@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.household_reports.types import (
         HouseholdReportFields,
         HouseholdReportRecord,
+        HouseholdReportRunRecord,
     )
     from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportRecord,
@@ -84,4 +85,15 @@ class HouseholdReportOperations(Protocol):
         self, *, country_id: str, report_ids: Sequence[UUID]
     ) -> tuple[HouseholdReportRecord, ...]:
         """Return the country's household reports among ``report_ids``."""
+        ...
+
+    def run_report(
+        self, *, country_id: str, report_id: UUID, force: bool
+    ) -> HouseholdReportRunRecord:
+        """Run a household report again on the current version (trigger ``manual``).
+
+        Raise ``HouseholdReportNotFoundError`` for a report the country lacks
+        and ``HouseholdReportsUnsupportedError`` for a country without
+        household calculations.
+        """
         ...

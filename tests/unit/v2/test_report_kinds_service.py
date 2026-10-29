@@ -6,6 +6,9 @@ from uuid import UUID
 
 import pytest
 
+from policyengine_api.services.v2.economy_reports.validators import (
+    EconomyReportsUnsupportedError,
+)
 from policyengine_api.services.v2.report_kinds.services import V2ReportService
 from policyengine_api.services.v2.report_kinds.validators import ReportNotFoundError
 from policyengine_api.services.v2.simulation_entrypoint.types import (
@@ -24,6 +27,7 @@ from tests.unit.v2.household_report_support import (
     household_report_record,
     household_report_service,
     household_report_store,
+    set_country_support,
 )
 
 UNKNOWN_REPORT_ID = UUID("00000000-0000-4000-8000-0000000004ff")
@@ -105,3 +109,78 @@ def test_a_listing_holds_both_kinds_in_the_order_asked() -> None:
         HOUSEHOLD_REPORT_ID,
         UNKNOWN_REPORT_ID,
     ]
+
+
+def test_an_economy_report_is_run_again_without_asking_for_a_household_report() -> None:
+    economy_simulation = FakeEconomyReportSimulation(
+        report_record(run=report_run_record())
+    )
+    household_simulation = FakeHouseholdReportSimulation()
+
+    run = _service(economy_simulation, household_simulation).run_report(
+        country_id="us", report_id=REPORT_ID, force=True
+    )
+
+    assert run.trigger == "manual"
+    assert household_simulation.calls == []
+
+
+def test_a_household_report_is_run_again_once_no_economy_report_has_its_id() -> None:
+    household_simulation = FakeHouseholdReportSimulation(household_report_record())
+
+    run = _service(FakeEconomyReportSimulation(), household_simulation).run_report(
+        country_id="us", report_id=HOUSEHOLD_REPORT_ID, force=True
+    )
+
+    assert run.report_id == HOUSEHOLD_REPORT_ID
+    assert [name for name, _argument in household_simulation.calls] == [
+        "get_report",
+        "run_report",
+    ]
+
+
+def test_a_household_report_of_a_household_only_country_is_run_again() -> None:
+    sessions = household_report_store()
+    set_country_support(
+        sessions, "us", household_enabled=True, society_wide_enabled=False
+    )
+    household_simulation = FakeHouseholdReportSimulation(household_report_record())
+    service = V2ReportService(
+        economy_reports=lambda: economy_report_service(
+            FakeEconomyReportSimulation(), sessions
+        ),
+        household_reports=lambda: household_report_service(
+            household_simulation, sessions=sessions
+        ),
+    )
+
+    run = service.run_report(
+        country_id="us", report_id=HOUSEHOLD_REPORT_ID, force=False
+    )
+
+    assert run.report_id == HOUSEHOLD_REPORT_ID
+
+
+def test_a_rerun_of_neither_kind_keeps_the_household_only_refusal() -> None:
+    sessions = household_report_store()
+    set_country_support(
+        sessions, "us", household_enabled=True, society_wide_enabled=False
+    )
+    service = V2ReportService(
+        economy_reports=lambda: economy_report_service(
+            FakeEconomyReportSimulation(), sessions
+        ),
+        household_reports=lambda: household_report_service(
+            FakeHouseholdReportSimulation(), sessions=sessions
+        ),
+    )
+
+    with pytest.raises(EconomyReportsUnsupportedError):
+        service.run_report(country_id="us", report_id=UNKNOWN_REPORT_ID, force=False)
+
+
+def test_a_rerun_of_neither_kind_is_not_found() -> None:
+    service = _service(FakeEconomyReportSimulation(), FakeHouseholdReportSimulation())
+
+    with pytest.raises(ReportNotFoundError):
+        service.run_report(country_id="us", report_id=UNKNOWN_REPORT_ID, force=False)

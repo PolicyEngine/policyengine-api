@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from policyengine_api.services.v2.economy_reports.validators import (
     EconomyReportNotFoundError,
+    EconomyReportsUnsupportedError,
 )
 from policyengine_api.services.v2.household_reports.types import (
     HouseholdReportFields,
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
     from policyengine_api.services.v2.household_reports.types import (
         HouseholdReportRecord,
+        HouseholdReportRunRecord,
     )
     from policyengine_api.services.v2.report_kinds.types import (
         EconomyReportOperations,
@@ -117,11 +119,31 @@ class V2ReportService:
 
     def run_report(
         self, *, country_id: str, report_id: UUID, force: bool
-    ) -> EconomyReportRunRecord:
-        """Run an economy report again on the current catalog version."""
-        return self._economy_reports().run_report(
-            country_id=country_id, report_id=report_id, force=force
-        )
+    ) -> EconomyReportRunRecord | HouseholdReportRunRecord:
+        """Run the country's report of either kind again on the current version.
+
+        A household-only country has no economy reports, so its report is
+        looked for among household reports at once. When the country has
+        neither kind by this ID, the economy refusal of a household-only
+        country (``EconomyReportsUnsupportedError``) stands, and otherwise
+        ``ReportNotFoundError`` is raised.
+        """
+        try:
+            return self._economy_reports().run_report(
+                country_id=country_id, report_id=report_id, force=force
+            )
+        except (EconomyReportNotFoundError, EconomyReportsUnsupportedError) as error:
+            economy_refusal: Exception = error
+        try:
+            return self._household_reports().run_report(
+                country_id=country_id, report_id=report_id, force=force
+            )
+        except HouseholdReportNotFoundError as error:
+            if isinstance(economy_refusal, EconomyReportsUnsupportedError):
+                raise economy_refusal from error
+            raise report_not_found(
+                country_id=country_id, reference=str(report_id)
+            ) from error
 
     def list_reports(
         self, *, country_id: str, report_ids: Sequence[UUID]

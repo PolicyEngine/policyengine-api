@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
 from policyengine_api.fastapi_routes.v2.reports.household_response_models import (
     HouseholdReportItem,
+    HouseholdReportRunItem,
     HouseholdReportSummaryItem,
 )
 from policyengine_api.services.v2.simulation_entrypoint.types import ReportStatus
@@ -98,6 +99,7 @@ class ReportRunItem(StrictReportAPIModel):
     ``simulating`` or ``outputs``.
     """
 
+    kind: Literal["economy"] = "economy"
     id: UUID
     report_id: UUID
     trigger: str
@@ -184,10 +186,15 @@ class ReportListResult(StrictReportAPIModel):
     items: list[ReportSummary]
 
 
-class ReportRunDetailResult(StrictReportAPIModel):
-    """Result holding one report run in ``item``."""
+ReportRunDetailItem = Annotated[
+    ReportRunItem | HouseholdReportRunItem, Field(discriminator="kind")
+]
 
-    item: ReportRunItem
+
+class ReportRunDetailResult(StrictReportAPIModel):
+    """Result holding one report run, of either kind, in ``item``."""
+
+    item: ReportRunDetailItem
 
 
 class ReportRunListResult(StrictReportAPIModel):
