@@ -54,11 +54,6 @@ class SimulationReferenceService:
         self._simulation = simulation
         self._household_reports = household_reports
 
-    @property
-    def checks_household_reports(self) -> bool:
-        """Whether a saved report may name a household report."""
-        return self._household_reports is not None
-
     def _household_report_country(self, report_id: UUID) -> str | None:
         """Return a household report's country, or None without one."""
         if self._household_reports is None:

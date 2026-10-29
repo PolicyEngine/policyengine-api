@@ -95,12 +95,25 @@ def test_an_unavailable_household_check_is_not_taken_for_a_missing_report() -> N
         ).require_report(country_id="us", report_id=HOUSEHOLD_REPORT_ID)
 
 
-def test_the_default_checker_also_checks_household_reports() -> None:
-    from policyengine_api.fastapi_routes.dependencies import (
-        _default_simulation_reference_checker,
+def test_the_default_checker_also_checks_household_reports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from policyengine_api.fastapi_routes import dependencies
+
+    household_reports = FakeHouseholdReportSimulation(household_report_record())
+    monkeypatch.setattr(
+        dependencies,
+        "_default_economy_report_simulation",
+        FakeEconomyReportSimulation,
+    )
+    monkeypatch.setattr(
+        dependencies,
+        "_default_household_report_simulation",
+        lambda: household_reports,
     )
 
-    checker = _default_simulation_reference_checker()
+    dependencies._default_simulation_reference_checker().require_report(
+        country_id="us", report_id=HOUSEHOLD_REPORT_ID
+    )
 
-    assert isinstance(checker, SimulationReferenceService)
-    assert checker.checks_household_reports
+    assert household_reports.calls == [("get_report", HOUSEHOLD_REPORT_ID)]
