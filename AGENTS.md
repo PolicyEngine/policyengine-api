@@ -55,8 +55,11 @@ code), or splitting a module into smaller ones, read
 
 Read `docs/engineering/skills/github-prs.md` before opening, replacing, or
 sharing any pull request. Every PR needs a tracking issue and
-`Fixes #ISSUE_NUMBER` as the first line of its description. Agents must never
-bypass branch rules (for example with `gh pr merge --admin`).
+`Fixes #ISSUE_NUMBER` as the first line of its description. Every PR also adds
+a changelog fragment of its own: a non-empty file directly in `changelog.d/`,
+named `changelog.d/<name>.<type>.md`, where `<type>` is `breaking`, `added`,
+`changed`, `fixed` or `removed` (see "Changelog fragments" in that skill).
+Agents must never bypass branch rules (for example with `gh pr merge --admin`).
 
 Before creating or sharing a migration PR, run the focused migration guards:
 

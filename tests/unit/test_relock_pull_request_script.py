@@ -154,6 +154,23 @@ def test_opens_a_pull_request_naming_a_new_tracking_issue(checkout: Path) -> Non
     assert not _calls_to(calls, "pr", "edit")
 
 
+def test_the_pull_request_adds_a_fragment_the_release_reads(checkout: Path) -> None:
+    from tests.unit.changelog_fragment_support import changelog_fragments
+
+    result, _ = _open_pull_request(checkout)
+
+    assert result.returncode == 0, result.stderr
+    pushed = _remote_branch(checkout).split()[0]
+    added_paths = _git(
+        checkout, "diff", "--name-only", "--diff-filter=A", "origin/master", pushed
+    ).splitlines()
+    assert added_paths == [FRAGMENT]
+    pushed_fragment = checkout.parent / "pushed-fragment.md"
+    pushed_fragment.write_text(_git(checkout, "show", f"{pushed}:{FRAGMENT}") + "\n")
+    definition = changelog_fragments().FragmentDefinition.load(REPO)
+    assert definition.problem_with(FRAGMENT, pushed_fragment) is None
+
+
 def test_reuses_the_open_tracking_issue(checkout: Path) -> None:
     result, calls = _open_pull_request(checkout, RELOCK_TEST_OPEN_ISSUE="41")
 

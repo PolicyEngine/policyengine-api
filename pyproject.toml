@@ -176,6 +176,11 @@ warn_return_any = true
 warn_unused_ignores = true
 show_error_codes = true
 
+# .github/changelog_fragments.py reads `directory` and the types' `directory`
+# names below, so the PR check, the version bump in .github/bump_version.py and
+# Towncrier share one list (rule api.process.changelog-fragment). Adding or
+# removing a type also needs its entry in BUMP_BY_TYPE in bump_version.py,
+# which refuses to run otherwise.
 [tool.towncrier]
 package = "policyengine_api"
 directory = "changelog.d"
@@ -183,6 +188,9 @@ filename = "CHANGELOG.md"
 title_format = "## [{version}] - {project_date}"
 issue_format = ""
 underlines = ["", "", ""]
+# With an ignore list, Towncrier fails on any other file in changelog.d/, such as
+# a folder or a file with an unknown type, instead of skipping it.
+ignore = [".gitkeep"]
 
 [[tool.towncrier.type]]
 directory = "breaking"

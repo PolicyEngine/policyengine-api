@@ -470,7 +470,7 @@ flowchart LR
 | `api.agents.adapters-point-to-agents-md` | CLAUDE.md and .github/copilot-instructions.md only point to AGENTS.md; skills and rules are listed in AGENTS.md alone. | mechanical | enforced | yes | quality guard `rules-registry` | `pr.yml:quality-guards` | yes |
 | `api.process.agents-never-bypass` | Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human. | mechanical | doc-only | no | nothing | — | — |
 | `api.process.agents-suppress-as-last-resort` | Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason. | judgment | doc-only | no | nothing | — | — |
-| `api.process.changelog-fragment` | Every PR adds a changelog.d fragment. | mechanical | enforced | yes | CI job `check-changelog` | `pr.yml:check-changelog` | — |
+| `api.process.changelog-fragment` | Every PR adds, relative to its base commit, at least one changelog fragment of its own, a non-empty file directly in changelog.d/ named `<name>.<type>.md` with a type from [tool.towncrier] in pyproject.toml, and leaves nothing else there but .gitkeep; the PR check and the release's version bump read fragments through one definition, .github/changelog_fragments.py. | mechanical | enforced | yes | CI job `check-changelog`, `versioning` | `pr.yml:check-changelog`, `push.yml:versioning` | yes |
 | `api.process.cloud-run-image-builds` | The Cloud Run container image builds. | mechanical | enforced | yes | CI job `test_cloud_run_container_builds` | `pr.yml:test_cloud_run_container_builds` | — |
 | `api.process.docker-image-builds` | The API Docker image builds. | mechanical | enforced | yes | CI job `test_container_builds` | `pr.yml:test_container_builds` | — |
 | `api.process.makefile-phony` | Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed. | mechanical | doc-only | no | nothing | — | — |
@@ -488,8 +488,9 @@ flowchart LR
   gap_unenforced>"not enforced"]
   r_api_process_agents_suppress_as_last_resort("api.process.agents-suppress-as-last-resort (doc-only)")
   r_api_process_changelog_fragment("api.process.changelog-fragment (enforced)")
-  e_CI_job_check_changelog["CI job check-changelog"]
+  e_CI_job_check_changelog__versioning["CI job check-changelog, versioning"]
   j_CI_pr_yml_check_changelog["CI pr.yml:check-changelog"]
+  j_CI_push_yml_versioning["CI push.yml:versioning"]
   r_api_process_cloud_run_image_builds("api.process.cloud-run-image-builds (enforced)")
   e_CI_job_test_cloud_run_container_builds["CI job test_cloud_run_container_builds"]
   j_CI_pr_yml_test_cloud_run_container_builds["CI pr.yml:test_cloud_run_container_builds"]
@@ -508,8 +509,9 @@ flowchart LR
   e_quality_guard_rules_registry --> j_CI_pr_yml_quality_guards
   r_api_process_agents_never_bypass -.-> gap_unenforced
   r_api_process_agents_suppress_as_last_resort -.-> gap_unenforced
-  r_api_process_changelog_fragment --> e_CI_job_check_changelog
-  e_CI_job_check_changelog --> j_CI_pr_yml_check_changelog
+  r_api_process_changelog_fragment --> e_CI_job_check_changelog__versioning
+  e_CI_job_check_changelog__versioning --> j_CI_pr_yml_check_changelog
+  e_CI_job_check_changelog__versioning --> j_CI_push_yml_versioning
   r_api_process_cloud_run_image_builds --> e_CI_job_test_cloud_run_container_builds
   e_CI_job_test_cloud_run_container_builds --> j_CI_pr_yml_test_cloud_run_container_builds
   r_api_process_docker_image_builds --> e_CI_job_test_container_builds

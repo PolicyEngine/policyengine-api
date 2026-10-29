@@ -113,6 +113,24 @@ def test_automatic_update_changes_and_stages_both_image_pins(update_checkout):
     ] in calls
 
 
+@pytest.mark.parametrize("target_version", [TARGET_VERSION, "4.1.0rc1", "4.1.0.post1"])
+def test_the_pull_request_adds_a_fragment_the_release_reads(
+    update_checkout, target_version
+):
+    from tests.unit.changelog_fragment_support import changelog_fragments
+
+    result, _ = run_update(
+        update_checkout,
+        LATEST_OVERRIDE=target_version,
+        BUNDLE_TEST_REPORTED_VERSION=target_version,
+    )
+
+    assert result.returncode == 0, result.stderr
+    fragment = f"changelog.d/update-policyengine-bundle-{target_version}.changed.md"
+    definition = changelog_fragments().FragmentDefinition.load(REPO)
+    assert definition.problem_with(fragment, update_checkout / fragment) is None
+
+
 @pytest.mark.parametrize("pin", ["3.9.0", "4.0.01", "4.0.0rc1"])
 def test_mismatched_image_pin_fails_before_file_changes(update_checkout, pin):
     image = update_checkout / "docker/Dockerfile"
