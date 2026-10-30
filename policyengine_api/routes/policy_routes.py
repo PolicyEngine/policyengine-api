@@ -33,8 +33,8 @@ from policyengine_api.services.policy_parameter_service import (
     loaded_model_parameter_names,
 )
 from policyengine_api.services.policy_service import (
+    InvalidPolicyDataError,
     PolicyService,
-    UnsettableParameterPathsError,
 )
 from policyengine_api.services.user_policy_mirroring import (
     UserPolicyMirrorCollaborators,
@@ -302,9 +302,10 @@ def set_policy(country_id: str) -> Response:
     A policy is identical when its country, content hash and label all match;
     that case returns 200, a new policy returns 201. An invalid payload gives
     400, as does a new policy whose ``data`` names paths that are not parameters
-    in the country model; that 400 lists every such path. An unavailable write
-    configuration gives 503. Under dual-write, a failed v2 copy is logged and
-    does not change the response.
+    in the country model, or holds period keys or values that simulations cannot
+    read; that 400 lists every such path, period key and value. An unavailable
+    write configuration gives 503. Under dual-write, a failed v2 copy is logged
+    and does not change the response.
 
     Args:
         country_id (str): Country to store the policy under.
@@ -333,7 +334,7 @@ def set_policy(country_id: str) -> Response:
             policy_json,
             prepare_for_mirroring=mirror_to_v2,
         )
-    except UnsettableParameterPathsError as error:
+    except InvalidPolicyDataError as error:
         return _make_error_response(
             error,
             400,

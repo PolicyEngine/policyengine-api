@@ -127,9 +127,15 @@ paths:
           description: >-
             Invalid request body, or a new policy whose data names paths that
             are not parameters in the country model, such as unknown paths and
-            parameter groups. For those paths, the message and the errors list
-            name every one. Re-saving a policy identical to a stored one returns
-            the stored policy without checking its paths.
+            parameter groups, or holds period keys or values that simulations
+            cannot read. A period key must be a date (YYYY-MM-DD) or an
+            inclusive date range (YYYY-MM-DD.YYYY-MM-DD) of real calendar dates
+            whose start is no later than its end. A value must be a finite
+            number, a boolean, null, a list, or the string "Infinity" or
+            "-Infinity"; numeric strings and objects such as {"value": 1} are
+            refused. The message and the errors list name every refused path,
+            period key and value. Re-saving a policy identical to a stored one
+            returns the stored policy without checking its data.
           content:
             application/json:
               schema:
@@ -144,18 +150,31 @@ paths:
                     nullable: true
                   errors:
                     type: array
-                    description: Present when data names paths that are not parameters.
+                    description: >-
+                      Present when data names paths that are not parameters,
+                      or holds period keys or values that simulations cannot
+                      read. Paths come first, sorted, then period keys and
+                      values, by parameter path.
                     items:
                       type: object
                       required: [type, name, path, message]
                       properties:
                         type:
                           type: string
-                          enum: [policy_parameter]
+                          enum: [policy_parameter, policy_period, policy_value]
+                          description: >-
+                            policy_parameter for a path that is not a
+                            parameter, policy_period for a period key or a
+                            parameter whose value is not an object of period
+                            keys, and policy_value for a value.
                         name:
                           type: string
+                          description: The parameter path.
                         path:
                           type: string
+                          description: >-
+                            Where the entry is: data.<parameter> or
+                            data.<parameter>.<period key>.
                         message:
                           type: string
         404:

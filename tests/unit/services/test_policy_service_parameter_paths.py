@@ -1,11 +1,11 @@
-"""PolicyService checks a new policy's parameter paths against a parameter catalog."""
+"""PolicyService checks a new policy's paths, period keys and values."""
 
 import pytest
 
 from policyengine_api.data.v1_models import Policy
 from policyengine_api.services.policy_service import (
+    InvalidPolicyDataError,
     PolicyService,
-    UnsettableParameterPathsError,
 )
 from policyengine_api.utils import hash_object
 
@@ -40,7 +40,7 @@ def test_new_policy_with_paths_outside_the_catalog_is_refused_and_not_stored(
     service,
     parameter_catalog,
 ):
-    with pytest.raises(UnsettableParameterPathsError) as raised:
+    with pytest.raises(InvalidPolicyDataError) as raised:
         service.set_policy(
             "US",
             "Refused",
@@ -59,6 +59,57 @@ def test_new_policy_with_paths_outside_the_catalog_is_refused_and_not_stored(
     ]
     assert parameter_catalog.looked_up_country_ids == ["us"]
     assert service.search_policies("us", "Refused") == []
+
+
+def test_new_policy_error_holds_refused_paths_then_refused_periods_and_values(
+    service,
+):
+    with pytest.raises(InvalidPolicyDataError) as raised:
+        service.set_policy(
+            "us",
+            "Unreadable",
+            {
+                "gov.tax.rate": {"2026": {"value": 0.2}},
+                "gov.x": {"2026-01-01.2026-12-31": 1},
+            },
+        )
+
+    assert raised.value.parameter_paths == ("gov.x",)
+    assert [(entry["type"], entry["path"]) for entry in raised.value.error_entries] == [
+        ("policy_parameter", "data.gov.x"),
+        ("policy_period", "data.gov.tax.rate.2026"),
+        ("policy_value", "data.gov.tax.rate.2026"),
+    ]
+    assert str(raised.value).startswith(
+        "Policy data contains keys that are not parameters in policyengine-us "
+    )
+    assert ". Policy data contains invalid period keys or values: " in str(raised.value)
+    assert service.search_policies("us", "Unreadable") == []
+
+
+def test_existing_identical_policy_is_returned_without_checking_its_periods(
+    service,
+    orm_session_factory,
+    parameter_catalog,
+):
+    bare_year_policy = {"gov.tax.rate": {"2026": "0.2"}}
+    with orm_session_factory.begin() as session:
+        session.add(
+            Policy(
+                id=99010,
+                country_id="us",
+                label=None,
+                api_version="2.0.0",
+                policy_json=bare_year_policy,
+                policy_hash=hash_object(bare_year_policy),
+            )
+        )
+
+    result = service.set_policy("us", None, bare_year_policy)
+
+    assert result.is_existing_policy is True
+    assert result.policy_id == 99010
+    assert parameter_catalog.looked_up_country_ids == []
 
 
 def test_new_policy_with_catalog_paths_is_stored(service):
@@ -106,7 +157,7 @@ def test_new_policy_for_a_country_without_a_loaded_model_is_refused(
         model_parameter_names=lambda _country_id: None,
     )
 
-    with pytest.raises(UnsettableParameterPathsError) as raised:
+    with pytest.raises(InvalidPolicyDataError) as raised:
         service_without_model.set_policy(
             "us",
             "No loaded model",
