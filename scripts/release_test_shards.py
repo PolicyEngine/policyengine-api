@@ -178,12 +178,26 @@ def shard_node_ids(
 def write_report(
     settings: ShardSettings, collected: Sequence[str], selected: Sequence[str]
 ) -> None:
-    """Write what this shard collected and kept to its report directory."""
+    """Write what this shard collected and kept to its report directory.
+
+    Raise FileExistsError if the directory already has a report: a second
+    pytest run in the same shard would otherwise replace the first one's.
+    """
     settings.report_directory.mkdir(parents=True, exist_ok=True)
-    (settings.report_directory / SHARD_FILE).write_text(
-        json.dumps({"index": settings.index, "count": settings.count}) + "\n",
-        encoding="utf-8",
-    )
+    try:
+        with (settings.report_directory / SHARD_FILE).open(
+            "x", encoding="utf-8"
+        ) as shard_file:
+            shard_file.write(
+                json.dumps({"index": settings.index, "count": settings.count}) + "\n"
+            )
+    except FileExistsError as error:
+        msg = (
+            f"{settings.report_directory} already has a shard report; another "
+            "pytest run in this shard wrote it. Remove the directory to run the "
+            "shard again."
+        )
+        raise FileExistsError(msg) from error
     for file_name, node_ids in (
         (COLLECTED_FILE, collected),
         (SELECTED_FILE, selected),
