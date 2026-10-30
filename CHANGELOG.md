@@ -1,3 +1,14 @@
+## [5.16.1] - 2026-10-30
+
+### Changed
+
+- Unit tests check that a household calculation without axes returns an enum variable as its member name and a string variable as a plain string.
+
+### Fixed
+
+- Creating a new policy now returns a 400 that names every period key and value in `data` that simulations cannot read: a period key must be a date (`YYYY-MM-DD`) or a date range (`YYYY-MM-DD.YYYY-MM-DD`), and a value a finite number, a boolean, null, a list, or the string `"Infinity"` or `"-Infinity"`. The same 400 also lists any paths that are not parameters; re-saving a policy identical to a stored one still returns it.
+
+
 ## [5.16.0] - 2026-10-30
 
 ### Added
