@@ -2,7 +2,8 @@
 
 import itertools
 import os
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -12,10 +13,12 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.dialects import postgresql
 
 from policyengine_api.constants import REPO
+from policyengine_api.data.v2.metadata_validation import SIMULATION_DOMAIN_TABLES
 from policyengine_api.data.v2.migration_target import (
     V2_ALEMBIC_DISPOSABLE_TEST,
     V2_ALEMBIC_HEAD_REVISION,
@@ -30,7 +33,26 @@ STAGE_11_PREVIOUS_REVISION = "af34023a728f"
 STAGE_12_PREVIOUS_REVISION = "724b1b11a33e"
 STAGE_12_COMPARISON_PREVIOUS_REVISION = "439303be14fe"
 STAGE_12A_PREVIOUS_REVISION = "91af4fc8d8c1"
+SIMULATION_TABLE_REMOVAL_REVISION = "363f34954a14"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
+# The retired association columns the removal revision drops.
+RETIRED_ASSOCIATION_COLUMNS = {
+    "user_simulation_associations": frozenset({"country", "label"}),
+    "user_report_associations": frozenset({"country", "label"}),
+}
+# The native enum types only the dropped tables used.
+SIMULATION_DOMAIN_ENUM_TYPES = frozenset(
+    {
+        "v2_aggregate_type",
+        "v2_decile_type",
+        "v2_household_job_status",
+        "v2_output_status",
+        "v2_report_run_status",
+        "v2_report_run_trigger",
+        "v2_simulation_status",
+        "v2_simulation_type",
+    }
+)
 
 
 def _disposable_url() -> str:
@@ -50,6 +72,14 @@ def _disposable_url() -> str:
 
 def _config() -> Config:
     return Config(str(REPO / "alembic-v2.ini"))
+
+
+def _simulation_table_removal_parent() -> str:
+    """Return the revision the simulation-table removal applies to."""
+    removal = ScriptDirectory.from_config(_config()).get_revision(
+        SIMULATION_TABLE_REMOVAL_REVISION
+    )
+    return removal.down_revision
 
 
 def _assert_head(engine) -> None:
@@ -174,10 +204,6 @@ def _assert_stage_12a_association_shape(engine) -> None:
         if foreign_key["referred_table"] == "user_policies"
     )
     assert report_policy_key["options"]["ondelete"] == "SET NULL"
-    for table_name in ("user_simulation_associations", "user_report_associations"):
-        columns = _columns(engine, table_name)
-        assert columns["country"]["nullable"]
-        assert columns["label"]["nullable"]
     user_columns = _columns(engine, "users")
     assert not user_columns["user_type"]["nullable"]
     assert "standard" in user_columns["user_type"]["default"]
@@ -191,6 +217,42 @@ def _assert_stage_12a_association_shape(engine) -> None:
         "ck_users_user_type",
         "ck_users_standard_primary_country",
     } <= user_checks
+
+
+def _enum_type_names(engine) -> set[str]:
+    with engine.connect() as connection:
+        return set(
+            connection.execute(
+                text("SELECT typname FROM pg_type WHERE typtype = 'e'")
+            ).scalars()
+        )
+
+
+def _assert_simulation_domain_schema_present(engine) -> None:
+    assert set(inspect(engine).get_table_names(schema="public")) >= (
+        SIMULATION_DOMAIN_TABLES
+    )
+    assert _enum_type_names(engine) >= SIMULATION_DOMAIN_ENUM_TYPES
+    for table_name, retired_columns in RETIRED_ASSOCIATION_COLUMNS.items():
+        columns = _columns(engine, table_name)
+        assert retired_columns <= columns.keys()
+        assert all(columns[name]["nullable"] for name in retired_columns)
+    filter_pair = next(
+        constraint
+        for constraint in inspect(engine).get_check_constraints("simulations")
+        if constraint["name"] == "ck_simulations_filter_pair"
+    )
+    assert "filter_field IS NULL" in filter_pair["sqltext"]
+    assert "filter_value IS NULL" in filter_pair["sqltext"]
+
+
+def _assert_simulation_domain_schema_removed(engine) -> None:
+    assert SIMULATION_DOMAIN_TABLES.isdisjoint(
+        inspect(engine).get_table_names(schema="public")
+    )
+    assert SIMULATION_DOMAIN_ENUM_TYPES.isdisjoint(_enum_type_names(engine))
+    for table_name, retired_columns in RETIRED_ASSOCIATION_COLUMNS.items():
+        assert retired_columns.isdisjoint(_columns(engine, table_name))
 
 
 def _upgrade_and_assert_head(config: Config, engine: Engine) -> None:
@@ -364,6 +426,13 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         }
 
         _upgrade_and_assert_head(config, engine)
+        _assert_simulation_domain_schema_removed(engine)
+
+        command.downgrade(config, _simulation_table_removal_parent())
+        _assert_revision(engine, _simulation_table_removal_parent())
+        _assert_simulation_domain_schema_present(engine)
+        _upgrade_and_assert_head(config, engine)
+        _assert_simulation_domain_schema_removed(engine)
 
         command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
         _assert_revision(engine, STAGE_12A_PREVIOUS_REVISION)
@@ -396,11 +465,43 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         engine.dispose()
 
 
-# Dormant at the parent revision: its models map these tables, and deleting a
-# user cascades through them, but no parent-revision code inserts into them.
-# They are the only tables Stage 12A may give a new required column.
-PARENT_REVISION_READ_ONLY_TABLES = frozenset(
-    {"user_simulation_associations", "user_report_associations"}
+@dataclass(frozen=True)
+class PreviousRevisionUsage:
+    """How a previous application revision uses the tables it maps.
+
+    ``read_only_tables`` are tables it maps but never writes, which the newer
+    schema may therefore give a new required column; only newer code writes
+    their rows. ``nullable_columns_required_by_checks`` are nullable columns
+    that one of its check constraints requires a value for.
+    """
+
+    read_only_tables: frozenset[str]
+    nullable_columns_required_by_checks: frozenset[tuple[str, str]]
+
+
+# The revision before Stage 12A. Its models map the two association tables and
+# deleting a user cascades through them, but no code of that revision inserts
+# into them, so Stage 12A may give them a new required column.
+STAGE_12A_PREVIOUS_USAGE = PreviousRevisionUsage(
+    read_only_tables=frozenset(
+        {"user_simulation_associations", "user_report_associations"}
+    ),
+    nullable_columns_required_by_checks=frozenset({("simulations", "household_id")}),
+)
+# The revision before the simulation-table removal. It writes every table it
+# still maps. Its checks require a standard user's country and one reference
+# of each association.
+SIMULATION_TABLE_REMOVAL_PREVIOUS_USAGE = PreviousRevisionUsage(
+    read_only_tables=frozenset(),
+    nullable_columns_required_by_checks=frozenset(
+        {
+            ("users", "primary_country"),
+            ("user_policies", "legacy_policy_id"),
+            ("user_household_associations", "legacy_household_id"),
+            ("user_simulation_associations", "legacy_simulation_id"),
+            ("user_report_associations", "legacy_report_id"),
+        }
+    ),
 )
 USER_ASSOCIATION_TABLES = (
     "user_policies",
@@ -409,8 +510,6 @@ USER_ASSOCIATION_TABLES = (
     "user_report_associations",
 )
 COUNTRY_COLUMN_NAMES = frozenset({"country", "country_id", "primary_country"})
-# Nullable references that a parent-revision check constraint requires.
-REFERENCES_REQUIRED_BY_CHECKS = frozenset({("simulations", "household_id")})
 # Required values that a parent-revision check constraint restricts.
 CHECKED_VALUES = {("datasets", "year"): 2026}
 
@@ -469,6 +568,7 @@ def _row_values(
     table: sa.Table,
     stored_rows: dict[str, dict],
     sequence: Iterator[int],
+    usage: PreviousRevisionUsage,
     *,
     head_table: sa.Table | None = None,
 ) -> dict:
@@ -481,7 +581,7 @@ def _row_values(
         column.name: _test_value(table, column, sequence)
         for column in table.columns
         if _is_required_without_default(column)
-        or (table.name, column.name) in REFERENCES_REQUIRED_BY_CHECKS
+        or (table.name, column.name) in usage.nullable_columns_required_by_checks
     }
     if head_table is not None:
         for column_name in _new_required_columns(table, head_table):
@@ -547,30 +647,37 @@ def _rewrite_mapped_columns(connection, table: sa.Table, row: dict) -> None:
     assert result.rowcount == 1, table.name
 
 
+@dataclass(frozen=True)
+class SchemaComparison:
+    """A previous revision's reflected tables, a newer schema, and their usage."""
+
+    parent: sa.MetaData
+    head: sa.MetaData
+    usage: PreviousRevisionUsage
+
+
 def _assert_user_deletion_cascades(
     connection,
-    parent: sa.MetaData,
-    head: sa.MetaData,
+    schemas: SchemaComparison,
     stored_rows: dict[str, dict],
     sequence: Iterator[int],
 ) -> None:
     """Delete, through the parent's users table, a user who owns Stage 12A rows."""
+    parent, head, usage = schemas.parent, schemas.head, schemas.usage
     users = parent.tables["users"]
     owner = _insert_and_read_back(
-        connection, users, _row_values(users, stored_rows, sequence)
+        connection, users, _row_values(users, stored_rows, sequence, usage)
     )
     owner_rows = {**stored_rows, "users": owner}
     for table_name in USER_ASSOCIATION_TABLES:
         table = parent.tables[table_name]
         head_table = (
-            head.tables[table_name]
-            if table_name in PARENT_REVISION_READ_ONLY_TABLES
-            else None
+            head.tables[table_name] if table_name in usage.read_only_tables else None
         )
         _insert_and_read_back(
             connection,
             table,
-            _row_values(table, owner_rows, sequence, head_table=head_table),
+            _row_values(table, owner_rows, sequence, usage, head_table=head_table),
             insert_table=head_table,
         )
     identities = head.tables["user_identities"]
@@ -596,82 +703,248 @@ def _assert_user_deletion_cascades(
         assert remaining == 0, table_name
 
 
+def _assert_newer_schema_serves_previous_usage(
+    engine: Engine,
+    parent: sa.MetaData,
+    head: sa.MetaData,
+    usage: PreviousRevisionUsage,
+) -> None:
+    """Run a previous revision's use of every table it maps against a newer schema.
+
+    Each table of ``parent`` gets a row inserted (supplying only what the
+    previous revision requires), read back with every mapped column,
+    rewritten and deleted, and a user who owns association rows is deleted so
+    the cascades run. The newer schema may not drop a column ``parent`` maps,
+    or give a table the previous revision writes a new required column
+    without a server default. Every change is rolled back.
+    """
+    parent_tables = [
+        table for table in parent.sorted_tables if table.name != "alembic_version"
+    ]
+    dropped_columns = sorted(
+        f"{table.name}.{column.name}"
+        for table in parent_tables
+        for column in table.columns
+        if table.name not in head.tables
+        or column.name not in head.tables[table.name].columns
+    )
+    assert dropped_columns == []
+    tables_with_new_required_columns = {
+        table.name: sorted(_new_required_columns(table, head.tables[table.name]))
+        for table in parent_tables
+        if _new_required_columns(table, head.tables[table.name])
+    }
+    assert set(tables_with_new_required_columns) <= usage.read_only_tables, (
+        tables_with_new_required_columns
+    )
+
+    sequence = itertools.count()
+    with engine.connect() as connection:
+        transaction = connection.begin()
+        try:
+            stored_rows: dict[str, dict] = {}
+            for table in parent_tables:
+                head_table = (
+                    head.tables[table.name]
+                    if table.name in usage.read_only_tables
+                    else None
+                )
+                stored_rows[table.name] = _insert_and_read_back(
+                    connection,
+                    table,
+                    _row_values(
+                        table, stored_rows, sequence, usage, head_table=head_table
+                    ),
+                    insert_table=head_table,
+                )
+                _rewrite_mapped_columns(connection, table, stored_rows[table.name])
+
+            _assert_user_deletion_cascades(
+                connection, SchemaComparison(parent, head, usage), stored_rows, sequence
+            )
+
+            for table in reversed(parent_tables):
+                result = connection.execute(
+                    table.delete().where(
+                        _primary_key_clause(table, stored_rows[table.name])
+                    )
+                )
+                assert result.rowcount == 1, table.name
+        finally:
+            transaction.rollback()
+
+
 def test_stage_12a_schema_serves_the_previous_revision() -> None:
+    """Run the pre-Stage 12A revision's table usage against the Stage 12A schema.
+
+    A rollback to a pre-Stage 12A release after the simulation-table removal
+    first downgrades the schema to the Stage 12A revision, so that schema must
+    still serve the pre-Stage 12A release.
+    """
+    database_url = _disposable_url()
+    config = _config()
+    engine = create_engine(database_url)
+    stage_12a_revision = _simulation_table_removal_parent()
+
+    try:
+        command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
+        parent = sa.MetaData()
+        parent.reflect(engine)
+        command.upgrade(config, stage_12a_revision)
+        stage_12a = sa.MetaData()
+        stage_12a.reflect(engine)
+
+        _assert_newer_schema_serves_previous_usage(
+            engine, parent, stage_12a, STAGE_12A_PREVIOUS_USAGE
+        )
+    finally:
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def _reflect_previous_revision_usage(engine) -> sa.MetaData:
+    """Reflect the tables and columns the previous application revision maps.
+
+    It maps neither the simulation-domain tables nor the retired association
+    columns, so the removal revision may drop them while it serves traffic.
+    """
+    parent = sa.MetaData()
+    for table_name, retired_columns in RETIRED_ASSOCIATION_COLUMNS.items():
+        sa.Table(
+            table_name,
+            parent,
+            autoload_with=engine,
+            include_columns=[
+                name
+                for name in _columns(engine, table_name)
+                if name not in retired_columns
+            ],
+        )
+    parent.reflect(
+        engine,
+        only=lambda table_name, _metadata: table_name not in SIMULATION_DOMAIN_TABLES,
+    )
+    return parent
+
+
+def test_simulation_table_removal_serves_the_previous_revision() -> None:
     """Run the previous Public API revision's table usage against head.
 
-    The parent revision's schema is reflected and then used, after upgrading,
-    to insert a row into every table it maps (supplying only what it
-    requires), read the row back with every mapped column, rewrite those
-    columns, delete it, and delete a user who owns Stage 12A rows so the
-    cascades run. Head may not give any table the parent revision writes a
-    new required column without a server default.
+    The removal revision drops exactly the simulation-domain tables and the
+    retired association columns, which the previous application revision no
+    longer maps. The rest of the parent schema is reflected and then used,
+    after upgrading, to insert a row into every table it maps (supplying only
+    what it requires), read the row back with every mapped column, rewrite
+    those columns, delete it, and delete a user who owns association rows so
+    the cascades run. Head may not give any table the parent revision writes
+    a new required column without a server default.
     """
     database_url = _disposable_url()
     config = _config()
     engine = create_engine(database_url)
 
     try:
-        command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
-        parent = sa.MetaData()
-        parent.reflect(engine)
+        command.downgrade(config, _simulation_table_removal_parent())
+        full_parent = sa.MetaData()
+        full_parent.reflect(engine)
+        parent = _reflect_previous_revision_usage(engine)
         command.upgrade(config, "head")
         head = sa.MetaData()
         head.reflect(engine)
-        parent_tables = [
-            table for table in parent.sorted_tables if table.name != "alembic_version"
-        ]
 
-        dropped_columns = sorted(
+        assert set(full_parent.tables) - set(head.tables) == SIMULATION_DOMAIN_TABLES
+        assert sorted(
             f"{table.name}.{column.name}"
-            for table in parent_tables
+            for table in full_parent.tables.values()
+            if table.name in head.tables
             for column in table.columns
-            if table.name not in head.tables
-            or column.name not in head.tables[table.name].columns
+            if column.name not in head.tables[table.name].columns
+        ) == sorted(
+            f"{table_name}.{column_name}"
+            for table_name, retired_columns in RETIRED_ASSOCIATION_COLUMNS.items()
+            for column_name in retired_columns
         )
-        assert dropped_columns == []
-        tables_with_new_required_columns = {
-            table.name: sorted(_new_required_columns(table, head.tables[table.name]))
-            for table in parent_tables
-            if _new_required_columns(table, head.tables[table.name])
-        }
-        assert set(tables_with_new_required_columns) <= (
-            PARENT_REVISION_READ_ONLY_TABLES
-        ), tables_with_new_required_columns
 
-        sequence = itertools.count()
-        with engine.connect() as connection:
-            transaction = connection.begin()
-            try:
-                stored_rows: dict[str, dict] = {}
-                for table in parent_tables:
-                    head_table = (
-                        head.tables[table.name]
-                        if table.name in PARENT_REVISION_READ_ONLY_TABLES
-                        else None
-                    )
-                    stored_rows[table.name] = _insert_and_read_back(
-                        connection,
-                        table,
-                        _row_values(
-                            table, stored_rows, sequence, head_table=head_table
-                        ),
-                        insert_table=head_table,
-                    )
-                    _rewrite_mapped_columns(connection, table, stored_rows[table.name])
+        _assert_newer_schema_serves_previous_usage(
+            engine, parent, head, SIMULATION_TABLE_REMOVAL_PREVIOUS_USAGE
+        )
+    finally:
+        command.upgrade(config, "head")
+        engine.dispose()
 
-                _assert_user_deletion_cascades(
-                    connection, parent, head, stored_rows, sequence
+
+def _schema_snapshot(engine: Engine, table_names: Iterable[str]) -> dict:
+    """Describe tables as PostgreSQL reports them, ignoring column order."""
+    inspector = inspect(engine)
+    snapshot: dict[str, dict] = {}
+    for table_name in sorted(table_names):
+        snapshot[table_name] = {
+            "columns": {
+                column["name"]: (
+                    repr(column["type"]),
+                    column["nullable"],
+                    column.get("default"),
                 )
+                for column in inspector.get_columns(table_name)
+            },
+            "primary_key": inspector.get_pk_constraint(table_name),
+            "foreign_keys": sorted(
+                (
+                    foreign_key["name"],
+                    tuple(foreign_key["constrained_columns"]),
+                    foreign_key["referred_table"],
+                    tuple(foreign_key["referred_columns"]),
+                    foreign_key["options"].get("ondelete"),
+                )
+                for foreign_key in inspector.get_foreign_keys(table_name)
+            ),
+            "unique_constraints": sorted(
+                (constraint["name"], tuple(constraint["column_names"]))
+                for constraint in inspector.get_unique_constraints(table_name)
+            ),
+            "check_constraints": sorted(
+                (constraint["name"], constraint["sqltext"])
+                for constraint in inspector.get_check_constraints(table_name)
+            ),
+            "indexes": sorted(
+                (index["name"], tuple(index["column_names"]), index["unique"])
+                for index in inspector.get_indexes(table_name)
+            ),
+        }
+    with engine.connect() as connection:
+        snapshot["enum_types"] = {
+            type_name: list(
+                connection.execute(
+                    text(
+                        "SELECT enumlabel FROM pg_enum JOIN pg_type "
+                        "ON pg_enum.enumtypid = pg_type.oid "
+                        "WHERE typname = :type_name ORDER BY enumsortorder"
+                    ),
+                    {"type_name": type_name},
+                ).scalars()
+            )
+            for type_name in sorted(SIMULATION_DOMAIN_ENUM_TYPES)
+        }
+    return snapshot
 
-                for table in reversed(parent_tables):
-                    result = connection.execute(
-                        table.delete().where(
-                            _primary_key_clause(table, stored_rows[table.name])
-                        )
-                    )
-                    assert result.rowcount == 1, table.name
-            finally:
-                transaction.rollback()
+
+def test_simulation_table_removal_downgrade_restores_the_previous_schema() -> None:
+    """The downgrade recreates exactly what the earlier revisions created."""
+    database_url = _disposable_url()
+    config = _config()
+    engine = create_engine(database_url)
+    compared_tables = SIMULATION_DOMAIN_TABLES | RETIRED_ASSOCIATION_COLUMNS.keys()
+
+    try:
+        command.downgrade(config, "base")
+        command.upgrade(config, _simulation_table_removal_parent())
+        created_by_earlier_revisions = _schema_snapshot(engine, compared_tables)
+        command.upgrade(config, "head")
+        command.downgrade(config, _simulation_table_removal_parent())
+        recreated_by_downgrade = _schema_snapshot(engine, compared_tables)
+
+        assert all(created_by_earlier_revisions["enum_types"].values())
+        assert recreated_by_downgrade == created_by_earlier_revisions
     finally:
         command.upgrade(config, "head")
         engine.dispose()
@@ -722,7 +995,10 @@ def test_baseline_uses_native_uuid_report_run_idempotency() -> None:
         }
 
     try:
-        command.upgrade(config, "head")
+        # The removal revision drops report_runs, so build the schema from
+        # empty up to the revision before it: report_runs is the baseline's.
+        command.downgrade(config, "base")
+        command.upgrade(config, _simulation_table_removal_parent())
         assert isinstance(idempotency_column_type(), postgresql.UUID)
         assert "ck_report_runs_idempotency_key_nonblank" not in report_run_checks()
 

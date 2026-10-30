@@ -17,11 +17,6 @@ SQLModel.metadata.naming_convention = {
 }
 
 # Import in dependency order so every reviewed table registers exactly once.
-# retired_tables declares, without models, the tables and columns a later
-# revision drops; see its docstring.
-from policyengine_api.data.v2.models import (  # noqa: E402
-    retired_tables as retired_tables,
-)
 from policyengine_api.data.v2.models.associations import (  # noqa: E402
     UserHouseholdAssociation,
     UserPolicy,

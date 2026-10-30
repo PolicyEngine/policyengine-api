@@ -34,11 +34,6 @@ DIRECT_SQLALCHEMY_EXCEPTIONS = MappingProxyType(
             "Overlapping composite region-default joins need SQLAlchemy "
             "relationship hints exposed by SQLModel Relationship."
         ),
-        "retired_table_declarations": (
-            "Tables and columns a later revision drops stay declared as plain "
-            "SQLAlchemy tables and columns that no model maps, so the metadata "
-            "matches the schema while nothing reads or writes them."
-        ),
     }
 )
 
