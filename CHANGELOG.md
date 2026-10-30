@@ -1,3 +1,17 @@
+## [5.15.2] - 2026-10-30
+
+### Changed
+
+- The UK metadata now offers Northern Ireland as `country/northern_ireland`, the code .py's UK region registry uses, instead of `country/ni`. Because the UK economy region check accepts the countries the metadata offers, `country/ni` now gets the same HTTP 400 as any other unknown UK region, and the Public API no longer rewrites it to `country/northern_ireland` before submitting a simulation. Requests for `country/northern_ireland`, including local-area breakdowns, are sent and cached under that code.
+- The release run upgrades the v1 Cloud SQL schema and seeds the v2 database side by side, in staging and in production, instead of one after the other; each Cloud Run candidate deploy still waits for both.
+- The release run splits its test suite across six runners and checks that each test ran exactly once, and skips lint, the quality guards, both Alembic checks and the cross-database integration tests when the release commit changes only release files and its merge run passed them; the staging deploy starts about 10 minutes sooner.
+
+### Fixed
+
+- UK economy requests now answer 400 for a region the simulation service can't resolve, such as `constituency`, `parliamentary_constituency` or `constituency/all`, with a message that names the region and the accepted forms. The annual and budget-window routes, including local-area breakdowns, check the region before they store anything or submit a simulation. Before, such a request was submitted, failed in the simulation service, and its stored result stayed `computing`. The check uses the regions the UK metadata offers, read once per process, with the simulation service's normalisation, so area names, lower-case GSS codes and bare country names keep working. Constituencies and local authorities are accepted only when the installed bundle's `regional_release_kind` is `local_area`, as in .py's UK region registry, and tests keep the constituency and local-authority lists equal to the ones packaged with .py. `country/ni` is still accepted and sent as `country/northern_ireland`. US requests are unchanged.
+- Creating a new policy now returns a 400 that lists every key in `data` that is not a parameter in the country model, such as an unknown path or a parameter group; re-saving a policy identical to a stored one still returns it. Household calculations now refuse parameter groups with their existing 400 instead of failing with a 500.
+
+
 ## [5.15.1] - 2026-10-29
 
 ### Changed
