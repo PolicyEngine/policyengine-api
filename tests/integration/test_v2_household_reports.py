@@ -123,6 +123,8 @@ def runtime_sessions(managed_v2_roles, v2_engine_as_role, disposable_v2_database
     try:
         yield sessionmaker(runtime_engine, class_=Session)
     finally:
+        # Each step in its own transaction: a failed household removal must
+        # not undo restoring the US row and removing the catalog version.
         with owner_engine.begin() as connection:
             connection.execute(
                 text("UPDATE countries SET society_wide_enabled = true WHERE id = 'us'")
@@ -131,6 +133,7 @@ def runtime_sessions(managed_v2_roles, v2_engine_as_role, disposable_v2_database
                 text("DELETE FROM tax_benefit_models WHERE name = :name"),
                 {"name": TEST_MODEL_NAME},
             )
+        with owner_engine.begin() as connection:
             stored_by_the_test = (
                 set(connection.execute(text("SELECT id FROM households")).scalars())
                 - households_before
@@ -140,6 +143,8 @@ def runtime_sessions(managed_v2_roles, v2_engine_as_role, disposable_v2_database
                     text("DELETE FROM households WHERE id = ANY(:household_ids)"),
                     {"household_ids": list(stored_by_the_test)},
                 )
+        # Read after the removal committed, as a later test would.
+        with owner_engine.connect() as connection:
             households_after = set(
                 connection.execute(text("SELECT id FROM households")).scalars()
             )
