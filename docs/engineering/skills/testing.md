@@ -184,7 +184,11 @@ assigns to its shard, heaviest file first, by the measured seconds in
 `MEASURED_FILE_SECONDS` or else by test count. A file's tests stay in one
 shard, so its fixtures are set up once. The `check-release-test-shards` job
 then fails, and the staging deployment with it, unless every shard collected
-the same tests and each test ran in exactly one shard. When a test file
+the same tests and each test ran in exactly one shard. The plugin reads its
+settings once, when pytest configures it, and then removes them and its `-p`
+option from `PYTEST_ADDOPTS`, so a pytest process that a test starts collects
+its own tests without the split; a shard writes its report once, and fails if
+one is already there. When a test file
 becomes much slower or faster, measure it again with `--durations=0` and
 update `MEASURED_FILE_SECONDS`; an out-of-date value only makes the shards
 finish less evenly.
