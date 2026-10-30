@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from alembic import command
@@ -31,9 +33,46 @@ from policyengine_api.data.v2.models import (
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from tests.fixtures.v2_catalog import normalized_catalog
+from tests.fixtures.v2_catalog_value_shapes import (
+    PARAMETER_CASES,
+    REGION_FILTER_VALUES,
+    value_shape_catalog,
+)
+
+if TYPE_CHECKING:
+    from policyengine_api.data.v2.catalog.records import NormalizedCatalog
 
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
+# The columns each catalog table stores, named as on the catalog's records.
+CATALOG_COLUMNS = {
+    "variables": (
+        "name",
+        "label",
+        "entity",
+        "description",
+        "data_type",
+        "possible_values",
+        "default_value",
+        "adds",
+        "subtracts",
+    ),
+    "parameter_nodes": ("name", "label", "description"),
+    "parameters": ("name", "label", "description", "data_type", "unit"),
+    "regions": (
+        "code",
+        "label",
+        "region_type",
+        "requires_filter",
+        "filter_field",
+        "filter_value",
+        "filter_strategy",
+        "parent_code",
+        "state_code",
+        "state_name",
+        "default_dataset_id",
+    ),
+}
 
 
 def _disposable_url() -> str:
@@ -340,3 +379,108 @@ def test_new_version_is_additive_and_concurrent_retries_serialize(
         "reports": 0,
         "report_runs": 0,
     }
+
+
+def _strict_json(value: object) -> str:
+    """Return ``value`` as JSON text, which tells 1, 1.0 and true apart."""
+    return json.dumps(value, sort_keys=True, default=str)
+
+
+def _stored_catalog_rows(engine: Engine, table_name: str) -> dict[tuple, str]:
+    """Return each row of a catalog table, keyed by model and name or code."""
+    key_column, *columns = CATALOG_COLUMNS[table_name]
+    selected = ", ".join(f"catalog_row.{column}" for column in (key_column, *columns))
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                f"""
+                SELECT model.name, {selected}
+                FROM {table_name} AS catalog_row
+                JOIN tax_benefit_model_versions AS version
+                  ON version.id = catalog_row.tax_benefit_model_version_id
+                JOIN tax_benefit_models AS model ON model.id = version.model_id
+                """
+            )
+        ).all()
+    return {(row[0], row[1]): _strict_json(row[2:]) for row in rows}
+
+
+def _catalog_rows(catalog: NormalizedCatalog, table_name: str) -> dict[tuple, str]:
+    """Return what ``_stored_catalog_rows`` should read for ``catalog``.
+
+    Each country catalog names its records after the table that stores them.
+    """
+    key_column, *columns = CATALOG_COLUMNS[table_name]
+    return {
+        (country.model.name, getattr(record, key_column)): _strict_json(
+            [getattr(record, column) for column in columns]
+        )
+        for country in catalog.countries
+        for record in getattr(country, table_name)
+    }
+
+
+def _stored_parameter_values(engine: Engine) -> dict[tuple, tuple]:
+    """Return each parameter value's JSON and end date, by model, name and start."""
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                """
+                SELECT model.name, parameter.name, parameter_value.start_date,
+                       parameter_value.value_json, parameter_value.end_date
+                FROM parameter_values AS parameter_value
+                JOIN parameters AS parameter
+                  ON parameter.id = parameter_value.parameter_id
+                JOIN tax_benefit_model_versions AS version
+                  ON version.id = parameter.tax_benefit_model_version_id
+                JOIN tax_benefit_models AS model ON model.id = version.model_id
+                """
+            )
+        ).all()
+    return {
+        (model_name, parameter_name, start_date): (_strict_json(value_json), end_date)
+        for model_name, parameter_name, start_date, value_json, end_date in rows
+    }
+
+
+def test_publication_stores_every_value_shape_unchanged(
+    publication_engine: Engine,
+) -> None:
+    catalog = value_shape_catalog()
+
+    publish_catalog(publication_engine, catalog)
+    # Publishing the same version again compares every stored row with the
+    # catalog in both directions and fails on any difference, so this also
+    # checks that the comparison reads each shape back as it was written.
+    publish_catalog(publication_engine, catalog)
+
+    stored_values = _stored_parameter_values(publication_engine)
+    assert stored_values == {
+        (country.model.name, parameter.name, value.start_date): (
+            _strict_json(value.value_json),
+            value.end_date,
+        )
+        for country in catalog.countries
+        for parameter in country.parameters
+        for value in parameter.values
+    }
+    us_model = catalog.country("us").model.name
+    for case in PARAMETER_CASES:
+        assert [
+            value_json
+            for (model_name, parameter_name, _start), (value_json, _end) in sorted(
+                stored_values.items()
+            )
+            if (model_name, parameter_name) == (us_model, case.name)
+        ] == [_strict_json(value.stored_value) for value in case.values], case.name
+
+    for table_name in CATALOG_COLUMNS:
+        assert _stored_catalog_rows(publication_engine, table_name) == _catalog_rows(
+            catalog, table_name
+        ), table_name
+    stored_regions = _stored_catalog_rows(publication_engine, "regions")
+    filter_value_index = CATALOG_COLUMNS["regions"].index("filter_value") - 1
+    for (country_id, code), filter_value in REGION_FILTER_VALUES.items():
+        model_name = catalog.country(country_id).model.name
+        stored_columns = json.loads(stored_regions[(model_name, code)])
+        assert stored_columns[filter_value_index] == filter_value, code

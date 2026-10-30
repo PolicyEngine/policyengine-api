@@ -38,6 +38,7 @@ EXPECTED_TEST_JOBS = {
     ("push.yml", "parallel-live-simulation-tests-staging-cloud-run"),
     ("push.yml", "release-tests"),
     ("v2-integration-check.yml", "catalog-runtime-integration"),
+    ("v2-integration-check.yml", "full-catalog-integration"),
 }
 # Operational jobs that run application code against real databases with the
 # interpreter setup-python provides. They keep an explicit unlocked install
