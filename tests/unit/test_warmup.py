@@ -101,9 +101,9 @@ def test_asgi_runs_warmup_and_marks_ready():
     assert "mark_ready" in src
 
 
-def test_readiness_check_gates_on_readiness():
-    src = (REPO / "policyengine_api/routes/system_routes.py").read_text(
+def test_health_gates_on_readiness():
+    src = (REPO / "policyengine_api/fastapi_routes/health.py").read_text(
         encoding="utf-8"
     )
-    assert "is_ready" in src
-    assert "status=503" in src
+    assert "dependencies.readiness_probe()" in src
+    assert "status_code=503" in src

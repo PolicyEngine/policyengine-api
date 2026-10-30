@@ -1,6 +1,7 @@
 """PolicyService checks a new policy's paths, period keys and values."""
 
 import pytest
+from sqlalchemy import select
 
 from policyengine_api.data.v1_models import Policy
 from policyengine_api.services.policy_service import (
@@ -23,6 +24,18 @@ class RecordingParameterCatalog:
         return SETTABLE_NAMES
 
 
+def _stored_us_policy_labels(orm_session_factory, label: str) -> list[str]:
+    """Return the labels of every stored US policy with exactly this label."""
+    with orm_session_factory() as session:
+        return list(
+            session.scalars(
+                select(Policy.label).where(
+                    Policy.country_id == "us", Policy.label == label
+                )
+            )
+        )
+
+
 @pytest.fixture
 def parameter_catalog():
     return RecordingParameterCatalog()
@@ -38,6 +51,7 @@ def service(orm_session_factory, parameter_catalog):
 
 def test_new_policy_with_paths_outside_the_catalog_is_refused_and_not_stored(
     service,
+    orm_session_factory,
     parameter_catalog,
 ):
     with pytest.raises(InvalidPolicyDataError) as raised:
@@ -58,7 +72,7 @@ def test_new_policy_with_paths_outside_the_catalog_is_refused_and_not_stored(
         "data.gov.x",
     ]
     assert parameter_catalog.looked_up_country_ids == ["us"]
-    assert service.search_policies("us", "Refused") == []
+    assert _stored_us_policy_labels(orm_session_factory, "Refused") == []
 
 
 def test_new_policy_error_holds_refused_paths_then_refused_periods_and_values(
@@ -165,4 +179,4 @@ def test_new_policy_for_a_country_without_a_loaded_model_is_refused(
         )
 
     assert raised.value.parameter_paths == ("gov.tax.rate",)
-    assert service_without_model.search_policies("us", "No loaded model") == []
+    assert _stored_us_policy_labels(orm_session_factory, "No loaded model") == []

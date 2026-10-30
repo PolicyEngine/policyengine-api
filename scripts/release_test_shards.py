@@ -65,7 +65,6 @@ MEASURED_FILE_SECONDS = {
     "tests/unit/data/test_v1_database_migration.py": 15,
     "tests/unit/routes/test_economy_spm_query.py": 15,
     "tests/to_refactor/api/test_api.py": 15,
-    "tests/unit/routes/test_user_policy_route_outcomes.py": 15,
     "tests/unit/routes/test_policy_dual_write_routes.py": 14,
     "tests/unit/libs/test_simulation_entrypoint.py": 14,
     "tests/unit/test_relock_pull_request_script.py": 13,

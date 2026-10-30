@@ -35,9 +35,6 @@ log_timing("Caching utilities import completed")
 from policyengine_api.routes.error_routes import error_bp
 
 log_timing("Error routes import completed")
-from policyengine_api.routes.home_routes import home_bp
-
-log_timing("Home routes import completed")
 from policyengine_api.routes.economy_routes import economy_bp
 
 log_timing("Economy routes import completed")
@@ -50,13 +47,8 @@ log_timing("Policy routes import completed")
 from policyengine_api.routes.metadata_routes import metadata_bp
 
 log_timing("Metadata routes import completed")
-from policyengine_api.routes.user_profile_routes import user_profile_bp
-
-log_timing("User profile routes import completed")
-from policyengine_api.routes.reform_impact_routes import reform_impact_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
-from policyengine_api.routes.system_routes import system_bp
 
 log_timing("Initialising API...")
 
@@ -112,9 +104,6 @@ log_timing("Migration request logging initialised")
 app.register_blueprint(error_bp)
 log_timing("Error routes registered")
 
-app.register_blueprint(home_bp)
-log_timing("Home routes registered")
-
 app.register_blueprint(metadata_bp)
 log_timing("Metadata routes registered")
 
@@ -129,17 +118,9 @@ log_timing("Policy routes registered")
 app.register_blueprint(economy_bp)
 log_timing("Economy routes registered")
 
-app.register_blueprint(user_profile_bp)
-log_timing("User profile routes registered")
-
-app.register_blueprint(reform_impact_bp)
-log_timing("Simulations endpoint registered")
-
 app.register_blueprint(simulation_bp)
 
 app.register_blueprint(report_output_bp)
-app.register_blueprint(system_bp)
-log_timing("System routes registered")
 
 
 log_timing("API initialised.")

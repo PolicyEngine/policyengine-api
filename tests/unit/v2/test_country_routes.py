@@ -57,7 +57,6 @@ def _client(service: FakeCountryService) -> tuple[TestClient, dict[str, int]]:
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
-        specification_provider=dict,
         v2_country_service_factory=lambda: service,
     )
     settings = RouteImplementationSettings(

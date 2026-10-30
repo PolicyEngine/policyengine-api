@@ -1,4 +1,4 @@
-"""Native health, liveness, and readiness routes."""
+"""Native health, deployment and simulation gateway health routes."""
 
 from __future__ import annotations
 
@@ -8,16 +8,22 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from starlette.responses import PlainTextResponse
+from starlette.responses import JSONResponse
 
 if TYPE_CHECKING:
     from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 
 
 class HealthResponse(BaseModel):
-    """Health-check result showing that the API is up and serving requests."""
+    """Health-check result showing that the API has warmed up and can serve requests."""
 
     status: Literal["healthy"]
+
+
+class HealthNotReadyResponse(BaseModel):
+    """Health-check result while warmup runs or the configuration is invalid."""
+
+    status: Literal["not_ready"]
 
 
 class SimulationGatewayHealthResponse(BaseModel):
@@ -44,11 +50,36 @@ class DeploymentResponse(BaseModel):
 def build_core_health_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
-    """Build health routes that were native before Stage 6."""
+    """Build the health, deployment and simulation gateway health routes.
+
+    ``/health`` answers 503 until the readiness probe passes: the startup
+    warmup has finished and the runtime configuration is valid. The Cloud Run
+    startup probe and the deployment health checks poll it, so a revision
+    receives no traffic, and is not promoted, before it can serve.
+    """
     router = APIRouter()
 
-    @router.get("/health", response_model=HealthResponse)
-    def health() -> HealthResponse:
+    # HEAD is accepted too: uptime monitors and `curl -I` send it.
+    @router.api_route(
+        "/health",
+        methods=["GET", "HEAD"],
+        response_model=HealthResponse,
+        responses={
+            503: {
+                "model": HealthNotReadyResponse,
+                "description": (
+                    "Startup warmup has not finished, or the runtime "
+                    "configuration is invalid."
+                ),
+            }
+        },
+    )
+    def health() -> HealthResponse | JSONResponse:
+        if not dependencies.readiness_probe():
+            return JSONResponse(
+                status_code=503,
+                content=HealthNotReadyResponse(status="not_ready").model_dump(),
+            )
         return HealthResponse(status="healthy")
 
     @router.get("/deployment", response_model=DeploymentResponse)
@@ -90,32 +121,5 @@ def build_core_health_router(
             status="healthy",
             simulation_gateway="healthy",
         )
-
-    return router
-
-
-def build_readiness_router(
-    dependencies: NativeRouteDependencies,
-) -> APIRouter:
-    """Build selectable native liveness and readiness routes."""
-    router = APIRouter()
-
-    @router.get(
-        "/liveness-check",
-        response_class=PlainTextResponse,
-        include_in_schema=False,
-    )
-    def liveness_check() -> PlainTextResponse:
-        return PlainTextResponse("OK", status_code=200)
-
-    @router.get(
-        "/readiness-check",
-        response_class=PlainTextResponse,
-        include_in_schema=False,
-    )
-    def readiness_check() -> PlainTextResponse:
-        if not dependencies.readiness_probe():
-            return PlainTextResponse("NOT READY", status_code=503)
-        return PlainTextResponse("OK", status_code=200)
 
     return router

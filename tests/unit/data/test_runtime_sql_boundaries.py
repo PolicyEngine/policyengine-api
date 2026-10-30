@@ -28,7 +28,6 @@ def test_ordinary_runtime_modules_no_longer_use_raw_sql_facade():
     relative_paths = (
         "routes/household_routes.py",
         "routes/policy_routes.py",
-        "routes/reform_impact_routes.py",
         "country.py",
         "services/reform_impacts_service.py",
     )

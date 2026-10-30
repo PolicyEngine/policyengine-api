@@ -81,7 +81,7 @@ def test_readiness_wait_polls_until_the_service_answers_ok(
             return await load_generator._wait_for_readiness(client, 60.0)
 
     assert asyncio.run(wait()) == 3.0
-    assert [path for path, _timeout in requests] == ["/readiness-check"] * 3
+    assert [path for path, _timeout in requests] == ["/health"] * 3
     assert requests[0][1]["read"] == 20.0
     assert sleeps == [5.0, 5.0]
 
@@ -98,7 +98,7 @@ def test_readiness_wait_gives_up_after_the_timeout(
         ) as client:
             return await load_generator._wait_for_readiness(client, 0.5)
 
-    with pytest.raises(RuntimeError, match=r"^/readiness-check not ready after 0s$"):
+    with pytest.raises(RuntimeError, match=r"^/health not ready after 0s$"):
         asyncio.run(wait())
 
 
@@ -157,7 +157,7 @@ def _run_load_cell(
                 request.extensions["timeout"]["read"],
             )
         )
-        if request.url.path == "/readiness-check":
+        if request.url.path == "/health":
             return httpx.Response(200)
         outcome = next(outcomes)
         if isinstance(outcome, Exception):
@@ -209,7 +209,7 @@ def test_load_cell_runs_seeded_clients_and_summarizes_each_endpoint(
     # The mock transport never yields, so the first client runs to the deadline
     # before the second one starts.
     assert requests == [
-        ("GET", "/readiness-check", None, None, 20.0),
+        ("GET", "/health", None, None, 20.0),
         ("POST", "/us/calculate", "01234567-cell-a-throwaway", 7, 290.0),
         ("POST", "/us/calculate", "01234567-cell-a-0-1", 7, 290.0),
         ("GET", "/us/metadata", None, None, 60.0),
@@ -267,7 +267,7 @@ def test_load_cell_without_cache_busting_repeats_the_same_payload(
     )
 
     assert requests == [
-        ("GET", "/readiness-check", None, None, 20.0),
+        ("GET", "/health", None, None, 20.0),
         ("POST", "/us/calculate", "01234567-cell-a-throwaway", 7, 290.0),
         *[("POST", "/us/calculate", None, 7, 290.0)] * 7,
     ]
