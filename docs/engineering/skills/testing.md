@@ -107,7 +107,7 @@ The generated-only v2 Alembic chain and disposable Postgres lifecycle:
 ```bash
 uv run pytest tests/unit/v2/test_alembic_v2.py tests/unit/test_alembic_workflows.py -q
 V2_ALEMBIC_DISPOSABLE_TEST=1 V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
-  uv run pytest tests/integration/test_alembic_v2_lifecycle.py -q
+  uv run pytest tests/integration/test_alembic_v2_lifecycle.py tests/integration/test_alembic_v2_catalog_tables.py -q
 ```
 
 The disposable lifecycle must start from empty Postgres, upgrade to `head`,
@@ -305,6 +305,7 @@ V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test
 uv run pytest \
   tests/integration/test_alembic_mysql_lifecycle.py \
   tests/integration/test_alembic_v2_lifecycle.py \
+  tests/integration/test_alembic_v2_catalog_tables.py \
   tests/integration/test_v2_policy_persistence.py \
   tests/integration/test_v1_policy_dual_write.py \
   tests/integration/test_mysql_policy_dual_write.py \
@@ -379,6 +380,7 @@ V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test
 uv run --frozen pytest \
   tests/integration/test_alembic_mysql_lifecycle.py \
   tests/integration/test_alembic_v2_lifecycle.py \
+  tests/integration/test_alembic_v2_catalog_tables.py \
   tests/integration/test_v2_household_persistence.py \
   tests/integration/test_v1_household_dual_write.py \
   tests/integration/test_mysql_household_spm_dual_write.py -q
@@ -436,6 +438,7 @@ V2_ALEMBIC_DISPOSABLE_TEST=1 \
 V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
 uv run --frozen pytest \
   tests/integration/test_alembic_v2_lifecycle.py \
+  tests/integration/test_alembic_v2_catalog_tables.py \
   tests/integration/test_v2_user_identity_persistence.py -q
 ```
 

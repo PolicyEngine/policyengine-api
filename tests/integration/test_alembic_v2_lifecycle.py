@@ -1,7 +1,6 @@
 """Exercise the isolated v2 Alembic lifecycle against disposable Postgres."""
 
 import itertools
-import os
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -16,15 +15,16 @@ from alembic.migration import MigrationContext
 from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.dialects import postgresql
 
-from policyengine_api.constants import REPO
 from policyengine_api.data.v2.migration_target import (
-    V2_ALEMBIC_DISPOSABLE_TEST,
     V2_ALEMBIC_HEAD_REVISION,
     V2MigrationTargetError,
-    load_v2_alembic_settings,
 )
 from policyengine_api.data.v2.models import V2_METADATA
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+from tests.fixtures.integration.alembic_v2 import (
+    alembic_v2_config,
+    disposable_v2_url,
+    table_columns,
+)
 
 BASELINE_REVISION = "f5ef4347cb2a"
 STAGE_11_PREVIOUS_REVISION = "af34023a728f"
@@ -33,25 +33,6 @@ STAGE_12_COMPARISON_PREVIOUS_REVISION = "439303be14fe"
 STAGE_12A_PREVIOUS_REVISION = "91af4fc8d8c1"
 COUNTRIES_PREVIOUS_REVISION = "fbb7488ebe8a"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
-
-
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    settings = load_v2_alembic_settings(
-        {
-            V2_MIGRATION_DATABASE_URL: database_url,
-            V2_ALEMBIC_DISPOSABLE_TEST: os.environ.get(V2_ALEMBIC_DISPOSABLE_TEST, ""),
-        }
-    )
-    if not settings.disposable_test:
-        pytest.fail("v2 lifecycle tests require disposable-test mode")
-    return settings.url.render_as_string(hide_password=False)
-
-
-def _config() -> Config:
-    return Config(str(REPO / "alembic-v2.ini"))
 
 
 def _assert_head(engine) -> None:
@@ -102,20 +83,13 @@ def _assert_head(engine) -> None:
     } <= set(inspect(engine).get_table_names(schema="public"))
 
 
-def _columns(engine, table_name: str) -> dict[str, dict]:
-    return {
-        column["name"]: column
-        for column in inspect(engine).get_columns(table_name, schema="public")
-    }
-
-
 def _assert_pre_stage_12a_association_shape(engine) -> None:
     assert "user_identities" not in inspect(engine).get_table_names(schema="public")
     for table_name, reference in (
         ("user_simulation_associations", "simulation"),
         ("user_report_associations", "report"),
     ):
-        columns = _columns(engine, table_name)
+        columns = table_columns(engine, table_name)
         assert {"country", "label"} <= columns.keys()
         assert {
             "country_id",
@@ -131,10 +105,10 @@ def _assert_pre_stage_12a_association_shape(engine) -> None:
         ("user_policies", "policy"),
         ("user_household_associations", "household"),
     ):
-        columns = _columns(engine, table_name)
+        columns = table_columns(engine, table_name)
         assert f"legacy_{reference}_id" not in columns
         assert not columns[f"{reference}_id"]["nullable"]
-    user_columns = _columns(engine, "users")
+    user_columns = table_columns(engine, "users")
     assert "user_type" not in user_columns
     assert not user_columns["primary_country"]["nullable"]
 
@@ -154,7 +128,7 @@ def _assert_stage_12a_association_shape(engine) -> None:
         ("user_simulation_associations", "simulation"),
         ("user_report_associations", "report"),
     ):
-        columns = _columns(engine, table_name)
+        columns = table_columns(engine, table_name)
         assert columns[f"{reference}_id"]["nullable"]
         assert columns[f"legacy_{reference}_id"]["nullable"]
         assert not columns["country_id"]["nullable"]
@@ -177,10 +151,10 @@ def _assert_stage_12a_association_shape(engine) -> None:
     )
     assert report_policy_key["options"]["ondelete"] == "SET NULL"
     for table_name in ("user_simulation_associations", "user_report_associations"):
-        columns = _columns(engine, table_name)
+        columns = table_columns(engine, table_name)
         assert columns["country"]["nullable"]
         assert columns["label"]["nullable"]
-    user_columns = _columns(engine, "users")
+    user_columns = table_columns(engine, "users")
     assert not user_columns["user_type"]["nullable"]
     assert "standard" in user_columns["user_type"]["default"]
     assert user_columns["primary_country"]["nullable"]
@@ -423,8 +397,8 @@ def _assert_pre_countries_shape(engine) -> None:
 
 
 def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
 
     try:
@@ -712,8 +686,8 @@ def _assert_head_serves_previous_revision(
     new required column without a server default; ``read_only_tables`` are the
     parent's tables that only new code writes.
     """
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
 
     try:
@@ -796,8 +770,8 @@ def test_countries_schema_serves_the_previous_revision() -> None:
 
 
 def test_upgrade_to_head_validates_the_resulting_schema_against_metadata() -> None:
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
 
     try:
@@ -822,8 +796,8 @@ def test_upgrade_to_head_validates_the_resulting_schema_against_metadata() -> No
 
 
 def test_baseline_uses_native_uuid_report_run_idempotency() -> None:
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
 
     def idempotency_column_type():
@@ -902,8 +876,8 @@ def test_baseline_uses_native_uuid_report_run_idempotency() -> None:
 
 
 def test_baseline_region_default_enforces_same_model_dataset() -> None:
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
     first_model_id = uuid4()
     second_model_id = uuid4()
@@ -1021,8 +995,8 @@ def test_baseline_region_default_enforces_same_model_dataset() -> None:
 
 def test_stage_12a_reshape_refuses_retained_dormant_association_rows() -> None:
     """A retained pre-12A report association stops the reshape unchanged."""
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
     user_id = uuid4()
     model_id = uuid4()
@@ -1081,8 +1055,8 @@ def test_countries_revision_keeps_existing_rows_and_rejects_unlisted_countries()
     None
 ):
     """Rows saved before the revision survive it, and only listed countries pass."""
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
     user_id = uuid4()
 
@@ -1143,8 +1117,8 @@ def test_countries_revision_keeps_existing_rows_and_rejects_unlisted_countries()
 
 def test_countries_downgrade_refuses_records_of_an_unlisted_country() -> None:
     """The restored US-and-UK checks stop a downgrade that would orphan records."""
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
     user_id = uuid4()
 
@@ -1181,8 +1155,8 @@ def test_countries_downgrade_refuses_records_of_an_unlisted_country() -> None:
 
 def test_a_household_only_country_row_lets_records_name_that_country() -> None:
     """Once a household-only country has a row, its records can be stored."""
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
     user_id = uuid4()
     household_id = uuid4()
@@ -1247,342 +1221,4 @@ def test_a_household_only_country_row_lets_records_name_that_country() -> None:
             finally:
                 transaction.rollback()
     finally:
-        engine.dispose()
-
-
-CATALOG_FORMAT_2_PARENT_REVISION = "fb1a3e40d3d6"
-CATALOG_FORMAT_2_COLUMNS = {
-    "tax_benefit_model_versions": ("catalog_format", "entities", "basic_inputs"),
-    "variables": (
-        "is_input_variable",
-        "hidden_input",
-        "module_name",
-        "adds_parameter_path",
-        "subtracts_parameter_path",
-        "enum_values",
-        "unit",
-        "definition_period",
-    ),
-    "parameters": ("economy", "household"),
-}
-
-
-def _catalog_version_published_before_format_2(connection: sa.Connection) -> UUID:
-    """Store a model version with one variable and one parameter; return its id."""
-    model_id = uuid4()
-    version_id = uuid4()
-    connection.execute(
-        text(
-            "INSERT INTO tax_benefit_models (id, name) "
-            "VALUES (:model_id, 'catalog-format-probe')"
-        ),
-        {"model_id": model_id},
-    )
-    connection.execute(
-        text(
-            "INSERT INTO tax_benefit_model_versions "
-            "(id, model_id, version, current_law_id, metadata_time_periods) "
-            "VALUES (:version_id, :model_id, '0.0.1-probe', 1, '[2026]')"
-        ),
-        {"version_id": version_id, "model_id": model_id},
-    )
-    connection.execute(
-        text(
-            "INSERT INTO variables "
-            "(id, name, entity, default_value, tax_benefit_model_version_id) "
-            "VALUES (:variable_id, 'probe_income', 'person', '0', :version_id)"
-        ),
-        {"variable_id": uuid4(), "version_id": version_id},
-    )
-    connection.execute(
-        text(
-            "INSERT INTO parameters (id, name, tax_benefit_model_version_id) "
-            "VALUES (:parameter_id, 'gov.probe.rate', :version_id)"
-        ),
-        {"parameter_id": uuid4(), "version_id": version_id},
-    )
-    return version_id
-
-
-def _format_2_values(connection: sa.Connection, version_id: UUID) -> list[tuple]:
-    """Return the format 2 columns of the version's model, variable and parameter."""
-    rows = []
-    for table_name, columns in CATALOG_FORMAT_2_COLUMNS.items():
-        key = (
-            "id"
-            if table_name == "tax_benefit_model_versions"
-            else "tax_benefit_model_version_id"
-        )
-        rows.append(
-            tuple(
-                connection.execute(
-                    text(
-                        f"SELECT {', '.join(columns)} FROM {table_name} "
-                        f"WHERE {key} = :version_id"
-                    ),
-                    {"version_id": version_id},
-                ).one()
-            )
-        )
-    return rows
-
-
-def test_catalog_format_2_columns_leave_earlier_versions_empty() -> None:
-    """A version stored before catalog format 2 keeps its format 2 fields null.
-
-    Upgrading adds the columns as nullable without writing to stored rows, and
-    downgrading drops them and keeps every row.
-    """
-    config = _config()
-    engine = create_engine(_disposable_url())
-    version_id = None
-    try:
-        command.downgrade(config, CATALOG_FORMAT_2_PARENT_REVISION)
-        for table_name, columns in CATALOG_FORMAT_2_COLUMNS.items():
-            assert set(columns).isdisjoint(_columns(engine, table_name))
-        with engine.begin() as connection:
-            version_id = _catalog_version_published_before_format_2(connection)
-
-        command.upgrade(config, "head")
-
-        for table_name, columns in CATALOG_FORMAT_2_COLUMNS.items():
-            stored_columns = _columns(engine, table_name)
-            for column_name in columns:
-                assert stored_columns[column_name]["nullable"]
-                assert stored_columns[column_name]["default"] is None
-        with engine.connect() as connection:
-            assert _format_2_values(connection, version_id) == [
-                (None, None, None),
-                (None, None, None, None, None, None, None, None),
-                (None, None),
-            ]
-
-        command.downgrade(config, CATALOG_FORMAT_2_PARENT_REVISION)
-
-        for table_name, columns in CATALOG_FORMAT_2_COLUMNS.items():
-            assert set(columns).isdisjoint(_columns(engine, table_name))
-        with engine.connect() as connection:
-            counts = connection.execute(
-                text(
-                    "SELECT (SELECT count(*) FROM variables "
-                    "WHERE tax_benefit_model_version_id = :version_id), "
-                    "(SELECT count(*) FROM parameters "
-                    "WHERE tax_benefit_model_version_id = :version_id)"
-                ),
-                {"version_id": version_id},
-            ).one()
-        assert tuple(counts) == (1, 1)
-    finally:
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "DELETE FROM tax_benefit_models WHERE name = 'catalog-format-probe'"
-                )
-            )
-        command.upgrade(config, "head")
-        engine.dispose()
-
-
-PARAMETER_TREE_PARENT_REVISION = "f5c1d9b4685b"
-
-
-def test_parameter_tree_table_is_created_empty_and_dropped_without_data_loss() -> None:
-    """The parameter tree revision creates an empty table and downgrades cleanly.
-
-    The revision writes no rows: catalog publication writes each version's
-    tree. A tree row is deleted with its version or its parameter, and
-    downgrading drops the table while every catalog row stays.
-    """
-    config = _config()
-    engine = create_engine(_disposable_url())
-    try:
-        command.downgrade(config, PARAMETER_TREE_PARENT_REVISION)
-        assert "parameter_tree_children" not in inspect(engine).get_table_names()
-        with engine.begin() as connection:
-            version_id = _catalog_version_published_before_format_2(connection)
-
-        command.upgrade(config, "head")
-
-        indexes = {
-            index["name"]: (index["column_names"], index["unique"])
-            for index in inspect(engine).get_indexes("parameter_tree_children")
-        }
-        assert indexes["ix_parameter_tree_children_listing"] == (
-            ["tax_benefit_model_version_id", "parent_path", "position"],
-            True,
-        )
-        assert indexes["ix_parameter_tree_children_reform_listing"] == (
-            ["tax_benefit_model_version_id", "parent_path", "reform_position"],
-            True,
-        )
-        with engine.begin() as connection:
-            assert (
-                connection.execute(
-                    text("SELECT count(*) FROM parameter_tree_children")
-                ).scalar_one()
-                == 0
-            )
-            parameter_id = connection.execute(
-                text(
-                    "SELECT id FROM parameters "
-                    "WHERE tax_benefit_model_version_id = :version_id"
-                ),
-                {"version_id": version_id},
-            ).scalar_one()
-            for path, parent, position, child_type, child_count, reference in (
-                ("gov", "", 0, "node", 1, None),
-                ("gov.probe", "gov", 0, "node", 1, None),
-                ("gov.probe.rate", "gov.probe", 0, "parameter", None, parameter_id),
-            ):
-                connection.execute(
-                    text(
-                        "INSERT INTO parameter_tree_children (id, "
-                        "tax_benefit_model_version_id, parent_path, path, position, "
-                        "label, child_type, child_count, parameter_id) VALUES "
-                        "(:id, :version_id, :parent, :path, :position, :path, "
-                        ":child_type, :child_count, :parameter_id)"
-                    ),
-                    {
-                        "id": uuid4(),
-                        "version_id": version_id,
-                        "parent": parent,
-                        "path": path,
-                        "position": position,
-                        "child_type": child_type,
-                        "child_count": child_count,
-                        "parameter_id": reference,
-                    },
-                )
-            with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
-                connection.execute(
-                    text(
-                        "INSERT INTO parameter_tree_children (id, "
-                        "tax_benefit_model_version_id, parent_path, path, position, "
-                        "label, child_type) VALUES (:id, :version_id, 'gov', "
-                        "'gov.other', 0, 'Other', 'node')"
-                    ),
-                    {"id": uuid4(), "version_id": version_id},
-                )
-            connection.execute(
-                text("DELETE FROM parameters WHERE id = :parameter_id"),
-                {"parameter_id": parameter_id},
-            )
-            assert connection.execute(
-                text("SELECT path FROM parameter_tree_children ORDER BY path")
-            ).scalars().all() == ["gov", "gov.probe"]
-
-        command.downgrade(config, PARAMETER_TREE_PARENT_REVISION)
-
-        assert "parameter_tree_children" not in inspect(engine).get_table_names()
-        with engine.connect() as connection:
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT count(*) FROM variables "
-                        "WHERE tax_benefit_model_version_id = :version_id"
-                    ),
-                    {"version_id": version_id},
-                ).scalar_one()
-                == 1
-            )
-    finally:
-        command.upgrade(config, "head")
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "DELETE FROM tax_benefit_models WHERE name = 'catalog-format-probe'"
-                )
-            )
-        engine.dispose()
-
-
-PARAMETER_SEARCH_FILE_PARENT_REVISION = "3869eb814a90"
-
-
-def test_parameter_search_file_table_is_created_empty_and_dropped_without_loss() -> (
-    None
-):
-    """The search file revision creates an empty table and downgrades cleanly.
-
-    The revision writes no rows: catalog publication writes each version's
-    file. A version holds at most one file, the file is deleted with its
-    version, and downgrading drops the table while every catalog row stays.
-    """
-    config = _config()
-    engine = create_engine(_disposable_url())
-    try:
-        command.downgrade(config, PARAMETER_SEARCH_FILE_PARENT_REVISION)
-        assert "parameter_search_files" not in inspect(engine).get_table_names()
-        with engine.begin() as connection:
-            version_id = _catalog_version_published_before_format_2(connection)
-
-        command.upgrade(config, "head")
-
-        insert_file = text(
-            "INSERT INTO parameter_search_files (id, tax_benefit_model_version_id, "
-            "file_format, compressed_content, content_sha256, uncompressed_size, "
-            "compressed_size) VALUES (:id, :version_id, 1, :content, :sha, 2, 22)"
-        )
-        file_values = {
-            "version_id": version_id,
-            "content": b"\x1f\x8b compressed bytes",
-            "sha": "0" * 64,
-        }
-        with engine.begin() as connection:
-            assert (
-                connection.execute(
-                    text("SELECT count(*) FROM parameter_search_files")
-                ).scalar_one()
-                == 0
-            )
-            connection.execute(insert_file, {"id": uuid4(), **file_values})
-            with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
-                connection.execute(insert_file, {"id": uuid4(), **file_values})
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT compressed_content FROM parameter_search_files "
-                        "WHERE tax_benefit_model_version_id = :version_id"
-                    ),
-                    {"version_id": version_id},
-                ).scalar_one()
-                == file_values["content"]
-            )
-
-        command.downgrade(config, PARAMETER_SEARCH_FILE_PARENT_REVISION)
-
-        assert "parameter_search_files" not in inspect(engine).get_table_names()
-        with engine.connect() as connection:
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT count(*) FROM variables "
-                        "WHERE tax_benefit_model_version_id = :version_id"
-                    ),
-                    {"version_id": version_id},
-                ).scalar_one()
-                == 1
-            )
-
-        command.upgrade(config, "head")
-        with engine.begin() as connection:
-            connection.execute(insert_file, {"id": uuid4(), **file_values})
-            connection.execute(
-                text("DELETE FROM tax_benefit_model_versions WHERE id = :version_id"),
-                {"version_id": version_id},
-            )
-            assert (
-                connection.execute(
-                    text("SELECT count(*) FROM parameter_search_files")
-                ).scalar_one()
-                == 0
-            )
-    finally:
-        command.upgrade(config, "head")
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "DELETE FROM tax_benefit_models WHERE name = 'catalog-format-probe'"
-                )
-            )
         engine.dispose()
