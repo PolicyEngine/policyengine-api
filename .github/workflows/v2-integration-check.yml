@@ -80,8 +80,8 @@ jobs:
         run: uv run --frozen --extra dev coverage run --branch -m pytest -q tests/integration/test_v2_catalog_installed.py
         env:
           RUN_V2_CATALOG_COMPATIBILITY: "1"
-      - name: Test v2 metadata publication and resource routes
-        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication.py tests/integration/test_v2_metadata_routes.py
+      - name: Test v2 metadata publication, resource routes and the countries list
+        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication.py tests/integration/test_v2_metadata_routes.py tests/integration/test_v2_country_routes.py
       - name: Test v2 policy persistence and immediate v1 mirroring
         run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_policy_persistence.py tests/integration/test_v1_policy_dual_write.py tests/integration/test_mysql_policy_dual_write.py tests/integration/test_v2_user_policy_mirroring.py tests/integration/test_v1_user_policy_dual_write.py
       - name: Test signed-in identity provisioning and user associations

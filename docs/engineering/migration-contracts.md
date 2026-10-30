@@ -7,8 +7,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | Metric | Count |
 | --- | ---: |
 | route group count | 9 |
-| workflow count | 16 |
-| request count | 89 |
+| workflow count | 17 |
+| request count | 90 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -18,7 +18,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | --- | --- | --- |
 | `health` | `health`, `simulation-gateway-check`, `liveness-check`, `readiness-check`, `deployment` | `none` | `none` |
 | `specification` | `specification` | `none` | `none` |
-| `metadata` | `metadata`, `datasets`, `economy-options`, `parameter-values`, `parameters`, `regions`, `tax-benefit-model-versions`, `tax-benefit-models`, `variables` | `metadata` | `none` |
+| `metadata` | `metadata`, `countries`, `datasets`, `economy-options`, `parameter-values`, `parameters`, `regions`, `tax-benefit-model-versions`, `tax-benefit-models`, `variables` | `metadata` | `none` |
 | `policy` | `policy`, `policies`, `user-policy`, `user-policies` | `policy` | `none` |
 | `household` | `household`, `households`, `user-household`, `user-households`, `calculate`, `calculate-full` | `household` | `household` |
 | `economy` | `economy` | `simulation` | `economy` |
@@ -189,6 +189,15 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | --- | ---: | --- | --- | --- |
 | `GET` | `/us/metadata` | 200 | `metadata` | none | `status`, `result.current_law_id`, `result.economy_options.region`, `result.economy_options.time_period` |
 | `GET` | `/uk/metadata` | 200 | `metadata` | none | `status`, `result.current_law_id`, `result.economy_options.region`, `result.economy_options.time_period` |
+
+### `country_selection_v2`
+
+- Current contract: `typed_v2_resources`
+- Future owner: Countries table and one country list in code
+
+| Method | Path | Status | Route group | Required headers | Stable response fields |
+| --- | --- | ---: | --- | --- | --- |
+| `GET` | `/v2/countries` | 200 | `metadata` | none | `status`, `message`, `result.items` |
 
 ### `metadata_resources_v2_preview`
 

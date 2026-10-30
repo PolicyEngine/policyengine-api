@@ -45,10 +45,6 @@ class User(IdentifiedModel, table=True):
     __table_args__ = (
         sa.UniqueConstraint("email", name="uq_users_email"),
         sa.CheckConstraint(
-            "primary_country IN ('us', 'uk')",
-            name="ck_users_primary_country",
-        ),
-        sa.CheckConstraint(
             "user_type IN ('unauthenticated', 'standard')",
             name="ck_users_user_type",
         ),
@@ -61,7 +57,12 @@ class User(IdentifiedModel, table=True):
     first_name: str | None = Field(default=None, max_length=255)
     last_name: str | None = Field(default=None, max_length=255)
     email: str | None = Field(default=None, max_length=320, index=True)
-    primary_country: str | None = Field(default=None, max_length=2)
+    primary_country: str | None = Field(
+        default=None,
+        max_length=2,
+        foreign_key="countries.id",
+        ondelete="RESTRICT",
+    )
     # The server default keeps inserts by earlier Public API revisions, which
     # do not map this column, creating standard users.
     user_type: str = Field(
