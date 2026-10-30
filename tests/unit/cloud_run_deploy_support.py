@@ -310,6 +310,11 @@ def push_workflow_jobs() -> dict[str, dict]:
     return yaml.safe_load(push_workflow())["jobs"]
 
 
+def pr_workflow_jobs() -> dict[str, dict]:
+    """Return pr.yml's jobs, parsed, keyed by job id."""
+    return yaml.safe_load(pr_workflow())["jobs"]
+
+
 def job_needs(job: dict) -> list[str]:
     """Return the ids of the jobs ``job`` needs, as a list."""
     needs = job.get("needs") or []
