@@ -6,13 +6,21 @@ Public API asks it, are in ``policyengine_api.services.v2.simulation_entrypoint`
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from policyengine_api.services.v2.simulation_entrypoint.types import (
     SimulationChoice,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from policyengine_api.services.v2.simulation_entrypoint.types import (
+        EconomyReportRecord,
+    )
 
 # The bounds and form the Simulation Entrypoint accepts.
 ReportYear = Annotated[int, Field(ge=1900, le=2200, description="The report's year")]
@@ -45,3 +53,15 @@ class EconomyReportRunFields(StrictEconomyReportInput):
     """A re-run; ``force`` calculates both simulations again instead of reusing runs."""
 
     force: StrictBool = False
+
+
+@dataclass(frozen=True)
+class EconomyReportListing:
+    """The country's economy reports among some IDs, and the IDs left unreadable.
+
+    ``unreadable_report_ids`` are reports the simulation service has but whose
+    stored result it cannot read back; a listing leaves them out.
+    """
+
+    reports: tuple[EconomyReportRecord, ...]
+    unreadable_report_ids: tuple[UUID, ...]

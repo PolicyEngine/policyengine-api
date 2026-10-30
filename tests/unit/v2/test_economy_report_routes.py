@@ -58,6 +58,10 @@ from tests.unit.v2.economy_report_support import (
     report_record,
     report_run_record,
 )
+from tests.unit.v2.household_report_support import (
+    FakeHouseholdReportSimulation,
+    household_report_service,
+)
 
 SUBMISSION = {
     "country_id": "us",
@@ -83,12 +87,16 @@ def _client(
         return jsonify({"source": "flask", "resource": resource})
 
     service = economy_report_service(simulation, sessions)
+    # A report that is not an economy report is looked for among household
+    # reports, of which this entrypoint has none.
+    household_service = household_report_service(FakeHouseholdReportSimulation())
     dependencies = NativeRouteDependencies(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
         specification_provider=dict,
         v2_economy_report_service_factory=service_factory or (lambda: service),
+        v2_household_report_service_factory=lambda: household_service,
     )
     settings = RouteImplementationSettings(
         health=RouteImplementation.FLASK_FALLBACK,
@@ -130,6 +138,7 @@ def _simulation_run_item(run_id, simulation_id) -> dict:
 
 
 PENDING_RUN_ITEM = {
+    "kind": "economy",
     "id": str(REPORT_RUN_ID),
     "report_id": str(REPORT_ID),
     "trigger": "initial",
@@ -342,7 +351,9 @@ def test_openapi_publishes_the_submit_contract() -> None:
     }
     assert set(operation["responses"]) >= {"201", "400", "422", "503"}
     request_schema = operation["requestBody"]["content"]["application/json"]["schema"]
-    assert request_schema["$ref"].endswith("/EconomyReportCreateRequest")
+    assert request_schema["discriminator"]["mapping"]["economy"].endswith(
+        "/EconomyReportCreateRequest"
+    )
     body = schema["components"]["schemas"]["EconomyReportCreateRequest"]
     assert set(body["required"]) == {
         "country_id",
@@ -395,7 +406,7 @@ def test_a_report_outside_the_country_is_not_found(reports) -> None:
     assert response.status_code == 404
     assert response.json() == {
         "status": "error",
-        "message": f"Economy report {REPORT_ID} was not found in country 'us'",
+        "message": f"Report {REPORT_ID} was not found in country 'us'",
     }
 
 
@@ -698,7 +709,8 @@ def test_a_report_whose_result_cannot_be_read_back_is_a_bad_gateway() -> None:
 @pytest.mark.parametrize(
     ("method", "path", "statuses"),
     [
-        ("post", "/v2/reports", {"201", "400", "413", "422", "500", "503"}),
+        # 404: a household report's household or policy is not the country's.
+        ("post", "/v2/reports", {"201", "400", "404", "413", "422", "500", "503"}),
         ("get", "/v2/reports", {"200", "422", "500", "503"}),
         (
             "get",

@@ -1,0 +1,1 @@
+Household reports at /v2/reports: a household stored through /v2/households under a baseline and an optional reform, calculated by the simulation service for the household's default year, for any country with household calculations, including a household-only one.

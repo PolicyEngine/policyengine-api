@@ -28,6 +28,9 @@ from policyengine_api.services.v2.economy_reports.transformations import (
     economy_report_submission,
     reports_of_country,
 )
+from policyengine_api.services.v2.economy_reports.types import (
+    EconomyReportListing,
+)
 from policyengine_api.services.v2.economy_reports.validators import (
     economy_reports_supported,
     report_not_found,
@@ -245,22 +248,32 @@ class V2EconomyReportService:
         """
         return self._runs_in_country(country_id=country_id, report_id=report_id)
 
-    def _report_or_none(self, report_id: UUID) -> EconomyReportRecord | None:
-        """Read a listed report; leave out an unknown one or an unreadable one.
+    def find_reports(
+        self, *, country_id: str, report_ids: Sequence[UUID]
+    ) -> EconomyReportListing:
+        """List the country's reports among ``report_ids``, and name the unreadable.
 
         A report whose stored result cannot be read back is logged and left out
-        of listings, as the caller can tell from the IDs it asked for.
+        of the listing, as the caller can tell from the IDs it asked for, and
+        its ID is named, because it is not missing.
         """
-        try:
-            return self._simulation.get_report(report_id)
-        except SimulationRecordNotFoundError:
-            return None
-        except SimulationRecordUnreadableError:
-            logger.warning(
-                "v2_economy_report_unreadable_in_listing",
-                extra={"policyengine_attributes": {"report_id": str(report_id)}},
-            )
-            return None
+        found: list[EconomyReportRecord] = []
+        unreadable_report_ids: list[UUID] = []
+        for report_id in dict.fromkeys(report_ids):
+            try:
+                found.append(self._simulation.get_report(report_id))
+            except SimulationRecordNotFoundError:
+                continue
+            except SimulationRecordUnreadableError:
+                logger.warning(
+                    "v2_economy_report_unreadable_in_listing",
+                    extra={"policyengine_attributes": {"report_id": str(report_id)}},
+                )
+                unreadable_report_ids.append(report_id)
+        return EconomyReportListing(
+            reports=reports_of_country(found, country_id=country_id),
+            unreadable_report_ids=tuple(unreadable_report_ids),
+        )
 
     def list_reports(
         self, *, country_id: str, report_ids: Sequence[UUID]
@@ -271,10 +284,4 @@ class V2EconomyReportService:
         cannot be read back are left out. Listing a report with no run does not
         start one; reading it does.
         """
-        return reports_of_country(
-            (
-                self._report_or_none(report_id)
-                for report_id in dict.fromkeys(report_ids)
-            ),
-            country_id=country_id,
-        )
+        return self.find_reports(country_id=country_id, report_ids=report_ids).reports

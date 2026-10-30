@@ -30,7 +30,13 @@ if TYPE_CHECKING:
         SimulationReferenceChecker,
     )
     from policyengine_api.services.v2.countries.types import CountryRead
-    from policyengine_api.services.v2.economy_reports.types import EconomyReportFields
+    from policyengine_api.services.v2.economy_reports.types import (
+        EconomyReportFields,
+        EconomyReportListing,
+    )
+    from policyengine_api.services.v2.household_reports.types import (
+        HouseholdReportSimulation,
+    )
     from policyengine_api.services.v2.households.types import (
         HouseholdPage,
         HouseholdRead,
@@ -61,6 +67,9 @@ if TYPE_CHECKING:
         NativePolicyCreationInput,
         PolicyPage,
         PolicyRead,
+    )
+    from policyengine_api.services.v2.report_kinds.types import (
+        HouseholdReportOperations as V2HouseholdReportResourceService,
     )
     from policyengine_api.services.v2.simulation_entrypoint.types import (
         EconomyReportRecord,
@@ -380,6 +389,12 @@ class V2EconomyReportResourceService(Protocol):
         self, *, country_id: str, report_ids: Sequence[UUID]
     ) -> tuple[EconomyReportRecord, ...]:
         """Return the country's reports among ``report_ids``, in order, once each."""
+        ...
+
+    def find_reports(
+        self, *, country_id: str, report_ids: Sequence[UUID]
+    ) -> EconomyReportListing:
+        """List the country's reports among ``report_ids``, naming the unreadable."""
         ...
 
     def list_report_runs(
@@ -901,6 +916,57 @@ def _default_v2_economy_report_service_factory() -> V2EconomyReportResourceServi
     )
 
 
+def _default_household_report_simulation() -> HouseholdReportSimulation:
+    """Return the process's adapter for the entrypoint's household report routes.
+
+    Raise ``SimulationServiceUnavailableError`` when the generated client is
+    not installed or has no household report routes (a client generated
+    before them, whose import fails with ``ImportError``), or the entrypoint
+    URL or gateway auth is unusable.
+    """
+    try:
+        from policyengine_api.libs.simulation_household_reports import (
+            shared_household_reports,
+        )
+    except ImportError as error:
+        if (error.name or "").split(".")[0] != SIMULATION_CLIENT_PACKAGE:
+            raise
+        msg = (
+            "the generated simulation client (policyengine-api-simulation-client) "
+            "is not installed or has no household report routes"
+        )
+        raise SimulationServiceUnavailableError(msg) from error
+    return shared_household_reports()
+
+
+def _default_v2_household_report_service_factory() -> V2HouseholdReportResourceService:
+    """Build the household report service; the adapter waits for its first call.
+
+    Refusals the Public API decides itself, such as a household-only
+    country's missing household, then answer without the simulation client.
+    """
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.household_reports.database_session import (
+        HouseholdReportDatabaseSession,
+    )
+    from policyengine_api.services.v2.household_reports.services import (
+        DeferredHouseholdReportSimulation,
+        V2HouseholdReportService,
+    )
+
+    return V2HouseholdReportService(
+        HouseholdReportDatabaseSession(get_v2_session_factory()),
+        households=_default_v2_household_service_factory(),
+        policies=_default_v2_policy_service_factory(),
+        simulation=DeferredHouseholdReportSimulation(
+            _default_household_report_simulation
+        ),
+        current_policyengine_version=_running_policyengine_version(),
+    )
+
+
 def _default_v2_policy_service_factory() -> V2PolicyResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -987,11 +1053,19 @@ def _default_legacy_reference_checker() -> LegacyReferenceChecker:
 
 def _default_simulation_reference_checker() -> SimulationReferenceChecker:
     """Defer the simulation client until a request checks a v2 reference."""
+    from policyengine_api.services.v2.household_reports.services import (
+        DeferredHouseholdReportSimulation,
+    )
     from policyengine_api.services.v2.simulation_refs.services import (
         SimulationReferenceService,
     )
 
-    return SimulationReferenceService(_deferred_economy_report_simulation())
+    return SimulationReferenceService(
+        _deferred_economy_report_simulation(),
+        household_reports=DeferredHouseholdReportSimulation(
+            _default_household_report_simulation
+        ),
+    )
 
 
 def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
@@ -1091,6 +1165,9 @@ class NativeRouteDependencies:
     v2_economy_report_service_factory: (
         Callable[[], V2EconomyReportResourceService] | None
     ) = None
+    v2_household_report_service_factory: (
+        Callable[[], V2HouseholdReportResourceService] | None
+    ) = None
     v2_policy_service_factory: Callable[[], V2PolicyResourceService] | None = None
     v2_household_service_factory: Callable[[], V2HouseholdResourceService] | None = None
     v2_user_policy_service_factory: Callable[[], V2UserPolicyResourceService] | None = (
@@ -1124,6 +1201,9 @@ class NativeRouteDependencies:
             v2_country_service_factory=_default_v2_country_service_factory,
             v2_economy_report_service_factory=(
                 _default_v2_economy_report_service_factory
+            ),
+            v2_household_report_service_factory=(
+                _default_v2_household_report_service_factory
             ),
             v2_policy_service_factory=_default_v2_policy_service_factory,
             v2_household_service_factory=_default_v2_household_service_factory,
