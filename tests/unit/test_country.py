@@ -78,6 +78,48 @@ class TestHouseholdCalculation:
 
         assert result.household["people"]["you"]["age"]["2025"] == 40
 
+    @pytest.mark.parametrize(
+        ("value_type", "calculated", "expected"),
+        [
+            (Enum, EnumArray(np.array([1]), ExampleEnum), "SECOND"),
+            (str, np.array(["second"]), "second"),
+        ],
+        ids=["enum", "str"],
+    )
+    def test__calculate_returns_enum_names_and_plain_strings_without_axes(
+        self,
+        monkeypatch,
+        value_type,
+        calculated,
+        expected,
+    ):
+        variable = SimpleNamespace(value_type=value_type)
+        simulation = SimpleNamespace(
+            calculate=lambda _variable_name, _period: calculated,
+            get_population=lambda _entity_plural: SimpleNamespace(
+                get_index=lambda _entity_id: 0
+            ),
+        )
+        system = SimpleNamespace(
+            variables={"example_category": variable},
+            get_variable=lambda _variable_name: variable,
+        )
+        country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+        monkeypatch.setattr(
+            country,
+            "_create_simulation",
+            lambda _household, _reform, **_kwargs: (simulation, system),
+        )
+
+        result = country.calculate(
+            {"people": {"you": {"example_category": {"2025": None}}}},
+            None,
+        )
+
+        value = result.household["people"]["you"]["example_category"]["2025"]
+        assert value == expected
+        assert type(value) is str
+
 
 class TestAxisResults:
     @pytest.mark.parametrize(
