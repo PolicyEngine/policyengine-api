@@ -1,0 +1,1 @@
+Stopped the Public API from reading or writing its copies of the simulation-domain v2 tables and the retired `country` and `label` association columns, so a later revision can drop them while this release serves traffic.

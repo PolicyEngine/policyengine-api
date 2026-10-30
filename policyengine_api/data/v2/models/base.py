@@ -31,13 +31,13 @@ DIRECT_SQLALCHEMY_EXCEPTIONS = MappingProxyType(
             "multi-column indexes are not expressible by one SQLModel Field."
         ),
         "ambiguous_foreign_key_relationships": (
-            "Dataset input/output, baseline/reform, and overlapping composite "
-            "region-default joins need SQLAlchemy relationship hints exposed "
-            "by SQLModel Relationship."
+            "Overlapping composite region-default joins need SQLAlchemy "
+            "relationship hints exposed by SQLModel Relationship."
         ),
-        "transaction_conflict_recovery": (
-            "Concurrent report idempotency requires a savepoint and bounded "
-            "IntegrityError recovery around the database uniqueness constraint."
+        "retired_table_declarations": (
+            "Tables and columns a later revision drops stay declared as plain "
+            "SQLAlchemy tables and columns that no model maps, so the metadata "
+            "matches the schema while nothing reads or writes them."
         ),
     }
 )

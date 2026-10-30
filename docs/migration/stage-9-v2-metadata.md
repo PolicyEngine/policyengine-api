@@ -23,9 +23,9 @@ Existing clients must not be redirected to the v2 resource routes.
 
 The initializer creates only reusable logical input `Dataset` rows. Each row
 has `is_output_dataset=false` and a null `storage_path`. It creates no
-package-derived `DatasetVersion` rows or simulation/report output datasets and
-does not modify `Simulation`, `Report`, or `ReportRun` rows or their dataset
-references.
+package-derived `DatasetVersion` rows or simulation/report output datasets.
+The simulation service owns simulations, reports and report runs in its own
+schema; the Public API no longer has models for them.
 
 ## Configuration and credential boundaries
 
