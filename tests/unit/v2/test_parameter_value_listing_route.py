@@ -7,8 +7,11 @@ from datetime import UTC, datetime
 import pytest
 
 from policyengine_api.services.v2.metadata.types import ParameterValueFilter
-
-from .test_metadata_routes import ResourceReader, _client, _resource_results
+from tests.fixtures.v2_metadata_routes import (
+    ResourceReader,
+    metadata_route_client,
+    resource_results,
+)
 
 
 def test_listing_forwards_every_query_parameter(
@@ -18,10 +21,10 @@ def test_listing_forwards_every_query_parameter(
 
     request_instant = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
     monkeypatch.setattr(common, "utc_now", lambda: request_instant)
-    results, ids = _resource_results()
+    results, ids = resource_results()
     reader = ResourceReader(results)
 
-    response = _client(lambda: reader).get(
+    response = metadata_route_client(lambda: reader).get(
         "/v2/parameter-values",
         params={
             "country_id": "uk",
@@ -50,10 +53,10 @@ def test_listing_forwards_every_query_parameter(
 
 
 def test_listing_defaults_to_every_value_on_the_first_page() -> None:
-    results, _ids = _resource_results()
+    results, _ids = resource_results()
     reader = ResourceReader(results)
 
-    response = _client(lambda: reader).get(
+    response = metadata_route_client(lambda: reader).get(
         "/v2/parameter-values", params={"country_id": "us"}
     )
 
@@ -75,10 +78,12 @@ def test_listing_defaults_to_every_value_on_the_first_page() -> None:
     ],
 )
 def test_invalid_listing_query_is_a_typed_422(params: dict[str, str]) -> None:
-    results, _ids = _resource_results()
+    results, _ids = resource_results()
     reader = ResourceReader(results)
 
-    response = _client(lambda: reader).get("/v2/parameter-values", params=params)
+    response = metadata_route_client(lambda: reader).get(
+        "/v2/parameter-values", params=params
+    )
 
     assert response.status_code == 422
     assert response.json() == {"status": "error", "message": "Invalid API v2 request"}
