@@ -5,7 +5,11 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
-from policyengine.countries.uk.regions import build_uk_region_registry
+from policyengine.countries.uk.regions import (
+    area_regions_routed_to_local_release,
+    build_uk_region_registry,
+    uk_region_registry,
+)
 from policyengine.data.uk_geography_assets import packaged_uk_area_list_path
 from policyengine_core.enums import EnumArray
 from policyengine_core.model_api import Enum
@@ -16,6 +20,9 @@ from policyengine_api.country import (
     _serialize_axis_result,
     get_requested_computations,
 )
+from policyengine_api.data import uk_regions as public_api_uk_regions
+from policyengine_api.services.economic_impact_request import EconomicImpactRequest
+from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.services.policy_parameter_service import PolicyParameterService
 
 
@@ -355,6 +362,57 @@ class TestUKCountryMetadata:
             r for r in uk_regions if r.get("type") == "constituency"
         ]
         assert len(constituency_regions) == 650
+
+    def test__economy_requests_accept_every_offered_region(self, uk_regions):
+        """An economy request may use any region the UK metadata offers.
+
+        Each offered name passes the economy service's check against .py's UK
+        region registry, which applies the simulation service's normalisation.
+        """
+        service = EconomyService()
+        refused_regions = []
+        for offered_region in uk_regions:
+            request = EconomicImpactRequest(
+                country_id="uk",
+                policy_id=1,
+                baseline_policy_id=1,
+                region=offered_region["name"],
+                dataset="default",
+                options={},
+                api_version="test",
+            )
+            try:
+                service._validate_uk_region(request)
+            except ValueError:
+                refused_regions.append(offered_region["name"])
+
+        assert len(uk_regions) == 1016
+        assert refused_regions == []
+
+    def test__the_region_check_follows_the_same_release_kind_as_policyengine(self):
+        """Area regions resolve exactly when .py's default registry lists them.
+
+        Both read regional_release_kind from the installed bundle manifest.
+        """
+        registry_lists_areas = all(
+            uk_region_registry.get_by_type(region_type)
+            for region_type in ("constituency", "local_authority")
+        )
+
+        assert public_api_uk_regions.area_regions_resolve() == (
+            area_regions_routed_to_local_release()
+        )
+        assert public_api_uk_regions.area_regions_resolve() == registry_lists_areas
+
+    def test__the_region_check_accepts_the_policyengine_countries(self):
+        """The countries the check accepts are .py's registry countries."""
+        registry = build_uk_region_registry(
+            include_constituencies=False, include_local_authorities=False
+        )
+
+        assert public_api_uk_regions.uk_country_codes() == tuple(
+            country.code for country in registry.get_by_type("country")
+        )
 
     def test__uk_has_all_region_types(self, uk_regions):
         """Verify all expected region types are present."""

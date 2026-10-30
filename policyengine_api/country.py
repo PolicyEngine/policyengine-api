@@ -9,11 +9,11 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from functools import cached_property
 from importlib.metadata import version as get_package_version
+from operator import attrgetter
 from pathlib import Path
 from typing import Any, NamedTuple
 
 import dpath
-import pandas as pd
 from policyengine_core.model_api import Enum, Reform, Variable
 from policyengine_core.parameters import (
     Parameter,
@@ -35,6 +35,7 @@ from policyengine_api.constants import (
 from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
 )
+from policyengine_api.data.uk_regions import uk_areas
 from policyengine_api.economy_years import uk_economy_years
 from policyengine_api.services.household_calculation_service import CalculationResult
 from policyengine_api.spm import (
@@ -212,11 +213,6 @@ class PolicyEngineCountry:
         #   time_period: [{ name: 2022, label: "2022", ... }] }
         options = {}
         if self.country_id == "uk":
-            constituency_names_path = (
-                Path(__file__).parent / "data" / "constituencies_2024.csv"
-            )
-            constituency_names = pd.read_csv(constituency_names_path)
-            constituency_names = constituency_names.sort_values("name")
             region = [
                 {"name": "uk", "label": "the UK", "type": "national"},
                 *(
@@ -224,26 +220,15 @@ class PolicyEngineCountry:
                     for name, label in UK_COUNTRY_REGIONS
                 ),
             ]
+            # The economy region check reads the same cached lists.
             region.extend(
                 {
-                    "name": f"constituency/{constituency_names.iloc[i]['name']}",
-                    "label": constituency_names.iloc[i]["name"],
-                    "type": "constituency",
+                    "name": f"{area_type}/{area.name}",
+                    "label": area.name,
+                    "type": area_type,
                 }
-                for i in range(len(constituency_names))
-            )
-            local_authority_names_path = (
-                Path(__file__).parent / "data" / "local_authorities_2021.csv"
-            )
-            local_authority_names = pd.read_csv(local_authority_names_path)
-            local_authority_names = local_authority_names.sort_values("name")
-            region.extend(
-                {
-                    "name": f"local_authority/{local_authority_names.iloc[i]['name']}",
-                    "label": local_authority_names.iloc[i]["name"],
-                    "type": "local_authority",
-                }
-                for i in range(len(local_authority_names))
+                for area_type in ("constituency", "local_authority")
+                for area in sorted(uk_areas(area_type), key=attrgetter("name"))
             )
             time_period = [
                 {"name": year, "label": str(year)}

@@ -18,6 +18,10 @@ from policyengine_api.data.congressional_districts import (
     normalize_us_region,
 )
 from policyengine_api.data.places import validate_place_code
+from policyengine_api.data.uk_regions import (
+    describe_accepted_uk_regions,
+    resolve_uk_region,
+)
 from policyengine_api.json_types import JSONValue
 from policyengine_api.observability import runtime as observability_runtime
 from policyengine_api.observability.stages import ECONOMY_ANNUAL_STAGES, Stage
@@ -128,6 +132,28 @@ class SimulationRequestMixin:
         if impact_request.target == "cliff":
             msg = "breakdown=local_areas cannot be combined with target=cliff"
             raise ValueError(msg)
+
+    def _validate_uk_region(self, impact_request: EconomicImpactRequest) -> None:
+        """Reject a UK region the simulation service cannot resolve.
+
+        Check the region the payload would send against the regions .py's UK
+        region registry holds, using the UK metadata's lists (see
+        ``policyengine_api.data.uk_regions``) and the simulation service's
+        normalisation, so names, lower-case codes and bare country names keep
+        working. Raise
+        ValueError, which the route returns as 400, before anything is stored
+        or submitted. Other countries are unchanged.
+        """
+        if impact_request.country_id != "uk":
+            return
+        region = impact_request.region
+        if resolve_uk_region(self._setup_region("uk", region)) is not None:
+            return
+        accepted = describe_accepted_uk_regions(
+            country_aliases=tuple(UK_REGION_REGISTRY_CODES)
+        )
+        msg = f"Unknown UK region {region!r}. Accepted regions: {accepted}."
+        raise ValueError(msg)
 
     def _breakdown_refusal(
         self,
