@@ -239,8 +239,11 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert "RUN_V2_CATALOG_PUBLICATION_QUALIFICATION" in workflow
     assert "test_runtime_cache_redis.py" in workflow
     assert "uv sync --frozen" in workflow
-    assert workflow.count("coverage run --branch") == 1
-    assert workflow.count("coverage run -a --branch") == 8
+    # One coverage file for each job: catalog-runtime-integration's seven test
+    # steps and full-catalog-integration's one
+    # (tests/unit/test_full_catalog_integration_workflow.py).
+    assert workflow.count("coverage run --branch") == 2
+    assert workflow.count("coverage run -a --branch") == 6
     assert "coverage xml -i -o coverage-v2.xml" in workflow
     assert "codecov/codecov-action@v5" in workflow
     assert "files: coverage-v2.xml" in workflow
