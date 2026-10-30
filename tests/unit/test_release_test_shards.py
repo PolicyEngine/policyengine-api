@@ -560,16 +560,23 @@ def test_run_release_tests_loads_the_shard_plugin():
 
 def test_pull_requests_run_the_tests_in_the_release_runs_shards():
     # A pull request runs the split the release run does, so a change that
-    # breaks the split fails before it merges. Release run 41063091599 was the
-    # first run of the split that #4139 broke.
+    # breaks the split fails before it merges. Nothing ran the split before
+    # #4134 merged, so release run 41063091599 was the first to find #4139.
     pull_request_tests = pr_workflow_jobs()["test"]
     release_tests = push_workflow_jobs()["release-tests"]
     pull_request_run_step = job_step(pull_request_tests, "Test the API")
     release_run_step = job_step(release_tests, "Run release tests")
     upload_step_name = "Upload the tests this shard collected and ran"
+    release_script = (REPO / ".github/scripts/run_release_tests.sh").read_text(
+        encoding="utf-8"
+    )
 
     assert pull_request_tests["strategy"] == release_tests["strategy"]
-    assert pull_request_run_step["run"] == release_run_step["run"]
+    # The job runs make test itself, which the rules registry's pr.yml rules
+    # look for, and loads the shard plugin as run_release_tests.sh does.
+    assert pull_request_run_step["run"] == "make test"
+    pytest_options = pull_request_run_step["env"]["PYTEST_ADDOPTS"]
+    assert f'PYTEST_ADDOPTS="{pytest_options}"' in release_script
     assert {
         name: value
         for name, value in pull_request_run_step["env"].items()

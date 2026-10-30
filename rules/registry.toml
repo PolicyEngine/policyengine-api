@@ -1061,7 +1061,7 @@ invocation = "mypy"
 [[rule]]
 id = "api.quality.tests-pass"
 category = "quality"
-statement = "The unit, contract and to-refactor test suites pass."
+statement = "The unit, contract and to-refactor test suites pass, each test in exactly one of the shards they run in."
 rationale = "docs/engineering/skills/testing.md"
 scope = ["tests/**/*.py"]
 tier = "mechanical"
@@ -1073,6 +1073,10 @@ kind = "workflow-job"
 workflow = ".github/workflows/pr.yml"
 job = "test"
 invocation = "make test"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "check-test-shards"
+invocation = "scripts.release_test_shards check-coverage"
 
 [[rule]]
 id = "api.quality.environment-variables-load"
