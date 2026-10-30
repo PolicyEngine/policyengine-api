@@ -42,6 +42,7 @@ from policyengine_api.services.v2.user_households.transformations import (
 from policyengine_api.services.v2.user_households.types import (
     UserHouseholdFilter,
     UserHouseholdListing,
+    UserHouseholdReferences,
 )
 from policyengine_api.services.v2.user_households.validators import (
     require_user_household,
@@ -267,12 +268,17 @@ class V2UserHouseholdService:
     ) -> UserHouseholdRead:
         """Update the supplied fields of the principal's association in this country.
 
-        A new ``legacy_household_id`` must exist in v1 and repoints ``household_id``
-        to the v2 copy of that household, or to None when there is no copy. Raise
-        UserHouseholdNotFoundError when the association is not the principal's.
+        The association keeps its id, owner, country and creation time. A new
+        ``legacy_household_id`` must exist in v1 (LegacyReferenceNotFoundError) and
+        repoints ``household_id`` to the v2 copy of that household, or to None when
+        there is no copy. A new ``household_id`` must exist in this country
+        (AssociationHouseholdNotFoundError or AssociationCountryConflictError).
+        Without ``legacy_household_id`` it clears the v1 reference; with it, both
+        are stored, and it must be the v2 copy of that v1 household when one exists
+        (AssociationReferenceConflictError). Raise UserHouseholdNotFoundError when
+        the association is not the principal's.
         """
-        repoint = "legacy_household_id" in association_input.model_fields_set
-        if repoint:
+        if "legacy_household_id" in association_input.model_fields_set:
             if association_input.legacy_household_id is None:
                 msg = "legacy_household_id must not be null"
                 raise TypeError(msg)
@@ -290,13 +296,17 @@ class V2UserHouseholdService:
                 country_id=country_id,
                 association_id=association_id,
             )
-            repointed_household_id = (
-                read_copied_household_ids(
-                    session,
-                    country_id=country_id,
-                    legacy_household_ids=(association_input.legacy_household_id,),
-                ).get(association_input.legacy_household_id)
-                if repoint and association_input.legacy_household_id is not None
+            references = (
+                UserHouseholdReferences(
+                    household_id=resolve_user_household_reference(
+                        session,
+                        country_id=country_id,
+                        household_id=association_input.household_id,
+                        legacy_household_id=association_input.legacy_household_id,
+                    ),
+                    legacy_household_id=association_input.legacy_household_id,
+                )
+                if association_input.repoints
                 else None
             )
             return user_household_read(
@@ -304,8 +314,7 @@ class V2UserHouseholdService:
                     session,
                     association,
                     association_input,
-                    repointed_household_id=repointed_household_id,
-                    repoint=repoint,
+                    references=references,
                 )
             )
 
