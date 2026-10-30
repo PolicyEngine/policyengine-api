@@ -176,6 +176,29 @@ needs it, so none of its steps start until the tests pass. The job keeps the
 `staging` environment and the variables the tests read when they ran inside
 the deployment job, and has no GCP credentials.
 
+The release test suite runs in six shards, one runner each, so that it
+finishes before the staging database jobs do. `run_release_tests.sh` loads the
+pytest plugin `tests/release_test_shard_plugin.py`: every runner collects the
+whole suite and keeps the tests in the files `scripts/release_test_shards.py`
+assigns to its shard, heaviest file first, by the measured seconds in
+`MEASURED_FILE_SECONDS` or else by test count. A file's tests stay in one
+shard, so its fixtures are set up once. The `check-release-test-shards` job
+then fails, and the staging deployment with it, unless every shard collected
+the same tests and each test ran in exactly one shard. When a test file
+becomes much slower or faster, measure it again with `--durations=0` and
+update `MEASURED_FILE_SECONDS`; an out-of-date value only makes the shards
+finish less evenly.
+
+The release run skips lint, the quality guards, both Alembic checks and the
+cross-database integration tests when its merge run passed them on the same
+code: `check-release-commit` (`.github/release_commit.py`) requires that the
+release commit changes only the `[project]` version in `pyproject.toml`, the
+project's own version entry in `uv.lock`, `CHANGELOG.md` and removed changelog
+fragments, and that the merge commit's Push run passed all five checks.
+Otherwise the release run runs them, and `publish-git-tag` requires lint, both
+Alembic checks and the integration tests to pass, as before. The release test
+suite always runs.
+
 Staging deployment checks run the live integration suite against the tagged
 Cloud Run staging URL before promoting the exact tested revision to the
 service URL. No production deployment may begin until the

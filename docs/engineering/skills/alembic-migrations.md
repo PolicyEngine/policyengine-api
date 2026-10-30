@@ -338,8 +338,11 @@ shared or deployed database.
 
 - Pull requests first detect whether the v1 Alembic surface changed. Relevant
   PRs invoke `.github/workflows/alembic-v1-check.yml`; unrelated PRs skip it.
-- Every push to `master` runs the reusable disposable-MySQL qualification next
-  to lint, regardless of which paths changed.
+- Every merge to `master` runs the reusable disposable-MySQL qualification next
+  to lint, regardless of which paths changed. The release commit's run skips it
+  only when `check-release-commit` confirms that the release commit changes
+  nothing but release files and that the merge commit's run passed it
+  (`.github/release_commit.py`); otherwise the release run runs it again.
 - The release migration job runs before either staging deployment. It refuses
   unversioned or invalid history, takes a backup only when revisions are
   pending, upgrades under the advisory lock, and requires zero post-migration

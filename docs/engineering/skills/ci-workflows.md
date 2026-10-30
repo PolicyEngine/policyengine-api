@@ -40,6 +40,34 @@ at least one failure path.
 Examples: `tests/unit/test_install_locked_ruff_script.py` and
 `tests/unit/test_cloud_run_deploy_scripts.py`.
 
+## Release jobs in push.yml
+
+A release run (the run for the "Update PolicyEngine API" commit) may skip the
+checks its merge run passed (`check-release-commit`, `.github/release_commit.py`).
+GitHub skips a job whose needs include a skipped job, directly or through the
+jobs between them, unless its `if:` calls a status function. So every release
+job with `needs` starts its `if:` with `!cancelled()` and checks the result of
+each job it needs, and each job of a reusable workflow a release job calls has
+`if: ${{ !cancelled() }}`:
+
+```yaml
+    needs:
+      - migrate-v1-production-cloud-sql
+      - seed-v2-production-database
+    if: |
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.migrate-v1-production-cloud-sql.result == 'success'
+      && needs.seed-v2-production-database.result == 'success'
+```
+
+Only `publish-git-tag` needs the checks that may be skipped; its
+`release_commit.py require-checks` step decides whether their results let the
+release continue. `tests/unit/test_release_run_checks.py` checks all of this.
+A release job that left the status check to GitHub would be skipped whenever
+the checks were, and the run would still finish green.
+
 ## Enforcement and baselines
 
 The `ci-scripts` quality guard (`python scripts/run_quality_guards.py`, or

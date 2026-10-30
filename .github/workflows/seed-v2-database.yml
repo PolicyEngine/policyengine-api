@@ -17,6 +17,10 @@ on:
 jobs:
   seed:
     name: Upgrade schema and seed v2 database
+    # push.yml calls this from a release job that may follow skipped
+    # checks. GitHub would skip this job too unless its if: calls a status
+    # function; the calling job has already checked what it needs.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: ${{ inputs.deployment_environment }}
