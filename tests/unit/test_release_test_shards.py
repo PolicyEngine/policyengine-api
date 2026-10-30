@@ -358,6 +358,142 @@ def test_the_plugin_refuses_to_run_without_shard_settings(tmp_path: Path):
     )
 
 
+INNER_PYTEST_TEST = """
+import os
+import subprocess
+import sys
+
+
+def test_a_pytest_run_this_test_starts_is_not_split():
+    inherited_shard_settings = [
+        name for name in os.environ if name.startswith("RELEASE_TEST_SHARD_")
+    ]
+    assert inherited_shard_settings == []
+    assert "release_test_shard_plugin" not in os.environ.get("PYTEST_ADDOPTS", "")
+    inner_run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "no:cacheprovider",
+            "--collect-only",
+            "-q",
+            "inner_tests",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert inner_run.returncode == 0, inner_run.stdout + inner_run.stderr
+    assert "1 test collected" in inner_run.stdout
+"""
+
+
+def _write_test_suite_that_starts_pytest(root: Path) -> None:
+    """Write the sample suite plus a test that runs pytest on inner_tests itself.
+
+    The outer run doesn't collect inner_tests, just as make test doesn't collect
+    the live staging tests that
+    test_live_staging_tests_get_one_pytest_worker_each collects in its own
+    pytest process.
+    """
+    _write_test_suite(root)
+    (root / "sample_tests" / "test_starts_pytest.py").write_text(INNER_PYTEST_TEST)
+    (root / "inner_tests").mkdir()
+    (root / "inner_tests" / "test_inner.py").write_text("def test_inner():\n    pass\n")
+
+
+def _run_shard_as_run_release_tests_does(
+    root: Path, report_root: Path, shard_index: int, shard_count: int
+):
+    """Run one shard with the plugin loaded through PYTEST_ADDOPTS."""
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "no:cacheprovider",
+            "--rootdir",
+            str(root),
+            "-q",
+            str(root / "sample_tests"),
+        ],
+        cwd=root,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(REPO),
+            "PYTEST_ADDOPTS": "-p tests.release_test_shard_plugin",
+            "RELEASE_TEST_SHARD_INDEX": str(shard_index),
+            "RELEASE_TEST_SHARD_COUNT": str(shard_count),
+            "RELEASE_TEST_SHARD_REPORT_DIRECTORY": str(
+                report_root / f"release-test-shard-{shard_index}"
+            ),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_a_pytest_run_that_a_test_starts_runs_without_the_split(tmp_path: Path):
+    suite_root = tmp_path / "suite"
+    suite_root.mkdir()
+    _write_test_suite_that_starts_pytest(suite_root)
+    report_root = tmp_path / "reports"
+    shard_count = 3
+
+    results = [
+        _run_shard_as_run_release_tests_does(
+            suite_root, report_root, shard_index, shard_count
+        )
+        for shard_index in range(1, shard_count + 1)
+    ]
+    coverage = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.release_test_shards",
+            "check-coverage",
+            "--shard-count",
+            str(shard_count),
+            str(report_root),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    # The inner pytest run neither splits its own tests nor replaces the
+    # shard's report, so every shard passes and the reports cover the outer
+    # run's 16 tests.
+    for result in results:
+        assert result.returncode == 0, result.stdout + result.stderr
+    assert coverage.returncode == 0, coverage.stdout + coverage.stderr
+    assert "Each of the 16 collected release tests ran in exactly one of 3 shards" in (
+        coverage.stdout
+    )
+
+
+def test_a_shard_report_is_never_replaced(tmp_path: Path):
+    settings = release_test_shards.ShardSettings(
+        index=1, count=2, report_directory=tmp_path / "release-test-shard-1"
+    )
+    release_test_shards.write_report(
+        settings, ["tests/unit/test_alpha.py::test_one"], []
+    )
+
+    with pytest.raises(FileExistsError, match="already has a shard report"):
+        release_test_shards.write_report(
+            settings, ["tests/unit/test_beta.py::test_one"], []
+        )
+
+    report = release_test_shards.read_report(settings.report_directory)
+    assert report.collected == ("tests/unit/test_alpha.py::test_one",)
+
+
 # --- push.yml -------------------------------------------------------------------
 
 
