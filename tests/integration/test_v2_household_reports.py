@@ -88,12 +88,16 @@ def runtime_sessions(managed_v2_roles, v2_engine_as_role, disposable_v2_database
     """Migrate, make the US household-only, add a catalog version, and yield sessions.
 
     The sessions act as the runtime role. The US row and the test catalog
-    version are restored and removed afterwards.
+    version are restored and removed afterwards, and so is any household a
+    test stored: later tests in the same database count households.
     """
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
     owner_engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
     runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
     with owner_engine.begin() as connection:
+        households_before = set(
+            connection.execute(text("SELECT id FROM households")).scalars()
+        )
         connection.execute(
             text("UPDATE countries SET society_wide_enabled = false WHERE id = 'us'")
         )
@@ -127,8 +131,21 @@ def runtime_sessions(managed_v2_roles, v2_engine_as_role, disposable_v2_database
                 text("DELETE FROM tax_benefit_models WHERE name = :name"),
                 {"name": TEST_MODEL_NAME},
             )
+            stored_by_the_test = (
+                set(connection.execute(text("SELECT id FROM households")).scalars())
+                - households_before
+            )
+            if stored_by_the_test:
+                connection.execute(
+                    text("DELETE FROM households WHERE id = ANY(:household_ids)"),
+                    {"household_ids": list(stored_by_the_test)},
+                )
+            households_after = set(
+                connection.execute(text("SELECT id FROM households")).scalars()
+            )
         owner_engine.dispose()
         runtime_engine.dispose()
+    assert households_after == households_before, "the test left households behind"
 
 
 def _client(sessions, simulation: FakeHouseholdReportSimulation) -> TestClient:
