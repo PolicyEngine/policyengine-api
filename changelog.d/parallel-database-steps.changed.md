@@ -1,0 +1,1 @@
+The release run upgrades the v1 Cloud SQL schema and seeds the v2 database side by side, in staging and in production, instead of one after the other; each Cloud Run candidate deploy still waits for both.

@@ -172,10 +172,12 @@ jobs:
     secrets: inherit
 
   seed-v2-staging-database:
+    # Runs beside migrate-v1-staging-cloud-sql: the seeding job connects only to
+    # the v2 database and the v1 upgrade only to Cloud SQL, so neither needs the
+    # other. The staging deploy needs both.
     name: Seed staging v2 database
     needs:
       - publish-git-tag
-      - migrate-v1-staging-cloud-sql
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -515,10 +517,11 @@ jobs:
     secrets: inherit
 
   seed-v2-production-database:
+    # Runs beside migrate-v1-production-cloud-sql, as in staging. The
+    # production deploy needs both.
     name: Seed production v2 database
     needs:
       - ensure-production-model-version-aligns-with-sim-api
-      - migrate-v1-production-cloud-sql
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -530,7 +533,9 @@ jobs:
   deploy-cloud-run-candidate:
     name: Deploy production Cloud Run candidate
     runs-on: ubuntu-latest
-    needs: seed-v2-production-database
+    needs:
+      - migrate-v1-production-cloud-sql
+      - seed-v2-production-database
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
