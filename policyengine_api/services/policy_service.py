@@ -1,4 +1,8 @@
-"""v1 policy storage: lookup, label search and deduplicated creation."""
+"""v1 policy storage: lookup, label search and deduplicated creation.
+
+A new policy may set only parameters that the running country model defines;
+re-saving a policy identical to a stored one returns the stored policy.
+"""
 
 from __future__ import annotations
 
@@ -8,14 +12,22 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.constants import (
+    COUNTRIES,
+    COUNTRY_PACKAGE_NAMES,
+    COUNTRY_PACKAGE_VERSIONS,
+)
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Policy
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+from policyengine_api.services.v2.policies.validators import (
+    parameters_missing_from_model,
+)
 from policyengine_api.utils import hash_object
+from policyengine_api.utils.input_validation import UnrecognizedInput
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Container, Iterator
 
     from sqlalchemy.orm import Session, sessionmaker
 
@@ -40,6 +52,43 @@ class PolicyNotFoundError(LookupError):
         super().__init__(*policy_ids)
 
 
+_COUNTRY_PACKAGE_NAME_BY_COUNTRY_ID = dict(
+    zip(COUNTRIES, COUNTRY_PACKAGE_NAMES, strict=True)
+)
+
+
+class UnsettableParameterPathsError(ValueError):
+    """Raised when a new policy names paths that are not settable parameters.
+
+    A path is refused when the running country model does not define it, or
+    defines it as a parameter group, scale or scale bracket rather than a
+    parameter that holds values.
+    """
+
+    def __init__(self, country_id: str, parameter_paths: tuple[str, ...]) -> None:
+        """Keep the refused paths, sorted, for the 400 response."""
+        self.country_id = country_id
+        self.parameter_paths = tuple(sorted(parameter_paths))
+        package_name = _COUNTRY_PACKAGE_NAME_BY_COUNTRY_ID[country_id].replace("_", "-")
+        super().__init__(
+            "Policy data contains keys that are not parameters in "
+            f"{package_name} {COUNTRY_PACKAGE_VERSIONS[country_id]}: "
+            + ", ".join(self.parameter_paths)
+        )
+
+    @property
+    def error_entries(self) -> list[dict]:
+        """Return the 400 response's ``errors``: one entry for each refused path."""
+        return [
+            UnrecognizedInput(
+                input_type="policy_parameter",
+                name=parameter_path,
+                path=f"data.{parameter_path}",
+            ).to_dict()
+            for parameter_path in self.parameter_paths
+        ]
+
+
 @dataclass(frozen=True)
 class PolicySetResult:
     """Existing v1 return values and an optional detached mirror snapshot."""
@@ -62,9 +111,19 @@ class PolicyService:
     def __init__(
         self,
         session_factory: sessionmaker[Session] | None = None,
+        model_parameter_names: Callable[[str], Container[str] | None] | None = None,
     ) -> None:
-        """Use this session factory, or the application's v1 one if omitted."""
+        """Use these collaborators, or the defaults for those omitted.
+
+        ``session_factory`` defaults to the application's v1 one.
+        ``model_parameter_names`` returns, for a country ID, the leaf parameter
+        paths of its model, the parameters a new policy may set, or None when
+        the country has no loaded model, which leaves a new policy no
+        parameters to set. Without it, ``set_policy`` stores any parameter
+        path; the policy route always supplies it.
+        """
         self._injected_session_factory = session_factory
+        self._model_parameter_names = model_parameter_names
 
     @property
     def _sessions(self) -> sessionmaker[Session]:
@@ -176,8 +235,11 @@ class PolicyService:
     ) -> PolicySetResult:
         """Store a policy, or return the existing one with the same content and label.
 
-        Raise ValueError for an unknown country. With ``prepare_for_mirroring`` the
-        result carries a snapshot of the stored row, for copying the policy into v2.
+        Raise ValueError for an unknown country, and UnsettableParameterPathsError
+        when a new policy names paths that are not settable parameters. An
+        existing identical policy is returned without checking its paths. With
+        ``prepare_for_mirroring`` the result carries a snapshot of the stored row,
+        for copying the policy into v2.
         """
         country_id = country_id.lower()
         if country_id not in COUNTRY_PACKAGE_VERSIONS:
@@ -235,6 +297,7 @@ class PolicyService:
         if existing is not None:
             return existing, "Policy already exists", True
 
+        self._check_parameter_paths(country_id, policy_json)
         policy = Policy(
             country_id=country_id,
             label=label,
@@ -245,6 +308,17 @@ class PolicyService:
         session.add(policy)
         session.flush()
         return policy, "Policy created", False
+
+    def _check_parameter_paths(self, country_id: str, policy_json: dict) -> None:
+        """Refuse paths the model lacks, compared as the v2 copy compares them."""
+        if self._model_parameter_names is None or not policy_json:
+            return
+        model_parameter_names = self._model_parameter_names(country_id) or frozenset()
+        unsettable_paths = parameters_missing_from_model(
+            policy_json, model_parameter_names
+        )
+        if unsettable_paths:
+            raise UnsettableParameterPathsError(country_id, unsettable_paths)
 
     def _get_unique_policy_with_label(
         self,

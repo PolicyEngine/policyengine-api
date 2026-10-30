@@ -11,7 +11,10 @@ from policyengine_api.utils import hash_object
 class TestPolicyCreation:
     # Define the policy to test against
     country_id = "us"
-    policy_json: ClassVar[dict] = {"sample_parameter": {"2024-01-01.2025-12-31": True}}
+    # A new policy may set only parameters the US model defines.
+    policy_json: ClassVar[dict] = {
+        "gov.contrib.states.mt.ctc.in_effect": {"2024-01-01.2025-12-31": True}
+    }
     label = "dworkin"
     test_policy: ClassVar[dict] = {"data": policy_json, "label": label}
     policy_hash = hash_object(policy_json)
