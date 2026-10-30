@@ -1,1 +1,0 @@
-The Artifact Registry image cleanup that runs after a production deploy now fails, and logs the gcloud error for each image it could not delete, instead of reporting success when it lists or deletes nothing.

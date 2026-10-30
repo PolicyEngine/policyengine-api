@@ -1,3 +1,17 @@
+## [5.16.0] - 2026-10-30
+
+### Added
+
+- Added `GET /v2/countries`, which lists every row of the countries table: each served country's ID and whether it supports household and society-wide calculations.
+- The Public API refuses to start when the v2 `countries` table and its country list in code name different countries, or when the table or the privilege to read it is missing. The check runs on Cloud Run and wherever a v2 runtime database is configured; when it cannot query the table, it logs why and startup continues.
+- Added a v2 `countries` table that records, for each country the Public API serves, whether it supports household and society-wide calculations. Its revision lists the US and the UK, both with both. Users' primary country and the country of every v2 household, policy and user association now reference this table instead of a fixed US-and-UK check.
+
+### Fixed
+
+- The Artifact Registry image cleanup that runs after a production deploy now fails, and logs the gcloud error for each image it could not delete, instead of reporting success when it lists or deletes nothing.
+- Release test shards no longer split, or replace the report of, a pytest run that a test starts in its own process; that made the first release run with the split test suite fail.
+
+
 ## [5.15.2] - 2026-10-30
 
 ### Changed
