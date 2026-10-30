@@ -9,7 +9,7 @@ from importlib import metadata as importlib_metadata
 import pytest
 from policyengine.bundle import get_current_bundle
 
-from policyengine_api.data.v2.catalog.extraction import extract_installed_catalog
+from tests.fixtures.installed_catalog import installed_catalog
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("RUN_V2_CATALOG_COMPATIBILITY") != "1",
@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
-    catalog = extract_installed_catalog()
+    catalog = installed_catalog()
     bundle = get_current_bundle()
     policyengine_version = importlib_metadata.version("policyengine")
     expected_dependencies = tuple(

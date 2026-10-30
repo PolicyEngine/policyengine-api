@@ -203,6 +203,19 @@ Otherwise the release run runs them, and `publish-git-tag` requires lint, both
 Alembic checks and the integration tests to pass, as before. The release test
 suite always runs.
 
+The two integration tests that load the complete installed PolicyEngine.py
+catalog, `test_v2_catalog_installed.py` and
+`test_v2_catalog_publication_qualification.py`, run in their own job,
+`full-catalog-integration` in `v2-integration-check.yml`, in one pytest process
+that extracts the catalog once. On a pull request or a push they run only when
+the change touches a path their outcome depends on, listed in
+`.github/scripts/decide_full_catalog_tests.sh`; a scheduled run every night
+and a manual run of the workflow always run them. Every pull request instead
+publishes `tests/fixtures/v2_catalog_value_shapes.py` to PostgreSQL, which
+holds one example of each value shape extraction accepts. When extraction
+accepts a new shape, add an example there; when a new module can change the
+full-catalog tests' outcome, add its path to the script's list.
+
 Staging deployment checks run the live integration suite against the tagged
 Cloud Run staging URL before promoting the exact tested revision to the
 service URL. No production deployment may begin until the

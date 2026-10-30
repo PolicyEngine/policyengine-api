@@ -15,9 +15,9 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
-from policyengine_api.data.v2.catalog.extraction import extract_installed_catalog
 from policyengine_api.data.v2.catalog.publication import publish_catalog
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+from tests.fixtures.installed_catalog import installed_catalog
 
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
@@ -54,7 +54,11 @@ def test_complete_installed_catalog_bulk_publication() -> None:
         connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
 
     try:
-        catalog = extract_installed_catalog()
+        # When pytest runs test_v2_catalog_installed.py first in this process,
+        # the catalog is already extracted. tracemalloc counts only what is
+        # allocated after it starts, so the peak is publish_catalog's own
+        # additional memory either way.
+        catalog = installed_catalog()
         gc.collect()
         tracemalloc.start()
         evidence = publish_catalog(engine, catalog)
