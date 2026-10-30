@@ -77,14 +77,14 @@ class UnsettableParameterPathsError(ValueError):
         )
 
     @property
-    def invalid_inputs(self) -> list[UnrecognizedInput]:
-        """Describe each refused path as an entry for the response's ``errors``."""
+    def error_entries(self) -> list[dict]:
+        """Return the 400 response's ``errors``: one entry for each refused path."""
         return [
             UnrecognizedInput(
                 input_type="policy_parameter",
                 name=parameter_path,
                 path=f"data.{parameter_path}",
-            )
+            ).to_dict()
             for parameter_path in self.parameter_paths
         ]
 
@@ -118,8 +118,9 @@ class PolicyService:
         ``session_factory`` defaults to the application's v1 one.
         ``model_parameter_names`` returns, for a country ID, the leaf parameter
         paths of its model, the parameters a new policy may set, or None when
-        the country has no loaded model. Without it, ``set_policy`` stores any
-        parameter path; the policy route always supplies it.
+        the country has no loaded model, which leaves a new policy no
+        parameters to set. Without it, ``set_policy`` stores any parameter
+        path; the policy route always supplies it.
         """
         self._injected_session_factory = session_factory
         self._model_parameter_names = model_parameter_names
@@ -312,9 +313,7 @@ class PolicyService:
         """Refuse paths the model lacks, compared as the v2 copy compares them."""
         if self._model_parameter_names is None or not policy_json:
             return
-        model_parameter_names = self._model_parameter_names(country_id)
-        if model_parameter_names is None:
-            return
+        model_parameter_names = self._model_parameter_names(country_id) or frozenset()
         unsettable_paths = parameters_missing_from_model(
             policy_json, model_parameter_names
         )

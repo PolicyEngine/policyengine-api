@@ -338,7 +338,7 @@ def set_policy(country_id: str) -> Response:
             error,
             400,
             result=None,
-            errors=[invalid_input.to_dict() for invalid_input in error.invalid_inputs],
+            errors=error.error_entries,
         )
     policy_id, message, is_existing_policy = creation
 

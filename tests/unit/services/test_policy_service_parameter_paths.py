@@ -53,7 +53,7 @@ def test_new_policy_with_paths_outside_the_catalog_is_refused_and_not_stored(
 
     assert raised.value.country_id == "us"
     assert raised.value.parameter_paths == ("gov.tax", "gov.x")
-    assert [entry.to_dict()["path"] for entry in raised.value.invalid_inputs] == [
+    assert [entry["path"] for entry in raised.value.error_entries] == [
         "data.gov.tax",
         "data.gov.x",
     ]
@@ -96,3 +96,22 @@ def test_existing_identical_policy_is_returned_without_checking_its_paths(
     assert result.is_existing_policy is True
     assert result.policy_id == 98768
     assert parameter_catalog.looked_up_country_ids == []
+
+
+def test_new_policy_for_a_country_without_a_loaded_model_is_refused(
+    orm_session_factory,
+):
+    service_without_model = PolicyService(
+        orm_session_factory,
+        model_parameter_names=lambda _country_id: None,
+    )
+
+    with pytest.raises(UnsettableParameterPathsError) as raised:
+        service_without_model.set_policy(
+            "us",
+            "No loaded model",
+            {"gov.tax.rate": {"2026-01-01.2026-12-31": 0.2}},
+        )
+
+    assert raised.value.parameter_paths == ("gov.tax.rate",)
+    assert service_without_model.search_policies("us", "No loaded model") == []
