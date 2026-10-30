@@ -393,10 +393,9 @@ def test_a_pytest_run_this_test_starts_is_not_split():
 def _write_test_suite_that_starts_pytest(root: Path) -> None:
     """Write the sample suite plus a test that runs pytest on inner_tests itself.
 
-    The outer run doesn't collect inner_tests, just as make test doesn't collect
-    the live staging tests that
-    test_live_staging_tests_get_one_pytest_worker_each collects in its own
-    pytest process.
+    The outer run doesn't collect inner_tests, as in release run 41063091599,
+    where a test collected the live staging tests, which make test doesn't
+    collect, in its own pytest process.
     """
     _write_test_suite(root)
     (root / "sample_tests" / "test_starts_pytest.py").write_text(INNER_PYTEST_TEST)

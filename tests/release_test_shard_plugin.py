@@ -10,10 +10,8 @@ check-release-test-shards job.
 
 It reads those settings once, when pytest configures it, and then removes them
 and its own ``-p`` option from ``PYTEST_ADDOPTS`` in the process environment.
-A test that runs pytest itself, such as
-test_live_staging_tests_get_one_pytest_worker_each, would otherwise load the
-plugin again in that inner run, split the inner run's tests and replace this
-shard's report.
+A test that runs pytest itself would otherwise load the plugin again in that
+inner run, split the inner run's tests and replace this shard's report.
 """
 
 from __future__ import annotations
