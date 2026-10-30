@@ -259,6 +259,21 @@ not block a direct-Modal deployment. The legacy `SIMULATION_API_URL` secret is
 intentionally unsupported: its value is opaque, cannot be audited, and must
 not silently choose a deployment upstream.
 
+Each environment calls its own Simulation Entrypoint. The `staging` secret
+holds the stable URL of the `policyengine-simulation-entry-staging` Cloud Run
+service, which calls the staging Modal environment; the `production` secret
+holds `https://simulation.api.policyengine.org`, served by
+`policyengine-simulation-entry`. In each release, the staging and production
+model-version alignment jobs first run
+`.github/scripts/check_simulation_entrypoint_environment.sh`. It reads the
+`x-policyengine-simulation-revision` header from the selected URL's `/health`
+response and fails the release unless the revision belongs to that
+environment's service, so a release whose `staging` secret points at
+production, or the reverse, stops before it deploys. Staging's live simulation
+tests therefore run against the staging simulation service and staging Modal
+workers. The old gateway is one shared Modal app that reports no environment,
+so `old_gateway_direct` is not checked.
+
 ## IAM and bootstrap constraints
 
 - The GitHub deploy service account holds `roles/run.developer`: it can deploy to
