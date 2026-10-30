@@ -3,6 +3,7 @@
 push.yml's release-tests job runs make test on six runners, one shard each
 (scripts/release_test_shards.py, tests/release_test_shard_plugin.py), and
 check-release-test-shards fails unless each collected test ran in exactly one.
+pr.yml's test and check-test-shards jobs do the same on every pull request.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from tests.unit.cloud_run_deploy_support import (
     REPO,
     job_needs,
     job_step,
+    pr_workflow_jobs,
     push_workflow_jobs,
 )
 
@@ -551,3 +553,47 @@ def test_run_release_tests_loads_the_shard_plugin():
         "RELEASE_TEST_SHARD_REPORT_DIRECTORY",
     ):
         assert f"${{{variable}:?" in script
+
+
+# --- pr.yml ---------------------------------------------------------------------
+
+
+def test_pull_requests_run_the_tests_in_the_release_runs_shards():
+    # A pull request runs the split the release run does, so a change that
+    # breaks the split fails before it merges. Release run 41063091599 was the
+    # first run of the split that #4139 broke.
+    pull_request_tests = pr_workflow_jobs()["test"]
+    release_tests = push_workflow_jobs()["release-tests"]
+    pull_request_run_step = job_step(pull_request_tests, "Test the API")
+    release_run_step = job_step(release_tests, "Run release tests")
+    upload_step_name = "Upload the tests this shard collected and ran"
+
+    assert pull_request_tests["strategy"] == release_tests["strategy"]
+    assert pull_request_run_step["run"] == release_run_step["run"]
+    assert {
+        name: value
+        for name, value in pull_request_run_step["env"].items()
+        if name.startswith("RELEASE_TEST_SHARD_")
+    } == {
+        name: value
+        for name, value in release_run_step["env"].items()
+        if name.startswith("RELEASE_TEST_SHARD_")
+    }
+    assert job_step(pull_request_tests, upload_step_name) == job_step(
+        release_tests, upload_step_name
+    )
+
+
+def test_ci_complete_needs_every_pull_request_test_to_have_run_once():
+    jobs = pr_workflow_jobs()
+    shard_check = jobs["check-test-shards"]
+
+    assert job_needs(shard_check) == ["test"]
+    # No condition of its own: when a shard fails, or on a stacked pull request
+    # whose shards were skipped, this job is skipped and CI complete fails.
+    assert "if" not in shard_check
+    assert (
+        shard_check["steps"]
+        == push_workflow_jobs()["check-release-test-shards"]["steps"]
+    )
+    assert "check-test-shards" in job_needs(jobs["ci-complete"])
