@@ -1,7 +1,8 @@
 """v1 policy storage: lookup, label search and deduplicated creation.
 
-A new policy may set only parameters that the running country model defines;
-re-saving a policy identical to a stored one returns the stored policy.
+A new policy may set only parameters that the running country model defines,
+with period keys and values that simulations can read; re-saving a policy
+identical to a stored one returns the stored policy.
 """
 
 from __future__ import annotations
@@ -25,6 +26,10 @@ from policyengine_api.services.v2.policies.validators import (
 )
 from policyengine_api.utils import hash_object
 from policyengine_api.utils.input_validation import UnrecognizedInput
+from policyengine_api.utils.policy_data_validation import (
+    InvalidPolicyEntry,
+    find_invalid_periods_and_values,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Container, Iterator
@@ -57,35 +62,56 @@ _COUNTRY_PACKAGE_NAME_BY_COUNTRY_ID = dict(
 )
 
 
-class UnsettableParameterPathsError(ValueError):
-    """Raised when a new policy names paths that are not settable parameters.
+class InvalidPolicyDataError(ValueError):
+    """Raised when a new policy's data holds entries the country model cannot use.
 
-    A path is refused when the running country model does not define it, or
-    defines it as a parameter group, scale or scale bracket rather than a
-    parameter that holds values.
+    ``parameter_paths`` are the paths that are not settable parameters: the
+    running country model does not define them, or defines them as a parameter
+    group, scale or scale bracket rather than a parameter that holds values.
+    ``invalid_entries`` are the period keys and values that simulations cannot
+    read (see policyengine_api.utils.policy_data_validation).
     """
 
-    def __init__(self, country_id: str, parameter_paths: tuple[str, ...]) -> None:
-        """Keep the refused paths, sorted, for the 400 response."""
+    def __init__(
+        self,
+        country_id: str,
+        parameter_paths: tuple[str, ...],
+        invalid_entries: tuple[InvalidPolicyEntry, ...] = (),
+    ) -> None:
+        """Keep the refused paths, sorted, and the refused entries for the 400."""
         self.country_id = country_id
         self.parameter_paths = tuple(sorted(parameter_paths))
-        package_name = _COUNTRY_PACKAGE_NAME_BY_COUNTRY_ID[country_id].replace("_", "-")
-        super().__init__(
-            "Policy data contains keys that are not parameters in "
-            f"{package_name} {COUNTRY_PACKAGE_VERSIONS[country_id]}: "
-            + ", ".join(self.parameter_paths)
-        )
+        self.invalid_entries = invalid_entries
+        message_parts = []
+        if self.parameter_paths:
+            package_name = _COUNTRY_PACKAGE_NAME_BY_COUNTRY_ID[country_id].replace(
+                "_", "-"
+            )
+            message_parts.append(
+                "Policy data contains keys that are not parameters in "
+                f"{package_name} {COUNTRY_PACKAGE_VERSIONS[country_id]}: "
+                + ", ".join(self.parameter_paths)
+            )
+        if self.invalid_entries:
+            message_parts.append(
+                "Policy data contains invalid period keys or values: "
+                + " ".join(entry.message for entry in self.invalid_entries)
+            )
+        super().__init__(". ".join(message_parts))
 
     @property
     def error_entries(self) -> list[dict]:
-        """Return the 400 response's ``errors``: one entry for each refused path."""
+        """Return the 400 response's ``errors``: refused paths, then refused entries."""
         return [
-            UnrecognizedInput(
-                input_type="policy_parameter",
-                name=parameter_path,
-                path=f"data.{parameter_path}",
-            ).to_dict()
-            for parameter_path in self.parameter_paths
+            *(
+                UnrecognizedInput(
+                    input_type="policy_parameter",
+                    name=parameter_path,
+                    path=f"data.{parameter_path}",
+                ).to_dict()
+                for parameter_path in self.parameter_paths
+            ),
+            *(entry.to_dict() for entry in self.invalid_entries),
         ]
 
 
@@ -119,8 +145,9 @@ class PolicyService:
         ``model_parameter_names`` returns, for a country ID, the leaf parameter
         paths of its model, the parameters a new policy may set, or None when
         the country has no loaded model, which leaves a new policy no
-        parameters to set. Without it, ``set_policy`` stores any parameter
-        path; the policy route always supplies it.
+        parameters to set. With it, ``set_policy`` also checks a new policy's
+        period keys and values. Without it, ``set_policy`` stores any data;
+        the policy route always supplies it.
         """
         self._injected_session_factory = session_factory
         self._model_parameter_names = model_parameter_names
@@ -235,9 +262,10 @@ class PolicyService:
     ) -> PolicySetResult:
         """Store a policy, or return the existing one with the same content and label.
 
-        Raise ValueError for an unknown country, and UnsettableParameterPathsError
-        when a new policy names paths that are not settable parameters. An
-        existing identical policy is returned without checking its paths. With
+        Raise ValueError for an unknown country, and InvalidPolicyDataError when
+        a new policy names paths that are not settable parameters, or holds
+        period keys or values that simulations cannot read. An existing
+        identical policy is returned without checking its data. With
         ``prepare_for_mirroring`` the result carries a snapshot of the stored row,
         for copying the policy into v2.
         """
@@ -297,7 +325,7 @@ class PolicyService:
         if existing is not None:
             return existing, "Policy already exists", True
 
-        self._check_parameter_paths(country_id, policy_json)
+        self._check_policy_data(country_id, policy_json)
         policy = Policy(
             country_id=country_id,
             label=label,
@@ -309,16 +337,21 @@ class PolicyService:
         session.flush()
         return policy, "Policy created", False
 
-    def _check_parameter_paths(self, country_id: str, policy_json: dict) -> None:
-        """Refuse paths the model lacks, compared as the v2 copy compares them."""
+    def _check_policy_data(self, country_id: str, policy_json: dict) -> None:
+        """Refuse paths the model lacks, and period keys or values it cannot read.
+
+        Paths are compared as the v2 copy compares them. Every refused path and
+        entry is reported in one error.
+        """
         if self._model_parameter_names is None or not policy_json:
             return
         model_parameter_names = self._model_parameter_names(country_id) or frozenset()
         unsettable_paths = parameters_missing_from_model(
             policy_json, model_parameter_names
         )
-        if unsettable_paths:
-            raise UnsettableParameterPathsError(country_id, unsettable_paths)
+        invalid_entries = find_invalid_periods_and_values(policy_json)
+        if unsettable_paths or invalid_entries:
+            raise InvalidPolicyDataError(country_id, unsettable_paths, invalid_entries)
 
     def _get_unique_policy_with_label(
         self,
