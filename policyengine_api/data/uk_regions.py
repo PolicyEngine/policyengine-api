@@ -19,11 +19,7 @@ from functools import cache
 from pathlib import Path
 from typing import NamedTuple
 
-from policyengine_api.constants import (
-    UK_COUNTRY_REGIONS,
-    UK_REGION_REGISTRY_CODES,
-    get_bundle_data_release,
-)
+from policyengine_api.constants import UK_COUNTRY_REGIONS, get_bundle_data_release
 
 UK_NATIONAL_REGION = "uk"
 UK_COUNTRY_REGION_TYPE = "country"
@@ -75,13 +71,8 @@ def _area_codes_by_spelling(region_type: str) -> dict[str, str]:
 
 
 def uk_country_codes() -> tuple[str, ...]:
-    """Return the code the payload sends for each country the metadata offers."""
-    return tuple(
-        dict.fromkeys(
-            UK_REGION_REGISTRY_CODES.get(name, name)
-            for name, _label in UK_COUNTRY_REGIONS
-        )
-    )
+    """Return the code of each country the UK metadata offers."""
+    return tuple(name for name, _label in UK_COUNTRY_REGIONS)
 
 
 def area_regions_resolve() -> bool:
@@ -143,14 +134,9 @@ def _list_alternatives(names: list[str]) -> str:
     return f"{', '.join(leading_names)} or {last_name}"
 
 
-def describe_accepted_uk_regions(*, country_aliases: tuple[str, ...] = ()) -> str:
-    """List the forms of UK region the check accepts.
-
-    ``country_aliases`` are other country names the Public API accepts and
-    sends as a registry code.
-    """
-    countries = [*uk_country_codes(), *country_aliases]
-    forms = [UK_NATIONAL_REGION, _list_alternatives(countries)]
+def describe_accepted_uk_regions() -> str:
+    """List the forms of UK region the check accepts."""
+    forms = [UK_NATIONAL_REGION, _list_alternatives(list(uk_country_codes()))]
     if area_regions_resolve():
         forms.extend(
             f"{region_type}/<{noun} name or GSS code>"

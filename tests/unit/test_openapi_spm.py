@@ -59,7 +59,7 @@ def test_economy_query_and_receipt_schemas_match_public_http_contract():
             assert "constituency" in breakdown["description"]
             assert (
                 "region one of: uk, country/england, country/scotland, "
-                "country/wales, country/ni, country/northern_ireland;"
+                "country/wales, country/northern_ireland;"
             ) in breakdown["description"]
         if suffix:
             assert parameters["window_size"]["schema"]["minimum"] == 1

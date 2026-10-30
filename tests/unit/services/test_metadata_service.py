@@ -49,7 +49,7 @@ class TestMetadataService:
                     "country/england",
                     "country/scotland",
                     "country/wales",
-                    "country/ni",
+                    "country/northern_ireland",
                 ],
             ),
             (

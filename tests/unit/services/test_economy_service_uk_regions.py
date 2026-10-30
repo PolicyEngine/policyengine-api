@@ -45,7 +45,6 @@ RESOLVABLE_SPELLINGS = (
     "Northern Ireland",
     "Country/Scotland",
     "country/wales ",
-    "country/ni",
     "country/northern_ireland",
     "constituency/e14001063",
     "constituency/aldershot",
@@ -54,6 +53,10 @@ RESOLVABLE_SPELLINGS = (
     "local_authority/Lambeth",
 )
 OTHER_UNRESOLVABLE_REGIONS = (
+    # The Public API's metadata named Northern Ireland country/ni; .py's
+    # registry names it country/northern_ireland, the only accepted code.
+    "country/ni",
+    "ni",
     "country/france",
     "country/NI",
     "country/",
@@ -64,8 +67,8 @@ OTHER_UNRESOLVABLE_REGIONS = (
 )
 
 ACCEPTED_REGIONS = (
-    "Accepted regions: uk; country/england, country/scotland, country/wales, "
-    "country/northern_ireland or country/ni; "
+    "Accepted regions: uk; country/england, country/scotland, country/wales "
+    "or country/northern_ireland; "
     "constituency/<constituency name or GSS code>; "
     "local_authority/<local authority name or GSS code>."
 )
@@ -186,8 +189,8 @@ def test_a_bundle_without_local_areas_refuses_area_regions():
     assert accepted.region == "country/wales"
     assert str(raised.value) == (
         "Unknown UK region 'constituency/E14001063'. Accepted regions: uk; "
-        "country/england, country/scotland, country/wales, "
-        "country/northern_ireland or country/ni."
+        "country/england, country/scotland, country/wales or "
+        "country/northern_ireland."
     )
 
 

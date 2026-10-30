@@ -10,8 +10,8 @@ from policyengine_api.routes import economy_routes
 from policyengine_api.services.economy_service import EconomyService
 
 ACCEPTED_REGIONS = (
-    "Accepted regions: uk; country/england, country/scotland, country/wales, "
-    "country/northern_ireland or country/ni; "
+    "Accepted regions: uk; country/england, country/scotland, country/wales "
+    "or country/northern_ireland; "
     "constituency/<constituency name or GSS code>; "
     "local_authority/<local authority name or GSS code>."
 )
@@ -45,7 +45,8 @@ def client():
 
 
 @pytest.mark.parametrize(
-    "region", ["constituency", "parliamentary_constituency", "constituency/all"]
+    "region",
+    ["constituency", "parliamentary_constituency", "constituency/all", "country/ni"],
 )
 @pytest.mark.parametrize(
     "query",
