@@ -178,7 +178,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `api.catalog.initializer-not-at-startup` | Application startup modules never import the metadata catalog initializer. | mechanical | enforced | yes | pytest `tests/unit/v2/test_catalog_initialization.py` | `pr.yml:test` | **unproven** |
 | `api.startup.fail-closed-configuration` | Default Cloud SQL startup needs no Supabase configuration, and a selected v2 runtime without its database URL fails closed. | mechanical | enforced | yes | pytest `tests/unit/v2/test_import_side_effects.py` | `pr.yml:test` | **unproven** |
-| `api.startup.no-import-side-effects` | Importing v2 modules, starting up and serving a request open no network connections and create no files or runtime SQLite databases. | mechanical | enforced | yes | pytest `tests/unit/v2/test_import_side_effects.py` | `pr.yml:test` | **unproven** |
+| `api.startup.no-import-side-effects` | Importing v2 modules opens no network connections, starting up and serving a request open none unless the process runs on Cloud Run or has a v2 runtime database configured, and none of them creates files or runtime SQLite databases. | mechanical | enforced | yes | pytest `tests/unit/v2/test_import_side_effects.py` | `pr.yml:test` | **unproven** |
 | `api.startup.no-runtime-sqlite-modules` | Runtime SQLite modules are absent from the production package. | mechanical | enforced | yes | pytest `tests/unit/v2/test_import_side_effects.py` | `pr.yml:test` | **unproven** |
 
 ```mermaid
@@ -334,7 +334,7 @@ flowchart LR
 | `api.quality.command-line-scripts-ruff-exemptions` | Command-line scripts under scripts/ may print their output, run other programs, fetch fixed URLs, stamp today's date and pick random samples (T201, S603, S607, S310, DTZ011, S311); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of DTZ011, S310, S311, S603, S607, T201 for `scripts/**` | `pr.yml:lint` | — |
 | `api.quality.environment-variables-load` | Required environment variables and credentials load in a deployed-like environment. | mechanical | enforced | yes | CI job `test_env_vars` | `pr.yml:test_env_vars` | — |
 | `api.quality.file-length` | A tracked Python file has at most 800 physical lines, or at most 1,500 if it is test code (a file under a tests or fixtures directory, or a conftest.py); a longer file is split by responsibility into modules, and keeps its public import path. | metric | enforced | yes | quality guard `file-length` | `pr.yml:quality-guards` | yes |
-| `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, v2 routes and services, and the user sign-in and account-deletion libraries pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:typecheck-v2` | — |
+| `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, v2 routes and services, the user sign-in and account-deletion libraries, the country list and its startup check pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:typecheck-v2` | — |
 | `api.quality.ruff-format` | All Python files are formatted with ruff format. | mechanical | enforced | yes | ruff format | `pr.yml:lint` | — |
 | `api.quality.ruff-lint` | All Python code passes ruff check with every ruff rule selected (ALL), with no ratchet, except the ignores in pyproject.toml: COM812 and ISC001, which conflict with ruff format, and D203 and D213, which conflict with the kept D211 and D212. | mechanical | enforced | yes | ruff check (ALL) | `pr.yml:lint` | — |
 | `api.quality.runtime-evaluated-models-resolve` | Every package model is one ruff treats as runtime-evaluated (a base resolves, through the import in its own module, to a name in runtime-evaluated-base-classes, or is a same-module class that does), and every Pydantic model and SQLAlchemy mapper resolves its annotations once the package is imported. | mechanical | enforced | yes | pytest `tests/unit/test_runtime_evaluated_annotations.py` | `pr.yml:test` | **unproven** |
@@ -470,7 +470,7 @@ flowchart LR
 | `api.agents.adapters-point-to-agents-md` | CLAUDE.md and .github/copilot-instructions.md only point to AGENTS.md; skills and rules are listed in AGENTS.md alone. | mechanical | enforced | yes | quality guard `rules-registry` | `pr.yml:quality-guards` | yes |
 | `api.process.agents-never-bypass` | Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human. | mechanical | doc-only | no | nothing | — | — |
 | `api.process.agents-suppress-as-last-resort` | Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason. | judgment | doc-only | no | nothing | — | — |
-| `api.process.changelog-fragment` | Every PR adds a changelog.d fragment. | mechanical | enforced | yes | CI job `check-changelog` | `pr.yml:check-changelog` | — |
+| `api.process.changelog-fragment` | Every PR adds, relative to its base commit, at least one changelog fragment of its own, a non-empty file directly in changelog.d/ named `<name>.<type>.md` with a type from [tool.towncrier] in pyproject.toml, and leaves nothing else there but .gitkeep; the PR check and the release's version bump read fragments through one definition, .github/changelog_fragments.py. | mechanical | enforced | yes | CI job `check-changelog`, `versioning` | `pr.yml:check-changelog`, `push.yml:versioning` | yes |
 | `api.process.cloud-run-image-builds` | The Cloud Run container image builds. | mechanical | enforced | yes | CI job `test_cloud_run_container_builds` | `pr.yml:test_cloud_run_container_builds` | — |
 | `api.process.docker-image-builds` | The API Docker image builds. | mechanical | enforced | yes | CI job `test_container_builds` | `pr.yml:test_container_builds` | — |
 | `api.process.makefile-phony` | Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed. | mechanical | doc-only | no | nothing | — | — |
@@ -488,8 +488,9 @@ flowchart LR
   gap_unenforced>"not enforced"]
   r_api_process_agents_suppress_as_last_resort("api.process.agents-suppress-as-last-resort (doc-only)")
   r_api_process_changelog_fragment("api.process.changelog-fragment (enforced)")
-  e_CI_job_check_changelog["CI job check-changelog"]
+  e_CI_job_check_changelog__versioning["CI job check-changelog, versioning"]
   j_CI_pr_yml_check_changelog["CI pr.yml:check-changelog"]
+  j_CI_push_yml_versioning["CI push.yml:versioning"]
   r_api_process_cloud_run_image_builds("api.process.cloud-run-image-builds (enforced)")
   e_CI_job_test_cloud_run_container_builds["CI job test_cloud_run_container_builds"]
   j_CI_pr_yml_test_cloud_run_container_builds["CI pr.yml:test_cloud_run_container_builds"]
@@ -508,8 +509,9 @@ flowchart LR
   e_quality_guard_rules_registry --> j_CI_pr_yml_quality_guards
   r_api_process_agents_never_bypass -.-> gap_unenforced
   r_api_process_agents_suppress_as_last_resort -.-> gap_unenforced
-  r_api_process_changelog_fragment --> e_CI_job_check_changelog
-  e_CI_job_check_changelog --> j_CI_pr_yml_check_changelog
+  r_api_process_changelog_fragment --> e_CI_job_check_changelog__versioning
+  e_CI_job_check_changelog__versioning --> j_CI_pr_yml_check_changelog
+  e_CI_job_check_changelog__versioning --> j_CI_push_yml_versioning
   r_api_process_cloud_run_image_builds --> e_CI_job_test_cloud_run_container_builds
   e_CI_job_test_cloud_run_container_builds --> j_CI_pr_yml_test_cloud_run_container_builds
   r_api_process_docker_image_builds --> e_CI_job_test_container_builds

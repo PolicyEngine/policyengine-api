@@ -11,6 +11,60 @@ Before opening a PR, all developers and agents must:
 2. Put `Fixes #ISSUE_NUMBER` as the first line of the PR description, using the
    issue number from the previous step. The PR template starts with this line.
 
+## Changelog fragments
+
+Every PR adds at least one changelog fragment of its own
+(`api.process.changelog-fragment`). A fragment is a file directly in
+`changelog.d/`, named `changelog.d/<name>.<type>.md`:
+
+- `<type>` is one of the types in `[tool.towncrier]` in `pyproject.toml`:
+  `breaking`, `added`, `changed`, `fixed` or `removed`, in lowercase. It sets
+  the release's version bump: `breaking` raises the major version, `added` and
+  `removed` the minor version, and `changed` and `fixed` the patch version.
+- `<name>` is letters and digits, in groups joined by single dots, hyphens or
+  underscores: an issue number such as `4083`, or a short label such as
+  `report-live-since`. A branch name with a `/` in it makes a folder, which
+  doesn't count.
+- The file holds a sentence or two, in UTF-8, saying what changed for people
+  who use or run the Public API. An empty file, or one with only whitespace
+  or invisible characters such as a zero-width space, fails.
+
+For example:
+
+```bash
+echo 'Report when the deployed version went live.' > changelog.d/4083.added.md
+```
+
+The `Check changelog fragment` job in `pr.yml` compares the PR with its base
+commit (`github.event.pull_request.base.sha`):
+
+- It fails unless the PR adds such a file. Fragments already on master don't
+  count: they belong to the PRs that added them until the next release removes
+  them. Editing, deleting or renaming one of them doesn't count either, but
+  moving a file the release couldn't read to a fragment name does. git decides
+  what is a rename: a file deleted and one added with mostly the same text.
+- A fragment the base branch has already released doesn't count, and fails.
+  When a lower PR in a stack is squash-merged, the release removes its
+  fragment; an upper branch that still holds the lower PR's commits would add
+  it back with the same text. Rebase the upper branch onto master without
+  those commits. A new fragment that only reuses a released one's name counts.
+- It fails on every file in `changelog.d/` the release can't read: a file in a
+  folder (#4084's `changelog.d/added/4083.md` belonged at
+  `changelog.d/4083.added.md`), another name, an unknown or uppercase type, an
+  empty file, a symbolic link or a submodule. Each error says how to fix it.
+
+After a merge to master, the `versioning` job in `push.yml` runs
+`.github/bump_version.py` and then Towncrier. The bump reads fragments through
+the same definition as the check, `.github/changelog_fragments.py`, and stops
+at any file it can't read; `ignore = [".gitkeep"]` makes Towncrier stop too.
+A release therefore never leaves out a fragment.
+
+To run the check locally before pushing:
+
+```bash
+BASE_SHA=origin/master bash .github/scripts/check_changelog_fragment.sh
+```
+
 ## Branch Rules
 
 Agents must never bypass branch rules, even when their credentials have admin
@@ -45,7 +99,8 @@ declares an API contract change. If a PR changes migration route contracts,
 route-group metadata, generated migration artifacts, or the cutover guardrails,
 it should:
 
-1. Include a changelog fragment.
+1. Include a changelog fragment (see
+   [Changelog fragments](#changelog-fragments)).
 2. Refresh generated migration artifacts with
    `python scripts/export_migration_contracts.py`.
 3. Run `python scripts/run_quality_guards.py`.

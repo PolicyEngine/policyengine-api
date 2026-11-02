@@ -123,7 +123,7 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
         metadata={
             "variables": {},
             "entities": {"person": {"plural": "people", "roles": {}}},
-            "parameters": {"gov.example.parameter": {}},
+            "parameters": {"gov.example.parameter": {"type": "parameter"}},
         },
     )
     service = HouseholdCalculationService(

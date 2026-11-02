@@ -1,8 +1,8 @@
 """drop UK area impact map coordinates
 
 Revision ID: e86f19a6c4da
-Revises: fbb7488ebe8a
-Create Date: 2026-10-28 15:31:32.507854
+Revises: fb1a3e40d3d6
+Create Date: 2026-11-02 19:06:49.238136
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
 """
 
@@ -14,7 +14,7 @@ import sqlmodel
 
 
 revision: str = "e86f19a6c4da"
-down_revision: Union[str, None] = "fbb7488ebe8a"
+down_revision: Union[str, None] = "fb1a3e40d3d6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

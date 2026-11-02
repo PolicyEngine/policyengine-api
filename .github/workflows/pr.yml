@@ -157,13 +157,30 @@ jobs:
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   check-changelog:
+    # Rule api.process.changelog-fragment: every pull request adds a changelog
+    # fragment the release can read. See
+    # docs/engineering/skills/github-prs.md#changelog-fragments.
     name: Check changelog fragment
     # Full CI runs only on the lowest unmerged pull request in a stack.
     if: ${{ !github.event.pull_request.stack || github.event.pull_request.stack.base.ref == github.event.pull_request.base.ref }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # The check compares the checked-out merge commit with the pull
+          # request's base commit, so it needs the base branch's history.
+          fetch-depth: 0
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Check for changelog fragment
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: bash .github/scripts/check_changelog_fragment.sh
   test_container_builds:
     name: Docker

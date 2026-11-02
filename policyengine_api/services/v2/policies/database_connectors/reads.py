@@ -22,6 +22,9 @@ from policyengine_api.data.v2.models import (
 if TYPE_CHECKING:
     from uuid import UUID
 
+# Parameter names bound in one statement; far below PostgreSQL's 65,535 limit.
+PARAMETER_NAME_BATCH_SIZE = 1_000
+
 
 def read_policy_catalog(
     session: Session,
@@ -61,16 +64,24 @@ def read_version_parameter_ids(
 def read_parameters_by_name(
     session: Session, *, model_version_id: UUID, names: set[str]
 ) -> dict[str, Parameter]:
-    """Return this model version's parameters with the given names, keyed by name."""
-    if not names:
-        return {}
-    parameters = session.exec(
-        select(Parameter).where(
-            Parameter.tax_benefit_model_version_id == model_version_id,
-            col(Parameter.name).in_(names),
-        )
-    ).all()
-    return {parameter.name: parameter for parameter in parameters}
+    """Return this model version's parameters with the given names, keyed by name.
+
+    The names are read in batches of PARAMETER_NAME_BATCH_SIZE, because a
+    PostgreSQL statement takes at most 65,535 bound values and a page of
+    policies can name more parameters than that.
+    """
+    ordered_names = sorted(names)
+    found: dict[str, Parameter] = {}
+    for start in range(0, len(ordered_names), PARAMETER_NAME_BATCH_SIZE):
+        batch = ordered_names[start : start + PARAMETER_NAME_BATCH_SIZE]
+        parameters = session.exec(
+            select(Parameter).where(
+                Parameter.tax_benefit_model_version_id == model_version_id,
+                col(Parameter.name).in_(batch),
+            )
+        ).all()
+        found.update((parameter.name, parameter) for parameter in parameters)
+    return found
 
 
 def read_policy_by_content_identity(

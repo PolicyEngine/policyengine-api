@@ -21,6 +21,7 @@ from policyengine_api.services.economy_impact_types import (
     LOCAL_AREA_BREAKDOWN_RETRY_NOTE,
     EconomicImpactResult,
     EconomicImpactSetupOptions,
+    ImpactPolicies,
     SimulationOptions,
 )
 from policyengine_api.services.reform_impacts_service import ReformImpactHandoffError
@@ -277,17 +278,14 @@ class ImpactExecutionMixin:
     def _handle_create_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
+        *,
+        policies: ImpactPolicies,
     ) -> EconomicImpactResult:
-        baseline_policy, reform_policy = self._get_policy_jsons(
-            setup_options.country_id,
-            setup_options.baseline_policy_id,
-            setup_options.reform_policy_id,
-        )
-
+        """Submit the simulation job for these already loaded policies."""
         sim_config: SimulationOptions = self._setup_sim_options(
             setup_options,
-            reform_policy=reform_policy,
-            baseline_policy=baseline_policy,
+            reform_policy=policies.reform,
+            baseline_policy=policies.baseline,
             time_period=setup_options.time_period,
             include_cliffs=setup_options.target == "cliff",
         )

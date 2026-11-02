@@ -175,6 +175,49 @@ def failures_on_the_unmatched_route(failure_count: int = 15) -> list[ErrorRecord
     ]
 
 
+STAGE12_WORKER_SERVICE = "policyengine-stage12-uk-worker"
+STAGE12_WORKER_FRAMES = (
+    '/root/policyengine_simulation_executor/runtime.py", line 120, in run_simulation',
+    '/root/policyengine_simulation_executor/datasets.py", line 80, in _load_dataset',
+    '/venv/lib/python3.13/site-packages/policyengine_uk/data.py", line 40, in get_year',
+)
+
+
+def original_worker_failure(**overrides: object) -> ErrorRecord:
+    """Return the original exception the simulation service logs for a failure.
+
+    It is a log record with an error, but no event name or handled flag.
+    """
+    fields: dict[str, object] = {
+        "service_name": STAGE12_WORKER_SERVICE,
+        "event_name": None,
+        "error_type": "ValueError",
+        "error_handled": None,
+        "frames": STAGE12_WORKER_FRAMES,
+        "route": None,
+        "status_code": None,
+        "operation_name": "stage12_simulation_execution",
+    }
+    fields.update(overrides)
+    return exception_record(**fields)
+
+
+def recorded_cause_copy(**overrides: object) -> ErrorRecord:
+    """Return the copy of a failure that the simulation service records next.
+
+    ``record_failure_cause`` records the failure again as a handled
+    ``exception.recorded`` event of class ``Stage12FailureCause``, with the
+    original's stack and often its timestamp to the microsecond.
+    """
+    fields: dict[str, object] = {
+        "event_name": "exception.recorded",
+        "error_type": "Stage12FailureCause",
+        "error_handled": True,
+    }
+    fields.update(overrides)
+    return original_worker_failure(**fields)
+
+
 PROJECT_ID = "policyengine-observability"
 # The deployment's values of the repository variables that name the logs.
 LOG_SOURCE = LogSource(

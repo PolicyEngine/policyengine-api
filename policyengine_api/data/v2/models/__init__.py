@@ -31,6 +31,7 @@ from policyengine_api.data.v2.models.comparison_runs import (  # noqa: E402
     Stage12RunStatus,
     Stage12SimulationRole,
 )
+from policyengine_api.data.v2.models.countries import Country  # noqa: E402
 from policyengine_api.data.v2.models.household_mappings import (  # noqa: E402
     LegacyHouseholdMapping,
 )
@@ -102,6 +103,7 @@ __all__ = [
     "ChangeAggregate",
     "CongressionalDistrictImpact",
     "ConstituencyImpact",
+    "Country",
     "Dataset",
     "DatasetVersion",
     "DecileImpact",

@@ -7,12 +7,13 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime
+from functools import cached_property
 from importlib.metadata import version as get_package_version
+from operator import attrgetter
 from pathlib import Path
 from typing import Any, NamedTuple
 
 import dpath
-import pandas as pd
 from policyengine_core.model_api import Enum, Reform, Variable
 from policyengine_core.parameters import (
     Parameter,
@@ -34,6 +35,8 @@ from policyengine_api.constants import (
 from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
 )
+from policyengine_api.data.uk_regions import uk_areas
+from policyengine_api.economy_years import uk_economy_years
 from policyengine_api.services.household_calculation_service import CalculationResult
 from policyengine_api.spm import (
     SPM_INPUT_ERROR_CODES,
@@ -149,6 +152,19 @@ class PolicyEngineCountry:
         )
         self.build_metadata()
 
+    @cached_property
+    def parameter_names(self) -> frozenset[str]:
+        """Return the path of every leaf parameter, the parameters a policy can set.
+
+        Nodes (which hold parameters) and the scales and brackets above leaf
+        parameters are left out, as the v2 catalog leaves them out.
+        """
+        return frozenset(
+            parameter.name
+            for parameter in self.tax_benefit_system.parameters.get_descendants()
+            if isinstance(parameter, Parameter)
+        )
+
     def build_metadata(self) -> None:
         """Build the JSON-safe metadata document served by the metadata endpoints."""
         self.metadata = self._json_safe(
@@ -197,11 +213,6 @@ class PolicyEngineCountry:
         #   time_period: [{ name: 2022, label: "2022", ... }] }
         options = {}
         if self.country_id == "uk":
-            constituency_names_path = (
-                Path(__file__).parent / "data" / "constituencies_2024.csv"
-            )
-            constituency_names = pd.read_csv(constituency_names_path)
-            constituency_names = constituency_names.sort_values("name")
             region = [
                 {"name": "uk", "label": "the UK", "type": "national"},
                 *(
@@ -209,35 +220,19 @@ class PolicyEngineCountry:
                     for name, label in UK_COUNTRY_REGIONS
                 ),
             ]
+            # The economy region check reads the same cached lists.
             region.extend(
                 {
-                    "name": f"constituency/{constituency_names.iloc[i]['name']}",
-                    "label": constituency_names.iloc[i]["name"],
-                    "type": "constituency",
+                    "name": f"{area_type}/{area.name}",
+                    "label": area.name,
+                    "type": area_type,
                 }
-                for i in range(len(constituency_names))
-            )
-            local_authority_names_path = (
-                Path(__file__).parent / "data" / "local_authorities_2021.csv"
-            )
-            local_authority_names = pd.read_csv(local_authority_names_path)
-            local_authority_names = local_authority_names.sort_values("name")
-            region.extend(
-                {
-                    "name": f"local_authority/{local_authority_names.iloc[i]['name']}",
-                    "label": local_authority_names.iloc[i]["name"],
-                    "type": "local_authority",
-                }
-                for i in range(len(local_authority_names))
+                for area_type in ("constituency", "local_authority")
+                for area in sorted(uk_areas(area_type), key=attrgetter("name"))
             )
             time_period = [
-                {"name": 2024, "label": "2024"},
-                {"name": 2025, "label": "2025"},
-                {"name": 2026, "label": "2026"},
-                {"name": 2027, "label": "2027"},
-                {"name": 2028, "label": "2028"},
-                {"name": 2029, "label": "2029"},
-                {"name": 2030, "label": "2030"},
+                {"name": year, "label": str(year)}
+                for year in uk_economy_years(self.tax_benefit_system.parameters)
             ]
             datasets = [get_bundle_default_dataset_option("uk")]
             options["region"] = region

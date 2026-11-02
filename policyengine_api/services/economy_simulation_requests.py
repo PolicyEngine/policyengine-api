@@ -8,16 +8,17 @@ from typing import Any
 
 import httpx
 
-from policyengine_api.constants import (
-    LOCAL_AREA_BREAKDOWN_REGIONS,
-    UK_REGION_REGISTRY_CODES,
-)
+from policyengine_api.constants import LOCAL_AREA_BREAKDOWN_REGIONS
 from policyengine_api.data.congressional_districts import (
     get_valid_congressional_districts,
     get_valid_state_codes,
     normalize_us_region,
 )
 from policyengine_api.data.places import validate_place_code
+from policyengine_api.data.uk_regions import (
+    describe_accepted_uk_regions,
+    resolve_uk_region,
+)
 from policyengine_api.json_types import JSONValue
 from policyengine_api.observability import runtime as observability_runtime
 from policyengine_api.observability.stages import ECONOMY_ANNUAL_STAGES, Stage
@@ -31,8 +32,10 @@ from policyengine_api.services.economy_impact_types import (
     LOCAL_AREA_BREAKDOWN_SIMULATION_KIND,
     EconomicImpactResult,
     EconomicImpactSetupOptions,
+    ImpactPolicies,
     SimulationOptions,
 )
+from policyengine_api.services.policy_service import PolicyNotFoundError
 
 
 class SimulationRequestMixin:
@@ -44,7 +47,14 @@ class SimulationRequestMixin:
         country_id: str,
         baseline_policy_id: int,
         reform_policy_id: int,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+    ) -> ImpactPolicies:
+        """Return the baseline and reform policies' JSON objects.
+
+        A policy ID belongs to one country. Raise PolicyNotFoundError with the
+        reform policy's ID, then the baseline policy's, for each one this
+        country does not have, so callers can check before they claim or
+        submit any work.
+        """
         baseline = self._policies.get_policy_json(
             country_id,
             baseline_policy_id,
@@ -53,9 +63,20 @@ class SimulationRequestMixin:
             country_id,
             reform_policy_id,
         )
-        return (
-            self._parse_json_object(baseline),
-            self._parse_json_object(reform),
+        missing_policy_ids = [
+            policy_id
+            for policy_id, policy_json in (
+                (reform_policy_id, reform),
+                (baseline_policy_id, baseline),
+            )
+            if policy_json is None
+        ]
+        if missing_policy_ids:
+            # dict.fromkeys drops a repeated ID and keeps the order.
+            raise PolicyNotFoundError(*dict.fromkeys(missing_policy_ids))
+        return ImpactPolicies(
+            baseline=self._parse_json_object(baseline),
+            reform=self._parse_json_object(reform),
         )
 
     @staticmethod
@@ -108,6 +129,26 @@ class SimulationRequestMixin:
         if impact_request.target == "cliff":
             msg = "breakdown=local_areas cannot be combined with target=cliff"
             raise ValueError(msg)
+
+    @staticmethod
+    def _validate_uk_region(impact_request: EconomicImpactRequest) -> None:
+        """Reject a UK region the simulation service cannot resolve.
+
+        Check the region the payload sends against the regions .py's UK region
+        registry holds, using the UK metadata's lists (see
+        ``policyengine_api.data.uk_regions``) and the simulation service's
+        normalisation, so names, lower-case codes and bare country names keep
+        working. Raise ValueError, which the route returns as 400, before
+        anything is stored or submitted. Other countries are unchanged.
+        """
+        if impact_request.country_id != "uk":
+            return
+        region = impact_request.region
+        if resolve_uk_region(region) is not None:
+            return
+        accepted = describe_accepted_uk_regions()
+        msg = f"Unknown UK region {region!r}. Accepted regions: {accepted}."
+        raise ValueError(msg)
 
     def _breakdown_refusal(
         self,
@@ -218,16 +259,14 @@ class SimulationRequestMixin:
         """Validate the region and return the code the simulation API expects.
 
         Assumes region has already been normalized (e.g., "ca" -> "state/ca").
-        Raises ValueError for invalid regions. The UK metadata names Northern
-        Ireland ``country/ni``, but .py's UK region registry names it
-        ``country/northern_ireland``, so the payload uses the registry's name.
+        Raises ValueError for invalid regions. A UK region is sent as
+        requested: request setup has already checked it against .py's UK
+        region registry.
         """
         # For US regions, validate (skip validation for national "us")
         if country_id == "us" and region != "us":
             self._validate_us_region(region)
 
-        if country_id == "uk":
-            return UK_REGION_REGISTRY_CODES.get(region, region)
         return region
 
     def _validate_us_region(self, region: str) -> None:

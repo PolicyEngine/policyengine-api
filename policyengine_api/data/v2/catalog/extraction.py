@@ -39,6 +39,7 @@ from policyengine_api.data.v2.catalog.records import (
     ModelVersionRecord,
     NormalizedCatalog,
 )
+from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
 
 __all__ = [
     "CURRENT_LAW_IDS",
@@ -58,11 +59,10 @@ __all__ = [
 ]
 
 
-SUPPORTED_COUNTRIES = ("us", "uk")
+SUPPORTED_COUNTRIES = SUPPORTED_COUNTRY_IDS
 REQUIRED_DEPENDENCIES = (
     "policyengine-core",
-    "policyengine-us",
-    "policyengine-uk",
+    *(f"policyengine-{country_id}" for country_id in SUPPORTED_COUNTRY_IDS),
 )
 CURRENT_LAW_IDS = {"us": 2, "uk": 1}
 METADATA_TIME_PERIODS = {
@@ -334,7 +334,7 @@ def extract_installed_catalog() -> NormalizedCatalog:
         bundle=get_current_bundle(),
         policyengine_version=policyengine_version,
         models={
-            "us": policyengine.us.model,
-            "uk": policyengine.uk.model,
+            country_id: getattr(policyengine, country_id).model
+            for country_id in SUPPORTED_COUNTRIES
         },
     )
