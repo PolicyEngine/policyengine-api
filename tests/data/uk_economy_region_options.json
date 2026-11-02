@@ -3,7 +3,7 @@
   {"name": "country/england", "label": "England", "type": "country"},
   {"name": "country/scotland", "label": "Scotland", "type": "country"},
   {"name": "country/wales", "label": "Wales", "type": "country"},
-  {"name": "country/ni", "label": "Northern Ireland", "type": "country"},
+  {"name": "country/northern_ireland", "label": "Northern Ireland", "type": "country"},
   {"name": "constituency/Aberafan Maesteg", "label": "Aberafan Maesteg", "type": "constituency"},
   {"name": "constituency/Aberdeen North", "label": "Aberdeen North", "type": "constituency"},
   {"name": "constituency/Aberdeen South", "label": "Aberdeen South", "type": "constituency"},
