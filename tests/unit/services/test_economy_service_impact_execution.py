@@ -267,15 +267,16 @@ class TestEconomyService:
                 "A new run for this state can be requested 2 minutes after this "
                 "failure."
             )
+            # The stored error expires, so the log keeps the failure's reason.
+            # Checked first: building the expected result below logs too.
+            mock_logger.log_struct.assert_any_call(
+                {"message": expected_message}, severity="ERROR"
+            )
             assert result == EconomicImpactResult.error(expected_message)
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once_with(
                 execution_id=MOCK_EXECUTION_ID,
                 message=expected_message,
                 keep_seconds=120,
-            )
-            # The stored error expires, so the log keeps the failure's reason.
-            mock_logger.log_struct.assert_any_call(
-                {"message": expected_message}, severity="ERROR"
             )
 
         @pytest.mark.usefixtures("mock_logger")
