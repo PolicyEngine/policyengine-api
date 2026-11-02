@@ -1,13 +1,10 @@
 """The full-catalog job in .github/workflows/v2-integration-check.yml.
 
 Two integration tests load the complete installed PolicyEngine.py catalog. They
-run in their own job, in one pytest process that extracts the catalog once,
-and only when the change can affect them: the job's first step decides
-(.github/scripts/decide_full_catalog_tests.sh) and every later step is
-conditional on its output. The job itself always runs and passes, because
-"CI complete" fails on a skipped job and a release run may skip the
-cross-database integration tests only when every job of its merge run's check
-succeeded (.github/release_commit.py).
+run on every run of the workflow, in their own job beside
+catalog-runtime-integration, in one pytest process that extracts the catalog
+once. No step of the job is conditional, so the cross-database check takes as
+long as the slower of its two jobs.
 """
 
 from __future__ import annotations
@@ -19,9 +16,6 @@ from tests.unit.cloud_run_deploy_support import REPO, job_step
 WORKFLOW_PATH = REPO / ".github/workflows/v2-integration-check.yml"
 FULL_CATALOG_JOB = "full-catalog-integration"
 RUNTIME_JOB = "catalog-runtime-integration"
-DECISION_STEP = "Decide whether this change can affect the full-catalog tests"
-DECISION_ID = "full_catalog"
-RUN_CONDITION = "steps.full_catalog.outputs.run_full_catalog_tests == 'true'"
 FULL_CATALOG_TESTS = (
     "tests/integration/test_v2_catalog_installed.py",
     "tests/integration/test_v2_catalog_publication_qualification.py",
@@ -49,57 +43,42 @@ def _step_commands(job: dict) -> list[str]:
     return [step["run"] for step in job["steps"] if "run" in step]
 
 
-def test_the_workflow_runs_on_call_on_dispatch_and_every_night() -> None:
+def test_the_workflow_runs_when_called_or_dispatched() -> None:
     triggers = _triggers()
 
-    assert set(triggers) == {"workflow_call", "workflow_dispatch", "schedule"}
+    # No schedule: every pull request and push already runs both tests.
+    assert set(triggers) == {"workflow_call", "workflow_dispatch"}
     assert triggers["workflow_call"]["secrets"] == {
         "CODECOV_TOKEN": {"required": False}
     }
-    assert len(triggers["schedule"]) == 1
-    minute, hour, day_of_month, month, day_of_week = triggers["schedule"][0][
-        "cron"
-    ].split()
-    assert minute.isdigit()
-    assert hour.isdigit()
-    assert (day_of_month, month, day_of_week) == ("*", "*", "*")
 
 
 def test_the_full_catalog_job_always_runs() -> None:
     job = _full_catalog_job()
 
-    # A job-level condition could skip the job, which fails "CI complete" and
-    # makes a release run repeat the check.
     assert "if" not in job
     assert "needs" not in job
     assert job["name"] == "Full installed PolicyEngine.py catalog"
 
 
-def test_the_first_steps_check_out_history_and_decide() -> None:
-    job = _full_catalog_job()
-    checkout, decision = job["steps"][:2]
+def test_no_step_of_the_full_catalog_job_is_conditional() -> None:
+    steps = _full_catalog_job()["steps"]
+
+    assert steps
+    for step in steps:
+        assert "if" not in step, step["name"]
+        assert "id" not in step, step["name"]
+
+
+def test_the_job_checks_out_only_the_commit_it_tests() -> None:
+    checkout = _full_catalog_job()["steps"][0]
+    workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
 
     assert checkout["uses"] == "actions/checkout@v4"
-    assert checkout["with"] == {"fetch-depth": 0}
-    assert "if" not in checkout
-    assert decision["name"] == DECISION_STEP
-    assert decision["id"] == DECISION_ID
-    assert decision["run"] == "bash .github/scripts/decide_full_catalog_tests.sh"
-    assert decision["env"] == {
-        "EVENT_NAME": "${{ github.event_name }}",
-        "BASE_SHA": (
-            "${{ github.event.pull_request.base.sha || github.event.before }}"
-        ),
-    }
-    assert "if" not in decision
-
-
-def test_every_step_after_the_decision_runs_only_when_it_says_so() -> None:
-    later_steps = _full_catalog_job()["steps"][2:]
-
-    assert later_steps
-    for step in later_steps:
-        assert step.get("if") == RUN_CONDITION, step["name"]
+    assert "with" not in checkout
+    assert "fetch-depth" not in workflow_text
+    assert "decide_full_catalog_tests" not in workflow_text
+    assert not (REPO / ".github/scripts/decide_full_catalog_tests.sh").exists()
 
 
 def test_the_job_reports_the_runner_it_got() -> None:
