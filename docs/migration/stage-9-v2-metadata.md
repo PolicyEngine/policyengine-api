@@ -158,17 +158,13 @@ regions. Publication took 24.120 seconds and added 7,968,103 bytes of measured
 peak publisher memory. The US fallback summary reported 436 congressional
 districts, 333 places, and 51 states.
 
-Re-run the production-scale test only against disposable Postgres:
-
-```bash
-RUN_V2_CATALOG_PUBLICATION_QUALIFICATION=1 \
-V2_ALEMBIC_DISPOSABLE_TEST=1 \
-V2_MIGRATION_DATABASE_URL="<disposable-postgres-url>" \
-uv run pytest -q tests/integration/test_v2_catalog_publication_qualification.py
-```
-
-Do not point this qualification command at a persistent staging or production
-target.
+The production-scale test that measured this,
+`tests/integration/test_v2_catalog_publication_qualification.py`, was removed
+with PolicyEngine/policyengine-api#4149: CI no longer loads the complete
+catalog. Each release publishes and validates it against staging, then
+production (`seed-v2-database.yml`), and the cross-database integration tests
+publish selected parameter folders of the installed models and a catalog of
+edge-case values (`docs/engineering/skills/testing.md`).
 
 ## Preview verification
 

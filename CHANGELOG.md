@@ -1,3 +1,21 @@
+## [5.17.1] - 2026-11-02
+
+### Changed
+
+- Pull requests run the test suite in the release run's six shards, check that each test ran in exactly one, and send Codecov the six shards' coverage in one upload.
+
+
+## [5.17.0] - 2026-11-02
+
+### Added
+
+- Each release now checks, in its staging and production model-version alignment jobs, that the environment's simulation URL is served by that environment's own Simulation Entrypoint service, and fails otherwise; staging must call the staging simulation service, and production the production one.
+
+### Changed
+
+- CI no longer loads the complete installed PolicyEngine.py catalog. The cross-database integration tests publish a few parameter folders of the installed US and UK models, and a small catalog of edge-case values, and check that every value comes back from PostgreSQL unchanged.
+
+
 ## [5.16.1] - 2026-10-30
 
 ### Changed
