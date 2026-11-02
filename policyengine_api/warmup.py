@@ -3,7 +3,7 @@
 Building a tax-benefit system (at import) does not compile the per-simulation
 machinery, so the first calculate on a fresh worker pays a large one-time cost
 (~2 minutes for US on Cloud Run). Running a throwaway calculate here moves that
-off the first user request, so /readiness-check (via policyengine_api.readiness)
+off the first user request, so /health (via policyengine_api.readiness)
 only reports ready once a calculate is actually fast. Only
 POLICYENGINE_API_WARMUP_COUNTRIES (default "us") are warmed, to keep the added
 boot time inside the startup-probe window.

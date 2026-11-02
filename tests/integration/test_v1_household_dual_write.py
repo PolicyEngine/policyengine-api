@@ -347,8 +347,8 @@ def test_changed_retained_event_fingerprint_cannot_mutate_destination(
         v2_engine.dispose()
 
 
-@pytest.mark.parametrize("country_id", ["ca", "ng", "il"])
-def test_cloud_sql_only_countries_create_no_event_or_destination_mapping(
+@pytest.mark.parametrize("country_id", ["us", "uk"])
+def test_cloud_sql_only_writes_create_no_event_or_destination_mapping(
     country_id: str,
     disposable_v1_database_url: str,
     disposable_v2_database_url: str,

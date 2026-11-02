@@ -1,3 +1,15 @@
+## [5.18.0] - 2026-11-02
+
+### Changed
+
+- `/health` now answers 503 `{"status": "not_ready"}` until the startup warmup has finished and while the runtime configuration is invalid, and 200 `{"status": "healthy"}` after. The Cloud Run startup probe and the deployment health checks poll it instead of `/readiness-check`, and `/liveness-check` and `/readiness-check` are removed.
+
+### Removed
+
+- Removed the routes that only legacy.policyengine.org or the API documentation used: the v1 saved-policy routes (`/{country_id}/user-policy`), the user-profile routes (`/{country_id}/user-profile`), the policy search (`GET /{country_id}/policies`), the recent-simulations list (`GET /simulations`), the `GET /` landing page and `GET /specification`; `/v2/openapi.json` documents the v2 resources.
+  Stopped serving Canada (`ca`), Nigeria (`ng`) and Israel (`il`): requests for them now get the unknown-country 400 response, and `policyengine_canada`, `policyengine-ng` and `policyengine-il` are no longer installed.
+
+
 ## [5.17.1] - 2026-11-02
 
 ### Changed
