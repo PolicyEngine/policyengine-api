@@ -27,6 +27,7 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
             "simulation-gateway-check",
             "liveness-check",
             "readiness-check",
+            "deployment",
         ),
     ),
     RouteGroupConfig(
@@ -37,6 +38,7 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
         name="metadata",
         path_segments=(
             "metadata",
+            "countries",
             "datasets",
             "economy-options",
             "parameter-values",

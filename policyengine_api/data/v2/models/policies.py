@@ -41,10 +41,6 @@ class Policy(TimestampedModel, table=True):
             name="uq_policies_canonicalization_content_hash",
         ),
         sa.CheckConstraint(
-            "country_id IN ('us', 'uk')",
-            name="ck_policies_country",
-        ),
-        sa.CheckConstraint(
             "canonicalization_version > 0",
             name="ck_policies_canonicalization_version",
         ),
@@ -64,7 +60,11 @@ class Policy(TimestampedModel, table=True):
         ),
     )
 
-    country_id: str = Field(max_length=2)
+    country_id: str = Field(
+        max_length=2,
+        foreign_key="countries.id",
+        ondelete="RESTRICT",
+    )
     tax_benefit_model_id: UUID = Field(
         foreign_key="tax_benefit_models.id",
         ondelete="RESTRICT",

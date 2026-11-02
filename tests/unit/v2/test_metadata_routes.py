@@ -538,6 +538,7 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/variables/{variable_id}",
     }
     native_paths = {
+        "/v2/countries",
         "/v2/households",
         "/v2/households/{household_id}",
         "/v2/policies",

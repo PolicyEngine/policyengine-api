@@ -35,6 +35,9 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
     simulation_entrypoint = MagicMock()
     simulation_entrypoint.get_spm_capability.return_value = worker_spm_capability()
     reform_impacts_service = MagicMock()
+    # Both policies load before the submission claim; stored current law is {}.
+    policy_service = MagicMock()
+    policy_service.get_policy_json.return_value = {}
 
     simulation_entrypoint.run_budget_window_batch.return_value = (
         ModalBudgetWindowBatchExecution(
@@ -57,6 +60,7 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
         economy_routes,
         "economy_service",
         EconomyService(
+            policy_service_=policy_service,
             reform_impacts_service_=reform_impacts_service,
             budget_window_cache_=fake_cache,
             simulation_entrypoint_=simulation_entrypoint,

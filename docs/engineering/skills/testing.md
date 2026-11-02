@@ -22,6 +22,27 @@ versions the Cloud Run image installs (`gcp/cloud_run/Dockerfile`):
   and `api.dependencies.test-from-lock`
   ([dependencies.md](dependencies.md)) check every install and test command.
 
+## Tests That Run a Country Model
+
+A new unit test stands in for the country model: a calculation with the
+installed policyengine-us takes seconds, and one of every variable takes most
+of a minute. `tests/unit/test_country_spm.py` uses no `COUNTRIES["us"]`,
+`load_forecast()` or real `Simulation`. It checks the country adapter's SPM
+handling, and the household routes' SPM responses, over stand-in simulations
+that raise the installed model's errors and report its receipts. Add a case
+about what the API does with a model's SPM error or receipt there. Route cases
+about storing, replaying and caching SPM selections, with a stand-in country,
+are in `tests/unit/routes/test_canonical_spm.py`.
+
+`tests/integration/test_installed_us_model_spm.py` holds two tests against
+the installed US model: a chosen county returns a threshold and a receipt for
+the pinned forecast, and a state-only household is null when it chose
+nothing and a 400 when it chose a county. Which code the model raises for
+each missing input is policyengine-us's to test. The file's fixtures build
+the Flask app and its calculation service once per session. It needs no
+database, network or credentials, so `make test` runs it after the unit
+tests, in the pull request `Test` job and in the release tests.
+
 ## Migration Test Layout
 
 - Put API migration compatibility tests under `tests/contract/`.
@@ -54,7 +75,7 @@ candidate endpoints, add the relevant focused service tests. For budget-window
 simulation compatibility, run:
 
 ```bash
-FLASK_DEBUG=1 python -m pytest tests/unit/services/test_economy_service.py::TestEconomyService::TestGetBudgetWindowEconomicImpact -q
+FLASK_DEBUG=1 python -m pytest tests/unit/services/test_economy_service_budget_window_*.py -q
 ```
 
 Regenerate and review `docs/engineering/migration-contracts.md` when
@@ -147,11 +168,44 @@ updated. The tests must assert that only the API server is supervised, no
 container-local Redis process is launched, and deployed configuration selects
 managed Redis without a localhost fallback.
 
-The Cloud Run staging deployment job must run the platform-neutral release test
-suite with local Redis before GCP authentication, image publication, or
-candidate deployment. Staging deployment checks run the live integration suite
-against the tagged Cloud Run staging URL before promoting the exact tested
-revision to the service URL. No production deployment may begin until the
+The platform-neutral release test suite must pass, with local Redis, before
+GCP authentication, image publication, or candidate deployment. It runs in
+`push.yml`'s `release-tests` job, which starts with the release run, beside the
+checks and the staging database jobs; the Cloud Run staging deployment job
+needs it, so none of its steps start until the tests pass. The job keeps the
+`staging` environment and the variables the tests read when they ran inside
+the deployment job, and has no GCP credentials.
+
+The release test suite runs in six shards, one runner each, so that it
+finishes before the staging database jobs do. `run_release_tests.sh` loads the
+pytest plugin `tests/release_test_shard_plugin.py`: every runner collects the
+whole suite and keeps the tests in the files `scripts/release_test_shards.py`
+assigns to its shard, heaviest file first, by the measured seconds in
+`MEASURED_FILE_SECONDS` or else by test count. A file's tests stay in one
+shard, so its fixtures are set up once. The `check-release-test-shards` job
+then fails, and the staging deployment with it, unless every shard collected
+the same tests and each test ran in exactly one shard. The plugin reads its
+settings once, when pytest configures it, and then removes them and its `-p`
+option from `PYTEST_ADDOPTS`, so a pytest process that a test starts collects
+its own tests without the split; a shard writes its report once, and fails if
+one is already there. When a test file
+becomes much slower or faster, measure it again with `--durations=0` and
+update `MEASURED_FILE_SECONDS`; an out-of-date value only makes the shards
+finish less evenly.
+
+The release run skips lint, the quality guards, both Alembic checks and the
+cross-database integration tests when its merge run passed them on the same
+code: `check-release-commit` (`.github/release_commit.py`) requires that the
+release commit changes only the `[project]` version in `pyproject.toml`, the
+project's own version entry in `uv.lock`, `CHANGELOG.md` and removed changelog
+fragments, and that the merge commit's Push run passed all five checks.
+Otherwise the release run runs them, and `publish-git-tag` requires lint, both
+Alembic checks and the integration tests to pass, as before. The release test
+suite always runs.
+
+Staging deployment checks run the live integration suite against the tagged
+Cloud Run staging URL before promoting the exact tested revision to the
+service URL. No production deployment may begin until the
 staging integration, exact-revision promotion, and stable-URL health check
 pass. Production Cloud Run promotion should happen only after tagged candidate
 smoke tests pass. Both environments must capture

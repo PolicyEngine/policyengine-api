@@ -62,3 +62,21 @@ def test_reform_impact_route_does_not_manage_sessions():
 def test_economy_service_delegates_persistence_without_opening_sessions():
     source = (SERVICE_ROOT / "economy_service.py").read_text(encoding="utf-8")
     assert "get_v1_session_factory" not in source
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "economy_budget_window_results.py",
+        "economy_budget_window_submission.py",
+        "economy_impact_execution.py",
+        "economy_impact_types.py",
+        "economy_simulation_requests.py",
+        "economy_stored_impacts.py",
+    ],
+)
+def test_economy_service_modules_delegate_persistence_without_opening_sessions(
+    module_name,
+):
+    source = (SERVICE_ROOT / module_name).read_text(encoding="utf-8")
+    assert "get_v1_session_factory" not in source

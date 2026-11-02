@@ -13,7 +13,10 @@ from policyengine_api.data.v1_models import Policy
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.services.policy_mirroring import PolicyMirrorUnavailableError
 from policyengine_api.services.policy_service import PolicySetResult
-from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+from policyengine_api.services.v2.policies.types import (
+    LegacyPolicySnapshot,
+    LegacyPolicyTranslationReason,
+)
 from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyTranslationError,
 )
@@ -222,9 +225,20 @@ def test_destination_failure_returns_the_stored_policy_and_logs_an_error(
 ) -> None:
     """Run the real policy and copy services, with only the v2 write failing."""
     monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
+    # The real service creates only policies that set parameters the US model
+    # defines.
+    body = {
+        "label": "Legacy label",
+        "data": {
+            "gov.irs.credits.ctc.amount.base[0].amount": {
+                "2026-01-01.2026-12-31": 2500,
+            },
+        },
+    }
     failing_destination = MagicMock()
     failing_destination.mirror_legacy_policy.side_effect = LegacyPolicyTranslationError(
-        "private parameter value"
+        "private parameter value",
+        reason=LegacyPolicyTranslationReason.MISSING_PARAMETERS,
     )
     with (
         patch(
@@ -233,7 +247,7 @@ def test_destination_failure_returns_the_stored_policy_and_logs_an_error(
         ),
         patch("policyengine_api.services.policy_mirroring.logger") as copy_logger,
     ):
-        response = _client().post("/us/policy", json=_body())
+        response = _client().post("/us/policy", json=body)
 
     assert response.status_code == 201
     assert response.json["message"] == "Policy created"
@@ -248,6 +262,7 @@ def test_destination_failure_returns_the_stored_policy_and_logs_an_error(
     assert logged_record["metric_name"] == "v1_policy_mirror_operations"
     assert logged_record["outcome"] == "error"
     assert logged_record["failure_category"] == "catalog_or_translation"
+    assert logged_record["failure_reason"] == "missing_parameters"
     assert logged_record["legacy_policy_id"] == stored_policy_id
     assert "private parameter value" not in json.dumps(logged_record)
 
@@ -281,6 +296,7 @@ def test_policy_without_a_mirror_snapshot_is_returned_and_logged(
     assert logged_record["metric_name"] == "v1_policy_mirror_operations"
     assert logged_record["outcome"] == "error"
     assert logged_record["failure_category"] == "missing_mirror_snapshot"
+    assert logged_record["failure_reason"] == "missing_mirror_snapshot"
     assert logged_record["country_id"] == "us"
     assert logged_record["legacy_policy_id"] == 42
     assert route_logger.log_struct.call_args.kwargs["severity"] == "ERROR"
@@ -336,6 +352,49 @@ def test_v1_policy_reads_require_cloud_sql_and_never_invoke_v2(
 
     assert invalid.status_code == 503
     invalid_get.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "missing_parameters",
+    [["gov.irs.income.bracket.thresholds.1.WIDOW"], [], None],
+    ids=["missing", "none-missing", "not-checked"],
+)
+def test_v1_policy_read_reports_the_parameters_the_model_lacks(
+    monkeypatch, missing_parameters: list[str] | None
+) -> None:
+    policy = Policy(
+        id=96567,
+        country_id="us",
+        label=None,
+        api_version="1.633.2",
+        policy_json={"gov.dol.minimum_wage": {"2026-01-01.2100-12-31": 9}},
+        policy_hash="legacy/base64+hash=",
+    )
+    monkeypatch.setenv("DB_READ_POLICY", "cloud_sql")
+    with (
+        patch(
+            "policyengine_api.routes.policy_routes.policy_service.get_policy",
+            return_value=policy,
+        ),
+        patch(
+            "policyengine_api.routes.policy_routes.policy_parameter_service.missing_parameters",
+            return_value=missing_parameters,
+        ) as check,
+    ):
+        response = _client().get("/us/policy/96567")
+
+    assert response.status_code == 200
+    result = json.loads(response.text)["result"]
+    assert result == {
+        "id": 96567,
+        "country_id": "us",
+        "label": None,
+        "api_version": "1.633.2",
+        "policy_json": {"gov.dol.minimum_wage": {"2026-01-01.2100-12-31": 9}},
+        "policy_hash": "legacy/base64+hash=",
+        "missing_parameters": missing_parameters,
+    }
+    check.assert_called_once_with("us", policy.policy_json)
 
 
 def test_policy_search_failure_does_not_expose_exception_details(

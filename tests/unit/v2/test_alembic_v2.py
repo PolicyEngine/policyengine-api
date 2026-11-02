@@ -40,6 +40,7 @@ TARGET_ENVIRONMENT = "test-foundation"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 POST_BASELINE_TABLE_NAMES = frozenset(
     {
+        "countries",
         "legacy_household_mappings",
         "legacy_policy_mappings",
         "legacy_user_mappings",
@@ -235,6 +236,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        "fbb7488ebe8a",
         "91af4fc8d8c1",
         "60d6518b6a98",
         "439303be14fe",
@@ -495,7 +497,6 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
         / "migrations/v2/versions/fbb7488ebe8a_link_signed_in_users_to_v1_anchored_.py"
     ).read_text(encoding="utf-8")
 
-    assert V2_ALEMBIC_HEAD_REVISION == "fbb7488ebe8a"
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
@@ -563,6 +564,94 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
     assert (
         '"users", "primary_country", existing_type=sa.VARCHAR(length=2), nullable=True'
     ) in upgrade
+
+
+COUNTRY_REFERENCE_COLUMNS = (
+    ("users", "primary_country"),
+    ("households", "country_id"),
+    ("policies", "country_id"),
+    ("user_household_associations", "country_id"),
+    ("user_policies", "country_id"),
+    ("user_simulation_associations", "country_id"),
+    ("user_report_associations", "country_id"),
+)
+# The generated downgrade restores each check in PostgreSQL's reflected form
+# of ``<column> IN ('us', 'uk')``.
+US_AND_UK = "ANY (ARRAY['us'::character varying, 'uk'::character varying]::text[])"
+REPLACED_COUNTRY_CHECKS = {
+    "ck_users_primary_country": ("users", f"primary_country::text = {US_AND_UK}"),
+    "ck_households_country": ("households", f"country_id::text = {US_AND_UK}"),
+    "ck_policies_country": ("policies", f"country_id::text = {US_AND_UK}"),
+    "ck_user_household_associations_country": (
+        "user_household_associations",
+        f"country_id::text = {US_AND_UK}",
+    ),
+    "ck_user_policies_country": ("user_policies", f"country_id::text = {US_AND_UK}"),
+    "ck_user_simulation_associations_country": (
+        "user_simulation_associations",
+        f"country_id::text = {US_AND_UK}",
+    ),
+    "ck_user_report_associations_country": (
+        "user_report_associations",
+        f"country_id::text = {US_AND_UK}",
+    ),
+}
+
+
+def _countries_revision_source() -> str:
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    countries_revision = next(
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == "fbb7488ebe8a"
+    )
+    assert countries_revision.revision == V2_ALEMBIC_HEAD_REVISION
+    assert countries_revision.path is not None
+    return Path(countries_revision.path).read_text(encoding="utf-8")
+
+
+def test_countries_revision_inserts_us_and_uk_and_replaces_country_checks() -> None:
+    revision = _countries_revision_source()
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert revision.count("op.create_table(") == 1
+    assert 'op.create_table(\n        "countries"' in upgrade
+    assert "ck_countries_society_wide_requires_household" in upgrade
+    assert 'op.drop_table("countries")' in downgrade
+    # The one hand-written operation, an approved exception to generated-only
+    # revisions: the US and UK rows, inserted before the foreign keys that
+    # existing rows must satisfy. The generated downgrade drops them with the
+    # table.
+    assert revision.count("Approved hand-written data operation") == 1
+    assert revision.count("Post-generation correction") == 0
+    assert revision.count("op.bulk_insert(") == 1
+    assert "op.execute(" not in revision
+    inserted_rows = upgrade[
+        upgrade.index("op.bulk_insert(") : upgrade.index("op.create_foreign_key(")
+    ]
+    for country_id in ("uk", "us"):
+        assert f'"id": "{country_id}"' in inserted_rows
+    assert inserted_rows.count('"household_enabled": True') == 2
+    assert inserted_rows.count('"society_wide_enabled": True') == 2
+    for table_name, column_name in COUNTRY_REFERENCE_COLUMNS:
+        key_name = f"fk_{table_name}_{column_name}_countries"
+        assert key_name in upgrade
+        assert key_name in downgrade
+    assert upgrade.count('ondelete="RESTRICT"') == len(COUNTRY_REFERENCE_COLUMNS)
+    for check_name, (table_name, expression) in REPLACED_COUNTRY_CHECKS.items():
+        assert check_name in upgrade
+        assert f'"{table_name}"' in upgrade
+        assert check_name in downgrade
+        assert expression in downgrade
+    assert "op.drop_column(" not in upgrade
+    assert "op.add_column(" not in upgrade
 
 
 def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -> None:

@@ -36,7 +36,7 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         importlib_metadata.version(name) == expected
         for name, expected in expected_dependencies
     )
-    # Counts for the 6.10.0 bundle's models: US 2.2.1 and UK 2.132.6. Keep
+    # Counts for the 6.11.1 bundle's models: US 2.2.1 and UK 2.151.0. Keep
     # this exact assertion so later package changes require explicit review.
     # Since 6.10.0 the UK registry also lists its 650 constituencies and 361
     # local authorities, because the bundle routes them to a local-area
@@ -45,10 +45,10 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
     assert catalog.entity_counts() == {
         "models": 2,
         "model_versions": 2,
-        "variables": 7_337,
-        "parameter_nodes": 29_307,
-        "parameters": 104_172,
-        "parameter_values": 1_194_360,
+        "variables": 7_438,
+        "parameter_nodes": 29_367,
+        "parameters": 104_673,
+        "parameter_values": 1_196_139,
         "datasets": 4,
         "regions": 1_837,
     }

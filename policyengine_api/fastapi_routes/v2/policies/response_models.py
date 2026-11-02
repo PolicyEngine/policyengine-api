@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Annotated, Any, Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
 
 if TYPE_CHECKING:
-    from policyengine_api.services.v2.policies.types import PolicyPage, PolicyRead
+    from policyengine_api.services.v2.policies.types import (
+        CheckedPolicyPage,
+        CheckedPolicyRead,
+    )
 
 
 class StrictPolicyAPIModel(BaseModel):
@@ -52,9 +55,22 @@ class PolicyItem(StrictPolicyAPIModel):
     created_at: datetime
     updated_at: datetime
     parameter_values: list[PolicyParameterValueItem]
+    missing_parameters: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                "The parameter paths this policy sets that the current "
+                "tax-benefit model (the catalog of the running PolicyEngine.py "
+                "version) no longer has, sorted; empty when it has them all. "
+                "Null when that catalog is not published, so nothing could be "
+                "checked. A policy with missing parameters cannot be run on "
+                "the current model."
+            )
+        ),
+    ]
 
     @classmethod
-    def from_read(cls, item: PolicyRead) -> PolicyItem:
+    def from_read(cls, item: CheckedPolicyRead) -> PolicyItem:
         """Build the response item by validating the service read record's fields."""
         return cls.model_validate(item)
 
@@ -78,7 +94,7 @@ class PolicyPageResult(StrictPolicyAPIModel):
     has_more: bool
 
     @classmethod
-    def from_page(cls, page: PolicyPage) -> PolicyPageResult:
+    def from_page(cls, page: CheckedPolicyPage) -> PolicyPageResult:
         """Build the response page from a service page, converting each item."""
         return cls(
             items=[PolicyItem.from_read(item) for item in page.items],

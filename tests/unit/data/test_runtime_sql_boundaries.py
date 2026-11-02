@@ -46,6 +46,15 @@ def test_report_orchestration_uses_sessions_and_models_not_raw_sql():
     assert "exec_driver_sql" not in source
 
 
+def test_report_run_history_uses_sessions_and_models_not_raw_sql():
+    source = (PACKAGE_ROOT / "services/report_output_runs.py").read_text(
+        encoding="utf-8"
+    )
+    assert "SQLAlchemyDAO" not in source
+    assert ".query(" not in source
+    assert "exec_driver_sql" not in source
+
+
 def test_legacy_persistence_compatibility_layers_are_absent():
     assert not (PACKAGE_ROOT / "data/v1_daos.py").exists()
     assert not (PACKAGE_ROOT / "data/data.py").exists()

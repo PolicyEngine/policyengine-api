@@ -23,10 +23,10 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
 )
 from policyengine_api.services.v2.policies.types import (
+    CheckedPolicyPage,
+    CheckedPolicyRead,
     NativePolicyCreation,
-    PolicyPage,
     PolicyParameterValueRead,
-    PolicyRead,
 )
 from policyengine_api.services.v2.policies.validators import (
     PolicyCatalogValidationError,
@@ -43,8 +43,13 @@ VALUE_ID = UUID("00000000-0000-0000-0000-000000000050")
 CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _policy_read(*, policy_id: UUID = POLICY_ID, country_id: str = "us") -> PolicyRead:
-    return PolicyRead(
+def _policy_read(
+    *,
+    policy_id: UUID = POLICY_ID,
+    country_id: str = "us",
+    missing_parameters: tuple[str, ...] | None = (),
+) -> CheckedPolicyRead:
+    return CheckedPolicyRead(
         id=policy_id,
         country_id=country_id,
         tax_benefit_model_id=MODEL_ID,
@@ -61,6 +66,7 @@ def _policy_read(*, policy_id: UUID = POLICY_ID, country_id: str = "us") -> Poli
                 end_date=None,
             ),
         ),
+        missing_parameters=missing_parameters,
     )
 
 
@@ -68,6 +74,7 @@ class FakePolicyService:
     def __init__(self) -> None:
         self.created = True
         self.error: Exception | None = None
+        self.missing_parameters: tuple[str, ...] | None = ()
         self.calls: list[tuple[str, object]] = []
 
     def _raise(self) -> None:
@@ -79,16 +86,18 @@ class FakePolicyService:
         self._raise()
         return NativePolicyCreation(item=_policy_read(), created=self.created)
 
-    def get_policy(self, **filters) -> PolicyRead:
+    def get_policy(self, **filters) -> CheckedPolicyRead:
         self.calls.append(("get_policy", filters))
         self._raise()
-        return _policy_read(policy_id=filters["policy_id"])
+        return _policy_read(
+            policy_id=filters["policy_id"], missing_parameters=self.missing_parameters
+        )
 
-    def list_policies(self, **filters) -> PolicyPage:
+    def list_policies(self, **filters) -> CheckedPolicyPage:
         self.calls.append(("list_policies", filters))
         self._raise()
-        return PolicyPage(
-            items=(_policy_read(),),
+        return CheckedPolicyPage(
+            items=(_policy_read(missing_parameters=self.missing_parameters),),
             offset=filters["offset"],
             limit=filters["limit"],
             has_more=False,
@@ -181,6 +190,7 @@ def test_create_returns_201_for_new_and_200_for_deduplicated_content() -> None:
                         "end_date": None,
                     }
                 ],
+                "missing_parameters": [],
             }
         },
     }
@@ -272,6 +282,41 @@ def test_detail_is_country_scoped_and_returns_typed_not_found() -> None:
     assert missing.status_code == 404
     assert missing.json() == {"status": "error", "message": "policy was not found"}
     assert flask_calls["count"] == 0
+
+
+@pytest.mark.parametrize(
+    ("missing_parameters", "reported"),
+    [
+        (("gov.example.removed_rate",), ["gov.example.removed_rate"]),
+        ((), []),
+        (None, None),
+    ],
+)
+def test_detail_reports_the_parameters_the_running_model_lacks(
+    missing_parameters: tuple[str, ...] | None,
+    reported: list[str] | None,
+) -> None:
+    service = FakePolicyService()
+    service.missing_parameters = missing_parameters
+    client, _flask_calls = _client(service)
+
+    response = client.get(f"/v2/policies/{POLICY_ID}?country_id=us")
+
+    assert response.status_code == 200
+    assert response.json()["result"]["item"]["missing_parameters"] == reported
+
+
+def test_list_reports_each_policy_s_missing_parameters() -> None:
+    service = FakePolicyService()
+    service.missing_parameters = ("gov.example.removed_rate",)
+    client, _flask_calls = _client(service)
+
+    response = client.get("/v2/policies?country_id=us")
+
+    assert response.status_code == 200
+    assert [
+        item["missing_parameters"] for item in response.json()["result"]["items"]
+    ] == [["gov.example.removed_rate"]]
 
 
 def test_list_passes_exact_model_filter_and_canonical_pagination() -> None:
@@ -406,7 +451,10 @@ def test_openapi_publishes_request_query_response_and_error_contracts() -> None:
         "created_at",
         "updated_at",
         "parameter_values",
+        "missing_parameters",
     }
+    missing_schema = item_schema["properties"]["missing_parameters"]
+    assert {"type": "null"} in missing_schema["anyOf"]
     assert "name" not in item_schema["properties"]
     assert "description" not in item_schema["properties"]
 

@@ -146,7 +146,12 @@ def _is_deprecated_axis(
         return False
 
     variable_name = axis.get("name")
-    hint = DEPRECATED_VARIABLES.get(variable_name)
+    # A name that is not a string is reported by the axis checks, not here.
+    hint = (
+        DEPRECATED_VARIABLES.get(variable_name)
+        if isinstance(variable_name, str)
+        else None
+    )
     if hint is None:
         return False
 
