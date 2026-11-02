@@ -203,17 +203,23 @@ Otherwise the release run runs them, and `publish-git-tag` requires lint, both
 Alembic checks and the integration tests to pass, as before. The release test
 suite always runs.
 
-The two integration tests that load the complete installed PolicyEngine.py
-catalog, `test_v2_catalog_installed.py` and
-`test_v2_catalog_publication_qualification.py`, run on every pull request and
-push in their own job, `full-catalog-integration` in `v2-integration-check.yml`,
-beside the other cross-database integration tests. They share one pytest
-process, which extracts the catalog once (`tests/fixtures/installed_catalog.py`),
-so the cross-database check takes as long as the slower of its two jobs. The
-full catalog checks counts and memory; `test_v2_catalog_publication.py` also
-publishes `tests/fixtures/v2_catalog_value_shapes.py`, which holds one example
-of each value shape extraction accepts, and reads every value back. When
-extraction accepts a new shape, add an example there.
+CI never loads the complete installed PolicyEngine.py catalog (about 1.2
+million parameter values). Two tests in the cross-database check cover
+publishing it instead, on every run:
+
+- `test_v2_catalog_installed_folders.py` runs the real US and UK models through
+  extraction and publication, reduced to the parameter folders in its
+  `SELECTED_FOLDERS`, and reads every value back. Between them the folders
+  hold every value shape the installed models hold, and the test fails when
+  one is missing: replace a renamed folder with one that holds the same
+  values.
+- `test_v2_catalog_publication.py` publishes
+  `tests/fixtures/v2_catalog_value_shapes.py`, which holds one example of each
+  value shape extraction accepts, and reads every value back. When extraction
+  accepts a new shape, add an example there.
+
+Each release publishes and validates the complete catalog against staging,
+then production, in `seed-v2-database.yml`.
 
 Staging deployment checks run the live integration suite against the tagged
 Cloud Run staging URL before promoting the exact tested revision to the

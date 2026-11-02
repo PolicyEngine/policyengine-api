@@ -88,6 +88,10 @@ jobs:
         run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_household_persistence.py tests/integration/test_v1_household_dual_write.py tests/integration/test_mysql_household_spm_dual_write.py
       - name: Test the row counts v1 ORM updates report on MySQL
         run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_mysql_update_row_counts.py
+      # The real US and UK models, reduced to a few parameter folders: the
+      # complete installed catalog is never loaded in CI.
+      - name: Publish selected parameter folders of the installed PolicyEngine.py models
+        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q --durations=10 tests/integration/test_v2_catalog_installed_folders.py
       - name: Test real Redis cross-instance semantics
         run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_runtime_cache_redis.py
       - name: Export v2 integration coverage
@@ -98,63 +102,3 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: PolicyEngine/policyengine-api
           files: coverage-v2.xml
-
-  full-catalog-integration:
-    # The two tests that load the complete installed PolicyEngine.py catalog,
-    # beside catalog-runtime-integration, in one pytest process so that the
-    # catalog is extracted once (tests/fixtures/installed_catalog.py).
-    name: Full installed PolicyEngine.py catalog
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: policyengine_v2_test
-          POSTGRES_DB: policyengine_v2_alembic_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
-    env:
-      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
-      # that .python-version selects.
-      UV_PYTHON: "3.12"
-      V2_MIGRATION_DATABASE_URL: postgresql+psycopg://postgres:policyengine_v2_test@127.0.0.1:5432/policyengine_v2_alembic_test
-      V2_ALEMBIC_DISPOSABLE_TEST: "1"
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      # The runner's processors and memory, which set how long the tests take.
-      - name: Report the runner's processor count
-        run: nproc
-      - name: Report the runner's memory
-        run: free -m
-      - name: Report the runner's processors
-        run: lscpu
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v6
-      - name: Install locked dependencies
-        run: uv sync --frozen --extra dev
-      - name: Prepare the disposable v2 schema
-        run: uv run --frozen --extra dev alembic -c alembic-v2.ini upgrade head
-      - name: Verify the installed catalog interface and qualify production-scale publication
-        run: uv run --frozen --extra dev coverage run --branch -m pytest -q --durations=10 tests/integration/test_v2_catalog_installed.py tests/integration/test_v2_catalog_publication_qualification.py
-        env:
-          RUN_V2_CATALOG_COMPATIBILITY: "1"
-          RUN_V2_CATALOG_PUBLICATION_QUALIFICATION: "1"
-      - name: Export full-catalog coverage
-        run: uv run --frozen --extra dev coverage xml -i -o coverage-v2-full-catalog.xml
-      - name: Upload full-catalog coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: PolicyEngine/policyengine-api
-          files: coverage-v2-full-catalog.xml

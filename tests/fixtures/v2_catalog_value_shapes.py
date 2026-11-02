@@ -1,10 +1,10 @@
 """A small catalog with one example of each value shape extraction accepts.
 
-Publishing the complete installed catalog (about 1.2 million parameter
-values) checks row counts, memory and four representative rows
-(tests/integration/test_v2_catalog_publication_qualification.py), not what
-each stored value holds. Publishing this catalog checks that each shape comes
-back from PostgreSQL unchanged (tests/integration/test_v2_catalog_publication.py):
+CI never loads the complete installed catalog (about 1.2 million parameter
+values). tests/integration/test_v2_catalog_installed_folders.py publishes a few
+parameter folders of the installed models, which hold only the shapes those
+models use; publishing this catalog checks that every shape extraction accepts
+comes back from PostgreSQL unchanged (tests/integration/test_v2_catalog_publication.py):
 every JSON value type a parameter value may hold, date-only and naive start
 dates, year-1, one-day and open-ended date ranges, bracket parameters and
 their nodes, and the text, number and membership-list region filters.
