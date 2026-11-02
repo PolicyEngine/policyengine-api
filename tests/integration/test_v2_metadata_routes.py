@@ -880,12 +880,31 @@ def _catalog_shaped_like_policyengine_py_output():
     """Return the fixture catalog with US records shaped like PolicyEngine.py's.
 
     Bracket parameters carry the labels PolicyEngine.py generates, and a
-    breakdown parameter its parent's label with the key. One schedule has no
-    node row, as the locked PolicyEngine.py publishes; the other has one with
-    its label, as the release that publishes schedules will.
+    breakdown parameter its parent's label with its filing status's enum label.
+    One schedule has no node row, as the locked PolicyEngine.py publishes; the
+    other has one with its label, as the release that publishes schedules will.
     """
     models = source_models()
     us = models["us"]
+    filing_status = SimpleNamespace(
+        **{
+            **vars(us.variables_by_name["employment_income"]),
+            "name": "filing_status",
+            "label": "Filing status",
+            "data_type": str,
+            "possible_values": ["SINGLE", "JOINT"],
+            "default_value": "SINGLE",
+            "is_input_variable": True,
+            "module_name": "household.demographic.tax_unit.filing_status",
+            "enum_values": [
+                SimpleNamespace(value="SINGLE", label="Single"),
+                SimpleNamespace(value="JOINT", label="Joint"),
+            ],
+            "unit": None,
+        }
+    )
+    us.variables.append(filing_status)
+    us.variables_by_name[filing_status.name] = filing_status
     nodes = [
         SimpleNamespace(
             name="gov.irs.deductions.standard.amount",
@@ -967,6 +986,8 @@ def test_postgres_parameter_tree_from_records_shaped_like_policyengine_py(
         ("gov.aca.age_curves.al[0]", "Bracket 1", "node", 2),
         ("gov.aca.age_curves.al[1]", "Bracket 2", "node", 2),
     ]
+    # Without a stored label for the schedule, its fields keep PolicyEngine.py's
+    # labels; with one, they show their field, as v3 does.
     assert level("gov.aca.age_curves.al[1]") == [
         (
             "gov.aca.age_curves.al[1].amount",
@@ -981,22 +1002,16 @@ def test_postgres_parameter_tree_from_records_shaped_like_policyengine_py(
             None,
         ),
     ]
+    assert level("gov.aca.age_curves.ak[1]") == [
+        ("gov.aca.age_curves.ak[1].amount", "Amount", "parameter", None),
+        ("gov.aca.age_curves.ak[1].threshold", "Threshold", "parameter", None),
+    ]
     assert level("gov.irs.deductions.standard") == [
         ("gov.irs.deductions.standard.amount", "Standard deduction", "node", 2),
     ]
     assert level("gov.irs.deductions.standard.amount") == [
-        (
-            "gov.irs.deductions.standard.amount.JOINT",
-            "Standard deduction (Joint)",
-            "parameter",
-            None,
-        ),
-        (
-            "gov.irs.deductions.standard.amount.SINGLE",
-            "Standard deduction (Single)",
-            "parameter",
-            None,
-        ),
+        ("gov.irs.deductions.standard.amount.JOINT", "JOINT", "parameter", None),
+        ("gov.irs.deductions.standard.amount.SINGLE", "SINGLE", "parameter", None),
     ]
 
 

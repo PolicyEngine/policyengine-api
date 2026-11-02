@@ -345,6 +345,10 @@ PY_SHAPED_PARAMETERS = (
 )
 
 
+# The labels the catalog's enum variables give their values.
+FILING_STATUS_LABELS = {"SINGLE": frozenset({"Single"}), "JOINT": frozenset({"Joint"})}
+
+
 def _py_shaped_tree(*, schedule_has_node_row: bool):
     nodes = [TreeNodeSource(name=STANDARD_DEDUCTION, label="Standard deduction")]
     if schedule_has_node_row:
@@ -356,11 +360,17 @@ def _py_shaped_tree(*, schedule_has_node_row: bool):
         parameters=[
             _parameter(name, label=label) for name, label in PY_SHAPED_PARAMETERS
         ],
+        enum_labels=FILING_STATUS_LABELS,
     )
 
 
 def test_a_tree_from_the_locked_policyengine_py_labels_its_schedule_by_name() -> None:
-    """The locked PolicyEngine.py stores no node row for a bracket schedule."""
+    """The locked PolicyEngine.py stores no node row for a bracket schedule.
+
+    Without the schedule's stored label, a bracket field's label cannot be told
+    from one PolicyEngine.py made, so it is kept. A breakdown parameter's label
+    made from its parent node's stored label takes v3's form: its key.
+    """
     rows = _py_shaped_tree(schedule_has_node_row=False)
     by_path = _rows_by_path(rows)
 
@@ -375,8 +385,8 @@ def test_a_tree_from_the_locked_policyengine_py_labels_its_schedule_by_name() ->
     ]
     assert by_path[STANDARD_DEDUCTION].label == "Standard deduction"
     assert [row.label for row in _children(rows, STANDARD_DEDUCTION)] == [
-        "Standard deduction (Joint)",
-        "Standard deduction (Single)",
+        "JOINT",
+        "SINGLE",
     ]
 
 
@@ -391,3 +401,132 @@ def test_a_tree_from_a_release_with_schedule_nodes_uses_the_schedule_label() -> 
         "Bracket 1",
         "Bracket 2",
     ]
+    # PolicyEngine.py labels each bracket field from the schedule's label;
+    # the tree shows the field, as v3 does.
+    assert [row.label for row in _children(rows, f"{AGE_CURVE}[0]")] == [
+        "Amount",
+        "Threshold",
+    ]
+    assert [row.label for row in _children(rows, f"{AGE_CURVE}[1]")] == ["Amount"]
+
+
+def test_marginal_bracket_and_nested_breakdown_labels_are_shortened() -> None:
+    """A "bracket N" field and a breakdown two levels down take v3's form too."""
+    rows = build_parameter_tree(
+        nodes=[
+            TreeNodeSource(name=f"{UK_RATES}.uk", label="Income Tax main rates"),
+            TreeNodeSource(
+                name="gov.usda.snap.max_allotment.main",
+                label="SNAP maximum allotment",
+            ),
+        ],
+        parameters=[
+            _parameter(
+                f"{UK_RATES}.uk[1].rate",
+                label="Income Tax main rates (bracket 2 rate)",
+            ),
+            _parameter(
+                "gov.usda.snap.max_allotment.main.CONTIGUOUS_US.1",
+                label="SNAP maximum allotment (Contiguous US, Household size 1)",
+            ),
+            _parameter(
+                "gov.irs.deductions.standard.amount.HEAD_OF_HOUSEHOLD",
+                label="Standard deduction (Head of household)",
+            ),
+        ],
+        enum_labels={"CONTIGUOUS_US": frozenset({"Contiguous US"})},
+    )
+    by_path = _rows_by_path(rows)
+
+    assert by_path[f"{UK_RATES}.uk[1].rate"].label == "Rate"
+    assert by_path["gov.usda.snap.max_allotment.main.CONTIGUOUS_US.1"].label == "1"
+    # The parent has no stored label here, so the label is the package's own.
+    assert by_path["gov.irs.deductions.standard.amount.HEAD_OF_HOUSEHOLD"].label == (
+        "Standard deduction (Head of household)"
+    )
+
+
+def test_stored_labels_that_only_look_generated_are_kept() -> None:
+    """A label is shortened only when it is exactly what PolicyEngine.py makes."""
+    rows = build_parameter_tree(
+        nodes=[
+            TreeNodeSource(name=f"{UK_RATES}.uk", label="Income Tax main rates"),
+            TreeNodeSource(name=STANDARD_DEDUCTION, label="Standard deduction"),
+            TreeNodeSource(name="gov.hmrc", label="HMRC"),
+            TreeNodeSource(
+                name="gov.dwp.attendance_allowance", label="Attendance Allowance"
+            ),
+        ],
+        parameters=[
+            # The bracket number or the field differs from the path's.
+            _parameter(
+                f"{UK_RATES}.uk[0].rate", label="Income Tax main rates (bracket 2 rate)"
+            ),
+            _parameter(
+                f"{UK_RATES}.uk[0].threshold",
+                label="Income Tax main rates (bracket 1 rate)",
+            ),
+            # Another schedule's label.
+            _parameter(f"{UK_RATES}.uk[1].rate", label="Other rates (bracket 2 rate)"),
+            # More parts than levels below the labelled ancestor.
+            _parameter(
+                f"{STANDARD_DEDUCTION}.SINGLE", label="Standard deduction (Single, CA)"
+            ),
+            # A label of a node that is not an ancestor.
+            _parameter(f"{STANDARD_DEDUCTION}.JOINT", label="HMRC (Joint)"),
+            # A label the package writes, whose qualifier is not the key's value.
+            _parameter(
+                "gov.dwp.attendance_allowance.higher",
+                label="Attendance Allowance (higher rate)",
+            ),
+        ],
+        enum_labels=FILING_STATUS_LABELS,
+    )
+    by_path = _rows_by_path(rows)
+
+    assert by_path[f"{UK_RATES}.uk[0].rate"].label == (
+        "Income Tax main rates (bracket 2 rate)"
+    )
+    assert by_path[f"{UK_RATES}.uk[0].threshold"].label == (
+        "Income Tax main rates (bracket 1 rate)"
+    )
+    assert by_path[f"{UK_RATES}.uk[1].rate"].label == "Other rates (bracket 2 rate)"
+    assert by_path[f"{STANDARD_DEDUCTION}.SINGLE"].label == (
+        "Standard deduction (Single, CA)"
+    )
+    assert by_path[f"{STANDARD_DEDUCTION}.JOINT"].label == "HMRC (Joint)"
+    assert by_path["gov.dwp.attendance_allowance.higher"].label == (
+        "Attendance Allowance (higher rate)"
+    )
+
+
+def test_breakdown_labels_whose_enum_labels_contain_commas_are_shortened() -> None:
+    """Each level's value is matched whole, so a label with ", " is still one value."""
+    schedule = "gov.states.ak.dpa.ssp.payment_standard"
+    rows = build_parameter_tree(
+        nodes=[TreeNodeSource(name=schedule, label="Alaska SSP payment standard")],
+        parameters=[
+            _parameter(
+                f"{schedule}.INDEPENDENT.COUPLE_BOTH_ELIGIBLE",
+                label=(
+                    "Alaska SSP payment standard "
+                    "(Living independently, Couple, both eligible)"
+                ),
+            ),
+            _parameter(
+                f"{schedule}.INDEPENDENT.INDIVIDUAL",
+                label="Alaska SSP payment standard (Living independently, Individual)",
+            ),
+        ],
+        enum_labels={
+            "INDEPENDENT": frozenset({"Living independently"}),
+            "COUPLE_BOTH_ELIGIBLE": frozenset({"Couple, both eligible"}),
+            "INDIVIDUAL": frozenset({"Individual"}),
+        },
+    )
+    by_path = _rows_by_path(rows)
+
+    assert by_path[f"{schedule}.INDEPENDENT.COUPLE_BOTH_ELIGIBLE"].label == (
+        "COUPLE BOTH ELIGIBLE"
+    )
+    assert by_path[f"{schedule}.INDEPENDENT.INDIVIDUAL"].label == "INDIVIDUAL"

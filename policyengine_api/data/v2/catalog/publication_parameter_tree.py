@@ -19,6 +19,7 @@ a human decision.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -124,7 +125,18 @@ def catalog_parameter_tree(
             )
             for parameter in country.parameters
         ],
+        enum_labels=enum_value_labels(country),
     )
+
+
+def enum_value_labels(country: CountryCatalog) -> dict[str, frozenset[str]]:
+    """Return the labels the country's enum variables give each value's name."""
+    labels: dict[str, set[str]] = defaultdict(set)
+    for variable in country.variables:
+        for enum_value in variable.enum_values or ():
+            if enum_value.label is not None:
+                labels[enum_value.value].add(str(enum_value.label))
+    return {value: frozenset(names) for value, names in labels.items()}
 
 
 def _table_rows(

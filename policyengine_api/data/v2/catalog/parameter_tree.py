@@ -14,6 +14,18 @@ the app's newer interface (v3) shows, in every view: a stored label with its
 underscores as spaces and its first letter upper-cased, or, for a path with no
 stored label, the last part of its name in the same form.
 
+PolicyEngine.py stores a label it makes itself for a parameter that has none:
+a bracket field gets its schedule's label and the bracket (``"Income Tax main
+rates (bracket 1 rate)"``), and a breakdown parameter its breakdown parent's
+label and its keys (``"Standard deduction (Single)"``). The tree shows such a
+label as v3 shows the parameter today, by the last part of its name, when it is
+what PolicyEngine.py makes from the stored labels above it: for a breakdown,
+one value per level below the labelled ancestor, each the key itself, the label
+an enum variable gives the key, or a dimension label followed by the key. A
+label the package writes in exactly one of those forms cannot be told apart and
+is shortened too: UK "Maximum LHA (category A)" shows as "A". Other catalog
+reads keep PolicyEngine.py's label.
+
 Each row also records whether a reform can change it, which mirrors the tree
 the app's newer interface builds from v1 metadata
 (``app/src/libs/buildParameterTree.ts``): a parameter under ``gov`` whose
@@ -31,7 +43,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping, Sequence
     from uuid import UUID
 
 REFORM_TREE_PREFIX = "gov."
@@ -39,6 +51,7 @@ REFORM_EXCLUDED_PATH_PARTS = ("taxsim", "gov.abolitions", "pycache")
 
 _BRACKET_INDEX = re.compile(r"\[(\d+)\]$")
 _NAME_PARTS = re.compile(r"[.\[]")
+_BRACKET_FIELD = re.compile(r"^(?P<schedule>.+)\[(?P<index>\d+)\]\.(?P<field>\w+)$")
 
 ChildType = Literal["node", "parameter"]
 
@@ -109,13 +122,103 @@ def generated_label(path: str) -> str:
     return display_label(_NAME_PARTS.split(path)[-1])
 
 
-def _child_label(path: str, stored_label: str | None) -> str:
+def _is_generated_bracket_label(
+    path: str, label: str, stored_labels: dict[str, str | None]
+) -> bool:
+    """Return whether a bracket field's label is the one PolicyEngine.py makes.
+
+    It names the schedule's stored label, then the bracket number and field.
+    """
+    match = _BRACKET_FIELD.match(path)
+    if match is None:
+        return False
+    schedule_label = stored_labels.get(match.group("schedule"))
+    if not schedule_label:
+        return False
+    number = int(match.group("index")) + 1
+    field = match.group("field")
+    return label in {
+        f"{schedule_label} ({kind} {number} {field})" for kind in ("bracket", "tier")
+    }
+
+
+def _matches_dimension_values(
+    text: str, keys: Sequence[str], enum_labels: Mapping[str, frozenset[str]]
+) -> bool:
+    """Return whether text is one value per key, joined by ", ", as .py writes them.
+
+    A value is the key itself, a label an enum variable gives the key, or a
+    dimension label followed by the key ("Household size 1"). Each value is
+    matched whole, so a label that contains ", " is still one value.
+    """
+    if not keys:
+        return not text
+    key, rest = keys[0], keys[1:]
+    separator = ", " if rest else ""
+    for value in (key, *sorted(enum_labels.get(key, ()))):
+        head = value + separator
+        if rest and text.startswith(head):
+            if _matches_dimension_values(text[len(head) :], rest, enum_labels):
+                return True
+        elif not rest and text == value:
+            return True
+    marker = f" {key}{separator}"
+    position = text.find(marker, 1)
+    while position != -1:
+        remainder = text[position + len(marker) :]
+        if (
+            ", " not in text[:position]
+            and (rest or not remainder)
+            and _matches_dimension_values(remainder, rest, enum_labels)
+        ):
+            return True
+        position = text.find(marker, position + 1)
+    return False
+
+
+def _is_generated_breakdown_label(
+    path: str,
+    label: str,
+    stored_labels: dict[str, str | None],
+    enum_labels: Mapping[str, frozenset[str]],
+) -> bool:
+    """Return whether a breakdown parameter's label is the one PolicyEngine.py makes.
+
+    It names an ancestor's stored label, then one value per level below it.
+    """
+    for ancestor in _ancestors(path):
+        ancestor_label = stored_labels.get(ancestor)
+        if not ancestor_label:
+            continue
+        prefix = f"{ancestor_label} ("
+        if not (label.startswith(prefix) and label.endswith(")")):
+            continue
+        below = path[len(ancestor) + 1 :]
+        if "[" in below:
+            continue
+        if _matches_dimension_values(
+            label[len(prefix) : -1], below.split("."), enum_labels
+        ):
+            return True
+    return False
+
+
+def _child_label(
+    path: str,
+    stored_label: str | None,
+    stored_labels: dict[str, str | None],
+    enum_labels: Mapping[str, frozenset[str]],
+) -> str:
     index = bracket_index(path)
     if index is not None:
         return f"Bracket {index + 1}"
-    if stored_label and stored_label.strip():
-        return display_label(stored_label)
-    return generated_label(path)
+    if not (stored_label and stored_label.strip()):
+        return generated_label(path)
+    if _is_generated_bracket_label(
+        path, stored_label, stored_labels
+    ) or _is_generated_breakdown_label(path, stored_label, stored_labels, enum_labels):
+        return generated_label(path)
+    return display_label(stored_label)
 
 
 def is_reform_changeable_parameter(parameter: TreeParameterSource) -> bool:
@@ -200,8 +303,13 @@ def build_parameter_tree(
     *,
     nodes: Iterable[TreeNodeSource],
     parameters: Iterable[TreeParameterSource],
+    enum_labels: Mapping[str, frozenset[str]] | None = None,
 ) -> tuple[ParameterTreeChildRow, ...]:
-    """Return one row per node and parameter of a version, parents first."""
+    """Return one row per node and parameter of a version, parents first.
+
+    ``enum_labels`` maps each enum value's name to the labels the version's
+    enum variables give it, for recognising labels PolicyEngine.py made.
+    """
     parameters_by_path = {parameter.name: parameter for parameter in parameters}
     stored_labels = {node.name: node.label for node in nodes}
     paths = set(stored_labels) | set(parameters_by_path)
@@ -223,7 +331,10 @@ def build_parameter_tree(
         children=dict(children),
         labels={
             path: _child_label(
-                path, _stored_label(path, stored_labels, parameters_by_path)
+                path,
+                _stored_label(path, stored_labels, parameters_by_path),
+                stored_labels,
+                enum_labels or {},
             )
             for path in paths
         },

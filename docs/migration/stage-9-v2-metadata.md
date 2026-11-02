@@ -281,7 +281,16 @@ whose children are its brackets, labelled "Bracket 1", "Bracket 2" and so on),
 and labels take the form the app's newer interface shows in every view: the
 stored label with underscores as spaces and its first letter upper-cased, or,
 without one, the last part of the name in that form (so an unlabelled schedule
-`...rates.uk` is "Uk"). Each row also records its position among all its
+`...rates.uk` is "Uk"). A label PolicyEngine.py made for a parameter without
+one also gets the last part of the name, as v3 shows it today: a bracket field
+labelled from its schedule ("Income Tax main rates (bracket 1 rate)" is
+"Rate") and a breakdown parameter labelled from its breakdown parent
+("Standard deduction (Single)" is "SINGLE"). A breakdown label is recognised
+when it is an ancestor's stored label followed by one value per level below
+it, each the key, a label the catalog's enum variables give the key, or a
+dimension label followed by the key. A label the package writes in one of
+those forms is shortened too, such as the UK's "Maximum LHA (category A)",
+shown as "A". The catalog's other reads keep the label. Each row also records its position among all its
 siblings and, if a reform can change it, among the siblings a reform can
 change: a parameter under `gov` whose economy or household flag is set and whose path names
 neither `taxsim`, `gov.abolitions` nor `pycache`, and every node above such a

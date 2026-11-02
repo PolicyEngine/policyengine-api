@@ -34,7 +34,7 @@ pytest_plugins = ("tests.fixtures.v2_metadata_service",)
 
 
 def _write_parameter_tree(session: Session, model_version_id) -> None:
-    """Write a version's tree from its stored rows, as catalog publication does."""
+    """Write a version's tree from its stored rows, without enum labels."""
     nodes = session.exec(
         select(ParameterNode).where(
             ParameterNode.tax_benefit_model_version_id == model_version_id
