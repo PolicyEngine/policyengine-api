@@ -604,3 +604,40 @@ def test_ci_complete_needs_every_pull_request_test_to_have_run_once():
         == push_workflow_jobs()["check-release-test-shards"]["steps"]
     )
     assert "check-test-shards" in job_needs(jobs["ci-complete"])
+
+
+def test_codecov_gets_one_upload_for_every_pull_request_shard():
+    # With an upload from each shard, Codecov updated its checks after each of
+    # the seven uploads #4145's run sent and left codecov/patch in progress.
+    # The shards hand their reports to one job that uploads them together, so
+    # Codecov gets one upload for the test suite, as it did before the split.
+    jobs = pr_workflow_jobs()
+    shard = jobs["test"]
+    coverage_upload = jobs["upload-test-coverage"]
+    report_step = job_step(shard, "Keep this shard's coverage report")
+    download_step = job_step(coverage_upload, "Download every shard's coverage report")
+    codecov_steps = [
+        step
+        for step in coverage_upload["steps"]
+        if step.get("uses", "").startswith("codecov/codecov-action@")
+    ]
+
+    assert not any(
+        step.get("uses", "").startswith("codecov/codecov-action@")
+        for step in shard["steps"]
+    )
+    assert report_step["uses"] == "actions/upload-artifact@v4"
+    assert report_step["with"] == {
+        "name": "test-coverage-shard-${{ matrix.shard_index }}",
+        "path": "coverage.xml",
+        "if-no-files-found": "error",
+        "retention-days": 7,
+    }
+    assert job_needs(coverage_upload) == ["test"]
+    # No condition of its own, like check-test-shards.
+    assert "if" not in coverage_upload
+    assert download_step["uses"] == "actions/download-artifact@v4"
+    assert download_step["with"]["pattern"] == "test-coverage-shard-*"
+    assert len(codecov_steps) == 1
+    assert codecov_steps[0]["with"]["directory"] == download_step["with"]["path"]
+    assert "upload-test-coverage" in job_needs(jobs["ci-complete"])
