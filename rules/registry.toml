@@ -57,6 +57,9 @@ title = "Process and repository hygiene"
 
 [discovery]
 workflows = [".github/workflows/pr.yml"]
+ignore_jobs = [
+  { job = "upload-test-coverage", reason = "sends the test shards' coverage reports to Codecov in one upload; it checks nothing" },
+]
 guard_test_globs = [
   "tests/**/test_*boundar*.py",
   "tests/**/test_import_side_effects.py",

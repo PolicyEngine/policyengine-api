@@ -195,8 +195,11 @@ out-of-date value only makes the shards finish less evenly.
 Every pull request runs the same six shards in `pr.yml`'s `test` job, which
 runs `make test` with the plugin in `PYTEST_ADDOPTS`, as
 `run_release_tests.sh` does, and its `check-test-shards` job runs the same
-check, so a change that breaks the split fails before it merges. "CI complete"
-needs both jobs.
+check, so a change that breaks the split fails before it merges. Each shard
+keeps its `coverage.xml` as an artifact, and the `upload-test-coverage` job
+sends all six to Codecov in one upload: with an upload from each shard, Codecov
+updated its checks after every upload and could leave one in progress. "CI
+complete" needs all three jobs.
 
 The release run skips lint, the quality guards, both Alembic checks and the
 cross-database integration tests when its merge run passed them on the same
