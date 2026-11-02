@@ -6,8 +6,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pandas as pd
 import pytest
-from policyengine.countries.uk.regions import build_uk_region_registry
+from policyengine.countries.uk.regions import (
+    area_regions_routed_to_local_release,
+    build_uk_region_registry,
+    uk_region_registry,
+)
 from policyengine_core.enums import EnumArray
 from policyengine_core.model_api import Enum
 
@@ -17,6 +22,10 @@ from policyengine_api.country import (
     _serialize_axis_result,
     get_requested_computations,
 )
+from policyengine_api.data import uk_regions as public_api_uk_regions
+from policyengine_api.services.economic_impact_request import EconomicImpactRequest
+from policyengine_api.services.economy_service import EconomyService
+from policyengine_api.services.policy_parameter_service import PolicyParameterService
 
 RECORDED_UK_REGION_OPTIONS_PATH = (
     Path(__file__).parents[1] / "data" / "uk_economy_region_options.json"
@@ -85,6 +94,48 @@ class TestHouseholdCalculation:
         )
 
         assert result.household["people"]["you"]["age"]["2025"] == 40
+
+    @pytest.mark.parametrize(
+        ("value_type", "calculated", "expected"),
+        [
+            (Enum, EnumArray(np.array([1]), ExampleEnum), "SECOND"),
+            (str, np.array(["second"]), "second"),
+        ],
+        ids=["enum", "str"],
+    )
+    def test__calculate_returns_enum_names_and_plain_strings_without_axes(
+        self,
+        monkeypatch,
+        value_type,
+        calculated,
+        expected,
+    ):
+        variable = SimpleNamespace(value_type=value_type)
+        simulation = SimpleNamespace(
+            calculate=lambda _variable_name, _period: calculated,
+            get_population=lambda _entity_plural: SimpleNamespace(
+                get_index=lambda _entity_id: 0
+            ),
+        )
+        system = SimpleNamespace(
+            variables={"example_category": variable},
+            get_variable=lambda _variable_name: variable,
+        )
+        country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+        monkeypatch.setattr(
+            country,
+            "_create_simulation",
+            lambda _household, _reform, **_kwargs: (simulation, system),
+        )
+
+        result = country.calculate(
+            {"people": {"you": {"example_category": {"2025": None}}}},
+            None,
+        )
+
+        value = result.household["people"]["you"]["example_category"]["2025"]
+        assert value == expected
+        assert type(value) is str
 
 
 class TestAxisResults:
@@ -213,6 +264,46 @@ class TestAxisResults:
         )
 
 
+UK_DATASET_DATA_YEAR = 2024
+
+
+def uk_model_projected_years(data_year):
+    """Return the years policyengine-uk's own projection gives a dataset.
+
+    Projects a three-household dataset of ``data_year`` with the installed
+    model, as the simulation service's model projects the UK dataset.
+    """
+    from policyengine_uk.data.dataset_schema import UKSingleYearDataset
+    from policyengine_uk.data.economic_assumptions import extend_single_year_dataset
+    from policyengine_uk.system import system
+
+    household_ids = np.arange(1, 4)
+    dataset = UKSingleYearDataset(
+        person=pd.DataFrame(
+            {
+                "person_id": household_ids,
+                "person_benunit_id": household_ids,
+                "person_household_id": household_ids,
+                "age": [45, 30, 70],
+            }
+        ),
+        benunit=pd.DataFrame({"benunit_id": household_ids}),
+        household=pd.DataFrame(
+            {
+                "household_id": household_ids,
+                "household_weight": [2.0, 3.0, 5.0],
+                "region": "LONDON",
+                "tenure_type": "OWNED_OUTRIGHT",
+                "rent": 0.0,
+                "council_tax": 0.0,
+            }
+        ),
+        fiscal_year=data_year,
+    )
+    projected = extend_single_year_dataset(dataset, system.parameters)
+    return sorted(int(year) for year in projected.years)
+
+
 class TestUKCountryMetadata:
     """Tests for UK country metadata, specifically its region options."""
 
@@ -223,6 +314,24 @@ class TestUKCountryMetadata:
     @pytest.fixture
     def uk_regions(self, uk_country):
         return uk_country.metadata["economy_options"]["region"]
+
+    def test__uk_years_run_to_the_models_last_projected_year(self, uk_country):
+        """The UK years end where the installed policyengine-uk projects its data.
+
+        The simulation service refuses a later year (DATASET_YEAR_UNAVAILABLE),
+        and the app offers no year after the last one listed here.
+        """
+        years = [
+            period["name"]
+            for period in uk_country.metadata["economy_options"]["time_period"]
+        ]
+        projected_years = uk_model_projected_years(UK_DATASET_DATA_YEAR)
+
+        assert years == projected_years
+        assert [
+            period["label"]
+            for period in uk_country.metadata["economy_options"]["time_period"]
+        ] == [str(year) for year in projected_years]
 
     def test__uk_metadata_contains_local_authorities(self, uk_regions):
         """Verify that local authorities are included in UK region options."""
@@ -272,7 +381,7 @@ class TestUKCountryMetadata:
         assert offered_areas == registry_areas
 
     def test__area_regions_follow_the_installed_policyengine_area_lists(
-        self, uk_country, monkeypatch, tmp_path
+        self, uk_country, monkeypatch, tmp_path, request
     ):
         """The area options come from the area lists in the installed .py wheel.
 
@@ -294,13 +403,17 @@ class TestUKCountryMetadata:
             encoding="utf-8",
         )
         monkeypatch.setattr(
-            "policyengine_api.constants.distribution",
+            "policyengine_api.data.uk_regions.distribution",
             lambda name: (
                 _InstalledWheelStandIn(tmp_path)
                 if name == "policyengine"
                 else distribution(name)
             ),
         )
+        # uk_areas reads each list once per process: forget what other tests
+        # read, and forget the stand-in's lists once this test ends.
+        public_api_uk_regions.uk_areas.cache_clear()
+        request.addfinalizer(public_api_uk_regions.uk_areas.cache_clear)
 
         area_options = [
             region
@@ -372,6 +485,57 @@ class TestUKCountryMetadata:
             r for r in uk_regions if r.get("type") == "constituency"
         ]
         assert len(constituency_regions) == 650
+
+    def test__economy_requests_accept_every_offered_region(self, uk_regions):
+        """An economy request may use any region the UK metadata offers.
+
+        Each offered name passes the economy service's check against .py's UK
+        region registry, which applies the simulation service's normalisation.
+        """
+        service = EconomyService()
+        refused_regions = []
+        for offered_region in uk_regions:
+            request = EconomicImpactRequest(
+                country_id="uk",
+                policy_id=1,
+                baseline_policy_id=1,
+                region=offered_region["name"],
+                dataset="default",
+                options={},
+                api_version="test",
+            )
+            try:
+                service._validate_uk_region(request)
+            except ValueError:
+                refused_regions.append(offered_region["name"])
+
+        assert len(uk_regions) == 1016
+        assert refused_regions == []
+
+    def test__the_region_check_follows_the_same_release_kind_as_policyengine(self):
+        """Area regions resolve exactly when .py's default registry lists them.
+
+        Both read regional_release_kind from the installed bundle manifest.
+        """
+        registry_lists_areas = all(
+            uk_region_registry.get_by_type(region_type)
+            for region_type in ("constituency", "local_authority")
+        )
+
+        assert public_api_uk_regions.area_regions_resolve() == (
+            area_regions_routed_to_local_release()
+        )
+        assert public_api_uk_regions.area_regions_resolve() == registry_lists_areas
+
+    def test__the_region_check_accepts_the_policyengine_countries(self):
+        """The countries the check accepts are .py's registry countries."""
+        registry = build_uk_region_registry(
+            include_constituencies=False, include_local_authorities=False
+        )
+
+        assert public_api_uk_regions.uk_country_codes() == tuple(
+            country.code for country in registry.get_by_type("country")
+        )
 
     def test__uk_has_all_region_types(self, uk_regions):
         """Verify all expected region types are present."""
@@ -448,3 +612,26 @@ class TestSimulationCompatibility:
         assert simulation.tax_benefit_system == "modern-system"
         assert simulation.reform is None
         assert simulation.situation == {"households": {"household": {}}}
+
+
+def test_loaded_model_parameter_names_are_its_leaf_parameters() -> None:
+    names = COUNTRIES["us"].parameter_names
+
+    assert "gov.dol.minimum_wage" in names
+    assert "gov.irs.credits.ctc.amount.base[0].amount" in names
+    # A node holds parameters but is not one a policy can set.
+    assert "gov.irs.credits.ctc.amount" not in names
+    # Renamed to SURVIVING_SPOUSE in a later policyengine-us release.
+    assert "gov.irs.income.bracket.thresholds.1.WIDOW" not in names
+
+
+def test_policy_parameter_service_checks_against_the_loaded_model() -> None:
+    missing = PolicyParameterService().missing_parameters(
+        "us",
+        {
+            "gov.dol.minimum_wage": {"2026-01-01.2100-12-31": 9},
+            "gov.irs.income.bracket.thresholds.1.WIDOW": {"2026": 0},
+        },
+    )
+
+    assert missing == ["gov.irs.income.bracket.thresholds.1.WIDOW"]

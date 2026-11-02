@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "5.10.2"
+version = "5.16.1"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -47,7 +47,7 @@ dependencies = [
     # versions certified by this PolicyEngine bundle. Cloud Run installs the
     # complete frozen environment from uv.lock; the generic image installs
     # this requirement directly.
-    "policyengine[models]==6.10.0",
+    "policyengine[models]==6.11.1",
     "pydantic",
     "pymysql",
     "python-dotenv",
@@ -74,6 +74,13 @@ dev = [
     "pytest-xdist",
     "ruff>=0.9.0",
     "towncrier>=24.8.0",
+]
+
+[dependency-groups]
+# Only the daily telemetry error issues workflow needs these. It installs this
+# group alone (uv run --frozen --only-group), not the API's dependencies.
+telemetry-error-issues = [
+    "google-cloud-bigquery>=3.30,<4",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -155,10 +162,14 @@ files = [
     "policyengine_api/query_parameters.py",
     "policyengine_api/fastapi_routes/query_parameters.py",
     "policyengine_api/fastapi_routes/dependencies.py",
+    "policyengine_api/fastapi_routes/metadata_protocols.py",
+    "policyengine_api/fastapi_routes/resource_service_protocols.py",
     "policyengine_api/fastapi_routes/v2",
     "policyengine_api/services/v2",
     "policyengine_api/libs/user_auth.py",
     "policyengine_api/libs/auth0_management.py",
+    "policyengine_api/startup_country_check.py",
+    "policyengine_api/supported_countries.py",
 ]
 explicit_package_bases = true
 follow_imports = "silent"
@@ -167,6 +178,11 @@ warn_return_any = true
 warn_unused_ignores = true
 show_error_codes = true
 
+# .github/changelog_fragments.py reads `directory` and the types' `directory`
+# names below, so the PR check, the version bump in .github/bump_version.py and
+# Towncrier share one list (rule api.process.changelog-fragment). Adding or
+# removing a type also needs its entry in BUMP_BY_TYPE in bump_version.py,
+# which refuses to run otherwise.
 [tool.towncrier]
 package = "policyengine_api"
 directory = "changelog.d"
@@ -174,6 +190,9 @@ filename = "CHANGELOG.md"
 title_format = "## [{version}] - {project_date}"
 issue_format = ""
 underlines = ["", "", ""]
+# With an ignore list, Towncrier fails on any other file in changelog.d/, such as
+# a folder or a file with an unknown type, instead of skipping it.
+ignore = [".gitkeep"]
 
 [[tool.towncrier.type]]
 directory = "breaking"
@@ -213,6 +232,8 @@ banned-module-level-imports = [
     "policyengine",
     "policyengine_api.data.v2.database",
     "policyengine_api.libs.auth0_management",
+    "policyengine_api.services.v2.countries.database_session",
+    "policyengine_api.services.v2.countries.services",
     "policyengine_api.services.v2.households.database_session",
     "policyengine_api.services.v2.households.services",
     "policyengine_api.services.v2.legacy_refs.database_session",

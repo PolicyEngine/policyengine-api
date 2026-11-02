@@ -1,7 +1,6 @@
 import pytest
 from sqlalchemy import func, select
 
-from policyengine_api import constants
 from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun
 from policyengine_api.services.report_output_service import ReportOutputService
@@ -10,6 +9,7 @@ from policyengine_api.services.report_run_service import (
     ReportRunService,
 )
 from policyengine_api.services.simulation_service import SimulationService
+from tests.fixtures.services.report_output_fixtures import insert_outdated_report_output
 
 run_service = ReportRunService()
 SPM_CONFIG = {
@@ -385,29 +385,21 @@ def test_resolve_legacy_spm_report_returns_new_empty_cache_record(
         population_id="us",
         population_type="geography",
     )
-    monkeypatch.setitem(constants.RUNTIME_CACHE_SCHEMA_VERSIONS, "report_output", 2)
-    legacy_cache_version = get_report_output_cache_version("us")
-    monkeypatch.setitem(constants.RUNTIME_CACHE_SCHEMA_VERSIONS, "report_output", 3)
-    assert legacy_cache_version != get_report_output_cache_version("us")
-    with orm_session_factory.begin() as session:
-        legacy = ReportOutput(
-            country_id="us",
-            simulation_1_id=baseline.id,
-            simulation_2_id=reform.id,
-            api_version=legacy_cache_version,
-            status="complete",
-            output={
-                "spm_config": SPM_CONFIG,
-                "spm_provenance": {
-                    "baseline": [SPM_RECEIPT],
-                    "reform": [SPM_RECEIPT],
-                },
+    legacy_id = insert_outdated_report_output(
+        orm_session_factory,
+        monkeypatch,
+        country_id="us",
+        simulation_1_id=baseline.id,
+        simulation_2_id=reform.id,
+        year="2025",
+        output={
+            "spm_config": SPM_CONFIG,
+            "spm_provenance": {
+                "baseline": [SPM_RECEIPT],
+                "reform": [SPM_RECEIPT],
             },
-            year="2025",
-        )
-        session.add(legacy)
-        session.flush()
-        legacy_id = legacy.id
+        },
+    )
 
     view = service.resolve_report_output("us", legacy_id)
 
@@ -486,3 +478,139 @@ def test_noop_and_missing_updates(service, orm_session_factory):
     assert service.update_report_output("us", report.id) is None
     with pytest.raises(LookupError, match="Report output #999 not found"):
         service.update_report_output("us", 999, status="pending")
+
+
+def create_outdated_economy_report(
+    orm_session_factory, monkeypatch, country_id="uk", year="2027"
+) -> int:
+    """Save a nationwide economy report under an outdated cache version."""
+    baseline, reform = (
+        create_simulation(
+            orm_session_factory,
+            country_id=country_id,
+            policy_id=policy_id,
+            population_id=country_id,
+            population_type="geography",
+        )
+        for policy_id in (1, 2)
+    )
+    return insert_outdated_report_output(
+        orm_session_factory,
+        monkeypatch,
+        country_id=country_id,
+        simulation_1_id=baseline.id,
+        simulation_2_id=reform.id,
+        year=year,
+        output={"outdated": True},
+    )
+
+
+def test_update_with_outdated_id_completes_the_served_current_report(
+    service,
+    orm_session_factory,
+    monkeypatch,
+):
+    outdated_id = create_outdated_economy_report(orm_session_factory, monkeypatch)
+    served = service.resolve_report_output("uk", outdated_id)
+    current_id = served.report_output.id
+
+    view = service.update_report_output(
+        "uk", outdated_id, status="complete", output={"current": True}
+    )
+
+    assert view.response_id == outdated_id
+    assert view.report_output.id == current_id
+    assert view.report_output.status == "complete"
+    reopened = service.resolve_report_output("uk", outdated_id)
+    assert reopened.report_output.id == current_id
+    assert reopened.report_output.status == "complete"
+    assert reopened.report_output.output == {"current": True}
+    assert reopened.report_output.active_run_id is None
+    assert reopened.report_output.latest_successful_run_id is not None
+    with orm_session_factory() as session:
+        outdated = session.get(ReportOutput, outdated_id)
+        assert outdated.output == {"outdated": True}
+
+
+def test_update_with_outdated_id_creates_the_current_report_when_none_was_served(
+    service,
+    orm_session_factory,
+    monkeypatch,
+):
+    outdated_id = create_outdated_economy_report(orm_session_factory, monkeypatch)
+
+    view = service.update_report_output(
+        "uk", outdated_id, status="complete", output={"current": True}
+    )
+
+    assert view.response_id == outdated_id
+    assert view.report_output.id != outdated_id
+    assert view.report_output.api_version == get_report_output_cache_version("uk")
+    assert service.resolve_report_output("uk", outdated_id).report_output.output == {
+        "current": True
+    }
+
+
+def test_update_with_outdated_id_records_an_error_on_the_served_current_report(
+    service,
+    orm_session_factory,
+    monkeypatch,
+):
+    outdated_id = create_outdated_economy_report(orm_session_factory, monkeypatch)
+    current_id = service.resolve_report_output("uk", outdated_id).report_output.id
+
+    view = service.update_report_output(
+        "uk", outdated_id, status="error", error_message="The run failed"
+    )
+
+    assert view.response_id == outdated_id
+    assert view.report_output.id == current_id
+    reopened = service.resolve_report_output("uk", outdated_id).report_output
+    assert reopened.id == current_id
+    assert reopened.status == "error"
+    assert reopened.error_message == "The run failed"
+    with orm_session_factory() as session:
+        outdated = session.get(ReportOutput, outdated_id)
+        assert outdated.status == "complete"
+        assert outdated.error_message is None
+
+
+def test_update_with_outdated_id_completes_a_us_economy_report_with_valid_provenance(
+    service,
+    orm_session_factory,
+    monkeypatch,
+):
+    outdated_id = create_outdated_economy_report(
+        orm_session_factory, monkeypatch, country_id="us", year="2025"
+    )
+    current_id = service.resolve_report_output("us", outdated_id).report_output.id
+
+    view = service.update_report_output(
+        "us", outdated_id, status="complete", output=compact_economy_output()
+    )
+
+    assert view.response_id == outdated_id
+    assert view.report_output.id == current_id
+    assert view.report_output.output == compact_economy_output()
+    assert view.display_run.output == compact_economy_output()
+
+
+def test_update_with_outdated_id_checks_spm_provenance_on_the_current_report(
+    service,
+    orm_session_factory,
+    monkeypatch,
+):
+    outdated_id = create_outdated_economy_report(
+        orm_session_factory, monkeypatch, country_id="us", year="2025"
+    )
+    current_id = service.resolve_report_output("us", outdated_id).report_output.id
+
+    with pytest.raises(ValueError, match="requires SPM provenance"):
+        service.update_report_output(
+            "us", outdated_id, status="complete", output={"budgetary_impact": 42}
+        )
+
+    with orm_session_factory() as session:
+        current = session.get(ReportOutput, current_id)
+        assert current.status == "pending"
+        assert current.output is None

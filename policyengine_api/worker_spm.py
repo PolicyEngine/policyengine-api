@@ -198,8 +198,32 @@ def _check_annual_receipts(
             raise ValueError(msg)
 
 
+# The typed input errors a worker reports that the Public API passes on to its
+# caller as a 400 with the same code and message. Besides the SPM codes,
+# DATASET_YEAR_UNAVAILABLE is the simulation service's answer for a year its
+# model cannot project the dataset to, such as a UK year after 2032. Any other
+# code keeps the existing handling of the worker's response.
+WORKER_INPUT_ERROR_CODES = frozenset(
+    {
+        "SPM_GEOGRAPHY_REQUIRED",
+        "SPM_GEOGRAPHY_UNAVAILABLE",
+        "SPM_COMPOSITION_REQUIRED",
+        "SPM_YEAR_UNAVAILABLE",
+        "SPM_SETTINGS_INVALID",
+        "SPM_SETTINGS_UNSUPPORTED",
+        "SPM_CONFIGURATION_UNAVAILABLE",
+        "DATASET_YEAR_UNAVAILABLE",
+    }
+)
+
+
 def raise_worker_spm_error(response: httpx.Response) -> None:
-    """Preserve public typed input errors across asynchronous HTTP polling."""
+    """Preserve public typed input errors across asynchronous HTTP polling.
+
+    Raise ``SPMValidationError`` with the worker's code and message for a 400
+    or 422 whose ``errors`` list a code in ``WORKER_INPUT_ERROR_CODES``; return
+    for anything else. Callers store and replay that error as a typed failure.
+    """
     if response.status_code not in (400, 422):
         return
     try:
@@ -209,16 +233,7 @@ def raise_worker_spm_error(response: httpx.Response) -> None:
     for error in errors:
         if (
             isinstance(error, dict)
-            and error.get("code")
-            in {
-                "SPM_GEOGRAPHY_REQUIRED",
-                "SPM_GEOGRAPHY_UNAVAILABLE",
-                "SPM_COMPOSITION_REQUIRED",
-                "SPM_YEAR_UNAVAILABLE",
-                "SPM_SETTINGS_INVALID",
-                "SPM_SETTINGS_UNSUPPORTED",
-                "SPM_CONFIGURATION_UNAVAILABLE",
-            }
+            and error.get("code") in WORKER_INPUT_ERROR_CODES
             and isinstance(error.get("message"), str)
         ):
             raise SPMValidationError(error["code"], error["message"])

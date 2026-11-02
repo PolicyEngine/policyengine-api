@@ -7,7 +7,9 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime
+from functools import cached_property
 from importlib.metadata import version as get_package_version
+from operator import attrgetter
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -29,11 +31,12 @@ from policyengine_core.types import ArrayLike
 from policyengine_api.constants import (
     UK_COUNTRY_REGIONS,
     get_bundle_default_dataset_option,
-    get_py_uk_area_names,
 )
 from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
 )
+from policyengine_api.data.uk_regions import uk_areas
+from policyengine_api.economy_years import uk_economy_years
 from policyengine_api.services.household_calculation_service import CalculationResult
 from policyengine_api.spm import (
     SPM_INPUT_ERROR_CODES,
@@ -149,6 +152,19 @@ class PolicyEngineCountry:
         )
         self.build_metadata()
 
+    @cached_property
+    def parameter_names(self) -> frozenset[str]:
+        """Return the path of every leaf parameter, the parameters a policy can set.
+
+        Nodes (which hold parameters) and the scales and brackets above leaf
+        parameters are left out, as the v2 catalog leaves them out.
+        """
+        return frozenset(
+            parameter.name
+            for parameter in self.tax_benefit_system.parameters.get_descendants()
+            if isinstance(parameter, Parameter)
+        )
+
     def build_metadata(self) -> None:
         """Build the JSON-safe metadata document served by the metadata endpoints."""
         self.metadata = self._json_safe(
@@ -205,24 +221,20 @@ class PolicyEngineCountry:
                 ),
             ]
             # Constituencies, then local authorities, each sorted by name, from
-            # the area lists .py builds its UK region registry from.
+            # the area lists .py builds its UK region registry from. The economy
+            # region check reads the same cached lists.
             region.extend(
                 {
-                    "name": f"{area_type}/{area_name}",
-                    "label": area_name,
+                    "name": f"{area_type}/{area.name}",
+                    "label": area.name,
                     "type": area_type,
                 }
                 for area_type in ("constituency", "local_authority")
-                for area_name in sorted(get_py_uk_area_names(area_type))
+                for area in sorted(uk_areas(area_type), key=attrgetter("name"))
             )
             time_period = [
-                {"name": 2024, "label": "2024"},
-                {"name": 2025, "label": "2025"},
-                {"name": 2026, "label": "2026"},
-                {"name": 2027, "label": "2027"},
-                {"name": 2028, "label": "2028"},
-                {"name": 2029, "label": "2029"},
-                {"name": 2030, "label": "2030"},
+                {"name": year, "label": str(year)}
+                for year in uk_economy_years(self.tax_benefit_system.parameters)
             ]
             datasets = [get_bundle_default_dataset_option("uk")]
             options["region"] = region

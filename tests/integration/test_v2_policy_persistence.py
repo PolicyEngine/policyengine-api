@@ -253,13 +253,11 @@ def test_legacy_policy_mapping_is_many_to_one_and_retry_safe() -> None:
                 session,
                 first,
                 running_policyengine_version=version.version,
-                country_package_versions={"us": "1.0.0"},
             )
             second_result = mirror_legacy_policy_in_session(
                 session,
                 second,
                 running_policyengine_version=version.version,
-                country_package_versions={"us": "1.0.0"},
             )
 
         with Session(engine) as session, session.begin():
@@ -267,7 +265,6 @@ def test_legacy_policy_mapping_is_many_to_one_and_retry_safe() -> None:
                 session,
                 first,
                 running_policyengine_version="5.2.0",
-                country_package_versions={"us": "1.0.0"},
             )
 
         assert first_result.policy_id == second_result.policy_id == retry.policy_id
@@ -310,7 +307,6 @@ def test_changed_hash_for_one_legacy_identity_rolls_back_without_mutation() -> N
                 session,
                 snapshot,
                 running_policyengine_version=version.version,
-                country_package_versions={"us": "1.0.0"},
             )
 
         changed = snapshot.model_copy(
@@ -328,7 +324,6 @@ def test_changed_hash_for_one_legacy_identity_rolls_back_without_mutation() -> N
                 session,
                 changed,
                 running_policyengine_version="5.2.0",
-                country_package_versions={"us": "1.0.0"},
             )
 
         with Session(engine) as session:

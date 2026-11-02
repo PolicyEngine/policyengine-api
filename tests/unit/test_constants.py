@@ -237,7 +237,7 @@ print(
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == self._expected_bundle_versions()
 
-    def test__uk_area_names_load_without_importing_policyengine(self):
+    def test__uk_area_lists_load_without_importing_policyengine(self):
         """.py's packaged area lists are read in file order, without importing .py.
 
         Importing any .py module builds .py's country models, which takes
@@ -246,12 +246,12 @@ print(
         code = (
             BLOCK_POLICYENGINE_IMPORTS
             + """
-from policyengine_api.constants import get_py_uk_area_names  # noqa: E402
+from policyengine_api.data.uk_regions import uk_areas  # noqa: E402
 
 print(
     json.dumps(
         {
-            area_type: get_py_uk_area_names(area_type)
+            area_type: [area.name for area in uk_areas(area_type)]
             for area_type in ("constituency", "local_authority")
         }
     )

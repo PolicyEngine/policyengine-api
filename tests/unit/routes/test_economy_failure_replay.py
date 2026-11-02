@@ -11,13 +11,13 @@ from policyengine_api.routes import economy_routes
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
-from policyengine_api.services import economy_service as economy_module
 from policyengine_api.services.economic_impact_request import EconomicImpactRequest
 from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactExecution,
     ReformImpactsService,
 )
+from tests.fixtures.services.economy_service import ECONOMY_SERVICE_LOGGER_MODULES
 
 SELECTION = {
     "forecast_content_sha256": "a" * 64,
@@ -82,7 +82,8 @@ def failed_job_harness(request, monkeypatch):
     )
     monkeypatch.setattr(economy_routes, "economy_service", service)
     logger = Mock()
-    monkeypatch.setattr(economy_module, "logger", logger)
+    for module_name in ECONOMY_SERVICE_LOGGER_MODULES:
+        monkeypatch.setattr(f"{module_name}.logger", logger)
     app = Flask(__name__)
     app.config["TESTING"] = True
     app.register_blueprint(economy_routes.economy_bp)

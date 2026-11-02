@@ -1,3 +1,163 @@
+## [5.16.1] - 2026-10-30
+
+### Changed
+
+- Unit tests check that a household calculation without axes returns an enum variable as its member name and a string variable as a plain string.
+
+### Fixed
+
+- Creating a new policy now returns a 400 that names every period key and value in `data` that simulations cannot read: a period key must be a date (`YYYY-MM-DD`) or a date range (`YYYY-MM-DD.YYYY-MM-DD`), and a value a finite number, a boolean, null, a list, or the string `"Infinity"` or `"-Infinity"`. The same 400 also lists any paths that are not parameters; re-saving a policy identical to a stored one still returns it.
+
+
+## [5.16.0] - 2026-10-30
+
+### Added
+
+- Added `GET /v2/countries`, which lists every row of the countries table: each served country's ID and whether it supports household and society-wide calculations.
+- The Public API refuses to start when the v2 `countries` table and its country list in code name different countries, or when the table or the privilege to read it is missing. The check runs on Cloud Run and wherever a v2 runtime database is configured; when it cannot query the table, it logs why and startup continues.
+- Added a v2 `countries` table that records, for each country the Public API serves, whether it supports household and society-wide calculations. Its revision lists the US and the UK, both with both. Users' primary country and the country of every v2 household, policy and user association now reference this table instead of a fixed US-and-UK check.
+
+### Fixed
+
+- The Artifact Registry image cleanup that runs after a production deploy now fails, and logs the gcloud error for each image it could not delete, instead of reporting success when it lists or deletes nothing.
+- Release test shards no longer split, or replace the report of, a pytest run that a test starts in its own process; that made the first release run with the split test suite fail.
+
+
+## [5.15.2] - 2026-10-30
+
+### Changed
+
+- The UK metadata now offers Northern Ireland as `country/northern_ireland`, the code .py's UK region registry uses, instead of `country/ni`. Because the UK economy region check accepts the countries the metadata offers, `country/ni` now gets the same HTTP 400 as any other unknown UK region, and the Public API no longer rewrites it to `country/northern_ireland` before submitting a simulation. Requests for `country/northern_ireland`, including local-area breakdowns, are sent and cached under that code.
+- The release run upgrades the v1 Cloud SQL schema and seeds the v2 database side by side, in staging and in production, instead of one after the other; each Cloud Run candidate deploy still waits for both.
+- The release run splits its test suite across six runners and checks that each test ran exactly once, and skips lint, the quality guards, both Alembic checks and the cross-database integration tests when the release commit changes only release files and its merge run passed them; the staging deploy starts about 10 minutes sooner.
+
+### Fixed
+
+- UK economy requests now answer 400 for a region the simulation service can't resolve, such as `constituency`, `parliamentary_constituency` or `constituency/all`, with a message that names the region and the accepted forms. The annual and budget-window routes, including local-area breakdowns, check the region before they store anything or submit a simulation. Before, such a request was submitted, failed in the simulation service, and its stored result stayed `computing`. The check uses the regions the UK metadata offers, read once per process, with the simulation service's normalisation, so area names, lower-case GSS codes and bare country names keep working. Constituencies and local authorities are accepted only when the installed bundle's `regional_release_kind` is `local_area`, as in .py's UK region registry, and tests keep the constituency and local-authority lists equal to the ones packaged with .py. `country/ni` is still accepted and sent as `country/northern_ireland`. US requests are unchanged.
+- Creating a new policy now returns a 400 that lists every key in `data` that is not a parameter in the country model, such as an unknown path or a parameter group; re-saving a policy identical to a stored one still returns it. Household calculations now refuse parameter groups with their existing 400 instead of failing with a 500.
+
+
+## [5.15.1] - 2026-10-29
+
+### Changed
+
+- Unit tests check every canonical SPM case through the household routes with stand-in simulations, and two integration tests check the installed US model, so the pull request and release test suites no longer run the model for each combination of settings.
+
+
+## [5.15.0] - 2026-10-29
+
+### Added
+
+- The v2 policy routes (`GET /v2/policies/{policy_id}`, `GET /v2/policies` and `POST /v2/policies`) now return `missing_parameters` with each policy: the parameter paths it sets that the catalog of the running PolicyEngine.py version no longer has, or null when that catalog is not published. `GET /{country}/policy/{policy_id}` returns the same field, checked against the country model the Public API runs; it reads nothing from Supabase.
+
+### Changed
+
+- The live staging tests in a release run each get their own pytest worker, so the step takes about as long as the longest test instead of the tests on the busier of two workers.
+- The release run's test suite runs in its own job, beside the checks and the staging database jobs, so the staging Cloud Run deploy starts about 17 minutes sooner; the deploy still waits for the tests to pass.
+
+### Fixed
+
+- A household calculation whose axes policyengine-core cannot expand, such as an axis with no `max` or with a null or non-numeric `min`, `max` or `count`, now returns 400 instead of a 500. This covers `/calculate`, `/calculate-full` and a stored household calculated under a stored policy. Each problem is listed in `errors` with the type `household_axis`, and the message names the axis and the field.
+- Dual-write now copies a v1 policy to v2 whatever country package version it was saved under, as long as every parameter it sets exists in the running catalog. Before, every policy saved under an older release was refused, which included each `POST /{country}/policy` that matched an existing policy. A v1 policy that already has a v2 copy now returns that copy without being translated again, so writing it again after a PolicyEngine.py or country package upgrade no longer fails. Each failed policy or saved-policy copy now logs a fixed `failure_reason` next to its `failure_category`, such as `missing_parameters`.
+
+
+## [5.14.3] - 2026-10-29
+
+### Fixed
+
+- An economy request, annual or budget window, that names a policy its country does not have, such as US policy 98557 on a UK route, now returns 404 with a message such as "Policy #98557 not found." instead of a 500. When both policies are missing, the message names both. The service loads both policies before it claims the submission or submits a simulation job, so the request leaves nothing in the shared cache.
+
+
+## [5.14.2] - 2026-10-29
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.11.1.
+
+### Fixed
+
+- The changelog fragment check on pull requests accepts only fragments the release reads: the pull request must add a non-empty file directly in `changelog.d/`, named `<name>.<type>.md` with one of the types in `[tool.towncrier]`. Fragments other pull requests left on master no longer count, and the version bump and Towncrier stop at any file in `changelog.d/` they can't read instead of leaving it out.
+
+
+## [5.14.1] - 2026-10-29
+
+### Fixed
+
+- The daily telemetry error report counts a failed simulation worker or coordinator in its original exception's group. The simulation service also records each such failure as a redacted copy of class `Stage12FailureCause`, which carries the original's traceback and often its timestamp, and the report could choose either record, splitting one cause across two groups and two issues. The copy now ranks after the original exception, and is used only when the failure has no other exception.
+
+
+## [5.14.0] - 2026-10-28
+
+### Added
+
+- `GET /deployment` reports the policyengine.py version the API serves and when it went live; the candidate deploy keeps that date across redeploys of the same version.
+
+### Fixed
+
+- A society-wide (economy) calculation for a year the simulation service's model cannot project its dataset to, such as a UK year after 2032, now returns 400 with the code `DATASET_YEAR_UNAVAILABLE` and a readable message such as "UK results are available for 2024 to 2032", instead of a 502. The failure is stored and replayed as a typed error, like the SPM input errors. The UK years in the country metadata now run to the last year the installed policyengine-uk projects its dataset to (2032), instead of stopping at 2030.
+
+
+## [5.13.3] - 2026-10-27
+
+### Changed
+
+- The daily telemetry error report now identifies each stack frame in an exception's fingerprint by its function name, without leading underscores, instead of its module path and function name (fingerprint algorithm 2), so moving a function to another module no longer opens a duplicate issue. Every error group gets a new fingerprint: issues opened under algorithm 1 are no longer updated or reopened, and a group that still fails opens a new issue.
+
+
+## [5.13.2] - 2026-10-27
+
+### Fixed
+
+- Cloud SQL connections now set MySQL's `CLIENT_FOUND_ROWS` flag, so an UPDATE reports the rows it matched rather than the rows whose values changed. Without it, SQLAlchemy raised `StaleDataError` when the ORM wrote values a row already held, which failed report saves (`PATCH /<country_id>/report`) with a 500.
+
+
+## [5.13.1] - 2026-10-27
+
+### Changed
+
+- Enforced the file-length rule now that no Python file is over its limit, deleted its empty baseline, and registered it in the metric tier, the tier for a number crossing a threshold.
+
+### Fixed
+
+- The daily telemetry error issues compute the error rate only from failures on route templates, leaving out placeholder routes such as `<unmatched>`, and show n/a with the counts instead of a rate above 100% when more requests failed than were logged as completed.
+- The daily telemetry error report gives the same error groups, counts and issues for the same log records whatever order BigQuery returns them in: records that tie on preference or time are now ordered by their own values.
+
+
+## [5.13.0] - 2026-10-27
+
+### Added
+
+- A daily workflow reports the previous day's production error groups from the central telemetry logs as GitHub issues, with production and staging counts and no error messages or stack text.
+
+### Changed
+
+- Split the Cloud Run deployment script tests into files under the file-length limit, without changing any test.
+- Split the FastAPI route dependencies and the v2 catalog extractor into modules under the file-length limit, without changing behaviour, import paths or the OpenAPI documents.
+- Split the economy service and its tests into modules under the file-length limit, without changing behaviour or import paths.
+
+### Fixed
+
+- Split the report output service into modules under the file-length limit, without changing behaviour or import paths, so the file-length check passes on master again.
+
+
+## [5.12.0] - 2026-10-27
+
+### Added
+
+- Registered a rule, checked by a new quality guard, that a Python file has at most 800 lines, or 1,500 for test code; Alembic revisions are not measured, and the five files over their limit today are listed in a baseline that may only shrink.
+
+### Fixed
+
+- `PATCH /{country_id}/report` with a report ID stored under an outdated cache version now updates the current report that `GET /{country_id}/report/{id}` serves for that ID, so a recomputed report no longer stays pending.
+
+
+## [5.11.0] - 2026-10-27
+
+### Added
+
+- Registered rules, checked by a new quality guard, that every project has a committed `uv.lock` checked in pull request CI, that every install and test command uses `uv.lock` unless it is a registered exception, and that a scheduled workflow relocks `uv.lock`.
+
+
 ## [5.10.2] - 2026-10-27
 
 ### Changed

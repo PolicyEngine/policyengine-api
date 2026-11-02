@@ -51,8 +51,18 @@ def test_require_git_ref_fails_with_an_annotation_on_another_ref() -> None:
     assert result.stdout == "::error::Cloud Run secret sync must run from master.\n"
 
 
-def _fake_gcloud(tmp_path: Path, rows: list[str], *, delete_exit: int = 0) -> Path:
-    """Return a bin dir whose fake gcloud lists ``rows`` and logs every other call."""
+def _fake_gcloud(
+    tmp_path: Path,
+    rows: list[str],
+    *,
+    failing_refs: tuple[str, ...] = (),
+    list_exit: int = 0,
+) -> Path:
+    """Return a bin dir whose fake gcloud lists ``rows`` and logs every other call.
+
+    Deleting a ref in ``failing_refs`` prints an error and exits 1, and the
+    listing exits with ``list_exit``.
+    """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     listing = tmp_path / "listing.txt"
@@ -63,10 +73,16 @@ def _fake_gcloud(tmp_path: Path, rows: list[str], *, delete_exit: int = 0) -> Pa
         "#!/usr/bin/env bash\n"
         'if [[ "$1 $2 $3 $4" == "artifacts docker images list" ]]; then\n'
         f'  cat "{listing}"\n'
-        "  exit 0\n"
+        f"  exit {list_exit}\n"
         "fi\n"
         f'echo "$*" >> "{calls}"\n'
-        f"exit {delete_exit}\n"
+        f"for failing_ref in {' '.join(failing_refs)}; do\n"
+        '  if [[ "$5" == "${failing_ref}" ]]; then\n'
+        '    echo "ERROR: PERMISSION_DENIED on $5" >&2\n'
+        "    exit 1\n"
+        "  fi\n"
+        "done\n"
+        'echo "Delete request issued for $5" >&2\n'
     )
     gcloud.chmod(0o755)
     return bin_dir
@@ -80,9 +96,16 @@ IMAGES = [
 
 
 def _cleanup(
-    tmp_path: Path, rows: list[str], **env: str
+    tmp_path: Path,
+    rows: list[str],
+    *,
+    failing_refs: tuple[str, ...] = (),
+    list_exit: int = 0,
+    **env: str,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
-    bin_dir = _fake_gcloud(tmp_path, rows, delete_exit=int(env.pop("DELETE_EXIT", "0")))
+    bin_dir = _fake_gcloud(
+        tmp_path, rows, failing_refs=failing_refs, list_exit=list_exit
+    )
     result = _run(
         CLEANUP_IMAGES,
         {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", **env},
@@ -120,9 +143,25 @@ def test_cleanup_keeps_everything_within_the_limit(tmp_path: Path) -> None:
     assert "Deleting:  0" in result.stdout
 
 
-def test_cleanup_counts_only_successful_deletions(tmp_path: Path) -> None:
-    result, calls = _cleanup(tmp_path, IMAGES, KEEP="1", DELETE_EXIT="1")
+def test_cleanup_reports_each_failed_deletion_and_fails(tmp_path: Path) -> None:
+    result, calls = _cleanup(
+        tmp_path, IMAGES, failing_refs=("repo/api@sha256:oldest",), KEEP="1"
+    )
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 1
     assert len(calls) == 2
-    assert "Deleted 0/2 image(s)." in result.stdout
+    assert "Failed to delete repo/api@sha256:oldest:\n" in result.stdout
+    assert "  ERROR: PERMISSION_DENIED on repo/api@sha256:oldest\n" in result.stdout
+    assert "Failed to delete repo/api@sha256:middle" not in result.stdout
+    assert "Delete request issued" not in result.stdout
+    assert "Deleted 1/2 image(s)." in result.stdout
+    assert "::error::Failed to delete 1/2 image(s)" in result.stdout
+
+
+def test_cleanup_fails_when_the_listing_fails(tmp_path: Path) -> None:
+    result, calls = _cleanup(tmp_path, IMAGES, list_exit=1, KEEP="1")
+
+    assert result.returncode == 1
+    assert calls == []
+    assert "::error::Could not list images in " in result.stdout
+    assert "Images:" not in result.stdout

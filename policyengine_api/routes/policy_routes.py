@@ -21,10 +21,21 @@ from policyengine_api.migration_flags import (
 from policyengine_api.request_context import current_request_id
 from policyengine_api.response_factory import _make_error_response
 from policyengine_api.services.policy_mirroring import (
+    MISSING_MIRROR_REVISION_FAILURE,
+    MISSING_MIRROR_SNAPSHOT_FAILURE,
+    UNEXPECTED_FAILURE,
+    PolicyCopyFailure,
     PolicyMirrorUnavailableError,
     mirror_policy_after_commit,
 )
-from policyengine_api.services.policy_service import PolicyService
+from policyengine_api.services.policy_parameter_service import (
+    PolicyParameterService,
+    loaded_model_parameter_names,
+)
+from policyengine_api.services.policy_service import (
+    InvalidPolicyDataError,
+    PolicyService,
+)
 from policyengine_api.services.user_policy_mirroring import (
     UserPolicyMirrorCollaborators,
     UserPolicyMirrorUnavailableError,
@@ -43,7 +54,8 @@ from policyengine_api.utils.payload_validators import (
 )
 
 policy_bp = Blueprint("policy", __name__)
-policy_service = PolicyService()
+policy_service = PolicyService(model_parameter_names=loaded_model_parameter_names)
+policy_parameter_service = PolicyParameterService()
 user_policy_service = UserPolicyService()
 
 # v1 policy and saved-policy IDs are MySQL signed INT values.
@@ -68,7 +80,7 @@ def _log_uncopied_v1_write(
     legacy_id_field: str,
     legacy_id: int,
     country_id: str,
-    failure_category: str,
+    failure: PolicyCopyFailure,
 ) -> None:
     """Record a committed v1 write that has no v2 copy, without failing the request.
 
@@ -89,7 +101,8 @@ def _log_uncopied_v1_write(
                 legacy_id_field: _safe_legacy_integer_id(legacy_id),
                 "request_id": current_request_id(),
                 "outcome": "error",
-                "failure_category": failure_category,
+                "failure_category": failure.category.value,
+                "failure_reason": failure.reason.value,
             },
             severity="ERROR",
         )
@@ -111,7 +124,7 @@ def _copy_policy_to_v2(
             legacy_id_field="legacy_policy_id",
             legacy_id=policy_id,
             country_id=country_id,
-            failure_category="missing_mirror_snapshot",
+            failure=MISSING_MIRROR_SNAPSHOT_FAILURE,
         )
         return
     # mirror_policy_after_commit has already logged the failure and its category.
@@ -135,7 +148,7 @@ def _copy_saved_policy_events_to_v2(
             legacy_id_field="legacy_user_policy_id",
             legacy_id=legacy_user_policy_id,
             country_id=country_id,
-            failure_category="missing_mirror_revision",
+            failure=MISSING_MIRROR_REVISION_FAILURE,
         )
         return
     try:
@@ -157,7 +170,7 @@ def _copy_saved_policy_events_to_v2(
             legacy_id_field="legacy_user_policy_id",
             legacy_id=legacy_user_policy_id,
             country_id=country_id,
-            failure_category="unexpected",
+            failure=UNEXPECTED_FAILURE,
         )
 
 
@@ -249,8 +262,11 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
         policy_id (int | str): ID of the stored policy; cast to int.
 
     Returns:
-        Response: The policy as JSON under ``result``. An unknown ID gives 404,
-        and an invalid policy read-source setting gives 503.
+        Response: The policy as JSON under ``result``, with
+        ``missing_parameters``: the parameter paths it sets that the country
+        model the Public API runs no longer has (sorted, empty when it has
+        them all), or null when they cannot be checked. An unknown ID gives
+        404, and an invalid policy read-source setting gives 503.
 
     """
     try:
@@ -262,11 +278,15 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
     policy_id = int(policy_id)
 
     policy = policy_service.get_policy(country_id, policy_id)
-    result = None if policy is None else _serialize_policy(policy)
-
-    if result is None:
+    if policy is None:
         msg = f"Policy #{policy_id} not found."
         raise NotFound(msg)
+    result = {
+        **_serialize_policy(policy),
+        "missing_parameters": policy_parameter_service.missing_parameters(
+            country_id, policy.policy_json
+        ),
+    }
 
     return Response(
         json.dumps({"status": "ok", "message": None, "result": result}),
@@ -281,8 +301,11 @@ def set_policy(country_id: str) -> Response:
 
     A policy is identical when its country, content hash and label all match;
     that case returns 200, a new policy returns 201. An invalid payload gives
-    400, and an unavailable write configuration gives 503. Under dual-write, a
-    failed v2 copy is logged and does not change the response.
+    400, as does a new policy whose ``data`` names paths that are not parameters
+    in the country model, or holds period keys or values that simulations cannot
+    read; that 400 lists every such path, period key and value. An unavailable
+    write configuration gives 503. Under dual-write, a failed v2 copy is logged
+    and does not change the response.
 
     Args:
         country_id (str): Country to store the policy under.
@@ -304,12 +327,20 @@ def set_policy(country_id: str) -> Response:
     policy_json = payload.pop("data", None)
     mirror_to_v2 = _should_mirror_to_v2(country_id, write_source)
 
-    creation = policy_service.set_policy(
-        country_id,
-        label,
-        policy_json,
-        prepare_for_mirroring=mirror_to_v2,
-    )
+    try:
+        creation = policy_service.set_policy(
+            country_id,
+            label,
+            policy_json,
+            prepare_for_mirroring=mirror_to_v2,
+        )
+    except InvalidPolicyDataError as error:
+        return _make_error_response(
+            error,
+            400,
+            result=None,
+            errors=error.error_entries,
+        )
     policy_id, message, is_existing_policy = creation
 
     if mirror_to_v2:

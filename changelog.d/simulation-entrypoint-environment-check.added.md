@@ -1,0 +1,1 @@
+Each release now checks, in its staging and production model-version alignment jobs, that the environment's simulation URL is served by that environment's own Simulation Entrypoint service, and fails otherwise; staging must call the staging simulation service, and production the production one.

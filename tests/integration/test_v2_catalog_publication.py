@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -31,6 +32,18 @@ from policyengine_api.data.v2.models import (
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from tests.fixtures.v2_catalog import normalized_catalog
+from tests.fixtures.v2_catalog_value_shapes import (
+    PARAMETER_CASES,
+    REGION_FILTER_VALUES,
+    value_shape_catalog,
+)
+from tests.integration.catalog_rows import (
+    CATALOG_COLUMNS,
+    assert_catalog_stored_unchanged,
+    stored_catalog_rows,
+    stored_parameter_values,
+    strict_json,
+)
 
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
@@ -340,3 +353,34 @@ def test_new_version_is_additive_and_concurrent_retries_serialize(
         "reports": 0,
         "report_runs": 0,
     }
+
+
+def test_publication_stores_every_value_shape_unchanged(
+    publication_engine: Engine,
+) -> None:
+    catalog = value_shape_catalog()
+
+    publish_catalog(publication_engine, catalog)
+    # Publishing the same version again compares every stored row with the
+    # catalog in both directions and fails on any difference, so this also
+    # checks that the comparison reads each shape back as it was written.
+    publish_catalog(publication_engine, catalog)
+
+    assert_catalog_stored_unchanged(publication_engine, catalog)
+    stored_values = stored_parameter_values(publication_engine)
+    us_model = catalog.country("us").model.name
+    for case in PARAMETER_CASES:
+        assert [
+            value_json
+            for (model_name, parameter_name, _start), (value_json, _end) in sorted(
+                stored_values.items()
+            )
+            if (model_name, parameter_name) == (us_model, case.name)
+        ] == [strict_json(value.stored_value) for value in case.values], case.name
+
+    stored_regions = stored_catalog_rows(publication_engine, "regions")
+    filter_value_index = CATALOG_COLUMNS["regions"].index("filter_value") - 1
+    for (country_id, code), filter_value in REGION_FILTER_VALUES.items():
+        model_name = catalog.country(country_id).model.name
+        stored_columns = json.loads(stored_regions[(model_name, code)])
+        assert stored_columns[filter_value_index] == filter_value, code

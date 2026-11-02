@@ -47,12 +47,19 @@ When adding, changing, or removing a rule, a guard test, a checker
 configuration, or a CI job that enforces one, read
 `docs/engineering/skills/rules-registry.md`.
 
+When adding code to a Python file that is near 800 lines (1,500 for test
+code), or splitting a module into smaller ones, read
+`docs/engineering/skills/file-length.md`.
+
 ## GitHub PRs
 
 Read `docs/engineering/skills/github-prs.md` before opening, replacing, or
 sharing any pull request. Every PR needs a tracking issue and
-`Fixes #ISSUE_NUMBER` as the first line of its description. Agents must never
-bypass branch rules (for example with `gh pr merge --admin`).
+`Fixes #ISSUE_NUMBER` as the first line of its description. Every PR also adds
+a changelog fragment of its own: a non-empty file directly in `changelog.d/`,
+named `changelog.d/<name>.<type>.md`, where `<type>` is `breaking`, `added`,
+`changed`, `fixed` or `removed` (see "Changelog fragments" in that skill).
+Agents must never bypass branch rules (for example with `gh pr merge --admin`).
 
 Before creating or sharing a migration PR, run the focused migration guards:
 
@@ -109,7 +116,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Code quality and types
 
-- Checked: `api.quality.alembic-revisions-unused-imports`, `api.quality.ci-cd-scripts-ruff-exemptions`, `api.quality.command-line-modules-ruff-exemptions`, `api.quality.command-line-scripts-ruff-exemptions`, `api.quality.environment-variables-load`, `api.quality.mypy-v2`, `api.quality.ruff-format`, `api.quality.ruff-lint`, `api.quality.runtime-evaluated-models-resolve`, `api.quality.tests-pass`, `api.quality.tests-ruff-exemptions`, `api.quality.unittest-ruff-exemptions`
+- Checked: `api.quality.alembic-revisions-unused-imports`, `api.quality.ci-cd-scripts-ruff-exemptions`, `api.quality.command-line-modules-ruff-exemptions`, `api.quality.command-line-scripts-ruff-exemptions`, `api.quality.environment-variables-load`, `api.quality.file-length`, `api.quality.mypy-v2`, `api.quality.ruff-format`, `api.quality.ruff-lint`, `api.quality.runtime-evaluated-models-resolve`, `api.quality.tests-pass`, `api.quality.tests-ruff-exemptions`, `api.quality.unittest-ruff-exemptions`
 
 ### Observability
 

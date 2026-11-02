@@ -75,17 +75,17 @@ def test_cloud_run_is_the_complete_release_sequence() -> None:
     production_seed = _job_block(workflow, "seed-v2-production-database")
     production_deploy = _job_block(workflow, "deploy-cloud-run-candidate")
     docker_publish = _job_block(workflow, "docker")
+    release_tests = _job_block(workflow, "release-tests")
 
-    assert "  release-tests:" not in workflow
-    assert "migrate-v1-staging-cloud-sql" in staging_seed
+    # The v1 schema upgrade and the v2 seeding run side by side, and each
+    # candidate deploy needs both (tests/unit/v2/test_metadata_deployment.py).
+    assert "- migrate-v1-staging-cloud-sql" not in staging_seed
+    assert "- migrate-v1-staging-cloud-sql" in staging_deploy
     assert "- seed-v2-staging-database" in staging_deploy
-    assert "bash .github/scripts/run_release_tests.sh" in staging_deploy
-    assert staging_deploy.index(
-        "bash .github/scripts/run_release_tests.sh"
-    ) < staging_deploy.index('uses: "google-github-actions/auth@v2"')
-    assert staging_deploy.index(
-        "bash .github/scripts/run_release_tests.sh"
-    ) < staging_deploy.index("Build and push Cloud Run image")
+    # The release tests run in their own job, and the staging deploy needs it.
+    assert "- release-tests" in staging_deploy
+    assert "bash .github/scripts/run_release_tests.sh" in release_tests
+    assert "bash .github/scripts/run_release_tests.sh" not in staging_deploy
     assert staging_deploy.index("Wait for Cloud Run staging health") < (
         staging_deploy.index("Run staging integration tests")
     )
@@ -96,8 +96,9 @@ def test_cloud_run_is_the_complete_release_sequence() -> None:
     assert "exercise-phase10-staging" not in workflow
     assert "exercise-phase11-staging" not in workflow
     assert "needs: promote-cloud-run-staging" in production_check
-    assert "migrate-v1-production-cloud-sql" in production_seed
-    assert "needs: seed-v2-production-database" in production_deploy
+    assert "- migrate-v1-production-cloud-sql" not in production_seed
+    assert "- migrate-v1-production-cloud-sql" in production_deploy
+    assert "- seed-v2-production-database" in production_deploy
     assert "needs: deploy-cloud-run-candidate" in docker_publish
 
 

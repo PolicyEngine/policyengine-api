@@ -131,6 +131,173 @@ Compare the deployed interval with the recorded pre-fix baseline: 46 collector
 metric export errors comprising 863 rejected points. Trace export had no
 corresponding rejected points in that interval.
 
+## Daily telemetry error issues
+
+The `Telemetry error issues` workflow
+(`.github/workflows/telemetry-error-issues.yml`) runs at 00:45 US Eastern each
+day. It reports the previous Eastern calendar day, from midnight to midnight,
+which lasts 23 or 25 hours on the days the clocks change. It runs
+`.github/scripts/sync_telemetry_error_issues.py`, a short entry point that calls
+the `telemetry_error_issues` package beside it in `.github/scripts/`. The package's
+`cli` module reads the arguments and settings and runs each step; `bigquery`
+runs the queries, `records` and `groups` choose, fingerprint and measure the
+failures, `rendering` writes the issue text, and `sync` updates the issues
+through `github_client`. Each run:
+
+1. Queries the central bucket through its linked BigQuery dataset
+   `observability_logs`. It reads the `_AllLogs` view for ERROR records with
+   the `policyengine.api-v1` service namespace in the report day and the seven
+   days before it, excluding the health-check routes. It also counts
+   `request.completed` records per route in the report day, for error rates.
+   Each query is limited to 5 GiB billed.
+2. Chooses one record per failed request and service: the exception record,
+   else the error message, else the failed `request.completed` record. An
+   exception of class `Stage12FailureCause` ranks after any other exception
+   and before messages: the simulation service records it as a redacted copy
+   of a worker's or coordinator's original exception, carrying the original's
+   traceback and often its timestamp, so the original's class decides the
+   group, and a failure with only the copy still uses it.
+   Records that tie, such as two exceptions logged at the same moment, are
+   ordered by their own values, so the same records give the same report
+   whatever order the query returns them in.
+3. Groups failures by a 16-character HMAC-SHA256 fingerprint of the
+   fingerprint algorithm number, the service family and either the exception
+   type and innermost application stack frames, the route and message
+   template, or the route and HTTP status. The frames are the three innermost
+   whose file paths are in application packages (or, when there are none,
+   the three innermost of any kind), and each is identified by its function
+   name alone, without leading underscores and without its module path or
+   line number. Moving a function to another module, or renaming a private
+   helper `_name` to `name`, keeps the fingerprint; any other rename changes
+   it. Frames come from the first traceback of the stack, which for a
+   chained exception is its first cause. The logging library keeps only the
+   first 16,384 characters of a stack, so a long cause can drop the final
+   traceback, but the first one is always kept.
+4. Creates or updates one issue per group in this repository, labelled
+   `telemetry-error` and `service: <service family>`. A group opens an issue
+   only after 3 production failures in at least 2 requests in one day, and at
+   most 5 issues open per run. Staging counts appear in each issue but never
+   open one. An issue closed as completed reopens, with the `regression`
+   label, when production failures that start 24 hours after it closed meet
+   the same thresholds.
+
+An issue's "Error rate on affected routes" compares the group's failed
+requests with the `request.completed` records counted on the same route
+templates. Failures with no route, or with a placeholder route such as
+`<unmatched>` (which a service logs for a request that matched none of its
+routes), count in neither. When some requests were logged as completed but
+more failed, the rate shows n/a with both counts instead of a percentage;
+when none were logged as completed, it shows n/a.
+
+This repository is public, so issues, workflow logs and job summaries hold
+only fingerprints, counts, service names, exception class names, route
+templates and a Logs Explorer link. Error messages, stack text and
+identifiers stay in BigQuery: the queries return stacks only as file and
+function names, messages only as their first three words, and identifiers
+only as hashes. A failed run prints only the failed stage, the exception class
+and the HTTP status.
+
+### Running it by hand
+
+Dispatch the workflow from `master`. `dry_run` defaults to `true`: the job
+queries and groups errors and writes the actions it would take to the job
+summary, without changing any issue. `report_date` (`YYYY-MM-DD`) reports a
+different Eastern day, such as one a scheduled run missed.
+
+To run it locally with your own credentials, use a throwaway fingerprint key.
+Its fingerprints won't match existing issues.
+
+```bash
+GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token)" \
+GITHUB_TOKEN="$(gh auth token)" \
+GITHUB_REPOSITORY=PolicyEngine/policyengine-api \
+TELEMETRY_ERROR_FINGERPRINT_KEY="$(openssl rand -hex 32)" \
+OBSERVABILITY_LOG_BUCKET=policyengine-observability \
+OBSERVABILITY_LOG_BUCKET_LOCATION=global \
+OBSERVABILITY_LOG_DATASET=observability_logs \
+OBSERVABILITY_LOG_VIEW=_AllLogs \
+OBSERVABILITY_SERVICE_NAMESPACE=policyengine.api-v1 \
+uv run --frozen --only-group telemetry-error-issues \
+  python .github/scripts/sync_telemetry_error_issues.py \
+  --project-id policyengine-observability --dry-run
+```
+
+The workflow runs the script the same way, through
+`.github/scripts/sync_telemetry_error_issues.sh`: in an environment holding
+only the `telemetry-error-issues` dependency group from `pyproject.toml`,
+which is `google-cloud-bigquery` at the version `uv.lock` pins. The queries
+read rows by iterating each job's result over the BigQuery REST API, never
+through the Storage Read API, which the service account has no role for.
+
+### Required infrastructure
+
+| Resource | Purpose |
+| --- | --- |
+| Linked BigQuery dataset `observability_logs` on the `policyengine-observability` bucket | SQL access to the bucket's log views |
+| Service account `telemetry-error-issues@policyengine-observability.iam.gserviceaccount.com` | The identity the workflow queries BigQuery as |
+| `roles/bigquery.jobUser` on the project, and `roles/bigquery.dataViewer` on the linked dataset | Run query jobs and read the log views |
+| `roles/iam.workloadIdentityUser` on the service account for `principal://iam.googleapis.com/projects/389282473430/locations/global/workloadIdentityPools/github/subject/repo:PolicyEngine/policyengine-api:environment:telemetry-error-issues` | Lets only jobs in the `telemetry-error-issues` GitHub environment act as the service account |
+| GitHub environment `telemetry-error-issues`, with deployments limited to `master` | Keeps other branches from acting as the service account |
+| Environment variable `TELEMETRY_ERROR_ISSUES_SERVICE_ACCOUNT` | The service account's email address |
+| Environment secret `TELEMETRY_ERROR_FINGERPRINT_KEY` | The 32-byte hexadecimal HMAC key for fingerprints |
+
+The workflow also uses the repository secret `GCP_WORKLOAD_IDENTITY_PROVIDER`
+and these repository variables, which say where the logs are:
+
+| Repository variable | Value | Used for |
+| --- | --- | --- |
+| `OBSERVABILITY_PROJECT_ID` | `policyengine-observability` | The project that runs the query jobs and holds the bucket |
+| `OBSERVABILITY_LOG_BUCKET` | `policyengine-observability` | The log bucket, in the Logs Explorer link |
+| `OBSERVABILITY_LOG_BUCKET_LOCATION` | `global` | The bucket's location, in the Logs Explorer link |
+| `OBSERVABILITY_LOG_DATASET` | `observability_logs` | The linked BigQuery dataset the queries read |
+| `OBSERVABILITY_LOG_VIEW` | `_AllLogs` | The log view, which is also the name of the linked dataset's view |
+| `OBSERVABILITY_SERVICE_NAMESPACE` | `policyengine.api-v1` | The `service.namespace` of the records to report; the API reads the same variable |
+
+Each name must match a strict identifier pattern
+(`.github/scripts/telemetry_error_issues/log_source.py`), because BigQuery
+can't take a dataset or view name as a query parameter; the run refuses any
+other value. The namespace is sent as a query parameter. The rules that decide
+which group a failure belongs to stay in code, because changing one changes
+fingerprints.
+
+These resources were created on 2026-10-20:
+
+- The linked dataset is in the BigQuery `US` location and holds one view,
+  `_AllLogs`.
+- `roles/bigquery.dataViewer` was granted on the dataset alone with
+  `GRANT ... ON SCHEMA`; `bq update --source` would replace the dataset's
+  access list. The service account needs no Cloud Logging role.
+- A dry run as the service account, for 2026-10-19, read 1,648 ERROR records
+  across eight days and found 15 error groups, 5 of them above the issue
+  thresholds. The queries scanned about 0.18 GiB of error records and
+  0.02 GiB of request counts, so a daily run stays well inside BigQuery's free
+  monthly allowance.
+
+Never rotate `TELEMETRY_ERROR_FINGERPRINT_KEY` on its own. Every fingerprint
+would change, so the next run would open a second issue for each group that
+already has one. A key change needs a plan for moving the existing issues to
+their new fingerprints, as does any change to `FINGERPRINT_ALGORITHM` in the
+script.
+
+Fingerprint algorithm 2 replaced algorithm 1, which identified each stack
+frame by its module path and function name, so that moving code between
+modules no longer opens a duplicate issue. Because the algorithm number is
+part of every fingerprint, message and failed-request groups got new
+fingerprints too, although their inputs didn't change. Issues opened under
+algorithm 1 were not carried over: the job no longer matches them, so it
+neither updates nor reopens them, and a group that still fails opens a new
+issue once it meets the thresholds. An algorithm 1 issue can be closed by
+hand, or carried over by replacing the fingerprint at the end of its title
+with the group's new one; the job then matches it by its title and rewrites
+its marked section.
+
+### Known gap: Cloud Run platform failures
+
+The source sinks forward only records in the application log format
+(`schema_version = policyengine.observability.v2`). Cloud Run request logs
+are not forwarded, so requests that time out, run out of memory or crash the
+container before the application logs anything never reach these reports.
+
 ## Rollback
 
 1. Remove the OTel endpoint from participating service configuration.
