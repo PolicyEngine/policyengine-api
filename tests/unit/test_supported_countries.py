@@ -49,6 +49,7 @@ sys.modules["policyengine.bundle"] = installed_bundle
 
 from pydantic import TypeAdapter
 
+from policyengine_api import constants
 from policyengine_api.data.v2.catalog import catalog_selection, extraction
 from policyengine_api.query_parameters import CountryId
 from scripts import process_v1_household_mirror_event
@@ -76,6 +77,9 @@ print(
             "installed_models": captured_arguments["models"],
             "dual_write_countries": sorted(catalog_selection.SUPPORTED_V2_COUNTRY_IDS),
             "household_copy_countries": list(country_option.choices),
+            "v1_countries": list(constants.COUNTRIES),
+            "v1_country_packages": list(constants.COUNTRY_PACKAGE_NAMES),
+            "bundled_country_packages": constants.BUNDLED_COUNTRY_PACKAGE_NAMES,
         }
     )
 )
@@ -126,6 +130,18 @@ def test_every_country_list_follows_a_country_added_to_the_one_list() -> None:
         },
         "dual_write_countries": ["uk", "us", "zz"],
         "household_copy_countries": ["us", "uk", "zz"],
+        # The v1 routes list countries alphabetically.
+        "v1_countries": ["uk", "us", "zz"],
+        "v1_country_packages": [
+            "policyengine_uk",
+            "policyengine_us",
+            "policyengine_zz",
+        ],
+        "bundled_country_packages": {
+            "uk": "policyengine-uk",
+            "us": "policyengine-us",
+            "zz": "policyengine-zz",
+        },
     }
 
 

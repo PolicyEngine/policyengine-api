@@ -53,9 +53,7 @@ class ProbeResult:
 
 
 DEFAULT_PROBES = (
-    RouteProbe("liveness", "GET", "/liveness-check", (200,)),
-    RouteProbe("readiness", "GET", "/readiness-check", (200,)),
-    RouteProbe("specification", "GET", "/specification", (200,)),
+    RouteProbe("health", "GET", "/health", (200,)),
     RouteProbe("us_metadata", "GET", "/us/metadata", (200,)),
     RouteProbe("uk_metadata", "GET", "/uk/metadata", (200,)),
 )

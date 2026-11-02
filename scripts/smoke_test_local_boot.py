@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Boot smoke test for the local PolicyEngine API app.
 
-Starts the real Flask app in debug/local-db mode, waits for it to come up,
-hits health endpoints, then shuts it down. If startup fails, prints captured
-stdout/stderr to make the failure actionable.
+Starts the real ASGI app (the FastAPI routes with the Flask app mounted) in
+debug mode, waits for it to answer, checks that ``/health`` reports ready,
+then shuts it down. Ready needs a valid runtime configuration, as on Cloud
+Run. If startup fails, prints captured stdout/stderr to make the failure
+actionable.
 """
 
 from __future__ import annotations
@@ -22,7 +24,8 @@ from pathlib import Path
 from typing import NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-HEALTH_PATHS = ("/liveness-check", "/readiness-check")
+HEALTH_PATH = "/health"
+READY_BODY = '{"status":"healthy"}'
 BOOT_TIMEOUT_SECONDS = 600
 HTTP_TIMEOUT_SECONDS = 2
 
@@ -96,7 +99,7 @@ def _policyengine_version() -> str:
 
 
 def _start_app(port: int, logs: _AppLogs, env: dict[str, str]) -> subprocess.Popen[str]:
-    """Start the Flask app on ``port``, writing its output to ``logs``."""
+    """Start the ASGI app on ``port``, writing its output to ``logs``."""
     with (
         logs.stdout.open("w", encoding="utf-8") as stdout_handle,
         logs.stderr.open("w", encoding="utf-8") as stderr_handle,
@@ -105,12 +108,10 @@ def _start_app(port: int, logs: _AppLogs, env: dict[str, str]) -> subprocess.Pop
             [
                 sys.executable,
                 "-m",
-                "flask",
-                "--app",
-                "policyengine_api.api",
-                "run",
-                "--without-threads",
-                "--no-reload",
+                "uvicorn",
+                "policyengine_api.asgi:app",
+                "--host",
+                "127.0.0.1",
                 "--port",
                 str(port),
             ],
@@ -122,27 +123,36 @@ def _start_app(port: int, logs: _AppLogs, env: dict[str, str]) -> subprocess.Pop
         )
 
 
-def _is_ok(status: int, body: str) -> bool:
-    """Whether a health endpoint answered 200 with the body "OK"."""
-    return status == HTTPStatus.OK and body.strip() == "OK"
+def _fetch_health(port: int) -> tuple[int, str]:
+    """Return the status and body of ``/health``, including an error status.
+
+    ``/health`` answers 503 until the app is ready, which urllib raises.
+    """
+    try:
+        return fetch(f"http://127.0.0.1:{port}{HEALTH_PATH}")
+    except urllib.error.HTTPError as error:
+        body = error.read().decode("utf-8", errors="replace") if error.fp else ""
+        return error.code, body
 
 
-def _wait_until_live(process: subprocess.Popen[str], port: int) -> bool:
-    """Poll the liveness check until it passes, the app exits, or time runs out."""
+def _is_ready(status: int, body: str) -> bool:
+    """Whether ``/health`` answered 200 with the ready body."""
+    return status == HTTPStatus.OK and body.strip() == READY_BODY
+
+
+def _wait_until_up(process: subprocess.Popen[str], port: int) -> bool:
+    """Poll ``/health`` until the app answers at all, exits, or time runs out."""
     deadline = time.time() + BOOT_TIMEOUT_SECONDS
     while time.time() < deadline:
         if process.poll() is not None:
             return False
 
         try:
-            status, body = fetch(f"http://127.0.0.1:{port}/liveness-check")
-            if _is_ok(status, body):
-                return True
+            _fetch_health(port)
         except (urllib.error.URLError, TimeoutError, ConnectionError):
             time.sleep(0.5)
             continue
-
-        time.sleep(0.5)
+        return True
     return False
 
 
@@ -157,13 +167,10 @@ def _stop_unready_app(process: subprocess.Popen[str]) -> None:
 
 
 def _probe_health(port: int) -> bool:
-    """Print each health endpoint's answer, stopping at the first that is not OK."""
-    for path in HEALTH_PATHS:
-        status, body = fetch(f"http://127.0.0.1:{port}{path}")
-        _report(f"{path}: {status} {body.strip()}")
-        if not _is_ok(status, body):
-            return False
-    return True
+    """Print the answer of ``/health`` and return whether it reports ready."""
+    status, body = _fetch_health(port)
+    _report(f"{HEALTH_PATH}: {status} {body.strip()}".rstrip())
+    return _is_ready(status, body)
 
 
 def _report_failure(message: str, logs: _AppLogs) -> int:
@@ -186,7 +193,7 @@ def _stop_app(process: subprocess.Popen[str]) -> None:
 
 
 def main() -> int:
-    """Boot the Flask app on a free port and return 1 unless both health checks pass.
+    """Boot the ASGI app on a free port and return 1 unless ``/health`` reports ready.
 
     On failure print the app's captured stdout and stderr; always stop the app.
     """
@@ -204,15 +211,13 @@ def main() -> int:
 
     process = _start_app(port, logs, env)
     try:
-        if not _wait_until_live(process, port):
+        if not _wait_until_up(process, port):
             _stop_unready_app(process)
-            return _report_failure(
-                "\nBoot smoke test failed: app did not become ready.", logs
-            )
+            return _report_failure("\nBoot smoke test failed: app did not start.", logs)
 
-        _report("\nBoot smoke test reached a live app. Probing health endpoints:")
+        _report("\nBoot smoke test reached a running app. Checking /health:")
         if not _probe_health(port):
-            return _report_failure("\nHealth endpoint probe failed.", logs)
+            return _report_failure("\nHealth check did not report ready.", logs)
 
         _report("\nBoot smoke test passed.")
         return 0
