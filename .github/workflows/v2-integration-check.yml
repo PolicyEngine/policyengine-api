@@ -6,10 +6,6 @@ on:
       CODECOV_TOKEN:
         required: false
   workflow_dispatch:
-  # full-catalog-integration runs its tests on every scheduled run, whatever
-  # changed since the last one.
-  schedule:
-    - cron: "23 4 * * *"
 
 jobs:
   catalog-runtime-integration:
@@ -105,13 +101,8 @@ jobs:
 
   full-catalog-integration:
     # The two tests that load the complete installed PolicyEngine.py catalog,
-    # in one pytest process so that it is extracted once
-    # (tests/fixtures/installed_catalog.py). The first step decides whether
-    # the change can affect them (.github/scripts/decide_full_catalog_tests.sh)
-    # and every later step runs only if it can. The job itself always runs and
-    # succeeds when they are skipped, because "CI complete" fails on a skipped
-    # job and a release run may skip these checks only when every job of its
-    # merge run's check succeeded (.github/release_commit.py).
+    # beside catalog-runtime-integration, in one pytest process so that the
+    # catalog is extracted once (tests/fixtures/installed_catalog.py).
     name: Full installed PolicyEngine.py catalog
     runs-on: ubuntu-latest
     services:
@@ -137,51 +128,31 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          # The decision compares the commit with its base, so it needs the
-          # history that leads to it.
-          fetch-depth: 0
-      - name: Decide whether this change can affect the full-catalog tests
-        id: full_catalog
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: bash .github/scripts/decide_full_catalog_tests.sh
       # The runner's processors and memory, which set how long the tests take.
       - name: Report the runner's processor count
-        if: steps.full_catalog.outputs.run_full_catalog_tests == 'true'
         run: nproc
       - name: Report the runner's memory
-        if: steps.full_catalog.outputs.run_full_catalog_tests == 'true'
         run: free -m
       - name: Report the runner's processors
-        if: steps.full_catalog.outputs.run_full_catalog_tests == 'true'
         run: lscpu
       - name: Setup Python
-        if: steps.full_catalog.outputs.run_full_catalog_tests == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Setup uv
-        if: steps.full_catalog.outputs.run_full_catalog_tests == 'true'
         uses: astral-sh/setup-uv@v6
       - name: Install locked dependencies
-        if: steps.full_catalog.outputs.run_full_catalog_tests == 'true'
         run: uv sync --frozen --extra dev
       - name: Prepare the disposable v2 schema
-        if: steps.full_catalog.outputs.run_full_catalog_tests == 'true'
         run: uv run --frozen --extra dev alembic -c alembic-v2.ini upgrade head
       - name: Verify the installed catalog interface and qualify production-scale publication
-        if: steps.full_catalog.outputs.run_full_catalog_tests == 'true'
         run: uv run --frozen --extra dev coverage run --branch -m pytest -q --durations=10 tests/integration/test_v2_catalog_installed.py tests/integration/test_v2_catalog_publication_qualification.py
         env:
           RUN_V2_CATALOG_COMPATIBILITY: "1"
           RUN_V2_CATALOG_PUBLICATION_QUALIFICATION: "1"
       - name: Export full-catalog coverage
-        if: steps.full_catalog.outputs.run_full_catalog_tests == 'true'
         run: uv run --frozen --extra dev coverage xml -i -o coverage-v2-full-catalog.xml
       - name: Upload full-catalog coverage to Codecov
-        if: steps.full_catalog.outputs.run_full_catalog_tests == 'true'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

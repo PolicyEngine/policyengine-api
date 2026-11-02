@@ -1,10 +1,9 @@
 """The value-shape catalog holds an example of each shape extraction accepts.
 
-Every pull request publishes it to PostgreSQL
-(tests/integration/test_v2_catalog_publication.py), while the complete
-installed catalog runs only when a change can affect it. These tests fail when
-extraction accepts a shape the value-shape catalog leaves out, or stores one
-differently from what the catalog says it stores.
+The cross-database integration tests publish it to PostgreSQL and read every
+value back (tests/integration/test_v2_catalog_publication.py). These tests fail
+when extraction accepts a shape the value-shape catalog leaves out, or stores
+one differently from what the catalog says it stores.
 """
 
 from __future__ import annotations
