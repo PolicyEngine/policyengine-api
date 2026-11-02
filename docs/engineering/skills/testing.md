@@ -203,6 +203,24 @@ Otherwise the release run runs them, and `publish-git-tag` requires lint, both
 Alembic checks and the integration tests to pass, as before. The release test
 suite always runs.
 
+CI never loads the complete installed PolicyEngine.py catalog (about 1.2
+million parameter values). Two tests in the cross-database check cover
+publishing it instead, on every run:
+
+- `test_v2_catalog_installed_folders.py` runs the real US and UK models through
+  extraction and publication, reduced to the parameter folders in its
+  `SELECTED_FOLDERS`, and reads every value back. Between them the folders
+  hold every value shape the installed models hold, and the test fails when
+  one is missing: replace a renamed folder with one that holds the same
+  values.
+- `test_v2_catalog_publication.py` publishes
+  `tests/fixtures/v2_catalog_value_shapes.py`, which holds one example of each
+  value shape extraction accepts, and reads every value back. When extraction
+  accepts a new shape, add an example there.
+
+Each release publishes and validates the complete catalog against staging,
+then production, in `seed-v2-database.yml`.
+
 Staging deployment checks run the live integration suite against the tagged
 Cloud Run staging URL before promoting the exact tested revision to the
 service URL. No production deployment may begin until the
