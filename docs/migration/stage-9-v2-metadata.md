@@ -106,7 +106,7 @@ publishes entities, basic inputs and these flags:
 Bracket schedules are parameter nodes with their stored label, or none when the
 package stores none. An empty basic-input list is stored as empty. Extraction
 stops before reading any record if the installed PolicyEngine.py does not
-publish these fields, and names each missing field: 6.7.5 and the locked 6.11.1
+publish these fields, and names each missing field: 6.7.5 and 6.11.1
 publish only the variables' unit and definition period. It also stops if the
 model has other than one person entity, names a basic input or a parameter path
 that is not published, gives enum labels that do not match the variable's

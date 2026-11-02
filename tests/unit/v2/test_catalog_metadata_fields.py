@@ -409,7 +409,7 @@ def test_inconsistent_format_2_metadata_fails_with_a_specific_message(
 def test_a_release_without_format_2_fields_fails_naming_each_missing_field() -> None:
     """A release without the fields fails before any record is checked, naming each.
 
-    PolicyEngine.py 6.7.5 and the locked 6.11.1, for example, publish only the
+    PolicyEngine.py 6.7.5 and 6.11.1, for example, publish only the
     variables' unit and definition period of these fields.
     """
     models = source_models()
