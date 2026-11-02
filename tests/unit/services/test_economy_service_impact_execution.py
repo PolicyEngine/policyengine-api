@@ -240,12 +240,12 @@ class TestEconomyService:
             call_args = mock_reform_impacts_service.set_error_reform_impact.call_args
             assert "Simulation timed out" in call_args[1]["message"]
 
-        @pytest.mark.usefixtures("mock_logger")
         def test__given_failed_us_state_job__keeps_its_error_for_two_minutes(
             self,
             economy_service,
             setup_options,
             mock_reform_impacts_service,
+            mock_logger,
         ):
             # Given
             state_setup_options = setup_options.model_copy(
@@ -272,6 +272,10 @@ class TestEconomyService:
                 execution_id=MOCK_EXECUTION_ID,
                 message=expected_message,
                 keep_seconds=120,
+            )
+            # The stored error expires, so the log keeps the failure's reason.
+            mock_logger.log_struct.assert_any_call(
+                {"message": expected_message}, severity="ERROR"
             )
 
         @pytest.mark.usefixtures("mock_logger")

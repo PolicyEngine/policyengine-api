@@ -42,8 +42,8 @@ BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES = {400, 422}
 LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES = frozenset({400, 422})
 # How long the error of a failed local-area breakdown or US state job is
 # returned before the next request may submit a new job. Both run on large
-# local-area datasets, where a timeout or memory failure may not repeat, and
-# the app offers Retry for both: for a UK breakdown, and for each state it runs
+# local-area datasets, where a timeout or memory failure may not repeat. The
+# app offers Retry for a UK breakdown, and will offer it for each state it runs
 # for a US nationwide report's congressional districts. Short, so Retry works
 # soon, but long enough that a client retrying on every 502 does not start a
 # run on that dataset each time. Every other failed job's error is kept for the
