@@ -1,3 +1,10 @@
+## [5.18.1] - 2026-11-02
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.12.0.
+
+
 ## [5.18.0] - 2026-11-02
 
 ### Changed
