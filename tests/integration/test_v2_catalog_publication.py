@@ -338,6 +338,22 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
         assert persisted_simulation.dataset_id == protected_ids[4]
         assert persisted_report.dataset_id == protected_ids[5]
         assert persisted_dataset_version.dataset_id == protected_ids[6]
+        # The simulation and report name catalog rows without foreign keys,
+        # so republishing must keep every row they name.
+        for dataset_id in (
+            persisted_simulation.dataset_id,
+            persisted_report.dataset_id,
+        ):
+            assert session.get(Dataset, dataset_id) is not None
+        for region_id in (persisted_simulation.region_id, persisted_report.region_id):
+            assert session.get(Region, region_id) is not None
+        assert (
+            session.get(
+                TaxBenefitModelVersion,
+                persisted_simulation.tax_benefit_model_version_id,
+            )
+            is not None
+        )
 
 
 def test_new_version_is_additive_and_concurrent_retries_serialize(

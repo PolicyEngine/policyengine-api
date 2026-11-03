@@ -26,11 +26,14 @@ Roles and what decides their privileges:
   so the deploy check, not the connector analysis, covers it.
 - ``policyengine_v2_simulation_service``: the simulation API on Cloud Run. It
   creates simulations, reports, their runs and household jobs, and reads the
-  policy, household and catalog rows a run needs.
+  policy, dynamic, household and catalog rows a run needs.
 - ``policyengine_v2_modal_worker``: the simulation API's Modal workers. They
   write the status of the runs and household jobs they were given, and their
-  results, and read the rows a run needs. Both simulation API roles' code lives
-  in that repository, so the deploy check covers them here.
+  results, and read the rows a run needs. Their ``UPDATE`` is table-level, like
+  every privilege here: the database doesn't limit it to the status and result
+  columns or to the worker's own run, so the workers' code does. Both
+  simulation API roles' code lives in that repository, so the deploy check
+  covers them here.
 
 The Public API reads the simulation tables it serves, and writes none of them.
 
@@ -130,7 +133,8 @@ _RUN_STATUS = _access(
 )
 # The Modal workers write results, keyed by run, once each.
 _RESULT = _access(runtime=READ, modal_worker=READ_INSERT)
-# What a run needs from the Public API's policies, households and catalog.
+# What a run needs from the Public API's policies, dynamics, households and
+# catalog.
 _RUN_INPUT_READS: Final = {"simulation_service": READ, "modal_worker": READ}
 
 
@@ -140,7 +144,8 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Custom totals, unused until they return.
     "aggregates": _access(),
     "change_aggregates": _access(),
-    "dynamics": _access(),
+    # A simulation's or household job's dynamic, which a run reads.
+    "dynamics": _access(**_RUN_INPUT_READS),
     # Simulations, reports, their runs and household jobs. The catalog writer
     # checks that publication leaves the rows of three of them untouched.
     "household_jobs": _RUN_STATUS,

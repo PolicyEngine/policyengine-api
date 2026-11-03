@@ -226,7 +226,7 @@ and a revision runs once per database, so it can't repair drift.
 | `policyengine_v2_catalog_writer` | `scripts/publish_v2_metadata_catalog.py` |
 | `policyengine_stage12_<environment>` | The simulation API and its Modal worker, on the temporary comparison-run tables |
 | `policyengine_v2_simulation_service` | The simulation API on Cloud Run: creates simulations, reports, their runs and household jobs, and reads the policy, household and catalog rows a run needs |
-| `policyengine_v2_modal_worker` | The simulation API's Modal workers: write their runs' and household jobs' status and results, and read the rows a run needs |
+| `policyengine_v2_modal_worker` | The simulation API's Modal workers: write their runs' and household jobs' status and results, and read the rows a run needs. Its `UPDATE` is table-level: the workers' code, not the database, limits it to their own run's status and result columns |
 
 Every v2 table has an entry for every role, so "no access" is a decision, not
 an omission. The migration role owns every table and isn't listed. Three rules
@@ -282,6 +282,7 @@ When a pull request adds or changes a v2 table, or a connector's use of one:
      tests/integration/test_v2_stage12_comparison_persistence.py \
      tests/integration/test_v2_metadata_routes.py \
      tests/integration/test_v2_catalog_publication.py \
+     tests/integration/test_v2_simulation_role_privileges.py \
      tests/integration/test_v2_privilege_reconciliation.py
    ```
 
@@ -473,9 +474,10 @@ model changes:
 
 - `simulations` keeps only what to calculate. Its execution columns
   (`status`, `error_message`, `started_at`, `completed_at`,
-  `household_result`, `output_dataset_id`) move to the new `simulation_runs`,
-  one row per run with the catalog version, country package version and
-  PolicyEngine.py version it used, its Modal call ID and its output file.
+  `household_result`) move to the new `simulation_runs`, one row per run with
+  the catalog version, country package version and PolicyEngine.py version it
+  used, and its Modal call ID; `output_dataset_id` is replaced by the run's
+  output file (`output_uri`, `output_sha256`).
 - The new `report_run_simulation_runs` names the simulation runs each report
   run combines, as its baseline or its reform.
 - `poverty` and `inequality` belong to a simulation run (`simulation_run_id`);
@@ -505,7 +507,8 @@ deploy stops before anything changes. The downgrade restores required columns
 the same way, so it needs `simulations`, `household_jobs` and the result
 tables empty. The previous Public API revision keeps working at this revision:
 none of its roles can read or write a table the revision changes, except the
-catalog writer, which only counts the rows of `simulations` and `report_runs`.
+catalog writer, which only counts the rows of `simulations`, `reports` and
+`report_runs`.
 `tests/integration/test_alembic_v2_simulation_runs.py` checks that the
 revision changes no other table, and the v2 lifecycle test covers the
 downgrade and re-upgrade.

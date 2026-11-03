@@ -76,7 +76,9 @@ class Report(TimestampedModel, table=True):
 
     Its user, model, policy, household, dataset and region are logical
     references to the Public API's rows, without foreign keys: the simulation
-    service checks them before it writes the report.
+    service checks them before it writes the report, except ``user_id``, the
+    owner the Public API names in its request, which the Public API checks
+    because the simulation service can't read users.
     """
 
     __tablename__ = "reports"

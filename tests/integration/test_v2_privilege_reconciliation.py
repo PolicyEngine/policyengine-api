@@ -162,7 +162,7 @@ def test_a_role_awaiting_creation_is_skipped_until_it_exists(
 
 
 def test_the_deploy_steps_pass_and_name_a_role_awaiting_creation(
-    disposable_v2_database_url, temporary_role, monkeypatch, capsys
+    disposable_v2_database_url, temporary_role, monkeypatch, capsys, tmp_path
 ) -> None:
     """``apply`` and ``verify`` succeed while a role awaiting creation is absent."""
     role = temporary_role()
@@ -177,10 +177,12 @@ def test_the_deploy_steps_pass_and_name_a_role_awaiting_creation(
         "ROLES_AWAITING_PROVISIONING",
         frozenset({absent_role}),
     )
+    summary_path = tmp_path / "summary.md"
     environ = {
         V2_MIGRATION_DATABASE_URL: disposable_v2_database_url,
         V2_ALEMBIC_DISPOSABLE_TEST: "1",
         DEPLOYMENT_ENVIRONMENT: "test",
+        "GITHUB_STEP_SUMMARY": str(summary_path),
     }
 
     apply_status = run("apply", environ=environ)
@@ -192,3 +194,5 @@ def test_the_deploy_steps_pass_and_name_a_role_awaiting_creation(
     assert f"`{absent_role}`" in apply_report
     assert absent_role in verify_output
     assert "Every declared v2 table privilege is held" in verify_output
+    # Each step names the skipped role in the job summary.
+    assert summary_path.read_text(encoding="utf-8").count(f"`{absent_role}`") == 2

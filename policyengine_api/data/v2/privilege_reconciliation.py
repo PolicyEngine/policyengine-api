@@ -513,7 +513,11 @@ def run(
             if mode == "verify":
                 skipped = skipped_roles(connection, declared, awaiting)
                 if skipped:
-                    print(_skipped_roles_line(skipped))
+                    _write_summary(
+                        values,
+                        f"## v2 table privileges ({environment})\n\n"
+                        f"{_skipped_roles_line(skipped)}\n",
+                    )
                 failures = check_declared_privileges(
                     connection, declared, roles_awaiting_creation=awaiting
                 )

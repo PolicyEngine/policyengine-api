@@ -51,10 +51,11 @@ SIMULATION_SERVICE_CREATES = frozenset(
     }
 )
 RUN_STATUS_TABLES = frozenset({"simulation_runs", "report_runs", "household_jobs"})
-# The policy, household and catalog rows a run needs.
+# The policy, dynamic, household and catalog rows a run needs.
 RUN_INPUT_TABLES = frozenset(
     {
         "policies",
+        "dynamics",
         "households",
         "tax_benefit_models",
         "tax_benefit_model_versions",
