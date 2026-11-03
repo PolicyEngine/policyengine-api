@@ -23,7 +23,9 @@ from policyengine_api.data.v2.models import (
     ParameterTreeChild,
     ParameterValue,
     Policy,
+    ReportRunSimulationRun,
     Simulation,
+    SimulationRun,
     TaxBenefitModelVersion,
     User,
     UserHouseholdAssociation,
@@ -46,6 +48,8 @@ COUNTRY_REFERENCE_COLUMNS = (
     ("user_report_associations", "country_id"),
 )
 
+# Outputs of a report run. Poverty and inequality describe one simulation, so
+# they belong to a simulation run instead (test_simulation_run_models.py).
 RUN_OUTPUT_TABLES = frozenset(
     {
         "aggregates",
@@ -54,10 +58,8 @@ RUN_OUTPUT_TABLES = frozenset(
         "congressional_district_impacts",
         "constituency_impacts",
         "decile_impacts",
-        "inequality",
         "intra_decile_impacts",
         "local_authority_impacts",
-        "poverty",
         "program_statistics",
     }
 )
@@ -74,6 +76,8 @@ def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
         HouseholdJob: "households",
         LegacyHouseholdMapping: "household_mappings",
         Simulation: "simulations",
+        SimulationRun: "simulations",
+        ReportRunSimulationRun: "reports",
         UserHouseholdAssociation: "associations",
         UserPolicy: "associations",
         LegacyPolicyMapping: "policy_mappings",
@@ -500,11 +504,12 @@ def test_named_checks_and_required_indexes_cover_core_invariants() -> None:
         "ck_users_standard_primary_country",
         "ck_countries_society_wide_requires_household",
         "ck_report_runs_terminal_completion",
+        "ck_simulation_runs_terminal_completion",
         "ck_parameter_values_single_owner",
     }.issubset(constraint_names)
     assert {
         "ix_users_email",
-        "ix_simulations_status_created_at",
+        "ix_simulation_runs_current_output",
         "ix_report_runs_current_output",
         "uq_parameter_values_canonical_parameter_start_date",
     }.issubset(index_names)

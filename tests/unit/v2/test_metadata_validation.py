@@ -33,3 +33,11 @@ def test_rejection_sets_do_not_block_current_metadata() -> None:
 
 def test_new_table_name_requires_no_allowlist_update() -> None:
     validate_v2_metadata_table_names({*V2_METADATA.tables, "future_domain_table"})
+
+
+@pytest.mark.parametrize("table_name", ["simulations", "simulation_runs"])
+def test_names_shared_with_v1_are_accepted(table_name: str) -> None:
+    """v2 reuses these v1 table names for its own tables, in its own database."""
+    assert table_name in V2_METADATA.tables
+    assert table_name not in V1_ONLY_TABLES
+    validate_v2_metadata_table_names({*V2_METADATA.tables, table_name})

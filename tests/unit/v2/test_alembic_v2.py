@@ -47,6 +47,8 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "legacy_user_policy_mappings",
         "parameter_search_files",
         "parameter_tree_children",
+        "report_run_simulation_runs",
+        "simulation_runs",
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
         "user_identities",
@@ -62,6 +64,12 @@ CATALOG_FORMAT_2_PARENT_REVISION = "fb1a3e40d3d6"
 CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
 AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
 PARAMETER_TREE_REVISION = "3869eb814a90"
+# The parameter search file revision, parent of the simulation runs revision.
+SIMULATION_RUNS_PARENT_REVISION = "c614b6bcccfc"
+SIMULATION_RUNS_REVISION_PATH = (
+    REPO
+    / "migrations/v2/versions/2ffd50f47a2b_add_simulation_runs_and_key_results_by_.py"
+)
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -243,6 +251,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        SIMULATION_RUNS_PARENT_REVISION,
         PARAMETER_TREE_REVISION,
         AREA_IMPACT_COORDINATE_REVISION,
         CATALOG_FORMAT_2_REVISION,
@@ -989,7 +998,7 @@ def test_parameter_search_file_revision_creates_only_the_files_table() -> None:
         if revision.down_revision == PARAMETER_TREE_REVISION
     ]
     assert len(children) == 1
-    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    assert children[0].revision == SIMULATION_RUNS_PARENT_REVISION
     revision = Path(children[0].path).read_text(encoding="utf-8")
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")
@@ -1009,3 +1018,48 @@ def test_parameter_search_file_revision_creates_only_the_files_table() -> None:
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body
         assert "op.add_column(" not in body
+
+
+def test_simulation_runs_revision_has_only_its_two_documented_corrections() -> None:
+    """The revision is generated; its two corrections handle enum types.
+
+    ``simulation_runs.status`` reuses the type the baseline created for
+    ``simulations.status``, and the downgrade drops the new role type.
+    """
+    revision = SIMULATION_RUNS_REVISION_PATH.read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert (
+        f'down_revision: Union[str, None] = "{SIMULATION_RUNS_PARENT_REVISION}"'
+        in revision
+    )
+    assert revision.count("Dialect correction:") == 1
+    assert revision.count("Post-generation reversibility correction:") == 1
+    assert 'name="v2_simulation_status",\n                create_type=False,' in (
+        upgrade
+    )
+    assert 'sa.Enum(name="v2_simulation_role").drop(op.get_bind())' in downgrade
+    assert 'op.create_table(\n        "simulation_runs"' in upgrade
+    assert 'op.create_table(\n        "report_run_simulation_runs"' in upgrade
+    assert 'op.drop_table("report_run_simulation_runs")' in downgrade
+    assert 'op.drop_table("simulation_runs")' in downgrade
+    assert upgrade.count("op.drop_table(") == 0
+    for removed_column in (
+        "status",
+        "error_message",
+        "started_at",
+        "completed_at",
+        "household_result",
+        "output_dataset_id",
+    ):
+        assert f'op.drop_column("simulations", "{removed_column}")' in upgrade
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body

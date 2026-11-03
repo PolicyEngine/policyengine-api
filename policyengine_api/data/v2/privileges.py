@@ -107,8 +107,10 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "local_authority_impacts": _access(),
     "poverty": _access(),
     "program_statistics": _access(),
+    "report_run_simulation_runs": _access(),
     "report_runs": _access(catalog_writer=READ),
     "reports": _access(catalog_writer=READ),
+    "simulation_runs": _access(),
     "simulations": _access(catalog_writer=READ),
     # Metadata catalog: the catalog writer publishes it, the Public API reads it.
     "dataset_versions": _access(catalog_writer=READ),

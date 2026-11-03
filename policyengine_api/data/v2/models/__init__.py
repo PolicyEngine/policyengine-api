@@ -82,11 +82,14 @@ from policyengine_api.data.v2.models.reports import (  # noqa: E402
     ProgramStatistics,
     Report,
     ReportRun,
+    ReportRunSimulationRun,
     ReportRunStatus,
     ReportRunTrigger,
+    SimulationRole,
 )
 from policyengine_api.data.v2.models.simulations import (  # noqa: E402
     Simulation,
+    SimulationRun,
     SimulationStatus,
     SimulationType,
 )
@@ -138,9 +141,12 @@ __all__ = [
     "RegionType",
     "Report",
     "ReportRun",
+    "ReportRunSimulationRun",
     "ReportRunStatus",
     "ReportRunTrigger",
     "Simulation",
+    "SimulationRole",
+    "SimulationRun",
     "SimulationStatus",
     "SimulationType",
     "Stage12AggregationStatus",

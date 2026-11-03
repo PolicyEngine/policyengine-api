@@ -1,4 +1,9 @@
-"""Canonical SQLModel tables for stable reports, runs, and run outputs."""
+"""Canonical SQLModel tables for stable reports, runs, and run outputs.
+
+Results that compare a baseline with a reform belong to a report run and name
+the two simulation runs they compare; poverty and inequality, which describe
+one simulation, belong to a simulation run.
+"""
 
 from datetime import datetime
 from enum import StrEnum
@@ -20,7 +25,7 @@ from policyengine_api.data.v2.models.metadata import (
     TaxBenefitModel,
 )
 from policyengine_api.data.v2.models.policies import Policy
-from policyengine_api.data.v2.models.simulations import Simulation
+from policyengine_api.data.v2.models.simulations import Simulation, SimulationRun
 from policyengine_api.data.v2.models.users import User
 
 
@@ -63,6 +68,13 @@ class DecileType(StrEnum):
 
     INCOME = "income"
     WEALTH = "wealth"
+
+
+class SimulationRole(StrEnum):
+    """The part a simulation run plays in the report run that combines it."""
+
+    BASELINE = "baseline"
+    REFORM = "reform"
 
 
 class Report(TimestampedModel, table=True):
@@ -145,7 +157,12 @@ class Report(TimestampedModel, table=True):
 
 
 class ReportRun(TimestampedModel, table=True):
-    """One immutable-version execution attempt for a stable report."""
+    """One immutable-version execution attempt for a stable report.
+
+    Its ``simulation_runs`` rows name the simulation runs it combines.
+    ``labor_supply_result`` and ``cliff_impact_result`` hold the two parts of an
+    economy comparison that have no result table.
+    """
 
     __tablename__ = "report_runs"
     __table_args__ = (
@@ -167,6 +184,7 @@ class ReportRun(TimestampedModel, table=True):
             "completed_at",
             "id",
         ),
+        sa.Index("ix_report_runs_status_started_at", "status", "started_at"),
     )
 
     report_id: UUID = Field(
@@ -184,6 +202,7 @@ class ReportRun(TimestampedModel, table=True):
         sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
     )
     idempotency_key: UUID | None = Field(default=None)
+    modal_call_id: str | None = Field(default=None, max_length=255)
     started_at: datetime | None = Field(
         default=None,
         sa_type=sa.DateTime(timezone=True),
@@ -194,8 +213,14 @@ class ReportRun(TimestampedModel, table=True):
     )
     error_message: str | None = None
     markdown: str | None = Field(default=None, sa_type=sa.Text)
+    labor_supply_result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
+    cliff_impact_result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
 
     report: Report = Relationship(back_populates="runs")
+    simulation_runs: list["ReportRunSimulationRun"] = Relationship(
+        back_populates="report_run",
+        cascade_delete=True,
+    )
     aggregates: list["AggregateOutput"] = Relationship(
         back_populates="report_run",
         cascade_delete=True,
@@ -219,10 +244,6 @@ class ReportRun(TimestampedModel, table=True):
         back_populates="report_run",
         cascade_delete=True,
     )
-    inequalities: list["Inequality"] = Relationship(
-        back_populates="report_run",
-        cascade_delete=True,
-    )
     intra_decile_impacts: list["IntraDecileImpact"] = Relationship(
         back_populates="report_run",
         cascade_delete=True,
@@ -231,14 +252,44 @@ class ReportRun(TimestampedModel, table=True):
         back_populates="report_run",
         cascade_delete=True,
     )
-    poverty_results: list["Poverty"] = Relationship(
-        back_populates="report_run",
-        cascade_delete=True,
-    )
     program_statistics: list["ProgramStatistics"] = Relationship(
         back_populates="report_run",
         cascade_delete=True,
     )
+
+
+class ReportRunSimulationRun(IdentifiedModel, table=True):
+    """One simulation run a report run combines, as its baseline or its reform.
+
+    A single-year report run names one of each (a household report may name
+    only a baseline); a budget-window run names one of each per year.
+    """
+
+    __tablename__ = "report_run_simulation_runs"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "report_run_id",
+            "role",
+            "simulation_run_id",
+            name="uq_report_run_simulation_runs_member",
+        ),
+    )
+
+    report_run_id: UUID = Field(
+        foreign_key="report_runs.id",
+        ondelete="CASCADE",
+    )
+    simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    role: SimulationRole = Field(
+        sa_type=enum_type(SimulationRole, "v2_simulation_role"),
+    )
+
+    report_run: ReportRun = Relationship(back_populates="simulation_runs")
+    simulation_run: SimulationRun = Relationship(back_populates="report_runs")
 
 
 class AggregateOutput(IdentifiedModel, table=True):
@@ -342,12 +393,12 @@ class BudgetSummary(IdentifiedModel, table=True):
         foreign_key="report_runs.id",
         ondelete="CASCADE",
     )
-    baseline_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
+    baseline_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
         ondelete="RESTRICT",
     )
-    reform_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
+    reform_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
         ondelete="RESTRICT",
     )
     variable_name: str = Field(max_length=512)
@@ -387,12 +438,12 @@ class DecileImpact(IdentifiedModel, table=True):
         foreign_key="report_runs.id",
         ondelete="CASCADE",
     )
-    baseline_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
+    baseline_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
         ondelete="RESTRICT",
     )
-    reform_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
+    reform_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
         ondelete="RESTRICT",
     )
     income_variable: str = Field(max_length=512)
@@ -434,12 +485,12 @@ class IntraDecileImpact(IdentifiedModel, table=True):
         foreign_key="report_runs.id",
         ondelete="CASCADE",
     )
-    baseline_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
+    baseline_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
         ondelete="RESTRICT",
     )
-    reform_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
+    reform_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
         ondelete="RESTRICT",
     )
     decile_type: DecileType = Field(
@@ -457,26 +508,21 @@ class IntraDecileImpact(IdentifiedModel, table=True):
 
 
 class Inequality(IdentifiedModel, table=True):
-    """Gini and top/bottom income shares for one simulation of a report run."""
+    """Gini and top/bottom income shares for one simulation run."""
 
     __tablename__ = "inequality"
     __table_args__ = (
         sa.UniqueConstraint(
-            "report_run_id",
-            "simulation_id",
+            "simulation_run_id",
             "income_variable",
             "entity",
-            name="uq_inequality_run_simulation_measure",
+            name="uq_inequality_simulation_run_measure",
         ),
     )
 
-    report_run_id: UUID = Field(
-        foreign_key="report_runs.id",
+    simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
         ondelete="CASCADE",
-    )
-    simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
     )
     income_variable: str = Field(max_length=512)
     entity: str = Field(default="household", max_length=128)
@@ -485,29 +531,32 @@ class Inequality(IdentifiedModel, table=True):
     top_1_share: float | None = None
     bottom_50_share: float | None = None
 
-    report_run: ReportRun = Relationship(back_populates="inequalities")
+    simulation_run: SimulationRun = Relationship(back_populates="inequalities")
 
 
 class Poverty(IdentifiedModel, table=True):
-    """Poverty headcount and rate of one type for one simulation of a report run."""
+    """Poverty headcount and rate of one type for one simulation run.
+
+    One row per run, poverty type, entity and filter variable; rows without a
+    filter variable count as equal, so each run has one unfiltered row per type
+    and entity.
+    """
 
     __tablename__ = "poverty"
     __table_args__ = (
-        sa.Index(
-            "ix_poverty_run_simulation_type",
-            "report_run_id",
-            "simulation_id",
+        sa.UniqueConstraint(
+            "simulation_run_id",
             "poverty_type",
+            "entity",
+            "filter_variable",
+            name="uq_poverty_simulation_run_measure",
+            postgresql_nulls_not_distinct=True,
         ),
     )
 
-    report_run_id: UUID = Field(
-        foreign_key="report_runs.id",
+    simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
         ondelete="CASCADE",
-    )
-    simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
     )
     poverty_type: str = Field(max_length=128)
     entity: str = Field(default="person", max_length=128)
@@ -516,7 +565,7 @@ class Poverty(IdentifiedModel, table=True):
     total_population: float | None = None
     rate: float | None = None
 
-    report_run: ReportRun = Relationship(back_populates="poverty_results")
+    simulation_run: SimulationRun = Relationship(back_populates="poverty_results")
 
 
 class ProgramStatistics(IdentifiedModel, table=True):
@@ -539,12 +588,12 @@ class ProgramStatistics(IdentifiedModel, table=True):
         foreign_key="report_runs.id",
         ondelete="CASCADE",
     )
-    baseline_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
+    baseline_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
         ondelete="RESTRICT",
     )
-    reform_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
+    reform_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
         ondelete="RESTRICT",
     )
     program_name: str = Field(max_length=512)
@@ -568,12 +617,12 @@ class GeographicImpactBase(IdentifiedModel):
         foreign_key="report_runs.id",
         ondelete="CASCADE",
     )
-    baseline_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
+    baseline_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
         ondelete="RESTRICT",
     )
-    reform_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
+    reform_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
         ondelete="RESTRICT",
     )
     average_household_income_change: float

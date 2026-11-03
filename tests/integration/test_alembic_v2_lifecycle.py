@@ -37,6 +37,8 @@ COUNTRIES_REVISION = "fb1a3e40d3d6"
 # The catalog format 2 revision, the parent of the area impact coordinate removal.
 CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
 AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
+# The parameter search file revision, the parent of the simulation runs revision.
+SIMULATION_RUNS_PREVIOUS_REVISION = "c614b6bcccfc"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 AREA_IMPACT_TABLES = ("constituency_impacts", "local_authority_impacts")
 MAP_COORDINATE_COLUMNS = ("x", "y")
@@ -409,6 +411,20 @@ def _assert_countries_shape(engine) -> None:
         assert check_name not in _check_names(engine, table_name)
 
 
+def _assert_pre_simulation_runs_shape(engine) -> None:
+    _assert_revision(engine, SIMULATION_RUNS_PREVIOUS_REVISION)
+    table_names = set(inspect(engine).get_table_names(schema="public"))
+    assert {"simulation_runs", "report_run_simulation_runs"}.isdisjoint(table_names)
+    simulation_columns = {
+        column["name"] for column in inspect(engine).get_columns("simulations")
+    }
+    poverty_columns = {
+        column["name"] for column in inspect(engine).get_columns("poverty")
+    }
+    assert {"status", "household_result", "output_dataset_id"} <= simulation_columns
+    assert {"report_run_id", "simulation_id"} <= poverty_columns
+
+
 def _assert_pre_countries_shape(engine) -> None:
     assert "countries" not in inspect(engine).get_table_names(schema="public")
     for (table_name, _column_name), check_name in COUNTRY_REFERENCE_COLUMNS.items():
@@ -429,6 +445,10 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
 
         _upgrade_and_assert_head(config, engine)
         _assert_countries_shape(engine)
+
+        command.downgrade(config, SIMULATION_RUNS_PREVIOUS_REVISION)
+        _assert_pre_simulation_runs_shape(engine)
+        _upgrade_and_assert_head(config, engine)
 
         command.downgrade(config, CATALOG_FORMAT_2_REVISION)
         _assert_area_impact_coordinates_restored(engine)

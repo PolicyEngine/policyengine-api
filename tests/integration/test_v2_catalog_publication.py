@@ -290,7 +290,6 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
         )
         simulation = Simulation(
             dataset_id=input_dataset.id,
-            output_dataset_id=output_dataset.id,
             tax_benefit_model_version_id=model_version.id,
             region_id=region.id,
         )
@@ -316,8 +315,8 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
             report.id,
             report_run.id,
             simulation.dataset_id,
-            simulation.output_dataset_id,
             report.dataset_id,
+            dataset_version.dataset_id,
         )
 
     publish_catalog(publication_engine, catalog)
@@ -332,8 +331,8 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
         assert persisted_report is not None
         assert persisted_report_run is not None
         assert persisted_simulation.dataset_id == protected_ids[4]
-        assert persisted_simulation.output_dataset_id == protected_ids[5]
-        assert persisted_report.dataset_id == protected_ids[6]
+        assert persisted_report.dataset_id == protected_ids[5]
+        assert persisted_dataset_version.dataset_id == protected_ids[6]
 
 
 def test_new_version_is_additive_and_concurrent_retries_serialize(
