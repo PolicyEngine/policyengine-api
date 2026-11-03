@@ -208,9 +208,55 @@ def test_report_runs_record_their_modal_call_and_untabled_results() -> None:
 
     assert report_runs.c.modal_call_id.nullable
     assert report_runs.c.modal_call_id.type.length == 255
-    for column_name in ("labor_supply_result", "cliff_impact_result"):
+    for column_name in (
+        "labor_supply_result",
+        "cliff_impact_result",
+        "spm_provenance",
+    ):
         assert report_runs.c[column_name].nullable
         assert isinstance(report_runs.c[column_name].type, sa.JSON)
+    assert report_runs.c.data_version.nullable
+    assert report_runs.c.data_version.type.length == 128
+
+
+def test_uk_area_impacts_record_disclosure_control() -> None:
+    for table_name in ("constituency_impacts", "local_authority_impacts"):
+        table = V2_METADATA.tables[table_name]
+        assert table.c.disclosure_tier.nullable
+        assert table.c.disclosure_tier.type.length == 16
+        for change in ("average", "relative"):
+            for bound in ("lower", "upper"):
+                column = table.c[f"{change}_household_income_change_{bound}"]
+                assert column.nullable
+                assert isinstance(column.type, sa.Float)
+        assert f"ck_{table_name}_disclosure_tier" in _check_names(table)
+
+
+def test_congressional_district_impacts_record_winner_and_loser_shares() -> None:
+    districts = V2_METADATA.tables["congressional_district_impacts"]
+
+    for column_name in (
+        "winner_percentage",
+        "loser_percentage",
+        "no_change_percentage",
+    ):
+        assert not districts.c[column_name].nullable
+        assert isinstance(districts.c[column_name].type, sa.Float)
+
+
+def test_detailed_budget_rows_need_neither_an_entity_nor_a_tax_flag() -> None:
+    """The economy output names each program's totals, not its entity or kind."""
+    program_statistics = V2_METADATA.tables["program_statistics"]
+
+    assert program_statistics.c.entity.nullable
+    assert program_statistics.c.is_tax.nullable
+    statement = str(
+        CreateTable(program_statistics).compile(dialect=postgresql.dialect())
+    )
+    assert (
+        "CONSTRAINT uq_program_statistics_run_program_entity UNIQUE NULLS NOT "
+        "DISTINCT (report_run_id, program_name, entity)"
+    ) in statement
 
 
 def test_report_runs_name_the_simulation_runs_they_combine() -> None:

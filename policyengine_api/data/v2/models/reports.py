@@ -127,8 +127,9 @@ class ReportRun(TimestampedModel, table=True):
     """One immutable-version execution attempt for a stable report.
 
     Its ``simulation_runs`` rows name the simulation runs it combines.
-    ``labor_supply_result`` and ``cliff_impact_result`` hold the two parts of an
-    economy comparison that have no result table.
+    ``labor_supply_result``, ``cliff_impact_result`` and ``spm_provenance`` hold
+    the parts of an economy comparison that have no result table, and
+    ``data_version`` the release of the data it used.
     """
 
     __tablename__ = "report_runs"
@@ -182,6 +183,8 @@ class ReportRun(TimestampedModel, table=True):
     markdown: str | None = Field(default=None, sa_type=sa.Text)
     labor_supply_result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
     cliff_impact_result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
+    spm_provenance: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
+    data_version: str | None = Field(default=None, max_length=128)
 
     report: Report = Relationship(back_populates="runs")
     simulation_runs: list["ReportRunSimulationRun"] = Relationship(
@@ -538,7 +541,9 @@ class Poverty(IdentifiedModel, table=True):
 class ProgramStatistics(IdentifiedModel, table=True):
     """Baseline and reform totals, counts, winners and losers for one program.
 
-    One row per run, program and entity; ``is_tax`` marks taxes.
+    One row per run, program and entity; ``is_tax`` marks taxes. The economy
+    output's detailed budget names neither the entity nor whether a program is
+    a tax, so both may be null, and rows without an entity count as equal.
     """
 
     __tablename__ = "program_statistics"
@@ -548,6 +553,7 @@ class ProgramStatistics(IdentifiedModel, table=True):
             "program_name",
             "entity",
             name="uq_program_statistics_run_program_entity",
+            postgresql_nulls_not_distinct=True,
         ),
     )
 
@@ -564,8 +570,8 @@ class ProgramStatistics(IdentifiedModel, table=True):
         ondelete="RESTRICT",
     )
     program_name: str = Field(max_length=512)
-    entity: str = Field(max_length=128)
-    is_tax: bool = False
+    entity: str | None = Field(default=None, max_length=128)
+    is_tax: bool | None = None
     baseline_total: float | None = None
     reform_total: float | None = None
     change: float | None = None
@@ -597,10 +603,33 @@ class GeographicImpactBase(IdentifiedModel):
     population: float
 
 
+class UKAreaImpactBase(GeographicImpactBase):
+    """Shared non-table disclosure fields of a UK area's impact.
+
+    ``disclosure_tier`` is ``reported``, or ``approximate`` when the area's
+    sample is thin; the ``_lower`` and ``_upper`` fields bound each income
+    change's 90% interval. All are null for results without disclosure control.
+    """
+
+    disclosure_tier: str | None = Field(default=None, max_length=16)
+    average_household_income_change_lower: float | None = None
+    average_household_income_change_upper: float | None = None
+    relative_household_income_change_lower: float | None = None
+    relative_household_income_change_upper: float | None = None
+
+
+def _disclosure_tier_check(table_name: str) -> sa.CheckConstraint:
+    return sa.CheckConstraint(
+        "disclosure_tier IS NULL OR disclosure_tier IN ('reported', 'approximate')",
+        name=f"ck_{table_name}_disclosure_tier",
+    )
+
+
 class CongressionalDistrictImpact(GeographicImpactBase, table=True):
     """Household income change and population in one US congressional district.
 
-    One row per run and district GEOID.
+    One row per run and district GEOID, with the shares of people who gain,
+    lose or see no change.
     """
 
     __tablename__ = "congressional_district_impacts"
@@ -615,13 +644,16 @@ class CongressionalDistrictImpact(GeographicImpactBase, table=True):
     district_geoid: int
     state_fips: int
     district_number: int
+    winner_percentage: float
+    loser_percentage: float
+    no_change_percentage: float
 
     report_run: ReportRun = Relationship(
         back_populates="congressional_district_impacts"
     )
 
 
-class ConstituencyImpact(GeographicImpactBase, table=True):
+class ConstituencyImpact(UKAreaImpactBase, table=True):
     """Household income change in one UK constituency.
 
     One row per run and constituency code.
@@ -634,6 +666,7 @@ class ConstituencyImpact(GeographicImpactBase, table=True):
             "constituency_code",
             name="uq_constituency_impacts_run_code",
         ),
+        _disclosure_tier_check("constituency_impacts"),
     )
 
     constituency_code: str = Field(max_length=64)
@@ -642,7 +675,7 @@ class ConstituencyImpact(GeographicImpactBase, table=True):
     report_run: ReportRun = Relationship(back_populates="constituency_impacts")
 
 
-class LocalAuthorityImpact(GeographicImpactBase, table=True):
+class LocalAuthorityImpact(UKAreaImpactBase, table=True):
     """Household income change in one UK local authority.
 
     One row per run and local authority code.
@@ -655,6 +688,7 @@ class LocalAuthorityImpact(GeographicImpactBase, table=True):
             "local_authority_code",
             name="uq_local_authority_impacts_run_code",
         ),
+        _disclosure_tier_check("local_authority_impacts"),
     )
 
     local_authority_code: str = Field(max_length=64)

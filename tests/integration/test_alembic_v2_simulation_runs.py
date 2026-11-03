@@ -1,11 +1,13 @@
 """Check the simulation runs revisions against disposable Postgres.
 
-The first revision adds simulation runs and the table naming the simulation
-runs a report run combines, keys every result table by run, and gives
-household jobs one household, one year and one policy. The second drops the
-foreign keys from those tables to the Public API's tables. Neither changes any
-other table, so the previous Public API revision, whose roles can't read or
-write any table they change, keeps working while they are deployed.
+Three revisions follow the area impact coordinate removal. The first adds
+simulation runs and the table naming the simulation runs a report run
+combines, keys every result table by run, and gives household jobs one
+household, one year and one policy. The second drops the foreign keys from
+those tables to the Public API's tables. The third adds the economy output's
+fields that had no column. None changes any other table, so the previous
+Public API revision, whose roles can't read or write any table they change,
+keeps working while they are deployed.
 """
 
 from __future__ import annotations
@@ -34,6 +36,8 @@ if TYPE_CHECKING:
     from sqlalchemy import Connection, Engine
 
 SIMULATION_RUNS_PREVIOUS_REVISION = "c614b6bcccfc"
+SIMULATION_RUNS_REVISION = "2ffd50f47a2b"
+CROSS_SERVICE_KEYS_REVISION = "7a83a87d029a"
 NEW_TABLES = frozenset({"simulation_runs", "report_run_simulation_runs"})
 CHANGED_TABLES = frozenset(
     {
@@ -57,7 +61,9 @@ CHANGED_TABLES = frozenset(
 SIMULATION_SIDE_TABLES = (
     CHANGED_TABLES | NEW_TABLES | {"aggregates", "change_aggregates"}
 )
+RUN_VERSIONS = {"country_package_version": "1.0.0", "policyengine_version": "4.0.0"}
 SHA256_HEX = "a" * 64
+COMPLETED_AT = "2026-11-04T00:00:00Z"
 
 
 def _disposable_url() -> str:
@@ -88,6 +94,18 @@ def engine(config: Config) -> Iterator[Engine]:
     finally:
         command.upgrade(config, "head")
         database_engine.dispose()
+
+
+@pytest.fixture
+def connection(config: Config, engine: Engine) -> Iterator[Connection]:
+    """Yield a connection at head whose writes are rolled back after the test."""
+    command.upgrade(config, "head")
+    with engine.connect() as database_connection:
+        transaction = database_connection.begin()
+        try:
+            yield database_connection
+        finally:
+            transaction.rollback()
 
 
 def _table_shape(engine: Engine, table_name: str) -> dict[str, object]:
@@ -123,7 +141,20 @@ def _shapes(engine: Engine) -> dict[str, dict[str, object]]:
     }
 
 
-def test_the_revision_adds_two_tables_and_changes_only_simulation_side_tables(
+def _column_names(engine: Engine, table_name: str) -> set[str]:
+    return {column["name"] for column in inspect(engine).get_columns(table_name)}
+
+
+def _enum_type_names(engine: Engine) -> set[str]:
+    with engine.connect() as type_connection:
+        return set(
+            type_connection.execute(
+                text("SELECT typname FROM pg_type WHERE typtype = 'e'")
+            ).scalars()
+        )
+
+
+def test_the_revisions_add_two_tables_and_change_only_simulation_side_tables(
     config: Config, engine: Engine
 ) -> None:
     command.downgrade(config, SIMULATION_RUNS_PREVIOUS_REVISION)
@@ -137,6 +168,42 @@ def test_the_revision_adds_two_tables_and_changes_only_simulation_side_tables(
         table_name for table_name in before if before[table_name] != after[table_name]
     }
     assert changed == CHANGED_TABLES
+
+
+def test_each_revision_downgrades_to_its_parent_and_upgrades_again(
+    config: Config, engine: Engine
+) -> None:
+    command.upgrade(config, "head")
+
+    command.downgrade(config, CROSS_SERVICE_KEYS_REVISION)
+    assert {"spm_provenance", "data_version"}.isdisjoint(
+        _column_names(engine, "report_runs")
+    )
+    program_entity = next(
+        column
+        for column in inspect(engine).get_columns("program_statistics")
+        if column["name"] == "entity"
+    )
+    assert not program_entity["nullable"]
+
+    command.downgrade(config, SIMULATION_RUNS_REVISION)
+    assert {"datasets", "households", "policies"} <= {
+        key["referred_table"] for key in inspect(engine).get_foreign_keys("simulations")
+    }
+
+    command.downgrade(config, SIMULATION_RUNS_PREVIOUS_REVISION)
+    assert NEW_TABLES.isdisjoint(inspect(engine).get_table_names(schema="public"))
+    assert {"status", "household_result", "output_dataset_id"} <= _column_names(
+        engine, "simulations"
+    )
+    assert {"report_run_id", "simulation_id"} <= _column_names(engine, "poverty")
+    enum_types = _enum_type_names(engine)
+    assert "v2_simulation_status" in enum_types
+    assert "v2_simulation_role" not in enum_types
+
+    command.upgrade(config, "head")
+    command.check(config)
+    assert "v2_simulation_role" in _enum_type_names(engine)
 
 
 def test_head_has_no_foreign_key_between_the_two_services_tables(
@@ -173,10 +240,31 @@ def _insert(connection: Connection, table: str, **values: object) -> None:
     )
 
 
+def _count(connection: Connection, table: str, column: str, value: object) -> int:
+    return connection.execute(
+        text(f"SELECT count(*) FROM {table} WHERE {column} = :value"),
+        {"value": value},
+    ).scalar_one()
+
+
+def _insert_simulation(connection: Connection) -> object:
+    """Store an economy simulation; its catalog references need no catalog rows."""
+    simulation_id = uuid4()
+    _insert(
+        connection,
+        "simulations",
+        id=simulation_id,
+        simulation_type="economy",
+        dataset_id=uuid4(),
+        tax_benefit_model_version_id=uuid4(),
+        year=2026,
+    )
+    return simulation_id
+
+
 def _insert_simulation_run(
     connection: Connection,
     simulation_id: object,
-    version_id: object,
     *,
     status: str = "pending",
     **values: object,
@@ -187,212 +275,214 @@ def _insert_simulation_run(
         "simulation_runs",
         id=run_id,
         simulation_id=simulation_id,
-        tax_benefit_model_version_id=version_id,
-        country_package_version="1.0.0",
-        policyengine_version="4.0.0",
+        tax_benefit_model_version_id=uuid4(),
         status=status,
+        **RUN_VERSIONS,
         **values,
     )
     return run_id
 
 
-def test_run_tables_enforce_completion_output_and_uniqueness(
-    config: Config, engine: Engine
+def _insert_report_run(connection: Connection) -> object:
+    report_id, report_run_id = uuid4(), uuid4()
+    _insert(
+        connection,
+        "reports",
+        id=report_id,
+        label="Report",
+        country="us",
+        tax_benefit_model_id=uuid4(),
+        inputs="{}",
+    )
+    _insert(
+        connection,
+        "report_runs",
+        id=report_run_id,
+        report_id=report_id,
+        status="running",
+        trigger="initial",
+        **RUN_VERSIONS,
+    )
+    return report_run_id
+
+
+def test_simulation_runs_need_a_completion_time_and_a_whole_output(
+    connection: Connection,
 ) -> None:
-    command.upgrade(config, "head")
-    model_id, version_id, dataset_id = uuid4(), uuid4(), uuid4()
-    simulation_id, report_id, report_run_id = uuid4(), uuid4(), uuid4()
+    simulation_id = _insert_simulation(connection)
+    run_id = _insert_simulation_run(connection, simulation_id)
 
-    with engine.connect() as connection:
-        transaction = connection.begin()
-        try:
-            _insert(
-                connection,
-                "tax_benefit_models",
-                id=model_id,
-                name=f"runs-{model_id.hex[:8]}",
-            )
-            connection.execute(
-                text(
-                    "INSERT INTO tax_benefit_model_versions "
-                    "(id, model_id, version, current_law_id, metadata_time_periods) "
-                    "VALUES (:id, :model_id, '1.0.0', 1, '[2026]')"
-                ),
-                {"id": version_id, "model_id": model_id},
-            )
-            _insert(
-                connection,
-                "datasets",
-                id=dataset_id,
-                name="populace",
-                year=2026,
-                is_output_dataset=False,
-                tax_benefit_model_version_id=version_id,
-            )
-            _insert(
-                connection,
-                "simulations",
-                id=simulation_id,
-                simulation_type="economy",
-                dataset_id=dataset_id,
-                tax_benefit_model_version_id=version_id,
-                year=2026,
-            )
-            baseline_run_id = _insert_simulation_run(
-                connection, simulation_id, version_id
-            )
-            reform_run_id = _insert_simulation_run(
-                connection,
-                simulation_id,
-                version_id,
-                status="succeeded",
-                completed_at="2026-11-04T00:00:00Z",
-                output_uri="gs://bucket/run.parquet",
-                output_sha256=SHA256_HEX,
-            )
+    with _refused(connection):
+        connection.execute(
+            text("UPDATE simulation_runs SET status = 'succeeded' WHERE id = :id"),
+            {"id": run_id},
+        )
+    with _refused(connection):
+        _insert_simulation_run(
+            connection, simulation_id, output_uri="gs://bucket/run.parquet"
+        )
+    with _refused(connection):
+        _insert_simulation_run(
+            connection,
+            simulation_id,
+            output_uri="gs://bucket/run.parquet",
+            output_sha256="short",
+        )
+    finished_run_id = _insert_simulation_run(
+        connection,
+        simulation_id,
+        status="succeeded",
+        completed_at=COMPLETED_AT,
+        output_uri="gs://bucket/run.parquet",
+        output_sha256=SHA256_HEX,
+    )
+    _insert(
+        connection,
+        "poverty",
+        id=uuid4(),
+        simulation_run_id=finished_run_id,
+        poverty_type="spm",
+        entity="person",
+    )
 
-            with _refused(connection):
-                connection.execute(
-                    text(
-                        "UPDATE simulation_runs SET status = 'succeeded' WHERE id = :id"
-                    ),
-                    {"id": baseline_run_id},
-                )
-            with _refused(connection):
-                _insert_simulation_run(
-                    connection,
-                    simulation_id,
-                    version_id,
-                    output_uri="gs://bucket/run.parquet",
-                )
-            with _refused(connection):
-                _insert_simulation_run(
-                    connection,
-                    simulation_id,
-                    version_id,
-                    output_uri="gs://bucket/run.parquet",
-                    output_sha256="short",
-                )
+    connection.execute(
+        text("DELETE FROM simulations WHERE id = :id"), {"id": simulation_id}
+    )
+    assert _count(connection, "simulation_runs", "simulation_id", simulation_id) == 0
+    assert _count(connection, "poverty", "simulation_run_id", finished_run_id) == 0
 
-            _insert(
-                connection,
-                "reports",
-                id=report_id,
-                label="Report",
-                country="us",
-                tax_benefit_model_id=model_id,
-                inputs="{}",
-            )
-            _insert(
-                connection,
-                "report_runs",
-                id=report_run_id,
-                report_id=report_id,
-                country_package_version="1.0.0",
-                policyengine_version="4.0.0",
-                status="running",
-                trigger="initial",
-            )
-            _insert(
-                connection,
-                "report_run_simulation_runs",
-                id=uuid4(),
-                report_run_id=report_run_id,
-                simulation_run_id=baseline_run_id,
-                role="baseline",
-            )
-            with _refused(connection):
-                _insert(
-                    connection,
-                    "report_run_simulation_runs",
-                    id=uuid4(),
-                    report_run_id=report_run_id,
-                    simulation_run_id=baseline_run_id,
-                    role="baseline",
-                )
-            with _refused(connection):
-                _insert(
-                    connection,
-                    "budget_summary",
-                    id=uuid4(),
-                    report_run_id=report_run_id,
-                    baseline_simulation_run_id=baseline_run_id,
-                    reform_simulation_run_id=uuid4(),
-                    variable_name="household_net_income",
-                    entity="household",
-                )
 
-            _insert(
-                connection,
-                "poverty",
-                id=uuid4(),
-                simulation_run_id=reform_run_id,
-                poverty_type="poverty",
-                entity="person",
-            )
-            with _refused(connection):
-                _insert(
-                    connection,
-                    "poverty",
-                    id=uuid4(),
-                    simulation_run_id=reform_run_id,
-                    poverty_type="poverty",
-                    entity="person",
-                )
+def test_report_run_members_are_unique_and_keep_their_simulation_runs(
+    connection: Connection,
+) -> None:
+    run_id = _insert_simulation_run(connection, _insert_simulation(connection))
+    report_run_id = _insert_report_run(connection)
+    member = {
+        "report_run_id": report_run_id,
+        "simulation_run_id": run_id,
+        "role": "baseline",
+    }
+    _insert(connection, "report_run_simulation_runs", id=uuid4(), **member)
 
-            household_job = {
-                "country": "us",
-                "household_id": uuid4(),
-                "request_data": "{}",
-                "tax_benefit_model_version_id": version_id,
-                "country_package_version": "1.0.0",
-                "policyengine_version": "4.0.0",
-            }
-            _insert(
-                connection,
-                "household_jobs",
-                id=uuid4(),
-                year=2026,
-                status="pending",
-                **household_job,
-            )
-            with _refused(connection):
-                _insert(
-                    connection,
-                    "household_jobs",
-                    id=uuid4(),
-                    year=1800,
-                    status="pending",
-                    **household_job,
-                )
-            with _refused(connection):
-                _insert(
-                    connection,
-                    "household_jobs",
-                    id=uuid4(),
-                    year=2026,
-                    status="failed",
-                    **household_job,
-                )
+    with _refused(connection):
+        _insert(connection, "report_run_simulation_runs", id=uuid4(), **member)
+    with _refused(connection):
+        connection.execute(
+            text("DELETE FROM simulation_runs WHERE id = :id"), {"id": run_id}
+        )
+    connection.execute(
+        text("DELETE FROM report_runs WHERE id = :id"), {"id": report_run_id}
+    )
+    assert (
+        _count(connection, "report_run_simulation_runs", "report_run_id", report_run_id)
+        == 0
+    )
 
-            connection.execute(
-                text("DELETE FROM report_runs WHERE id = :id"), {"id": report_run_id}
-            )
-            assert (
-                connection.execute(
-                    text("SELECT count(*) FROM report_run_simulation_runs")
-                ).scalar_one()
-                == 0
-            )
-            connection.execute(
-                text("DELETE FROM simulations WHERE id = :id"), {"id": simulation_id}
-            )
-            remaining_runs = connection.execute(
-                text("SELECT count(*) FROM simulation_runs")
-            ).scalar_one()
-            remaining_poverty = connection.execute(
-                text("SELECT count(*) FROM poverty")
-            ).scalar_one()
-            assert (remaining_runs, remaining_poverty) == (0, 0)
-        finally:
-            transaction.rollback()
+
+def test_results_are_unique_per_run_and_name_runs_that_exist(
+    connection: Connection,
+) -> None:
+    simulation_id = _insert_simulation(connection)
+    baseline_run_id = _insert_simulation_run(connection, simulation_id)
+    reform_run_id = _insert_simulation_run(connection, simulation_id)
+    comparison_runs = {
+        "report_run_id": _insert_report_run(connection),
+        "baseline_simulation_run_id": baseline_run_id,
+        "reform_simulation_run_id": reform_run_id,
+    }
+
+    with _refused(connection):
+        _insert(
+            connection,
+            "budget_summary",
+            id=uuid4(),
+            variable_name="household_net_income",
+            entity="household",
+            **{**comparison_runs, "reform_simulation_run_id": uuid4()},
+        )
+    poverty = {
+        "simulation_run_id": reform_run_id,
+        "poverty_type": "spm",
+        "entity": "person",
+    }
+    _insert(connection, "poverty", id=uuid4(), **poverty)
+    with _refused(connection):
+        _insert(connection, "poverty", id=uuid4(), **poverty)
+    _insert(
+        connection,
+        "program_statistics",
+        id=uuid4(),
+        program_name="income_tax",
+        **comparison_runs,
+    )
+    with _refused(connection):
+        _insert(
+            connection,
+            "program_statistics",
+            id=uuid4(),
+            program_name="income_tax",
+            **comparison_runs,
+        )
+    constituency = {
+        "constituency_name": "Aldershot",
+        "average_household_income_change": 1.0,
+        "relative_household_income_change": 0.01,
+        "population": 100.0,
+        **comparison_runs,
+    }
+    _insert(
+        connection,
+        "constituency_impacts",
+        id=uuid4(),
+        constituency_code="E14000530",
+        disclosure_tier="approximate",
+        **constituency,
+    )
+    with _refused(connection):
+        _insert(
+            connection,
+            "constituency_impacts",
+            id=uuid4(),
+            constituency_code="E14000531",
+            disclosure_tier="withheld",
+            **constituency,
+        )
+
+
+def test_household_jobs_take_a_valid_year_and_record_when_they_end(
+    connection: Connection,
+) -> None:
+    household_job = {
+        "country": "us",
+        "household_id": uuid4(),
+        "request_data": "{}",
+        "tax_benefit_model_version_id": uuid4(),
+        **RUN_VERSIONS,
+    }
+    _insert(
+        connection,
+        "household_jobs",
+        id=uuid4(),
+        year=2026,
+        status="pending",
+        **household_job,
+    )
+
+    with _refused(connection):
+        _insert(
+            connection,
+            "household_jobs",
+            id=uuid4(),
+            year=1800,
+            status="pending",
+            **household_job,
+        )
+    with _refused(connection):
+        _insert(
+            connection,
+            "household_jobs",
+            id=uuid4(),
+            year=2026,
+            status="failed",
+            **household_job,
+        )

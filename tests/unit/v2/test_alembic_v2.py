@@ -72,6 +72,8 @@ SIMULATION_RUNS_REVISION_PATH = (
 )
 # The simulation runs revision, parent of the cross-service foreign key revision.
 CROSS_SERVICE_KEYS_PARENT_REVISION = "2ffd50f47a2b"
+# The cross-service foreign key revision, parent of the economy output revision.
+ECONOMY_OUTPUT_PARENT_REVISION = "7a83a87d029a"
 # The foreign keys from the simulation service's tables to the Public API's.
 CROSS_SERVICE_KEYS = {
     "household_jobs": {"dynamics", "policies"},
@@ -273,6 +275,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        ECONOMY_OUTPUT_PARENT_REVISION,
         CROSS_SERVICE_KEYS_PARENT_REVISION,
         SIMULATION_RUNS_PARENT_REVISION,
         PARAMETER_TREE_REVISION,
@@ -1142,3 +1145,65 @@ def test_cross_service_key_revision_only_drops_and_restores_foreign_keys() -> No
             "op.bulk_insert(",
         ):
             assert operation not in body
+
+
+def test_economy_output_revision_only_adds_columns_and_relaxes_two() -> None:
+    """The revision after the cross-service key revision is generated.
+
+    It adds the economy output's fields that had no column and lets a detailed
+    budget row omit its entity and tax flag; it removes nothing.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == ECONOMY_OUTPUT_PARENT_REVISION
+    ]
+    assert len(children) == 1
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert "No post-generation corrections." in revision
+    added_columns = set(
+        re.findall(r'op\.add_column\(\s*"(\w+)",\s*sa\.Column\(\s*"(\w+)"', upgrade)
+    )
+    uk_disclosure_columns = {
+        "disclosure_tier",
+        "average_household_income_change_lower",
+        "average_household_income_change_upper",
+        "relative_household_income_change_lower",
+        "relative_household_income_change_upper",
+    }
+    assert added_columns == {
+        ("report_runs", "spm_provenance"),
+        ("report_runs", "data_version"),
+        ("congressional_district_impacts", "winner_percentage"),
+        ("congressional_district_impacts", "loser_percentage"),
+        ("congressional_district_impacts", "no_change_percentage"),
+        *(("constituency_impacts", column) for column in uk_disclosure_columns),
+        *(("local_authority_impacts", column) for column in uk_disclosure_columns),
+    }
+    assert upgrade.count("op.add_column(") == len(added_columns)
+    relaxed_columns = re.findall(
+        r'op\.alter_column\(\s*"(\w+)",\s*"(\w+)",\s*'
+        r"existing_type=sa\.\w+\([^)]*\),\s*nullable=True",
+        upgrade,
+    )
+    assert upgrade.count("op.alter_column(") == 2
+    assert set(relaxed_columns) == {
+        ("program_statistics", "entity"),
+        ("program_statistics", "is_tax"),
+    }
+    assert downgrade.count("op.drop_column(") == len(added_columns)
+    for body in (upgrade, downgrade):
+        assert "op.drop_table(" not in body
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+    assert "op.drop_column(" not in upgrade
