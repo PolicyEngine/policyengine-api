@@ -1,22 +1,14 @@
-"""ORM integration behavior for household and saved-policy routes."""
+"""ORM integration behavior for the household-under-policy route."""
 
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
-
-from flask import Flask
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import (
     Household,
     Policy,
-    UserPolicy,
 )
 from policyengine_api.routes.household_routes import get_household_under_policy
-from policyengine_api.routes.policy_routes import (
-    get_user_policy,
-    set_user_policy,
-    update_user_policy,
-)
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.household_calculations import (
@@ -148,38 +140,3 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
         spm=INSTALLED_SPM_SELECTION,
         spm_requested=False,
     )
-
-
-def test_user_policy_endpoints_round_trip_through_orm_session_factory(
-    orm_session_factory,
-):
-    app = Flask(__name__)
-    payload = {
-        "reform_label": "Reform",
-        "reform_id": 2,
-        "baseline_label": "Current law",
-        "baseline_id": 1,
-        "user_id": "auth0|one",
-        "year": "2026",
-        "geography": "us",
-        "dataset": "default",
-        "number_of_provisions": 3,
-        "api_version": "1",
-        "added_date": 1,
-        "updated_date": 1,
-        "budgetary_impact": None,
-        "type": None,
-    }
-
-    with app.test_request_context(json=payload):
-        created = set_user_policy("us")
-    listed = get_user_policy("us", "auth0|one")
-    with app.test_request_context(json={"id": 1, "reform_label": "Updated"}):
-        updated = update_user_policy("us")
-
-    assert created.status_code == 201
-    assert created.get_json()["result"]["dataset"] == "default"
-    assert listed["result"][0]["reform_label"] == "Reform"
-    assert updated.status_code == 200
-    with orm_session_factory() as session:
-        assert session.get(UserPolicy, 1).reform_label == "Updated"

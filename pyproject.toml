@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "5.16.1"
+version = "5.19.1"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -40,14 +40,11 @@ dependencies = [
     "openai",
     "packaging>=24,<27",
     "policyengine-observability[flask,google,httpx,otlp-grpc]>=3.0.3,<4",
-    "policyengine_canada==0.96.3",
-    "policyengine-ng==0.5.1",
-    "policyengine-il==0.1.0",
     # The models extra pins Core, US, UK, and the SPM calculator to the exact
     # versions certified by this PolicyEngine bundle. Cloud Run installs the
     # complete frozen environment from uv.lock; the generic image installs
     # this requirement directly.
-    "policyengine[models]==6.11.1",
+    "policyengine[models]==6.12.0",
     "pydantic",
     "pymysql",
     "python-dotenv",

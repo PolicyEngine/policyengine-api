@@ -1,3 +1,58 @@
+## [5.19.1] - 2026-11-03
+
+### Changed
+
+- A failed US state economy job (`region=state/...`) now keeps its error for two minutes instead of 30 days, and the error message says when the state can be requested again; the next request after that submits a new job. Failed US national, congressional district and place jobs, UK national jobs and typed SPM failures are still kept for 30 days.
+
+
+## [5.19.0] - 2026-11-03
+
+### Added
+
+- Catalog format 2 stores the metadata the app's v3 workspace reads, taken only from PolicyEngine.py's public records: each model version's entities and basic inputs; each variable's input and hidden-input flags, module, the parameter path its adds or subtracts names, its enum values' labels, its unit and its definition period; each parameter's economy and household flags. Bracket schedules are stored as parameter nodes with their stored label. A generated revision adds the columns as nullable, so catalog versions published earlier keep them empty and are compared without them when republished. An opt-in parity test, which CI does not run, compares every new field for the US and the UK with /{country}/metadata. Each country's default dataset now comes from the installed PolicyEngine.py release's manifest; the Public API no longer fixes its own (populace_us_2024 and microcosm_uk_2024_25), and publication stops if the release names no default or gives the national region another dataset.
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.12.0.
+
+
+## [5.18.1] - 2026-11-02
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.12.0.
+
+
+## [5.18.0] - 2026-11-02
+
+### Changed
+
+- `/health` now answers 503 `{"status": "not_ready"}` until the startup warmup has finished and while the runtime configuration is invalid, and 200 `{"status": "healthy"}` after. The Cloud Run startup probe and the deployment health checks poll it instead of `/readiness-check`, and `/liveness-check` and `/readiness-check` are removed.
+
+### Removed
+
+- Removed the routes that only legacy.policyengine.org or the API documentation used: the v1 saved-policy routes (`/{country_id}/user-policy`), the user-profile routes (`/{country_id}/user-profile`), the policy search (`GET /{country_id}/policies`), the recent-simulations list (`GET /simulations`), the `GET /` landing page and `GET /specification`; `/v2/openapi.json` documents the v2 resources.
+  Stopped serving Canada (`ca`), Nigeria (`ng`) and Israel (`il`): requests for them now get the unknown-country 400 response, and `policyengine_canada`, `policyengine-ng` and `policyengine-il` are no longer installed.
+
+
+## [5.17.1] - 2026-11-02
+
+### Changed
+
+- Pull requests run the test suite in the release run's six shards, check that each test ran in exactly one, and send Codecov the six shards' coverage in one upload.
+
+
+## [5.17.0] - 2026-11-02
+
+### Added
+
+- Each release now checks, in its staging and production model-version alignment jobs, that the environment's simulation URL is served by that environment's own Simulation Entrypoint service, and fails otherwise; staging must call the staging simulation service, and production the production one.
+
+### Changed
+
+- CI no longer loads the complete installed PolicyEngine.py catalog. The cross-database integration tests publish a few parameter folders of the installed US and UK models, and a small catalog of edge-case values, and check that every value comes back from PostgreSQL unchanged.
+
+
 ## [5.16.1] - 2026-10-30
 
 ### Changed

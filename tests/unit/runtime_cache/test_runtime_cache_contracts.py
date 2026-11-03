@@ -167,7 +167,7 @@ def test_set_reform_impact_stores_every_field_from_its_arguments():
     )
 
     assert stored == _stored_impact()
-    assert service.get_recent_reform_impacts(5) == [_stored_impact()]
+    assert service._cache.recent(5) == [_stored_impact()]
 
 
 def test_lookups_select_by_every_scope_field():
@@ -237,7 +237,7 @@ def test_delete_keeps_records_differing_in_any_field(changes):
 
     service.delete_reform_impact(ReformImpactScope(**SCOPE), OPTIONS_HASH)
 
-    assert len(service.get_recent_reform_impacts(5)) == 1
+    assert len(service._cache.recent(5)) == 1
 
 
 def test_delete_ignores_the_api_version():
@@ -246,7 +246,7 @@ def test_delete_ignores_the_api_version():
 
     service.delete_reform_impact(ReformImpactScope(**SCOPE), OPTIONS_HASH)
 
-    assert service.get_recent_reform_impacts(5) == []
+    assert service._cache.recent(5) == []
 
 
 def test_delete_swallows_a_failed_cache_write():

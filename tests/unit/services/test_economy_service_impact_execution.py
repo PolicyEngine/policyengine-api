@@ -10,6 +10,7 @@ from policyengine_api.libs.simulation_entrypoint import (
     SimulationRunProgress,
 )
 from policyengine_api.services.economy_service import (
+    EconomicImpactResult,
     EconomicImpactSetupOptions,
     EconomyService,
     ImpactStatus,
@@ -19,6 +20,7 @@ from tests.fixtures.services.economy_service import (
     MOCK_BASELINE_POLICY_ID,
     MOCK_COUNTRY_ID,
     MOCK_DATA_VERSION,
+    MOCK_EXECUTION_ID,
     MOCK_MODEL_VERSION,
     MOCK_OBSERVABILITY_ID,
     MOCK_OPTIONS,
@@ -237,6 +239,79 @@ class TestEconomyService:
             # Verify the error message was passed to the service
             call_args = mock_reform_impacts_service.set_error_reform_impact.call_args
             assert "Simulation timed out" in call_args[1]["message"]
+
+        def test__given_failed_us_state_job__keeps_its_error_for_two_minutes(
+            self,
+            economy_service,
+            setup_options,
+            mock_reform_impacts_service,
+            mock_logger,
+        ):
+            # Given
+            state_setup_options = setup_options.model_copy(
+                update={"region": "state/ca"}
+            )
+            reform_impact = create_mock_reform_impact(status="computing")
+            execution = ModalSimulationExecution(
+                job_id=MOCK_EXECUTION_ID, status="failed", error="out of memory"
+            )
+
+            # When
+            result = economy_service._handle_execution_state(
+                state_setup_options, "failed", reform_impact, execution
+            )
+
+            # Then
+            expected_message = (
+                "Simulation entrypoint execution failed: out of memory. "
+                "A new run for this state can be requested 2 minutes after this "
+                "failure."
+            )
+            # The stored error expires, so the log keeps the failure's reason.
+            # Checked first: building the expected result below logs too.
+            mock_logger.log_struct.assert_any_call(
+                {"message": expected_message}, severity="ERROR"
+            )
+            assert result == EconomicImpactResult.error(expected_message)
+            mock_reform_impacts_service.set_error_reform_impact.assert_called_once_with(
+                execution_id=MOCK_EXECUTION_ID,
+                message=expected_message,
+                keep_seconds=120,
+            )
+
+        @pytest.mark.usefixtures("mock_logger")
+        @pytest.mark.parametrize(
+            "region",
+            [MOCK_REGION, "congressional_district/CA-37", "place/NJ-57000"],
+            ids=["national", "district", "place"],
+        )
+        def test__given_failed_us_job_outside_a_state__keeps_its_error_for_30_days(
+            self,
+            economy_service,
+            setup_options,
+            mock_reform_impacts_service,
+            region,
+        ):
+            # Given
+            region_setup_options = setup_options.model_copy(update={"region": region})
+            reform_impact = create_mock_reform_impact(status="computing")
+            execution = ModalSimulationExecution(
+                job_id=MOCK_EXECUTION_ID, status="failed", error="out of memory"
+            )
+
+            # When
+            result = economy_service._handle_execution_state(
+                region_setup_options, "failed", reform_impact, execution
+            )
+
+            # Then
+            expected_message = "Simulation entrypoint execution failed: out of memory"
+            assert result == EconomicImpactResult.error(expected_message)
+            # Without keep_seconds the error has the cache's 30-day lifetime.
+            mock_reform_impacts_service.set_error_reform_impact.assert_called_once_with(
+                execution_id=MOCK_EXECUTION_ID,
+                message=expected_message,
+            )
 
         @pytest.mark.usefixtures("mock_logger")
         def test__given_modal_running_state__then_returns_computing_result(

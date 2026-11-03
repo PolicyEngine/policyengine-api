@@ -20,10 +20,6 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from uuid import UUID
 
-REVIEWED_DEFAULT_DATASETS = {
-    "us": "populace_us_2024",
-    "uk": "microcosm_uk_2024_25",
-}
 SUPPORTED_REGION_TYPES = frozenset(
     {
         "national",
@@ -102,7 +98,7 @@ class _RegionDatasetSelection(NamedTuple):
     """The logical input datasets a country's regions select.
 
     Names every selected dataset, each region code's dataset, and how many
-    regions of each type fall back to the reviewed default dataset.
+    regions of each type fall back to the release's default dataset.
     """
 
     dataset_names: set[str]
@@ -110,20 +106,20 @@ class _RegionDatasetSelection(NamedTuple):
     fallback_counts: Counter[str]
 
 
-def verified_default_dataset(
+def release_default_dataset(
     country_id: str,
     release_manifest: object,
 ) -> tuple[str, object]:
-    """Return the reviewed default dataset and the manifest's URI for it.
+    """Return the default dataset the installed PolicyEngine.py release names.
 
-    The manifest's default dataset must be the reviewed one.
+    Also returns the manifest's URI for it. The Public API sets no default of
+    its own.
     """
-    reviewed_default = REVIEWED_DEFAULT_DATASETS[country_id]
-    manifest_default = getattr(release_manifest, "default_dataset", None)
-    if manifest_default != reviewed_default:
-        msg = f"{country_id} default dataset does not match the reviewed selection"
+    default_dataset = getattr(release_manifest, "default_dataset", None)
+    if not isinstance(default_dataset, str) or not default_dataset:
+        msg = f"{country_id} release manifest names no default dataset"
         raise CatalogExtractionError(msg)
-    return reviewed_default, getattr(release_manifest, "default_dataset_uri", None)
+    return default_dataset, getattr(release_manifest, "default_dataset_uri", None)
 
 
 def verified_source_regions(country_id: str, source: object) -> tuple[Any, ...]:
@@ -155,7 +151,7 @@ def select_region_datasets(
     country_id: str,
     source_regions: tuple[Any, ...],
     *,
-    reviewed_default: str,
+    default_dataset: str,
     default_dataset_uri: object,
 ) -> _RegionDatasetSelection:
     """Choose each region's logical input dataset.
@@ -163,11 +159,11 @@ def select_region_datasets(
     A subnational region with a dataset path uses that dataset: US states and
     districts, and the UK constituencies and local authorities that .py routes
     to its local-area release. Every other region, such as a UK country that
-    filters the national file, uses the reviewed default, and the national
+    filters the national file, uses the release's default, and the national
     region may only name it. A US subnational region without a path is
     counted as a fallback.
     """
-    selected_dataset_names: set[str] = {reviewed_default}
+    selected_dataset_names: set[str] = {default_dataset}
     region_dataset_names: dict[str, str] = {}
     fallback_counts: Counter[str] = Counter()
     for region in source_regions:
@@ -189,14 +185,17 @@ def select_region_datasets(
             dataset_name = _dataset_name_from_path(dataset_path)
             selected_dataset_names.add(dataset_name)
         else:
-            dataset_name = reviewed_default
+            dataset_name = default_dataset
             if country_id == "us" and region_type != "national" and not dataset_path:
                 fallback_counts[region_type] += 1
         if region_type == "national" and dataset_path not in {
             None,
             default_dataset_uri,
         }:
-            msg = f"{country_id} national region does not use the reviewed dataset"
+            msg = (
+                f"{country_id} national region does not use the release's default "
+                f"dataset {default_dataset}"
+            )
             raise CatalogExtractionError(msg)
         region_dataset_names[code] = dataset_name
     return _RegionDatasetSelection(
