@@ -1,3 +1,10 @@
+## [5.19.1] - 2026-11-03
+
+### Changed
+
+- A failed US state economy job (`region=state/...`) now keeps its error for two minutes instead of 30 days, and the error message says when the state can be requested again; the next request after that submits a new job. Failed US national, congressional district and place jobs, UK national jobs and typed SPM failures are still kept for 30 days.
+
+
 ## [5.19.0] - 2026-11-03
 
 ### Added
