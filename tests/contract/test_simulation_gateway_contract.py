@@ -16,6 +16,7 @@ from tests.fixtures.libs.simulation_entrypoint import (
     MOCK_BATCH_SUBMIT_RESPONSE_SUCCESS,
     MOCK_HEALTH_RESPONSE,
     MOCK_LOCAL_AREA_BREAKDOWN_RESULT,
+    MOCK_LOCAL_AREA_BREAKDOWN_RESULT_WITH_WITHHELD_CODES,
     MOCK_MODAL_JOB_ID,
     MOCK_POLL_RESPONSE_COMPLETE,
     MOCK_RESOLVED_APP_NAME,
@@ -203,9 +204,14 @@ def _uk_submission(options: dict) -> dict:
             "local_areas",
             MOCK_LOCAL_AREA_BREAKDOWN_RESULT,
         ),
+        (
+            {"breakdown": "local_areas"},
+            "local_areas",
+            MOCK_LOCAL_AREA_BREAKDOWN_RESULT_WITH_WITHHELD_CODES,
+        ),
         ({}, None, MOCK_POLL_RESPONSE_COMPLETE["result"]),
     ],
-    ids=["local-area-breakdown", "national"],
+    ids=["local-area-breakdown", "local-area-breakdown-withheld-codes", "national"],
 )
 def test_gateway_uk_comparison_sends_breakdown_only_when_requested(
     monkeypatch, options, expected_breakdown, result
