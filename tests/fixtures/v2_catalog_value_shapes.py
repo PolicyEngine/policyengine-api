@@ -73,6 +73,8 @@ class ParameterCase:
             description=None,
             data_type=self.data_type,
             unit=None,
+            economy=True,
+            household=False,
             parameter_values=[
                 SimpleNamespace(
                     value=value.value, start_date=value.start, end_date=value.end
@@ -339,6 +341,17 @@ def _variables() -> list[SimpleNamespace]:
             default_value=_FilingStatus.SINGLE,
             adds=None,
             subtracts=None,
+            is_input_variable=True,
+            hidden_input=False,
+            module_name="household.demographic.filing_status",
+            adds_parameter_path=None,
+            subtracts_parameter_path=None,
+            enum_values=[
+                SimpleNamespace(value="SINGLE", label="Single"),
+                SimpleNamespace(value="JOINT", label="Joint"),
+            ],
+            unit=None,
+            definition_period="year",
         ),
         SimpleNamespace(
             name="is_blind",
@@ -350,6 +363,14 @@ def _variables() -> list[SimpleNamespace]:
             default_value=False,
             adds=None,
             subtracts=None,
+            is_input_variable=True,
+            hidden_input=False,
+            module_name="household.demographic.is_blind",
+            adds_parameter_path=None,
+            subtracts_parameter_path=None,
+            enum_values=None,
+            unit=None,
+            definition_period="year",
         ),
         SimpleNamespace(
             name="household_net_income",
@@ -361,6 +382,14 @@ def _variables() -> list[SimpleNamespace]:
             default_value=0.0,
             adds=["employment_income"],
             subtracts=["income_tax"],
+            is_input_variable=False,
+            hidden_input=False,
+            module_name="household.income.household_net_income",
+            adds_parameter_path=None,
+            subtracts_parameter_path=None,
+            enum_values=None,
+            unit="currency-USD",
+            definition_period="year",
         ),
     ]
 

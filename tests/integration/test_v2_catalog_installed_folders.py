@@ -5,8 +5,8 @@ values). This test runs the real US and UK models through extraction and
 publication instead, each reduced to the parameters under the folders in
 SELECTED_FOLDERS, and checks that every extracted value comes back from
 PostgreSQL unchanged. Extraction gets only what it needs besides those
-parameters: each model's identity, package and release manifest, its national
-region, and no variables.
+parameters: each model's identity, package, release manifest and entities, its
+national region, and no variables or basic inputs.
 
 tests/fixtures/v2_catalog_value_shapes.py covers the value shapes extraction
 accepts that the installed models don't hold, such as text and mappings.
@@ -115,6 +115,9 @@ def selected_model(country_id: str, model: object, folders: Iterable[str]) -> ob
             country_id,
             [region for region in model.region_registry if region.code == country_id],
         ),
+        entities=model.entities,
+        # Basic inputs name variables, and the reduced model has none.
+        basic_inputs=[],
         variables_by_name={},
         parameter_nodes_by_name={
             name: node

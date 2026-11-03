@@ -93,6 +93,36 @@ metadata time-period options are stored on the model-version snapshot.
 PolicyEngine Core and country-package versions are derived diagnostic evidence
 and are not separately persisted.
 
+Catalog format 2 adds the metadata the app's v3 workspace reads, taken only
+from PolicyEngine.py's public records, which carry it from the release that
+publishes entities, basic inputs and these flags:
+
+| Record | Fields |
+| --- | --- |
+| Model version | `catalog_format` (2), `entities` (`key`, `plural`, `is_person`, in the package's order), `basic_inputs` (the household builder's default fields) |
+| Variable | `is_input_variable`, `hidden_input`, `module_name`, `adds_parameter_path` and `subtracts_parameter_path` (the parameter whose dated value lists the variables summed; `adds` and `subtracts` keep the list PolicyEngine.py resolved), `enum_values` (`value` and declared `label`, in order), `unit` (for example `currency-USD`) and `definition_period` (`year`, `month` or `eternity`), which the household builder and breakdown read |
+| Parameter | `economy`, `household` |
+
+Bracket schedules are parameter nodes with their stored label, or none when the
+package stores none. An empty basic-input list is stored as empty. Extraction
+stops before reading any record if the installed PolicyEngine.py does not
+publish these fields, and names each missing field: 6.7.5 and 6.11.1
+publish only the variables' unit and definition period. It also stops if the
+model has other than one person entity, names a basic input or a parameter path
+that is not published, gives enum labels that do not match the variable's
+possible values or are not JSON scalars, or gives a flag that is not a boolean.
+An opt-in test, `tests/integration/test_v2_catalog_metadata_parity.py`,
+compares every format 2 field for the US and the UK with what
+`/{country}/metadata` builds. CI does not run it, because it extracts every
+variable and parameter of the installed models, with their values, and builds
+each country's v1 metadata; set `RUN_V2_CATALOG_METADATA_PARITY=1` to run it.
+
+Publication never rewrites a stored version. A version published before
+format 2 has a null `catalog_format` and null format 2 fields, and later
+publications of the same PolicyEngine.py version compare it without those
+fields. The first PolicyEngine.py version published after format 2 deploys
+carries them.
+
 Parameter extraction requires the PolicyEngine.py public history contract from
 5.0.4 and later: values are ordered from oldest to newest, bounded `end_date`
 values are inclusive and fall one day before the following `start_date`, and
@@ -101,20 +131,24 @@ does not reorder, deduplicate, or repair package output. A value superseded on
 the immediately following day therefore has equal start and end dates and is a
 valid one-day interval.
 
-The US national region uses `populace_us_2024`. A US state,
+Each country's default dataset is the one the installed PolicyEngine.py
+release names in its manifest (`default_dataset`); the Public API sets none of
+its own. Publication stops if the manifest names no default, or if the release
+gives the national region another dataset. The US national region uses the
+release's default (`populace_us_2024` in 6.11.1). A US state,
 congressional-district, or place region uses its PolicyEngine.py regional
 alternative when one is available. Until a later reviewed change removes the
-fallback, a subnational region without such an alternative uses
-`populace_us_2024`. The command emits one summary warning containing only the
-affected region types and counts. The UK national and country regions use
-`microcosm_uk_2024_25`, the default certified by PolicyEngine.py 6.10.0; a
-country filters that national file. UK constituency and local-authority
-regions use the dataset PolicyEngine.py routes them to,
-`microcosm_uk_2024_25_dense`, because the national file has no area codes.
+fallback, a subnational region without such an alternative uses the default.
+The command emits one summary warning containing only the affected region
+types and counts. The UK national and country regions use the release's
+default (`microcosm_uk_2024_25` in 6.11.1); a country filters that national
+file. UK constituency and local-authority regions use the dataset
+PolicyEngine.py routes them to, `microcosm_uk_2024_25_dense`, because the
+national file has no area codes.
 
 Review the fallback summary on every new PolicyEngine.py release. A changed
-count may identify an upstream catalog change that needs a reviewed dataset
-selection even when publication otherwise succeeds.
+count may identify an upstream change to the release's datasets even when
+publication otherwise succeeds.
 
 ## Validation evidence and retry
 

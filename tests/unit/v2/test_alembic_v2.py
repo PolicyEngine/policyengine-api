@@ -55,6 +55,8 @@ POOLER_URL = (
     f"{PROJECT_REF}:test-password@aws-0-us-east-2.pooler.supabase.com:5432/"
     "postgres?sslmode=require"
 )
+# The catalog format 2 revision's parent, the countries revision.
+CATALOG_FORMAT_2_PARENT_REVISION = "fb1a3e40d3d6"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -236,6 +238,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        CATALOG_FORMAT_2_PARENT_REVISION,
         "fbb7488ebe8a",
         "91af4fc8d8c1",
         "60d6518b6a98",
@@ -605,7 +608,7 @@ def _countries_revision_source() -> str:
         for revision in script.walk_revisions()
         if revision.down_revision == "fbb7488ebe8a"
     )
-    assert countries_revision.revision == V2_ALEMBIC_HEAD_REVISION
+    assert countries_revision.revision == CATALOG_FORMAT_2_PARENT_REVISION
     assert countries_revision.path is not None
     return Path(countries_revision.path).read_text(encoding="utf-8")
 
@@ -828,3 +831,54 @@ def test_v2_environment_commits_after_persistent_target_qualification() -> None:
     assert "current_heads != previous_heads" in env_source
     assert "current_heads == script_heads" in env_source
     assert "validate_v2_head_schema(connection, target_metadata)" in env_source
+
+
+def test_catalog_format_2_revision_adds_only_nullable_columns() -> None:
+    """The revision after the countries revision adds catalog format 2's columns.
+
+    It is generated, adds each column as nullable so versions published earlier
+    keep them empty, drops them on downgrade, and writes no data.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == CATALOG_FORMAT_2_PARENT_REVISION
+    ]
+    assert len(children) == 1
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    added_columns = {
+        "tax_benefit_model_versions": ("catalog_format", "entities", "basic_inputs"),
+        "variables": (
+            "is_input_variable",
+            "hidden_input",
+            "module_name",
+            "adds_parameter_path",
+            "subtracts_parameter_path",
+            "enum_values",
+            "unit",
+            "definition_period",
+        ),
+        "parameters": ("economy", "household"),
+    }
+    column_count = sum(len(columns) for columns in added_columns.values())
+    assert upgrade.count("op.add_column(") == column_count
+    assert upgrade.count("nullable=True") == column_count
+    assert downgrade.count("op.drop_column(") == column_count
+    for table_name, columns in added_columns.items():
+        for column_name in columns:
+            assert f'"{column_name}"' in upgrade
+            assert f'op.drop_column("{table_name}", "{column_name}")' in downgrade
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "server_default" not in body
