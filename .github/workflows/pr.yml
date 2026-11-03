@@ -50,7 +50,7 @@ jobs:
         run: bash .github/scripts/check_ci_complete.sh
 
   ensure-policyengine-bundle-supported-by-simulation-api:
-    name: Ensure PolicyEngine bundle is supported by simulation API
+    name: Ensure PolicyEngine bundle is the simulation API's latest
     # Full CI runs only on the lowest unmerged pull request in a stack.
     if: ${{ !github.event.pull_request.stack || github.event.pull_request.stack.base.ref == github.event.pull_request.base.ref }}
     runs-on: ubuntu-latest
@@ -63,14 +63,12 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Set up uv for installed bundle validation
         uses: astral-sh/setup-uv@v6
-      - name: Check simulation API supports updated PolicyEngine bundle
-        run: bash .github/check-policyengine-bundle-supported.sh --if-changed-from-base "${{ github.base_ref }}"
+      - name: Check the PolicyEngine bundle is the simulation API's latest
+        run: bash .github/check-policyengine-bundle-supported.sh
 
   lint:
     name: Lint

@@ -42,11 +42,19 @@ years, and geography it used. This is the concrete behavior referred to elsewher
 as SPM selection and provenance.
 
 The API and simulation worker can be reviewed independently. Economy calculations
-using this API version require a worker whose `/versions` response maps the
-installed PolicyEngine.py, US, and UK versions to the same worker application and
-reports the matching `canonical-spm-v1` settings. Until such a worker is deployed,
-the API returns `SPM_CONFIGURATION_UNAVAILABLE` instead of submitting a calculation
-to an incompatible worker. [Simulation API PR 703](https://github.com/PolicyEngine/policyengine-sim-api/pull/703)
+using this API version require a worker whose `/versions` response routes the
+installed PolicyEngine.py version and reports the matching `canonical-spm-v1`
+settings for it. Until such a worker is deployed, the API returns
+`SPM_CONFIGURATION_UNAVAILABLE` instead of submitting a calculation to an
+incompatible worker.
+
+Every pull request, and every staging and production deploy, also runs
+`.github/check-policyengine-bundle-supported.sh`. It fails unless the installed
+PolicyEngine.py version is the `policyengine.latest` version that environment's
+`/versions` response reports, so the API stays on the latest bundle the
+simulation API has published. The API's economy requests name their
+PolicyEngine.py version, and the simulation API routes them by it, so the check
+doesn't compare the US and UK routes. [Simulation API PR 703](https://github.com/PolicyEngine/policyengine-sim-api/pull/703)
 implements the corresponding worker package update.
 
 The automated dependency updater changes the single `policyengine[models]`

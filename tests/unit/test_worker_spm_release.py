@@ -86,19 +86,24 @@ def test_release_rejects_worker_without_matching_spm_capability(registry, mutati
         worker_spm_release.validate_installed_worker(registry, FIXTURE_BUNDLE_VERSION)
 
 
-@pytest.mark.parametrize("route", ["policyengine", "us", "uk"])
-def test_release_rejects_missing_worker_route(registry, route):
-    registry[route] = {}
-    with pytest.raises(ValueError, match=r"no .* application"):
-        worker_spm_release.validate_installed_worker(registry, FIXTURE_BUNDLE_VERSION)
+def test_release_accepts_country_routes_to_a_newer_worker(registry):
+    """The release compares only PolicyEngine.py versions, never country routes.
 
+    A newer bundle with the same US and UK versions points those versions'
+    routes at its own worker. The Public API's requests name their
+    PolicyEngine.py version, so the gateway never uses those routes for them.
+    """
+    for country_id in ("us", "uk"):
+        version = next(iter(registry[country_id]))
+        registry[country_id][version] = "newer-worker"
 
-@pytest.mark.parametrize("route", ["us", "uk"])
-def test_release_rejects_country_route_to_different_worker(registry, route):
-    version = next(iter(registry[route]))
-    registry[route][version] = "different-worker"
-    with pytest.raises(ValueError, match="different worker"):
-        worker_spm_release.validate_installed_worker(registry, FIXTURE_BUNDLE_VERSION)
+    assert (
+        worker_spm_release.validate_installed_worker(
+            registry,
+            FIXTURE_BUNDLE_VERSION,
+        )
+        == SELECTION
+    )
 
 
 def test_release_rejects_installed_distribution_outside_manifest(
