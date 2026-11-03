@@ -61,7 +61,10 @@ def _refused(connection: Connection, statement: str, **values: object) -> None:
 
 def _create_simulation_rows(connection: Connection) -> dict[str, object]:
     """Create what the simulation API creates for one economy report run."""
-    ids = {name: uuid4() for name in ("simulation", "run", "report", "report_run")}
+    ids = {
+        name: uuid4()
+        for name in ("simulation", "run", "report", "report_run", "household_job")
+    }
     insert_row(
         connection,
         "simulations",
@@ -109,7 +112,7 @@ def _create_simulation_rows(connection: Connection) -> dict[str, object]:
     insert_row(
         connection,
         "household_jobs",
-        id=uuid4(),
+        id=ids["household_job"],
         country="us",
         household_id=uuid4(),
         year=2026,
@@ -193,6 +196,13 @@ def test_modal_workers_write_their_run_status_and_results_only(
         baseline_simulation_run_id=ids["run"],
         reform_simulation_run_id=ids["run"],
         cliff_impact_result="{}",
+    )
+    connection.execute(
+        text(
+            "UPDATE household_jobs SET status = 'succeeded', result = '{}', "
+            "completed_at = now() WHERE id = :id AND status = 'pending'"
+        ),
+        {"id": ids["household_job"]},
     )
     connection.execute(text("SELECT count(*) FROM parameter_values")).scalar_one()
 

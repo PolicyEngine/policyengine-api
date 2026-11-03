@@ -93,7 +93,7 @@ class Simulation(TimestampedModel, table=True):
 
 
 class SimulationRun(TimestampedModel, table=True):
-    """One run of a simulation on one catalog version and .py version.
+    """One run of a simulation on one catalog version and PolicyEngine.py version.
 
     ``tax_benefit_model_version_id``, ``dataset_id`` and ``region_id`` name the
     catalog version, dataset and region the run used, which a run on a newer

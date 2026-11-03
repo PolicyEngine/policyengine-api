@@ -94,8 +94,8 @@ class HouseholdJob(TimestampedModel, table=True):
 
     ``policy_id`` is null for current law. ``request_data`` holds the
     calculation's options, such as axes. The job records the catalog version
-    and .py version it ran on, its Modal call, and its status and result or
-    error. Its household, policy, dynamic and catalog version are logical
+    and PolicyEngine.py version it ran on, its Modal call, and its status and
+    result or error. Its household, policy, dynamic and catalog version are logical
     references to the Public API's rows, without foreign keys: the simulation
     service checks them before it writes the job.
     """

@@ -1,6 +1,6 @@
 """Check the simulation runs revisions against disposable Postgres.
 
-Five revisions follow the area impact coordinate removal. The first adds
+Five revisions follow the parameter tree revision. The first adds
 simulation runs and the table naming the simulation runs a report run
 combines, keys every result table by run, and gives household jobs one
 household, one year and one policy. The second drops the foreign keys from
@@ -8,9 +8,10 @@ those tables to the Public API's tables. The third adds the economy output's
 fields that had no column. The fourth makes each result row tell apart its
 pair of simulation runs, decile grouping and poverty group. The fifth moves
 the parts of a comparison without a result table from the report run to one
-row per compared pair. None changes any other table, so the previous Public
-API revision, whose roles can't read or write any table they change, keeps
-working while they are deployed.
+row per compared pair. None changes any other table. The previous Public API
+revision keeps working while they are deployed: its roles can't read or write
+any table they change, except the catalog writer, which counts the rows of
+simulations, reports and report_runs.
 """
 
 from __future__ import annotations
@@ -159,7 +160,7 @@ def _enum_type_names(engine: Engine) -> set[str]:
         )
 
 
-def test_the_revisions_add_two_tables_and_change_only_simulation_side_tables(
+def test_the_revisions_add_three_tables_and_change_only_simulation_side_tables(
     config: Config, engine: Engine
 ) -> None:
     command.downgrade(config, SIMULATION_RUNS_PREVIOUS_REVISION)

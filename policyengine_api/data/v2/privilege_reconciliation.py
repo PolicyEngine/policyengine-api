@@ -486,6 +486,45 @@ def _write_summary(environ: Mapping[str, str], summary: str) -> None:
             summary_file.write(summary)
 
 
+def _verify(
+    connection: Connection,
+    declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
+    roles_awaiting_creation: Collection[str],
+    environment: str,
+    environ: Mapping[str, str],
+) -> int:
+    """Check every declared privilege, skipping roles not created yet.
+
+    The roles skipped and the privileges missing are written to stdout and the
+    job summary under one heading.
+    """
+    skipped = skipped_roles(connection, declared, roles_awaiting_creation)
+    checked = {role: tables for role, tables in declared.items() if role not in skipped}
+    failures = check_declared_privileges(connection, checked)
+    heading = f"## v2 table privileges ({environment})\n\n"
+    skipped_note = f"{_skipped_roles_line(skipped)}\n\n" if skipped else ""
+    if failures:
+        rows = "\n".join(
+            f"- `{failure.role}` lacks {failure.privilege} on `{failure.table}`"
+            for failure in failures
+        )
+        _write_summary(
+            environ,
+            f"{heading}{skipped_note}"
+            f"Declared privileges missing after reconciling:\n\n{rows}\n",
+        )
+        return 1
+    if skipped:
+        _write_summary(
+            environ,
+            f"{heading}{skipped_note}"
+            "Every other declared v2 table privilege is held.\n",
+        )
+        return 0
+    print(f"Every declared v2 table privilege is held ({environment}).")
+    return 0
+
+
 def _build_engine(settings: V2AlembicSettings) -> Engine:
     return create_engine(settings.url, poolclass=NullPool)
 
@@ -511,30 +550,7 @@ def run(
         with engine.begin() as connection:
             qualify_v2_connection(connection, settings)
             if mode == "verify":
-                skipped = skipped_roles(connection, declared, awaiting)
-                if skipped:
-                    _write_summary(
-                        values,
-                        f"## v2 table privileges ({environment})\n\n"
-                        f"{_skipped_roles_line(skipped)}\n",
-                    )
-                failures = check_declared_privileges(
-                    connection, declared, roles_awaiting_creation=awaiting
-                )
-                if failures:
-                    rows = "\n".join(
-                        f"- `{failure.role}` lacks {failure.privilege} on "
-                        f"`{failure.table}`"
-                        for failure in failures
-                    )
-                    _write_summary(
-                        values,
-                        f"## v2 table privileges ({environment})\n\n"
-                        f"Declared privileges missing after reconciling:\n\n{rows}\n",
-                    )
-                    return 1
-                print(f"Every declared v2 table privilege is held ({environment}).")
-                return 0
+                return _verify(connection, declared, awaiting, environment, values)
             if create_roles:
                 created = create_missing_roles(connection, declared)
                 if created:

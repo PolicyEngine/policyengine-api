@@ -1,9 +1,9 @@
 """Structural tests for simulation runs, report runs, household jobs and results.
 
 A simulation defines what to calculate and each calculation of it is a run that
-records the catalog and .py versions it used. A report run names the simulation
-runs it combines, results are keyed by run, and a household job calculates one
-household for one year under one policy.
+records the catalog and PolicyEngine.py versions it used. A report run names
+the simulation runs it combines, results are keyed by run, and a household job
+calculates one household for one year under one policy.
 """
 
 import sqlalchemy as sa

@@ -565,7 +565,9 @@ models made each result row tell apart what it measures:
 - `poverty.filter_group` names the group a filter selects (`child` for
   `age`), and joins the table's unique key.
 
-Missing values in those keys count as equal (`NULLS NOT DISTINCT`). It has no
+Missing values in those keys count as equal (`NULLS NOT DISTINCT`, which
+PostgreSQL supports from version 15; `poverty` and `program_statistics` use it
+from the earlier revisions too). It has no
 post-generation corrections and needs no table empty; its downgrade fails
 while a report run holds comparison rows of more than one pair, or a run holds
 rows that differ only in a removed column.

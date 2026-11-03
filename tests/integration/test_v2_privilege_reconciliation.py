@@ -193,6 +193,41 @@ def test_the_deploy_steps_pass_and_name_a_role_awaiting_creation(
     assert (apply_status, verify_status) == (0, 0)
     assert f"`{absent_role}`" in apply_report
     assert absent_role in verify_output
-    assert "Every declared v2 table privilege is held" in verify_output
+    assert "Every other declared v2 table privilege is held." in verify_output
+    assert "Every declared v2 table privilege is held" not in verify_output
     # Each step names the skipped role in the job summary.
     assert summary_path.read_text(encoding="utf-8").count(f"`{absent_role}`") == 2
+
+
+def test_verify_fails_once_a_role_awaiting_creation_exists_without_its_privileges(
+    disposable_v2_database_url, temporary_role, monkeypatch, capsys, tmp_path
+) -> None:
+    """A role awaiting creation is checked as soon as it exists."""
+    role = temporary_role()
+    absent_role = f"policyengine_privilege_test_absent_{uuid4().hex[:12]}"
+    monkeypatch.setattr(
+        privilege_reconciliation,
+        "declared_privileges",
+        lambda _environment: {role: {"regions": READ}, absent_role: {"regions": READ}},
+    )
+    monkeypatch.setattr(
+        privilege_reconciliation,
+        "ROLES_AWAITING_PROVISIONING",
+        frozenset({role, absent_role}),
+    )
+    summary_path = tmp_path / "summary.md"
+    environ = {
+        V2_MIGRATION_DATABASE_URL: disposable_v2_database_url,
+        V2_ALEMBIC_DISPOSABLE_TEST: "1",
+        DEPLOYMENT_ENVIRONMENT: "test",
+        "GITHUB_STEP_SUMMARY": str(summary_path),
+    }
+
+    verify_status = run("verify", environ=environ)
+    capsys.readouterr()
+    summary = summary_path.read_text(encoding="utf-8")
+
+    assert verify_status == 1
+    assert f"`{role}` lacks SELECT on `regions`" in summary
+    assert f"`{absent_role}`" in summary
+    assert summary.count("## v2 table privileges") == 1
