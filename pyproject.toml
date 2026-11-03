@@ -44,7 +44,7 @@ dependencies = [
     # versions certified by this PolicyEngine bundle. Cloud Run installs the
     # complete frozen environment from uv.lock; the generic image installs
     # this requirement directly.
-    "policyengine[models]==6.12.0",
+    "policyengine[models]==6.12.1",
     "pydantic",
     "pymysql",
     "python-dotenv",
