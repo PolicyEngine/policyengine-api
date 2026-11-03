@@ -216,7 +216,9 @@ class PolicyEngineCountry:
                     for name, label in UK_COUNTRY_REGIONS
                 ),
             ]
-            # The economy region check reads the same cached lists.
+            # Constituencies, then local authorities, each sorted by name, from
+            # the area lists .py builds its UK region registry from. The economy
+            # region check reads the same cached lists.
             region.extend(
                 {
                     "name": f"{area_type}/{area.name}",

@@ -6,17 +6,18 @@ UK, its four countries and, when the installed bundle's
 ``regional_release_kind`` is ``local_area``, the constituencies and local
 authorities from the area lists packaged with policyengine.
 
-This module checks a region against the Public API's own copies of those
-lists, the ones its UK metadata offers, so the check and the metadata always
-agree and no part of .py is imported. Tests keep the copies equal to .py's
-packaged files and the countries equal to .py's registry.
+This module reads those area lists from the installed policyengine wheel,
+for both the region check and the UK metadata, so the two always agree and
+no part of .py is imported. Tests keep the countries equal to .py's
+registry.
 """
 
 from __future__ import annotations
 
 import csv
+import io
 from functools import cache
-from pathlib import Path
+from importlib.metadata import distribution
 from typing import NamedTuple
 
 from policyengine_api.constants import UK_COUNTRY_REGIONS, get_bundle_data_release
@@ -32,9 +33,11 @@ UK_AREA_REGION_NOUNS = {
     "constituency": "constituency",
     "local_authority": "local authority",
 }
-UK_AREA_LIST_PATHS = {
-    "constituency": Path(__file__).parent / "constituencies_2024.csv",
-    "local_authority": Path(__file__).parent / "local_authorities_2021.csv",
+# .py's packaged area lists, the files its UK region registry is built from,
+# inside the installed policyengine wheel.
+PY_UK_AREA_LIST_FILES = {
+    "constituency": "policyengine/data/uk_geography/constituencies_2024.csv",
+    "local_authority": "policyengine/data/uk_geography/local_authorities_2023.csv",
 }
 
 
@@ -50,13 +53,16 @@ def uk_areas(region_type: str) -> tuple[UKArea, ...]:
     """Return the constituencies or local authorities, in file order.
 
     The UK metadata and the region check both read the lists here, once per
-    process.
+    process. They are read from the installed policyengine wheel rather than
+    through .py, because importing any .py module builds .py's country models,
+    which takes several seconds and requests release manifests over the
+    network.
     """
-    with UK_AREA_LIST_PATHS[region_type].open(encoding="utf-8") as area_file:
-        return tuple(
-            UKArea(code=row["code"], name=row["name"])
-            for row in csv.DictReader(area_file)
-        )
+    area_list = distribution("policyengine").locate_file(
+        PY_UK_AREA_LIST_FILES[region_type]
+    )
+    rows = csv.DictReader(io.StringIO(area_list.read_text(encoding="utf-8")))
+    return tuple(UKArea(code=row["code"], name=row["name"]) for row in rows)
 
 
 @cache

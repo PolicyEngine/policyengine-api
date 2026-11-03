@@ -2,9 +2,9 @@
 
 .py's registry builds its constituencies and local authorities from area
 lists packaged with policyengine, and includes them only when the installed
-bundle's regional_release_kind is local_area. The Public API checks UK
-regions against its own copies of those lists, the ones its UK metadata
-offers, so these tests compare the copies with the installed package's files.
+bundle's regional_release_kind is local_area. The Public API reads those lists
+from the installed package for both its UK region check and its UK metadata,
+so these tests compare what it reads with the package's files.
 """
 
 import csv
