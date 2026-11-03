@@ -1,10 +1,10 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 90,
+    "request_count": 86,
     "route_group_count": 9,
     "sim_flow_count": 3,
-    "workflow_count": 17
+    "workflow_count": 16
   },
   "route_groups": [
     {
@@ -136,16 +136,6 @@
             "message",
             "result"
           ]
-        },
-        {
-          "expected_status": 200,
-          "headers": [],
-          "method": "GET",
-          "path": "/us/policies",
-          "route_group": "policy",
-          "stable_response_fields": [
-            "result"
-          ]
         }
       ]
     },
@@ -203,53 +193,6 @@
             "result.offset",
             "result.limit",
             "result.has_more"
-          ]
-        }
-      ]
-    },
-    {
-      "current_contract": "api_v1_compatible",
-      "future_owner_pr": "PR 10: Policy Migration",
-      "name": "saved_policy_v1_compatibility",
-      "requests": [
-        {
-          "expected_status": 201,
-          "headers": [],
-          "method": "POST",
-          "path": "/us/user-policy",
-          "route_group": "policy",
-          "stable_response_fields": [
-            "status",
-            "message",
-            "result.id",
-            "result.reform_id",
-            "result.reform_label",
-            "result.baseline_id",
-            "result.user_id"
-          ]
-        },
-        {
-          "expected_status": 200,
-          "headers": [],
-          "method": "GET",
-          "path": "/us/user-policy/{user_id}",
-          "route_group": "policy",
-          "stable_response_fields": [
-            "status",
-            "message",
-            "result"
-          ]
-        },
-        {
-          "expected_status": 200,
-          "headers": [],
-          "method": "PUT",
-          "path": "/us/user-policy",
-          "route_group": "policy",
-          "stable_response_fields": [
-            "status",
-            "message",
-            "result.id"
           ]
         }
       ]

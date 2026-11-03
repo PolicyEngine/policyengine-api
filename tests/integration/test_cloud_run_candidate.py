@@ -3,13 +3,9 @@ def test_cloud_run_candidate_health_routes(api_client):
     assert health_response.status_code == 200, health_response.text
     assert health_response.json() == {"status": "healthy"}
 
-    liveness_response = api_client.get("/liveness-check")
-    assert liveness_response.status_code == 200, liveness_response.text
-    assert liveness_response.text == "OK"
-
-    readiness_response = api_client.get("/readiness-check")
-    assert readiness_response.status_code == 200, readiness_response.text
-    assert readiness_response.text == "OK"
+    for removed_probe_path in ("/liveness-check", "/readiness-check"):
+        removed_probe_response = api_client.get(removed_probe_path)
+        assert removed_probe_response.status_code == 404, removed_probe_path
 
     simulation_gateway_response = api_client.get("/simulation-gateway-check")
     assert simulation_gateway_response.status_code == 200, (
@@ -36,14 +32,13 @@ def test_cloud_run_candidate_metadata_and_policy(
     assert policy_payload["result"]["id"] == current_law_id
 
 
-def test_cloud_run_candidate_stage6_read_route_contracts(api_client):
-    specification_response = api_client.get("/specification")
-    assert specification_response.status_code == 200, specification_response.text
-    specification = specification_response.json()
-    assert specification["openapi"] == "3.0.0"
-    assert specification["info"]["title"] == "PolicyEngine API"
-    assert specification["info"]["version"]
+def test_cloud_run_candidate_serves_no_legacy_documentation_routes(api_client):
+    for path in ("/", "/specification", "/simulations"):
+        response = api_client.get(path)
+        assert response.status_code == 404, (path, response.text)
 
+
+def test_cloud_run_candidate_stage6_read_route_contracts(api_client):
     uk_metadata_response = api_client.get(
         "/uk/metadata",
         headers={"X-PolicyEngine-Request-Id": "stage6-uk-metadata"},
@@ -62,9 +57,7 @@ def test_cloud_run_candidate_stage6_read_route_contracts(api_client):
     assert invalid_country_response.status_code == 400
     assert invalid_country_response.json() == {
         "status": "error",
-        "message": (
-            "Country zz not found. Available countries are: uk, us, ca, ng, il"
-        ),
+        "message": ("Country zz not found. Available countries are: uk, us"),
     }
 
 

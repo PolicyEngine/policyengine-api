@@ -256,3 +256,11 @@ Apply the reviewed schema revisions and application image only to independently
 verified production targets. Enable native v2 use and v1 create copying as
 separate operational decisions and retain the preceding application revision
 for immediate rollback.
+
+## Removal of Canada, Nigeria and Israel
+
+The Public API no longer serves Canada, Nigeria and Israel, and their country
+packages are no longer installed. Their v1 household requests are rejected as
+unknown countries before any write, so the Cloud SQL-only path described
+above for those countries no longer runs. Existing Cloud SQL rows for them
+are kept.

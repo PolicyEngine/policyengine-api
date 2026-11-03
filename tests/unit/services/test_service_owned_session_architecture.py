@@ -14,7 +14,6 @@ from policyengine_api.services.reform_impacts_service import ReformImpactsServic
 from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.services.user_policy_service import UserPolicyService
-from policyengine_api.services.user_service import UserService
 
 PROJECT_ROOT = Path(__file__).parents[3]
 PACKAGE_ROOT = PROJECT_ROOT / "policyengine_api"
@@ -33,7 +32,7 @@ PACKAGE_ROOT = PROJECT_ROOT / "policyengine_api"
         ),
         (
             PolicyService,
-            ("get_policy", "get_policy_json", "search_policies", "set_policy"),
+            ("get_policy", "get_policy_json", "set_policy"),
         ),
         (
             UserPolicyService,
@@ -43,7 +42,6 @@ PACKAGE_ROOT = PROJECT_ROOT / "policyengine_api"
                 "update_user_policy",
             ),
         ),
-        (UserService, ("get_profile", "create_profile", "update_profile")),
         (
             SimulationService,
             (
@@ -63,7 +61,6 @@ PACKAGE_ROOT = PROJECT_ROOT / "policyengine_api"
         (
             ReformImpactsService,
             (
-                "get_recent_reform_impacts",
                 "get_all_reform_impacts",
                 "get_all_reform_impacts_by_options_hash_prefix",
                 "set_reform_impact",

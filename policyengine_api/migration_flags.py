@@ -44,6 +44,9 @@ DEFAULT_DB_SOURCE = "cloud_sql"
 DEFAULT_SIM_ENTRYPOINT = "old_gateway_direct"
 DEFAULT_SIM_COMPUTE_BACKEND = "old_gateway"
 
+# Removed paths ("/", the liveness and readiness checks, "/specification")
+# keep their groups, so requests that still arrive for them are labelled in
+# the request logs.
 ROUTE_GROUP_BY_PATH = {
     "": "home",
     "/": "home",
@@ -147,7 +150,15 @@ def get_route_impl(route_group: str) -> RouteImplementation:
 
 @dataclass(frozen=True)
 class RouteImplementationSettings:
-    """Startup route selections for the read groups migrated in Stage 6."""
+    """Startup route selections for the read groups migrated in Stage 6.
+
+    ``health`` and ``specification`` no longer select a route: the liveness
+    and readiness checks and ``GET /specification`` are removed, and
+    ``/health`` is always native. They are still read because the deployment
+    pipeline requires and verifies ``ROUTE_IMPL_HEALTH`` and
+    ``ROUTE_IMPL_SPECIFICATION``; all of them go when the Flask fallback is
+    removed.
+    """
 
     health: RouteImplementation
     specification: RouteImplementation

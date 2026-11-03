@@ -218,8 +218,7 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert "alembic -c alembic-v1.ini upgrade head" in workflow
     assert "alembic -c alembic-v2.ini upgrade head" in workflow
     assert "test_alembic_v2_lifecycle.sh" not in workflow
-    assert "test_v2_catalog_installed.py" in workflow
-    assert "RUN_V2_CATALOG_COMPATIBILITY" in workflow
+    assert "test_v2_catalog_installed_folders.py" in workflow
     assert "test_v2_catalog_publication.py" in workflow
     assert "test_v2_metadata_routes.py" in workflow
     assert "test_v2_country_routes.py" in workflow
@@ -235,12 +234,12 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert "test_v1_household_dual_write.py" in workflow
     assert "test_mysql_household_spm_dual_write.py" in workflow
     assert "test_mysql_update_row_counts.py" in workflow
-    assert "test_v2_catalog_publication_qualification.py" in workflow
-    assert "RUN_V2_CATALOG_PUBLICATION_QUALIFICATION" in workflow
     assert "test_runtime_cache_redis.py" in workflow
-    assert "uv sync --frozen" in workflow
+    # The steps run coverage and pytest, which only the dev extra declares;
+    # the default environment no longer brings coverage in.
+    assert "uv sync --frozen --extra dev" in workflow
     assert workflow.count("coverage run --branch") == 1
-    assert workflow.count("coverage run -a --branch") == 8
+    assert workflow.count("coverage run -a --branch") == 7
     assert "coverage xml -i -o coverage-v2.xml" in workflow
     assert "codecov/codecov-action@v5" in workflow
     assert "files: coverage-v2.xml" in workflow
