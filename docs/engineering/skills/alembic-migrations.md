@@ -225,6 +225,8 @@ and a revision runs once per database, so it can't repair drift.
 | `policyengine_v2_runtime` | The Public API on Cloud Run |
 | `policyengine_v2_catalog_writer` | `scripts/publish_v2_metadata_catalog.py` |
 | `policyengine_stage12_<environment>` | The simulation API and its Modal worker, on the temporary comparison-run tables |
+| `policyengine_v2_simulation_service` | The simulation API on Cloud Run: creates simulations, reports, their runs and household jobs, and reads the policy, household and catalog rows a run needs |
+| `policyengine_v2_modal_worker` | The simulation API's Modal workers: write their runs' and household jobs' status and results, and read the rows a run needs |
 
 Every v2 table has an entry for every role, so "no access" is a decision, not
 an omission. The migration role owns every table and isn't listed. Three rules
@@ -237,6 +239,9 @@ check the declarations:
   `policyengine_v2_runtime`, catalog publication as
   `policyengine_v2_catalog_writer`, and the comparison-run services as
   `policyengine_stage12_test`, holding only their declared privileges.
+  `tests/integration/test_v2_simulation_role_privileges.py` runs the
+  simulation API's writes as its two roles; their code lives in the simulation
+  API's repository.
 - `api.v2.deployed-privileges-match`: every deploy runs
   `scripts/reconcile_v2_privileges.py apply` right after the schema upgrade,
   then `verify`, before the catalog is seeded.

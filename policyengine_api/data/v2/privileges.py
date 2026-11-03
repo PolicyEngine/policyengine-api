@@ -24,6 +24,15 @@ Roles and what decides their privileges:
   (``scripts/publish_v2_metadata_catalog.py``). Its privileges follow what
   publication writes and reads; its code isn't organized as connector modules,
   so the deploy check, not the connector analysis, covers it.
+- ``policyengine_v2_simulation_service``: the simulation API on Cloud Run. It
+  creates simulations, reports, their runs and household jobs, and reads the
+  policy, household and catalog rows a run needs.
+- ``policyengine_v2_modal_worker``: the simulation API's Modal workers. They
+  write the status of the runs and household jobs they were given, and their
+  results, and read the rows a run needs. Both simulation API roles' code lives
+  in that repository, so the deploy check covers them here.
+
+The Public API reads the simulation tables it serves, and writes none of them.
 
 The migration role (``policyengine_v2_migrator``) owns every table, and
 Supabase's ``postgres`` role administers the project; neither is managed here.
@@ -36,12 +45,14 @@ one appears, so the manifest can be extended to cover it.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final
 
 RUNTIME_ROLE: Final = "policyengine_v2_runtime"
 CATALOG_WRITER_ROLE: Final = "policyengine_v2_catalog_writer"
+SIMULATION_SERVICE_ROLE: Final = "policyengine_v2_simulation_service"
+MODAL_WORKER_ROLE: Final = "policyengine_v2_modal_worker"
 STAGE12_ROLE_PREFIX: Final = "policyengine_stage12_"
 PERSISTENT_ENVIRONMENTS: Final = frozenset({"staging", "production"})
 # Declared roles an operator hasn't created in staging and production yet. While
@@ -49,7 +60,9 @@ PERSISTENT_ENVIRONMENTS: Final = frozenset({"staging", "production"})
 # instead of failing; once it exists they grant and check its privileges.
 # Remove a role from this set when it exists in both environments, so that its
 # absence fails the deploy again.
-ROLES_AWAITING_PROVISIONING: Final[frozenset[str]] = frozenset()
+ROLES_AWAITING_PROVISIONING: Final[frozenset[str]] = frozenset(
+    {SIMULATION_SERVICE_ROLE, MODAL_WORKER_ROLE}
+)
 ENVIRONMENT_PATTERN: Final = re.compile(r"^[a-z][a-z0-9_]{0,30}$")
 
 
@@ -65,6 +78,7 @@ class TablePrivilege(StrEnum):
 NO_ACCESS: Final[frozenset[TablePrivilege]] = frozenset()
 READ: Final = frozenset({TablePrivilege.SELECT})
 READ_INSERT: Final = frozenset({TablePrivilege.SELECT, TablePrivilege.INSERT})
+READ_UPDATE: Final = frozenset({TablePrivilege.SELECT, TablePrivilege.UPDATE})
 READ_INSERT_UPDATE: Final = frozenset(
     {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.UPDATE}
 )
@@ -85,6 +99,8 @@ class TableAccess:
     runtime: frozenset[TablePrivilege]
     catalog_writer: frozenset[TablePrivilege]
     stage12: frozenset[TablePrivilege]
+    simulation_service: frozenset[TablePrivilege]
+    modal_worker: frozenset[TablePrivilege]
 
 
 def _access(
@@ -92,35 +108,62 @@ def _access(
     runtime: frozenset[TablePrivilege] = NO_ACCESS,
     catalog_writer: frozenset[TablePrivilege] = NO_ACCESS,
     stage12: frozenset[TablePrivilege] = NO_ACCESS,
+    simulation_service: frozenset[TablePrivilege] = NO_ACCESS,
+    modal_worker: frozenset[TablePrivilege] = NO_ACCESS,
 ) -> TableAccess:
-    return TableAccess(runtime=runtime, catalog_writer=catalog_writer, stage12=stage12)
+    return TableAccess(
+        runtime=runtime,
+        catalog_writer=catalog_writer,
+        stage12=stage12,
+        simulation_service=simulation_service,
+        modal_worker=modal_worker,
+    )
+
+
+# The simulation API creates these rows; its Modal workers read them, and write
+# the status of the runs and household jobs among them.
+_SIMULATION_DEFINITION = _access(
+    runtime=READ, simulation_service=READ_INSERT, modal_worker=READ
+)
+_RUN_STATUS = _access(
+    runtime=READ, simulation_service=READ_INSERT, modal_worker=READ_UPDATE
+)
+# The Modal workers write results, keyed by run, once each.
+_RESULT = _access(runtime=READ, modal_worker=READ_INSERT)
+# What a run needs from the Public API's policies, households and catalog.
+_RUN_INPUT_READS: Final = {"simulation_service": READ, "modal_worker": READ}
 
 
 TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Alembic's revision record; the catalog writer checks the schema revision.
     "alembic_version": _access(catalog_writer=READ),
-    # Simulation-domain result tables, unused by the managed roles.
+    # Custom totals, unused until they return.
     "aggregates": _access(),
-    "budget_summary": _access(),
     "change_aggregates": _access(),
-    "congressional_district_impacts": _access(),
-    "constituency_impacts": _access(),
-    "decile_impacts": _access(),
     "dynamics": _access(),
-    "household_jobs": _access(),
-    "inequality": _access(),
-    "intra_decile_impacts": _access(),
-    "local_authority_impacts": _access(),
-    "poverty": _access(),
-    "program_statistics": _access(),
-    "report_run_simulation_runs": _access(),
-    "report_runs": _access(catalog_writer=READ),
-    "reports": _access(catalog_writer=READ),
-    "simulation_runs": _access(),
-    "simulations": _access(catalog_writer=READ),
+    # Simulations, reports, their runs and household jobs. The catalog writer
+    # checks that publication leaves the rows of three of them untouched.
+    "household_jobs": _RUN_STATUS,
+    "report_run_simulation_runs": _SIMULATION_DEFINITION,
+    "report_runs": replace(_RUN_STATUS, catalog_writer=READ),
+    "reports": replace(_SIMULATION_DEFINITION, catalog_writer=READ),
+    "simulation_runs": _RUN_STATUS,
+    "simulations": replace(_SIMULATION_DEFINITION, catalog_writer=READ),
+    # Results of simulation runs and report runs.
+    "budget_summary": _RESULT,
+    "congressional_district_impacts": _RESULT,
+    "constituency_impacts": _RESULT,
+    "decile_impacts": _RESULT,
+    "inequality": _RESULT,
+    "intra_decile_impacts": _RESULT,
+    "local_authority_impacts": _RESULT,
+    "poverty": _RESULT,
+    "program_statistics": _RESULT,
     # Metadata catalog: the catalog writer publishes it, the Public API reads it.
     "dataset_versions": _access(catalog_writer=READ),
-    "datasets": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
+    "datasets": _access(
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
+    ),
     "parameter_nodes": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
     # Written by catalog publication for each version it publishes, from the
     # installed packages' catalog; never rewritten.
@@ -128,20 +171,28 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Written with each catalog version that publication publishes.
     "parameter_tree_children": _access(runtime=READ, catalog_writer=READ_INSERT),
     # The Public API also inserts a v2 policy's own parameter values.
-    "parameter_values": _access(runtime=READ_INSERT, catalog_writer=READ_INSERT_UPDATE),
-    "parameters": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
-    "regions": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
-    "tax_benefit_model_versions": _access(
-        runtime=READ, catalog_writer=READ_INSERT_UPDATE
+    "parameter_values": _access(
+        runtime=READ_INSERT, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
     ),
-    "tax_benefit_models": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
+    "parameters": _access(
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
+    ),
+    "regions": _access(
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
+    ),
+    "tax_benefit_model_versions": _access(
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
+    ),
+    "tax_benefit_models": _access(
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
+    ),
     "variables": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
     # v2 policies and households, created by the native routes and by Stage 10
     # dual-write. A copy locks its mapping row (FOR UPDATE), which needs UPDATE.
-    "households": _access(runtime=READ_INSERT),
+    "households": _access(runtime=READ_INSERT, **_RUN_INPUT_READS),
     "legacy_household_mappings": _access(runtime=READ_INSERT_UPDATE),
     "legacy_policy_mappings": _access(runtime=READ_INSERT_UPDATE),
-    "policies": _access(runtime=READ_INSERT),
+    "policies": _access(runtime=READ_INSERT, **_RUN_INPUT_READS),
     # Stage 10 saved-policy mirror.
     "legacy_user_mappings": _access(runtime=READ_WRITE),
     "legacy_user_policy_mappings": _access(runtime=READ_WRITE),
@@ -191,4 +242,10 @@ def declared_privileges(
             table: access.catalog_writer for table, access in TABLE_ACCESS.items()
         },
         stage12: {table: access.stage12 for table, access in TABLE_ACCESS.items()},
+        SIMULATION_SERVICE_ROLE: {
+            table: access.simulation_service for table, access in TABLE_ACCESS.items()
+        },
+        MODAL_WORKER_ROLE: {
+            table: access.modal_worker for table, access in TABLE_ACCESS.items()
+        },
     }

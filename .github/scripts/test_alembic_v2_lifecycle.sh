@@ -5,4 +5,5 @@ set -euo pipefail
 uv run --frozen --extra dev pytest -q \
   tests/unit/v2/test_alembic_v2.py \
   tests/integration/test_alembic_v2_lifecycle.py \
-  tests/integration/test_alembic_v2_catalog_tables.py
+  tests/integration/test_alembic_v2_catalog_tables.py \
+  tests/integration/test_alembic_v2_simulation_runs.py
