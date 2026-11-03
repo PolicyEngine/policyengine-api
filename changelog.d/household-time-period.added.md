@@ -1,1 +1,0 @@
-Add `household_options.time_period` to the `/{country}/metadata` response: the years offered for household calculations, in the shape of `economy_options.time_period`. The US years are the years the certified SPM forecast covers, up to the last year of the CPI-U parameter; the UK years follow the rule for the UK society-wide years. `economy_options` is unchanged.

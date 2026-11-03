@@ -1,3 +1,21 @@
+## [5.22.0] - 2026-11-03
+
+### Added
+
+- Add `household_options.time_period` to the `/{country}/metadata` response: the years offered for household calculations, in the shape of `economy_options.time_period`. The US years are the years the certified SPM forecast covers, up to the last year of the CPI-U parameter; the UK years follow the rule for the UK society-wide years. `economy_options` is unchanged.
+- A `breakdown=local_areas` result of `GET /{country_id}/economy/{policy_id}/over/{baseline_policy_id}` carries `constituency_withheld_codes` and `local_authority_withheld_codes` unchanged from the simulation API, and the SPM guide documents them: the sorted ONS codes of each level's areas that the run estimated but disclosure control withheld, `[]` when none were, and null or absent when the result doesn't report them.
+- Catalog publication writes parameter trees into a new table, parameter_tree_children, built from the installed packages' catalog records for each version: one row per node and parameter under its parent's path, with its label, its position among its siblings, its direct child counts, and whether a reform can change it. A bracket schedule is one node whose children are its brackets, labelled "Bracket 1", "Bracket 2" and so on, and labels take the form the app's v3 workspace shows, with a path without a stored label getting one made from the last part of its name. Publication writes the tree of each version it publishes, and of the installed version when an earlier release stored it with catalog format 2 but without one; its evidence lists them. Other stored versions, and an installed version stored before catalog format 2, have no tree.
+
+### Changed
+
+- The Cloud SQL migration and household mirror-event workflows install their dependencies from uv.lock and run their scripts through uv run --frozen, instead of an unlocked pip install.
+- /v2/parameters/children reads one level of the stored parameter tree with one indexed read. A bracket schedule is now listed as one node whose children are its brackets, instead of its brackets appearing beside its parent's groups under their raw names, and every child carries its label in the form the app's v3 workspace shows: the stored label with underscores as spaces and its first letter upper-cased, or one made from the last part of its name. A label PolicyEngine.py made for a bracket field or breakdown parameter without one of its own, such as "Standard deduction (Single)", is shown by the last part of its name, as v3 shows it today. reform_changeable=true lists only the children a reform can change, sorted by label, with child counts that count only those, following the rules of the tree the app's v3 workspace builds. The route now reads its query through the shared strict models, so unknown or repeated parameters, an unsupported country and a malformed policyengine_version return 422 (an unsupported country and a malformed version returned 400 before), and a catalog version without a tree returns 503 with a message naming the version.
+
+### Fixed
+
+- UK `breakdown=local_areas` results cached before the simulation API listed each level's withheld area codes (`constituency_withheld_codes` and `local_authority_withheld_codes`) are no longer served: a breakdown request's options hash now includes `breakdown_schema=2`, so the next request computes the breakdown again. Hashes and cached results of requests without a breakdown are unchanged.
+
+
 ## [5.21.0] - 2026-11-03
 
 ### Changed
