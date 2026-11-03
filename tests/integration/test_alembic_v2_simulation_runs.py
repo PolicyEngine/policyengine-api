@@ -1,19 +1,21 @@
 """Check the simulation runs revisions against disposable Postgres.
 
-Three revisions follow the area impact coordinate removal. The first adds
+Five revisions follow the area impact coordinate removal. The first adds
 simulation runs and the table naming the simulation runs a report run
 combines, keys every result table by run, and gives household jobs one
 household, one year and one policy. The second drops the foreign keys from
 those tables to the Public API's tables. The third adds the economy output's
-fields that had no column. None changes any other table, so the previous
-Public API revision, whose roles can't read or write any table they change,
-keeps working while they are deployed.
+fields that had no column. The fourth makes each result row tell apart its
+pair of simulation runs, decile grouping and poverty group. The fifth moves
+the parts of a comparison without a result table from the report run to one
+row per compared pair. None changes any other table, so the previous Public
+API revision, whose roles can't read or write any table they change, keeps
+working while they are deployed.
 """
 
 from __future__ import annotations
 
 import os
-from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -21,7 +23,6 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.exc import IntegrityError
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.migration_target import (
@@ -29,6 +30,7 @@ from policyengine_api.data.v2.migration_target import (
     load_v2_alembic_settings,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+from tests.integration.simulation_rows import RUN_VERSIONS, insert_row, refused
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -39,7 +41,10 @@ SIMULATION_RUNS_PREVIOUS_REVISION = "c614b6bcccfc"
 SIMULATION_RUNS_REVISION = "2ffd50f47a2b"
 CROSS_SERVICE_KEYS_REVISION = "7a83a87d029a"
 ECONOMY_OUTPUT_REVISION = "7f43d2c7c3c6"
-NEW_TABLES = frozenset({"simulation_runs", "report_run_simulation_runs"})
+RESULT_IDENTITY_REVISION = "2e3de7c572ed"
+NEW_TABLES = frozenset(
+    {"simulation_runs", "report_run_simulation_runs", "report_run_comparisons"}
+)
 CHANGED_TABLES = frozenset(
     {
         "budget_summary",
@@ -62,7 +67,6 @@ CHANGED_TABLES = frozenset(
 SIMULATION_SIDE_TABLES = (
     CHANGED_TABLES | NEW_TABLES | {"aggregates", "change_aggregates"}
 )
-RUN_VERSIONS = {"country_package_version": "1.0.0", "policyengine_version": "4.0.0"}
 SHA256_HEX = "a" * 64
 COMPLETED_AT = "2026-11-04T00:00:00Z"
 
@@ -176,6 +180,12 @@ def test_each_revision_downgrades_to_its_parent_and_upgrades_again(
 ) -> None:
     command.upgrade(config, "head")
 
+    command.downgrade(config, RESULT_IDENTITY_REVISION)
+    assert "report_run_comparisons" not in inspect(engine).get_table_names()
+    assert {"labor_supply_result", "data_version"} <= _column_names(
+        engine, "report_runs"
+    )
+
     command.downgrade(config, ECONOMY_OUTPUT_REVISION)
     assert "decile_variable" not in _column_names(engine, "decile_impacts")
     assert "filter_group" not in _column_names(engine, "poverty")
@@ -234,23 +244,6 @@ def test_head_has_no_foreign_key_between_the_two_services_tables(
     assert cross_service_keys == []
 
 
-@contextmanager
-def _refused(connection: Connection) -> Iterator[None]:
-    """Expect the statement inside to violate a constraint, then roll it back."""
-    savepoint = connection.begin_nested()
-    with pytest.raises(IntegrityError):
-        yield
-    savepoint.rollback()
-
-
-def _insert(connection: Connection, table: str, **values: object) -> None:
-    columns = ", ".join(values)
-    placeholders = ", ".join(f":{column}" for column in values)
-    connection.execute(
-        text(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"), values
-    )
-
-
 def _count(connection: Connection, table: str, column: str, value: object) -> int:
     return connection.execute(
         text(f"SELECT count(*) FROM {table} WHERE {column} = :value"),
@@ -261,7 +254,7 @@ def _count(connection: Connection, table: str, column: str, value: object) -> in
 def _insert_simulation(connection: Connection) -> object:
     """Store an economy simulation; its catalog references need no catalog rows."""
     simulation_id = uuid4()
-    _insert(
+    insert_row(
         connection,
         "simulations",
         id=simulation_id,
@@ -281,7 +274,7 @@ def _insert_simulation_run(
     **values: object,
 ) -> object:
     run_id = uuid4()
-    _insert(
+    insert_row(
         connection,
         "simulation_runs",
         id=run_id,
@@ -296,7 +289,7 @@ def _insert_simulation_run(
 
 def _insert_report_run(connection: Connection) -> object:
     report_id, report_run_id = uuid4(), uuid4()
-    _insert(
+    insert_row(
         connection,
         "reports",
         id=report_id,
@@ -305,7 +298,7 @@ def _insert_report_run(connection: Connection) -> object:
         tax_benefit_model_id=uuid4(),
         inputs="{}",
     )
-    _insert(
+    insert_row(
         connection,
         "report_runs",
         id=report_run_id,
@@ -323,16 +316,16 @@ def test_simulation_runs_need_a_completion_time_and_a_whole_output(
     simulation_id = _insert_simulation(connection)
     run_id = _insert_simulation_run(connection, simulation_id)
 
-    with _refused(connection):
+    with refused(connection):
         connection.execute(
             text("UPDATE simulation_runs SET status = 'succeeded' WHERE id = :id"),
             {"id": run_id},
         )
-    with _refused(connection):
+    with refused(connection):
         _insert_simulation_run(
             connection, simulation_id, output_uri="gs://bucket/run.parquet"
         )
-    with _refused(connection):
+    with refused(connection):
         _insert_simulation_run(
             connection,
             simulation_id,
@@ -347,7 +340,7 @@ def test_simulation_runs_need_a_completion_time_and_a_whole_output(
         output_uri="gs://bucket/run.parquet",
         output_sha256=SHA256_HEX,
     )
-    _insert(
+    insert_row(
         connection,
         "poverty",
         id=uuid4(),
@@ -373,11 +366,11 @@ def test_report_run_members_are_unique_and_keep_their_simulation_runs(
         "simulation_run_id": run_id,
         "role": "baseline",
     }
-    _insert(connection, "report_run_simulation_runs", id=uuid4(), **member)
+    insert_row(connection, "report_run_simulation_runs", id=uuid4(), **member)
 
-    with _refused(connection):
-        _insert(connection, "report_run_simulation_runs", id=uuid4(), **member)
-    with _refused(connection):
+    with refused(connection):
+        insert_row(connection, "report_run_simulation_runs", id=uuid4(), **member)
+    with refused(connection):
         connection.execute(
             text("DELETE FROM simulation_runs WHERE id = :id"), {"id": run_id}
         )
@@ -402,8 +395,8 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
         "reform_simulation_run_id": reform_run_id,
     }
 
-    with _refused(connection):
-        _insert(
+    with refused(connection):
+        insert_row(
             connection,
             "budget_summary",
             id=uuid4(),
@@ -416,11 +409,11 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
         "poverty_type": "spm",
         "entity": "person",
     }
-    _insert(connection, "poverty", id=uuid4(), **poverty)
-    with _refused(connection):
-        _insert(connection, "poverty", id=uuid4(), **poverty)
+    insert_row(connection, "poverty", id=uuid4(), **poverty)
+    with refused(connection):
+        insert_row(connection, "poverty", id=uuid4(), **poverty)
     for group in ("child", "adult"):
-        _insert(
+        insert_row(
             connection,
             "poverty",
             id=uuid4(),
@@ -435,35 +428,47 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
         "quantiles": 10,
         **comparison_runs,
     }
-    _insert(connection, "decile_impacts", id=uuid4(), **decile)
-    _insert(
+    insert_row(connection, "decile_impacts", id=uuid4(), **decile)
+    insert_row(
         connection,
         "decile_impacts",
         id=uuid4(),
         decile_variable="household_wealth_decile",
         **decile,
     )
-    with _refused(connection):
-        _insert(connection, "decile_impacts", id=uuid4(), **decile)
+    with refused(connection):
+        insert_row(connection, "decile_impacts", id=uuid4(), **decile)
     budget = {"variable_name": "household_tax", "entity": "household"}
-    _insert(connection, "budget_summary", id=uuid4(), **budget, **comparison_runs)
+    insert_row(connection, "budget_summary", id=uuid4(), **budget, **comparison_runs)
     next_year_runs = {
         **comparison_runs,
         "baseline_simulation_run_id": _insert_simulation_run(connection, simulation_id),
         "reform_simulation_run_id": _insert_simulation_run(connection, simulation_id),
     }
-    _insert(connection, "budget_summary", id=uuid4(), **budget, **next_year_runs)
-    with _refused(connection):
-        _insert(connection, "budget_summary", id=uuid4(), **budget, **next_year_runs)
-    _insert(
+    insert_row(connection, "budget_summary", id=uuid4(), **budget, **next_year_runs)
+    with refused(connection):
+        insert_row(connection, "budget_summary", id=uuid4(), **budget, **next_year_runs)
+    # One comparison row per compared pair holds the untabled parts.
+    for runs in (comparison_runs, next_year_runs):
+        insert_row(
+            connection,
+            "report_run_comparisons",
+            id=uuid4(),
+            labor_supply_result="{}",
+            data_version="1.0.0",
+            **runs,
+        )
+    with refused(connection):
+        insert_row(connection, "report_run_comparisons", id=uuid4(), **next_year_runs)
+    insert_row(
         connection,
         "program_statistics",
         id=uuid4(),
         program_name="income_tax",
         **comparison_runs,
     )
-    with _refused(connection):
-        _insert(
+    with refused(connection):
+        insert_row(
             connection,
             "program_statistics",
             id=uuid4(),
@@ -477,7 +482,7 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
         "population": 100.0,
         **comparison_runs,
     }
-    _insert(
+    insert_row(
         connection,
         "constituency_impacts",
         id=uuid4(),
@@ -485,8 +490,8 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
         disclosure_tier="approximate",
         **constituency,
     )
-    with _refused(connection):
-        _insert(
+    with refused(connection):
+        insert_row(
             connection,
             "constituency_impacts",
             id=uuid4(),
@@ -506,7 +511,7 @@ def test_household_jobs_take_a_valid_year_and_record_when_they_end(
         "tax_benefit_model_version_id": uuid4(),
         **RUN_VERSIONS,
     }
-    _insert(
+    insert_row(
         connection,
         "household_jobs",
         id=uuid4(),
@@ -515,8 +520,8 @@ def test_household_jobs_take_a_valid_year_and_record_when_they_end(
         **household_job,
     )
 
-    with _refused(connection):
-        _insert(
+    with refused(connection):
+        insert_row(
             connection,
             "household_jobs",
             id=uuid4(),
@@ -524,8 +529,8 @@ def test_household_jobs_take_a_valid_year_and_record_when_they_end(
             status="pending",
             **household_job,
         )
-    with _refused(connection):
-        _insert(
+    with refused(connection):
+        insert_row(
             connection,
             "household_jobs",
             id=uuid4(),

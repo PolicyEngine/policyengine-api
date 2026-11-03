@@ -20,13 +20,12 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.pool import NullPool
 
 from policyengine_api.constants import REPO
+from tests.integration.simulation_rows import RUN_VERSIONS, insert_row, refused
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from sqlalchemy import Connection
-
-RUN_VERSIONS = {"country_package_version": "1.0.0", "policyengine_version": "4.0.0"}
 
 
 @pytest.fixture
@@ -54,26 +53,16 @@ def _act_as(connection: Connection, role: str) -> None:
     connection.execute(text(f"SET LOCAL ROLE {quoted_role}"))
 
 
-def _insert(connection: Connection, table: str, **values: object) -> None:
-    columns = ", ".join(values)
-    placeholders = ", ".join(f":{column}" for column in values)
-    connection.execute(
-        text(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"), values
-    )
-
-
 def _refused(connection: Connection, statement: str, **values: object) -> None:
-    """Expect a permission error, then return the connection to a usable state."""
-    savepoint = connection.begin_nested()
-    with pytest.raises(ProgrammingError, match="permission denied"):
+    """Expect a permission error from ``statement``."""
+    with refused(connection, ProgrammingError, match="permission denied"):
         connection.execute(text(statement), values)
-    savepoint.rollback()
 
 
 def _create_simulation_rows(connection: Connection) -> dict[str, object]:
     """Create what the simulation API creates for one economy report run."""
     ids = {name: uuid4() for name in ("simulation", "run", "report", "report_run")}
-    _insert(
+    insert_row(
         connection,
         "simulations",
         id=ids["simulation"],
@@ -82,7 +71,7 @@ def _create_simulation_rows(connection: Connection) -> dict[str, object]:
         tax_benefit_model_version_id=uuid4(),
         year=2026,
     )
-    _insert(
+    insert_row(
         connection,
         "simulation_runs",
         id=ids["run"],
@@ -91,7 +80,7 @@ def _create_simulation_rows(connection: Connection) -> dict[str, object]:
         status="pending",
         **RUN_VERSIONS,
     )
-    _insert(
+    insert_row(
         connection,
         "reports",
         id=ids["report"],
@@ -100,7 +89,7 @@ def _create_simulation_rows(connection: Connection) -> dict[str, object]:
         tax_benefit_model_id=uuid4(),
         inputs="{}",
     )
-    _insert(
+    insert_row(
         connection,
         "report_runs",
         id=ids["report_run"],
@@ -109,7 +98,7 @@ def _create_simulation_rows(connection: Connection) -> dict[str, object]:
         trigger="initial",
         **RUN_VERSIONS,
     )
-    _insert(
+    insert_row(
         connection,
         "report_run_simulation_runs",
         id=uuid4(),
@@ -117,7 +106,7 @@ def _create_simulation_rows(connection: Connection) -> dict[str, object]:
         simulation_run_id=ids["run"],
         role="baseline",
     )
-    _insert(
+    insert_row(
         connection,
         "household_jobs",
         id=uuid4(),
@@ -157,6 +146,15 @@ def test_the_simulation_service_creates_rows_but_writes_no_status_or_result(
         run_id=ids["run"],
     )
     _refused(connection, "DELETE FROM simulations WHERE id = :id", id=ids["simulation"])
+    _refused(
+        connection,
+        "INSERT INTO report_run_comparisons "
+        "(id, report_run_id, baseline_simulation_run_id, reform_simulation_run_id) "
+        "VALUES (:id, :report_run_id, :run_id, :run_id)",
+        id=uuid4(),
+        report_run_id=ids["report_run"],
+        run_id=ids["run"],
+    )
     _refused(connection, "UPDATE policies SET content_hash = content_hash")
 
 
@@ -174,7 +172,7 @@ def test_modal_workers_write_their_run_status_and_results_only(
         ),
         {"id": ids["run"]},
     ).scalar_one()
-    _insert(
+    insert_row(
         connection,
         "poverty",
         id=uuid4(),
@@ -186,6 +184,15 @@ def test_modal_workers_write_their_run_status_and_results_only(
     connection.execute(
         text("UPDATE report_runs SET status = 'running' WHERE id = :id"),
         {"id": ids["report_run"]},
+    )
+    insert_row(
+        connection,
+        "report_run_comparisons",
+        id=uuid4(),
+        report_run_id=ids["report_run"],
+        baseline_simulation_run_id=ids["run"],
+        reform_simulation_run_id=ids["run"],
+        cliff_impact_result="{}",
     )
     connection.execute(text("SELECT count(*) FROM parameter_values")).scalar_one()
 

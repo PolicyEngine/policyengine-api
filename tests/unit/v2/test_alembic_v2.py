@@ -47,6 +47,7 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "legacy_user_policy_mappings",
         "parameter_search_files",
         "parameter_tree_children",
+        "report_run_comparisons",
         "report_run_simulation_runs",
         "simulation_runs",
         "stage12_evaluation_reports",
@@ -76,6 +77,14 @@ CROSS_SERVICE_KEYS_PARENT_REVISION = "2ffd50f47a2b"
 ECONOMY_OUTPUT_PARENT_REVISION = "7a83a87d029a"
 # The economy output revision, parent of the result row identity revision.
 RESULT_IDENTITY_PARENT_REVISION = "7f43d2c7c3c6"
+# The result row identity revision, parent of the comparisons revision.
+COMPARISONS_PARENT_REVISION = "2e3de7c572ed"
+UNTABLED_COMPARISON_COLUMNS = (
+    "labor_supply_result",
+    "cliff_impact_result",
+    "spm_provenance",
+    "data_version",
+)
 # Each comparison result table's unique key, which gains the pair of runs.
 COMPARISON_UNIQUE_KEYS = {
     "budget_summary": "uq_budget_summary_run_variable_entity",
@@ -287,6 +296,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        COMPARISONS_PARENT_REVISION,
         RESULT_IDENTITY_PARENT_REVISION,
         ECONOMY_OUTPUT_PARENT_REVISION,
         CROSS_SERVICE_KEYS_PARENT_REVISION,
@@ -1273,3 +1283,40 @@ def test_result_identity_revision_adds_two_columns_and_widens_unique_keys() -> N
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body
     assert "op.drop_column(" not in upgrade
+
+
+def test_comparisons_revision_moves_untabled_results_to_one_row_per_pair() -> None:
+    """The revision after the result row identity revision is generated.
+
+    It creates ``report_run_comparisons`` and drops the four columns it takes
+    over from ``report_runs``; the downgrade puts them back.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == COMPARISONS_PARENT_REVISION
+    ]
+    assert len(children) == 1
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert "No post-generation corrections." in revision
+    assert 'op.create_table(\n        "report_run_comparisons"' in upgrade
+    assert "uq_report_run_comparisons_run_pair" in upgrade
+    assert upgrade.count("op.drop_column(") == len(UNTABLED_COMPARISON_COLUMNS)
+    assert downgrade.count("op.add_column(") == len(UNTABLED_COMPARISON_COLUMNS)
+    for column_name in UNTABLED_COMPARISON_COLUMNS:
+        assert f'op.drop_column("report_runs", "{column_name}")' in upgrade
+        assert f'"{column_name}"' in downgrade
+    assert 'op.drop_table("report_run_comparisons")' in downgrade
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body

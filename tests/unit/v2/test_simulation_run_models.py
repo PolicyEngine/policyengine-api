@@ -13,6 +13,8 @@ from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v2.models import (
     V2_METADATA,
+    ReportRun,
+    ReportRunComparison,
     ReportRunSimulationRun,
     SimulationRole,
     SimulationRun,
@@ -39,6 +41,7 @@ SIMULATION_SIDE_TABLES = frozenset(
         "reports",
         "report_runs",
         "report_run_simulation_runs",
+        "report_run_comparisons",
         "household_jobs",
         "aggregates",
         "change_aggregates",
@@ -203,20 +206,54 @@ def test_run_tables_require_a_completion_time_and_index_running_runs() -> None:
     )
 
 
-def test_report_runs_record_their_modal_call_and_untabled_results() -> None:
+def test_report_runs_record_their_modal_call() -> None:
     report_runs = V2_METADATA.tables["report_runs"]
 
     assert report_runs.c.modal_call_id.nullable
     assert report_runs.c.modal_call_id.type.length == 255
-    for column_name in (
+    # A budget-window run compares one pair per year, so the parts of a
+    # comparison without a result table belong to its comparison row.
+    assert {
         "labor_supply_result",
         "cliff_impact_result",
         "spm_provenance",
-    ):
-        assert report_runs.c[column_name].nullable
-        assert isinstance(report_runs.c[column_name].type, sa.JSON)
-    assert report_runs.c.data_version.nullable
-    assert report_runs.c.data_version.type.length == 128
+        "data_version",
+    }.isdisjoint(report_runs.c.keys())
+
+
+def test_each_comparison_keeps_the_parts_without_a_result_table() -> None:
+    comparisons = V2_METADATA.tables["report_run_comparisons"]
+
+    for column_name in ("labor_supply_result", "cliff_impact_result", "spm_provenance"):
+        assert comparisons.c[column_name].nullable
+        assert isinstance(comparisons.c[column_name].type, sa.JSON)
+    assert comparisons.c.data_version.nullable
+    assert comparisons.c.data_version.type.length == 128
+    report_run_key = _foreign_key(comparisons, "report_run_id")
+    assert report_run_key.target_fullname == "report_runs.id"
+    assert report_run_key.ondelete == "CASCADE"
+    for column_name in ("baseline_simulation_run_id", "reform_simulation_run_id"):
+        assert not comparisons.c[column_name].nullable
+        run_key = _foreign_key(comparisons, column_name)
+        assert run_key.target_fullname == "simulation_runs.id"
+        assert run_key.ondelete == "RESTRICT"
+    assert _unique_column_sets(comparisons) == {
+        ("report_run_id", "baseline_simulation_run_id", "reform_simulation_run_id")
+    }
+    assert ReportRunComparison.__module__.endswith(".reports")
+
+
+def test_report_run_relationships_name_member_and_comparison_rows() -> None:
+    relationships = sa.inspect(ReportRun).relationships
+
+    assert relationships["simulation_run_members"].mapper.class_ is (
+        ReportRunSimulationRun
+    )
+    assert relationships["comparisons"].mapper.class_ is ReportRunComparison
+    assert (
+        sa.inspect(SimulationRun).relationships["report_run_memberships"].mapper.class_
+        is ReportRunSimulationRun
+    )
 
 
 def test_uk_area_impacts_record_disclosure_control() -> None:

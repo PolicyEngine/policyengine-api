@@ -130,10 +130,9 @@ class Report(TimestampedModel, table=True):
 class ReportRun(TimestampedModel, table=True):
     """One immutable-version execution attempt for a stable report.
 
-    Its ``simulation_runs`` rows name the simulation runs it combines.
-    ``labor_supply_result``, ``cliff_impact_result`` and ``spm_provenance`` hold
-    the parts of an economy comparison that have no result table, and
-    ``data_version`` the release of the data it used.
+    Its ``simulation_run_members`` name the simulation runs it combines, and
+    its ``comparisons`` hold, per compared pair, the parts of an economy
+    comparison that have no result table.
     """
 
     __tablename__ = "report_runs"
@@ -185,13 +184,13 @@ class ReportRun(TimestampedModel, table=True):
     )
     error_message: str | None = None
     markdown: str | None = Field(default=None, sa_type=sa.Text)
-    labor_supply_result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
-    cliff_impact_result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
-    spm_provenance: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
-    data_version: str | None = Field(default=None, max_length=128)
 
     report: Report = Relationship(back_populates="runs")
-    simulation_runs: list["ReportRunSimulationRun"] = Relationship(
+    simulation_run_members: list["ReportRunSimulationRun"] = Relationship(
+        back_populates="report_run",
+        cascade_delete=True,
+    )
+    comparisons: list["ReportRunComparison"] = Relationship(
         back_populates="report_run",
         cascade_delete=True,
     )
@@ -262,8 +261,49 @@ class ReportRunSimulationRun(IdentifiedModel, table=True):
         sa_type=enum_type(SimulationRole, "v2_simulation_role"),
     )
 
-    report_run: ReportRun = Relationship(back_populates="simulation_runs")
-    simulation_run: SimulationRun = Relationship(back_populates="report_runs")
+    report_run: ReportRun = Relationship(back_populates="simulation_run_members")
+    simulation_run: SimulationRun = Relationship(
+        back_populates="report_run_memberships"
+    )
+
+
+class ReportRunComparison(IdentifiedModel, table=True):
+    """The parts of one compared pair of a report run that have no result table.
+
+    A report run compares one baseline and one reform simulation run, or one
+    pair per year for a budget window. Each pair's labour supply response,
+    cliff impact, SPM receipts and data release are one row here, as the
+    simulation API's economy output gives them.
+    """
+
+    __tablename__ = "report_run_comparisons"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "report_run_id",
+            "baseline_simulation_run_id",
+            "reform_simulation_run_id",
+            name="uq_report_run_comparisons_run_pair",
+        ),
+    )
+
+    report_run_id: UUID = Field(
+        foreign_key="report_runs.id",
+        ondelete="CASCADE",
+    )
+    baseline_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
+        ondelete="RESTRICT",
+    )
+    reform_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
+        ondelete="RESTRICT",
+    )
+    labor_supply_result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
+    cliff_impact_result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
+    spm_provenance: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
+    data_version: str | None = Field(default=None, max_length=128)
+
+    report_run: ReportRun = Relationship(back_populates="comparisons")
 
 
 class AggregateOutput(IdentifiedModel, table=True):

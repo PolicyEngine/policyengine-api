@@ -155,6 +155,7 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "simulation_runs": _RUN_STATUS,
     "simulations": replace(_SIMULATION_DEFINITION, catalog_writer=READ),
     # Results of simulation runs and report runs.
+    "report_run_comparisons": _RESULT,
     "budget_summary": _RESULT,
     "congressional_district_impacts": _RESULT,
     "constituency_impacts": _RESULT,
