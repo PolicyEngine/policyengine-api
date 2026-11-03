@@ -18,15 +18,7 @@ from policyengine_api.data.v2.models.base import (
     TimestampedModel,
     enum_type,
 )
-from policyengine_api.data.v2.models.households import Household
-from policyengine_api.data.v2.models.metadata import (
-    Dataset,
-    Region,
-    TaxBenefitModel,
-)
-from policyengine_api.data.v2.models.policies import Policy
 from policyengine_api.data.v2.models.simulations import Simulation, SimulationRun
-from policyengine_api.data.v2.models.users import User
 
 
 class ReportRunStatus(StrEnum):
@@ -78,7 +70,12 @@ class SimulationRole(StrEnum):
 
 
 class Report(TimestampedModel, table=True):
-    """Stable report definition; execution state belongs to ReportRun."""
+    """Stable report definition; execution state belongs to ReportRun.
+
+    Its user, model, policy, household, dataset and region are logical
+    references to the Public API's rows, without foreign keys: the simulation
+    service checks them before it writes the report.
+    """
 
     __tablename__ = "reports"
     __table_args__ = (
@@ -93,21 +90,9 @@ class Report(TimestampedModel, table=True):
     description: str | None = None
     country: str = Field(max_length=16)
     type: str | None = Field(default=None, max_length=128)
-    user_id: UUID | None = Field(
-        default=None,
-        foreign_key="users.id",
-        ondelete="SET NULL",
-    )
-    tax_benefit_model_id: UUID = Field(
-        foreign_key="tax_benefit_models.id",
-        ondelete="RESTRICT",
-        index=True,
-    )
-    policy_id: UUID | None = Field(
-        default=None,
-        foreign_key="policies.id",
-        ondelete="SET NULL",
-    )
+    user_id: UUID | None = None
+    tax_benefit_model_id: UUID = Field(index=True)
+    policy_id: UUID | None = None
     baseline_simulation_id: UUID | None = Field(
         default=None,
         foreign_key="simulations.id",
@@ -118,27 +103,12 @@ class Report(TimestampedModel, table=True):
         foreign_key="simulations.id",
         ondelete="SET NULL",
     )
-    household_id: UUID | None = Field(
-        default=None,
-        foreign_key="households.id",
-        ondelete="RESTRICT",
-    )
-    dataset_id: UUID | None = Field(
-        default=None,
-        foreign_key="datasets.id",
-        ondelete="SET NULL",
-    )
-    region_id: UUID | None = Field(
-        default=None,
-        foreign_key="regions.id",
-        ondelete="SET NULL",
-    )
+    household_id: UUID | None = None
+    dataset_id: UUID | None = None
+    region_id: UUID | None = None
     year: int | None = None
     inputs: dict[str, Any] = Field(default_factory=dict, sa_type=sa.JSON)
 
-    user: User | None = Relationship(back_populates="reports")
-    tax_benefit_model: TaxBenefitModel = Relationship(back_populates="reports")
-    policy: Policy | None = Relationship(back_populates="reports")
     baseline_simulation: Simulation | None = Relationship(
         back_populates="baseline_reports",
         sa_relationship_kwargs={"foreign_keys": "Report.baseline_simulation_id"},
@@ -147,9 +117,6 @@ class Report(TimestampedModel, table=True):
         back_populates="reform_reports",
         sa_relationship_kwargs={"foreign_keys": "Report.reform_simulation_id"},
     )
-    household: Household | None = Relationship(back_populates="reports")
-    dataset: Dataset | None = Relationship(back_populates="reports")
-    region: Region | None = Relationship(back_populates="reports")
     runs: list["ReportRun"] = Relationship(
         back_populates="report",
         cascade_delete=True,

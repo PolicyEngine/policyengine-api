@@ -70,6 +70,28 @@ SIMULATION_RUNS_REVISION_PATH = (
     REPO
     / "migrations/v2/versions/2ffd50f47a2b_add_simulation_runs_and_key_results_by_.py"
 )
+# The simulation runs revision, parent of the cross-service foreign key revision.
+CROSS_SERVICE_KEYS_PARENT_REVISION = "2ffd50f47a2b"
+# The foreign keys from the simulation service's tables to the Public API's.
+CROSS_SERVICE_KEYS = {
+    "household_jobs": {"dynamics", "policies"},
+    "reports": {
+        "datasets",
+        "households",
+        "policies",
+        "regions",
+        "tax_benefit_models",
+        "users",
+    },
+    "simulations": {
+        "datasets",
+        "dynamics",
+        "households",
+        "policies",
+        "regions",
+        "tax_benefit_model_versions",
+    },
+}
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -251,6 +273,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        CROSS_SERVICE_KEYS_PARENT_REVISION,
         SIMULATION_RUNS_PARENT_REVISION,
         PARAMETER_TREE_REVISION,
         AREA_IMPACT_COORDINATE_REVISION,
@@ -1063,3 +1086,59 @@ def test_simulation_runs_revision_has_only_its_two_documented_corrections() -> N
     for body in (upgrade, downgrade):
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body
+
+
+def test_cross_service_key_revision_only_drops_and_restores_foreign_keys() -> None:
+    """The revision after the simulation runs revision is generated.
+
+    Its upgrade drops each foreign key from a table the simulation service
+    writes to a table the Public API writes; its downgrade restores them.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == CROSS_SERVICE_KEYS_PARENT_REVISION
+    ]
+    assert len(children) == 1
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert "No post-generation corrections." in revision
+    dropped_tables = re.findall(
+        r'op\.drop_constraint\(\s*op\.f\("[^"]+"\),\s*"([a-z_]+)",\s*'
+        r'type_="foreignkey"',
+        upgrade,
+    )
+    restored_keys = re.findall(
+        r'op\.create_foreign_key\(\s*op\.f\("[^"]+"\),\s*"([a-z_]+)",\s*"([a-z_]+)"',
+        downgrade,
+    )
+    expected_count = sum(len(targets) for targets in CROSS_SERVICE_KEYS.values())
+    assert len(dropped_tables) == upgrade.count("op.drop_constraint(")
+    assert len(dropped_tables) == expected_count
+    assert {table: dropped_tables.count(table) for table in CROSS_SERVICE_KEYS} == {
+        table: len(targets) for table, targets in CROSS_SERVICE_KEYS.items()
+    }
+    assert len(restored_keys) == downgrade.count("op.create_foreign_key(")
+    restored_targets: dict[str, set[str]] = {}
+    for table, target in restored_keys:
+        restored_targets.setdefault(table, set()).add(target)
+    assert restored_targets == CROSS_SERVICE_KEYS
+    for body in (upgrade, downgrade):
+        for operation in (
+            "op.add_column(",
+            "op.drop_column(",
+            "op.create_table(",
+            "op.drop_table(",
+            "op.execute(",
+            "op.bulk_insert(",
+        ):
+            assert operation not in body

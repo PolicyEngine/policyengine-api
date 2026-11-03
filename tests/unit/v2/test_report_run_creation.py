@@ -38,10 +38,13 @@ def engine():
 
 
 def _create_report(session: Session) -> Report:
+    model = TaxBenefitModel(name=f"model-{uuid4()}")
+    session.add(model)
+    session.flush()
     report = Report(
         label="Distributional report",
         country="us",
-        tax_benefit_model=TaxBenefitModel(name=f"model-{uuid4()}"),
+        tax_benefit_model_id=model.id,
         inputs={},
     )
     session.add(report)

@@ -39,6 +39,9 @@ CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
 AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
 # The parameter search file revision, the parent of the simulation runs revision.
 SIMULATION_RUNS_PREVIOUS_REVISION = "c614b6bcccfc"
+# The simulation runs revision, parent of the revision that drops the foreign
+# keys from the simulation service's tables to the Public API's tables.
+CROSS_SERVICE_KEYS_PREVIOUS_REVISION = "2ffd50f47a2b"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 AREA_IMPACT_TABLES = ("constituency_impacts", "local_authority_impacts")
 MAP_COORDINATE_COLUMNS = ("x", "y")
@@ -411,6 +414,14 @@ def _assert_countries_shape(engine) -> None:
         assert check_name not in _check_names(engine, table_name)
 
 
+def _assert_cross_service_keys_shape(engine) -> None:
+    _assert_revision(engine, CROSS_SERVICE_KEYS_PREVIOUS_REVISION)
+    referred_tables = {
+        key["referred_table"] for key in inspect(engine).get_foreign_keys("simulations")
+    }
+    assert {"datasets", "households", "policies"} <= referred_tables
+
+
 def _assert_pre_simulation_runs_shape(engine) -> None:
     _assert_revision(engine, SIMULATION_RUNS_PREVIOUS_REVISION)
     table_names = set(inspect(engine).get_table_names(schema="public"))
@@ -445,6 +456,10 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
 
         _upgrade_and_assert_head(config, engine)
         _assert_countries_shape(engine)
+
+        command.downgrade(config, CROSS_SERVICE_KEYS_PREVIOUS_REVISION)
+        _assert_cross_service_keys_shape(engine)
+        _upgrade_and_assert_head(config, engine)
 
         command.downgrade(config, SIMULATION_RUNS_PREVIOUS_REVISION)
         _assert_pre_simulation_runs_shape(engine)

@@ -6,18 +6,16 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from sqlmodel import Field, Relationship
 
 from policyengine_api.data.v2.models.base import TimestampedModel, enum_type
-from policyengine_api.data.v2.models.policies import Dynamic, Policy
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import UserHouseholdAssociation
     from policyengine_api.data.v2.models.household_mappings import (
         LegacyHouseholdMapping,
     )
-    from policyengine_api.data.v2.models.reports import Report
-    from policyengine_api.data.v2.models.simulations import Simulation
 
 
 class HouseholdJobStatus(StrEnum):
@@ -33,8 +31,9 @@ class Household(TimestampedModel, table=True):
     """Immutable household input, stored once per canonicalization version and hash.
 
     ``content_hash`` is the SHA-256 of the canonical document, so saving the same
-    household again finds the existing row. Households that simulations, reports
-    or saved links use cannot be deleted.
+    household again finds the existing row. Households that saved links use
+    cannot be deleted; simulations, reports and household jobs name a household
+    without a foreign key.
     """
 
     __tablename__ = "households"
@@ -77,13 +76,11 @@ class Household(TimestampedModel, table=True):
     )
     default_year: int | None = None
     household_data: dict[str, Any] = Field(
-        sa_type=sa.JSON().with_variant(sa.dialects.postgresql.JSONB(), "postgresql")
+        sa_type=sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
     )
     canonicalization_version: int
     content_hash: str = Field(max_length=64)
 
-    simulations: list["Simulation"] = Relationship(back_populates="household")
-    reports: list["Report"] = Relationship(back_populates="household")
     user_associations: list["UserHouseholdAssociation"] = Relationship(
         back_populates="household",
     )
@@ -98,10 +95,9 @@ class HouseholdJob(TimestampedModel, table=True):
     ``policy_id`` is null for current law. ``request_data`` holds the
     calculation's options, such as axes. The job records the catalog version
     and .py version it ran on, its Modal call, and its status and result or
-    error. ``household_id`` and ``tax_benefit_model_version_id`` are logical
-    references to the Public API's rows, which the simulation service checks
-    before it writes the job. Deleting the job's policy or dynamic keeps the
-    job but clears the reference.
+    error. Its household, policy, dynamic and catalog version are logical
+    references to the Public API's rows, without foreign keys: the simulation
+    service checks them before it writes the job.
     """
 
     __tablename__ = "household_jobs"
@@ -121,16 +117,8 @@ class HouseholdJob(TimestampedModel, table=True):
     household_id: UUID = Field(index=True)
     year: int
     request_data: dict[str, Any] = Field(sa_type=sa.JSON)
-    policy_id: UUID | None = Field(
-        default=None,
-        foreign_key="policies.id",
-        ondelete="SET NULL",
-    )
-    dynamic_id: UUID | None = Field(
-        default=None,
-        foreign_key="dynamics.id",
-        ondelete="SET NULL",
-    )
+    policy_id: UUID | None = None
+    dynamic_id: UUID | None = None
     tax_benefit_model_version_id: UUID
     country_package_version: str = Field(max_length=128)
     policyengine_version: str = Field(max_length=128)
@@ -149,6 +137,3 @@ class HouseholdJob(TimestampedModel, table=True):
         default=None,
         sa_type=sa.DateTime(timezone=True),
     )
-
-    policy: Policy | None = Relationship(back_populates="household_jobs")
-    dynamic: Dynamic | None = Relationship(back_populates="household_jobs")

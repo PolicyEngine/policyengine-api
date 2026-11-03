@@ -9,13 +9,6 @@ import sqlalchemy as sa
 from sqlmodel import Field, Relationship
 
 from policyengine_api.data.v2.models.base import TimestampedModel, enum_type
-from policyengine_api.data.v2.models.households import Household
-from policyengine_api.data.v2.models.metadata import (
-    Dataset,
-    Region,
-    TaxBenefitModelVersion,
-)
-from policyengine_api.data.v2.models.policies import Dynamic, Policy
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.reports import (
@@ -46,8 +39,9 @@ class Simulation(TimestampedModel, table=True):
     """A simulation of exactly one household or one dataset, matching its type.
 
     It defines what to calculate; each calculation of it is a ``SimulationRun``.
-    Deleting its policy, dynamic or region clears that reference; its household
-    and input dataset cannot be deleted while it exists.
+    Its dataset, household, policy, dynamic, catalog version and region are
+    logical references to the Public API's rows, without foreign keys: the
+    simulation service checks them before it writes the simulation.
     """
 
     __tablename__ = "simulations"
@@ -73,52 +67,17 @@ class Simulation(TimestampedModel, table=True):
         default=SimulationType.ECONOMY,
         sa_type=enum_type(SimulationType, "v2_simulation_type"),
     )
-    dataset_id: UUID | None = Field(
-        default=None,
-        foreign_key="datasets.id",
-        ondelete="RESTRICT",
-    )
-    household_id: UUID | None = Field(
-        default=None,
-        foreign_key="households.id",
-        ondelete="RESTRICT",
-    )
-    policy_id: UUID | None = Field(
-        default=None,
-        foreign_key="policies.id",
-        ondelete="SET NULL",
-    )
-    dynamic_id: UUID | None = Field(
-        default=None,
-        foreign_key="dynamics.id",
-        ondelete="SET NULL",
-    )
-    tax_benefit_model_version_id: UUID = Field(
-        foreign_key="tax_benefit_model_versions.id",
-        ondelete="RESTRICT",
-        index=True,
-    )
-    region_id: UUID | None = Field(
-        default=None,
-        foreign_key="regions.id",
-        ondelete="SET NULL",
-    )
+    dataset_id: UUID | None = None
+    household_id: UUID | None = None
+    policy_id: UUID | None = None
+    dynamic_id: UUID | None = None
+    tax_benefit_model_version_id: UUID = Field(index=True)
+    region_id: UUID | None = None
     filter_field: str | None = Field(default=None, max_length=128)
     filter_value: str | None = Field(default=None, max_length=255)
     filter_strategy: str | None = Field(default=None, max_length=64)
     year: int | None = None
 
-    dataset: Dataset | None = Relationship(
-        back_populates="input_simulations",
-        sa_relationship_kwargs={"foreign_keys": "Simulation.dataset_id"},
-    )
-    household: Household | None = Relationship(back_populates="simulations")
-    policy: Policy | None = Relationship(back_populates="simulations")
-    dynamic: Dynamic | None = Relationship(back_populates="simulations")
-    tax_benefit_model_version: TaxBenefitModelVersion = Relationship(
-        back_populates="simulations"
-    )
-    region: Region | None = Relationship(back_populates="simulations")
     baseline_reports: list["Report"] = Relationship(
         back_populates="baseline_simulation",
         sa_relationship_kwargs={"foreign_keys": "Report.baseline_simulation_id"},

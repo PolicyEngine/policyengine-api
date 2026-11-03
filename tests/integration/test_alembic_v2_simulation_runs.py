@@ -1,10 +1,11 @@
-"""Check the simulation runs revision against disposable Postgres.
+"""Check the simulation runs revisions against disposable Postgres.
 
-The revision adds simulation runs and the table naming the simulation runs a
-report run combines, keys every result table by run, and gives household jobs
-one household, one year and one policy. It changes no other table, so the
-previous Public API revision, whose roles can't read or write any table it
-changes, keeps working while it is deployed.
+The first revision adds simulation runs and the table naming the simulation
+runs a report run combines, keys every result table by run, and gives
+household jobs one household, one year and one policy. The second drops the
+foreign keys from those tables to the Public API's tables. Neither changes any
+other table, so the previous Public API revision, whose roles can't read or
+write any table they change, keeps working while they are deployed.
 """
 
 from __future__ import annotations
@@ -47,8 +48,14 @@ CHANGED_TABLES = frozenset(
         "poverty",
         "program_statistics",
         "report_runs",
+        "reports",
         "simulations",
     }
+)
+# The tables the simulation service and its Modal workers write; the Public API
+# writes every other table.
+SIMULATION_SIDE_TABLES = (
+    CHANGED_TABLES | NEW_TABLES | {"aggregates", "change_aggregates"}
 )
 SHA256_HEX = "a" * 64
 
@@ -130,6 +137,23 @@ def test_the_revision_adds_two_tables_and_changes_only_simulation_side_tables(
         table_name for table_name in before if before[table_name] != after[table_name]
     }
     assert changed == CHANGED_TABLES
+
+
+def test_head_has_no_foreign_key_between_the_two_services_tables(
+    config: Config, engine: Engine
+) -> None:
+    command.upgrade(config, "head")
+    inspector = inspect(engine)
+
+    cross_service_keys = sorted(
+        f"{table_name}.{key['name']} -> {key['referred_table']}"
+        for table_name in inspector.get_table_names(schema="public")
+        for key in inspector.get_foreign_keys(table_name)
+        if (table_name in SIMULATION_SIDE_TABLES)
+        != (key["referred_table"] in SIMULATION_SIDE_TABLES)
+    )
+
+    assert cross_service_keys == []
 
 
 @contextmanager

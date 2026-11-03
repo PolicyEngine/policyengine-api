@@ -80,6 +80,11 @@ def _disposable_url() -> str:
     return database_url
 
 
+# Simulations and reports have no foreign key to the catalog, so truncating the
+# catalog no longer reaches them; the tests that store them name them here.
+TRUNCATE_PUBLICATION_ROWS = "TRUNCATE tax_benefit_models, simulations, reports CASCADE"
+
+
 @pytest.fixture
 def publication_engine() -> Engine:
     database_url = _disposable_url()
@@ -87,10 +92,10 @@ def publication_engine() -> Engine:
     command.upgrade(config, "head")
     engine = create_engine(database_url, poolclass=NullPool)
     with engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
+        connection.execute(text(TRUNCATE_PUBLICATION_ROWS))
     yield engine
     with engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
+        connection.execute(text(TRUNCATE_PUBLICATION_ROWS))
     engine.dispose()
 
 

@@ -8,6 +8,7 @@ household for one year under one policy.
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v2.models import (
@@ -15,6 +16,7 @@ from policyengine_api.data.v2.models import (
     ReportRunSimulationRun,
     SimulationRole,
     SimulationRun,
+    User,
 )
 
 RUN_STATUSES = ["pending", "running", "succeeded", "failed"]
@@ -28,6 +30,49 @@ COMPARISON_RESULT_TABLES = (
     "local_authority_impacts",
     "program_statistics",
 )
+# The tables the simulation service and its Modal workers write. The Public API
+# writes every other table.
+SIMULATION_SIDE_TABLES = frozenset(
+    {
+        "simulations",
+        "simulation_runs",
+        "reports",
+        "report_runs",
+        "report_run_simulation_runs",
+        "household_jobs",
+        "aggregates",
+        "change_aggregates",
+        *PER_SIMULATION_RESULT_TABLES,
+        *COMPARISON_RESULT_TABLES,
+    }
+)
+# Columns naming the Public API's rows, which the simulation service checks
+# before it writes the row that names them.
+LOGICAL_REFERENCES = {
+    "simulations": (
+        "dataset_id",
+        "household_id",
+        "policy_id",
+        "dynamic_id",
+        "tax_benefit_model_version_id",
+        "region_id",
+    ),
+    "reports": (
+        "user_id",
+        "tax_benefit_model_id",
+        "policy_id",
+        "household_id",
+        "dataset_id",
+        "region_id",
+    ),
+    "simulation_runs": ("tax_benefit_model_version_id", "dataset_id", "region_id"),
+    "household_jobs": (
+        "household_id",
+        "policy_id",
+        "dynamic_id",
+        "tax_benefit_model_version_id",
+    ),
+}
 
 
 def _foreign_key(table: sa.Table, column_name: str) -> sa.ForeignKey:
@@ -284,3 +329,40 @@ def test_custom_totals_keep_their_simulation_references() -> None:
         assert _foreign_key(table, "report_run_id").target_fullname == (
             "report_runs.id"
         )
+
+
+def test_no_foreign_key_joins_tables_that_different_services_write() -> None:
+    """Each service checks the other service's rows its own rows name."""
+    cross_service_keys = sorted(
+        f"{table.name}.{key.parent.name} -> {key.column.table.name}"
+        for table in V2_METADATA.tables.values()
+        for key in table.foreign_keys
+        if (table.name in SIMULATION_SIDE_TABLES)
+        != (key.column.table.name in SIMULATION_SIDE_TABLES)
+    )
+
+    assert cross_service_keys == []
+    assert set(V2_METADATA.tables) >= SIMULATION_SIDE_TABLES
+
+
+def test_references_to_public_api_rows_stay_as_uuid_columns() -> None:
+    for table_name, column_names in LOGICAL_REFERENCES.items():
+        table = V2_METADATA.tables[table_name]
+        for column_name in column_names:
+            column = table.c[column_name]
+            assert isinstance(column.type, sa.Uuid), f"{table_name}.{column_name}"
+            assert not column.foreign_keys, f"{table_name}.{column_name}"
+
+
+def test_no_relationship_joins_models_that_different_services_write() -> None:
+    configure_mappers()
+    cross_service_relationships = sorted(
+        f"{mapper.class_.__name__}.{relationship.key}"
+        for mapper in sa.inspect(User).registry.mappers
+        if mapper.local_table is not None and mapper.local_table.metadata is V2_METADATA
+        for relationship in mapper.relationships
+        if (mapper.local_table.name in SIMULATION_SIDE_TABLES)
+        != (relationship.mapper.local_table.name in SIMULATION_SIDE_TABLES)
+    )
+
+    assert cross_service_relationships == []
