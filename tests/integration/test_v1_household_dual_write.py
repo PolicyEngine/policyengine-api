@@ -260,8 +260,11 @@ def test_translation_failure_retains_one_pending_event_until_explicit_replay(
     try:
         creation = v1_service.create_household(
             "us",
-            {"people": {"adult": {"age": {"2026": 40}}}},
-            "Structurally incomplete household",
+            {
+                "people": {"adult": {"age": {"2026": 40}}},
+                "unsupported_entities": {},
+            },
+            "Household with a collection policyengine-core rejects",
             record_mirror_event=True,
         )
         with pytest.raises(HouseholdMirrorUnavailableError):
