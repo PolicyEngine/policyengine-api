@@ -146,7 +146,7 @@ def test_catalog_format_2_columns_leave_earlier_versions_empty() -> None:
         engine.dispose()
 
 
-PARAMETER_TREE_PARENT_REVISION = "f5c1d9b4685b"
+PARAMETER_TREE_PARENT_REVISION = "e86f19a6c4da"
 
 
 def test_parameter_tree_table_is_created_empty_and_dropped_without_data_loss() -> None:

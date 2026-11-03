@@ -1,8 +1,8 @@
 """store each catalog version's parameter tree
 
 Revision ID: 3869eb814a90
-Revises: f5c1d9b4685b
-Create Date: 2026-10-22 22:51:53.959795
+Revises: e86f19a6c4da
+Create Date: 2026-11-04 01:03:34.038237
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
 """
 
@@ -14,7 +14,7 @@ import sqlmodel
 
 
 revision: str = "3869eb814a90"
-down_revision: Union[str, None] = "f5c1d9b4685b"
+down_revision: Union[str, None] = "e86f19a6c4da"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

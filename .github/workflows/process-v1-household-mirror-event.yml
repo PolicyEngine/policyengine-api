@@ -45,6 +45,9 @@ jobs:
       V2_RUNTIME_DATABASE_URL: ${{ secrets.V2_DATA_WRITE_DATABASE_URL }}
       HOUSEHOLD_MIRROR_OPERATOR_IDENTITY: ${{ vars.GCP_DB_MIGRATION_SERVICE_ACCOUNT }}
       ALLOWED_HOUSEHOLD_MIRROR_OPERATOR_IDENTITY: ${{ vars.HOUSEHOLD_MIRROR_OPERATOR_IDENTITY }}
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -52,11 +55,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # make install syncs .venv from uv.lock, which the bare python this
-      # job's scripts run does not read. Moving this job to uv.lock is a
-      # separate, verified change; until then it installs unlocked.
-      - name: Install dependencies (unlocked)
-        run: pip install -e ".[dev]"
+      # The same uv version as the Cloud Run image and the release job.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.4"
+      # The runtime dependencies only, as the Cloud Run image installs them;
+      # the operator script runs them through uv run --frozen.
+      - name: Install locked dependencies
+        run: uv sync --frozen
       - name: Authenticate authorized database operator
         uses: google-github-actions/auth@v2
         with:

@@ -1,1 +1,0 @@
-The UK metadata's constituency and local-authority region options, and the economy region check that accepts them, read the area lists packaged with .py, without importing .py, and the Public API's own copies of those lists are removed; the region options and the regions the check accepts are unchanged.

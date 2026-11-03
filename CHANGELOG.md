@@ -1,3 +1,34 @@
+## [5.21.0] - 2026-11-03
+
+### Changed
+
+- Pull requests and deploys now fail unless the installed PolicyEngine.py version is the latest one the simulation API has published. The check no longer compares the simulation API's US and UK routes, and runs on every pull request.
+
+### Removed
+
+- API v2's `constituency_impacts` and `local_authority_impacts` tables no longer have the `x` and `y` hex-map position columns; v2 Alembic revision `e86f19a6c4da` drops them. Nothing read or wrote these tables, and the app draws its maps from its own layout files.
+
+
+## [5.20.0] - 2026-11-03
+
+### Added
+
+- Every successful v2 metadata response carries a strong ETag (a hash of its body) and a public Cache-Control lifetime: a day when the request names its catalog with policyengine_version, five minutes for the running version, and never past the UTC midnight after the request for current parameter values (current=true). A request whose If-None-Match names the ETag gets 304 with no body. These responses and their 304s carry Vary: Origin, Accept-Encoding, each value once, and browser scripts can read the ETag.
+  GET /v2/model-catalog returns only the small parts of one catalog version (model, model version, entities, basic inputs, regions, logical input datasets and economy choices, which are empty lists for a catalog without regions) and names the selected PolicyEngine.py version, so a client can request every other part for that exact version.
+  GET /v2/model-catalog/variables returns every variable of a catalog version in one response, with the catalog format 2 fields (input and hidden-input flags, module, the parameter path an adds or subtracts list comes from, enum labels, unit and definition period), and the current-law values by date of each parameter such a list comes from. GET /v2/variables pages carry the same variable fields.
+  GET /v2/model-catalog/parameters fetches up to 100 parameters of a catalog version by name in one request, each with its economy and household flags and its current-law values by date, plus the stored labels of their ancestor nodes for breadcrumbs and the requested names the version lacks. /v2/parameters pages and details carry the economy and household flags.
+  Each API process keeps the serialized /v2/model-catalog and /v2/model-catalog/variables bodies and their ETags once built (up to eight route, country and version combinations), so only the first successful request per process reads them from the database; requests arriving during that read receive its outcome.
+
+### Changed
+
+- The UK metadata's constituency and local-authority region options, and the economy region check that accepts them, read the area lists packaged with .py, without importing .py, and the Public API's own copies of those lists are removed; the region options and the regions the check accepts are unchanged.
+- Every v2 metadata route reads its query through the shared query models, so unknown or repeated parameters, a missing or unsupported country_id and a malformed policyengine_version return 422 before any read (unsupported countries and malformed versions returned 400 before, and unknown parameters were ignored). /v2/parameters accepts repeated name keys and /v2/parameter-values repeated parameter_name keys to page only those parameters.
+
+### Fixed
+
+- v2 metadata reads run in autocommit sessions on the shared pool, and each process keeps the catalog versions it has selected. A request that makes one read for a version the process has already selected, such as a page of parameters or one parameter's values, now sends two statements to the database (the pool's liveness check and the read) instead of five; each further read in a request adds one statement.
+
+
 ## [5.19.1] - 2026-11-03
 
 ### Changed

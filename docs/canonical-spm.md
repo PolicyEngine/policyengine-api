@@ -42,11 +42,19 @@ years, and geography it used. This is the concrete behavior referred to elsewher
 as SPM selection and provenance.
 
 The API and simulation worker can be reviewed independently. Economy calculations
-using this API version require a worker whose `/versions` response maps the
-installed PolicyEngine.py, US, and UK versions to the same worker application and
-reports the matching `canonical-spm-v1` settings. Until such a worker is deployed,
-the API returns `SPM_CONFIGURATION_UNAVAILABLE` instead of submitting a calculation
-to an incompatible worker. [Simulation API PR 703](https://github.com/PolicyEngine/policyengine-sim-api/pull/703)
+using this API version require a worker whose `/versions` response routes the
+installed PolicyEngine.py version and reports the matching `canonical-spm-v1`
+settings for it. Until such a worker is deployed, the API returns
+`SPM_CONFIGURATION_UNAVAILABLE` instead of submitting a calculation to an
+incompatible worker.
+
+Every pull request, and every staging and production deploy, also runs
+`.github/check-policyengine-bundle-supported.sh`. It fails unless the installed
+PolicyEngine.py version is the `policyengine.latest` version that environment's
+`/versions` response reports, so the API stays on the latest bundle the
+simulation API has published. The API's economy requests name their
+PolicyEngine.py version, and the simulation API routes them by it, so the check
+doesn't compare the US and UK routes. [Simulation API PR 703](https://github.com/PolicyEngine/policyengine-sim-api/pull/703)
 implements the corresponding worker package update.
 
 The automated dependency updater changes the single `policyengine[models]`
@@ -335,7 +343,19 @@ accepted only for the UK, with `region` exactly `uk` or one UK country
 requests, including other spellings of those regions, return HTTP 400 before
 anything is read from the cache or submitted. The API sends `"breakdown": "local_areas"` to the simulation API,
 which computes the impacts in a run separate from the national result, and
-returns its result (`kind: "local_areas"`) like any other economy result. If
+returns its result (`kind: "local_areas"`) like any other economy result.
+Besides `constituency_impact` and `local_authority_impact`, the result has
+`constituency_withheld_codes` and `local_authority_withheld_codes`: the ONS
+codes, sorted, of each level's areas that the run estimated but disclosure
+control withheld, which the impact lists leave out. `[]` means none were
+withheld. `null` or an absent field means the result doesn't report them, as
+in results computed before the simulation API reported them. An area the run
+never estimated, such as one with no households in the dataset, is not listed.
+The API stores and returns these fields unchanged. A breakdown's options hash
+also includes `breakdown_schema=2`, the version of the breakdown result, so a
+breakdown cached before the result reported withheld codes is not returned and
+the next request computes it again; hashes of requests without `breakdown`
+don't include it. If
 the simulation API refuses the request with HTTP 400 or 422, because the
 deployed simulation API or the .py release it routes to cannot run breakdowns,
 the route returns HTTP 502 with the simulation API's reason and stores
