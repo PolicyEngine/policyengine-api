@@ -255,7 +255,8 @@ def test_detailed_budget_rows_need_neither_an_entity_nor_a_tax_flag() -> None:
     )
     assert (
         "CONSTRAINT uq_program_statistics_run_program_entity UNIQUE NULLS NOT "
-        "DISTINCT (report_run_id, program_name, entity)"
+        "DISTINCT (report_run_id, baseline_simulation_run_id, "
+        "reform_simulation_run_id, program_name, entity)"
     ) in statement
 
 
@@ -325,7 +326,13 @@ def test_per_simulation_results_belong_to_one_simulation_run() -> None:
         ("simulation_run_id", "income_variable", "entity")
     }
     assert _unique_column_sets(V2_METADATA.tables["poverty"]) == {
-        ("simulation_run_id", "poverty_type", "entity", "filter_variable")
+        (
+            "simulation_run_id",
+            "poverty_type",
+            "entity",
+            "filter_variable",
+            "filter_group",
+        )
     }
 
 
@@ -336,7 +343,7 @@ def test_poverty_rows_without_a_filter_variable_are_unique_per_run() -> None:
 
     assert (
         "CONSTRAINT uq_poverty_simulation_run_measure UNIQUE NULLS NOT DISTINCT "
-        "(simulation_run_id, poverty_type, entity, filter_variable)"
+        "(simulation_run_id, poverty_type, entity, filter_variable, filter_group)"
     ) in statement
 
 
@@ -354,8 +361,13 @@ def test_comparison_results_name_the_two_simulation_runs_they_compare() -> None:
             run_key = _foreign_key(table, column_name)
             assert run_key.target_fullname == "simulation_runs.id", table_name
             assert run_key.ondelete == "RESTRICT"
-        assert any(
-            columns[0] == "report_run_id" for columns in _unique_column_sets(table)
+        # A budget-window run compares one pair of simulation runs per year, so
+        # each row is unique within its report run and pair.
+        (unique_columns,) = _unique_column_sets(table)
+        assert unique_columns[:3] == (
+            "report_run_id",
+            "baseline_simulation_run_id",
+            "reform_simulation_run_id",
         ), table_name
 
 
@@ -412,3 +424,25 @@ def test_no_relationship_joins_models_that_different_services_write() -> None:
     )
 
     assert cross_service_relationships == []
+
+
+def test_poverty_rows_name_the_group_their_filter_selects() -> None:
+    """One filter variable selects several groups (``age``: child, adult, senior)."""
+    poverty = V2_METADATA.tables["poverty"]
+
+    assert poverty.c.filter_group.nullable
+    assert poverty.c.filter_group.type.length == 64
+
+
+def test_decile_rows_name_the_variable_that_groups_them() -> None:
+    """Wealth deciles of income changes share the income variable and entity."""
+    decile_impacts = V2_METADATA.tables["decile_impacts"]
+
+    assert decile_impacts.c.decile_variable.nullable
+    assert decile_impacts.c.decile_variable.type.length == 512
+    statement = str(CreateTable(decile_impacts).compile(dialect=postgresql.dialect()))
+    assert (
+        "CONSTRAINT uq_decile_impacts_run_measure UNIQUE NULLS NOT DISTINCT "
+        "(report_run_id, baseline_simulation_run_id, reform_simulation_run_id, "
+        "income_variable, decile_variable, entity, decile, quantiles)"
+    ) in statement

@@ -74,6 +74,18 @@ SIMULATION_RUNS_REVISION_PATH = (
 CROSS_SERVICE_KEYS_PARENT_REVISION = "2ffd50f47a2b"
 # The cross-service foreign key revision, parent of the economy output revision.
 ECONOMY_OUTPUT_PARENT_REVISION = "7a83a87d029a"
+# The economy output revision, parent of the result row identity revision.
+RESULT_IDENTITY_PARENT_REVISION = "7f43d2c7c3c6"
+# Each comparison result table's unique key, which gains the pair of runs.
+COMPARISON_UNIQUE_KEYS = {
+    "budget_summary": "uq_budget_summary_run_variable_entity",
+    "congressional_district_impacts": "uq_congressional_district_impacts_run_geoid",
+    "constituency_impacts": "uq_constituency_impacts_run_code",
+    "decile_impacts": "uq_decile_impacts_run_measure",
+    "intra_decile_impacts": "uq_intra_decile_impacts_run_type_decile",
+    "local_authority_impacts": "uq_local_authority_impacts_run_code",
+    "program_statistics": "uq_program_statistics_run_program_entity",
+}
 # The foreign keys from the simulation service's tables to the Public API's.
 CROSS_SERVICE_KEYS = {
     "household_jobs": {"dynamics", "policies"},
@@ -275,6 +287,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        RESULT_IDENTITY_PARENT_REVISION,
         ECONOMY_OUTPUT_PARENT_REVISION,
         CROSS_SERVICE_KEYS_PARENT_REVISION,
         SIMULATION_RUNS_PARENT_REVISION,
@@ -1201,6 +1214,59 @@ def test_economy_output_revision_only_adds_columns_and_relaxes_two() -> None:
         ("program_statistics", "entity"),
         ("program_statistics", "is_tax"),
     }
+    assert downgrade.count("op.drop_column(") == len(added_columns)
+    for body in (upgrade, downgrade):
+        assert "op.drop_table(" not in body
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+    assert "op.drop_column(" not in upgrade
+
+
+def test_result_identity_revision_adds_two_columns_and_widens_unique_keys() -> None:
+    """The revision after the economy output revision is generated.
+
+    It adds ``decile_impacts.decile_variable`` and ``poverty.filter_group`` and
+    rebuilds each comparison result table's unique key with the pair of
+    simulation runs, and ``poverty``'s with its group.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == RESULT_IDENTITY_PARENT_REVISION
+    ]
+    assert len(children) == 1
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert "No post-generation corrections." in revision
+    added_columns = set(
+        re.findall(r'op\.add_column\(\s*"(\w+)",\s*sa\.Column\(\s*"(\w+)"', upgrade)
+    )
+    assert added_columns == {
+        ("decile_impacts", "decile_variable"),
+        ("poverty", "filter_group"),
+    }
+    rebuilt_keys = {
+        table: name
+        for name, table in re.findall(
+            r'op\.create_unique_constraint\(\s*"(\w+)",\s*"(\w+)"', upgrade
+        )
+    }
+    assert rebuilt_keys == {
+        **COMPARISON_UNIQUE_KEYS,
+        "poverty": "uq_poverty_simulation_run_measure",
+    }
+    assert upgrade.count("op.drop_constraint(") == len(rebuilt_keys)
+    assert upgrade.count('"baseline_simulation_run_id",') == len(COMPARISON_UNIQUE_KEYS)
+    assert downgrade.count("op.create_unique_constraint(") == len(rebuilt_keys)
     assert downgrade.count("op.drop_column(") == len(added_columns)
     for body in (upgrade, downgrade):
         assert "op.drop_table(" not in body

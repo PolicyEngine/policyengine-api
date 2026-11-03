@@ -1,8 +1,10 @@
 """Canonical SQLModel tables for stable reports, runs, and run outputs.
 
 Results that compare a baseline with a reform belong to a report run and name
-the two simulation runs they compare; poverty and inequality, which describe
-one simulation, belong to a simulation run.
+the two simulation runs they compare; each such row is unique within its report
+run and pair of simulation runs, because a budget-window run compares one pair
+per year. Poverty and inequality, which describe one simulation, belong to a
+simulation run.
 """
 
 from datetime import datetime
@@ -346,13 +348,15 @@ class ChangeAggregate(IdentifiedModel, table=True):
 class BudgetSummary(IdentifiedModel, table=True):
     """Baseline and reform totals of one budget variable for a report run.
 
-    One row per run, variable and entity.
+    One row per report run, pair of simulation runs, variable and entity.
     """
 
     __tablename__ = "budget_summary"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
+            "baseline_simulation_run_id",
+            "reform_simulation_run_id",
             "variable_name",
             "entity",
             name="uq_budget_summary_run_variable_entity",
@@ -383,19 +387,26 @@ class BudgetSummary(IdentifiedModel, table=True):
 class DecileImpact(IdentifiedModel, table=True):
     """Mean income change and better/worse-off counts in one income quantile.
 
-    ``decile`` runs from 1 to ``quantiles``; there is one row per run, income
-    variable, entity, quantile count and decile.
+    ``decile`` runs from 1 to ``quantiles``; there is one row per report run,
+    pair of simulation runs, income variable, decile variable, entity, quantile
+    count and decile. ``decile_variable`` names a variable that groups the
+    households instead of the income variable's own deciles, such as
+    ``household_wealth_decile``; rows without one count as equal.
     """
 
     __tablename__ = "decile_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
+            "baseline_simulation_run_id",
+            "reform_simulation_run_id",
             "income_variable",
+            "decile_variable",
             "entity",
             "decile",
             "quantiles",
             name="uq_decile_impacts_run_measure",
+            postgresql_nulls_not_distinct=True,
         ),
         sa.CheckConstraint("quantiles > 0", name="ck_decile_impacts_quantiles"),
         sa.CheckConstraint(
@@ -417,6 +428,7 @@ class DecileImpact(IdentifiedModel, table=True):
         ondelete="RESTRICT",
     )
     income_variable: str = Field(max_length=512)
+    decile_variable: str | None = Field(default=None, max_length=512)
     entity: str = Field(max_length=128)
     decile: int
     quantiles: int = 10
@@ -434,13 +446,16 @@ class DecileImpact(IdentifiedModel, table=True):
 class IntraDecileImpact(IdentifiedModel, table=True):
     """Shares of one decile whose income rises or falls by more or less than 5%.
 
-    One row per run, decile type and decile, where ``decile`` is 0 to 10.
+    One row per report run, pair of simulation runs, decile type and decile,
+    where ``decile`` is 0 to 10.
     """
 
     __tablename__ = "intra_decile_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
+            "baseline_simulation_run_id",
+            "reform_simulation_run_id",
             "decile_type",
             "decile",
             name="uq_intra_decile_impacts_run_type_decile",
@@ -507,9 +522,10 @@ class Inequality(IdentifiedModel, table=True):
 class Poverty(IdentifiedModel, table=True):
     """Poverty headcount and rate of one type for one simulation run.
 
-    One row per run, poverty type, entity and filter variable; rows without a
-    filter variable count as equal, so each run has one unfiltered row per type
-    and entity.
+    One row per run, poverty type, entity, filter variable and filter group:
+    ``filter_variable`` selects people (``age``) and ``filter_group`` names the
+    group (``child``). Missing values count as equal, so each run has one
+    unfiltered row per type and entity.
     """
 
     __tablename__ = "poverty"
@@ -519,6 +535,7 @@ class Poverty(IdentifiedModel, table=True):
             "poverty_type",
             "entity",
             "filter_variable",
+            "filter_group",
             name="uq_poverty_simulation_run_measure",
             postgresql_nulls_not_distinct=True,
         ),
@@ -531,6 +548,7 @@ class Poverty(IdentifiedModel, table=True):
     poverty_type: str = Field(max_length=128)
     entity: str = Field(default="person", max_length=128)
     filter_variable: str | None = Field(default=None, max_length=512)
+    filter_group: str | None = Field(default=None, max_length=64)
     headcount: float | None = None
     total_population: float | None = None
     rate: float | None = None
@@ -541,7 +559,8 @@ class Poverty(IdentifiedModel, table=True):
 class ProgramStatistics(IdentifiedModel, table=True):
     """Baseline and reform totals, counts, winners and losers for one program.
 
-    One row per run, program and entity; ``is_tax`` marks taxes. The economy
+    One row per report run, pair of simulation runs, program and entity;
+    ``is_tax`` marks taxes. The economy
     output's detailed budget names neither the entity nor whether a program is
     a tax, so both may be null, and rows without an entity count as equal.
     """
@@ -550,6 +569,8 @@ class ProgramStatistics(IdentifiedModel, table=True):
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
+            "baseline_simulation_run_id",
+            "reform_simulation_run_id",
             "program_name",
             "entity",
             name="uq_program_statistics_run_program_entity",
@@ -628,14 +649,16 @@ def _disclosure_tier_check(table_name: str) -> sa.CheckConstraint:
 class CongressionalDistrictImpact(GeographicImpactBase, table=True):
     """Household income change and population in one US congressional district.
 
-    One row per run and district GEOID, with the shares of people who gain,
-    lose or see no change.
+    One row per report run, pair of simulation runs and district GEOID, with the
+    shares of people who gain, lose or see no change.
     """
 
     __tablename__ = "congressional_district_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
+            "baseline_simulation_run_id",
+            "reform_simulation_run_id",
             "district_geoid",
             name="uq_congressional_district_impacts_run_geoid",
         ),
@@ -656,13 +679,15 @@ class CongressionalDistrictImpact(GeographicImpactBase, table=True):
 class ConstituencyImpact(UKAreaImpactBase, table=True):
     """Household income change in one UK constituency.
 
-    One row per run and constituency code.
+    One row per report run, pair of simulation runs and constituency code.
     """
 
     __tablename__ = "constituency_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
+            "baseline_simulation_run_id",
+            "reform_simulation_run_id",
             "constituency_code",
             name="uq_constituency_impacts_run_code",
         ),
@@ -678,13 +703,15 @@ class ConstituencyImpact(UKAreaImpactBase, table=True):
 class LocalAuthorityImpact(UKAreaImpactBase, table=True):
     """Household income change in one UK local authority.
 
-    One row per run and local authority code.
+    One row per report run, pair of simulation runs and local authority code.
     """
 
     __tablename__ = "local_authority_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
+            "baseline_simulation_run_id",
+            "reform_simulation_run_id",
             "local_authority_code",
             name="uq_local_authority_impacts_run_code",
         ),

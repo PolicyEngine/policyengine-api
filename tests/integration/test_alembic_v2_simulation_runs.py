@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 SIMULATION_RUNS_PREVIOUS_REVISION = "c614b6bcccfc"
 SIMULATION_RUNS_REVISION = "2ffd50f47a2b"
 CROSS_SERVICE_KEYS_REVISION = "7a83a87d029a"
+ECONOMY_OUTPUT_REVISION = "7f43d2c7c3c6"
 NEW_TABLES = frozenset({"simulation_runs", "report_run_simulation_runs"})
 CHANGED_TABLES = frozenset(
     {
@@ -174,6 +175,16 @@ def test_each_revision_downgrades_to_its_parent_and_upgrades_again(
     config: Config, engine: Engine
 ) -> None:
     command.upgrade(config, "head")
+
+    command.downgrade(config, ECONOMY_OUTPUT_REVISION)
+    assert "decile_variable" not in _column_names(engine, "decile_impacts")
+    assert "filter_group" not in _column_names(engine, "poverty")
+    budget_key = next(
+        constraint
+        for constraint in inspect(engine).get_unique_constraints("budget_summary")
+        if constraint["name"] == "uq_budget_summary_run_variable_entity"
+    )
+    assert budget_key["column_names"] == ["report_run_id", "variable_name", "entity"]
 
     command.downgrade(config, CROSS_SERVICE_KEYS_REVISION)
     assert {"spm_provenance", "data_version"}.isdisjoint(
@@ -408,6 +419,42 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
     _insert(connection, "poverty", id=uuid4(), **poverty)
     with _refused(connection):
         _insert(connection, "poverty", id=uuid4(), **poverty)
+    for group in ("child", "adult"):
+        _insert(
+            connection,
+            "poverty",
+            id=uuid4(),
+            filter_variable="age",
+            filter_group=group,
+            **poverty,
+        )
+    decile = {
+        "income_variable": "household_net_income",
+        "entity": "household",
+        "decile": 1,
+        "quantiles": 10,
+        **comparison_runs,
+    }
+    _insert(connection, "decile_impacts", id=uuid4(), **decile)
+    _insert(
+        connection,
+        "decile_impacts",
+        id=uuid4(),
+        decile_variable="household_wealth_decile",
+        **decile,
+    )
+    with _refused(connection):
+        _insert(connection, "decile_impacts", id=uuid4(), **decile)
+    budget = {"variable_name": "household_tax", "entity": "household"}
+    _insert(connection, "budget_summary", id=uuid4(), **budget, **comparison_runs)
+    next_year_runs = {
+        **comparison_runs,
+        "baseline_simulation_run_id": _insert_simulation_run(connection, simulation_id),
+        "reform_simulation_run_id": _insert_simulation_run(connection, simulation_id),
+    }
+    _insert(connection, "budget_summary", id=uuid4(), **budget, **next_year_runs)
+    with _refused(connection):
+        _insert(connection, "budget_summary", id=uuid4(), **budget, **next_year_runs)
     _insert(
         connection,
         "program_statistics",
