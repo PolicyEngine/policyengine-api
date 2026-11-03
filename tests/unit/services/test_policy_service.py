@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
@@ -51,47 +52,6 @@ def test_get_policy_json_returns_python_object(service):
     assert result == {
         "gov.irs.income.bracket.rates.2": {"2024-01-01.2024-12-31": 0.2433}
     }
-
-
-def test_search_policies_filters_and_deduplicates(service, orm_session_factory):
-    with orm_session_factory.begin() as session:
-        session.add_all(
-            [
-                Policy(
-                    id=31,
-                    country_id="us",
-                    label="Tax reform",
-                    api_version="1",
-                    policy_json={},
-                    policy_hash="same-hash",
-                ),
-                Policy(
-                    id=32,
-                    country_id="us",
-                    label="Tax reform",
-                    api_version="1",
-                    policy_json={"different": True},
-                    policy_hash="same-hash",
-                ),
-                Policy(
-                    id=33,
-                    country_id="us",
-                    label="Benefit reform",
-                    api_version="1",
-                    policy_json={},
-                    policy_hash="other-hash",
-                ),
-            ]
-        )
-
-    all_results = service.search_policies("us", "Tax", unique_only=False)
-    unique_results = service.search_policies("us", "Tax", unique_only=True)
-    escaped_wildcard_results = service.search_policies("us", "Tax%", unique_only=False)
-
-    assert len(all_results) == 2
-    assert len(unique_results) == 1
-    assert unique_results[0].label == "Tax reform"
-    assert escaped_wildcard_results == []
 
 
 def test_set_policy_adds_mapped_entity(service, monkeypatch):
@@ -196,13 +156,13 @@ def test_set_policy_does_not_build_v2_snapshot_unless_requested(
     )
 
     result = service.set_policy(
-        "ca",
-        "Canadian policy",
+        "uk",
+        "UK policy",
         {"parameter": 1},
     )
 
     assert result.snapshot is None
-    assert service.get_policy("ca", result.policy_id) is not None
+    assert service.get_policy("uk", result.policy_id) is not None
 
 
 def test_set_policy_rejects_invalid_country(service):
@@ -243,7 +203,11 @@ def test_mirror_snapshot_read_failure_rolls_back_new_v1_policy(
         with pytest.raises(SQLAlchemyError, match="snapshot read failed"):
             service.set_policy("us", "Failed snapshot", {}, prepare_for_mirroring=True)
 
-    assert service.search_policies("us", "Failed snapshot") == []
+    with orm_session_factory() as session:
+        stored_labels = session.scalars(
+            select(Policy.label).where(Policy.label == "Failed snapshot")
+        ).all()
+    assert stored_labels == []
     retry = service.set_policy("us", "Failed snapshot", {}, prepare_for_mirroring=True)
     assert retry.is_existing_policy is False
     assert retry.snapshot == service.get_policy_snapshot("us", retry.policy_id)

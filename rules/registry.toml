@@ -57,6 +57,9 @@ title = "Process and repository hygiene"
 
 [discovery]
 workflows = [".github/workflows/pr.yml"]
+ignore_jobs = [
+  { job = "upload-test-coverage", reason = "sends the test shards' coverage reports to Codecov in one upload; it checks nothing" },
+]
 guard_test_globs = [
   "tests/**/test_*boundar*.py",
   "tests/**/test_import_side_effects.py",
@@ -417,7 +420,7 @@ kind = "pytest"
 nodes = [
   "tests/unit/services/test_orm_service_boundaries.py::test_migrated_services_use_sessions_and_mapped_models",
   "tests/unit/services/test_local_data_service_boundaries.py::test_local_service_public_methods_do_not_accept_persistence",
-  "tests/unit/services/test_local_data_service_boundaries.py::test_reform_impact_route_does_not_manage_sessions",
+  "tests/unit/services/test_local_data_service_boundaries.py::test_flask_routes_do_not_manage_sessions",
   "tests/unit/services/test_local_data_service_boundaries.py::test_economy_service_delegates_persistence_without_opening_sessions",
   "tests/unit/services/test_local_data_service_boundaries.py::test_economy_service_modules_delegate_persistence_without_opening_sessions",
 ]
@@ -1063,7 +1066,7 @@ invocation = "mypy"
 [[rule]]
 id = "api.quality.tests-pass"
 category = "quality"
-statement = "The unit, contract and to-refactor test suites pass."
+statement = "The unit, contract and to-refactor test suites pass, each test in exactly one of the shards they run in."
 rationale = "docs/engineering/skills/testing.md"
 scope = ["tests/**/*.py"]
 tier = "mechanical"
@@ -1075,6 +1078,10 @@ kind = "workflow-job"
 workflow = ".github/workflows/pr.yml"
 job = "test"
 invocation = "make test"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "check-test-shards"
+invocation = "scripts.release_test_shards check-coverage"
 
 [[rule]]
 id = "api.quality.environment-variables-load"

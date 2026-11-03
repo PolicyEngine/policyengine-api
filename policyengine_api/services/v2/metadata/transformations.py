@@ -7,11 +7,20 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from policyengine_api.dataset_display import get_dataset_display_label
 from policyengine_api.services.v2.metadata.types import (
+    CurrentLawValueRow,
     MetadataCanonicalParameterValue,
+    MetadataCatalogParameter,
+    MetadataCatalogParametersResult,
+    MetadataCatalogVariablesResult,
     MetadataDataset,
     MetadataDatasetOption,
+    MetadataDatedValue,
+    MetadataEconomyOptions,
     MetadataEconomyOptionsResult,
+    MetadataEntity,
+    MetadataEnumValue,
     MetadataModel,
+    MetadataModelCatalogResult,
     MetadataModelSelectionResult,
     MetadataModelVersionDetail,
     MetadataPageResult,
@@ -22,6 +31,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataRegionType,
     MetadataTimePeriodOption,
     MetadataVariable,
+    ParameterNodeLabelRow,
     ParameterValueSelection,
 )
 
@@ -103,7 +113,77 @@ def metadata_variable(variable: Variable) -> MetadataVariable:
         default_value=variable.default_value,
         adds=variable.adds,
         subtracts=variable.subtracts,
+        is_input_variable=variable.is_input_variable,
+        hidden_input=variable.hidden_input,
+        module_name=variable.module_name,
+        adds_parameter_path=variable.adds_parameter_path,
+        subtracts_parameter_path=variable.subtracts_parameter_path,
+        enum_values=(
+            None
+            if variable.enum_values is None
+            else [
+                MetadataEnumValue.model_validate(enum_value)
+                for enum_value in variable.enum_values
+            ]
+        ),
+        unit=variable.unit,
+        definition_period=variable.definition_period,
     )
+
+
+def part_parameter_paths(variables: list[Variable]) -> set[str]:
+    """Return every parameter path the variables' adds or subtracts names."""
+    return {
+        path
+        for variable in variables
+        for path in (variable.adds_parameter_path, variable.subtracts_parameter_path)
+        if path is not None
+    }
+
+
+def metadata_catalog_variables(
+    selected: SelectedCatalog,
+    *,
+    variables: list[Variable],
+    part_paths: set[str],
+    part_values: list[CurrentLawValueRow],
+) -> MetadataCatalogVariablesResult:
+    """Build every variable of the selected version and its part parameters' values.
+
+    part_paths holds part_parameter_paths of the variables, and part_values the
+    current-law values of those parameters in name and start-date order. Each
+    path gets an entry, empty when no value carries its name.
+    """
+    values_by_path = dated_values_by_parameter_name(
+        part_values, parameter_names=part_paths
+    )
+    return MetadataCatalogVariablesResult(
+        policyengine_version=selected.policyengine_version,
+        catalog_format=selected.model_version.catalog_format,
+        variables=[metadata_variable(variable) for variable in variables],
+        part_parameter_values=values_by_path,
+    )
+
+
+def dated_values_by_parameter_name(
+    value_rows: list[CurrentLawValueRow], *, parameter_names: set[str]
+) -> dict[str, list[MetadataDatedValue]]:
+    """Group value rows by parameter name, with an empty list for each other name.
+
+    value_rows are in parameter-name and start-date order.
+    """
+    values_by_name: dict[str, list[MetadataDatedValue]] = {
+        name: [] for name in sorted(parameter_names)
+    }
+    for row in value_rows:
+        values_by_name.setdefault(row.name, []).append(
+            MetadataDatedValue(
+                start_date=as_utc(row.start_date),
+                end_date=None if row.end_date is None else as_utc(row.end_date),
+                value=row.value_json,
+            )
+        )
+    return values_by_name
 
 
 def metadata_parameter(parameter: Parameter) -> MetadataParameterSummary:
@@ -115,6 +195,51 @@ def metadata_parameter(parameter: Parameter) -> MetadataParameterSummary:
         description=parameter.description,
         data_type=parameter.data_type,
         unit=parameter.unit,
+        economy=parameter.economy,
+        household=parameter.household,
+    )
+
+
+def ancestor_paths(parameter_name: str) -> list[str]:
+    """Return the paths of every node above parameter_name, from the root down.
+
+    A dot separates a child, and so does the ``[`` of a bracket index:
+    ``gov.tax.rates[0].rate`` has the ancestors ``gov``, ``gov.tax``,
+    ``gov.tax.rates`` and ``gov.tax.rates[0]``.
+    """
+    return [
+        parameter_name[:position]
+        for position, character in enumerate(parameter_name)
+        if character in ".[" and position > 0
+    ]
+
+
+def metadata_catalog_parameters(
+    selected: SelectedCatalog,
+    *,
+    parameters: list[Parameter],
+    values_by_name: dict[str, list[MetadataDatedValue]],
+    node_rows: list[ParameterNodeLabelRow],
+    missing_names: set[str],
+) -> MetadataCatalogParametersResult:
+    """Build the requested parameters with their values and ancestor labels.
+
+    values_by_name maps each parameter's name to its current-law values (see
+    dated_values_by_parameter_name), node_rows are the stored labels of their
+    ancestor nodes, and missing_names the requested names the version lacks.
+    """
+    return MetadataCatalogParametersResult(
+        policyengine_version=selected.policyengine_version,
+        catalog_format=selected.model_version.catalog_format,
+        parameters=[
+            MetadataCatalogParameter(
+                **metadata_parameter(parameter).model_dump(),
+                values=values_by_name[parameter.name],
+            )
+            for parameter in parameters
+        ],
+        node_labels={row.name: row.label for row in node_rows},
+        missing_names=sorted(missing_names),
     )
 
 
@@ -127,6 +252,18 @@ def metadata_parameter_value(value: ParameterValue) -> MetadataCanonicalParamete
         start_date=value.start_date,
         end_date=value.end_date,
     )
+
+
+def as_utc(moment: datetime) -> datetime:
+    """Return moment in UTC, treating a naive time as UTC.
+
+    The database may return times in its session's time zone (or, in SQLite,
+    without one); serving them in UTC keeps a response's bytes, and so its
+    ETag, the same whatever that setting is.
+    """
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=UTC)
+    return moment.astimezone(UTC)
 
 
 def utc_day_start(selected_time: datetime) -> datetime:
@@ -153,6 +290,7 @@ def parameter_value_selection(
     return ParameterValueSelection(
         parameter_id=value_filter.parameter_id,
         selected_day=selected_day,
+        parameter_names=value_filter.parameter_names,
     )
 
 
@@ -187,31 +325,26 @@ def metadata_region(region: Region) -> MetadataRegion:
 def metadata_parameter_children(rows: list[Any]) -> list[MetadataParameterChild]:
     """Build parameter-tree children from read_parameter_children rows.
 
-    Parameter leaves carry the parameter's summary, and a child with no label is
-    labelled with the last segment of its path.
+    Parameter leaves carry the same summary as the parameter routes, and a child
+    with no label is labelled with the last segment of its path.
     """
-    items = []
-    for row in rows:
-        parameter = None
-        if row.type == "parameter":
-            parameter = MetadataParameterSummary(
-                id=row.parameter_id,
-                name=row.path,
-                label=row.parameter_label,
-                description=row.parameter_description,
-                data_type=row.parameter_data_type,
-                unit=row.parameter_unit,
-            )
-        items.append(
-            MetadataParameterChild(
-                path=row.path,
-                label=row.label or row.path.rsplit(".", 1)[-1],
-                type=row.type,
-                child_count=row.child_count,
-                parameter=parameter,
-            )
+    return [
+        MetadataParameterChild(
+            path=row.path,
+            label=row.label or row.path.rsplit(".", 1)[-1],
+            type=row.type,
+            child_count=row.child_count,
+            parameter=(
+                metadata_parameter(row.Parameter) if row.type == "parameter" else None
+            ),
         )
-    return items
+        for row in rows
+    ]
+
+
+def national_region(regions: list[Region], country_id: str) -> Region | None:
+    """Return the country's national region (its code is the country ID), or None."""
+    return next((region for region in regions if region.code == country_id), None)
 
 
 def metadata_economy_options(
@@ -221,9 +354,22 @@ def metadata_economy_options(
 
     The national dataset is the only dataset choice, and it is the default.
     """
+    options = _economy_option_lists(
+        selected, regions=regions, national_dataset=national_dataset
+    )
     return MetadataEconomyOptionsResult(
         policyengine_version=selected.policyengine_version,
         current_law_id=selected.model_version.current_law_id,
+        region=options.region,
+        time_period=options.time_period,
+        datasets=options.datasets,
+    )
+
+
+def _economy_option_lists(
+    selected: SelectedCatalog, *, regions: list[Region], national_dataset: Dataset
+) -> MetadataEconomyOptions:
+    return MetadataEconomyOptions(
         region=[
             MetadataRegionOption(
                 name=region.code,
@@ -242,4 +388,40 @@ def metadata_economy_options(
                 label=get_dataset_display_label(national_dataset.name),
             )
         ],
+    )
+
+
+def metadata_model_catalog(
+    selected: SelectedCatalog,
+    *,
+    regions: list[Region],
+    datasets: list[Dataset],
+    national_dataset: Dataset | None,
+) -> MetadataModelCatalogResult:
+    """Build the small parts of the selected catalog version.
+
+    Without a national dataset (a catalog without regions) the economy choices
+    are empty. Entities and basic inputs a version published before catalog
+    format 2 lacks are empty lists.
+    """
+    model_version = selected.model_version
+    return MetadataModelCatalogResult(
+        policyengine_version=selected.policyengine_version,
+        catalog_format=model_version.catalog_format,
+        model=metadata_model(selected),
+        model_version=metadata_model_version(selected),
+        entities=[
+            MetadataEntity.model_validate(entity)
+            for entity in model_version.entities or []
+        ],
+        basic_inputs=list(model_version.basic_inputs or []),
+        regions=[metadata_region(region) for region in regions],
+        datasets=[metadata_dataset(dataset) for dataset in datasets],
+        economy_options=(
+            _economy_option_lists(
+                selected, regions=regions, national_dataset=national_dataset
+            )
+            if national_dataset is not None
+            else MetadataEconomyOptions(region=[], time_period=[], datasets=[])
+        ),
     )

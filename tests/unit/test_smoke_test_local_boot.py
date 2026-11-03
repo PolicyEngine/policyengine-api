@@ -33,7 +33,7 @@ class _FakeClock:
 
 
 class _FakeApp:
-    """Stands in for the Flask child process and records how it is managed."""
+    """Stands in for the app's child process and records how it is managed."""
 
     def __init__(
         self, *, exits_after_polls: int | None = None, ignores_terminate: bool = False
@@ -63,7 +63,7 @@ class _FakeApp:
     def wait(self, timeout: float) -> int:
         self.calls.append(("wait", timeout))
         if self.ignores_terminate and ("kill",) not in self.calls:
-            command_name = "flask"
+            command_name = "uvicorn"
             raise subprocess.TimeoutExpired(command_name, timeout)
         if self.returncode is None:
             self.returncode = -15
@@ -132,28 +132,33 @@ CAPTURED_OUTPUT = [
     "=== stderr ===",
     "app stderr",
 ]
-LIVENESS_URL = f"http://127.0.0.1:{PORT}/liveness-check"
-READINESS_URL = f"http://127.0.0.1:{PORT}/readiness-check"
+HEALTH_URL = f"http://127.0.0.1:{PORT}/health"
+READY = (200, '{"status":"healthy"}')
 
 
-def test_boot_passes_when_both_health_checks_answer_ok(
+def _not_ready() -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(
+        HEALTH_URL, 503, "Service Unavailable", Message(), None
+    )
+
+
+def test_boot_passes_when_health_reports_ready(
     boot: BootRunner, capsys: pytest.CaptureFixture[str]
 ) -> None:
     app = _FakeApp()
 
-    status, fetched, clock = boot(app, [(200, "OK\n"), (200, "OK\n"), (200, " OK ")])
+    status, fetched, clock = boot(app, [READY, (200, ' {"status":"healthy"}\n')])
 
     assert status == 0
     assert capsys.readouterr().out.splitlines() == [
         *_header(app),
         "",
-        "Boot smoke test reached a live app. Probing health endpoints:",
-        "/liveness-check: 200 OK",
-        "/readiness-check: 200 OK",
+        "Boot smoke test reached a running app. Checking /health:",
+        '/health: 200 {"status":"healthy"}',
         "",
         "Boot smoke test passed.",
     ]
-    assert fetched == [LIVENESS_URL, LIVENESS_URL, READINESS_URL]
+    assert fetched == [HEALTH_URL, HEALTH_URL]
     assert clock.sleeps == []
     assert app.calls == [("terminate",), ("wait", 5)]
     assert app.popen_args is not None
@@ -161,12 +166,10 @@ def test_boot_passes_when_both_health_checks_answer_ok(
     assert command == [
         sys.executable,
         "-m",
-        "flask",
-        "--app",
-        "policyengine_api.api",
-        "run",
-        "--without-threads",
-        "--no-reload",
+        "uvicorn",
+        "policyengine_api.asgi:app",
+        "--host",
+        "127.0.0.1",
         "--port",
         str(PORT),
     ]
@@ -178,7 +181,7 @@ def test_boot_passes_when_both_health_checks_answer_ok(
     assert kwargs["stderr"].closed
 
 
-def test_boot_retries_until_the_app_is_live(
+def test_boot_retries_until_the_app_answers(
     boot: BootRunner, capsys: pytest.CaptureFixture[str]
 ) -> None:
     app = _FakeApp()
@@ -189,21 +192,18 @@ def test_boot_retries_until_the_app_is_live(
             urllib.error.URLError("refused"),
             TimeoutError(),
             ConnectionError(),
-            (503, "starting"),
-            (200, "not ok"),
-            (200, "OK"),
-            (200, "OK"),
-            (200, "OK"),
+            _not_ready(),
+            READY,
         ],
     )
 
     assert status == 0
-    assert fetched == [LIVENESS_URL] * 6 + [LIVENESS_URL, READINESS_URL]
-    assert clock.sleeps == [0.5] * 5
+    assert fetched == [HEALTH_URL] * 5
+    assert clock.sleeps == [0.5] * 3
     assert "Boot smoke test passed." in capsys.readouterr().out
 
 
-def test_boot_fails_when_the_app_exits_before_it_is_live(
+def test_boot_fails_when_the_app_exits_before_it_answers(
     boot: BootRunner, capsys: pytest.CaptureFixture[str]
 ) -> None:
     app = _FakeApp(exits_after_polls=1)
@@ -214,15 +214,15 @@ def test_boot_fails_when_the_app_exits_before_it_is_live(
     assert capsys.readouterr().out.splitlines() == [
         *_header(app),
         "",
-        "Boot smoke test failed: app did not become ready.",
+        "Boot smoke test failed: app did not start.",
         *CAPTURED_OUTPUT,
     ]
-    assert fetched == [LIVENESS_URL]
+    assert fetched == [HEALTH_URL]
     assert clock.sleeps == [0.5]
     assert app.calls == [("wait", 5)]
 
 
-def test_boot_stops_an_app_that_never_becomes_live(
+def test_boot_stops_an_app_that_never_answers(
     boot: BootRunner, capsys: pytest.CaptureFixture[str]
 ) -> None:
     app = _FakeApp()
@@ -234,7 +234,7 @@ def test_boot_stops_an_app_that_never_becomes_live(
     assert capsys.readouterr().out.splitlines() == [
         *_header(app),
         "",
-        "Boot smoke test failed: app did not become ready.",
+        "Boot smoke test failed: app did not start.",
         *CAPTURED_OUTPUT,
     ]
     assert len(fetched) == 1200
@@ -242,34 +242,42 @@ def test_boot_stops_an_app_that_never_becomes_live(
     assert app.calls == [("terminate",), ("wait", 5)]
 
 
-def test_boot_fails_when_a_health_probe_is_not_ok(
-    boot: BootRunner, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(
+    ("health_answer", "reported_line"),
+    [
+        (_not_ready(), "/health: 503"),
+        ((200, '{"status":"starting"}'), '/health: 200 {"status":"starting"}'),
+    ],
+    ids=["not-ready", "unexpected-body"],
+)
+def test_boot_fails_when_health_does_not_report_ready(
+    boot: BootRunner,
+    capsys: pytest.CaptureFixture[str],
+    health_answer: FetchOutcome,
+    reported_line: str,
 ) -> None:
     app = _FakeApp()
 
-    status, fetched, _clock = boot(
-        app, [(200, "OK"), (200, "OK"), (503, " starting \n")]
-    )
+    status, fetched, _clock = boot(app, [READY, health_answer])
 
     assert status == 1
     assert capsys.readouterr().out.splitlines() == [
         *_header(app),
         "",
-        "Boot smoke test reached a live app. Probing health endpoints:",
-        "/liveness-check: 200 OK",
-        "/readiness-check: 503 starting",
+        "Boot smoke test reached a running app. Checking /health:",
+        reported_line,
         "",
-        "Health endpoint probe failed.",
+        "Health check did not report ready.",
         *CAPTURED_OUTPUT,
     ]
-    assert fetched == [LIVENESS_URL, LIVENESS_URL, READINESS_URL]
+    assert fetched == [HEALTH_URL, HEALTH_URL]
     assert app.calls == [("terminate",), ("wait", 5)]
 
 
 def test_boot_kills_an_app_that_ignores_terminate(boot: BootRunner) -> None:
     app = _FakeApp(ignores_terminate=True)
 
-    status, _fetched, _clock = boot(app, [(200, "OK"), (200, "OK"), (200, "OK")])
+    status, _fetched, _clock = boot(app, [READY, READY])
 
     assert status == 0
     assert app.calls == [("terminate",), ("wait", 5), ("kill",), ("wait", 5)]
@@ -279,10 +287,9 @@ def test_health_probe_errors_propagate_after_stopping_the_app(
     boot: BootRunner,
 ) -> None:
     app = _FakeApp()
-    error = urllib.error.HTTPError(READINESS_URL, 500, "boom", Message(), None)
 
-    with pytest.raises(urllib.error.HTTPError):
-        boot(app, [(200, "OK"), (200, "OK"), error])
+    with pytest.raises(ConnectionError):
+        boot(app, [READY, ConnectionError()])
 
     assert app.calls == [("terminate",), ("wait", 5)]
 
@@ -297,6 +304,6 @@ def test_boot_reports_a_missing_policyengine_package(
 
     monkeypatch.setattr(importlib.metadata, "version", missing)
 
-    boot(_FakeApp(), [(200, "OK"), (200, "OK"), (200, "OK")])
+    boot(_FakeApp(), [READY, READY])
 
     assert "policyengine: not installed" in capsys.readouterr().out.splitlines()

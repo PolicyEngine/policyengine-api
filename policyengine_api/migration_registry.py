@@ -19,6 +19,9 @@ class RouteGroupConfig:
     sim_flow: str | None = None
 
 
+# Path segments of removed routes (the liveness and readiness checks, the v1
+# saved-policy, user-profile and policy search routes) stay listed, so
+# requests that still arrive for them are labelled in the request logs.
 ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
     RouteGroupConfig(
         name="health",
@@ -41,6 +44,7 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
             "countries",
             "datasets",
             "economy-options",
+            "model-catalog",
             "parameter-values",
             "parameters",
             "regions",

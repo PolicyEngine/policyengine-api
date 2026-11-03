@@ -575,7 +575,7 @@ def test_a_bundle_this_build_cannot_read_reports_no_validator_internals(
 
 @pytest.mark.usefixtures("certified_bundle")
 def test_a_country_package_without_a_simulation_is_typed_not_internal(monkeypatch):
-    """A partially installed model must not make /readiness-check raise.
+    """A partially installed model must not make /health raise.
 
     `is_ready` recovers from RuntimeError and ValueError only, so an escaping
     AttributeError turns the health check into a 500 and every US request with

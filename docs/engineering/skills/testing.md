@@ -188,10 +188,18 @@ the same tests and each test ran in exactly one shard. The plugin reads its
 settings once, when pytest configures it, and then removes them and its `-p`
 option from `PYTEST_ADDOPTS`, so a pytest process that a test starts collects
 its own tests without the split; a shard writes its report once, and fails if
-one is already there. When a test file
-becomes much slower or faster, measure it again with `--durations=0` and
-update `MEASURED_FILE_SECONDS`; an out-of-date value only makes the shards
-finish less evenly.
+one is already there. When a test file becomes much slower or faster, measure
+it again with `--durations=0` and update `MEASURED_FILE_SECONDS`; an
+out-of-date value only makes the shards finish less evenly.
+
+Every pull request runs the same six shards in `pr.yml`'s `test` job, which
+runs `make test` with the plugin in `PYTEST_ADDOPTS`, as
+`run_release_tests.sh` does, and its `check-test-shards` job runs the same
+check, so a change that breaks the split fails before it merges. Each shard
+keeps its `coverage.xml` as an artifact, and the `upload-test-coverage` job
+sends all six to Codecov in one upload: with an upload from each shard, Codecov
+updated its checks after every upload and could leave one in progress. "CI
+complete" needs all three jobs.
 
 The release run skips lint, the quality guards, both Alembic checks and the
 cross-database integration tests when its merge run passed them on the same
@@ -279,7 +287,6 @@ uv run pytest \
   tests/unit/services/test_policy_mirroring.py \
   tests/unit/services/test_user_policy_mirroring.py \
   tests/unit/routes/test_policy_dual_write_routes.py \
-  tests/unit/routes/test_user_policy_dual_write_routes.py \
   tests/unit/test_migration_flags.py \
   tests/unit/test_readiness.py \
   tests/contract -q
@@ -313,8 +320,7 @@ uv run pytest \
   tests/contract/test_v1_route_contracts.py \
   tests/unit/services/test_policy_service.py \
   tests/unit/services/test_user_policy_service.py \
-  tests/unit/routes/test_policy_dual_write_routes.py \
-  tests/unit/routes/test_user_policy_dual_write_routes.py -q
+  tests/unit/routes/test_policy_dual_write_routes.py -q
 ```
 
 Finally regenerate and validate migration contracts:

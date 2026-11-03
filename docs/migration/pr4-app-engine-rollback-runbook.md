@@ -39,7 +39,7 @@ gcloud compute url-maps describe lb-api --project policyengine-api \
 
 ```bash
 for i in $(seq 1 200); do
-  curl -sI --max-time 10 https://api.policyengine.org/liveness-check | tr -d '\r' \
+  curl -sI --max-time 10 https://api.policyengine.org/health | tr -d '\r' \
     | awk -F': ' 'tolower($1)=="x-policyengine-backend" {print $2}'
 done | sort | uniq -c   # expect 200 app_engine after settle
 ```

@@ -10,7 +10,6 @@ def test_app_v2_workflow_contract_registry_is_complete():
     assert {workflow.name for workflow in APP_V2_WORKFLOW_CONTRACTS} == {
         "policy_save_search",
         "policy_resources_v2",
-        "saved_policy_v1_compatibility",
         "user_policy_associations_v2",
         "household_save_read",
         "household_resources_v2",

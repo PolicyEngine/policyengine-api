@@ -584,9 +584,7 @@ def test_annual_route_stores_and_returns_a_completed_breakdown_unchanged(
     assert polled.get_json()["result"] == stored.get_json()["result"]
     gateway.get_execution_by_id.assert_called_once_with("submitted-job")
 
-    records = economy_routes.economy_service._reform_impacts.get_recent_reform_impacts(
-        5
-    )
+    records = economy_routes.economy_service._reform_impacts._cache.recent(5)
     assert len(records) == 1
     assert records[0].status == "ok"
     assert records[0].options_json == {"breakdown": "local_areas"}

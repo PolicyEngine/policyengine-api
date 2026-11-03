@@ -314,7 +314,7 @@ from the final SQLModel metadata. It has no post-generation corrections.
   "Rollback").
 
 The models drop the `user_associations` relationships from v2 simulations and
-reports. Stage 12A set `V2_ALEMBIC_HEAD_REVISION` to `fbb7488ebe8a`.
+reports. `V2_ALEMBIC_HEAD_REVISION` was `fbb7488ebe8a` when Stage 12A shipped.
 
 ### Reshape safety
 

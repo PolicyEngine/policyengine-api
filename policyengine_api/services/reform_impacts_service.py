@@ -45,13 +45,6 @@ class ReformImpactsService:
             cache = ReformImpactCache(context.client, context.namespace)
         self._cache = cache
 
-    def get_recent_reform_impacts(
-        self,
-        max_results: int,
-    ) -> list[CachedReformImpact]:
-        """Return up to ``max_results`` cached impacts, most recently started first."""
-        return self._cache.recent(max_results)
-
     def get_all_reform_impacts(
         self,
         identity: ReformImpactIdentity,

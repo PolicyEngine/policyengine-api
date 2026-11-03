@@ -1,3 +1,78 @@
+## [5.20.0] - 2026-11-03
+
+### Added
+
+- Every successful v2 metadata response carries a strong ETag (a hash of its body) and a public Cache-Control lifetime: a day when the request names its catalog with policyengine_version, five minutes for the running version, and never past the UTC midnight after the request for current parameter values (current=true). A request whose If-None-Match names the ETag gets 304 with no body. These responses and their 304s carry Vary: Origin, Accept-Encoding, each value once, and browser scripts can read the ETag.
+  GET /v2/model-catalog returns only the small parts of one catalog version (model, model version, entities, basic inputs, regions, logical input datasets and economy choices, which are empty lists for a catalog without regions) and names the selected PolicyEngine.py version, so a client can request every other part for that exact version.
+  GET /v2/model-catalog/variables returns every variable of a catalog version in one response, with the catalog format 2 fields (input and hidden-input flags, module, the parameter path an adds or subtracts list comes from, enum labels, unit and definition period), and the current-law values by date of each parameter such a list comes from. GET /v2/variables pages carry the same variable fields.
+  GET /v2/model-catalog/parameters fetches up to 100 parameters of a catalog version by name in one request, each with its economy and household flags and its current-law values by date, plus the stored labels of their ancestor nodes for breadcrumbs and the requested names the version lacks. /v2/parameters pages and details carry the economy and household flags.
+  Each API process keeps the serialized /v2/model-catalog and /v2/model-catalog/variables bodies and their ETags once built (up to eight route, country and version combinations), so only the first successful request per process reads them from the database; requests arriving during that read receive its outcome.
+
+### Changed
+
+- The UK metadata's constituency and local-authority region options, and the economy region check that accepts them, read the area lists packaged with .py, without importing .py, and the Public API's own copies of those lists are removed; the region options and the regions the check accepts are unchanged.
+- Every v2 metadata route reads its query through the shared query models, so unknown or repeated parameters, a missing or unsupported country_id and a malformed policyengine_version return 422 before any read (unsupported countries and malformed versions returned 400 before, and unknown parameters were ignored). /v2/parameters accepts repeated name keys and /v2/parameter-values repeated parameter_name keys to page only those parameters.
+
+### Fixed
+
+- v2 metadata reads run in autocommit sessions on the shared pool, and each process keeps the catalog versions it has selected. A request that makes one read for a version the process has already selected, such as a page of parameters or one parameter's values, now sends two statements to the database (the pool's liveness check and the read) instead of five; each further read in a request adds one statement.
+
+
+## [5.19.1] - 2026-11-03
+
+### Changed
+
+- A failed US state economy job (`region=state/...`) now keeps its error for two minutes instead of 30 days, and the error message says when the state can be requested again; the next request after that submits a new job. Failed US national, congressional district and place jobs, UK national jobs and typed SPM failures are still kept for 30 days.
+
+
+## [5.19.0] - 2026-11-03
+
+### Added
+
+- Catalog format 2 stores the metadata the app's v3 workspace reads, taken only from PolicyEngine.py's public records: each model version's entities and basic inputs; each variable's input and hidden-input flags, module, the parameter path its adds or subtracts names, its enum values' labels, its unit and its definition period; each parameter's economy and household flags. Bracket schedules are stored as parameter nodes with their stored label. A generated revision adds the columns as nullable, so catalog versions published earlier keep them empty and are compared without them when republished. An opt-in parity test, which CI does not run, compares every new field for the US and the UK with /{country}/metadata. Each country's default dataset now comes from the installed PolicyEngine.py release's manifest; the Public API no longer fixes its own (populace_us_2024 and microcosm_uk_2024_25), and publication stops if the release names no default or gives the national region another dataset.
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.12.0.
+
+
+## [5.18.1] - 2026-11-02
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.12.0.
+
+
+## [5.18.0] - 2026-11-02
+
+### Changed
+
+- `/health` now answers 503 `{"status": "not_ready"}` until the startup warmup has finished and while the runtime configuration is invalid, and 200 `{"status": "healthy"}` after. The Cloud Run startup probe and the deployment health checks poll it instead of `/readiness-check`, and `/liveness-check` and `/readiness-check` are removed.
+
+### Removed
+
+- Removed the routes that only legacy.policyengine.org or the API documentation used: the v1 saved-policy routes (`/{country_id}/user-policy`), the user-profile routes (`/{country_id}/user-profile`), the policy search (`GET /{country_id}/policies`), the recent-simulations list (`GET /simulations`), the `GET /` landing page and `GET /specification`; `/v2/openapi.json` documents the v2 resources.
+  Stopped serving Canada (`ca`), Nigeria (`ng`) and Israel (`il`): requests for them now get the unknown-country 400 response, and `policyengine_canada`, `policyengine-ng` and `policyengine-il` are no longer installed.
+
+
+## [5.17.1] - 2026-11-02
+
+### Changed
+
+- Pull requests run the test suite in the release run's six shards, check that each test ran in exactly one, and send Codecov the six shards' coverage in one upload.
+
+
+## [5.17.0] - 2026-11-02
+
+### Added
+
+- Each release now checks, in its staging and production model-version alignment jobs, that the environment's simulation URL is served by that environment's own Simulation Entrypoint service, and fails otherwise; staging must call the staging simulation service, and production the production one.
+
+### Changed
+
+- CI no longer loads the complete installed PolicyEngine.py catalog. The cross-database integration tests publish a few parameter folders of the installed US and UK models, and a small catalog of edge-case values, and check that every value comes back from PostgreSQL unchanged.
+
+
 ## [5.16.1] - 2026-10-30
 
 ### Changed

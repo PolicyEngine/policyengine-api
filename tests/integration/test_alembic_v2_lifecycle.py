@@ -34,6 +34,8 @@ STAGE_12A_PREVIOUS_REVISION = "91af4fc8d8c1"
 STAGE_12A_REVISION = "fbb7488ebe8a"
 COUNTRIES_PREVIOUS_REVISION = STAGE_12A_REVISION
 COUNTRIES_REVISION = "fb1a3e40d3d6"
+# The catalog format 2 revision, the parent of the area impact coordinate removal.
+CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 AREA_IMPACT_TABLES = ("constituency_impacts", "local_authority_impacts")
 MAP_COORDINATE_COLUMNS = ("x", "y")
@@ -116,8 +118,8 @@ def _columns(engine, table_name: str) -> dict[str, dict]:
 
 
 def _assert_area_impact_coordinates_restored(engine: Engine) -> None:
-    """Check the countries revision's map coordinates are required integers."""
-    _assert_revision(engine, COUNTRIES_REVISION)
+    """Check the catalog format 2 revision's map coordinates are required integers."""
+    _assert_revision(engine, CATALOG_FORMAT_2_REVISION)
     for table_name in AREA_IMPACT_TABLES:
         columns = _columns(engine, table_name)
         for column_name in MAP_COORDINATE_COLUMNS:
@@ -453,7 +455,7 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         _upgrade_and_assert_head(config, engine)
         _assert_countries_shape(engine)
 
-        command.downgrade(config, COUNTRIES_REVISION)
+        command.downgrade(config, CATALOG_FORMAT_2_REVISION)
         _assert_area_impact_coordinates_restored(engine)
         _upgrade_and_assert_head(config, engine)
 
@@ -823,18 +825,18 @@ def test_countries_schema_serves_the_previous_revision() -> None:
 def test_area_impact_coordinate_removal_changes_nothing_else() -> None:
     """Check that head drops the map coordinates and changes nothing else.
 
-    Head is compared with the countries revision. The previous Public API
-    revision still maps those four columns, but it can't read or write either
-    table: no managed database role holds any privilege on them
-    (``policyengine_api/data/v2/privileges.py``). Every table it can use keeps
-    every column.
+    Head is compared with its parent, the catalog format 2 revision. The
+    previous Public API revision still maps those four columns, but it can't
+    read or write either table: no managed database role holds any privilege
+    on them (``policyengine_api/data/v2/privileges.py``). Every table it can
+    use keeps every column.
     """
     database_url = _disposable_url()
     config = _config()
     engine = create_engine(database_url)
 
     try:
-        command.downgrade(config, COUNTRIES_REVISION)
+        command.downgrade(config, CATALOG_FORMAT_2_REVISION)
         parent = sa.MetaData()
         parent.reflect(engine)
         command.upgrade(config, "head")
@@ -1317,4 +1319,137 @@ def test_a_household_only_country_row_lets_records_name_that_country() -> None:
             finally:
                 transaction.rollback()
     finally:
+        engine.dispose()
+
+
+CATALOG_FORMAT_2_PARENT_REVISION = "fb1a3e40d3d6"
+CATALOG_FORMAT_2_COLUMNS = {
+    "tax_benefit_model_versions": ("catalog_format", "entities", "basic_inputs"),
+    "variables": (
+        "is_input_variable",
+        "hidden_input",
+        "module_name",
+        "adds_parameter_path",
+        "subtracts_parameter_path",
+        "enum_values",
+        "unit",
+        "definition_period",
+    ),
+    "parameters": ("economy", "household"),
+}
+
+
+def _catalog_version_published_before_format_2(connection: sa.Connection) -> UUID:
+    """Store a model version with one variable and one parameter; return its id."""
+    model_id = uuid4()
+    version_id = uuid4()
+    connection.execute(
+        text(
+            "INSERT INTO tax_benefit_models (id, name) "
+            "VALUES (:model_id, 'catalog-format-probe')"
+        ),
+        {"model_id": model_id},
+    )
+    connection.execute(
+        text(
+            "INSERT INTO tax_benefit_model_versions "
+            "(id, model_id, version, current_law_id, metadata_time_periods) "
+            "VALUES (:version_id, :model_id, '0.0.1-probe', 1, '[2026]')"
+        ),
+        {"version_id": version_id, "model_id": model_id},
+    )
+    connection.execute(
+        text(
+            "INSERT INTO variables "
+            "(id, name, entity, default_value, tax_benefit_model_version_id) "
+            "VALUES (:variable_id, 'probe_income', 'person', '0', :version_id)"
+        ),
+        {"variable_id": uuid4(), "version_id": version_id},
+    )
+    connection.execute(
+        text(
+            "INSERT INTO parameters (id, name, tax_benefit_model_version_id) "
+            "VALUES (:parameter_id, 'gov.probe.rate', :version_id)"
+        ),
+        {"parameter_id": uuid4(), "version_id": version_id},
+    )
+    return version_id
+
+
+def _format_2_values(connection: sa.Connection, version_id: UUID) -> list[tuple]:
+    """Return the format 2 columns of the version's model, variable and parameter."""
+    rows = []
+    for table_name, columns in CATALOG_FORMAT_2_COLUMNS.items():
+        key = (
+            "id"
+            if table_name == "tax_benefit_model_versions"
+            else "tax_benefit_model_version_id"
+        )
+        rows.append(
+            tuple(
+                connection.execute(
+                    text(
+                        f"SELECT {', '.join(columns)} FROM {table_name} "
+                        f"WHERE {key} = :version_id"
+                    ),
+                    {"version_id": version_id},
+                ).one()
+            )
+        )
+    return rows
+
+
+def test_catalog_format_2_columns_leave_earlier_versions_empty() -> None:
+    """A version stored before catalog format 2 keeps its format 2 fields null.
+
+    Upgrading adds the columns as nullable without writing to stored rows, and
+    downgrading drops them and keeps every row.
+    """
+    config = _config()
+    engine = create_engine(_disposable_url())
+    version_id = None
+    try:
+        command.downgrade(config, CATALOG_FORMAT_2_PARENT_REVISION)
+        for table_name, columns in CATALOG_FORMAT_2_COLUMNS.items():
+            assert set(columns).isdisjoint(_columns(engine, table_name))
+        with engine.begin() as connection:
+            version_id = _catalog_version_published_before_format_2(connection)
+
+        command.upgrade(config, "head")
+
+        for table_name, columns in CATALOG_FORMAT_2_COLUMNS.items():
+            stored_columns = _columns(engine, table_name)
+            for column_name in columns:
+                assert stored_columns[column_name]["nullable"]
+                assert stored_columns[column_name]["default"] is None
+        with engine.connect() as connection:
+            assert _format_2_values(connection, version_id) == [
+                (None, None, None),
+                (None, None, None, None, None, None, None, None),
+                (None, None),
+            ]
+
+        command.downgrade(config, CATALOG_FORMAT_2_PARENT_REVISION)
+
+        for table_name, columns in CATALOG_FORMAT_2_COLUMNS.items():
+            assert set(columns).isdisjoint(_columns(engine, table_name))
+        with engine.connect() as connection:
+            counts = connection.execute(
+                text(
+                    "SELECT (SELECT count(*) FROM variables "
+                    "WHERE tax_benefit_model_version_id = :version_id), "
+                    "(SELECT count(*) FROM parameters "
+                    "WHERE tax_benefit_model_version_id = :version_id)"
+                ),
+                {"version_id": version_id},
+            ).one()
+        assert tuple(counts) == (1, 1)
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "DELETE FROM tax_benefit_models WHERE name = 'catalog-format-probe'"
+                )
+            )
+        command.upgrade(config, "head")
         engine.dispose()
