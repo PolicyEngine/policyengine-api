@@ -123,6 +123,19 @@ def request_count(
     return RequestCount(service_name, environment_name, route, requests)
 
 
+def input_orders(items: list) -> dict[str, list]:
+    """Return ``items`` forward, reversed and in a fixed shuffled order.
+
+    The shuffled order puts the items at odd positions first, then those at
+    even positions from last to first, so it separates and reorders neighbours.
+    """
+    return {
+        "forward": list(items),
+        "reversed": items[::-1],
+        "shuffled": [*items[1::2], *items[::2][::-1]],
+    }
+
+
 def failures_with_and_without_a_route() -> list:
     """Return one failed request on a route and two route-less failures."""
     return [
@@ -140,6 +153,69 @@ def failures_with_and_without_a_route() -> list:
             timestamp=hours_after_window_noon(2),
         ),
     ]
+
+
+GATEWAY_SERVICE = "policyengine-simulation-gateway"
+
+
+def failures_on_the_unmatched_route(failure_count: int = 15) -> list[ErrorRecord]:
+    """Return gateway failures in separate requests that matched no route.
+
+    The gateway logs ``<unmatched>`` as the route of such a request.
+    """
+    return [
+        exception_record(
+            service_name=GATEWAY_SERVICE,
+            error_type="ValueError",
+            route="<unmatched>",
+            request_key=f"unmatched-{index}",
+            timestamp=hours_after_window_noon(index / 10),
+        )
+        for index in range(failure_count)
+    ]
+
+
+STAGE12_WORKER_SERVICE = "policyengine-stage12-uk-worker"
+STAGE12_WORKER_FRAMES = (
+    '/root/policyengine_simulation_executor/runtime.py", line 120, in run_simulation',
+    '/root/policyengine_simulation_executor/datasets.py", line 80, in _load_dataset',
+    '/venv/lib/python3.13/site-packages/policyengine_uk/data.py", line 40, in get_year',
+)
+
+
+def original_worker_failure(**overrides: object) -> ErrorRecord:
+    """Return the original exception the simulation service logs for a failure.
+
+    It is a log record with an error, but no event name or handled flag.
+    """
+    fields: dict[str, object] = {
+        "service_name": STAGE12_WORKER_SERVICE,
+        "event_name": None,
+        "error_type": "ValueError",
+        "error_handled": None,
+        "frames": STAGE12_WORKER_FRAMES,
+        "route": None,
+        "status_code": None,
+        "operation_name": "stage12_simulation_execution",
+    }
+    fields.update(overrides)
+    return exception_record(**fields)
+
+
+def recorded_cause_copy(**overrides: object) -> ErrorRecord:
+    """Return the copy of a failure that the simulation service records next.
+
+    ``record_failure_cause`` records the failure again as a handled
+    ``exception.recorded`` event of class ``Stage12FailureCause``, with the
+    original's stack and often its timestamp to the microsecond.
+    """
+    fields: dict[str, object] = {
+        "event_name": "exception.recorded",
+        "error_type": "Stage12FailureCause",
+        "error_handled": True,
+    }
+    fields.update(overrides)
+    return original_worker_failure(**fields)
 
 
 PROJECT_ID = "policyengine-observability"

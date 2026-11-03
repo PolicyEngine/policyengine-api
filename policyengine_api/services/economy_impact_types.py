@@ -40,14 +40,22 @@ BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES = {400, 422}
 # 400 from a gateway whose routed .py release does not declare breakdowns, and
 # 422 from an entry deployment that does not know the field.
 LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES = frozenset({400, 422})
-# How long a failed breakdown's error is returned before the next request may
-# submit a new job. Short, so the app's Retry works soon, but long enough that
-# a client retrying on every 502 does not start a run on the large local-area
-# dataset each time.
-LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS = 120
+# How long the error of a failed local-area breakdown or US state job is
+# returned before the next request may submit a new job. Both run on large
+# local-area datasets, where a timeout or memory failure may not repeat. The
+# app offers Retry for a UK breakdown, and will offer it for each state it runs
+# for a US nationwide report's congressional districts. Short, so Retry works
+# soon, but long enough that a client retrying on every 502 does not start a
+# run on that dataset each time. Every other failed job's error is kept for the
+# cache lifetime of 30 days.
+RETRYABLE_FAILURE_SECONDS = 120
 LOCAL_AREA_BREAKDOWN_RETRY_NOTE = (
     "A new local-area breakdown can be requested "
-    f"{LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS // 60} minutes after this failure."
+    f"{RETRYABLE_FAILURE_SECONDS // 60} minutes after this failure."
+)
+US_STATE_RETRY_NOTE = (
+    "A new run for this state can be requested "
+    f"{RETRYABLE_FAILURE_SECONDS // 60} minutes after this failure."
 )
 # The telemetry simulation_kind of a breakdown run. The simulation API's
 # telemetry envelope forbids extra fields, so the run is marked here rather
@@ -81,6 +89,14 @@ class RuntimeBundleIdentity:
     policyengine_version: str | None = None
     data_version: str | None = None
     runtime_app_name: str | None = None
+
+
+@dataclass(frozen=True)
+class ImpactPolicies:
+    """The stored JSON of the baseline and reform policies that an impact compares."""
+
+    baseline: dict[str, Any]
+    reform: dict[str, Any]
 
 
 class SimulationOptions(BaseModel):

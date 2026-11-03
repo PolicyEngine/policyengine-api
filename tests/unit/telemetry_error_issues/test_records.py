@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from itertools import permutations
 
 import pytest
 from telemetry_error_issues.records import (
+    ErrorRecord,
     fingerprint,
     fingerprint_key,
     fingerprint_parts,
@@ -21,6 +23,34 @@ from tests.unit.telemetry_error_issues.report_support import (
     extract_frames,
     failed_request_record,
     message_record,
+    original_worker_failure,
+    recorded_cause_copy,
+)
+
+
+def _frame_header(module_path: str, function_name: str, line_number: int) -> str:
+    """Return one stack frame header as the query extracts it."""
+    return f'/app/{module_path}", line {line_number}, in {function_name}'
+
+
+# One exception's stack before and after a file-length split moved the service
+# functions into new modules, and after the split made a private helper public.
+FRAMES_BEFORE_SPLIT = (
+    _frame_header("policyengine_api/routes/report_routes.py", "create_report", 41),
+    _frame_header("policyengine_api/services/report_service.py", "create", 88),
+    _frame_header(
+        "policyengine_api/services/report_service.py", "_resolve_region", 140
+    ),
+)
+FRAMES_AFTER_SPLIT = (
+    _frame_header("policyengine_api/routes/report_routes.py", "create_report", 41),
+    _frame_header("policyengine_api/services/report/creation.py", "create", 30),
+    _frame_header("policyengine_api/services/report/regions.py", "_resolve_region", 12),
+)
+FRAMES_AFTER_SPLIT_WITH_PUBLIC_HELPER = (
+    _frame_header("policyengine_api/routes/report_routes.py", "create_report", 41),
+    _frame_header("policyengine_api/services/report/creation.py", "create", 30),
+    _frame_header("policyengine_api/services/report/regions.py", "resolve_region", 12),
 )
 
 
@@ -63,6 +93,44 @@ def test_primary_prefers_an_unhandled_exception_over_a_handled_one() -> None:
     assert primary_records([handled, unhandled]) == [unhandled]
 
 
+def test_primary_chooses_the_same_record_of_a_tie_in_either_input_order() -> None:
+    # One request logged two unhandled exceptions at the same moment.
+    stale_data = exception_record()
+    timeout = exception_record(error_type="TimeoutError")
+    assert fingerprint(stale_data, FINGERPRINT_KEY) != fingerprint(
+        timeout, FINGERPRINT_KEY
+    )
+
+    forward = primary_records([stale_data, timeout])
+    backward = primary_records([timeout, stale_data])
+
+    assert len(forward) == 1
+    assert forward == backward
+
+
+def test_primary_orders_failures_at_one_moment_the_same_way_in_either_input_order():
+    saving = message_record(request_key="request-1")
+    loading = message_record(request_key="request-2", message_template="failed to load")
+    unidentified = message_record(
+        request_key=None, trace_key=None, message_template="no request"
+    )
+
+    forward = primary_records([saving, loading, unidentified])
+    backward = primary_records([unidentified, loading, saving])
+
+    assert forward == backward
+
+
+def test_primary_prefers_the_earlier_record_before_breaking_a_tie() -> None:
+    later = exception_record(
+        timestamp=datetime(2026, 10, 20, 16, 0, 1, tzinfo=UTC),
+        error_type="AttributeError",
+    )
+    earlier = exception_record(error_type="ZeroDivisionError")
+
+    assert primary_records([later, earlier]) == [earlier]
+
+
 def test_primary_treats_a_request_completed_record_with_error_fields_as_an_exception():
     completed = failed_request_record(
         error_type="StaleDataError", frames=APPLICATION_FRAMES
@@ -97,9 +165,68 @@ def test_primary_keeps_failures_of_different_services_separate() -> None:
         frames=(),
     )
 
-    primary = primary_records([api_failure, simulation_failure])
+    # Both failures happen at the same moment, so they are ordered by their
+    # values: the exception's fingerprint inputs sort before the failed
+    # request's, whichever order the records arrive in.
+    expected = [simulation_failure, api_failure]
+    assert primary_records([api_failure, simulation_failure]) == expected
+    assert primary_records([simulation_failure, api_failure]) == expected
 
-    assert primary == [api_failure, simulation_failure]
+
+def _worker_failure_records() -> dict[str, ErrorRecord]:
+    """Return the records the simulation service logs for one worker failure.
+
+    The original exception and its recorded-cause copy share a timestamp, and
+    the worker's operation then fails with a RuntimeError of its own.
+    """
+    original = original_worker_failure()
+    return {
+        "original": original,
+        "copy": recorded_cause_copy(),
+        "operation": original_worker_failure(
+            event_name="operation.completed",
+            error_type="RuntimeError",
+            frames=original.frames[:1],
+            timestamp=original.timestamp + timedelta(seconds=1),
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    "record_order",
+    list(permutations(["original", "copy", "operation"])),
+    ids="-then-".join,
+)
+def test_primary_prefers_the_original_exception_over_its_recorded_cause_copy(
+    record_order: tuple[str, ...],
+) -> None:
+    records = _worker_failure_records()
+
+    primary = primary_records([records[name] for name in record_order])
+
+    assert [record.error_type for record in primary] == ["ValueError"]
+    assert primary == [records["original"]]
+
+
+@pytest.mark.parametrize(
+    "record_order",
+    list(permutations(["copy", "message", "failed_request"])),
+    ids="-then-".join,
+)
+def test_primary_uses_a_recorded_cause_copy_without_its_original(
+    record_order: tuple[str, ...],
+) -> None:
+    copy = recorded_cause_copy()
+    records = {
+        "copy": copy,
+        "message": message_record(service_name=copy.service_name),
+        "failed_request": failed_request_record(service_name=copy.service_name),
+    }
+
+    primary = primary_records([records[name] for name in record_order])
+
+    assert [record.error_type for record in primary] == ["Stage12FailureCause"]
+    assert primary == [copy]
 
 
 def test_fingerprint_exception_ignores_lines_path_prefixes_and_routes() -> None:
@@ -114,6 +241,46 @@ def test_fingerprint_exception_ignores_lines_path_prefixes_and_routes() -> None:
     )
 
     assert fingerprint(first, FINGERPRINT_KEY) == fingerprint(second, FINGERPRINT_KEY)
+
+
+def test_fingerprint_exception_is_the_same_after_its_functions_move_modules() -> None:
+    before_split = exception_record(frames=FRAMES_BEFORE_SPLIT)
+    after_split = exception_record(frames=FRAMES_AFTER_SPLIT)
+
+    assert fingerprint(before_split, FINGERPRINT_KEY) == fingerprint(
+        after_split, FINGERPRINT_KEY
+    )
+
+
+@pytest.mark.parametrize(
+    "private_helper_frames",
+    [FRAMES_BEFORE_SPLIT, FRAMES_AFTER_SPLIT],
+    ids=["in-its-old-module", "in-its-new-module"],
+)
+def test_fingerprint_exception_ignores_leading_underscores_in_function_names(
+    private_helper_frames: tuple[str, ...],
+) -> None:
+    private_helper = exception_record(frames=private_helper_frames)
+    public_helper = exception_record(frames=FRAMES_AFTER_SPLIT_WITH_PUBLIC_HELPER)
+
+    assert fingerprint(private_helper, FINGERPRINT_KEY) == fingerprint(
+        public_helper, FINGERPRINT_KEY
+    )
+
+
+def test_fingerprint_exception_differs_when_a_function_is_renamed() -> None:
+    renamed_frames = (
+        *FRAMES_AFTER_SPLIT[:-1],
+        _frame_header(
+            "policyengine_api/services/report/regions.py", "_find_region", 12
+        ),
+    )
+    original = exception_record(frames=FRAMES_AFTER_SPLIT)
+    renamed = exception_record(frames=renamed_frames)
+
+    assert fingerprint(original, FINGERPRINT_KEY) != fingerprint(
+        renamed, FINGERPRINT_KEY
+    )
 
 
 def test_fingerprint_exception_merges_simulation_service_versions() -> None:
@@ -187,8 +354,8 @@ def test_fingerprint_key_parts_for_each_kind() -> None:
         "exception",
         "policyengine-api",
         "StaleDataError",
-        "policyengine_api/routes/report_routes.py:create_report",
-        "policyengine_api/services/report_service.py:create",
+        "create_report",
+        "create",
     )
     assert fingerprint_parts(message) == (
         "message",

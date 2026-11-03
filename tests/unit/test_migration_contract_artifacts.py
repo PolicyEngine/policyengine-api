@@ -21,7 +21,6 @@ def test_migration_contract_payload_summarizes_route_contracts():
     assert {workflow["name"] for workflow in payload["workflows"]} == {
         "policy_save_search",
         "policy_resources_v2",
-        "saved_policy_v1_compatibility",
         "user_policy_associations_v2",
         "household_save_read",
         "household_resources_v2",
@@ -31,6 +30,7 @@ def test_migration_contract_payload_summarizes_route_contracts():
         "user_account_v2",
         "household_calculate",
         "region_selection",
+        "country_selection_v2",
         "metadata_resources_v2_preview",
         "simulation_submit_poll",
         "report_create_poll",

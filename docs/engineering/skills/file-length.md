@@ -47,12 +47,8 @@ where that is natural, and keep every one under the limit.
   no longer reaches that call, and the test silently stops using its fake.
   Patch the module whose code calls the name.
 
-## The baseline
+## Enforcement
 
-The rule is ratcheted: `rules/baselines/file-length.txt` lists the files that
-were over their limit when the rule was added, and the guard tolerates only
-those. It fails on an oversized file the baseline doesn't list, and on a listed
-file that is now within its limit or no longer exists, so the list only
-shrinks. When a split brings a file under its limit, remove its entry and lower
-the rule's `baseline.count` in the same pull request. Never add an entry: split
-the file instead.
+The rule is enforced, with no baseline of tolerated files: the guard fails on
+any measured file over its limit. When a change would take a file over, split
+the file by responsibility, as above, in the same pull request.

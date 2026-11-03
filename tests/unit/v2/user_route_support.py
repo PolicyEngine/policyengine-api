@@ -64,7 +64,6 @@ def user_route_client(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
-        specification_provider=dict,
         **overrides,
     )
     settings = RouteImplementationSettings(

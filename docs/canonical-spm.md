@@ -13,7 +13,7 @@ its existing behavior when settings are omitted and rejects explicit SPM setting
 with `SPM_SETTINGS_UNSUPPORTED`, whatever its version. A bundle whose US model
 does implement the constructor but ships no certified `measurements.spm`
 configuration fails closed with `SPM_CONFIGURATION_UNAVAILABLE`: such a
-deployment also fails `/readiness-check`, so the release checks report the
+deployment also fails `/health`, so the release checks report the
 condition rather than leaving it to individual requests. Other countries retain their
 behavior and reject US-only SPM settings.
 
@@ -42,11 +42,19 @@ years, and geography it used. This is the concrete behavior referred to elsewher
 as SPM selection and provenance.
 
 The API and simulation worker can be reviewed independently. Economy calculations
-using this API version require a worker whose `/versions` response maps the
-installed PolicyEngine.py, US, and UK versions to the same worker application and
-reports the matching `canonical-spm-v1` settings. Until such a worker is deployed,
-the API returns `SPM_CONFIGURATION_UNAVAILABLE` instead of submitting a calculation
-to an incompatible worker. [Simulation API PR 703](https://github.com/PolicyEngine/policyengine-sim-api/pull/703)
+using this API version require a worker whose `/versions` response routes the
+installed PolicyEngine.py version and reports the matching `canonical-spm-v1`
+settings for it. Until such a worker is deployed, the API returns
+`SPM_CONFIGURATION_UNAVAILABLE` instead of submitting a calculation to an
+incompatible worker.
+
+Every pull request, and every staging and production deploy, also runs
+`.github/check-policyengine-bundle-supported.sh`. It fails unless the installed
+PolicyEngine.py version is the `policyengine.latest` version that environment's
+`/versions` response reports, so the API stays on the latest bundle the
+simulation API has published. The API's economy requests name their
+PolicyEngine.py version, and the simulation API routes them by it, so the check
+doesn't compare the US and UK routes. [Simulation API PR 703](https://github.com/PolicyEngine/policyengine-sim-api/pull/703)
 implements the corresponding worker package update.
 
 The automated dependency updater changes the single `policyengine[models]`
@@ -131,7 +139,7 @@ whose measurement configuration this build cannot resolve — no certified
 configuration for a model that implements the constructor, a manifest this API
 cannot read, or an artifact that will not load — fails every US calculation with
 a configuration code, whatever the caller sent, and also fails
-`/readiness-check`: it is meant to stop a deployment rather than to be met on a
+`/health`: it is meant to stop a deployment rather than to be met on a
 request. `GET /us/metadata` still answers, reporting `spm.available` false.
 
 A country receipt this API cannot read in full is the same class of failure and
@@ -263,8 +271,8 @@ calculation result and SPM receipts. `active_run_id` identifies a pending/runnin
 run and becomes null when
 inactive; `latest_successful_run_id` identifies the latest successful run. These
 run fields and specification metadata may be null on historical records. The
-served `/specification` documents these request and response shapes through both
-Flask and the native specification route.
+legacy `GET /specification` document, which also described these request and
+response shapes, has been removed; this section describes them.
 
 HTTP response cache identity includes the normalized selection and model/bundle
 versions, and validates certification before reading the cache. The stored
@@ -321,17 +329,17 @@ annual requests require `time_period`, while budget-window requests require
 `start_year` and `window_size` (1–75, ending no later than 2099). Years use four
 digits. Optional fields are `version` (installed country model version),
 `target` (`general`, or annual-only `cliff`) and the annual-only `breakdown`.
-Omitted `spm` inherits certified bundle defaults. The served `/specification`
-generates these query declarations from the same typed models as the Flask
-parser.
+Omitted `spm` inherits certified bundle defaults. The Flask parser's typed
+models define these query rules; the legacy `GET /specification` document
+that also declared them has been removed.
 
 `breakdown=local_areas` asks the annual route for the UK constituency and
 local-authority impacts only. It is a calculation option, so the request has
 its own options hash and its own cached result. Any other value returns HTTP
 400, and requests without `breakdown` keep their existing options hash. It is
 accepted only for the UK, with `region` exactly `uk` or one UK country
-(`country/england`, `country/scotland`, `country/wales` or `country/ni`, or
-.py's `country/northern_ireland`), and not with `target=cliff`; other
+(`country/england`, `country/scotland`, `country/wales` or
+`country/northern_ireland`), and not with `target=cliff`; other
 requests, including other spellings of those regions, return HTTP 400 before
 anything is read from the cache or submitted. The API sends `"breakdown": "local_areas"` to the simulation API,
 which computes the impacts in a run separate from the national result, and
@@ -345,8 +353,14 @@ completes without `kind: "local_areas"`, also returns HTTP 502. Its result is
 not stored. Its error is kept for two minutes on that job's own record, so
 every request in that time gets the same error, which says when a new
 breakdown can be requested; then the record expires and the next request
-submits a new job. Other jobs' records are not changed. A failed national job
-is still stored and returned again for the cache lifetime of 30 days.
+submits a new job. Other jobs' records are not changed. A failed US state job
+(`country_id` `us` with region `state/...`, or a bare state code) keeps its
+error for two minutes in the same way, with a message that says when the
+state can be requested again, so a client can retry one state of a
+nationwide report's congressional districts. Any other failed job, such as
+a national, congressional district or place job, is still stored and
+returned again for the cache lifetime of 30 days, and so is a typed SPM
+failure.
 
 Before cache access or submission,
 the API validates the selected worker application's `canonical-spm-v1` capability

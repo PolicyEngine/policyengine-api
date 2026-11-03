@@ -53,6 +53,22 @@ def optional_text(
     return value
 
 
+def optional_bool(value: object, *, field_name: str) -> bool | None:
+    """Return a boolean or ``None``; raise for any other value."""
+    if value is not None and not isinstance(value, bool):
+        msg = f"{field_name} must be a boolean or null"
+        raise CatalogExtractionError(msg)
+    return value
+
+
+def required_bool(value: object, *, field_name: str) -> bool:
+    """Return a boolean; raise for any other value."""
+    if not isinstance(value, bool):
+        msg = f"{field_name} must be a boolean"
+        raise CatalogExtractionError(msg)
+    return value
+
+
 def _normalize_json_float(value: float) -> JSONValue:
     """Keep a finite float, write an infinity as a string and reject NaN."""
     if math.isnan(value):

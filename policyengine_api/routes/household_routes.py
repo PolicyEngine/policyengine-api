@@ -33,7 +33,6 @@ from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationService,
     HouseholdNotFoundError,
     InvalidHouseholdInputsError,
-    PolicyNotFoundError,
 )
 from policyengine_api.services.household_mirroring import (
     HouseholdMirrorUnavailableError,
@@ -44,13 +43,14 @@ from policyengine_api.services.household_service import (
     HouseholdPersistenceError,
     HouseholdService,
 )
+from policyengine_api.services.policy_service import PolicyNotFoundError
 from policyengine_api.spm import (
     SPMValidationError,
     normalize_spm_selection,
     spm_error_detail,
 )
 from policyengine_api.utils import hash_object
-from policyengine_api.utils.input_validation import format_unrecognized_inputs_message
+from policyengine_api.utils.input_validation import format_invalid_inputs_message
 from policyengine_api.utils.payload_validators import (
     validate_country,
     validate_household_payload,
@@ -179,9 +179,9 @@ def _spm_error_response(error: Exception) -> Response | None:
 
 
 def _invalid_household_inputs_response(error: InvalidHouseholdInputsError) -> Response:
-    """Return the 400 that lists every unrecognized calculation input."""
+    """Return the 400 that lists every invalid calculation input."""
     return _make_error_response(
-        format_unrecognized_inputs_message(error.invalid_inputs),
+        format_invalid_inputs_message(error.invalid_inputs),
         400,
         result=None,
         errors=[invalid_input.to_dict() for invalid_input in error.invalid_inputs],

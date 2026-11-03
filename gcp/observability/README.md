@@ -151,13 +151,27 @@ through `github_client`. Each run:
    `request.completed` records per route in the report day, for error rates.
    Each query is limited to 5 GiB billed.
 2. Chooses one record per failed request and service: the exception record,
-   else the error message, else the failed `request.completed` record.
-3. Groups failures by a 16-character HMAC-SHA256 fingerprint of the service
-   family and either the exception type and innermost application stack
-   frames, the route and message template, or the route and HTTP status.
-   Frames come from the first traceback of the stack, which for a chained
-   exception is its first cause. The logging library keeps only the first
-   16,384 characters of a stack, so a long cause can drop the final
+   else the error message, else the failed `request.completed` record. An
+   exception of class `Stage12FailureCause` ranks after any other exception
+   and before messages: the simulation service records it as a redacted copy
+   of a worker's or coordinator's original exception, carrying the original's
+   traceback and often its timestamp, so the original's class decides the
+   group, and a failure with only the copy still uses it.
+   Records that tie, such as two exceptions logged at the same moment, are
+   ordered by their own values, so the same records give the same report
+   whatever order the query returns them in.
+3. Groups failures by a 16-character HMAC-SHA256 fingerprint of the
+   fingerprint algorithm number, the service family and either the exception
+   type and innermost application stack frames, the route and message
+   template, or the route and HTTP status. The frames are the three innermost
+   whose file paths are in application packages (or, when there are none,
+   the three innermost of any kind), and each is identified by its function
+   name alone, without leading underscores and without its module path or
+   line number. Moving a function to another module, or renaming a private
+   helper `_name` to `name`, keeps the fingerprint; any other rename changes
+   it. Frames come from the first traceback of the stack, which for a
+   chained exception is its first cause. The logging library keeps only the
+   first 16,384 characters of a stack, so a long cause can drop the final
    traceback, but the first one is always kept.
 4. Creates or updates one issue per group in this repository, labelled
    `telemetry-error` and `service: <service family>`. A group opens an issue
@@ -166,6 +180,14 @@ through `github_client`. Each run:
    open one. An issue closed as completed reopens, with the `regression`
    label, when production failures that start 24 hours after it closed meet
    the same thresholds.
+
+An issue's "Error rate on affected routes" compares the group's failed
+requests with the `request.completed` records counted on the same route
+templates. Failures with no route, or with a placeholder route such as
+`<unmatched>` (which a service logs for a request that matched none of its
+routes), count in neither. When some requests were logged as completed but
+more failed, the rate shows n/a with both counts instead of a percentage;
+when none were logged as completed, it shows n/a.
 
 This repository is public, so issues, workflow logs and job summaries hold
 only fingerprints, counts, service names, exception class names, route
@@ -256,6 +278,18 @@ would change, so the next run would open a second issue for each group that
 already has one. A key change needs a plan for moving the existing issues to
 their new fingerprints, as does any change to `FINGERPRINT_ALGORITHM` in the
 script.
+
+Fingerprint algorithm 2 replaced algorithm 1, which identified each stack
+frame by its module path and function name, so that moving code between
+modules no longer opens a duplicate issue. Because the algorithm number is
+part of every fingerprint, message and failed-request groups got new
+fingerprints too, although their inputs didn't change. Issues opened under
+algorithm 1 were not carried over: the job no longer matches them, so it
+neither updates nor reopens them, and a group that still fails opens a new
+issue once it meets the thresholds. An algorithm 1 issue can be closed by
+hand, or carried over by replacing the fingerprint at the end of its title
+with the group's new one; the job then matches it by its title and rewrites
+its marked section.
 
 ### Known gap: Cloud Run platform failures
 

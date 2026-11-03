@@ -6,20 +6,28 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from telemetry_error_issues.groups import build_groups
-from telemetry_error_issues.records import fingerprint
+from telemetry_error_issues.records import ErrorRecord, fingerprint
 from telemetry_error_issues.window import reporting_window
 
 from tests.unit.telemetry_error_issues.report_support import (
     FINGERPRINT_KEY,
+    GATEWAY_SERVICE,
     REPORT_DATE,
     WINDOW_NOON,
     exception_record,
     failed_request_record,
+    failures_on_the_unmatched_route,
     failures_with_and_without_a_route,
     hours_after_window_noon,
+    input_orders,
     message_record,
+    original_worker_failure,
+    recorded_cause_copy,
     request_count,
 )
+
+REPORT_ROUTE = "/<country_id>/report"
+CALCULATE_ROUTE = "/<country_id>/calculate"
 
 
 def _only_group(records: list, request_counts=()) -> object:
@@ -129,6 +137,74 @@ def test_measures_error_rate_counts_only_failures_on_routes() -> None:
     assert group.production.route_affected_requests == 1
     assert group.production.route_requests == 1
     assert group.production.error_rate == pytest.approx(1.0)
+
+
+def test_measures_error_rate_leaves_out_failures_on_the_unmatched_route() -> None:
+    # 15 failed requests on "<unmatched>", which one completed request also
+    # carried, used to give an error rate of 15 (1500%).
+    group = _only_group(
+        failures_on_the_unmatched_route(),
+        [request_count("<unmatched>", 1, service_name=GATEWAY_SERVICE)],
+    )
+
+    assert group.production.error_rate is None
+    assert group.production.route_affected_requests == 0
+    assert group.production.route_requests == 0
+    assert group.production.affected_requests == 15
+    assert group.route == "<unmatched>"
+
+
+@pytest.mark.parametrize(
+    "placeholder_route",
+    [
+        pytest.param("<unmatched>", id="unmatched"),
+        pytest.param("<unrecognized>", id="unrecognized"),
+        pytest.param("-", id="missing"),
+        pytest.param("/us/policy/12345", id="path-with-a-record-id"),
+    ],
+)
+def test_measures_error_rate_counts_only_route_templates(
+    placeholder_route: str,
+) -> None:
+    records = [
+        exception_record(request_key="r1", route="/<country_id>/calculate"),
+        *(
+            exception_record(
+                request_key=f"placeholder-{index}",
+                route=placeholder_route,
+                timestamp=hours_after_window_noon(index + 1),
+            )
+            for index in range(3)
+        ),
+    ]
+    request_counts = [
+        request_count("/<country_id>/calculate", 10),
+        request_count(placeholder_route, 1),
+    ]
+
+    group = _only_group(records, request_counts)
+
+    assert group.production.error_rate == pytest.approx(0.1)
+    assert group.production.route_affected_requests == 1
+    assert group.production.route_requests == 10
+    assert group.production.affected_requests == 4
+
+
+def test_measures_error_rate_is_unknown_when_failures_outnumber_completions() -> None:
+    records = [
+        exception_record(
+            request_key=f"r{index}",
+            route="/<country_id>/calculate",
+            timestamp=hours_after_window_noon(index),
+        )
+        for index in range(3)
+    ]
+
+    group = _only_group(records, [request_count("/<country_id>/calculate", 2)])
+
+    assert group.production.error_rate is None
+    assert group.production.route_affected_requests == 3
+    assert group.production.route_requests == 2
 
 
 def test_measures_error_rate_counts_every_simulation_service_version() -> None:
@@ -376,3 +452,98 @@ def test_measures_count_production_occurrences_since_a_moment() -> None:
 
     assert group.production_since(hours_after_window_noon(-1)) == (2, 2)
     assert group.production_since(hours_after_window_noon(-48)) == (3, 3)
+
+
+def _failures_that_tie() -> list[ErrorRecord]:
+    """Return failures whose records tie on time, and within a failure on rank."""
+    two_requests_each = [
+        exception_record(
+            error_type=error_type,
+            request_key=f"{error_type}-{hour}",
+            timestamp=hours_after_window_noon(hour),
+        )
+        for error_type in ("StaleDataError", "TimeoutError")
+        for hour in (1, 2)
+    ]
+    # One request logged two unhandled exceptions at the same moment, and the
+    # gateway logged an error on the same trace.
+    one_request = [
+        exception_record(request_key="both", trace_key="shared"),
+        exception_record(
+            error_type="TimeoutError", request_key="both", trace_key="shared"
+        ),
+        message_record(
+            service_name="policyengine-simulation-gateway",
+            request_key="gateway",
+            trace_key="shared",
+        ),
+    ]
+    two_failures_on_each_route = [
+        exception_record(
+            error_type="KeyError", request_key=f"route-{index}", route=route
+        )
+        for index, route in enumerate([REPORT_ROUTE, CALCULATE_ROUTE] * 2)
+    ]
+    two_operations = [
+        message_record(request_key=f"operation-{operation}", operation_name=operation)
+        for operation in ("save_report", "save_policy")
+    ]
+    two_statuses = [
+        exception_record(
+            error_type="ValueError", request_key=f"status-{status}", status_code=status
+        )
+        for status in (500, 502)
+    ]
+    without_request_or_trace = [
+        message_record(request_key=None, trace_key=None, message_template=template)
+        for template in ("first unidentified", "second unidentified")
+    ]
+    return [
+        *two_requests_each,
+        *one_request,
+        *two_failures_on_each_route,
+        *two_operations,
+        *two_statuses,
+        *without_request_or_trace,
+    ]
+
+
+def test_groups_are_the_same_in_any_input_order() -> None:
+    request_counts = [
+        request_count(REPORT_ROUTE, 200),
+        request_count(CALCULATE_ROUTE, 100),
+        request_count(REPORT_ROUTE, 50, environment_name="staging"),
+    ]
+    request_counts_by_order = input_orders(request_counts)
+    window = reporting_window(REPORT_DATE)
+
+    groups_by_order = {
+        order: build_groups(
+            records, request_counts_by_order[order], window, FINGERPRINT_KEY
+        )
+        for order, records in input_orders(_failures_that_tie()).items()
+    }
+
+    assert groups_by_order["reversed"] == groups_by_order["forward"]
+    assert groups_by_order["shuffled"] == groups_by_order["forward"]
+
+
+def test_groups_count_each_worker_failure_in_its_original_exception_group() -> None:
+    # As on 2026-10-26, the copy of some failures has the original's
+    # timestamp, and the copy of others is logged a moment later.
+    records = []
+    for index in range(4):
+        failed_at = hours_after_window_noon(index)
+        copy_logged_at = failed_at + timedelta(milliseconds=100 * (index % 2))
+        records += [
+            original_worker_failure(request_key=f"worker-{index}", timestamp=failed_at),
+            recorded_cause_copy(
+                request_key=f"worker-{index}", timestamp=copy_logged_at
+            ),
+        ]
+
+    groups = build_groups(records, [], reporting_window(REPORT_DATE), FINGERPRINT_KEY)
+
+    assert [(group.error_type, group.production.occurrences) for group in groups] == [
+        ("ValueError", 4)
+    ]

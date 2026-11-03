@@ -48,3 +48,17 @@ def read_dataset(
         ),
     )
     return rows[0] if rows else None
+
+
+def read_input_datasets(session: Session, *, model_version_id: UUID) -> list[Dataset]:
+    """Return every logical input dataset of a model version in name order."""
+    return read_rows(
+        session,
+        select(Dataset)
+        .where(
+            col(Dataset.tax_benefit_model_version_id) == model_version_id,
+            col(Dataset.is_output_dataset).is_(False),
+            col(Dataset.storage_path).is_(None),
+        )
+        .order_by(col(Dataset.name)),
+    )

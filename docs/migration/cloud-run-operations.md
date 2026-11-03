@@ -70,14 +70,16 @@ Values measured and justified in
   gcloud inherits unspecified template fields (a mid-campaign CI deploy once shipped an
   inherited test concurrency), and `--concurrency default` resolves to the *platform*
   default (640), not the historical 80.
-- **`--startup-probe httpGet.path=/readiness-check` — pinned on every deploy.**
+- **`--startup-probe httpGet.path=/health` — pinned on every deploy.**
   Cloud Run's default is a *TCP* probe, which passes the instant gunicorn's master
   binds the port, long before a worker finishes importing (the import runs
   post-fork; `--preload` is deliberately unset). Cloud Run therefore treated a
   booting instance as "started" and routed live traffic onto it, where requests
   queued until the 300s timeout — the "no available instance" 500s and 504s seen on
-  scale-out bursts. Probing `/readiness-check` over HTTP makes Cloud Run withhold
-  traffic until the app can actually serve.
+  scale-out bursts. Probing `/health` over HTTP makes Cloud Run withhold
+  traffic until the app can actually serve. (The probe used `/readiness-check`
+  until that route and `/liveness-check` were removed; `/health` now has the
+  readiness behaviour.)
 
   **Sizing it is constrained by measured boot times.** Boot-to-ready across 48
   boots over 7 days (2026-07-14→21), measured from each instance's
@@ -115,14 +117,14 @@ Values measured and justified in
   **Startup warmup — why readiness depends on more than the import.** Building the
   tax-benefit systems at import does not compile the per-simulation machinery
   (parameter-tree materialisation, the formula graph). The **first** calculate on a
-  fresh worker paid that cost — measured at ~121s — and `/readiness-check` returned
+  fresh worker paid that cost — measured at ~121s — and the readiness check returned
   200 before it, so the probe (and health checks, and smoke tests) saw a "ready"
   instance whose first real request still took two minutes.
   `policyengine_api.warmup.run_startup_warmup` now runs a throwaway calculate per
   country (default US; override with `POLICYENGINE_API_WARMUP_COUNTRIES`, disable
   with `POLICYENGINE_API_STARTUP_WARMUP=0`) from `asgi.py` before the worker serves,
-  and `/readiness-check` returns 503 until it completes
-  (`policyengine_api.readiness`). Verified locally: after the warmup a cold
+  and `/health` returns 503 until it completes, or while the runtime
+  configuration is invalid (`policyengine_api.readiness`). Verified locally: after the warmup a cold
   test-payload calculate drops from ~121s to ~10s. This is the fix for the note that
   used to live here — deferring the build lazily relocated the cost onto the first
   request, where readiness lied; warming it at startup pays the cost off the request
@@ -208,11 +210,11 @@ Consequences to keep in mind:
 
 - An instance is "started" when its port is bound, before the application can
   answer. The HTTP startup probe prevents Cloud Run from routing requests to
-  that instance until `/readiness-check` succeeds.
-- **Cold-start and readiness measurements must be taken from `/readiness-check` turning
+  that instance until `/health` succeeds.
+- **Cold-start and readiness measurements must be taken from `/health` turning
   healthy**, not from instance start or port bind — the bind time is no longer meaningful.
 - Readiness in CI is governed by `.github/scripts/health_check.sh` polling
-  `/readiness-check` (defaults: 900s budget, 5s interval, 15s per-request `--max-time`;
+  `/health` (defaults: 900s budget, 5s interval, 15s per-request `--max-time`;
   all env-overridable).
 
 ## Automated revision promotion and rollback
@@ -259,6 +261,21 @@ not block a direct-Modal deployment. The legacy `SIMULATION_API_URL` secret is
 intentionally unsupported: its value is opaque, cannot be audited, and must
 not silently choose a deployment upstream.
 
+Each environment calls its own Simulation Entrypoint. The `staging` secret
+holds the stable URL of the `policyengine-simulation-entry-staging` Cloud Run
+service, which calls the staging Modal environment; the `production` secret
+holds `https://simulation.api.policyengine.org`, served by
+`policyengine-simulation-entry`. In each release, the staging and production
+model-version alignment jobs first run
+`.github/scripts/check_simulation_entrypoint_environment.sh`. It reads the
+`x-policyengine-simulation-revision` header from the selected URL's `/health`
+response and fails the release unless the revision belongs to that
+environment's service, so a release whose `staging` secret points at
+production, or the reverse, stops before it deploys. Staging's live simulation
+tests therefore run against the staging simulation service and staging Modal
+workers. The old gateway is one shared Modal app that reports no environment,
+so `old_gateway_direct` is not checked.
+
 ## IAM and bootstrap constraints
 
 - The GitHub deploy service account holds `roles/run.developer`: it can deploy to
@@ -299,7 +316,7 @@ gcloud run services get-iam-policy policyengine-api-staging \
   --project policyengine-api --region us-central1
 
 # Readiness
-curl -s -o /dev/null -w '%{http_code}\n' "$SERVICE_URL/readiness-check"
+curl -s -o /dev/null -w '%{http_code}\n' "$SERVICE_URL/health"
 ```
 
 ## Public load-balancer routing
@@ -313,7 +330,7 @@ complete URL map before and after any intended routing change because
 gcloud compute url-maps describe lb-api --project policyengine-api \
   --format='yaml(defaultService,defaultRouteAction,pathMatchers)'
 curl -s -o /dev/null -w '%{http_code}\n' \
-  https://api.policyengine.org/readiness-check
+  https://api.policyengine.org/health
 ```
 
 Application rollback restores the previously serving Cloud Run revision. It

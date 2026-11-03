@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING
 
 from telemetry_error_issues.normalization import (
@@ -20,12 +20,29 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 REQUEST_COMPLETED_EVENT = "request.completed"
-# Changing how fingerprints are computed changes every fingerprint, and the
-# job matches existing issues only by the current algorithm. A change to it
-# must say how existing issues are carried over.
-FINGERPRINT_ALGORITHM = 1
+# Changing how fingerprints are computed changes every fingerprint. The job
+# matches an issue by the fingerprint in its state comment only when the state
+# names the current algorithm, and otherwise by the fingerprint in its title,
+# which it never changes. A change to the algorithm must say how existing
+# issues are carried over.
+#
+# Algorithm 2 keys an exception's stack frames by function name, where
+# algorithm 1 used module path and function name. The algorithm number is
+# hashed into every fingerprint, so every group's fingerprint changed. Issues
+# opened under algorithm 1 were not carried over: their titles hold algorithm 1
+# fingerprints, so the job no longer updates or reopens them, and a group that
+# still fails opens a new issue.
+FINGERPRINT_ALGORITHM = 2
 FINGERPRINT_LENGTH = 16
 MIN_FINGERPRINT_KEY_LENGTH = 32
+# Exception classes that only copy another exception of the same failure. When
+# a simulation worker or coordinator fails, the simulation service logs the
+# original exception, then ``record_failure_cause`` records a redacted copy
+# that carries the original's traceback: a handled ``exception.recorded``
+# event. A worker's copy often has the original's frames and timestamp. The
+# copy sets no event name or attribute of its own, so only its class tells it
+# apart from other handled exceptions.
+RECORDED_CAUSE_COPY_TYPES = frozenset({"Stage12FailureCause"})
 
 
 @dataclass(frozen=True)
@@ -80,19 +97,44 @@ class ErrorRecord:
 
 
 def _primary_preference(record: ErrorRecord) -> tuple[int, int, datetime]:
-    """Sort key: exceptions before messages before request completions.
+    """Sort key: exceptions, recorded-cause copies, messages, request completions.
 
+    A recorded-cause copy (see ``RECORDED_CAUSE_COPY_TYPES``) ranks after the
+    exception it copies, so the original's class decides the failure's group
+    whatever their timestamps; a failure with only the copy still uses it.
     Among exceptions, an unhandled one (the cause of an error response) comes
     first; otherwise the earliest record does.
     """
     if record.event_name == REQUEST_COMPLETED_EVENT:
-        source_rank = 2
+        source_rank = 3
+    elif record.error_type in RECORDED_CAUSE_COPY_TYPES:
+        source_rank = 1
     elif record.error_type:
         source_rank = 0
     else:
-        source_rank = 1
+        source_rank = 2
     handled_rank = 0 if record.error_handled is False else 1
     return source_rank, handled_rank, record.timestamp
+
+
+def _field_values(record: ErrorRecord) -> tuple[tuple[bool, object], ...]:
+    """Return every field of the record, each as whether it is set and its value.
+
+    Missing values sort first and are never compared with set ones, so any two
+    records compare, and only equal records tie.
+    """
+    values = (getattr(record, field.name) for field in fields(record))
+    return tuple((value is not None, value) for value in values)
+
+
+def _tie_breaker(record: ErrorRecord) -> tuple[object, ...]:
+    """Order records by their values alone, never by the order they arrived in.
+
+    The values that decide the record's error group come first, so a tie goes
+    to the group whose values sort first, and the choice doesn't change when
+    only the line numbers in the stack do.
+    """
+    return fingerprint_parts(record), _field_values(record)
 
 
 def primary_records(records: Iterable[ErrorRecord]) -> list[ErrorRecord]:
@@ -100,6 +142,8 @@ def primary_records(records: Iterable[ErrorRecord]) -> list[ErrorRecord]:
 
     Records of one service that share a request ID, or a trace when there is no
     request ID, describe one failure. A record with neither is its own failure.
+    Records that tie on preference, or on time, are ordered by their values, so
+    the result doesn't depend on the order of ``records``.
     """
     failures: dict[tuple[str, str], list[ErrorRecord]] = {}
     standalone: list[ErrorRecord] = []
@@ -109,15 +153,25 @@ def primary_records(records: Iterable[ErrorRecord]) -> list[ErrorRecord]:
             standalone.append(record)
         else:
             failures.setdefault((record.family, correlation), []).append(record)
-    chosen = [min(group, key=_primary_preference) for group in failures.values()]
-    return sorted([*chosen, *standalone], key=lambda record: record.timestamp)
+    chosen = [
+        min(
+            group,
+            key=lambda record: (_primary_preference(record), _tie_breaker(record)),
+        )
+        for group in failures.values()
+    ]
+    return sorted(
+        [*chosen, *standalone],
+        key=lambda record: (record.timestamp, _tie_breaker(record)),
+    )
 
 
 def fingerprint_parts(record: ErrorRecord) -> tuple[str, ...]:
     """Return the kind and the values that identify the record's error group.
 
     An exception's route is left out, so one shared failure doesn't open an
-    issue for every route that reaches it.
+    issue for every route that reaches it. Its stack frames are keyed by
+    function name, not module path (see ``fingerprint_frames``).
     """
     kind = record.kind
     if kind == "exception":

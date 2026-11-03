@@ -39,7 +39,6 @@ def _native_health_app(runtime: Mock, readiness_probe=lambda: True):
             readiness_probe=lambda: True,
             gateway_client_factory=lambda: None,
             metadata_reader_factory=lambda: None,
-            specification_provider=dict,
         ),
         readiness_probe=readiness_probe,
     )
@@ -67,7 +66,7 @@ def test_native_request_calls_the_runtime_and_logger_in_a_fixed_order() -> None:
         ),
     ):
         response = TestClient(_native_health_app(timeline.runtime)).get(
-            "/readiness-check?country_id=uk",
+            "/health?country_id=uk",
             headers={REQUEST_ID_HEADER: "incoming-request-id"},
         )
 
@@ -78,7 +77,7 @@ def test_native_request_calls_the_runtime_and_logger_in_a_fixed_order() -> None:
     begin_request = timeline.runtime.begin_request.call_args
     assert begin_request.kwargs["headers"][REQUEST_ID_HEADER] == "incoming-request-id"
     assert timeline.mock_calls == [
-        call.runtime.begin_request(headers=ANY, method="GET", route="/readiness-check"),
+        call.runtime.begin_request(headers=ANY, method="GET", route="/health"),
         call.runtime.set_context(request_id="runtime-request-id"),
         call.runtime.set_context(observability_id=OBSERVABILITY_ID),
         call.runtime.response_headers(),
@@ -86,14 +85,14 @@ def test_native_request_calls_the_runtime_and_logger_in_a_fixed_order() -> None:
             ServedRequest(
                 request_id="runtime-request-id",
                 method="GET",
-                path="/readiness-check",
+                path="/health",
                 status_code=200,
                 started_at=ANY,
                 country_id="uk",
                 route_impl=RouteImplementation.FASTAPI_NATIVE,
             )
         ),
-        call.runtime.update_request_route("/readiness-check"),
+        call.runtime.update_request_route("/health"),
         call.runtime.update_request_status(200),
         call.runtime.end_request(status_code=200, error=None),
     ]
@@ -106,7 +105,7 @@ def test_native_request_keeps_its_id_when_the_runtime_assigns_none() -> None:
 
     with patch.object(asgi_factory, "log_migration_request") as log_request:
         response = TestClient(_native_health_app(runtime)).get(
-            "/readiness-check",
+            "/health",
             headers={REQUEST_ID_HEADER: "incoming-request-id"},
         )
 
@@ -128,26 +127,26 @@ def test_failing_native_route_logs_and_finishes_as_a_server_error() -> None:
         response = TestClient(
             _native_health_app(timeline.runtime, readiness_probe=failing_probe),
             raise_server_exceptions=False,
-        ).get("/readiness-check", headers={REQUEST_ID_HEADER: "failed-request"})
+        ).get("/health", headers={REQUEST_ID_HEADER: "failed-request"})
 
     assert response.status_code == 500
     assert response.text == "Internal Server Error"
     assert response.headers[REQUEST_ID_HEADER] == "failed-request"
     assert timeline.mock_calls == [
-        call.runtime.begin_request(headers=ANY, method="GET", route="/readiness-check"),
+        call.runtime.begin_request(headers=ANY, method="GET", route="/health"),
         call.runtime.set_context(request_id="failed-request"),
         call.log(
             ServedRequest(
                 request_id="failed-request",
                 method="GET",
-                path="/readiness-check",
+                path="/health",
                 status_code=500,
                 started_at=ANY,
                 country_id=None,
                 route_impl=RouteImplementation.FASTAPI_NATIVE,
             )
         ),
-        call.runtime.update_request_route("/readiness-check"),
+        call.runtime.update_request_route("/health"),
         call.runtime.update_request_status(500),
         call.runtime.end_request(status_code=500, error=route_error),
     ]
@@ -165,7 +164,7 @@ def test_native_request_survives_a_failing_observability_context_update() -> Non
             asgi_factory, "current_observability_id", return_value=OBSERVABILITY_ID
         ),
     ):
-        response = TestClient(_native_health_app(runtime)).get("/readiness-check")
+        response = TestClient(_native_health_app(runtime)).get("/health")
 
     assert response.status_code == 200
     assert response.headers[OBSERVABILITY_ID_HEADER] == OBSERVABILITY_ID

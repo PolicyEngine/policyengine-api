@@ -6,7 +6,27 @@ import re
 import subprocess
 from pathlib import Path
 
+from tests.unit.cloud_run_deploy_support import job_needs, push_workflow_jobs
+
 REPO = Path(__file__).resolve().parents[3]
+
+# Per environment: the v1 Cloud SQL schema upgrade, the v2 seeding, the job
+# that deploys the Cloud Run candidate, and the job both database jobs start
+# after.
+DATABASE_JOBS_BY_ENVIRONMENT = {
+    "staging": {
+        "v1_upgrade": "migrate-v1-staging-cloud-sql",
+        "v2_seeding": "seed-v2-staging-database",
+        "candidate_deploy": "deploy-cloud-run-staging",
+        "start_after": "publish-git-tag",
+    },
+    "production": {
+        "v1_upgrade": "migrate-v1-production-cloud-sql",
+        "v2_seeding": "seed-v2-production-database",
+        "candidate_deploy": "deploy-cloud-run-candidate",
+        "start_after": "ensure-production-model-version-aligns-with-sim-api",
+    },
+}
 
 
 def _read(relative_path: str) -> str:
@@ -142,23 +162,39 @@ def test_privilege_steps_connect_with_the_migration_credential() -> None:
 
 
 def test_seeding_success_is_required_before_candidate_creation() -> None:
-    workflow = _read(".github/workflows/push.yml")
-    staging_seed = _job(workflow, "seed-v2-staging-database")
-    production_seed = _job(workflow, "seed-v2-production-database")
+    jobs = push_workflow_jobs()
 
-    assert "deployment_environment: staging" in staging_seed
-    assert "migrate-v1-staging-cloud-sql" in staging_seed
-    assert "seed-v2-staging-database" in _job(
-        workflow,
-        "deploy-cloud-run-staging",
-    )
+    for environment, database_jobs in DATABASE_JOBS_BY_ENVIRONMENT.items():
+        seeding = jobs[database_jobs["v2_seeding"]]
+        candidate_deploy = jobs[database_jobs["candidate_deploy"]]
 
-    assert "migrate-v1-production-cloud-sql" in production_seed
-    assert "deployment_environment: production" in production_seed
-    assert "needs: seed-v2-production-database" in _job(
-        workflow,
-        "deploy-cloud-run-candidate",
-    )
+        assert seeding["with"] == {"deployment_environment": environment}
+        assert seeding["secrets"] == "inherit"
+        # The candidate deploy waits for both database jobs.
+        assert database_jobs["v2_seeding"] in job_needs(candidate_deploy)
+        assert database_jobs["v1_upgrade"] in job_needs(candidate_deploy)
+
+
+def test_v1_upgrade_and_v2_seeding_run_side_by_side() -> None:
+    # Neither job reads the other's database: the v1 upgrade connects only to
+    # Cloud SQL through its proxy, and the seeding job only to the v2 database,
+    # with no Cloud SQL proxy or v1 credentials.
+    jobs = push_workflow_jobs()
+
+    for environment, database_jobs in DATABASE_JOBS_BY_ENVIRONMENT.items():
+        v1_upgrade = jobs[database_jobs["v1_upgrade"]]
+        seeding = jobs[database_jobs["v2_seeding"]]
+
+        assert database_jobs["v1_upgrade"] not in job_needs(seeding), environment
+        assert database_jobs["v2_seeding"] not in job_needs(v1_upgrade), environment
+        assert database_jobs["start_after"] in job_needs(seeding), environment
+        assert database_jobs["start_after"] in job_needs(v1_upgrade), environment
+        # Each keeps the GitHub environment it reads its database target from.
+        assert v1_upgrade["with"] == {
+            "deployment_environment": environment,
+            "github_environment": f"{environment}-database",
+        }
+        assert v1_upgrade["secrets"] == "inherit"
 
 
 def test_stage_9_deployment_shell_script_is_syntax_valid() -> None:

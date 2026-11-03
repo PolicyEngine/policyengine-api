@@ -1,4 +1,0 @@
-name: Readiness
-endpoint: /readiness-check
-response:
-  status: 200

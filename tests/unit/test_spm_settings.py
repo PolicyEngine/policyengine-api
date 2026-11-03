@@ -319,6 +319,36 @@ def test_typed_worker_year_error_is_preserved(status):
     assert caught.value.to_dict() == detail
 
 
+@pytest.mark.parametrize("status", [400, 422])
+def test_typed_worker_dataset_year_error_is_preserved(status):
+    import httpx
+
+    from policyengine_api.worker_spm import raise_worker_spm_error
+
+    detail = {
+        "code": "DATASET_YEAR_UNAVAILABLE",
+        "message": (
+            "UK results are available for 2024 to 2032. 2033 is outside the years "
+            "the current UK model and data cover."
+        ),
+    }
+    with pytest.raises(spm.SPMValidationError) as caught:
+        raise_worker_spm_error(httpx.Response(status, json={"errors": [detail]}))
+    assert caught.value.to_dict() == detail
+
+
+def test_an_unknown_worker_error_code_is_left_to_the_caller():
+    import httpx
+
+    from policyengine_api.worker_spm import raise_worker_spm_error
+
+    # An unknown code keeps today's handling: the caller sees the 400 itself.
+    detail = {"code": "SOME_FUTURE_CODE", "message": "Not a public input error"}
+    assert (
+        raise_worker_spm_error(httpx.Response(400, json={"errors": [detail]})) is None
+    )
+
+
 def test_variadic_constructor_alone_does_not_claim_support():
     class Legacy:
         def __init__(self, **kwargs):
@@ -545,7 +575,7 @@ def test_a_bundle_this_build_cannot_read_reports_no_validator_internals(
 
 @pytest.mark.usefixtures("certified_bundle")
 def test_a_country_package_without_a_simulation_is_typed_not_internal(monkeypatch):
-    """A partially installed model must not make /readiness-check raise.
+    """A partially installed model must not make /health raise.
 
     `is_ready` recovers from RuntimeError and ValueError only, so an escaping
     AttributeError turns the health check into a 500 and every US request with

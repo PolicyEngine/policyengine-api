@@ -107,6 +107,14 @@ def _model_source(
         default_value=0.0,
         adds=None,
         subtracts=None,
+        is_input_variable=True,
+        hidden_input=False,
+        module_name="household.income.employment_income",
+        adds_parameter_path=None,
+        subtracts_parameter_path=None,
+        enum_values=None,
+        unit="currency-USD",
+        definition_period="year",
     )
     parameter_node = SimpleNamespace(
         name="gov.example",
@@ -119,6 +127,8 @@ def _model_source(
         description="An example rate",
         data_type=float,
         unit="/1",
+        economy=True,
+        household=False,
         parameter_values=[
             SimpleNamespace(
                 value=0.1,
@@ -148,6 +158,11 @@ def _model_source(
         default_dataset_uri=default_uri,
     )
     version_holder.region_registry = RegionRegistry(country_id, regions)
+    version_holder.entities = [
+        SimpleNamespace(key="person", plural="people", is_person=True),
+        SimpleNamespace(key="household", plural="households", is_person=False),
+    ]
+    version_holder.basic_inputs = ["employment_income"]
     version_holder.variables = [variable]
     version_holder.parameter_nodes = [parameter_node]
     version_holder.parameters = [parameter]
@@ -235,3 +250,78 @@ def normalized_catalog(
         models=source_models(policyengine_version=policyengine_version),
         installed_version=installed_version,
     )
+
+
+def add_format_2_variable_records(model: SimpleNamespace) -> None:
+    """Add two variables that between them fill every format 2 variable field.
+
+    ``filing_status`` is an enum whose labels are a string and an integer, with
+    no unit and a yearly period. ``countable_income`` names the parameters that
+    hold the lists it adds and subtracts, with a currency unit and a monthly
+    period.
+    """
+    for name in ("gov.example.countable_income", "gov.example.deductions"):
+        parameter = SimpleNamespace(
+            name=name,
+            label=None,
+            description=None,
+            data_type=list,
+            unit=None,
+            economy=True,
+            household=True,
+            parameter_values=[
+                SimpleNamespace(
+                    value=["employment_income"],
+                    start_date=datetime(2025, 1, 1, tzinfo=UTC),
+                    end_date=None,
+                )
+            ],
+        )
+        model.parameters.append(parameter)
+        model.parameters_by_name[name] = parameter
+    variables = (
+        SimpleNamespace(
+            name="filing_status",
+            label="Filing status",
+            entity="person",
+            description=None,
+            data_type="Enum",
+            possible_values=["SINGLE", "JOINT"],
+            default_value="SINGLE",
+            adds=None,
+            subtracts=None,
+            is_input_variable=True,
+            hidden_input=False,
+            module_name="household.demographic.filing_status",
+            adds_parameter_path=None,
+            subtracts_parameter_path=None,
+            enum_values=[
+                SimpleNamespace(value="SINGLE", label="Single"),
+                SimpleNamespace(value="JOINT", label=2),
+            ],
+            unit=None,
+            definition_period="year",
+        ),
+        SimpleNamespace(
+            name="countable_income",
+            label="Countable income",
+            entity="person",
+            description=None,
+            data_type=float,
+            possible_values=None,
+            default_value=0.0,
+            adds=["employment_income"],
+            subtracts=["employment_income"],
+            is_input_variable=False,
+            hidden_input=False,
+            module_name="household.income.countable_income",
+            adds_parameter_path="gov.example.countable_income",
+            subtracts_parameter_path="gov.example.deductions",
+            enum_values=None,
+            unit="currency-USD",
+            definition_period="month",
+        ),
+    )
+    for variable in variables:
+        model.variables.append(variable)
+        model.variables_by_name[variable.name] = variable

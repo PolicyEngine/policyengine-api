@@ -11,6 +11,7 @@ from policyengine_api.dataset_display import (
     DEFAULT_DATASET_DISPLAY_LABEL,
     get_dataset_display_label,
 )
+from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
 
 REPO = Path(__file__).parents[1]
 GET = "GET"
@@ -19,17 +20,12 @@ UPDATE = "UPDATE"
 LIST = "LIST"
 VERSION = "3.38.1"
 CURRENT_YEAR = str(datetime.now().year)  # noqa: DTZ005  # the default year is the host's local calendar year
-COUNTRIES = ("uk", "us", "ca", "ng", "il")
-COUNTRY_PACKAGE_NAMES = (
-    "policyengine_uk",
-    "policyengine_us",
-    "policyengine_canada",
-    "policyengine_ng",
-    "policyengine_il",
-)
+# The countries the v1 routes serve: the one country list, in the
+# alphabetical order the unknown-country error lists them.
+COUNTRIES: tuple[str, ...] = tuple(sorted(SUPPORTED_COUNTRY_IDS))
+COUNTRY_PACKAGE_NAMES = tuple(f"policyengine_{country_id}" for country_id in COUNTRIES)
 BUNDLED_COUNTRY_PACKAGE_NAMES = {
-    "uk": "policyengine-uk",
-    "us": "policyengine-us",
+    country_id: f"policyengine-{country_id}" for country_id in COUNTRIES
 }
 DEFAULT_BUNDLE_DATASET_LABEL = DEFAULT_DATASET_DISPLAY_LABEL
 
@@ -295,18 +291,14 @@ UK_COUNTRY_REGIONS = (
     ("country/england", "England"),
     ("country/scotland", "Scotland"),
     ("country/wales", "Wales"),
-    ("country/ni", "Northern Ireland"),
+    ("country/northern_ireland", "Northern Ireland"),
 )
-# UK regions whose metadata name differs from the code .py's UK region
-# registry uses, mapped to that code.
-UK_REGION_REGISTRY_CODES = {"country/ni": "country/northern_ireland"}
 # The regions a UK local-area breakdown can cover, in the order messages and
-# the query description list them: the UK, each UK country the metadata
-# publishes, and .py's own code for a country the metadata names differently.
+# the query description list them: the UK and each UK country the metadata
+# publishes.
 LOCAL_AREA_BREAKDOWN_REGIONS = (
     "uk",
     *(name for name, _label in UK_COUNTRY_REGIONS),
-    *UK_REGION_REGISTRY_CODES.values(),
 )
 
 # Modal simulation API status values

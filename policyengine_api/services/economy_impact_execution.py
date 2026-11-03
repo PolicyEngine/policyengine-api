@@ -17,10 +17,12 @@ from policyengine_api.observability.stages import ECONOMY_ANNUAL_STAGES, Stage
 from policyengine_api.runtime_cache.reform_impacts import CachedReformImpact
 from policyengine_api.services.economic_impact_request import LOCAL_AREA_BREAKDOWN
 from policyengine_api.services.economy_impact_types import (
-    LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS,
     LOCAL_AREA_BREAKDOWN_RETRY_NOTE,
+    RETRYABLE_FAILURE_SECONDS,
+    US_STATE_RETRY_NOTE,
     EconomicImpactResult,
     EconomicImpactSetupOptions,
+    ImpactPolicies,
     SimulationOptions,
 )
 from policyengine_api.services.reform_impacts_service import ReformImpactHandoffError
@@ -50,8 +52,11 @@ class ImpactExecutionMixin:
             raw_result = self._simulation_gateway.get_execution_result(execution)
             kind_error = self._breakdown_result_kind_error(setup_options, raw_result)
             if kind_error is not None:
-                return self._record_breakdown_failure(
-                    setup_options, reform_impact, kind_error
+                return self._record_retryable_failure(
+                    setup_options,
+                    reform_impact,
+                    kind_error,
+                    retry_note=LOCAL_AREA_BREAKDOWN_RETRY_NOTE,
                 )
             result = self._with_policyengine_bundle(
                 result=raw_result,
@@ -85,9 +90,13 @@ class ImpactExecutionMixin:
                 error_message = (
                     f"Simulation entrypoint execution failed: {execution.error}"
                 )
-            if setup_options.options.get("breakdown") is not None:
-                return self._record_breakdown_failure(
-                    setup_options, reform_impact, error_message
+            retry_note = self._failure_retry_note(setup_options)
+            if retry_note is not None:
+                return self._record_retryable_failure(
+                    setup_options,
+                    reform_impact,
+                    error_message,
+                    retry_note=retry_note,
                 )
 
             self._set_reform_impact_error(
@@ -136,31 +145,51 @@ class ImpactExecutionMixin:
             f"{LOCAL_AREA_BREAKDOWN!r}; the result was not stored"
         )
 
-    def _record_breakdown_failure(
+    @staticmethod
+    def _failure_retry_note(setup_options: EconomicImpactSetupOptions) -> str | None:
+        """Return the retry note for a failed job whose error is kept briefly.
+
+        A local-area breakdown job and a US state job (region ``state/...``,
+        already normalized from a bare state code) get a note; every other
+        failed job, including US national, congressional district and place
+        jobs, gets None, and its error is kept for the cache lifetime.
+        """
+        if setup_options.options.get("breakdown") is not None:
+            return LOCAL_AREA_BREAKDOWN_RETRY_NOTE
+        if setup_options.country_id == "us" and setup_options.region.startswith(
+            "state/"
+        ):
+            return US_STATE_RETRY_NOTE
+        return None
+
+    def _record_retryable_failure(
         self,
         setup_options: EconomicImpactSetupOptions,
         reform_impact: CachedReformImpact,
         reason: str,
+        *,
+        retry_note: str,
     ) -> EconomicImpactResult:
-        """Keep a failed breakdown job's error for two minutes, then let it go.
+        """Keep a failed job's error for two minutes, then let it go.
 
-        A breakdown runs on the large local-area dataset, where a timeout or
-        memory failure may not repeat, so its failure is not kept for the usual
-        30 days. This job's own record, found by its execution ID, becomes an
-        error that expires after ``LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS``.
-        Until then every request gets the same error, which says when to try
-        again; after it, the next request finds no record and submits a new
-        job. No other job's record is read or changed, and no submission claim
-        is held at this point: it was released once the job was handed off.
-        Failures of requests without a breakdown are stored as before.
+        Used for local-area breakdown and US state jobs, which run on large
+        local-area datasets, where a timeout or memory failure may not repeat,
+        so their failures are not kept for the usual 30 days. This job's own
+        record, found by its execution ID, becomes an error that expires after
+        ``RETRYABLE_FAILURE_SECONDS``. Until then every request gets the same
+        error, which ends with ``retry_note`` to say when to try again; after
+        it, the next request finds no record and submits a new job. No other
+        job's record is read or changed, and no submission claim is held at
+        this point: it was released once the job was handed off. Other failed
+        jobs, and typed SPM failures, are stored as before.
         """
-        message = f"{reason}. {LOCAL_AREA_BREAKDOWN_RETRY_NOTE}"
+        message = f"{reason}. {retry_note}"
         if reform_impact.execution_id:
             self._set_reform_impact_error(
                 setup_options=setup_options,
                 message=message,
                 execution_id=reform_impact.execution_id,
-                keep_seconds=LOCAL_AREA_BREAKDOWN_FAILURE_SECONDS,
+                keep_seconds=RETRYABLE_FAILURE_SECONDS,
             )
         return EconomicImpactResult.error(message=message)
 
@@ -277,17 +306,14 @@ class ImpactExecutionMixin:
     def _handle_create_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
+        *,
+        policies: ImpactPolicies,
     ) -> EconomicImpactResult:
-        baseline_policy, reform_policy = self._get_policy_jsons(
-            setup_options.country_id,
-            setup_options.baseline_policy_id,
-            setup_options.reform_policy_id,
-        )
-
+        """Submit the simulation job for these already loaded policies."""
         sim_config: SimulationOptions = self._setup_sim_options(
             setup_options,
-            reform_policy=reform_policy,
-            baseline_policy=baseline_policy,
+            reform_policy=policies.reform,
+            baseline_policy=policies.baseline,
             time_period=setup_options.time_period,
             include_cliffs=setup_options.target == "cliff",
         )

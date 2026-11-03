@@ -218,10 +218,8 @@ class TestEconomicImpactSetupOptions:
 
             assert "breakdown" not in sim_options
 
-        def test__given_uk_northern_ireland__sends_registry_code_but_keeps_scope(
-            self,
-        ):
-            setup_options = setup_options_for("uk", "country/ni")
+        def test__given_uk_northern_ireland__sends_the_registry_code(self):
+            setup_options = setup_options_for("uk", "country/northern_ireland")
 
             sim_options = EconomyService()._setup_sim_options(
                 setup_options,
@@ -231,8 +229,7 @@ class TestEconomicImpactSetupOptions:
             )
 
             assert sim_options.region == "country/northern_ireland"
-            # The cache scope keeps the public region name.
-            assert setup_options.region == "country/ni"
+            assert setup_options.region == "country/northern_ireland"
 
     class TestDatasetSelection:
         @pytest.mark.parametrize(
@@ -263,7 +260,6 @@ class TestEconomicImpactSetupOptions:
                 "country/england",
                 "country/scotland",
                 "country/wales",
-                "country/ni",
                 "country/northern_ireland",
             ],
         )
@@ -305,6 +301,7 @@ class TestEconomicImpactSetupOptions:
                 ("uk", "country/ ", "general", "region uk or a UK country"),
                 ("uk", "country/%20", "general", "region uk or a UK country"),
                 ("uk", "country/NI", "general", "region uk or a UK country"),
+                ("uk", "country/ni", "general", "region uk or a UK country"),
                 ("uk", "country/france", "general", "region uk or a UK country"),
                 ("uk", "Country/scotland", "general", "region uk or a UK country"),
                 ("uk", "country/scotland ", "general", "region uk or a UK country"),
@@ -356,7 +353,7 @@ class TestEconomicImpactSetupOptions:
             assert str(raised.value) == (
                 "breakdown=local_areas needs region uk or a UK country, one of "
                 "uk, country/england, country/scotland, country/wales, "
-                "country/ni, country/northern_ireland; not 'country/france'"
+                "country/northern_ireland; not 'country/france'"
             )
 
         def test__given_unknown_breakdown_option__rejects_it(self):

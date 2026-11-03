@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 from datetime import timedelta
 from urllib.parse import urlsplit
@@ -10,9 +12,11 @@ import pytest
 from telemetry_error_issues.github_client import GitHubError
 from telemetry_error_issues.rendering import (
     SECTION_END,
+    SECTION_START,
     issue_body,
     issue_section,
     issue_title,
+    parse_state,
 )
 from telemetry_error_issues.window import reporting_window
 
@@ -24,6 +28,7 @@ from tests.unit.telemetry_error_issues.github_support import (
     sync,
 )
 from tests.unit.telemetry_error_issues.report_support import (
+    FINGERPRINT_KEY,
     LOG_SOURCE,
     REPORT_DATE,
     WINDOW_NOON,
@@ -39,6 +44,45 @@ def _existing_issue(group: object, number: int = 7, **fields: object) -> dict:
         number,
         title=issue_title(group),
         body=issue_body(group, earlier, LOG_SOURCE),
+    )
+    issue.update(fields)
+    return issue
+
+
+# The values fingerprint algorithm 1 hashed for the StaleDataError failures that
+# ``failures`` returns: it keyed each stack frame by module path and function.
+ALGORITHM_1_FINGERPRINT_PARTS = (
+    "exception",
+    "policyengine-api",
+    "StaleDataError",
+    "policyengine_api/routes/report_routes.py:create_report",
+    "policyengine_api/services/report_service.py:create",
+)
+
+
+def _algorithm_1_issue(number: int, **fields: object) -> dict:
+    """Return the issue algorithm 1 opened for the StaleDataError failures."""
+    payload = json.dumps(
+        [1, *ALGORITHM_1_FINGERPRINT_PARTS], ensure_ascii=False, separators=(",", ":")
+    )
+    digest = hmac.new(FINGERPRINT_KEY, payload.encode(), hashlib.sha256).hexdigest()
+    algorithm_1_fingerprint = digest[:16]
+    state = {
+        "algorithm": 1,
+        "fingerprint": algorithm_1_fingerprint,
+        "kind": "exception",
+        "window_end": "2026-10-20T04:00:00+00:00",
+    }
+    state_comment = (
+        f"<!-- telemetry-error-issues:state {json.dumps(state, sort_keys=True)} -->"
+    )
+    issue = bot_issue(
+        number,
+        title=(
+            "[telemetry] policyengine-api: StaleDataError on `/<country_id>/report` "
+            f"({algorithm_1_fingerprint})"
+        ),
+        body=f"{SECTION_START}\n{state_comment}\n{SECTION_END}\n",
     )
     issue.update(fields)
     return issue
@@ -336,3 +380,46 @@ def test_sync_dry_run_makes_no_write_calls() -> None:
 
     assert github.writes == []
     assert sorted(action.action for action in result.actions) == ["created", "updated"]
+
+
+@pytest.mark.parametrize(
+    "issue_fields",
+    [
+        {},
+        {
+            "state": "closed",
+            "state_reason": "completed",
+            "closed_at": (WINDOW_NOON - timedelta(days=2)).isoformat(),
+        },
+    ],
+    ids=["open", "closed-as-completed"],
+)
+def test_sync_never_updates_or_reopens_an_issue_from_fingerprint_algorithm_1(
+    issue_fields: dict[str, object],
+) -> None:
+    group = groups_for_report_date(failures(4))[0]
+    algorithm_1_issue = _algorithm_1_issue(7, **issue_fields)
+    github = FakeGitHub([algorithm_1_issue])
+
+    result = sync([group], github)
+
+    assert result.actions[0].action == "created"
+    assert result.actions[0].issue_number == 8
+    assert github.issues[8]["title"] == issue_title(group)
+    issue_paths = {urlsplit(request.url).path for _, request in github.writes}
+    assert not any("/issues/7" in path for path in issue_paths)
+    assert github.issues[7] == algorithm_1_issue
+    assert 7 not in github.comments
+
+
+def test_sync_carries_over_an_algorithm_1_issue_retitled_with_the_new_fingerprint():
+    group = groups_for_report_date(failures(3))[0]
+    retitled_issue = _algorithm_1_issue(7, title=issue_title(group))
+    github = FakeGitHub([retitled_issue])
+
+    result = sync([group], github)
+
+    assert result.actions[0].action == "updated"
+    assert result.actions[0].issue_number == 7
+    assert parse_state(github.issues[7]["body"])["algorithm"] == 2
+    assert list(github.issues) == [7]

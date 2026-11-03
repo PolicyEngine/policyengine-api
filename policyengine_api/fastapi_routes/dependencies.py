@@ -16,6 +16,7 @@ from policyengine_api.fastapi_routes.metadata_protocols import (
 )
 from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2AccountResourceService,
+    V2CountryResourceService,
     V2HouseholdResourceService,
     V2PolicyResourceService,
     V2UserHouseholdResourceService,
@@ -23,14 +24,19 @@ from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2UserReportResourceService,
     V2UserSimulationResourceService,
 )
+from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+    MetadataResponseCache,
+)
 from policyengine_api.fastapi_routes.v2.user_auth import authenticate_account_request
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.readiness import is_ready
+from policyengine_api.services.v2.metadata.selected_catalogs import (
+    SelectedCatalogStore,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from policyengine_api.json_types import JSONObject
     from policyengine_api.services.v2.associations.types import (
         LegacyReferenceChecker,
     )
@@ -43,6 +49,7 @@ __all__ = [
     "NativeRouteDependencies",
     "SimulationGatewayProbe",
     "V2AccountResourceService",
+    "V2CountryResourceService",
     "V2HouseholdResourceService",
     "V2MetadataResourceReader",
     "V2PolicyResourceService",
@@ -81,22 +88,26 @@ def _default_metadata_reader_factory() -> MetadataReader:
     return MetadataService()
 
 
-def _default_specification_provider() -> JSONObject:
-    from policyengine_api.specification import (  # noqa: PLC0415  # reads and builds the OpenAPI document at import
-        OPENAPI_SPECIFICATION,
-    )
-
-    return OPENAPI_SPECIFICATION
-
-
 @lru_cache(maxsize=1)
 def _running_policyengine_version() -> str:
     return importlib_metadata.version("policyengine")
 
 
+@lru_cache(maxsize=1)
+def _process_selected_catalogs() -> SelectedCatalogStore:
+    """Return the catalog versions this process's metadata reads have selected."""
+    return SelectedCatalogStore()
+
+
+@lru_cache(maxsize=1)
+def _process_metadata_response_cache() -> MetadataResponseCache:
+    """Return the whole catalog-version responses this process keeps."""
+    return MetadataResponseCache()
+
+
 def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     from policyengine_api.data.v2.database import (
-        get_v2_session_factory,
+        get_v2_read_session_factory,
     )
     from policyengine_api.services.v2.metadata.database_session import (
         MetadataDatabaseSession,
@@ -104,9 +115,22 @@ def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     from policyengine_api.services.v2.metadata.services import V2MetadataService
 
     return V2MetadataService(
-        MetadataDatabaseSession(get_v2_session_factory()()),
+        MetadataDatabaseSession(get_v2_read_session_factory()()),
         running_policyengine_version=_running_policyengine_version(),
+        selected_catalogs=_process_selected_catalogs(),
     )
+
+
+def _default_v2_country_service_factory() -> V2CountryResourceService:
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.countries.database_session import (
+        CountryDatabaseSession,
+    )
+    from policyengine_api.services.v2.countries.services import V2CountryService
+
+    return V2CountryService(CountryDatabaseSession(get_v2_session_factory()))
 
 
 def _default_v2_policy_service_factory() -> V2PolicyResourceService:
@@ -282,8 +306,8 @@ class NativeRouteDependencies:
     readiness_probe: Callable[[], bool]
     gateway_client_factory: Callable[[], SimulationGatewayProbe]
     metadata_reader_factory: Callable[[], MetadataReader]
-    specification_provider: Callable[[], JSONObject]
     v2_metadata_reader_factory: Callable[[], V2MetadataResourceReader] | None = None
+    v2_country_service_factory: Callable[[], V2CountryResourceService] | None = None
     v2_policy_service_factory: Callable[[], V2PolicyResourceService] | None = None
     v2_household_service_factory: Callable[[], V2HouseholdResourceService] | None = None
     v2_user_policy_service_factory: Callable[[], V2UserPolicyResourceService] | None = (
@@ -299,6 +323,9 @@ class NativeRouteDependencies:
         None
     )
     v2_account_service_factory: Callable[[], V2AccountResourceService] | None = None
+    # Whole catalog-version responses (/v2/model-catalog and its variables) are
+    # kept here once built; None reads them on every request.
+    v2_metadata_response_cache: MetadataResponseCache | None = None
     # User-owned routes attach this at router level. The default validates the
     # Auth0 bearer token, or else accepts the unauthenticated-user header, and
     # fails closed (401/403/503); tests replace it with a callable returning a
@@ -312,8 +339,9 @@ class NativeRouteDependencies:
             readiness_probe=_default_readiness_probe,
             gateway_client_factory=_default_gateway_client_factory,
             metadata_reader_factory=_default_metadata_reader_factory,
-            specification_provider=_default_specification_provider,
             v2_metadata_reader_factory=_default_v2_metadata_reader_factory,
+            v2_country_service_factory=_default_v2_country_service_factory,
+            v2_metadata_response_cache=_process_metadata_response_cache(),
             v2_policy_service_factory=_default_v2_policy_service_factory,
             v2_household_service_factory=_default_v2_household_service_factory,
             v2_user_policy_service_factory=(_default_v2_user_policy_service_factory),

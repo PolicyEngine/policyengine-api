@@ -58,34 +58,6 @@ def test_cloud_run_startup_script_is_shell_syntax_valid():
     assert result.returncode == 0, result.stderr
 
 
-def test_simulation_version_guard_accepts_bundle_and_compatible_country_routes():
-    result = _run_simulation_version_guard(
-        {
-            "policyengine": {
-                "latest": "4.18.3",
-                "4.18.3": "policyengine-simulation-py4-18-3",
-            },
-            "us": {
-                "latest": "1.729.0",
-                "1.729.0": "policyengine-simulation-py4-18-3",
-            },
-            "uk": {
-                "latest": "2.89.2",
-                "2.89.2": "policyengine-simulation-py4-18-3",
-            },
-        },
-        "-py",
-        "4.18.3",
-        "-us",
-        "1.729.0",
-        "-uk",
-        "2.89.2",
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert "SUCCESS: PolicyEngine bundle route is deployed and ready" in result.stdout
-
-
 def test_simulation_version_guard_accepts_policyengine_bundle_route_only():
     result = _run_simulation_version_guard(
         {
@@ -105,6 +77,44 @@ def test_simulation_version_guard_accepts_policyengine_bundle_route_only():
     assert "SUCCESS: PolicyEngine bundle route is deployed and ready" in result.stdout
 
 
+def test_simulation_version_guard_rejects_bundle_older_than_latest():
+    result = _run_simulation_version_guard(
+        {
+            "policyengine": {
+                "latest": "6.12.0",
+                "6.11.1": "policyengine-simulation-py6-11-1",
+                "6.12.0": "policyengine-simulation-py6-12-0",
+            },
+        },
+        "-py",
+        "6.11.1",
+    )
+
+    assert result.returncode == 1
+    assert (
+        "ERROR: The Public API is on PolicyEngine .py 6.11.1, but the "
+        "simulation API's latest is 6.12.0" in result.stdout
+    )
+    assert "SUCCESS" not in result.stdout
+
+
+def test_simulation_version_guard_rejects_registry_without_latest():
+    result = _run_simulation_version_guard(
+        {
+            "policyengine": {
+                "4.18.5": "policyengine-simulation-py4-18-5",
+            },
+        },
+        "-py",
+        "4.18.5",
+    )
+
+    assert result.returncode == 1
+    assert "ERROR: The simulation API reports no latest PolicyEngine .py" in (
+        result.stdout
+    )
+
+
 @pytest.mark.parametrize(
     ("entrypoint", "expected_url"),
     [
@@ -119,6 +129,7 @@ def test_simulation_version_guard_uses_selected_endpoint(entrypoint, expected_ur
     result = _run_simulation_version_guard(
         {
             "policyengine": {
+                "latest": "4.18.5",
                 "4.18.5": "policyengine-simulation-py4-18-5",
             },
         },
@@ -187,29 +198,6 @@ def test_policyengine_bundle_support_check_passes_pyproject_pin_to_guard(tmp_pat
         current_version,
         "--check-installed-spm",
     ]
-
-
-def test_simulation_version_guard_rejects_country_route_to_different_app():
-    result = _run_simulation_version_guard(
-        {
-            "policyengine": {
-                "latest": "4.18.3",
-                "4.18.3": "policyengine-simulation-py4-18-3",
-            },
-            "us": {
-                "latest": "1.729.0",
-                "1.729.0": "policyengine-simulation-us1-729-0",
-            },
-        },
-        "-py",
-        "4.18.3",
-        "-us",
-        "1.729.0",
-    )
-
-    assert result.returncode == 1
-    assert "resolves to policyengine-simulation-us1-729-0" in result.stdout
-    assert "not bundle app policyengine-simulation-py4-18-3" in result.stdout
 
 
 def test_cloud_run_dockerfile_runs_startup_with_bash():

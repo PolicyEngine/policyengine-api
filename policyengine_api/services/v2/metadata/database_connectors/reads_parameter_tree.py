@@ -114,11 +114,7 @@ def _parameter_children_statement(
             ),
             sa.case((is_node, "node"), else_="parameter").label("type"),
             sa.case((is_node, direct_child_count), else_=None).label("child_count"),
-            parameter_id.label("parameter_id"),
-            col(Parameter.label).label("parameter_label"),
-            col(Parameter.description).label("parameter_description"),
-            col(Parameter.data_type).label("parameter_data_type"),
-            col(Parameter.unit).label("parameter_unit"),
+            Parameter,
         )
         .select_from(
             paths.outerjoin(
@@ -152,7 +148,7 @@ def read_parameter_children(
     """Return a page of the direct children of parent_path in a model version's tree.
 
     Each row has the child's path, label, type (node or parameter), child count
-    and, for parameters, the parameter's summary columns. The session's dialect
+    and the stored Parameter (None for a node). The session's dialect
     selects SQLite or PostgreSQL string functions; limit + 1 rows are fetched so
     the caller can tell whether another page exists.
     """

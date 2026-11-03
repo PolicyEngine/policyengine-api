@@ -14,7 +14,8 @@
         "health",
         "simulation-gateway-check",
         "liveness-check",
-        "readiness-check"
+        "readiness-check",
+        "deployment"
       ],
       "sim_flow": null
     },
@@ -31,8 +32,10 @@
       "name": "metadata",
       "path_segments": [
         "metadata",
+        "countries",
         "datasets",
         "economy-options",
+        "model-catalog",
         "parameter-values",
         "parameters",
         "regions",
@@ -134,16 +137,6 @@
             "message",
             "result"
           ]
-        },
-        {
-          "expected_status": 200,
-          "headers": [],
-          "method": "GET",
-          "path": "/us/policies",
-          "route_group": "policy",
-          "stable_response_fields": [
-            "result"
-          ]
         }
       ]
     },
@@ -166,7 +159,8 @@
             "result.item.tax_benefit_model_id",
             "result.item.parameter_values",
             "result.item.created_at",
-            "result.item.updated_at"
+            "result.item.updated_at",
+            "result.item.missing_parameters"
           ]
         },
         {
@@ -183,7 +177,8 @@
             "result.item.tax_benefit_model_id",
             "result.item.parameter_values",
             "result.item.created_at",
-            "result.item.updated_at"
+            "result.item.updated_at",
+            "result.item.missing_parameters"
           ]
         },
         {
@@ -199,53 +194,6 @@
             "result.offset",
             "result.limit",
             "result.has_more"
-          ]
-        }
-      ]
-    },
-    {
-      "current_contract": "api_v1_compatible",
-      "future_owner_pr": "PR 10: Policy Migration",
-      "name": "saved_policy_v1_compatibility",
-      "requests": [
-        {
-          "expected_status": 201,
-          "headers": [],
-          "method": "POST",
-          "path": "/us/user-policy",
-          "route_group": "policy",
-          "stable_response_fields": [
-            "status",
-            "message",
-            "result.id",
-            "result.reform_id",
-            "result.reform_label",
-            "result.baseline_id",
-            "result.user_id"
-          ]
-        },
-        {
-          "expected_status": 200,
-          "headers": [],
-          "method": "GET",
-          "path": "/us/user-policy/{user_id}",
-          "route_group": "policy",
-          "stable_response_fields": [
-            "status",
-            "message",
-            "result"
-          ]
-        },
-        {
-          "expected_status": 200,
-          "headers": [],
-          "method": "PUT",
-          "path": "/us/user-policy",
-          "route_group": "policy",
-          "stable_response_fields": [
-            "status",
-            "message",
-            "result.id"
           ]
         }
       ]
@@ -1350,6 +1298,25 @@
     },
     {
       "current_contract": "typed_v2_resources",
+      "future_owner_pr": "Countries table and one country list in code",
+      "name": "country_selection_v2",
+      "requests": [
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/countries",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_resources",
       "future_owner_pr": "Later metadata read cutover and v2 route-prefix removal",
       "name": "metadata_resources_v2_preview",
       "requests": [
@@ -1613,6 +1580,55 @@
             "result.region",
             "result.time_period",
             "result.datasets"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/model-catalog?country_id=us",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.policyengine_version",
+            "result.catalog_format",
+            "result.entities",
+            "result.basic_inputs",
+            "result.regions",
+            "result.datasets",
+            "result.economy_options"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/model-catalog/variables?country_id=us",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.policyengine_version",
+            "result.catalog_format",
+            "result.variables",
+            "result.part_parameter_values"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/model-catalog/parameters?country_id=us&name=gov.irs.income.bracket.rates.1",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.policyengine_version",
+            "result.catalog_format",
+            "result.parameters",
+            "result.node_labels",
+            "result.missing_names"
           ]
         }
       ]

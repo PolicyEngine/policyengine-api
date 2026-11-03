@@ -31,6 +31,7 @@ from policyengine_api.data.v2.models.comparison_runs import (  # noqa: E402
     Stage12RunStatus,
     Stage12SimulationRole,
 )
+from policyengine_api.data.v2.models.countries import Country  # noqa: E402
 from policyengine_api.data.v2.models.household_mappings import (  # noqa: E402
     LegacyHouseholdMapping,
 )
@@ -40,6 +41,8 @@ from policyengine_api.data.v2.models.households import (  # noqa: E402
     HouseholdJobStatus,
 )
 from policyengine_api.data.v2.models.metadata import (  # noqa: E402
+    CatalogEntity,
+    CatalogEnumValue,
     Dataset,
     DatasetVersion,
     Parameter,
@@ -99,9 +102,12 @@ __all__ = [
     "AggregateOutput",
     "AggregateType",
     "BudgetSummary",
+    "CatalogEntity",
+    "CatalogEnumValue",
     "ChangeAggregate",
     "CongressionalDistrictImpact",
     "ConstituencyImpact",
+    "Country",
     "Dataset",
     "DatasetVersion",
     "DecileImpact",
