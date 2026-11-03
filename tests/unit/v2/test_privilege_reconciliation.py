@@ -120,6 +120,70 @@ def test_missing_roles_and_tables_are_recorded_and_block_the_plan() -> None:
     )
 
 
+def test_a_missing_role_awaiting_creation_is_skipped_without_blocking() -> None:
+    plan = plan_reconciliation(
+        _declared(),
+        granted={},
+        existing_roles={RUNTIME},
+        existing_tables={"users", "legacy_policy_mappings", "reports"},
+        roles_awaiting_creation={STAGE12},
+    )
+
+    assert plan.can_apply
+    assert plan.missing_roles == ()
+    assert plan.skipped_roles == (STAGE12,)
+    assert {entry.role for entry in plan.grants} == {RUNTIME}
+
+
+def test_a_role_awaiting_creation_gets_its_privileges_once_it_exists() -> None:
+    declared = {RUNTIME: {"users": READ}, STAGE12: {"users": READ}}
+
+    plan = plan_reconciliation(
+        declared,
+        granted={},
+        existing_roles={RUNTIME, STAGE12},
+        existing_tables={"users"},
+        roles_awaiting_creation={STAGE12},
+    )
+
+    assert plan.skipped_roles == ()
+    assert plan.grants == (
+        PrivilegeEntry(STAGE12, "users", "SELECT"),
+        PrivilegeEntry(RUNTIME, "users", "SELECT"),
+    )
+
+
+def test_a_missing_role_not_awaiting_creation_still_blocks_the_plan() -> None:
+    plan = plan_reconciliation(
+        _declared(),
+        granted={},
+        existing_roles={RUNTIME},
+        existing_tables={"users", "legacy_policy_mappings", "reports"},
+        roles_awaiting_creation={"policyengine_v2_some_other_role"},
+    )
+
+    assert plan.missing_roles == (STAGE12,)
+    assert plan.skipped_roles == ()
+    assert not plan.can_apply
+
+
+def test_summary_names_the_roles_skipped_until_an_operator_creates_them() -> None:
+    plan = ReconciliationPlan(
+        grants=(),
+        undeclared=(),
+        missing_roles=(),
+        missing_tables=(),
+        skipped_roles=(STAGE12,),
+    )
+
+    summary = render_summary(plan, (), deployment_environment="staging", applied=True)
+
+    assert (
+        "Declared roles not created yet, skipped until an operator creates them: "
+        f"`{STAGE12}`"
+    ) in summary
+
+
 def test_grant_statements_group_privileges_per_role_and_table() -> None:
     plan = ReconciliationPlan(
         grants=(

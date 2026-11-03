@@ -248,6 +248,13 @@ table is missing. The roles themselves are provisioned outside the
 repository; `--create-missing-roles` is accepted only for the disposable test
 database.
 
+A pull request may declare a role before an operator creates it by listing it
+in `ROLES_AWAITING_PROVISIONING` in `privileges.py`. While a listed role is
+missing, `apply` and `verify` skip it and name it in their output and the job
+summary instead of failing; once it exists, the next deploy grants and checks
+its privileges. Remove the role from the set once it exists in staging and
+production, so that its absence fails the deploy again.
+
 The declarations include write privileges for code paths production doesn't
 turn on: the dual-write copies into `legacy_policy_mappings` and
 `legacy_household_mappings`, and the writes behind the native `/v2/policies`

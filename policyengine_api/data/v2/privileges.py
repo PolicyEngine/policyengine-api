@@ -44,6 +44,12 @@ RUNTIME_ROLE: Final = "policyengine_v2_runtime"
 CATALOG_WRITER_ROLE: Final = "policyengine_v2_catalog_writer"
 STAGE12_ROLE_PREFIX: Final = "policyengine_stage12_"
 PERSISTENT_ENVIRONMENTS: Final = frozenset({"staging", "production"})
+# Declared roles an operator hasn't created in staging and production yet. While
+# one is missing, the deploy's ``apply`` and ``verify`` skip it and name it,
+# instead of failing; once it exists they grant and check its privileges.
+# Remove a role from this set when it exists in both environments, so that its
+# absence fails the deploy again.
+ROLES_AWAITING_PROVISIONING: Final[frozenset[str]] = frozenset()
 ENVIRONMENT_PATTERN: Final = re.compile(r"^[a-z][a-z0-9_]{0,30}$")
 
 

@@ -11,6 +11,11 @@ it. Two modes:
 - ``verify`` checks every declared privilege with ``has_table_privilege``
   (rule ``api.v2.deployed-privileges-match``) and fails on any that is missing.
 
+Both skip a missing role the manifest lists in ``ROLES_AWAITING_PROVISIONING``,
+and name it in their output, so a pull request can declare a role before an
+operator creates it. Once the role exists, ``apply`` grants its privileges and
+``verify`` checks them.
+
 ``--create-missing-roles`` creates the managed roles as ``NOLOGIN`` roles. It
 is refused unless the target is the disposable test database
 (``V2_ALEMBIC_DISPOSABLE_TEST=1``); in staging and production the roles are
@@ -42,6 +47,7 @@ from policyengine_api.data.v2.migration_target import (
 )
 from policyengine_api.data.v2.privileges import (
     PERSISTENT_ENVIRONMENTS,
+    ROLES_AWAITING_PROVISIONING,
     TablePrivilege,
     declared_privileges,
 )
@@ -88,12 +94,17 @@ class DefaultPrivilege:
 
 @dataclass(frozen=True)
 class ReconciliationPlan:
-    """What ``apply`` grants and reports for one database."""
+    """What ``apply`` grants and reports for one database.
+
+    ``skipped_roles`` are missing roles awaiting creation by an operator; they
+    don't block the plan, and nothing is granted to them.
+    """
 
     grants: tuple[PrivilegeEntry, ...]
     undeclared: tuple[PrivilegeEntry, ...]
     missing_roles: tuple[str, ...]
     missing_tables: tuple[str, ...]
+    skipped_roles: tuple[str, ...] = ()
 
     @property
     def can_apply(self) -> bool:
@@ -107,18 +118,22 @@ def plan_reconciliation(
     *,
     existing_roles: Collection[str],
     existing_tables: Collection[str],
+    roles_awaiting_creation: Collection[str] = (),
 ) -> ReconciliationPlan:
     """Compare declared privileges with what the database grants.
 
-    ``granted`` holds the managed roles' direct grants, by role then table.
+    ``granted`` holds the managed roles' direct grants, by role then table. A
+    missing role in ``roles_awaiting_creation`` is skipped instead of missing.
     """
-    missing_roles = tuple(sorted(set(declared) - set(existing_roles)))
+    absent_roles = set(declared) - set(existing_roles)
+    skipped_roles = tuple(sorted(absent_roles & set(roles_awaiting_creation)))
+    missing_roles = tuple(sorted(absent_roles - set(skipped_roles)))
     declared_tables = {table for tables in declared.values() for table in tables}
     missing_tables = tuple(sorted(declared_tables - set(existing_tables)))
     grants = sorted(
         PrivilegeEntry(role, table, privilege.value)
         for role, tables in declared.items()
-        if role not in missing_roles
+        if role not in absent_roles
         for table, privileges in tables.items()
         if table not in missing_tables
         for privilege in privileges
@@ -140,6 +155,7 @@ def plan_reconciliation(
         undeclared=tuple(undeclared),
         missing_roles=missing_roles,
         missing_tables=missing_tables,
+        skipped_roles=skipped_roles,
     )
 
 
@@ -193,6 +209,13 @@ def _privilege_rows(entries: Iterable[PrivilegeEntry]) -> list[str]:
     ]
 
 
+def _skipped_roles_line(roles: Iterable[str]) -> str:
+    return (
+        "Declared roles not created yet, skipped until an operator creates them: "
+        + ", ".join(f"`{role}`" for role in roles)
+    )
+
+
 def render_summary(
     plan: ReconciliationPlan,
     default_privileges: Sequence[DefaultPrivilege],
@@ -202,6 +225,8 @@ def render_summary(
 ) -> str:
     """Return the Markdown report for the job summary and the log."""
     lines = [f"## v2 table privileges ({deployment_environment})", ""]
+    if plan.skipped_roles:
+        lines += [_skipped_roles_line(plan.skipped_roles), ""]
     if plan.missing_roles:
         lines += [
             "Declared roles missing from the database (nothing was granted): "
@@ -363,10 +388,13 @@ def create_missing_roles(connection: Connection, roles: Iterable[str]) -> list[s
 def apply_declared_privileges(
     connection: Connection,
     declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
+    *,
+    roles_awaiting_creation: Collection[str] = (),
 ) -> tuple[ReconciliationPlan, list[DefaultPrivilege]]:
     """Grant every declared privilege a role lacks; never revoke.
 
-    Grants nothing when a declared role or table is missing.
+    Grants nothing when a declared role or table is missing, unless the missing
+    role awaits creation, which is skipped.
     """
     roles = list(declared)
     plan = plan_reconciliation(
@@ -374,6 +402,7 @@ def apply_declared_privileges(
         read_granted_privileges(connection, roles),
         existing_roles=read_existing_roles(connection, roles),
         existing_tables=read_public_tables(connection),
+        roles_awaiting_creation=roles_awaiting_creation,
     )
     if plan.can_apply:
         for statement in grant_statements(
@@ -383,14 +412,33 @@ def apply_declared_privileges(
     return plan, read_default_privileges(connection, roles)
 
 
+def skipped_roles(
+    connection: Connection,
+    declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
+    roles_awaiting_creation: Collection[str],
+) -> tuple[str, ...]:
+    """Return the declared roles awaiting creation that don't exist yet."""
+    existing_roles = read_existing_roles(connection, list(declared))
+    return tuple(
+        sorted((set(declared) & set(roles_awaiting_creation)) - existing_roles)
+    )
+
+
 def check_declared_privileges(
     connection: Connection,
     declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
+    *,
+    roles_awaiting_creation: Collection[str] = (),
 ) -> list[PrivilegeEntry]:
     """Return every declared privilege a role doesn't effectively hold.
 
-    A missing role or table counts as missing every privilege declared for it.
+    A missing role or table counts as missing every privilege declared for it,
+    except a missing role awaiting creation, which is skipped.
     """
+    skipped = set(skipped_roles(connection, declared, roles_awaiting_creation))
+    declared = {
+        role: tables for role, tables in declared.items() if role not in skipped
+    }
     existing_roles = read_existing_roles(connection, list(declared))
     existing_tables = read_public_tables(connection)
 
@@ -457,12 +505,18 @@ def run(
         msg = "--create-missing-roles is only allowed for the disposable test database"
         raise V2ConfigurationError(msg)
     declared = declared_privileges(environment)
+    awaiting = ROLES_AWAITING_PROVISIONING
     engine = engine_builder(settings)
     try:
         with engine.begin() as connection:
             qualify_v2_connection(connection, settings)
             if mode == "verify":
-                failures = check_declared_privileges(connection, declared)
+                skipped = skipped_roles(connection, declared, awaiting)
+                if skipped:
+                    print(_skipped_roles_line(skipped))
+                failures = check_declared_privileges(
+                    connection, declared, roles_awaiting_creation=awaiting
+                )
                 if failures:
                     rows = "\n".join(
                         f"- `{failure.role}` lacks {failure.privilege} on "
@@ -481,7 +535,9 @@ def run(
                 created = create_missing_roles(connection, declared)
                 if created:
                     print("Created roles: " + ", ".join(created))
-            plan, defaults = apply_declared_privileges(connection, declared)
+            plan, defaults = apply_declared_privileges(
+                connection, declared, roles_awaiting_creation=awaiting
+            )
             _write_summary(
                 values,
                 render_summary(

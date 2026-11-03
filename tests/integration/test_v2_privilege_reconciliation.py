@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
+from policyengine_api.data.v2 import privilege_reconciliation
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_DISPOSABLE_TEST
 from policyengine_api.data.v2.privilege_reconciliation import (
     DEPLOYMENT_ENVIRONMENT,
@@ -137,3 +138,57 @@ def test_a_missing_role_blocks_every_grant_and_fails_verification(
             PrivilegeEntry(role, "regions", "SELECT"),
         ]
     )
+
+
+def test_a_role_awaiting_creation_is_skipped_until_it_exists(
+    superuser_engine, temporary_role
+) -> None:
+    role = temporary_role()
+    absent_role = f"policyengine_privilege_test_absent_{uuid4().hex[:12]}"
+    declared = {role: {"regions": READ}, absent_role: {"regions": READ}}
+    with superuser_engine.begin() as connection:
+        plan, _defaults = apply_declared_privileges(
+            connection, declared, roles_awaiting_creation={absent_role}
+        )
+        missing = check_declared_privileges(
+            connection, declared, roles_awaiting_creation={absent_role}
+        )
+
+    assert plan.can_apply
+    assert plan.skipped_roles == (absent_role,)
+    assert plan.grants == (PrivilegeEntry(role, "regions", "SELECT"),)
+    assert missing == []
+    assert _has_privilege(superuser_engine, role, "regions", "SELECT")
+
+
+def test_the_deploy_steps_pass_and_name_a_role_awaiting_creation(
+    disposable_v2_database_url, temporary_role, monkeypatch, capsys
+) -> None:
+    """``apply`` and ``verify`` succeed while a role awaiting creation is absent."""
+    role = temporary_role()
+    absent_role = f"policyengine_privilege_test_absent_{uuid4().hex[:12]}"
+    monkeypatch.setattr(
+        privilege_reconciliation,
+        "declared_privileges",
+        lambda _environment: {role: {"regions": READ}, absent_role: {"regions": READ}},
+    )
+    monkeypatch.setattr(
+        privilege_reconciliation,
+        "ROLES_AWAITING_PROVISIONING",
+        frozenset({absent_role}),
+    )
+    environ = {
+        V2_MIGRATION_DATABASE_URL: disposable_v2_database_url,
+        V2_ALEMBIC_DISPOSABLE_TEST: "1",
+        DEPLOYMENT_ENVIRONMENT: "test",
+    }
+
+    apply_status = run("apply", environ=environ)
+    apply_report = capsys.readouterr().out
+    verify_status = run("verify", environ=environ)
+    verify_output = capsys.readouterr().out
+
+    assert (apply_status, verify_status) == (0, 0)
+    assert f"`{absent_role}`" in apply_report
+    assert absent_role in verify_output
+    assert "Every declared v2 table privilege is held" in verify_output
