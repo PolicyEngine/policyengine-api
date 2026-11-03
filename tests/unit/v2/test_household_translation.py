@@ -93,6 +93,87 @@ def test_array_variable_that_contains_person_names_is_not_a_relationship() -> No
     ]
 
 
+ADULT_AND_CHILD = {"adult": {"age": {"2026": 40}}, "child": {"age": {"2026": 10}}}
+
+
+@pytest.mark.parametrize(
+    ("country_id", "household_json", "omitted_collections"),
+    [
+        (
+            "us",
+            {
+                "people": ADULT_AND_CHILD,
+                "households": {"home": {"members": ["adult", "child"]}},
+                "tax_units": {"tax unit": {"members": ["adult", "child"]}},
+            },
+            ["family", "spm_unit", "marital_unit"],
+        ),
+        (
+            "us",
+            {"people": ADULT_AND_CHILD, "households": None},
+            ["household", "family", "tax_unit", "spm_unit", "marital_unit"],
+        ),
+        (
+            "uk",
+            {
+                "people": ADULT_AND_CHILD,
+                "households": {"home": {"members": ["adult", "child"]}},
+            },
+            ["benunit"],
+        ),
+    ],
+)
+def test_omitted_collection_becomes_one_unnamed_group_of_everyone(
+    country_id: str,
+    household_json: dict[str, object],
+    omitted_collections: list[str],
+) -> None:
+    # policyengine-core fills an omitted or null collection with one group of
+    # every person, so v1 calculates these households.
+    translated = translate_legacy_household(
+        _snapshot(country_id, household_json=household_json)
+    )
+    people = translated.household_data["people"]
+
+    for collection in omitted_collections:
+        assert translated.household_data[collection] == [
+            {"id": f"{collection}-1", "values": {}}
+        ]
+        assert [person["memberships"][collection] for person in people] == [
+            f"{collection}-1",
+            f"{collection}-1",
+        ]
+
+
+def test_person_left_out_of_a_collection_gets_an_unnamed_group_of_their_own() -> None:
+    # policyengine-core gives each person that a collection's groups leave out
+    # a group of their own, so v1 calculates these households.
+    source = _snapshot().household_json
+    assert isinstance(source, dict)
+    source["tax_units"] = {"tax unit": {"members": ["adult"]}}
+    source["marital_units"] = {}
+
+    translated = translate_legacy_household(_snapshot(household_json=source))
+    people = translated.household_data["people"]
+
+    assert translated.household_data["tax_unit"] == [
+        {"id": "tax_unit-1", "source_name": "tax unit", "values": {}},
+        {"id": "tax_unit-2", "values": {}},
+    ]
+    assert translated.household_data["marital_unit"] == [
+        {"id": "marital_unit-1", "values": {}},
+        {"id": "marital_unit-2", "values": {}},
+    ]
+    assert [person["memberships"]["tax_unit"] for person in people] == [
+        "tax_unit-1",
+        "tax_unit-2",
+    ]
+    assert [person["memberships"]["marital_unit"] for person in people] == [
+        "marital_unit-1",
+        "marital_unit-2",
+    ]
+
+
 def test_one_unambiguous_year_supplies_scalar_period_context() -> None:
     source = _snapshot().household_json
     assert isinstance(source, dict)
