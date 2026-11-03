@@ -5,15 +5,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from uuid import UUID
 
     from policyengine_api.json_types import JSONObject
     from policyengine_api.services.v2.metadata.types import (
         MetadataCanonicalParameterValue,
+        MetadataCatalogParametersResult,
+        MetadataCatalogVariablesResult,
         MetadataDataset,
         MetadataDetailResult,
         MetadataEconomyOptionsResult,
         MetadataModel,
+        MetadataModelCatalogResult,
         MetadataModelSelectionResult,
         MetadataModelVersionDetail,
         MetadataPageResult,
@@ -21,6 +25,7 @@ if TYPE_CHECKING:
         MetadataParameterSummary,
         MetadataRegion,
         MetadataVariable,
+        ParameterFilter,
         ParameterValueFilter,
     )
 
@@ -126,11 +131,12 @@ class V2MetadataResourceReader(Protocol):
         *,
         offset: int = 0,
         limit: int = 100,
-        search: str | None = None,
+        parameter_filter: ParameterFilter | None = None,
     ) -> MetadataPageResult[MetadataParameterSummary]:
-        """Return parameters in name order, optionally filtered by ``search``.
+        """Return parameters in name order, optionally filtered.
 
-        ``search`` is a case-insensitive substring of the name, label or description.
+        The filter's ``search`` is a case-insensitive substring of the name,
+        label or description; its ``names`` keep only those exact names.
         """
         ...
 
@@ -167,9 +173,10 @@ class V2MetadataResourceReader(Protocol):
         offset: int = 0,
         limit: int = 100,
     ) -> MetadataPageResult[MetadataCanonicalParameterValue]:
-        """Return canonical values, optionally for one parameter.
+        """Return canonical values, optionally for one or several parameters.
 
-        With the filter's ``current``, only values in effect on the UTC day of its
+        The filter's ``parameter_id`` or ``parameter_names`` select parameters.
+        With its ``current``, only values in effect on the UTC day of its
         ``now`` (default: the present) are returned.
         """
         ...
@@ -244,5 +251,45 @@ class V2MetadataResourceReader(Protocol):
 
         Raise ``MetadataCatalogUnavailableError`` when the national region, its
         dataset or the model version's options are missing from the catalog.
+        """
+        ...
+
+    def get_model_catalog(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> MetadataModelCatalogResult:
+        """Return the small parts of the selected catalog version.
+
+        These are the model and model version, entities, basic inputs, regions,
+        logical input datasets and economy choices, which are empty for a
+        catalog without regions. Raise ``MetadataCatalogUnavailableError`` when
+        a catalog with regions lacks what ``get_economy_options`` needs.
+        """
+        ...
+
+    def get_catalog_variables(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> MetadataCatalogVariablesResult:
+        """Return every variable of the selected catalog version, in name order.
+
+        It also carries the current-law values of each parameter a variable's
+        adds or subtracts names.
+        """
+        ...
+
+    def get_catalog_parameters(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+        *,
+        names: Sequence[str],
+    ) -> MetadataCatalogParametersResult:
+        """Return the named parameters of the selected version, in name order.
+
+        Each carries its current-law values; the result also carries the
+        stored labels of their ancestor nodes and the names the version lacks.
         """
         ...
