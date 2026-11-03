@@ -233,7 +233,7 @@ jobs:
         env:
           JOB_RESULTS: ${{ toJSON(needs) }}
       - name: Publish Git Tag
-        run: ".github/publish-git-tag.sh"
+        run: bash .github/scripts/publish_git_tag.sh
 
   migrate-v1-staging-cloud-sql:
     name: Upgrade staging v1 Cloud SQL schema
