@@ -770,8 +770,8 @@ kind = "none"
 [[rule]]
 id = "api.migration.bundle-supported-by-simulation-api"
 category = "migration"
-statement = "A PolicyEngine bundle version change is supported by the simulation API before it merges."
-rationale = "docs/engineering/skills/github-prs.md"
+statement = "The installed PolicyEngine bundle is the latest one the simulation API has published, checked on every pull request and before each staging and production deploy."
+rationale = "docs/canonical-spm.md#policyengine-6-compatibility"
 scope = ["pyproject.toml"]
 tier = "mechanical"
 status = "enforced"
