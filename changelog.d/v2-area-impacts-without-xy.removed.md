@@ -1,0 +1,1 @@
+API v2's `constituency_impacts` and `local_authority_impacts` tables no longer have the `x` and `y` hex-map position columns; v2 Alembic revision `e86f19a6c4da` drops them. Nothing read or wrote these tables, and the app draws its maps from its own layout files.

@@ -31,8 +31,14 @@ STAGE_11_PREVIOUS_REVISION = "af34023a728f"
 STAGE_12_PREVIOUS_REVISION = "724b1b11a33e"
 STAGE_12_COMPARISON_PREVIOUS_REVISION = "439303be14fe"
 STAGE_12A_PREVIOUS_REVISION = "91af4fc8d8c1"
-COUNTRIES_PREVIOUS_REVISION = "fbb7488ebe8a"
+STAGE_12A_REVISION = "fbb7488ebe8a"
+COUNTRIES_PREVIOUS_REVISION = STAGE_12A_REVISION
+COUNTRIES_REVISION = "fb1a3e40d3d6"
+# The catalog format 2 revision, the parent of the area impact coordinate removal.
+CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
+AREA_IMPACT_TABLES = ("constituency_impacts", "local_authority_impacts")
+MAP_COORDINATE_COLUMNS = ("x", "y")
 
 
 def _disposable_url() -> str:
@@ -100,6 +106,8 @@ def _assert_head(engine) -> None:
         "legacy_user_mappings",
         "legacy_user_policy_mappings",
     } <= set(inspect(engine).get_table_names(schema="public"))
+    for table_name in AREA_IMPACT_TABLES:
+        assert set(MAP_COORDINATE_COLUMNS).isdisjoint(_columns(engine, table_name))
 
 
 def _columns(engine, table_name: str) -> dict[str, dict]:
@@ -107,6 +115,17 @@ def _columns(engine, table_name: str) -> dict[str, dict]:
         column["name"]: column
         for column in inspect(engine).get_columns(table_name, schema="public")
     }
+
+
+def _assert_area_impact_coordinates_restored(engine: Engine) -> None:
+    """Check the catalog format 2 revision's map coordinates are required integers."""
+    _assert_revision(engine, CATALOG_FORMAT_2_REVISION)
+    for table_name in AREA_IMPACT_TABLES:
+        columns = _columns(engine, table_name)
+        for column_name in MAP_COORDINATE_COLUMNS:
+            assert isinstance(columns[column_name]["type"], sa.Integer)
+            assert not columns[column_name]["nullable"]
+            assert columns[column_name]["default"] is None
 
 
 def _assert_pre_stage_12a_association_shape(engine) -> None:
@@ -436,6 +455,10 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         _upgrade_and_assert_head(config, engine)
         _assert_countries_shape(engine)
 
+        command.downgrade(config, CATALOG_FORMAT_2_REVISION)
+        _assert_area_impact_coordinates_restored(engine)
+        _upgrade_and_assert_head(config, engine)
+
         command.downgrade(config, COUNTRIES_PREVIOUS_REVISION)
         _assert_revision(engine, COUNTRIES_PREVIOUS_REVISION)
         _assert_pre_countries_shape(engine)
@@ -636,10 +659,10 @@ def _rewrite_mapped_columns(connection, table: sa.Table, row: dict) -> None:
 
 @dataclass(frozen=True)
 class PreviousRevisionSchemas:
-    """A previous revision's reflected schema and head's, after the upgrade.
+    """A previous revision's reflected schema and the one it was upgraded to.
 
     ``read_only_tables`` are the previous revision's tables that only new code
-    writes, so their test rows are inserted through head's table.
+    writes, so their test rows are inserted through the upgraded table.
     """
 
     parent: sa.MetaData
@@ -647,7 +670,7 @@ class PreviousRevisionSchemas:
     read_only_tables: frozenset[str]
 
     def insert_table(self, table_name: str) -> sa.Table | None:
-        """Head's table for a read-only table, otherwise ``None``."""
+        """Return the upgraded table for a read-only table, otherwise ``None``."""
         if table_name in self.read_only_tables:
             return self.head.tables[table_name]
         return None
@@ -698,19 +721,21 @@ def _assert_user_deletion_cascades(
         assert remaining == 0, table_name
 
 
-def _assert_head_serves_previous_revision(
+def _assert_revision_serves_previous_revision(
     previous_revision: str,
+    revision: str,
     read_only_tables: frozenset[str],
 ) -> None:
-    """Run a previous Public API revision's table usage against head.
+    """Run a previous Public API revision's table usage against ``revision``.
 
-    The parent revision's schema is reflected and then used, after upgrading,
+    The parent revision's schema is reflected and then used, after upgrading
+    to ``revision``, the revision it ran beside during that deploy,
     to insert a row into every table it maps (supplying only what it
     requires), read the row back with every mapped column, rewrite those
     columns, delete it, and delete a user who owns association rows so the
-    cascades run. Head may not give any table the parent revision writes a
-    new required column without a server default; ``read_only_tables`` are the
-    parent's tables that only new code writes.
+    cascades run. ``revision`` may not give any table the parent revision
+    writes a new required column without a server default; ``read_only_tables``
+    are the parent's tables that only new code writes.
     """
     database_url = _disposable_url()
     config = _config()
@@ -720,7 +745,7 @@ def _assert_head_serves_previous_revision(
         command.downgrade(config, previous_revision)
         parent = sa.MetaData()
         parent.reflect(engine)
-        command.upgrade(config, "head")
+        command.upgrade(config, revision)
         head = sa.MetaData()
         head.reflect(engine)
         parent_tables = [
@@ -781,18 +806,65 @@ def _assert_head_serves_previous_revision(
 
 
 def test_stage_12a_schema_serves_the_previous_revision() -> None:
-    _assert_head_serves_previous_revision(
+    _assert_revision_serves_previous_revision(
         STAGE_12A_PREVIOUS_REVISION,
+        STAGE_12A_REVISION,
         STAGE_12A_PARENT_READ_ONLY_TABLES,
     )
 
 
 def test_countries_schema_serves_the_previous_revision() -> None:
     """The release before the countries table keeps working during a deploy."""
-    _assert_head_serves_previous_revision(
+    _assert_revision_serves_previous_revision(
         COUNTRIES_PREVIOUS_REVISION,
+        COUNTRIES_REVISION,
         frozenset(),
     )
+
+
+def test_area_impact_coordinate_removal_changes_nothing_else() -> None:
+    """Check that head drops the map coordinates and changes nothing else.
+
+    Head is compared with its parent, the catalog format 2 revision. The
+    previous Public API revision still maps those four columns, but it can't
+    read or write either table: no managed database role holds any privilege
+    on them (``policyengine_api/data/v2/privileges.py``). Every table it can
+    use keeps every column.
+    """
+    database_url = _disposable_url()
+    config = _config()
+    engine = create_engine(database_url)
+
+    try:
+        command.downgrade(config, CATALOG_FORMAT_2_REVISION)
+        parent = sa.MetaData()
+        parent.reflect(engine)
+        command.upgrade(config, "head")
+        head = sa.MetaData()
+        head.reflect(engine)
+
+        assert set(head.tables) == set(parent.tables)
+        dropped_columns = sorted(
+            f"{table.name}.{column.name}"
+            for table in parent.tables.values()
+            for column in table.columns
+            if column.name not in head.tables[table.name].columns
+        )
+        added_columns = sorted(
+            f"{table.name}.{column.name}"
+            for table in head.tables.values()
+            for column in table.columns
+            if column.name not in parent.tables[table.name].columns
+        )
+        assert dropped_columns == sorted(
+            f"{table_name}.{column_name}"
+            for table_name in AREA_IMPACT_TABLES
+            for column_name in MAP_COORDINATE_COLUMNS
+        )
+        assert added_columns == []
+    finally:
+        command.upgrade(config, "head")
+        engine.dispose()
 
 
 def test_upgrade_to_head_validates_the_resulting_schema_against_metadata() -> None:
