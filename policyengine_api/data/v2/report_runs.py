@@ -1,8 +1,9 @@
 """Durable report-definition and report-run operations for API v2-alpha.
 
-No managed role can run these operations: they lock ``reports`` rows with
-``SELECT ... FOR UPDATE``, which needs ``UPDATE``, and only the simulation API's
-roles write report runs, with their own code.
+``set_report_type`` and ``create_report_run`` lock ``reports`` rows with
+``SELECT ... FOR UPDATE``, which needs ``UPDATE`` on ``reports``; no managed
+role holds it, so none can run them. The simulation API creates reports and
+report runs with its own code.
 """
 
 from __future__ import annotations

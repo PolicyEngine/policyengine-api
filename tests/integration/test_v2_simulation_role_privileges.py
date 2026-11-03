@@ -197,16 +197,18 @@ def test_modal_workers_write_their_run_status_and_results_only(
         reform_simulation_run_id=ids["run"],
         cliff_impact_result="{}",
     )
-    connection.execute(
+    finished_job = connection.execute(
         text(
             "UPDATE household_jobs SET status = 'succeeded', result = '{}', "
-            "completed_at = now() WHERE id = :id AND status = 'pending'"
+            "completed_at = now() WHERE id = :id AND status = 'pending' "
+            "RETURNING id"
         ),
         {"id": ids["household_job"]},
-    )
+    ).scalar_one()
     connection.execute(text("SELECT count(*) FROM parameter_values")).scalar_one()
 
     assert updated == ids["run"]
+    assert finished_job == ids["household_job"]
     _refused(
         connection,
         "INSERT INTO simulations (id, simulation_type, dataset_id, "

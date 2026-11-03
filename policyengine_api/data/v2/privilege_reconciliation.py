@@ -427,18 +427,12 @@ def skipped_roles(
 def check_declared_privileges(
     connection: Connection,
     declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
-    *,
-    roles_awaiting_creation: Collection[str] = (),
 ) -> list[PrivilegeEntry]:
     """Return every declared privilege a role doesn't effectively hold.
 
-    A missing role or table counts as missing every privilege declared for it,
-    except a missing role awaiting creation, which is skipped.
+    A missing role or table counts as missing every privilege declared for it;
+    leave out the roles ``skipped_roles`` returns to skip them.
     """
-    skipped = set(skipped_roles(connection, declared, roles_awaiting_creation))
-    declared = {
-        role: tables for role, tables in declared.items() if role not in skipped
-    }
     existing_roles = read_existing_roles(connection, list(declared))
     existing_tables = read_public_tables(connection)
 
@@ -493,10 +487,12 @@ def _verify(
     environment: str,
     environ: Mapping[str, str],
 ) -> int:
-    """Check every declared privilege, skipping roles not created yet.
+    """Check every declared privilege, skipping missing roles awaiting creation.
 
-    The roles skipped and the privileges missing are written to stdout and the
-    job summary under one heading.
+    A missing role in ``roles_awaiting_creation`` is skipped; any other missing
+    role counts as missing every privilege declared for it. The roles skipped
+    and the privileges missing are written to stdout and the job summary under
+    one heading.
     """
     skipped = skipped_roles(connection, declared, roles_awaiting_creation)
     checked = {role: tables for role, tables in declared.items() if role not in skipped}

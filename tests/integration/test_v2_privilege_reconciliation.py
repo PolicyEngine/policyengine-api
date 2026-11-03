@@ -23,6 +23,7 @@ from policyengine_api.data.v2.privilege_reconciliation import (
     apply_declared_privileges,
     check_declared_privileges,
     run,
+    skipped_roles,
 )
 from policyengine_api.data.v2.privileges import READ, TablePrivilege
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
@@ -150,13 +151,16 @@ def test_a_role_awaiting_creation_is_skipped_until_it_exists(
         plan, _defaults = apply_declared_privileges(
             connection, declared, roles_awaiting_creation={absent_role}
         )
+        skipped = skipped_roles(connection, declared, {absent_role})
         missing = check_declared_privileges(
-            connection, declared, roles_awaiting_creation={absent_role}
+            connection,
+            {name: tables for name, tables in declared.items() if name not in skipped},
         )
 
     assert plan.can_apply
     assert plan.skipped_roles == (absent_role,)
     assert plan.grants == (PrivilegeEntry(role, "regions", "SELECT"),)
+    assert skipped == (absent_role,)
     assert missing == []
     assert _has_privilege(superuser_engine, role, "regions", "SELECT")
 
@@ -229,5 +233,8 @@ def test_verify_fails_once_a_role_awaiting_creation_exists_without_its_privilege
 
     assert verify_status == 1
     assert f"`{role}` lacks SELECT on `regions`" in summary
-    assert f"`{absent_role}`" in summary
+    assert (
+        "Declared roles not created yet, skipped until an operator creates them: "
+        f"`{absent_role}`"
+    ) in summary
     assert summary.count("## v2 table privileges") == 1
