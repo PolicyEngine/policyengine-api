@@ -18,6 +18,10 @@ class PublicationEvidence:
     entity_counts: dict[str, int]
     fallback_summaries: tuple[tuple[str, str, int], ...]
     elapsed_seconds: float
+    # The catalog's versions whose parameter tree this publication wrote:
+    # model, version and tree rows. Empty when none needed one: each already
+    # has its tree, or was stored before catalog format 2 and gets none.
+    parameter_trees_written: tuple[tuple[str, str, int], ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         """Return the evidence as the JSON object printed after a publication."""
@@ -33,6 +37,10 @@ class PublicationEvidence:
                     "count": count,
                 }
                 for country_id, region_type, count in self.fallback_summaries
+            ],
+            "parameter_trees_written": [
+                {"model": model_name, "version": version, "rows": rows}
+                for model_name, version, rows in self.parameter_trees_written
             ],
             "elapsed_seconds": round(self.elapsed_seconds, 3),
         }

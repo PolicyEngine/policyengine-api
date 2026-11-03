@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.v2.metadata.common import (
     METADATA_RESPONSES,
+    PARAMETER_TREE_ERROR_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
     take_utc_instant_for_read,
@@ -29,6 +30,7 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
 )
 from policyengine_api.services.v2.metadata.types import (
     ParameterFilter,
+    ParameterTreeLevel,
     ParameterValueFilter,
 )
 
@@ -76,7 +78,19 @@ def build_v2_metadata_parameter_router(
     @router.get(
         "/parameters/children",
         response_model=MetadataParameterChildPageResponse,
-        summary="List direct children of one parameter path",
+        responses=PARAMETER_TREE_ERROR_RESPONSES,
+        summary="List one level of a catalog version's parameter tree",
+        description=(
+            "Lists the direct children of `parent_path` (the top level when "
+            "empty). With `reform_changeable=true`, only the children a reform "
+            "can change, sorted by label, with child counts that count only "
+            "those. Invalid query parameters return 422, including a malformed "
+            "policyengine_version, an unsupported country, and an unknown or "
+            "repeated parameter. A catalog version without a tree (publication "
+            "writes trees only for the versions it publishes and for the "
+            "installed version with catalog format 2) returns 503 with a "
+            "message naming it."
+        ),
     )
     def list_parameter_children(
         query: ParameterChildrenQueryDependency,
@@ -87,7 +101,10 @@ def build_v2_metadata_parameter_router(
             lambda reader: reader.list_parameter_children(
                 query.country_id,
                 query.policyengine_version,
-                parent_path=query.parent_path,
+                level=ParameterTreeLevel(
+                    parent_path=query.parent_path,
+                    reform_changeable=query.reform_changeable,
+                ),
                 offset=query.offset,
                 limit=query.limit,
             ),
