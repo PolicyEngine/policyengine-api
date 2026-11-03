@@ -168,9 +168,12 @@ gh workflow run process-v1-household-mirror-event.yml \
 ```
 
 The workflow starts an environment-specific Cloud SQL Auth Proxy and the
-command connects through it as `policyengine_schema_migrator`. The
-corresponding local command is intended only for an already authenticated
-operator with the same explicit settings and an active staging-only proxy:
+command connects through it as `policyengine_schema_migrator`. The workflow
+installs the runtime dependencies from `uv.lock` (`uv sync --frozen`), and the
+script runs the command through `uv run --frozen`, so a local run needs uv and
+uses the same locked versions. The corresponding local command is intended only
+for an already authenticated operator with the same explicit settings and an
+active staging-only proxy:
 
 ```bash
 bash .github/scripts/run_household_mirror_event_operator.sh \
