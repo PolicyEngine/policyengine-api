@@ -242,11 +242,17 @@ def test_certified_forecast_years_are_the_artifacts_years():
     assert spm.certified_spm_forecast_years() == (2022, 2035)
 
 
-@pytest.mark.parametrize("model_supports_spm", [False, True])
-def test_certified_forecast_years_are_none_without_a_certified_forecast(
-    monkeypatch, model_supports_spm
+@pytest.mark.parametrize(
+    ("model_supports_spm", "reason"),
+    [
+        (False, "the installed bundle certifies no SPM measurement configuration"),
+        (True, "The installed bundle has no certified SPM measurement configuration"),
+    ],
+)
+def test_certified_forecast_years_raise_without_a_certified_forecast(
+    monkeypatch, model_supports_spm, reason
 ):
-    """No certified forecast means no years, whether or not the model has SPM."""
+    """No certified forecast is an error, whether or not the model has SPM."""
     monkeypatch.setattr(spm, "_current_bundle", lambda: deepcopy(LEGACY_BUNDLE))
     monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: model_supports_spm)
 
@@ -255,11 +261,16 @@ def test_certified_forecast_years_are_none_without_a_certified_forecast(
         raise AssertionError(msg)
 
     monkeypatch.setattr(spm, "_selected_forecast", must_not_load)
-    assert spm.certified_spm_forecast_years() is None
+    with pytest.raises(spm.SPMValidationError) as caught:
+        spm.certified_spm_forecast_years()
+    assert caught.value.to_dict() == {
+        "code": "SPM_CONFIGURATION_UNAVAILABLE",
+        "message": f"The certified US SPM forecast is unavailable: {reason}",
+    }
 
 
 @pytest.mark.usefixtures("certified_bundle")
-def test_certified_forecast_years_are_none_when_the_forecast_cannot_load(
+def test_certified_forecast_years_raise_when_the_forecast_cannot_load(
     monkeypatch,
 ):
     def mismatched_artifact(_expected):
@@ -267,7 +278,15 @@ def test_certified_forecast_years_are_none_when_the_forecast_cannot_load(
         raise ValueError(msg)
 
     monkeypatch.setattr(spm, "_selected_forecast", mismatched_artifact)
-    assert spm.certified_spm_forecast_years() is None
+    with pytest.raises(spm.SPMValidationError) as caught:
+        spm.certified_spm_forecast_years()
+    assert caught.value.to_dict() == {
+        "code": "SPM_CONFIGURATION_UNAVAILABLE",
+        "message": (
+            "The certified US SPM forecast is unavailable: "
+            "Forecast content SHA256 mismatch"
+        ),
+    }
 
 
 @pytest.mark.usefixtures("certified_bundle")

@@ -171,15 +171,14 @@ class PolicyEngineCountry:
 
     def build_metadata(self) -> None:
         """Build the JSON-safe metadata document served by the metadata endpoints."""
-        economy_options = self.build_microsimulation_options()
         self.metadata = self._json_safe(
             {
                 "variables": self.build_variables(),
                 "parameters": self.build_parameters(),
                 "entities": self.build_entities(),
                 "variableModules": self.tax_benefit_system.variable_module_metadata,
-                "economy_options": economy_options,
-                "household_options": self.build_household_options(economy_options),
+                "economy_options": self.build_microsimulation_options(),
+                "household_options": self.build_household_options(),
                 "current_law_id": get_current_law_policy_id(self.country_id),
                 "basicInputs": self.tax_benefit_system.basic_inputs,
                 "modelled_policies": self.tax_benefit_system.modelled_policies,
@@ -319,35 +318,30 @@ class PolicyEngineCountry:
             options["datasets"] = datasets
         return options
 
-    def build_household_options(self, economy_options: dict) -> dict:
+    def build_household_options(self) -> dict:
         """Build the years offered for household calculations.
 
         Each year has the shape of an ``economy_options`` year. The US years
         are the certified SPM forecast's years up to the last CPI-U year
-        (``us_household_years``), or the society-wide years when the bundle
-        has no certified SPM forecast. The UK years follow the rule for the
-        UK society-wide years (``uk_economy_years``). Any other country
-        offers its society-wide years.
+        (``us_household_years``). Without a certified forecast that loads,
+        ``certified_spm_forecast_years`` raises SPMValidationError
+        (``SPM_CONFIGURATION_UNAVAILABLE``), so the metadata is not built and
+        no other years are offered in their place. The UK years follow the
+        rule for the UK society-wide years (``uk_economy_years``). Any other
+        country raises ValueError: only the countries the Public API serves
+        (``SupportedCountryId``) have household years.
         """
         parameters = self.tax_benefit_system.parameters
-        years = None
-        if self.country_id == "uk":
+        if self.country_id == "us":
+            years = us_household_years(parameters, certified_spm_forecast_years())
+        elif self.country_id == "uk":
             years = uk_economy_years(parameters)
-        elif self.country_id == "us":
-            forecast_years = certified_spm_forecast_years()
-            if forecast_years is None:
-                logger.warning(
-                    "The bundle has no certified SPM forecast; the US household "
-                    "years are the US society-wide years"
-                )
-            else:
-                years = us_household_years(parameters, forecast_years)
-        if years is None:
-            return {
-                "time_period": [
-                    dict(period) for period in economy_options.get("time_period", [])
-                ]
-            }
+        else:
+            msg = (
+                f"No household years are defined for country {self.country_id!r}: "
+                "only the countries the Public API serves have them"
+            )
+            raise ValueError(msg)
         return {"time_period": [{"name": year, "label": str(year)} for year in years]}
 
     def build_variables(self) -> dict:
