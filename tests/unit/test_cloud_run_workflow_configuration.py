@@ -14,6 +14,9 @@ from tests.unit.cloud_run_deploy_support import (
     pr_workflow as _pr_workflow,
 )
 from tests.unit.cloud_run_deploy_support import (
+    pr_workflow_jobs as _pr_workflow_jobs,
+)
+from tests.unit.cloud_run_deploy_support import (
     push_workflow as _push_workflow,
 )
 from tests.unit.cloud_run_deploy_support import (
@@ -168,6 +171,15 @@ def test_pr_build_and_test_jobs_require_simulation_bundle_compatibility():
     ):
         job = _workflow_job_block(workflow, job_name)
         assert compatibility_job in job
+
+
+def test_every_pull_request_checks_the_bundle_against_the_simulation_api():
+    """The check runs whatever files a pull request changes."""
+    job = _pr_workflow_jobs()["ensure-policyengine-bundle-supported-by-simulation-api"]
+    step_commands = [step["run"] for step in job["steps"] if "run" in step]
+
+    assert "bash .github/check-policyengine-bundle-supported.sh" in step_commands
+    assert not any("if-changed-from-base" in command for command in step_commands)
 
 
 def test_cloud_run_candidate_jobs_use_environment_scoped_migration_selectors():

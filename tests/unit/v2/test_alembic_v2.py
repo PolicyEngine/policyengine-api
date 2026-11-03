@@ -59,6 +59,7 @@ POOLER_URL = (
 # The catalog format 2 revision's parent, the countries revision.
 CATALOG_FORMAT_2_PARENT_REVISION = "fb1a3e40d3d6"
 CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
+AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -240,6 +241,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        AREA_IMPACT_COORDINATE_REVISION,
         CATALOG_FORMAT_2_REVISION,
         CATALOG_FORMAT_2_PARENT_REVISION,
         "fbb7488ebe8a",
@@ -660,6 +662,46 @@ def test_countries_revision_inserts_us_and_uk_and_replaces_country_checks() -> N
     assert "op.add_column(" not in upgrade
 
 
+AREA_IMPACT_COORDINATE_COLUMNS = frozenset(
+    (table_name, column_name)
+    for table_name in ("constituency_impacts", "local_authority_impacts")
+    for column_name in ("x", "y")
+)
+
+
+def test_area_impact_coordinate_removal_is_generated_and_reversible() -> None:
+    revision = (
+        REPO
+        / "migrations/v2/versions/e86f19a6c4da_drop_uk_area_impact_map_coordinates.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "f5c1d9b4685b"' in revision
+    assert "Post-generation" not in revision
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+    # The upgrade drops the four map coordinate columns and does nothing else.
+    assert len(re.findall(r"\bop\.\w+\(", upgrade)) == 4
+    dropped_columns = re.findall(
+        r'op\.drop_column\(\s*"(\w+)",\s*"(\w+)"\s*\)', upgrade
+    )
+    assert frozenset(dropped_columns) == AREA_IMPACT_COORDINATE_COLUMNS
+    # The downgrade adds each one back as the baseline created it: a required
+    # integer without a server default.
+    assert len(re.findall(r"\bop\.\w+\(", downgrade)) == 4
+    restored_columns = re.findall(
+        r'op\.add_column\(\s*"(\w+)",\s*sa\.Column\(\s*"(\w+)",\s*'
+        r"sa\.INTEGER\(\),\s*autoincrement=False,\s*nullable=False,?\s*\),?\s*\)",
+        downgrade,
+    )
+    assert frozenset(restored_columns) == AREA_IMPACT_COORDINATE_COLUMNS
+
+
 def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -> None:
     original = REPO / "migrations/v2"
     missing = tmp_path / "missing"
@@ -888,7 +930,7 @@ def test_catalog_format_2_revision_adds_only_nullable_columns() -> None:
 
 
 def test_parameter_tree_revision_creates_only_the_children_table() -> None:
-    """The revision after catalog format 2 creates the parameter tree's table.
+    """The revision after the coordinate removal creates the parameter tree's table.
 
     It is generated, creates the table with its two listing indexes and its
     parameter index, drops them on downgrade, and writes no data: rows are
@@ -898,7 +940,7 @@ def test_parameter_tree_revision_creates_only_the_children_table() -> None:
     children = [
         revision
         for revision in script.walk_revisions()
-        if revision.down_revision == CATALOG_FORMAT_2_REVISION
+        if revision.down_revision == AREA_IMPACT_COORDINATE_REVISION
     ]
     assert len(children) == 1
     assert children[0].revision == V2_ALEMBIC_HEAD_REVISION

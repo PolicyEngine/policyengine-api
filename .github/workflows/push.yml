@@ -148,7 +148,7 @@ jobs:
         run: sudo apt-get install -y jq
       - name: Set up uv for installed bundle validation
         uses: astral-sh/setup-uv@v6
-      - name: Check simulation API supports PolicyEngine bundle
+      - name: Check the PolicyEngine bundle is the simulation API's latest
         run: bash .github/check-policyengine-bundle-supported.sh
 
   versioning:
@@ -647,7 +647,7 @@ jobs:
         run: sudo apt-get install -y jq
       - name: Set up uv for installed bundle validation
         uses: astral-sh/setup-uv@v6
-      - name: Check simulation API supports PolicyEngine bundle
+      - name: Check the PolicyEngine bundle is the simulation API's latest
         run: bash .github/check-policyengine-bundle-supported.sh
 
   migrate-v1-production-cloud-sql:
