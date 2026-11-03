@@ -81,12 +81,19 @@ class _FailingMetadataReader:
         raise RuntimeError(msg)
 
 
+@pytest.fixture(autouse=True)
+def default_readiness_probe_reports_ready(monkeypatch):
+    """Report ready from the default probe, which needs deployed configuration."""
+    monkeypatch.setattr(
+        "policyengine_api.fastapi_routes.dependencies.is_ready", lambda: True
+    )
+
+
 def _dependencies():
     return NativeRouteDependencies(
         readiness_probe=lambda: True,
         gateway_client_factory=_HealthySimulationGateway,
         metadata_reader_factory=_MetadataReader,
-        specification_provider=lambda: {"openapi": "3.0.0"},
     )
 
 
@@ -343,7 +350,7 @@ def test_request_logging_runs_for_fastapi_native_health_routes():
     assert log_payload["migration"]["route_impl"] == "fastapi_native"
 
 
-def test_native_readiness_logs_the_implementation_that_served_it():
+def test_native_health_logs_the_implementation_that_served_it():
     with patch("policyengine_api.migration_logging.logger") as mock_logger:
         response = TestClient(
             create_asgi_app(
@@ -351,12 +358,12 @@ def test_native_readiness_logs_the_implementation_that_served_it():
                 route_settings=_settings(health=RouteImplementation.FASTAPI_NATIVE),
                 dependencies=_dependencies(),
             )
-        ).get("/readiness-check")
+        ).get("/health")
 
     assert response.status_code == 200
     assert mock_logger.log_struct.call_count == 1
     log_payload = mock_logger.log_struct.call_args.args[0]
-    assert log_payload["path"] == "/readiness-check"
+    assert log_payload["path"] == "/health"
     assert log_payload["migration"]["route_group"] == "health"
     assert log_payload["migration"]["route_impl"] == "fastapi_native"
 
@@ -597,7 +604,6 @@ def test_native_route_failure_logs_country_and_actual_implementation():
         readiness_probe=lambda: True,
         gateway_client_factory=_HealthySimulationGateway,
         metadata_reader_factory=_FailingMetadataReader,
-        specification_provider=lambda: {"openapi": "3.0.0"},
     )
 
     with patch("policyengine_api.migration_logging.logger") as mock_logger:

@@ -66,21 +66,14 @@ def _bundle_package_versions() -> dict[str, str]:
     return versions
 
 
-def _registered_application(
-    registry: dict,
-    route_kind: str,
-    route_version: str,
-) -> str:
-    routes = registry.get(route_kind) if isinstance(registry, dict) else None
-    app = routes.get(route_version) if isinstance(routes, dict) else None
-    if not isinstance(app, str) or not app:
-        msg = f"The worker registry has no {route_kind} {route_version} application"
-        raise ValueError(msg)
-    return app
-
-
 def validate_installed_worker(registry: dict, expected_bundle: str) -> dict | None:
-    """Validate local package versions, worker routes, and SPM capability."""
+    """Validate local package versions and the worker's SPM capability.
+
+    ``.github/request-simulation-model-versions.sh`` checks the registry's
+    PolicyEngine.py routes before this runs. The gateway routes the Public
+    API's requests by PolicyEngine.py version, so the US and UK routes are not
+    compared.
+    """
     versions = _bundle_package_versions()
     if versions["policyengine"] != expected_bundle:
         msg = "The bundle manifest differs from the release requirement"
@@ -92,20 +85,6 @@ def validate_installed_worker(registry: dict, expected_bundle: str) -> dict | No
     for package_name, expected_version in versions.items():
         if distribution_version(package_name) != expected_version:
             msg = f"Installed {package_name} does not match the bundle manifest"
-            raise ValueError(msg)
-
-    bundle_app = _registered_application(registry, "policyengine", expected_bundle)
-    for country_id, package_name in (
-        ("us", "policyengine-us"),
-        ("uk", "policyengine-uk"),
-    ):
-        country_app = _registered_application(
-            registry,
-            country_id,
-            versions[package_name],
-        )
-        if country_app != bundle_app:
-            msg = f"The {country_id} route resolves to a different worker application"
             raise ValueError(msg)
 
     return validate_worker_spm(

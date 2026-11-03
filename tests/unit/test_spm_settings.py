@@ -238,6 +238,39 @@ def test_metadata_exposes_typed_defaults_only_when_available():
 
 
 @pytest.mark.usefixtures("certified_bundle")
+def test_certified_forecast_years_are_the_artifacts_years():
+    assert spm.certified_spm_forecast_years() == (2022, 2035)
+
+
+@pytest.mark.parametrize("model_supports_spm", [False, True])
+def test_certified_forecast_years_are_none_without_a_certified_forecast(
+    monkeypatch, model_supports_spm
+):
+    """No certified forecast means no years, whether or not the model has SPM."""
+    monkeypatch.setattr(spm, "_current_bundle", lambda: deepcopy(LEGACY_BUNDLE))
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: model_supports_spm)
+
+    def must_not_load(_expected):
+        msg = "No certified forecast should be loaded"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(spm, "_selected_forecast", must_not_load)
+    assert spm.certified_spm_forecast_years() is None
+
+
+@pytest.mark.usefixtures("certified_bundle")
+def test_certified_forecast_years_are_none_when_the_forecast_cannot_load(
+    monkeypatch,
+):
+    def mismatched_artifact(_expected):
+        msg = "Forecast content SHA256 mismatch"
+        raise ValueError(msg)
+
+    monkeypatch.setattr(spm, "_selected_forecast", mismatched_artifact)
+    assert spm.certified_spm_forecast_years() is None
+
+
+@pytest.mark.usefixtures("certified_bundle")
 def test_selected_area_must_exist_in_artifact():
     with pytest.raises(spm.SPMValidationError) as caught:
         spm.normalize_spm_selection(
@@ -317,6 +350,36 @@ def test_typed_worker_year_error_is_preserved(status):
     with pytest.raises(spm.SPMValidationError) as caught:
         raise_worker_spm_error(httpx.Response(status, json={"errors": [detail]}))
     assert caught.value.to_dict() == detail
+
+
+@pytest.mark.parametrize("status", [400, 422])
+def test_typed_worker_dataset_year_error_is_preserved(status):
+    import httpx
+
+    from policyengine_api.worker_spm import raise_worker_spm_error
+
+    detail = {
+        "code": "DATASET_YEAR_UNAVAILABLE",
+        "message": (
+            "UK results are available for 2024 to 2032. 2033 is outside the years "
+            "the current UK model and data cover."
+        ),
+    }
+    with pytest.raises(spm.SPMValidationError) as caught:
+        raise_worker_spm_error(httpx.Response(status, json={"errors": [detail]}))
+    assert caught.value.to_dict() == detail
+
+
+def test_an_unknown_worker_error_code_is_left_to_the_caller():
+    import httpx
+
+    from policyengine_api.worker_spm import raise_worker_spm_error
+
+    # An unknown code keeps today's handling: the caller sees the 400 itself.
+    detail = {"code": "SOME_FUTURE_CODE", "message": "Not a public input error"}
+    assert (
+        raise_worker_spm_error(httpx.Response(400, json={"errors": [detail]})) is None
+    )
 
 
 def test_variadic_constructor_alone_does_not_claim_support():
@@ -545,7 +608,7 @@ def test_a_bundle_this_build_cannot_read_reports_no_validator_internals(
 
 @pytest.mark.usefixtures("certified_bundle")
 def test_a_country_package_without_a_simulation_is_typed_not_internal(monkeypatch):
-    """A partially installed model must not make /readiness-check raise.
+    """A partially installed model must not make /health raise.
 
     `is_ready` recovers from RuntimeError and ValueError only, so an escaping
     AttributeError turns the health check into a 500 and every US request with

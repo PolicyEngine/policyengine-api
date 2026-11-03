@@ -6,10 +6,13 @@ from typing import Generic, Literal, TypeVar
 
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
+    MetadataCatalogParametersResult,
+    MetadataCatalogVariablesResult,
     MetadataDataset,
     MetadataDetailResult,
     MetadataEconomyOptionsResult,
     MetadataModel,
+    MetadataModelCatalogResult,
     MetadataModelSelectionResult,
     MetadataModelVersionDetail,
     MetadataPageResult,
@@ -139,3 +142,21 @@ class MetadataEconomyOptionsResponse(
     MetadataResourceSuccessResponse[MetadataEconomyOptionsResult]
 ):
     """Success response holding the options for configuring an economy comparison."""
+
+
+class MetadataModelCatalogResponse(
+    MetadataResourceSuccessResponse[MetadataModelCatalogResult]
+):
+    """Success response holding the small parts of one catalog version."""
+
+
+class MetadataCatalogVariablesResponse(
+    MetadataResourceSuccessResponse[MetadataCatalogVariablesResult]
+):
+    """Success response holding every variable of one catalog version."""
+
+
+class MetadataCatalogParametersResponse(
+    MetadataResourceSuccessResponse[MetadataCatalogParametersResult]
+):
+    """Success response holding parameters fetched by name, with their values."""

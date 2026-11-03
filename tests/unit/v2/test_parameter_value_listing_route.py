@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from policyengine_api.services.v2.metadata.types import ParameterValueFilter
@@ -9,7 +11,13 @@ from policyengine_api.services.v2.metadata.types import ParameterValueFilter
 from .test_metadata_routes import ResourceReader, _client, _resource_results
 
 
-def test_listing_forwards_every_query_parameter() -> None:
+def test_listing_forwards_every_query_parameter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from policyengine_api.fastapi_routes.v2.metadata import common
+
+    request_instant = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(common, "utc_now", lambda: request_instant)
     results, ids = _resource_results()
     reader = ResourceReader(results)
 
@@ -32,7 +40,7 @@ def test_listing_forwards_every_query_parameter() -> None:
             ("uk", "4.19.0"),
             {
                 "value_filter": ParameterValueFilter(
-                    parameter_id=ids["parameter_id"], current=True
+                    parameter_id=ids["parameter_id"], current=True, now=request_instant
                 ),
                 "offset": 5,
                 "limit": 7,

@@ -36,6 +36,7 @@ EXPECTED_TEST_JOBS = {
     ("push.yml", "deploy-cloud-run-candidate"),
     ("push.yml", "deploy-cloud-run-staging"),
     ("push.yml", "parallel-live-simulation-tests-staging-cloud-run"),
+    ("push.yml", "release-tests"),
     ("v2-integration-check.yml", "catalog-runtime-integration"),
 }
 # Operational jobs that run application code against real databases with the

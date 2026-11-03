@@ -52,10 +52,6 @@ class UserHouseholdAssociation(TimestampedModel, table=True):
             name="uq_user_household_associations_id_country",
         ),
         sa.CheckConstraint(
-            "country_id IN ('us', 'uk')",
-            name="ck_user_household_associations_country",
-        ),
-        sa.CheckConstraint(
             "household_id IS NOT NULL OR legacy_household_id IS NOT NULL",
             name="ck_user_household_associations_household_ref",
         ),
@@ -91,7 +87,11 @@ class UserHouseholdAssociation(TimestampedModel, table=True):
     )
     household_id: UUID | None = Field(default=None, index=True)
     legacy_household_id: int | None = Field(default=None, sa_type=sa.BigInteger)
-    country_id: str = Field(max_length=2)
+    country_id: str = Field(
+        max_length=2,
+        foreign_key="countries.id",
+        ondelete="RESTRICT",
+    )
     name: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, sa_type=sa.Text)
 
@@ -112,10 +112,6 @@ class UserPolicy(TimestampedModel, table=True):
             "id",
             "country_id",
             name="uq_user_policies_id_country",
-        ),
-        sa.CheckConstraint(
-            "country_id IN ('us', 'uk')",
-            name="ck_user_policies_country",
         ),
         sa.CheckConstraint(
             "policy_id IS NOT NULL OR legacy_policy_id IS NOT NULL",
@@ -157,7 +153,11 @@ class UserPolicy(TimestampedModel, table=True):
     )
     policy_id: UUID | None = Field(default=None, index=True)
     legacy_policy_id: int | None = Field(default=None, sa_type=sa.BigInteger)
-    country_id: str = Field(max_length=2)
+    country_id: str = Field(
+        max_length=2,
+        foreign_key="countries.id",
+        ondelete="RESTRICT",
+    )
     name: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, sa_type=sa.Text)
     baseline: str | None = Field(default=None, max_length=16)
@@ -186,10 +186,6 @@ class UserSimulationAssociation(TimestampedModel, table=True):
             name="uq_user_simulation_associations_id_country",
         ),
         sa.CheckConstraint(
-            "country_id IN ('us', 'uk')",
-            name="ck_user_simulation_associations_country",
-        ),
-        sa.CheckConstraint(
             "simulation_id IS NOT NULL OR legacy_simulation_id IS NOT NULL",
             name="ck_user_simulation_associations_simulation_ref",
         ),
@@ -214,7 +210,11 @@ class UserSimulationAssociation(TimestampedModel, table=True):
     )
     simulation_id: UUID | None = Field(default=None, index=True)
     legacy_simulation_id: int | None = Field(default=None, sa_type=sa.BigInteger)
-    country_id: str = Field(max_length=2)
+    country_id: str = Field(
+        max_length=2,
+        foreign_key="countries.id",
+        ondelete="RESTRICT",
+    )
     name: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, sa_type=sa.Text)
     # Retired; see the module docstring.
@@ -238,10 +238,6 @@ class UserReportAssociation(TimestampedModel, table=True):
             "id",
             "country_id",
             name="uq_user_report_associations_id_country",
-        ),
-        sa.CheckConstraint(
-            "country_id IN ('us', 'uk')",
-            name="ck_user_report_associations_country",
         ),
         sa.CheckConstraint(
             "report_id IS NOT NULL OR legacy_report_id IS NOT NULL",
@@ -273,7 +269,11 @@ class UserReportAssociation(TimestampedModel, table=True):
     )
     report_id: UUID | None = Field(default=None, index=True)
     legacy_report_id: int | None = Field(default=None, sa_type=sa.BigInteger)
-    country_id: str = Field(max_length=2)
+    country_id: str = Field(
+        max_length=2,
+        foreign_key="countries.id",
+        ondelete="RESTRICT",
+    )
     name: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, sa_type=sa.Text)
     user_policy_id: UUID | None = Field(

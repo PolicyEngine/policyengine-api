@@ -40,6 +40,7 @@ TARGET_ENVIRONMENT = "test-foundation"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 POST_BASELINE_TABLE_NAMES = frozenset(
     {
+        "countries",
         "legacy_household_mappings",
         "legacy_policy_mappings",
         "legacy_user_mappings",
@@ -54,6 +55,8 @@ POOLER_URL = (
     f"{PROJECT_REF}:test-password@aws-0-us-east-2.pooler.supabase.com:5432/"
     "postgres?sslmode=require"
 )
+# The catalog format 2 revision's parent, the countries revision.
+CATALOG_FORMAT_2_PARENT_REVISION = "fb1a3e40d3d6"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -235,6 +238,9 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        "f5c1d9b4685b",
+        CATALOG_FORMAT_2_PARENT_REVISION,
+        "fbb7488ebe8a",
         "91af4fc8d8c1",
         "60d6518b6a98",
         "439303be14fe",
@@ -495,7 +501,6 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
         / "migrations/v2/versions/fbb7488ebe8a_link_signed_in_users_to_v1_anchored_.py"
     ).read_text(encoding="utf-8")
 
-    assert V2_ALEMBIC_HEAD_REVISION == "fbb7488ebe8a"
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
@@ -563,6 +568,135 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
     assert (
         '"users", "primary_country", existing_type=sa.VARCHAR(length=2), nullable=True'
     ) in upgrade
+
+
+COUNTRY_REFERENCE_COLUMNS = (
+    ("users", "primary_country"),
+    ("households", "country_id"),
+    ("policies", "country_id"),
+    ("user_household_associations", "country_id"),
+    ("user_policies", "country_id"),
+    ("user_simulation_associations", "country_id"),
+    ("user_report_associations", "country_id"),
+)
+# The generated downgrade restores each check in PostgreSQL's reflected form
+# of ``<column> IN ('us', 'uk')``.
+US_AND_UK = "ANY (ARRAY['us'::character varying, 'uk'::character varying]::text[])"
+REPLACED_COUNTRY_CHECKS = {
+    "ck_users_primary_country": ("users", f"primary_country::text = {US_AND_UK}"),
+    "ck_households_country": ("households", f"country_id::text = {US_AND_UK}"),
+    "ck_policies_country": ("policies", f"country_id::text = {US_AND_UK}"),
+    "ck_user_household_associations_country": (
+        "user_household_associations",
+        f"country_id::text = {US_AND_UK}",
+    ),
+    "ck_user_policies_country": ("user_policies", f"country_id::text = {US_AND_UK}"),
+    "ck_user_simulation_associations_country": (
+        "user_simulation_associations",
+        f"country_id::text = {US_AND_UK}",
+    ),
+    "ck_user_report_associations_country": (
+        "user_report_associations",
+        f"country_id::text = {US_AND_UK}",
+    ),
+}
+
+
+def _countries_revision_source() -> str:
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    countries_revision = next(
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == "fbb7488ebe8a"
+    )
+    assert countries_revision.revision == CATALOG_FORMAT_2_PARENT_REVISION
+    assert countries_revision.path is not None
+    return Path(countries_revision.path).read_text(encoding="utf-8")
+
+
+def test_countries_revision_inserts_us_and_uk_and_replaces_country_checks() -> None:
+    revision = _countries_revision_source()
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert revision.count("op.create_table(") == 1
+    assert 'op.create_table(\n        "countries"' in upgrade
+    assert "ck_countries_society_wide_requires_household" in upgrade
+    assert 'op.drop_table("countries")' in downgrade
+    # The one hand-written operation, an approved exception to generated-only
+    # revisions: the US and UK rows, inserted before the foreign keys that
+    # existing rows must satisfy. The generated downgrade drops them with the
+    # table.
+    assert revision.count("Approved hand-written data operation") == 1
+    assert revision.count("Post-generation correction") == 0
+    assert revision.count("op.bulk_insert(") == 1
+    assert "op.execute(" not in revision
+    inserted_rows = upgrade[
+        upgrade.index("op.bulk_insert(") : upgrade.index("op.create_foreign_key(")
+    ]
+    for country_id in ("uk", "us"):
+        assert f'"id": "{country_id}"' in inserted_rows
+    assert inserted_rows.count('"household_enabled": True') == 2
+    assert inserted_rows.count('"society_wide_enabled": True') == 2
+    for table_name, column_name in COUNTRY_REFERENCE_COLUMNS:
+        key_name = f"fk_{table_name}_{column_name}_countries"
+        assert key_name in upgrade
+        assert key_name in downgrade
+    assert upgrade.count('ondelete="RESTRICT"') == len(COUNTRY_REFERENCE_COLUMNS)
+    for check_name, (table_name, expression) in REPLACED_COUNTRY_CHECKS.items():
+        assert check_name in upgrade
+        assert f'"{table_name}"' in upgrade
+        assert check_name in downgrade
+        assert expression in downgrade
+    assert "op.drop_column(" not in upgrade
+    assert "op.add_column(" not in upgrade
+
+
+AREA_IMPACT_COORDINATE_COLUMNS = frozenset(
+    (table_name, column_name)
+    for table_name in ("constituency_impacts", "local_authority_impacts")
+    for column_name in ("x", "y")
+)
+
+
+def test_area_impact_coordinate_removal_is_generated_and_reversible() -> None:
+    revision = (
+        REPO
+        / "migrations/v2/versions/e86f19a6c4da_drop_uk_area_impact_map_coordinates.py"
+    ).read_text(encoding="utf-8")
+
+    assert V2_ALEMBIC_HEAD_REVISION == "e86f19a6c4da"
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "f5c1d9b4685b"' in revision
+    assert "Post-generation" not in revision
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+    # The upgrade drops the four map coordinate columns and does nothing else.
+    assert len(re.findall(r"\bop\.\w+\(", upgrade)) == 4
+    dropped_columns = re.findall(
+        r'op\.drop_column\(\s*"(\w+)",\s*"(\w+)"\s*\)', upgrade
+    )
+    assert frozenset(dropped_columns) == AREA_IMPACT_COORDINATE_COLUMNS
+    # The downgrade adds each one back as the baseline created it: a required
+    # integer without a server default.
+    assert len(re.findall(r"\bop\.\w+\(", downgrade)) == 4
+    restored_columns = re.findall(
+        r'op\.add_column\(\s*"(\w+)",\s*sa\.Column\(\s*"(\w+)",\s*'
+        r"sa\.INTEGER\(\),\s*autoincrement=False,\s*nullable=False,?\s*\),?\s*\)",
+        downgrade,
+    )
+    assert frozenset(restored_columns) == AREA_IMPACT_COORDINATE_COLUMNS
 
 
 def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -> None:
@@ -739,3 +873,54 @@ def test_v2_environment_commits_after_persistent_target_qualification() -> None:
     assert "current_heads != previous_heads" in env_source
     assert "current_heads == script_heads" in env_source
     assert "validate_v2_head_schema(connection, target_metadata)" in env_source
+
+
+def test_catalog_format_2_revision_adds_only_nullable_columns() -> None:
+    """The revision after the countries revision adds catalog format 2's columns.
+
+    It is generated, adds each column as nullable so versions published earlier
+    keep them empty, drops them on downgrade, and writes no data.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == CATALOG_FORMAT_2_PARENT_REVISION
+    ]
+    assert len(children) == 1
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    added_columns = {
+        "tax_benefit_model_versions": ("catalog_format", "entities", "basic_inputs"),
+        "variables": (
+            "is_input_variable",
+            "hidden_input",
+            "module_name",
+            "adds_parameter_path",
+            "subtracts_parameter_path",
+            "enum_values",
+            "unit",
+            "definition_period",
+        ),
+        "parameters": ("economy", "household"),
+    }
+    column_count = sum(len(columns) for columns in added_columns.values())
+    assert upgrade.count("op.add_column(") == column_count
+    assert upgrade.count("nullable=True") == column_count
+    assert downgrade.count("op.drop_column(") == column_count
+    for table_name, columns in added_columns.items():
+        for column_name in columns:
+            assert f'"{column_name}"' in upgrade
+            assert f'op.drop_column("{table_name}", "{column_name}")' in downgrade
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "server_default" not in body

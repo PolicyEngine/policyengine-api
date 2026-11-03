@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -15,10 +16,12 @@ from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session, select
 
+from policyengine_api.data.v2.catalog.extraction import extract_catalog
 from policyengine_api.data.v2.catalog.publication import (
     CatalogPublicationError,
     publish_catalog,
 )
+from policyengine_api.data.v2.catalog.records import EnumValueRecord
 from policyengine_api.data.v2.models import (
     Dataset,
     DatasetVersion,
@@ -30,7 +33,26 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
-from tests.fixtures.v2_catalog import normalized_catalog
+from tests.fixtures.v2_catalog import (
+    POLICYENGINE_VERSION,
+    add_format_2_variable_records,
+    bundle,
+    installed_version,
+    normalized_catalog,
+    source_models,
+)
+from tests.fixtures.v2_catalog_value_shapes import (
+    PARAMETER_CASES,
+    REGION_FILTER_VALUES,
+    value_shape_catalog,
+)
+from tests.integration.catalog_rows import (
+    CATALOG_COLUMNS,
+    assert_catalog_stored_unchanged,
+    stored_catalog_rows,
+    stored_parameter_values,
+    strict_json,
+)
 
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
@@ -340,3 +362,274 @@ def test_new_version_is_additive_and_concurrent_retries_serialize(
         "reports": 0,
         "report_runs": 0,
     }
+
+
+def test_publication_stores_every_value_shape_unchanged(
+    publication_engine: Engine,
+) -> None:
+    catalog = value_shape_catalog()
+
+    publish_catalog(publication_engine, catalog)
+    # Publishing the same version again compares every stored row with the
+    # catalog in both directions and fails on any difference, so this also
+    # checks that the comparison reads each shape back as it was written.
+    publish_catalog(publication_engine, catalog)
+
+    assert_catalog_stored_unchanged(publication_engine, catalog)
+    stored_values = stored_parameter_values(publication_engine)
+    us_model = catalog.country("us").model.name
+    for case in PARAMETER_CASES:
+        assert [
+            value_json
+            for (model_name, parameter_name, _start), (value_json, _end) in sorted(
+                stored_values.items()
+            )
+            if (model_name, parameter_name) == (us_model, case.name)
+        ] == [strict_json(value.stored_value) for value in case.values], case.name
+
+    stored_regions = stored_catalog_rows(publication_engine, "regions")
+    filter_value_index = CATALOG_COLUMNS["regions"].index("filter_value") - 1
+    for (country_id, code), filter_value in REGION_FILTER_VALUES.items():
+        model_name = catalog.country(country_id).model.name
+        stored_columns = json.loads(stored_regions[(model_name, code)])
+        assert stored_columns[filter_value_index] == filter_value, code
+
+
+def _format_2_values(engine: Engine) -> dict[str, object]:
+    """Return the US version's stored catalog format 2 fields."""
+    with engine.connect() as connection:
+        version = connection.execute(
+            text(
+                "SELECT version.catalog_format, version.entities, version.basic_inputs "
+                "FROM tax_benefit_model_versions AS version "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = 'policyengine-us'"
+            )
+        ).one()
+        variable = connection.execute(
+            text(
+                "SELECT is_input_variable, hidden_input, module_name, "
+                "adds_parameter_path, subtracts_parameter_path, enum_values, "
+                "unit, definition_period "
+                "FROM variables WHERE name = 'employment_income' "
+                "AND tax_benefit_model_version_id = ("
+                "SELECT version.id FROM tax_benefit_model_versions AS version "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = 'policyengine-us')"
+            )
+        ).one()
+        parameter = connection.execute(
+            text(
+                "SELECT economy, household FROM parameters "
+                "WHERE name = 'gov.example.rate' "
+                "AND tax_benefit_model_version_id = ("
+                "SELECT version.id FROM tax_benefit_model_versions AS version "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = 'policyengine-us')"
+            )
+        ).one()
+    return {
+        "version": tuple(version),
+        "variable": tuple(variable),
+        "parameter": tuple(parameter),
+    }
+
+
+def _clear_format_2_fields(engine: Engine) -> None:
+    """Make every stored version look as if published before catalog format 2."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE tax_benefit_model_versions SET catalog_format = NULL, "
+                "entities = NULL, basic_inputs = NULL"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE variables SET is_input_variable = NULL, hidden_input = NULL, "
+                "module_name = NULL, adds_parameter_path = NULL, "
+                "subtracts_parameter_path = NULL, enum_values = NULL, "
+                "unit = NULL, definition_period = NULL"
+            )
+        )
+        connection.execute(
+            text("UPDATE parameters SET economy = NULL, household = NULL")
+        )
+
+
+def test_publication_stores_catalog_format_2_fields(
+    publication_engine: Engine,
+) -> None:
+    publish_catalog(publication_engine, normalized_catalog())
+
+    assert _format_2_values(publication_engine) == {
+        "version": (
+            2,
+            [
+                {"key": "person", "plural": "people", "is_person": True},
+                {"key": "household", "plural": "households", "is_person": False},
+            ],
+            ["employment_income"],
+        ),
+        "variable": (
+            True,
+            False,
+            "household.income.employment_income",
+            None,
+            None,
+            None,
+            "currency-USD",
+            "year",
+        ),
+        "parameter": (True, False),
+    }
+
+
+def test_version_stored_before_format_2_keeps_its_fields_empty_on_republish(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+    publish_catalog(publication_engine, catalog)
+    _clear_format_2_fields(publication_engine)
+    before_ids = _identifiers(publication_engine)
+
+    result = publish_catalog(publication_engine, catalog)
+
+    assert result.as_dict()["outcome"] == "ok"
+    assert _identifiers(publication_engine) == before_ids
+    assert _format_2_values(publication_engine) == {
+        "version": (None, None, None),
+        "variable": (None, None, None, None, None, None, None, None),
+        "parameter": (None, None),
+    }
+
+
+def test_version_stored_with_format_2_fails_when_a_format_2_field_changes(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+    publish_catalog(publication_engine, catalog)
+    before_counts = _counts(publication_engine)
+    us = catalog.country("us")
+    changed_parameter = replace(us.parameters[0], household=True)
+    changed = replace(
+        catalog,
+        countries=(
+            replace(us, parameters=(changed_parameter,)),
+            catalog.country("uk"),
+        ),
+    )
+
+    with pytest.raises(CatalogPublicationError, match="differs"):
+        publish_catalog(publication_engine, changed)
+
+    assert _counts(publication_engine) == before_counts
+    assert _format_2_values(publication_engine)["parameter"] == (True, False)
+
+
+def _catalog_with_format_2_variable_records():
+    models = source_models()
+    add_format_2_variable_records(models["us"])
+    return extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    )
+
+
+def _stored_us_variables(engine: Engine) -> dict[str, tuple[object, ...]]:
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT variable.name, variable.enum_values, "
+                "variable.adds_parameter_path, variable.subtracts_parameter_path, "
+                "variable.unit, variable.definition_period "
+                "FROM variables AS variable "
+                "JOIN tax_benefit_model_versions AS version "
+                "ON version.id = variable.tax_benefit_model_version_id "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = 'policyengine-us'"
+            )
+        ).all()
+    return {row[0]: tuple(row[1:]) for row in rows}
+
+
+def _with_changed_us_variable(catalog, name: str, **changes: object):
+    us = catalog.country("us")
+    variables = tuple(
+        replace(variable, **changes) if variable.name == name else variable
+        for variable in us.variables
+    )
+    return replace(
+        catalog,
+        countries=(replace(us, variables=variables), catalog.country("uk")),
+    )
+
+
+def test_enum_labels_parameter_paths_units_and_periods_round_trip_exactly(
+    publication_engine: Engine,
+) -> None:
+    catalog = _catalog_with_format_2_variable_records()
+
+    publish_catalog(publication_engine, catalog)
+    before_ids = _identifiers(publication_engine)
+    stored = _stored_us_variables(publication_engine)
+    republished = publish_catalog(publication_engine, catalog)
+
+    assert stored["filing_status"] == (
+        [{"value": "SINGLE", "label": "Single"}, {"value": "JOINT", "label": 2}],
+        None,
+        None,
+        None,
+        "year",
+    )
+    assert type(stored["filing_status"][0][1]["label"]) is int
+    assert stored["countable_income"] == (
+        None,
+        "gov.example.countable_income",
+        "gov.example.deductions",
+        "currency-USD",
+        "month",
+    )
+    assert republished.as_dict()["outcome"] == "ok"
+    assert _identifiers(publication_engine) == before_ids
+
+
+@pytest.mark.parametrize(
+    ("variable_name", "changes"),
+    [
+        (
+            "filing_status",
+            {
+                "enum_values": (
+                    EnumValueRecord(value="SINGLE", label="Single filer"),
+                    EnumValueRecord(value="JOINT", label=2),
+                )
+            },
+        ),
+        ("countable_income", {"adds_parameter_path": "gov.example.deductions"}),
+        ("countable_income", {"subtracts_parameter_path": None}),
+        ("filing_status", {"unit": "currency-USD"}),
+        ("countable_income", {"definition_period": "year"}),
+    ],
+)
+def test_republication_detects_a_changed_enum_label_parameter_path_unit_or_period(
+    publication_engine: Engine,
+    variable_name: str,
+    changes: dict[str, object],
+) -> None:
+    catalog = _catalog_with_format_2_variable_records()
+    publish_catalog(publication_engine, catalog)
+    stored = _stored_us_variables(publication_engine)
+
+    with pytest.raises(
+        CatalogPublicationError,
+        match=r"^persisted us catalog differs from PolicyEngine.py$",
+    ):
+        publish_catalog(
+            publication_engine,
+            _with_changed_us_variable(catalog, variable_name, **changes),
+        )
+
+    assert _stored_us_variables(publication_engine) == stored

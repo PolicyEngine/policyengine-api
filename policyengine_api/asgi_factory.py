@@ -19,14 +19,8 @@ from starlette.routing import Match, Mount
 
 from policyengine_api.constants import VERSION
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-from policyengine_api.fastapi_routes.health import (
-    build_core_health_router,
-    build_readiness_router,
-)
+from policyengine_api.fastapi_routes.health import build_core_health_router
 from policyengine_api.fastapi_routes.metadata import build_metadata_router
-from policyengine_api.fastapi_routes.specification import (
-    build_specification_router,
-)
 from policyengine_api.fastapi_routes.v2.errors import (
     V2AuthenticationRequiredError,
     V2AuthenticationUnavailableError,
@@ -53,6 +47,7 @@ from policyengine_api.request_context import (
     current_observability_id,
     generate_request_id,
 )
+from policyengine_api.vary_headers import UniqueVaryMiddleware
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
@@ -420,10 +415,6 @@ def _include_native_routers(
     """Include the always-native routers and those the settings select."""
     app.include_router(build_core_health_router(dependencies))
     app.include_router(build_v2_router(dependencies))
-    if route_settings.health is RouteImplementation.FASTAPI_NATIVE:
-        app.include_router(build_readiness_router(dependencies))
-    if route_settings.specification is RouteImplementation.FASTAPI_NATIVE:
-        app.include_router(build_specification_router(dependencies))
     if route_settings.metadata is RouteImplementation.FASTAPI_NATIVE:
         app.include_router(build_metadata_router(dependencies))
 
@@ -471,7 +462,9 @@ def create_asgi_app(
     app.mount("/", WSGIMiddleware(wsgi_app))
     # The public API already permits every web origin. Use the standard ASGI
     # implementation while preserving the existing reflected-origin response.
-    return CORSMiddleware(
+    # UniqueVaryMiddleware wraps it, because CORS and gzip each append to Vary
+    # values a route may already have named.
+    cors_app = CORSMiddleware(
         app=app,
         allow_origin_regex=".*",
         allow_methods=["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
@@ -480,7 +473,10 @@ def create_asgi_app(
             REQUEST_ID_HEADER,
             OBSERVABILITY_ID_HEADER,
             "WWW-Authenticate",
+            # v2 metadata responses carry an ETag a client may revalidate with.
+            "ETag",
         ],
         allow_credentials=False,
         max_age=600,
     )
+    return UniqueVaryMiddleware(cors_app)

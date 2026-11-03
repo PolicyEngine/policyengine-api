@@ -54,10 +54,6 @@ class Household(TimestampedModel, table=True):
             name="uq_households_canonicalization_content_hash",
         ),
         sa.CheckConstraint(
-            "country_id IN ('us', 'uk')",
-            name="ck_households_country",
-        ),
-        sa.CheckConstraint(
             "default_year IS NULL OR default_year BETWEEN 1900 AND 2200",
             name="ck_households_default_year",
         ),
@@ -78,7 +74,11 @@ class Household(TimestampedModel, table=True):
         ),
     )
 
-    country_id: str = Field(max_length=2)
+    country_id: str = Field(
+        max_length=2,
+        foreign_key="countries.id",
+        ondelete="RESTRICT",
+    )
     default_year: int | None = None
     household_data: dict[str, Any] = Field(
         sa_type=sa.JSON().with_variant(sa.dialects.postgresql.JSONB(), "postgresql")

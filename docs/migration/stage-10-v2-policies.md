@@ -129,7 +129,12 @@ failure, retained-event processing, idempotent retries, and source/destination
 rollback using the same MySQL and PostgreSQL engines as the deployed databases.
 
 Under this selection, a core-policy mutation commits Cloud SQL first and then
-completes its policy transaction in Supabase. A saved-policy mutation commits
+completes its policy transaction in Supabase. The copy binds the v1 policy to
+the running catalog whatever country package version the v1 row was saved
+under (its stored `api_version`), the same way the Public API simulates an old
+policy with the running country package. A policy is copied when every
+parameter path it sets exists in the running catalog and its periods and values
+are valid. A saved-policy mutation commits
 its source row, incremented revision, and complete event in one Cloud SQL
 transaction. The same request then processes that source's pending events in
 revision order and records `processed_at` only after the corresponding
@@ -147,7 +152,12 @@ its `failure_category`, and the route returns its normal v1 response. A
 saved-policy event that failed stays pending, and the next mutation of the same
 saved policy replays it, with earlier retained events first. A core policy
 whose copy failed is copied again the next time any request writes the same
-policy. Destination revision and fingerprint checks make a replay safe if
+policy. A core policy that already has a copy returns that copy without being
+translated again, so writing it again after a PolicyEngine.py or country
+package upgrade does not fail. When two first copies of the same v1 policy run
+at once on revisions with different PolicyEngine.py versions, the mapping
+committed first is the copy; the other request's v2 policy commits without a
+mapping and its record reports `policy_created=false`. Destination revision and fingerprint checks make a replay safe if
 Supabase committed but the Cloud SQL processing marker did not. There is no
 background processor or reconciliation process.
 
@@ -164,11 +174,45 @@ request headers used by v1 and v2, exposes `X-PolicyEngine-Request-Id`, and
 applies CORS headers to typed errors and service-unavailable responses. Route
 functions do not implement separate preflight behavior.
 
+## Missing parameters
+
+A policy can set parameters that a later country package release renamed or
+removed. Policy reads report them as `missing_parameters`, so a client can
+tell its user and not run the policy:
+
+- `GET /{country}/policy/{policy_id}` checks the v1 policy's parameter paths
+  against the leaf parameters of the country model the Public API runs. It
+  reads nothing from Supabase, so v1 reads stay on Cloud SQL. The field is
+  null for a stored policy that is not a parameter-path object.
+- `GET /v2/policies/{policy_id}`, `GET /v2/policies` and `POST /v2/policies`
+  check each policy against the catalog of the running PolicyEngine.py
+  version. The field is null when that catalog is not published.
+
+Both use the comparison the v2 copy uses (`parameters_missing_from_model`),
+and the v2 catalog of a release holds the same leaf parameters as that
+release's country model. So a v1 policy reported with missing parameters
+is one a first copy under the running release refuses as
+`missing_parameters`. A policy copied before a release removed its
+parameter keeps that copy, since an existing copy is not translated again;
+it is still reported as missing on both routes.
+
 ## Monitoring
 
 Monitor structured events with metric names `v1_policy_mirror_operations` and
 `v1_user_policy_mirror_operations`. Alert on `outcome=error`, grouped by
-`failure_category` and country. Events include the legacy integer ID,
+`failure_category` and country. Each failed copy also records a fixed
+`failure_reason`:
+
+| `failure_category` | `failure_reason` |
+| --- | --- |
+| `catalog_or_translation` | `missing_parameters` (the policy sets a parameter the running catalog lacks), `invalid_parameter_values`, `empty_parameter_values`, `invalid_period`, `conflicting_values`, `too_many_values` (more than 1,000 dated values), `catalog_absent` (no catalog for the running PolicyEngine.py version), `catalog_query_failed`, `catalog_version_not_found`, `catalog_mismatch` |
+| `integrity` | `mapping_conflict`, `content_hash_collision`, `stored_policy_integrity`, `saved_policy_integrity` (any integrity check of a saved-policy copy) |
+| `database` | `database_error` |
+| `configuration` | `configuration` |
+| `unexpected` | `missing_reform_policy` (a saved policy's v1 reform could not be loaded), `unexpected` |
+| `missing_mirror_snapshot`, `missing_mirror_revision` | the same value as the category |
+
+Events include the legacy integer ID,
 destination UUID when committed, attempted and completed database sources, and
 duration. They do not include policy JSON, presentation data, database URLs, or
 credentials.
@@ -177,7 +221,8 @@ The disposable and route-level tests verify that:
 
 - native policy and association create/read/list/update/delete operations use
   the initialized catalog and Supabase only;
-- both newly created and existing v1 policies receive durable mappings;
+- both newly created and existing v1 policies receive durable mappings,
+  including existing policies saved under an older country package version;
 - v1 saved-policy label updates change association `name`, while v1-only field
   updates change only the mapping fingerprint;
 - saved-policy event revisions are processed in ascending order, successful
@@ -207,3 +252,17 @@ The normal staging promotion still restores the previously serving Cloud Run
 revision when promotion or the stable-URL health check fails. It does not
 create persistent policy fixtures or change the configured write selection as
 part of each release.
+
+## Removal of the v1 saved-policy routes
+
+`POST /{country_id}/user-policy`, `GET /{country_id}/user-policy/{user_id}`
+and `PUT /{country_id}/user-policy` are removed, along with
+`GET /{country_id}/policies`. Only legacy.policyengine.org called them; Cloud
+Run request logs for the 30 days to 2026-10-19 showed no saved-policy
+requests. No new v1 saved policies are created, so none are copied to v2. The
+saved-policy copying and v1 saved-policy service modules stay until dual-write
+is deleted, and existing Cloud SQL `user_policies` rows are kept.
+
+The Public API also no longer serves Canada, Nigeria and Israel: their v1
+policy requests are rejected as unknown countries before any write, so every
+v1 policy write is now for a country that v2 supports.

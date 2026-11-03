@@ -29,6 +29,9 @@ class _ScriptedResult:
     def scalar_one_or_none(self) -> object:
         return self.value
 
+    def all(self) -> object:
+        return self.value
+
 
 @dataclass
 class RecordingSession:

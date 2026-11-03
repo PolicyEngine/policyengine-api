@@ -18,6 +18,7 @@ from policyengine_api.data.v2.models import (
     User,
     UserHouseholdAssociation,
 )
+from tests.fixtures.v2_countries import add_listed_countries
 
 
 def _engine():
@@ -30,6 +31,8 @@ def _engine():
         cursor.close()
 
     V2_METADATA.create_all(engine)
+    with Session(engine) as session:
+        add_listed_countries(session)
     return engine
 
 
