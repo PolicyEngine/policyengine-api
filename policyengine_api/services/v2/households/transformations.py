@@ -211,7 +211,9 @@ def translate_legacy_household(
     """Translate a v1 household document into normalized v2 household content.
 
     Named v1 people and groups get stable ids in name order, and group members
-    become person memberships. The default year is derived from the value periods.
+    become person memberships. People a v1 collection leaves out belong to the
+    unnamed groups policyengine-core would create for them. The default year is
+    derived from the value periods.
     Raise LegacyHouseholdTranslationError when the v1 document cannot be
     translated exactly.
     """
@@ -269,9 +271,24 @@ def _translate_legacy_groups(
     collection: str,
     translation: _LegacyTranslation,
 ) -> list[dict[str, Any]]:
-    """Translate one v1 collection's named groups into v2 records, in name order."""
+    """Translate one v1 collection's groups into v2 records.
+
+    Named groups come first, in name order. People the collection leaves out get
+    the unnamed groups policyengine-core gives them when it builds a simulation
+    from the v1 household: one group of everyone when the collection is omitted
+    or null, otherwise a group of their own each, in name order.
+    """
     source_name = LEGACY_COLLECTION_NAMES[collection]
-    source_groups = source.get(source_name, {})
+    source_groups = source.get(source_name)
+    if source_groups is None:
+        return [
+            _unnamed_legacy_group(
+                collection,
+                group_number=1,
+                members=list(translation.person_ids),
+                translation=translation,
+            )
+        ]
     if type(source_groups) is not dict:
         msg = f"legacy {source_name} must be an object"
         raise LegacyHouseholdTranslationError(msg)
@@ -295,7 +312,35 @@ def _translate_legacy_groups(
                 "values": values,
             }
         )
+    left_out = [
+        person_name
+        for person_name in sorted(translation.person_ids)
+        if collection not in translation.person_memberships[person_name]
+    ]
+    for group_number, person_name in enumerate(left_out, start=len(group_records) + 1):
+        group_records.append(
+            _unnamed_legacy_group(
+                collection,
+                group_number=group_number,
+                members=[person_name],
+                translation=translation,
+            )
+        )
     return group_records
+
+
+def _unnamed_legacy_group(
+    collection: str,
+    *,
+    group_number: int,
+    members: list[str],
+    translation: _LegacyTranslation,
+) -> dict[str, Any]:
+    """Return a v2 record, with no source name or values, for a group v1 implies."""
+    group_id = f"{collection}-{group_number}"
+    for person_name in members:
+        translation.person_memberships[person_name][collection] = group_id
+    return {"id": group_id, "values": {}}
 
 
 def _translate_legacy_group(
