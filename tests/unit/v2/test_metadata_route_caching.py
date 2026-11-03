@@ -332,10 +332,13 @@ def test_openapi_declares_caching_headers_and_not_modified_responses() -> None:
         )
     ]
 
-    assert len(metadata_paths) == 21
+    assert len(metadata_paths) == 22
     for path in metadata_paths:
         responses = schema["paths"][path]["get"]["responses"]
-        assert set(responses["200"]["headers"]) == {"ETag", "Cache-Control", "Vary"}
+        expected_headers = {"ETag", "Cache-Control", "Vary"}
+        if path == "/v2/parameters/search-file":
+            expected_headers.add("Content-Encoding")
+        assert set(responses["200"]["headers"]) == expected_headers
         assert "$ref" in responses["200"]["content"]["application/json"]["schema"]
         assert set(responses["304"]["headers"]) == {"ETag", "Cache-Control", "Vary"}
         assert "content" not in responses["304"]

@@ -1,0 +1,1 @@
+Responses are gzip-compressed according to the qualities in Accept-Encoding instead of a search for the text "gzip": a client that refuses gzip (for example gzip;q=0) now receives an uncompressed response, and `Accept-Encoding: *` or a differently cased value such as GZIP now receives gzip, where both used to receive an uncompressed response.

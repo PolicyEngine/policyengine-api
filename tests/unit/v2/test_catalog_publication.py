@@ -280,6 +280,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         fallback_summaries=(("us", "state", 3),),
         elapsed_seconds=2.3456,
         parameter_trees_written=(("policyengine-uk", "6.7.5", 2_430),),
+        parameter_search_files_written=(("policyengine-uk", "6.7.5", 412_000, 61_000),),
     ).as_dict()
 
     assert evidence == {
@@ -295,6 +296,14 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
                 "model": "policyengine-uk",
                 "version": "6.7.5",
                 "rows": 2_430,
+            }
+        ],
+        "parameter_search_files_written": [
+            {
+                "model": "policyengine-uk",
+                "version": "6.7.5",
+                "uncompressed_bytes": 412_000,
+                "compressed_bytes": 61_000,
             }
         ],
         "elapsed_seconds": 2.346,

@@ -314,6 +314,7 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/model-catalog/parameters",
         "/v2/parameters",
         "/v2/parameters/children",
+        "/v2/parameters/search-file",
         "/v2/parameters/{parameter_id}",
         "/v2/parameter-values",
         "/v2/parameter-values/{value_id}",
@@ -748,7 +749,7 @@ def test_every_metadata_route_declares_the_shared_catalog_query() -> None:
         )
     ]
 
-    assert len(metadata_paths) == 21
+    assert len(metadata_paths) == 22
     for path in metadata_paths:
         parameters = {
             parameter["name"]: parameter

@@ -33,6 +33,7 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
+    ParameterSearchFileUnavailableError,
     ParameterTreeUnavailableError,
 )
 from policyengine_api.vary_headers import unique_vary_values
@@ -74,6 +75,19 @@ PARAMETER_TREE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 """The parameter tree route's 503, which also covers a version without a tree."""
 
+PARAMETER_SEARCH_FILE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    503: {
+        "model": V2ErrorResponse,
+        "description": (
+            "The initialized v2 catalog is unavailable, or the catalog version "
+            "has no parameter search file: only catalog format 2 versions that "
+            "publication has published, or run with installed, since search files "
+            "were added have one. The message then names the version."
+        ),
+    },
+}
+"""The search file route's 503, which also covers a version without a file."""
+
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {
         "model": V2ErrorResponse,
@@ -103,7 +117,10 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 
 CACHE_HEADER_DESCRIPTIONS: dict[str, dict[str, Any]] = {
     "ETag": {
-        "description": "Strong validator: a hash of the exact response body.",
+        "description": (
+            "Strong validator: a hash of the uncompressed response body, so a "
+            "gzip-encoded response carries the same tag."
+        ),
         "schema": {"type": "string"},
     },
     "Cache-Control": {
@@ -240,7 +257,7 @@ def with_cache_headers(request: Request, response: Response) -> Response:
     if read_instant is not None:
         max_age = min(max_age, _seconds_left_in_utc_day(read_instant, utc_now()))
     headers = {"Cache-Control": f"public, max-age={max_age}", "ETag": entity_tag}
-    if _names_entity_tag(request.headers.get("if-none-match"), entity_tag):
+    if names_entity_tag(request.headers.get("if-none-match"), entity_tag):
         not_modified = Response(status_code=304, headers=headers)
         not_modified.headers["Vary"] = _cacheable_vary(None)
         return not_modified
@@ -268,7 +285,8 @@ def _cacheable_vary(existing: str | None) -> str:
     return unique_vary_values(", ".join([existing or "", *CACHEABLE_VARY_VALUES]))
 
 
-def _names_entity_tag(if_none_match: str | None, entity_tag: str) -> bool:
+def names_entity_tag(if_none_match: str | None, entity_tag: str) -> bool:
+    """Return whether an If-None-Match value names ``entity_tag`` (or is ``*``)."""
     if if_none_match is None:
         return False
     candidates = {candidate.strip() for candidate in if_none_match.split(",")}
@@ -363,10 +381,14 @@ def run_metadata_read(
     ) as error:
         return v2_error_response(404, str(error))
     except (V2ConfigurationError, MetadataCatalogUnavailableError) as error:
-        # Only a missing parameter tree has a message written for callers.
+        # Only a missing parameter tree or search file has a message written
+        # for callers; it names the catalog version.
         message = (
             str(error)
-            if isinstance(error, ParameterTreeUnavailableError)
+            if isinstance(
+                error,
+                ParameterTreeUnavailableError | ParameterSearchFileUnavailableError,
+            )
             else "V2 metadata catalog is unavailable"
         )
         return v2_error_response(503, message)
