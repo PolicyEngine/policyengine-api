@@ -1,3 +1,14 @@
+## [5.21.0] - 2026-11-03
+
+### Changed
+
+- Pull requests and deploys now fail unless the installed PolicyEngine.py version is the latest one the simulation API has published. The check no longer compares the simulation API's US and UK routes, and runs on every pull request.
+
+### Removed
+
+- API v2's `constituency_impacts` and `local_authority_impacts` tables no longer have the `x` and `y` hex-map position columns; v2 Alembic revision `e86f19a6c4da` drops them. Nothing read or wrote these tables, and the app draws its maps from its own layout files.
+
+
 ## [5.20.0] - 2026-11-03
 
 ### Added
