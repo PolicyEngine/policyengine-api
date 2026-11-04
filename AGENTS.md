@@ -55,7 +55,9 @@ code), or splitting a module into smaller ones, read
 
 Read `docs/engineering/skills/github-prs.md` before opening, replacing, or
 sharing any pull request. Every PR needs a tracking issue and
-`Fixes #ISSUE_NUMBER` as the first line of its description. Every PR also adds
+`Fixes #ISSUE_NUMBER` as the first line of its description; the
+`PR description` job fails unless that issue is open in this repository.
+Every PR also adds
 a changelog fragment of its own: a non-empty file directly in `changelog.d/`,
 named `changelog.d/<name>.<type>.md`, where `<type>` is `breaking`, `added`,
 `changed`, `fixed` or `removed` (see "Changelog fragments" in that skill).
@@ -137,11 +139,10 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Process and repository hygiene
 
-- Checked: `api.agents.adapters-point-to-agents-md`, `api.process.changelog-fragment`, `api.process.cloud-run-image-builds`, `api.process.docker-image-builds`, `api.process.rules-registry`, `api.process.stacked-prs-full-ci-at-bottom`
+- Checked: `api.agents.adapters-point-to-agents-md`, `api.process.changelog-fragment`, `api.process.cloud-run-image-builds`, `api.process.docker-image-builds`, `api.process.pr-tracking-issue`, `api.process.rules-registry`, `api.process.stacked-prs-full-ci-at-bottom`
 - `api.process.agents-never-bypass`: Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human. (doc-only, not checked: follow it yourself)
 - `api.process.agents-suppress-as-last-resort`: Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason. (doc-only, not checked: follow it yourself)
 - `api.process.makefile-phony`: Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed. (doc-only, not checked: follow it yourself)
-- `api.process.pr-tracking-issue`: Every PR has a tracking issue in this repository, and the first line of its description is Fixes #ISSUE_NUMBER. (doc-only, not checked: follow it yourself)
 - `api.process.rule-machinery-code-owned`: Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author. (doc-only, not checked: follow it yourself)
 
 <!-- END GENERATED: rules -->

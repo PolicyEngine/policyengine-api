@@ -11,6 +11,68 @@ Before opening a PR, all developers and agents must:
 2. Put `Fixes #ISSUE_NUMBER` as the first line of the PR description, using the
    issue number from the previous step. The PR template starts with this line.
 
+Rule `api.process.pr-tracking-issue`. The `PR description` job, in
+`.github/workflows/pr-description.yml`, checks every open pull request whenever
+it is opened, reopened or edited and on every push, including each pull request
+in a stack. It skips closed pull requests. It reads the description from the
+event that started the run and fails unless:
+
+- the first line is exactly `Fixes #ISSUE_NUMBER`;
+- `ISSUE_NUMBER` is an open issue in this repository. A pull request's number,
+  an issue that was moved to another repository, a closed issue and a number
+  with no issue all fail.
+
+CRLF line endings, which the GitHub web editor uses, and trailing spaces are
+fine. These fail:
+
+- an empty description, or the template's `Fixes #` left unfilled;
+- a blank first line, or leading spaces before `Fixes`;
+- other wording, such as `Fixes #3728.`, `Closes #3800.` or `Part of #3797`;
+- a reference to another repository, such as
+  `Fixes PolicyEngine/policyengine-sim-api#862`.
+
+To fix a failure:
+
+- **Wrong first line:** edit the description. Saving the edit runs the check
+  again.
+- **Closed issue:** if the pull request still fixes it, reopen the issue, then
+  re-run the job from the pull request's Checks tab. Reopening an issue starts
+  no run. Re-running checks the description as it was when the run started, so
+  after changing the description, rely on the run the edit starts.
+
+A pull request into a branch that doesn't contain
+`.github/scripts/check_pr_description.py`, such as one stacked on a branch cut
+before the check existed, fails with Python's `can't open file` message. Merge
+master into that branch, or rely on the run that starts when GitHub retargets
+the pull request to master.
+
+To run the check on a description locally, save a pull request event and pass
+it in; the check needs only Python and an authenticated `gh`:
+
+```bash
+gh pr view <PR_NUMBER> --json body --jq '{pull_request: {body: .body}}' > /tmp/event.json
+GITHUB_EVENT_PATH=/tmp/event.json GITHUB_REPOSITORY=PolicyEngine/policyengine-api \
+  python .github/scripts/check_pr_description.py
+```
+
+Automated pull requests follow the rule too:
+
+- The PolicyEngine bundle update (`update-policyengine-package.sh`) reuses the
+  oldest open "Update PolicyEngine bundle to <version>" issue or opens one, so
+  each version's pull request has an issue of its own. Merging the pull
+  request closes it. Closing the pull request without merging, as when a
+  newer version supersedes it, runs `close-bundle-update-issue.yml`, which
+  closes it too, even when the pull request conflicts with master (the
+  workflow runs on `pull_request_target`). If you reopen such a pull request,
+  reopen its issue as well, then re-run its `PR description` job. A run that
+  opens an issue but then can't push or open the pull request closes that
+  issue again.
+- A bundle-update pull request opened before the rule has no `Fixes` line,
+  and rerunning the workflow doesn't add one: edit its description.
+- The daily relock (`open_relock_pull_request.sh`) reuses the open "Relock
+  dependencies" issue or opens one, and rewrites the description of a relock
+  pull request that is already open.
+
 ## Changelog fragments
 
 Every PR adds at least one changelog fragment of its own
@@ -76,13 +138,17 @@ human instead.
 
 In a stack of pull requests, only the lowest unmerged one runs the full PR
 workflow (`.github/workflows/pr.yml`). The ones above it run only the
-`CI complete` job, which fails and says so. A stack therefore uses one set of
-runners instead of one per layer.
+`CI complete` job, which fails and says so, and the `PR description` job (see
+[Tracking Issues](#tracking-issues)), which every open pull request runs. A
+stack therefore uses one set of runners instead of one per layer.
 
-- **`CI complete` is the required check.** It needs every other job. On a
-  pull request that isn't stacked, or is the lowest unmerged one, it passes
-  only when every job passed. Skipped jobs would otherwise count as passing, so
-  a stack can only merge bottom-up, and nothing merges untested.
+- **`CI complete` is the required check for `pr.yml`.** It needs every other
+  job. On a pull request that isn't stacked, or is the lowest unmerged one, it
+  passes only when every job passed. Skipped jobs would otherwise count as
+  passing, so a stack can only merge bottom-up, and nothing merges untested.
+- **`PR description` is in a workflow of its own,** so `CI complete` can't
+  need it, and it has no stack condition. For it to block a merge, the master
+  ruleset has to require it by name, next to `CI complete`.
 - **When the pull request below merges,** GitHub rebases the next one onto
   the trunk, and that push starts its full run. If no run starts, push again
   (`gh stack rebase`, then `gh stack push`), or close and reopen the pull
