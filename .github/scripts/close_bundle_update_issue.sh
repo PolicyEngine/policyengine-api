@@ -7,7 +7,9 @@
 # of its description (rule api.process.pr-tracking-issue; see
 # update-policyengine-package.sh). Merging the pull request closes it through
 # the Fixes line. Superseded updates are closed without merging, so this
-# script, run by close-bundle-update-issue.yml, closes their issues instead.
+# script, run by close-bundle-update-issue.yml on pull_request_target, closes
+# their issues instead. It reads only the event payload, never the pull
+# request's code.
 #
 # It closes the issue only when the pull request came from
 # auto/update-policyengine-bundle-<version>, was not merged, and the first

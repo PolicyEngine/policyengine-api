@@ -45,8 +45,8 @@ RULE_ID = "api.process.pr-tracking-issue"
 HOW_TO_FIX = (
     "Edit the description so its first line is exactly Fixes #ISSUE_NUMBER, "
     "where ISSUE_NUMBER is an open issue in this repository; editing the "
-    "description runs this check again. See docs/engineering/skills/github-prs.md "
-    f"#tracking-issues (rule {RULE_ID})."
+    "description runs this check again. See "
+    f"docs/engineering/skills/github-prs.md#tracking-issues (rule {RULE_ID})."
 )
 RETRY_LOOKUP = (
     "Re-run this job; if it fails again, check the GH_TOKEN the workflow gives it."

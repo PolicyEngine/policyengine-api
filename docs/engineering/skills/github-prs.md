@@ -40,6 +40,12 @@ To fix a failure:
   no run. Re-running checks the description as it was when the run started, so
   after changing the description, rely on the run the edit starts.
 
+A pull request into a branch that doesn't contain
+`.github/scripts/check_pr_description.py`, such as one stacked on a branch cut
+before the check existed, fails with Python's `can't open file` message. Merge
+master into that branch, or rely on the run that starts when GitHub retargets
+the pull request to master.
+
 To run the check on a description locally, save a pull request event and pass
 it in; the check needs only Python and an authenticated `gh`:
 
@@ -54,11 +60,15 @@ Automated pull requests follow the rule too:
 - The PolicyEngine bundle update (`update-policyengine-package.sh`) reuses the
   oldest open "Update PolicyEngine bundle to <version>" issue or opens one, so
   each version's pull request has an issue of its own. Merging the pull
-  request closes it; closing the pull request without merging, as when a
+  request closes it. Closing the pull request without merging, as when a
   newer version supersedes it, runs `close-bundle-update-issue.yml`, which
-  closes it too. A bundle-update pull request opened before the rule has no
-  `Fixes` line, and rerunning the workflow doesn't add one: edit its
-  description.
+  closes it too, even when the pull request conflicts with master (the
+  workflow runs on `pull_request_target`). If you reopen such a pull request,
+  reopen its issue as well, then re-run its `PR description` job. A run that
+  opens an issue but then can't push or open the pull request closes that
+  issue again.
+- A bundle-update pull request opened before the rule has no `Fixes` line,
+  and rerunning the workflow doesn't add one: edit its description.
 - The daily relock (`open_relock_pull_request.sh`) reuses the open "Relock
   dependencies" issue or opens one, and rewrites the description of a relock
   pull request that is already open.

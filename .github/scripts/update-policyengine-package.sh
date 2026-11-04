@@ -12,7 +12,9 @@
 # line; close-bundle-update-issue.yml closes it when the PR is closed without
 # merging, as superseded updates are. The issue is resolved after the lock
 # and before the branch is pushed, so a failed update opens no issue and a
-# failed lookup pushes no branch.
+# failed lookup pushes no branch. When the push or the PR fails after this
+# run opened the issue, the script closes it again, unless an open PR for the
+# branch names it.
 #
 # Environment:
 #   GH_TOKEN must be set for gh: a token that can write issues and pull
@@ -33,6 +35,8 @@ fi
 
 REPOSITORY="${GITHUB_REPOSITORY:-PolicyEngine/policyengine-api}"
 ISSUE_NUMBER=""
+# 1 when this run opened ISSUE_NUMBER rather than reusing an open issue.
+ISSUE_OPENED_HERE=0
 
 # Set ISSUE_NUMBER to the oldest open tracking issue for LATEST, opening one
 # when none is open. This sets a variable rather than printing, because bash
@@ -65,6 +69,7 @@ find_or_open_tracking_issue() {
       exit 1
     fi
     issue_number="${issue_url##*/}"
+    ISSUE_OPENED_HERE=1
   fi
 
   if [[ ! "${issue_number}" =~ ^[0-9]+$ ]]; then
@@ -72,6 +77,35 @@ find_or_open_tracking_issue() {
     exit 1
   fi
   ISSUE_NUMBER="${issue_number}"
+}
+
+# After a rejected push or a failed gh pr create, close the issue this run
+# opened, so no open issue is left that no pull request names: a concurrent
+# run for the same version, whose push won, has an issue of its own. Keep it
+# when an open pull request for the branch names it after all, and never
+# close an issue this run reused.
+close_unused_tracking_issue() {
+  local first_line
+
+  if [[ "${ISSUE_OPENED_HERE}" != "1" ]]; then
+    return 0
+  fi
+  first_line="$(
+    gh pr view "$BRANCH" \
+      --repo "${REPOSITORY}" \
+      --json state,body \
+      --jq 'select(.state == "OPEN") | .body | split("\n") | .[0]' \
+      2>/dev/null || true
+  )"
+  if [[ "${first_line%$'\r'}" == "Fixes #${ISSUE_NUMBER}" ]]; then
+    return 0
+  fi
+  if ! gh issue close "${ISSUE_NUMBER}" \
+    --repo "${REPOSITORY}" \
+    --reason "not planned" \
+    --comment "This run of the bundle update couldn't open a pull request for ${LATEST}, so nothing names this issue."; then
+    echo "Could not close the unused issue #${ISSUE_NUMBER}; close it by hand." >&2
+  fi
 }
 
 create_pr_body() {
@@ -159,11 +193,14 @@ fi
 if git ls-remote --exit-code --heads origin "$BRANCH" &>/dev/null; then
   echo "Remote branch '${BRANCH}' already exists without an open PR. Creating PR."
   find_or_open_tracking_issue
-  gh pr create \
+  if ! gh pr create \
     --base master \
     --head "$BRANCH" \
     --title "Update PolicyEngine bundle to ${LATEST}" \
-    --body "$(create_pr_body)"
+    --body "$(create_pr_body)"; then
+    close_unused_tracking_issue
+    exit 1
+  fi
   echo "PR created for existing branch ${BRANCH}"
   exit 0
 fi
@@ -227,11 +264,17 @@ git checkout -b "$BRANCH"
 git add pyproject.toml docker/Dockerfile uv.lock "$FRAGMENT"
 
 git commit -m "Update PolicyEngine bundle to ${LATEST}"
-git push -u origin "$BRANCH"
+if ! git push -u origin "$BRANCH"; then
+  close_unused_tracking_issue
+  exit 1
+fi
 
-gh pr create \
+if ! gh pr create \
   --base master \
   --title "Update PolicyEngine bundle to ${LATEST}" \
-  --body "$(create_pr_body)"
+  --body "$(create_pr_body)"; then
+  close_unused_tracking_issue
+  exit 1
+fi
 
 echo "PR created: PolicyEngine bundle ${CURRENT} -> ${LATEST}"
