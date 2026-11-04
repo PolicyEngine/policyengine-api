@@ -16,9 +16,10 @@ shrinks. A declared package the application loads by name rather than by import
 is a ``[[rule.exception]]`` with ``category = "not-imported-package"``,
 ``match`` set to the package's name and ``path`` set to the file that loads it;
 it covers only that package's DEP002 finding. ``path`` must be one file's exact
-path from the repository root, and not a file that lists every package; the
-exception fails once no line in the file other than a whole-line comment names
-the package, or once deptry stops reporting it.
+path from the repository root, and a file the application runs from: a shell
+script, a Dockerfile or a module in the package. The exception fails once no
+line in the file other than a whole-line comment names the package, or once
+deptry stops reporting it.
 
 Tolerated findings live only in the code-owned baseline and registry. So the
 guard also fails when anything else would hide a finding from deptry:
@@ -79,9 +80,11 @@ INLINE_IGNORE = re.compile(r"#\s*deptry\s*:\s*ignore", re.IGNORECASE)
 SCANNED_SUFFIXES = (".py", ".ipynb")
 # Files that list every declared package, so naming a package there shows
 # nothing about whether the application loads it.
-DECLARATION_FILES = frozenset(
-    {"pyproject.toml", "uv.lock", "rules/registry.toml", "docs/generated/rules.md"}
-)
+# The files an exception may name: those the application runs from. Any other
+# file (pyproject.toml, uv.lock, the registry, docs, a changelog fragment)
+# could mention a package without loading it.
+SHELL_SCRIPT_SUFFIX = ".sh"
+DOCKERFILE_NAME = "Dockerfile"
 GLOB_CHARACTERS = frozenset("*?[")
 # deptry's verbose log lists the files it scans after this line, one per line,
 # and ends the list with a blank line.
@@ -492,10 +495,14 @@ def _exception_problems(root: Path, exception: RuleException) -> list[str]:
         return [
             f"{where} must name one file by its exact path from the repository root"
         ]
-    if exception.path in DECLARATION_FILES:
+    if not (
+        path.suffix == SHELL_SCRIPT_SUFFIX
+        or path.name == DOCKERFILE_NAME
+        or (path.parts[0] == PACKAGE and path.suffix == ".py")
+    ):
         return [
-            f"{where} names a file that lists every declared package, so it "
-            "can't show that the application loads one"
+            f"{where} names a file the application doesn't run from: it must be "
+            f"a shell script, a Dockerfile or a module in {PACKAGE}"
         ]
     file = root / exception.path
     if not file.is_file():

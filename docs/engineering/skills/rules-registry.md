@@ -128,6 +128,8 @@ fail the guard yet.
   `ratcheted` with a baseline file of tolerated violations. Baselines may only
   shrink: the guard compares each baseline's count and its entries against the
   base branch, so an entry can't be swapped for a new one at the same count.
+  Each entry is therefore a stable key, such as a path or a code and a module,
+  never a count or a line number, which would change as violations are fixed.
 - Moving a rule from enforced/ratcheted to advisory/doc-only needs an explicit
   `[rule.downgrade] reason`.
 

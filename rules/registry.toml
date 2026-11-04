@@ -1344,7 +1344,7 @@ invocation = "unittest discover -s scripts/rules/tests"
 [[rule]]
 id = "api.dependencies.declared-and-used"
 category = "dependencies"
-statement = "pyproject.toml declares what policyengine_api imports and nothing else: deptry finds no import that no declared distribution provides (DEP001), no declared runtime dependency the package never imports (DEP002), no import of a module installed only as another package's dependency (DEP003), no import of a dev-extra-only dependency (DEP004) and no declared standard-library module (DEP005), apart from the findings rules/baselines/deptry.txt lists and the rule's not-imported-package exceptions."
+statement = "pyproject.toml declares what policyengine_api imports and nothing else: deptry finds no import that no declared distribution provides (DEP001), no declared runtime dependency the package never imports (DEP002), no import of a module installed only as another package's dependency (DEP003), no import of a package declared only as a development dependency (DEP004) and no declared standard-library module (DEP005), apart from the findings rules/baselines/deptry.txt lists and the rule's not-imported-package exceptions."
 rationale = "docs/engineering/skills/dependencies.md#we-declare-what-we-import"
 scope = ["pyproject.toml", "policyengine_api/**/*.py"]
 tier = "mechanical"

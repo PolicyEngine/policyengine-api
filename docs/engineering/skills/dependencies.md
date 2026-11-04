@@ -85,6 +85,10 @@ go on lines of their own. The list may only shrink: the registry guard fails a
 pull request whose baseline has a higher count than the base branch's, or any
 entry the base branch's copy doesn't. Fixing a finding makes its line fail as
 stale, so remove the line and lower `count` in the rule's `[rule.baseline]`.
+An entry can't be renamed either: if the name deptry reports changes (because
+`pyproject.toml` respells the package, or a deptry upgrade normalizes names),
+the new name fails as an entry the base branch lacks, so fix the finding in
+the same change.
 
 A declared package that the application loads by name, not by import, is a
 `[[rule.exception]]` on the rule, with
@@ -94,10 +98,15 @@ file that loads it. Today these are gunicorn
 and uvicorn, which `gcp/cloud_run/start.sh` runs, and pymysql, the driver
 `policyengine_api/data/orm.py` names. An exception covers only that package's
 DEP002 finding. Its `path` must be one file's exact path from the repository
-root, not a glob, and can't be `pyproject.toml`, `uv.lock`,
-`rules/registry.toml` or `docs/generated/rules.md`, which list every declared
-package or exception. It fails once no line in the file other than a
+root, not a glob, and a file the application runs from: a shell script, a
+Dockerfile or a module in `policyengine_api`. Any other file, such as
+`pyproject.toml`, the registry or a changelog fragment, can mention a package
+without loading it. The exception fails once no line in the file other than a
 whole-line comment names the package, or once deptry stops reporting it.
+
+An exception is reviewed like the baseline, since both are in code-owned
+`rules/`, but it isn't counted: add one only for a package the application
+really loads by name, never to tolerate an unused dependency.
 
 A tolerated finding lives only in the baseline or an exception, both
 code-owned. The guard also fails on anything else that would hide a finding
