@@ -22,6 +22,41 @@ versions the Cloud Run image installs (`gcp/cloud_run/Dockerfile`):
   and `api.dependencies.test-from-lock`
   ([dependencies.md](dependencies.md)) check every install and test command.
 
+## Every Test Checks Something
+
+`api.quality.tests-assert`: every test function checks its outcome. A test
+that checks nothing passes whatever the code returns, as long as nothing
+raises. The `asserting-tests` quality guard
+(`scripts/rules/asserting_tests.py`) reads every tracked `test_*.py` and
+`*_test.py` file outside a `fixtures` directory, and fails on a test function,
+as pytest and unittest collect them, that contains none of:
+
+- an `assert` statement, or `raise AssertionError`;
+- `pytest.raises`, `pytest.warns`, `pytest.deprecated_call` or `pytest.fail`,
+  also when imported from pytest by name;
+- a call to a function or method whose name starts with `assert`, such as
+  `self.assertEqual`, a mock's `assert_called_once_with` or
+  `assert_frame_equal`, or unittest's `self.fail`;
+- a call to a helper that does one of these, defined in the same file or
+  imported by name (`from tests.unit.support import check_response`) from
+  another module in the repository. The guard follows helpers through other
+  helpers.
+
+A function nested in the test counts as part of it, so a stand-in that raises
+`AssertionError` when the code calls it is a check.
+
+A test that only shows that a call doesn't raise checks nothing: assert what
+the call returns or what it changes instead. A test whose check is a helper
+imported some other way (`import tests.unit.support as support`, then
+`support.check(...)`) needs the helper named `assert_...`, or a by-name
+import.
+
+The rule is ratcheted. `rules/baselines/tests-without-checks.txt` lists the
+22 tests that check nothing today, as `<path>::<test>` (`<test>` is
+`Class::method` for a method). A test not listed there fails, and a listed
+one that is gone, renamed or now checks something fails as stale: remove its
+line and lower the rule's baseline `count`.
+
 ## Tests That Run a Country Model
 
 A new unit test stands in for the country model: a calculation with the
