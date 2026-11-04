@@ -1,0 +1,13 @@
+{
+  "action": "opened",
+  "number": 3776,
+  "pull_request": {
+    "number": 3776,
+    "state": "open",
+    "title": "Route API v1 simulations through the Stage 5 entrypoint",
+    "body": "## Summary\n\n- introduce a generic `SimulationAPIClient` and retain compatibility aliases for the former Modal-specific client;\n- keep the old Modal gateway URL and the new Cloud Run Simulation Entrypoint URL independently configured.\n\n## Validation\n\n- Unit tests for the client and the deployment configuration.\n\nFixes #3775\n"
+  },
+  "repository": {
+    "full_name": "PolicyEngine/policyengine-api"
+  }
+}
