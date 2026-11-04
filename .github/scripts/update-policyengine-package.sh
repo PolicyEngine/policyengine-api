@@ -7,8 +7,10 @@
 #
 # Every PR names its tracking issue on the first line of its description
 # (rule api.process.pr-tracking-issue): the oldest open issue titled
-# "Update PolicyEngine bundle to <version>", or a new one when none is open.
-# Merging the PR closes it.
+# "Update the PolicyEngine bundle", or a new one when none is open. Every
+# bundle-update PR shares it, so one closed without merging, as superseded
+# ones are, leaves no issue open: the first to merge closes it, and the next
+# update opens a new one.
 #
 # Environment:
 #   GH_TOKEN must be set for gh: a token that can write issues and pull
@@ -30,12 +32,12 @@ fi
 REPOSITORY="${GITHUB_REPOSITORY:-PolicyEngine/policyengine-api}"
 ISSUE_NUMBER=""
 
-# Set ISSUE_NUMBER to the oldest open tracking issue for LATEST, opening one
-# when none is open. This sets a variable rather than printing, because bash
+# Set ISSUE_NUMBER to the oldest open tracking issue, opening one when none
+# is open. This sets a variable rather than printing, because bash
 # turns off set -e inside $(...), and a failed lookup must not open a
 # duplicate issue.
 find_or_open_tracking_issue() {
-  local title="Update PolicyEngine bundle to ${LATEST}"
+  local title="Update the PolicyEngine bundle"
   local issue_number
   local issue_url
 
@@ -52,13 +54,13 @@ find_or_open_tracking_issue() {
       gh issue create \
         --repo "${REPOSITORY}" \
         --title "${title}" \
-        --body "Tracks the automated update of the PolicyEngine .py bundle to ${LATEST} by .github/workflows/update-policyengine-bundle.yaml. The update pull request names this issue on the first line of its description and closes it when it merges."
+        --body "Tracks the automated PolicyEngine .py bundle updates by .github/workflows/update-policyengine-bundle.yaml. Every open bundle-update pull request names this issue on the first line of its description; the first one to merge closes it, and the next update opens a new one."
     )"
     issue_number="${issue_url##*/}"
   fi
 
   if [[ ! "${issue_number}" =~ ^[0-9]+$ ]]; then
-    echo "Could not resolve the tracking issue for PolicyEngine bundle ${LATEST}: ${issue_number}" >&2
+    echo "Could not resolve the bundle-update tracking issue: ${issue_number}" >&2
     exit 1
   fi
   ISSUE_NUMBER="${issue_number}"

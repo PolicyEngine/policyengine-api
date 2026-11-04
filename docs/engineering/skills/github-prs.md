@@ -49,11 +49,17 @@ GITHUB_EVENT_PATH=/tmp/event.json GITHUB_REPOSITORY=PolicyEngine/policyengine-ap
   python .github/scripts/check_pr_description.py
 ```
 
-Automated pull requests follow the rule too. The PolicyEngine bundle update
-(`update-policyengine-package.sh`) reuses the open "Update PolicyEngine bundle
-to <version>" issue or opens one. The daily relock (`open_relock_pull_request.sh`)
-reuses the open "Relock dependencies" issue or opens one, and rewrites the
-description of a relock pull request that is already open.
+Automated pull requests follow the rule too:
+
+- The PolicyEngine bundle update (`update-policyengine-package.sh`) reuses the
+  oldest open "Update the PolicyEngine bundle" issue or opens one. Every open
+  bundle-update pull request names it, so closing a superseded one leaves no
+  issue behind; the first to merge closes it. A bundle-update pull request
+  opened before the rule has no `Fixes` line, and rerunning the workflow
+  doesn't add one: edit its description.
+- The daily relock (`open_relock_pull_request.sh`) reuses the open "Relock
+  dependencies" issue or opens one, and rewrites the description of a relock
+  pull request that is already open.
 
 ## Changelog fragments
 
@@ -129,8 +135,8 @@ stack therefore uses one set of runners instead of one per layer.
   passes only when every job passed. Skipped jobs would otherwise count as
   passing, so a stack can only merge bottom-up, and nothing merges untested.
 - **`PR description` is in a workflow of its own,** so `CI complete` can't
-  need it, and it has no stack condition. The master ruleset requires it as a
-  separate check.
+  need it, and it has no stack condition. For it to block a merge, the master
+  ruleset has to require it by name, next to `CI complete`.
 - **When the pull request below merges,** GitHub rebases the next one onto
   the trunk, and that push starts its full run. If no run starts, push again
   (`gh stack rebase`, then `gh stack push`), or close and reopen the pull

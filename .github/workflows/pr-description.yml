@@ -8,7 +8,8 @@ name: PR description
 # this check, not the whole of CI. It has no branches or paths filter and no
 # stack condition: it is cheap, so every open pull request runs it, including
 # each one in a stack. CI complete in pr.yml can't need a job in another
-# workflow, so the master ruleset requires this job's check on its own.
+# workflow, so for this check to block a merge, the master ruleset has to
+# require it by name.
 
 on:
   pull_request:
