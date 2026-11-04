@@ -255,6 +255,16 @@ class TestEconomyService:
             execution = ModalSimulationExecution(
                 job_id=MOCK_EXECUTION_ID, status="failed", error="out of memory"
             )
+            stored_failure = create_mock_reform_impact(status="error")
+            mock_reform_impacts_service.set_error_reform_impact.return_value = (
+                stored_failure
+            )
+            # The next request's lookup answers from this stored failure.
+            next_lookup = MagicMock(return_value=stored_failure)
+            economy_service._get_most_recent_impact = next_lookup
+            mock_reform_impacts_service.get_reform_impact_seconds_left.return_value = (
+                120
+            )
 
             # When
             result = economy_service._handle_execution_state(
@@ -272,12 +282,18 @@ class TestEconomyService:
             mock_logger.log_struct.assert_any_call(
                 {"message": expected_message}, severity="ERROR"
             )
-            assert result == EconomicImpactResult.error(expected_message)
+            assert result == EconomicImpactResult.error(
+                expected_message, retry_after_seconds=120
+            )
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once_with(
                 execution_id=MOCK_EXECUTION_ID,
                 message=expected_message,
                 keep_seconds=120,
             )
+            mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
+                stored_failure
+            )
+            next_lookup.assert_called_once_with(state_setup_options)
 
         @pytest.mark.usefixtures("mock_logger")
         @pytest.mark.parametrize(
@@ -298,6 +314,16 @@ class TestEconomyService:
             execution = ModalSimulationExecution(
                 job_id=MOCK_EXECUTION_ID, status="failed", error="out of memory"
             )
+            stored_failure = create_mock_reform_impact(status="error")
+            mock_reform_impacts_service.set_error_reform_impact.return_value = (
+                stored_failure
+            )
+            # The next request's lookup answers from this stored failure.
+            next_lookup = MagicMock(return_value=stored_failure)
+            economy_service._get_most_recent_impact = next_lookup
+            mock_reform_impacts_service.get_reform_impact_seconds_left.return_value = (
+                2_591_000
+            )
 
             # When
             result = economy_service._handle_execution_state(
@@ -306,12 +332,89 @@ class TestEconomyService:
 
             # Then
             expected_message = "Simulation entrypoint execution failed: out of memory"
-            assert result == EconomicImpactResult.error(expected_message)
+            assert result == EconomicImpactResult.error(
+                expected_message, retry_after_seconds=2_591_000
+            )
             # Without keep_seconds the error has the cache's 30-day lifetime.
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once_with(
                 execution_id=MOCK_EXECUTION_ID,
                 message=expected_message,
             )
+            mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
+                stored_failure
+            )
+            next_lookup.assert_called_once_with(region_setup_options)
+
+        @pytest.mark.usefixtures("mock_logger")
+        @pytest.mark.parametrize("region", ["state/ca", MOCK_REGION])
+        @pytest.mark.parametrize(
+            "next_answer",
+            [None, create_mock_reform_impact(status="computing")],
+            ids=["no-record", "another-record"],
+        )
+        def test__given_the_next_lookup_uses_another_record__gives_no_seconds(
+            self,
+            economy_service,
+            setup_options,
+            mock_reform_impacts_service,
+            next_answer,
+            region,
+        ):
+            # Given: the failure is stored, but the next request would start a
+            # new run or answer from a newer job instead.
+            reform_impact = create_mock_reform_impact(status="computing")
+            execution = ModalSimulationExecution(
+                job_id=MOCK_EXECUTION_ID, status="failed", error="out of memory"
+            )
+            stored_failure = create_mock_reform_impact(status="error")
+            mock_reform_impacts_service.set_error_reform_impact.return_value = (
+                stored_failure
+            )
+            if next_answer is not None:
+                next_answer.execution_id = "newer-job"
+            economy_service._get_most_recent_impact = MagicMock(
+                return_value=next_answer
+            )
+
+            # When
+            result = economy_service._handle_execution_state(
+                setup_options.model_copy(update={"region": region}),
+                "failed",
+                reform_impact,
+                execution,
+            )
+
+            # Then
+            assert result.status == ImpactStatus.ERROR
+            assert result.retry_after_seconds is None
+            mock_reform_impacts_service.get_reform_impact_seconds_left.assert_not_called()
+
+        @pytest.mark.usefixtures("mock_logger")
+        @pytest.mark.parametrize("region", ["state/ca", MOCK_REGION])
+        def test__given_the_error_is_not_stored__answers_without_seconds(
+            self,
+            economy_service,
+            setup_options,
+            mock_reform_impacts_service,
+            region,
+        ):
+            # Given: the cache refuses the error write, so no failure is stored.
+            region_setup_options = setup_options.model_copy(update={"region": region})
+            reform_impact = create_mock_reform_impact(status="computing")
+            execution = ModalSimulationExecution(
+                job_id=MOCK_EXECUTION_ID, status="failed", error="out of memory"
+            )
+            mock_reform_impacts_service.set_error_reform_impact.return_value = None
+
+            # When
+            result = economy_service._handle_execution_state(
+                region_setup_options, "failed", reform_impact, execution
+            )
+
+            # Then
+            assert result.status == ImpactStatus.ERROR
+            assert result.retry_after_seconds is None
+            mock_reform_impacts_service.get_reform_impact_seconds_left.assert_not_called()
 
         @pytest.mark.usefixtures("mock_logger")
         def test__given_modal_running_state__then_returns_computing_result(
@@ -389,3 +492,34 @@ class TestEconomyService:
             # Then
             assert result.status == ImpactStatus.COMPUTING
             assert result.data is None
+
+    class TestHandleFailedImpact:
+        @pytest.fixture
+        def economy_service(self):
+            return EconomyService()
+
+        @pytest.mark.usefixtures("mock_logger")
+        def test__given_stored_failure__answers_with_the_seconds_it_is_still_kept(
+            self,
+            economy_service,
+            mock_reform_impacts_service,
+        ):
+            # Given
+            stored_failure = create_mock_reform_impact(
+                status="error",
+                message="Simulation entrypoint execution failed: out of memory",
+            )
+            seconds_left = mock_reform_impacts_service.get_reform_impact_seconds_left
+            seconds_left.return_value = 75
+
+            # When
+            result = economy_service._handle_failed_impact(stored_failure)
+
+            # Then
+            assert result == EconomicImpactResult.error(
+                "Simulation entrypoint execution failed: out of memory",
+                retry_after_seconds=75,
+            )
+            mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
+                stored_failure
+            )

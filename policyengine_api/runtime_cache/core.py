@@ -58,6 +58,11 @@ class CachePipeline(Protocol):
         ...
 
 
+# Redis's PTTL replies for a key that does not exist and for one that never expires.
+PTTL_MISSING_KEY = -2
+PTTL_NO_EXPIRY = -1
+
+
 class CacheBackend(Protocol):
     """The Redis client subset the runtime cache uses; fakes implement it too."""
 
@@ -71,6 +76,10 @@ class CacheBackend(Protocol):
 
     def delete(self, *keys: str) -> object:
         """Delete every given key and return how many existed."""
+        ...
+
+    def pttl(self, key: str) -> object:
+        """Return the key's milliseconds to live; -2 if missing, -1 if no expiry."""
         ...
 
     def pipeline(self, *, transaction: bool = True) -> CachePipeline:

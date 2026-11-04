@@ -39,6 +39,7 @@ class TestEconomicImpactResult:
                 "status": "ok",
                 "data": MOCK_REFORM_IMPACT_DATA,
                 "message": None,
+                "retry_after_seconds": None,
             }
 
         def test__given_computing_result__returns_correct_dict(self):
@@ -50,6 +51,7 @@ class TestEconomicImpactResult:
                 "status": "computing",
                 "data": None,
                 "message": None,
+                "retry_after_seconds": None,
             }
 
         def test__given_error_result__returns_correct_dict(self):
@@ -62,6 +64,7 @@ class TestEconomicImpactResult:
                 "status": "error",
                 "data": None,
                 "message": "Test error message",
+                "retry_after_seconds": None,
             }
 
     class TestClassMethods:

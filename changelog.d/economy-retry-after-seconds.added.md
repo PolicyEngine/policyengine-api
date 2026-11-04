@@ -1,0 +1,1 @@
+A failed economy calculation's 502 body now has `retry_after_seconds`: the longest time the Public API keeps returning the stored failure before a request starts a new run, read from the cache's own expiry of the stored failure and its lookup index, or null when no failure is stored or its lifetime cannot be read.

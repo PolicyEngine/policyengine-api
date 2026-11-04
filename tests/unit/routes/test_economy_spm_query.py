@@ -542,6 +542,8 @@ def test_annual_route_returns_502_when_the_simulation_api_refuses_a_breakdown(
             "(HTTP 400): policyengine 6.7.5 does not support local-area breakdowns"
         ),
         "result": None,
+        # Nothing is stored, so the Public API cannot say when a new run can start.
+        "retry_after_seconds": None,
     }
     assert gateway.run.call_args.args[0]["breakdown"] == "local_areas"
 
