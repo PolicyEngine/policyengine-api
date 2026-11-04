@@ -1,10 +1,13 @@
 """The suppressions quality guard: every noqa and type: ignore is explained.
 
-A ``noqa`` or ``type: ignore`` comment switches ruff or mypy off for one line,
-or for a whole file, so it must say what it switches off and why:
+A ``noqa``, ``ruff: disable`` or ``type: ignore`` comment switches ruff or mypy
+off for a line, a range of lines or a whole file, so it must say what it
+switches off and why:
 
 - a ``noqa`` comment, line-level or file-level (``# ruff: noqa``,
   ``# flake8: noqa``), lists its ruff codes;
+- a range suppression, ``# ruff: disable[CODE]``, lists its ruff codes in
+  brackets;
 - a ``type: ignore`` comment lists its mypy error codes in brackets;
 - the comment also holds a reason, a ``#`` part that is neither a suppression
   nor another tool's directive (``fmt: skip``, ``pragma: no cover``):
@@ -13,8 +16,8 @@ or for a whole file, so it must say what it switches off and why:
 Other tools' comments that switch a check off (``# mypy: ignore-errors``,
 ``# isort: skip_file``) are not checked.
 
-Only real comments count: the guard reads each tracked Python file with
-``tokenize``, so a string that looks like a suppression isn't one.
+Only real comments count: the guard reads each tracked ``.py`` and ``.pyi`` file
+with ``tokenize``, so a string that looks like a suppression isn't one.
 
 While the rule is ratcheted, its baseline file lists the tolerated
 suppressions, one ``<path> :: <source line>`` per occurrence (a file with two
@@ -32,13 +35,13 @@ from __future__ import annotations
 
 import io
 import re
+import subprocess
 import tokenize
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from scripts.rules.file_length import tracked_python_files
 from scripts.rules.load import load_registry
 from scripts.rules.model import Violation
 
@@ -51,19 +54,44 @@ CHECK_NAME = "suppressions"
 SEPARATOR = " :: "
 CODE = "a code"
 REASON = "a reason"
-# One part of a comment (the text between two #) that is a suppression. ruff
-# reads the word noqa case-insensitively, but its ruff: and flake8: prefixes
-# only in lowercase; mypy reads type: ignore only in lowercase, and allows
-# spaces before the bracketed codes.
+# One part of a comment (the text between two #) that is a suppression. Ruff
+# reads the word noqa case-insensitively, but its prefixes for a whole file
+# only in lowercase. A range suppression (the disable form with codes in
+# brackets) switches its codes off until the matching enable form. Mypy reads
+# its ignore comment only in lowercase, and allows spaces before the bracketed
+# codes; it treats brackets that hold no code, such as [] or [,], as ignoring
+# every error on the line.
 _NOQA = re.compile(r"(?:(?:ruff|flake8)\s*:\s*)?(?i:noqa)\b(?P<rest>.*)")
 _NOQA_CODES = re.compile(r"\s*:\s*[A-Z]+[0-9]+", re.IGNORECASE)
+_RUFF_DISABLE = re.compile(r"ruff\s*:\s*disable\b(?P<rest>.*)")
 _TYPE_IGNORE = re.compile(r"type\s*:\s*ignore\b(?P<rest>.*)")
-_TYPE_IGNORE_CODES = re.compile(r"\s*\[\s*[^\]\s][^\]]*\]")
-# Another tool's directive in a part of the comment is not a reason.
-_OTHER_DIRECTIVE = re.compile(
-    r"(?:fmt|pragma|pyright|mypy|isort|pylint|ruff|flake8|type)\s*:|nosec\b",
-    re.IGNORECASE,
+_BRACKETED_CODES = re.compile(r"\s*\[(?P<codes>[^\]]*)\]")
+# Other tools' directives, which aren't reasons when they share a comment with
+# a suppression. Each pattern matches the directive's own syntax, so that a
+# reason that starts with a tool's name and a colon still counts.
+_OTHER_DIRECTIVES = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"fmt:\s*(?:skip|off|on)\b",
+        r"pragma:?\s*no\s+(?:cover|branch)\b",
+        r"pyright:\s*(?:ignore\b|basic\b|standard\b|strict\b|report\w+\s*=)",
+        r"mypy:\s*[\w-]+(?:\s*=\s*\S+)?(?:\s*,\s*[\w-]+(?:\s*=\s*\S+)?)*\s*$",
+        r"isort:\s*(?:skip_file|skip|off|on|split|dont-add-imports?)\b",
+        r"pylint:\s*(?:disable-next|disable|enable|skip-file)\b",
+        r"ruff:\s*(?:enable\b|isort\s*:)",
+        r"ty:\s*ignore\b",
+        r"pyrefly:\s*ignore\b",
+        r"pyre-(?:ignore|fixme)\b",
+        r"pytype:\s*(?:disable|enable)=",
+        r"yapf:\s*(?:disable|enable)\b",
+        r"nosec\b",
+        r"nosemgrep\b",
+        r"NOSONAR\b",
+        r"noinspection\b",
+        r"codespell:\s*ignore\b",
+    )
 )
+SOURCE_SUFFIXES = (".py", ".pyi")
 FIX = (
     "name what it suppresses and say why, as `# noqa: CODE  # reason` or "
     "`# type: ignore[code]  # reason`, once a code change or a setting can't "
@@ -93,9 +121,12 @@ def _suppression_has_code(part: str) -> bool | None:
     noqa = _NOQA.match(part)
     if noqa is not None:
         return _NOQA_CODES.match(noqa.group("rest")) is not None
-    type_ignore = _TYPE_IGNORE.match(part)
-    if type_ignore is not None:
-        return _TYPE_IGNORE_CODES.match(type_ignore.group("rest")) is not None
+    for bracketed in (_RUFF_DISABLE.match(part), _TYPE_IGNORE.match(part)):
+        if bracketed is not None:
+            codes = _BRACKETED_CODES.match(bracketed.group("rest"))
+            return codes is not None and any(
+                code.strip() for code in codes.group("codes").split(",")
+            )
     return None
 
 
@@ -113,7 +144,7 @@ def comment_problems(comment: str) -> tuple[str, ...]:
         named = _suppression_has_code(part)
         if named is not None:
             suppressions.append(named)
-        elif not _OTHER_DIRECTIVE.match(part):
+        elif not any(directive.match(part) for directive in _OTHER_DIRECTIVES):
             has_reason = True
     if not suppressions:
         return ()
@@ -149,6 +180,28 @@ def unexplained_suppressions(path: str, text: str) -> list[Suppression]:
                 Suppression(path, line, token.string, lines[line - 1], missing)
             )
     return found
+
+
+def tracked_sources(root: Path) -> list[str]:
+    """Return the tracked ``.py`` and ``.pyi`` files, or every one in a plain tree.
+
+    A directory that isn't a git checkout (a test's temporary tree) has every
+    such file under it scanned.
+    """
+    if not (root / ".git").exists():
+        return sorted(
+            path.relative_to(root).as_posix()
+            for path in root.rglob("*")
+            if path.is_file() and path.suffix in SOURCE_SUFFIXES
+        )
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--", *(f"*{suffix}" for suffix in SOURCE_SUFFIXES)],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split("\0")
+    return sorted(path for path in listed if path and (root / path).is_file())
 
 
 def _describe(suppression: Suppression) -> str:
@@ -222,7 +275,7 @@ def run_check(root: Path = REPO_ROOT) -> list[Violation]:
         ]
     violations = []
     found = []
-    for path in tracked_python_files(root):
+    for path in tracked_sources(root):
         text = (root / path).read_text(encoding="utf-8", errors="replace")
         try:
             found.extend(unexplained_suppressions(path, text))
