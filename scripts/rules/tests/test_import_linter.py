@@ -178,5 +178,45 @@ class TestImportLinterEnforcer(unittest.TestCase):
         )
 
 
+class TestUnregisteredContracts(unittest.TestCase):
+    def test_a_contract_no_rule_references_is_a_hidden_rule(self) -> None:
+        with Repo({"pyproject.toml": CONFIG}) as repo:
+            hidden = [
+                message for message in repo.messages() if "hidden-rule" in message
+            ]
+
+        self.assertEqual(
+            hidden,
+            [
+                "[registry] hidden-rule: Import Linter contract 'pkg-layers' in "
+                "pyproject.toml has no rule. Fix: add a [[rule]] with "
+                'enforcer.kind = "import-linter" and enforcer.contract = '
+                '"pkg-layers".',
+                "[registry] hidden-rule: Import Linter contract 'pkg-pure' in "
+                "pyproject.toml has no rule. Fix: add a [[rule]] with "
+                'enforcer.kind = "import-linter" and enforcer.contract = '
+                '"pkg-pure".',
+            ],
+        )
+
+    def test_a_contract_without_an_id_is_a_hidden_rule(self) -> None:
+        config = '[tool.importlinter]\nroot_package = "pkg"\n\n'
+        config += '[[tool.importlinter.contracts]]\nname = "Layers"\ntype = "layers"\n'
+        with Repo({"pyproject.toml": config}) as repo:
+            hidden = [
+                message for message in repo.messages() if "hidden-rule" in message
+            ]
+
+        self.assertEqual(
+            hidden,
+            [
+                "[registry] hidden-rule: Import Linter contract 'Layers' in "
+                "pyproject.toml has no id, so no rule can reference it. Fix: give "
+                "it an id and add a [[rule]] with enforcer.kind = "
+                '"import-linter" that names it.'
+            ],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
