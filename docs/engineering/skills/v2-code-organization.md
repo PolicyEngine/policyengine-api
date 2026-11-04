@@ -5,6 +5,9 @@ responsibility. Route modules must not open database sessions or construct SQL
 (rule `api.v2.routes-no-sessions-or-sql`). Service modules must sequence work
 but must not construct or execute SQL (rule `api.v2.services-no-sql`).
 
+
+## File layers
+
 Every `.py` file under `policyengine_api/services/v2` and
 `policyengine_api/fastapi_routes/v2` has a layer, which the `v2-layers` quality
 guard (`scripts/rules/v2_layers.py`) takes from the file's name: `services.py`,
@@ -13,7 +16,17 @@ guard (`scripts/rules/v2_layers.py`) takes from the file's name: `services.py`,
 `<name>_routes.py`, `request_models.py`, `response_models.py` or `__init__.py`.
 A file with another name needs an entry, with its layer and a reason, in
 `rules/v2-layer-manifest.toml`, or the guard fails (rule
-`api.v2.files-assigned-to-layers`).
+`api.v2.files-assigned-to-layers`). The manifest can give a file under
+`services/v2` the layer `service`, `validator`, `transformation`, `types` or
+`process-state`, and a file under `fastapi_routes/v2` the layer `route`,
+`http-model` or `http-support`; each layer follows that layer's rules below.
+
+The guard counts a method call as a session call when its receiver is named
+`session` or `<something>_session` (not `request.session` or `http_session`),
+a SQL builder when it was imported from SQLAlchemy or SQLModel or is called on
+a model's `__table__`, and a session factory when it comes from
+`policyengine_api.data.orm` or `policyengine_api.data.v2.database`. A
+ratcheted rule's baseline lists one line per tolerated occurrence.
 
 ## HTTP adapters
 
@@ -111,6 +124,9 @@ session method, or define HTTP response models in this module (rule
 Define functions that inspect already-available values and either return a
 validated value or raise a typed exception. Validators must not load records,
 open sessions, execute SQL, mutate database rows, or construct HTTP responses.
+Validators, transformations, types, process-state modules and package
+`__init__` files call no session method, SQL builder or session factory (rule
+`api.v2.pure-modules-no-session-calls`).
 
 When validation depends on stored state, a database connector loads the
 required rows and the service passes those rows to a validator. For example,

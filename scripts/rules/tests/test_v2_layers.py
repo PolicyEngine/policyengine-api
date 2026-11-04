@@ -158,7 +158,7 @@ class TestCallChecks(unittest.TestCase):
 
         self.assertEqual(
             _findings({SERVICE: source}, SERVICES_RULE),
-            {f"{SERVICE} calls sqlalchemy.text"},
+            {f"{SERVICE} calls sqlalchemy.text", f"{SERVICE} imports sqlalchemy"},
         )
 
     def test_imports_under_type_checking_count(self) -> None:

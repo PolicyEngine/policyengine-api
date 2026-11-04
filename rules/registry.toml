@@ -184,7 +184,7 @@ invocation = "make test"
 id = "api.v2.files-assigned-to-layers"
 category = "v2-layers"
 statement = "Every .py file under services/v2 and fastapi_routes/v2 has a layer, from its file name or from rules/v2-layer-manifest.toml, so the layer rules check it."
-rationale = "docs/engineering/skills/v2-code-organization.md#resource-service-packages"
+rationale = "docs/engineering/skills/v2-code-organization.md#file-layers"
 scope = ["policyengine_api/services/v2/**/*.py", "policyengine_api/fastapi_routes/v2/**/*.py"]
 tier = "mechanical"
 status = "enforced"
@@ -207,7 +207,7 @@ invocation = "unittest discover -s scripts/rules/tests"
 [[rule]]
 id = "api.v2.routes-no-sessions-or-sql"
 category = "v2-layers"
-statement = "v2 route modules never open database sessions or construct SQL: they import no SQLAlchemy, SQLModel, connector, database_session or v2 database module, and call no SQL builder, session method or session factory; they call one service method and map typed failures to HTTP."
+statement = "v2 route modules never open database sessions or construct SQL: they import no SQLAlchemy, SQLModel, connector, database_session, v1 ORM or v2 database module, and call no SQL builder, session method or session factory; they call one service method and map typed failures to HTTP."
 rationale = "docs/engineering/skills/v2-code-organization.md#http-adapters"
 scope = ["policyengine_api/fastapi_routes/v2/**/*.py"]
 tier = "mechanical"
@@ -234,7 +234,7 @@ count = 4
 [[rule]]
 id = "api.v2.services-no-sql"
 category = "v2-layers"
-statement = "v2 services sequence work but never construct SQL expressions, call Session.exec or another data-access session method, or define HTTP response models (they import no FastAPI or Starlette)."
+statement = "v2 services sequence work but never construct SQL expressions (they import nothing from SQLAlchemy or SQLModel but the Session type and sqlalchemy.exc), call Session.exec or another data-access session method, or define HTTP response models (they import no FastAPI or Starlette)."
 rationale = "docs/engineering/skills/v2-code-organization.md#servicespy"
 scope = ["policyengine_api/services/v2/*/services.py"]
 tier = "mechanical"
@@ -277,9 +277,33 @@ good_fixture = "rules/fixtures/api.v2.user-services-no-sql/good_services.py"
 test = "tests/unit/v2/test_data_crud_boundaries.py::test_rule_proof_user_services_no_sql"
 
 [[rule]]
+id = "api.v2.pure-modules-no-session-calls"
+category = "v2-layers"
+statement = "v2 validators, transformations, types, process-state modules and package __init__ files call no session method, SQL builder or session factory; they work on values and rows a connector loaded."
+rationale = "docs/engineering/skills/v2-code-organization.md#validatorspy"
+scope = ["policyengine_api/services/v2/*/validators.py", "policyengine_api/services/v2/*/transformations.py", "policyengine_api/services/v2/*/types.py", "policyengine_api/services/v2/metadata/selected_catalogs.py", "policyengine_api/services/v2/**/__init__.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.pure-modules-no-session-calls/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.pure-modules-no-session-calls/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_pure_modules_no_session_calls"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
 id = "api.v2.connectors-never-commit"
 category = "v2-layers"
-statement = "v2 connectors receive a session from the service and never open, commit, roll back or close it, or import the v2 database or a database_session module."
+statement = "v2 connectors receive a session from the service and never open, commit, roll back or close it, or import the v1 ORM, the v2 database or a database_session module."
 rationale = "docs/engineering/skills/v2-code-organization.md#database_connectors"
 scope = ["policyengine_api/services/v2/*/database_connectors/*.py"]
 tier = "mechanical"
