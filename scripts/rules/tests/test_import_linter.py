@@ -180,6 +180,7 @@ class TestImportLinterEnforcer(unittest.TestCase):
 
 class TestUnregisteredContracts(unittest.TestCase):
     def test_a_contract_no_rule_references_is_a_hidden_rule(self) -> None:
+        # Reported in the order pyproject.toml lists the contracts.
         with Repo({"pyproject.toml": CONFIG}) as repo:
             hidden = [
                 message for message in repo.messages() if "hidden-rule" in message
@@ -188,14 +189,14 @@ class TestUnregisteredContracts(unittest.TestCase):
         self.assertEqual(
             hidden,
             [
-                "[registry] hidden-rule: Import Linter contract 'pkg-layers' in "
-                "pyproject.toml has no rule. Fix: add a [[rule]] with "
-                'enforcer.kind = "import-linter" and enforcer.contract = '
-                '"pkg-layers".',
                 "[registry] hidden-rule: Import Linter contract 'pkg-pure' in "
                 "pyproject.toml has no rule. Fix: add a [[rule]] with "
                 'enforcer.kind = "import-linter" and enforcer.contract = '
                 '"pkg-pure".',
+                "[registry] hidden-rule: Import Linter contract 'pkg-layers' in "
+                "pyproject.toml has no rule. Fix: add a [[rule]] with "
+                'enforcer.kind = "import-linter" and enforcer.contract = '
+                '"pkg-layers".',
             ],
         )
 

@@ -69,6 +69,7 @@ dev = [
     "pytest-snapshot",
     "pytest-timeout",
     "pytest-xdist",
+    "import-linter>=2.15,<3",
     "ruff>=0.9.0",
     "towncrier>=24.8.0",
 ]
@@ -176,6 +177,108 @@ disallow_untyped_defs = true
 warn_return_any = true
 warn_unused_ignores = true
 show_error_codes = true
+
+# Import Linter checks which v2 modules may import which, directly or through
+# other modules (docs/engineering/skills/v2-code-organization.md). Each contract
+# is a rule in rules/registry.toml (enforcer kind import-linter), and CI runs
+# `lint-imports` in the quality-guards job. Imports made only under
+# TYPE_CHECKING count too, so moving an import there can't pass a contract.
+#
+# A contract's ignore_imports must equal its rule's baseline file under
+# rules/baselines/ plus the rule's enforcer.allowed_ignore_imports; the rules
+# guard fails otherwise. unmatched_ignore_imports_alerting = "error" makes an
+# exception that no longer matches fail, so the lists only shrink.
+[tool.importlinter]
+root_package = "policyengine_api"
+include_external_packages = true
+exclude_type_checking_imports = false
+
+[[tool.importlinter.contracts]]
+id = "api-v2-layers"
+name = "v2 routes import v2 services and data, and v2 services import v2 data, never the reverse (rule api.v2.import-layers)"
+type = "layers"
+layers = [
+    "policyengine_api.fastapi_routes.v2",
+    "policyengine_api.services.v2",
+    "policyengine_api.data.v2",
+]
+
+[[tool.importlinter.contracts]]
+id = "api-v2-pure-modules-no-database"
+name = "v2 validators, transformations and types reach no SQLAlchemy, SQLModel, connector, session or v2 database module except through the table models (rule api.v2.pure-modules-no-database)"
+type = "forbidden"
+source_modules = [
+    "policyengine_api.services.v2.*.validators",
+    "policyengine_api.services.v2.*.transformations",
+    "policyengine_api.services.v2.*.types",
+]
+forbidden_modules = [
+    "sqlalchemy",
+    "sqlmodel",
+    "policyengine_api.services.v2.*.database_connectors",
+    "policyengine_api.services.v2.*.database_session",
+    "policyengine_api.data.v2.database",
+]
+ignore_imports = [
+    # Allowed by design: validators and transformations may use loaded table
+    # rows, and the table models are SQLModel classes.
+    "policyengine_api.data.v2.models -> sqlmodel",
+    "policyengine_api.data.v2.models.* -> sqlalchemy",
+    "policyengine_api.data.v2.models.* -> sqlmodel",
+    # Tolerated: rules/baselines/import-linter-api-v2-pure-modules-no-database.txt
+    "policyengine_api.services.v2.identity.types -> sqlmodel",
+]
+unmatched_ignore_imports_alerting = "error"
+
+[[tool.importlinter.contracts]]
+id = "api-v2-routes-no-database-access"
+name = "v2 route modules import no connector, database_session or v2 database module (rule api.v2.routes-import-no-database-access)"
+type = "forbidden"
+source_modules = ["policyengine_api.fastapi_routes.v2"]
+forbidden_modules = [
+    "policyengine_api.services.v2.*.database_connectors",
+    "policyengine_api.services.v2.*.database_session",
+    "policyengine_api.data.v2.database",
+]
+# Direct imports only: routes reach connectors through the services they call.
+allow_indirect_imports = true
+unmatched_ignore_imports_alerting = "error"
+
+[[tool.importlinter.contracts]]
+id = "api-v2-types-transformations-no-validators"
+name = "v2 types and transformations import no validators module (rule api.v2.types-transformations-no-validators)"
+type = "forbidden"
+source_modules = [
+    "policyengine_api.services.v2.*.types",
+    "policyengine_api.services.v2.*.transformations",
+]
+forbidden_modules = ["policyengine_api.services.v2.*.validators"]
+allow_indirect_imports = true
+ignore_imports = [
+    # Tolerated: rules/baselines/import-linter-api-v2-types-transformations-no-validators.txt
+    "policyengine_api.services.v2.households.transformations -> policyengine_api.services.v2.households.validators",
+    "policyengine_api.services.v2.households.types -> policyengine_api.services.v2.households.validators",
+    "policyengine_api.services.v2.policies.transformations -> policyengine_api.services.v2.policies.validators",
+    "policyengine_api.services.v2.policies.types -> policyengine_api.services.v2.policies.validators",
+]
+unmatched_ignore_imports_alerting = "error"
+
+[[tool.importlinter.contracts]]
+id = "api-v2-connectors-independent"
+name = "v2 connector modules import no other connector module (rule api.v2.connectors-no-cross-calls)"
+type = "independence"
+modules = ["policyengine_api.services.v2.*.database_connectors.*"]
+ignore_imports = [
+    # Tolerated: rules/baselines/import-linter-api-v2-connectors-independent.txt
+    "policyengine_api.services.v2.metadata.database_connectors.reads_datasets -> policyengine_api.services.v2.metadata.database_connectors.reads",
+    "policyengine_api.services.v2.metadata.database_connectors.reads_parameter_nodes -> policyengine_api.services.v2.metadata.database_connectors.reads",
+    "policyengine_api.services.v2.metadata.database_connectors.reads_parameter_search_file -> policyengine_api.services.v2.metadata.database_connectors.reads",
+    "policyengine_api.services.v2.metadata.database_connectors.reads_parameter_tree -> policyengine_api.services.v2.metadata.database_connectors.reads",
+    "policyengine_api.services.v2.metadata.database_connectors.reads_parameters -> policyengine_api.services.v2.metadata.database_connectors.reads",
+    "policyengine_api.services.v2.metadata.database_connectors.reads_regions -> policyengine_api.services.v2.metadata.database_connectors.reads",
+    "policyengine_api.services.v2.metadata.database_connectors.reads_variables -> policyengine_api.services.v2.metadata.database_connectors.reads",
+]
+unmatched_ignore_imports_alerting = "error"
 
 # .github/changelog_fragments.py reads `directory` and the types' `directory`
 # names below, so the PR check, the version bump in .github/bump_version.py and

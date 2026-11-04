@@ -21,7 +21,10 @@ KIND_FIELDS: dict[Kind, tuple[dict[str, type], dict[str, type]]] = {
     Kind.RUFF: ({"mode": str}, {"codes": list, "pattern": str, "config": str}),
     Kind.MYPY: ({"paths": list}, {"config": str}),
     Kind.PYRIGHT: ({"config": str}, {"project": str}),
-    Kind.IMPORT_LINTER: ({"config": str, "contract": str}, {}),
+    Kind.IMPORT_LINTER: (
+        {"config": str, "contract": str},
+        {"allowed_ignore_imports": list},
+    ),
     Kind.WORKFLOW_JOB: ({}, {"step": str}),
     Kind.DOCS_GUARD: ({"doc": str, "marker": str}, {}),
     Kind.LLM_REVIEW: ({"prompt": str, "model": str}, {}),

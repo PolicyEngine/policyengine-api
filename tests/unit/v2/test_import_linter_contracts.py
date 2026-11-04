@@ -73,6 +73,8 @@ def _fixture_config(rule_id: str) -> tuple[str, str]:
     ]
     if kept_exceptions:
         fixture_contract["ignore_imports"] = _renamed(kept_exceptions)
+        # A fixture need not contain every module an allowed exception names.
+        fixture_contract["unmatched_ignore_imports_alerting"] = "none"
     top_level = {
         key: _renamed(value) for key, value in settings.items() if key != "contracts"
     }

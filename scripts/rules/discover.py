@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from scripts.rules.import_linter import unregistered_contracts
 from scripts.rules.model import Kind, Registry, Violation
 from scripts.rules.resolve import (
     DEFAULT_RUNNER,
@@ -136,6 +137,9 @@ def discover_hidden(registry: Registry, root: Path) -> list[Violation]:
         for path in mypy_files(root)
         if path not in covered
     )
+
+    # Import Linter contracts.
+    violations.extend(unregistered_contracts(rules, root))
 
     # Guard-style tests.
     registered_nodes = _registered_nodes(registry)

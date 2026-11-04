@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 61 | 0 | 1 | 12 | 74 |
+| mechanical | 63 | 3 | 1 | 11 | 78 |
 | metric | 1 | 0 | 0 | 0 | 1 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 62 of 76 rules.
+**Blocking:** 67 of 80 rules.
 
 ## Gaps
 
@@ -28,7 +28,6 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 - `api.process.rule-machinery-code-owned`: Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author.
 - `api.routes.shared-query-parameters`: Routes that accept query parameters define them through the shared typed query models, never with a second manual parser.
 - `api.v2.connectors-never-commit`: v2 connectors receive a session from the service and never open, commit, roll back or close it.
-- `api.v2.connectors-no-cross-calls`: v2 connector modules never call one another to sequence a workflow; the service does the sequencing.
 - `api.v2.routes-no-sessions-or-sql`: v2 route modules never open database sessions or construct SQL; they call one service method and map typed failures to HTTP.
 - `api.v2.services-no-sql`: v2 services sequence work but never construct SQL expressions, call Session.exec, or define HTTP response models.
 
@@ -65,7 +64,9 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Ratcheted (existing violations still tolerated)
 
-- None.
+- `api.v2.connectors-no-cross-calls`: 7 remaining in `rules/baselines/import-linter-api-v2-connectors-independent.txt`
+- `api.v2.pure-modules-no-database`: 1 remaining in `rules/baselines/import-linter-api-v2-pure-modules-no-database.txt`
+- `api.v2.types-transformations-no-validators`: 4 remaining in `rules/baselines/import-linter-api-v2-types-transformations-no-validators.txt`
 
 ### Exceptions and review dates
 
@@ -84,12 +85,16 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 | `api.routes.shared-query-parameters` | Routes that accept query parameters define them through the shared typed query models, never with a second manual parser. | mechanical | doc-only | no | nothing | — | — |
 | `api.v2.connectors-mutations-no-reads` | v2 mutation connectors (creates, updates, deletes) never issue select or get reads. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | **unproven** |
 | `api.v2.connectors-never-commit` | v2 connectors receive a session from the service and never open, commit, roll back or close it. | mechanical | doc-only | no | nothing | — | — |
-| `api.v2.connectors-no-cross-calls` | v2 connector modules never call one another to sequence a workflow; the service does the sequencing. | mechanical | doc-only | no | nothing | — | — |
+| `api.v2.connectors-no-cross-calls` | v2 connector modules never import one another, so they cannot call one another to sequence a workflow; the service does the sequencing. | mechanical | ratcheted | yes | import-linter `pyproject.toml` | `pr.yml:quality-guards` | yes |
 | `api.v2.connectors-reads-no-mutations` | v2 read connectors never insert, add or delete rows. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | **unproven** |
 | `api.v2.crud-checks-cover-every-resource` | The v2 CRUD boundary checks find modules by filename, so every resource package is covered, and every connector module is named as a create, read, update or delete module. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | **unproven** |
+| `api.v2.import-layers` | v2 route modules may import v2 services and v2 data modules, and v2 services may import v2 data modules, never the reverse, directly or through other modules. | mechanical | enforced | yes | import-linter `pyproject.toml` | `pr.yml:quality-guards` | yes |
+| `api.v2.pure-modules-no-database` | v2 validators, transformations and types never reach SQLAlchemy, SQLModel, a connector, a database_session module or the v2 database module, directly or through other modules, except through the v2 table models; imports under TYPE_CHECKING count. | mechanical | ratcheted | yes | import-linter `pyproject.toml` | `pr.yml:quality-guards` | yes |
+| `api.v2.routes-import-no-database-access` | v2 route modules never import a connector, a database_session module or the v2 database module; they call a service, which does. | mechanical | enforced | yes | import-linter `pyproject.toml` | `pr.yml:quality-guards` | yes |
 | `api.v2.routes-no-sessions-or-sql` | v2 route modules never open database sessions or construct SQL; they call one service method and map typed failures to HTTP. | mechanical | doc-only | no | nothing | — | — |
 | `api.v2.services-no-sql` | v2 services sequence work but never construct SQL expressions, call Session.exec, or define HTTP response models. | mechanical | doc-only | no | nothing | — | — |
 | `api.v2.session-modules-no-queries` | v2 database_session modules own session lifetime only and never build select, insert, update, delete or exec calls. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | **unproven** |
+| `api.v2.types-transformations-no-validators` | v2 types and transformations modules never import a validators module; validators import types, not the reverse. | mechanical | ratcheted | yes | import-linter `pyproject.toml` | `pr.yml:quality-guards` | yes |
 | `api.v2.user-services-no-sql` | v2 user services (identity, accounts, legacy references and user associations) never build or run SQL themselves or import SQLAlchemy; their connectors do. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | yes |
 | `api.v2.validators-transformations-no-db` | v2 validators and transformations never import SQLAlchemy or SQLModel query or session APIs. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | yes |
 
@@ -101,24 +106,35 @@ flowchart LR
   e_pytest_tests_unit_v2_test_data_crud_boundaries_py["pytest tests/unit/v2/test_data_crud_boundaries.py"]
   j_CI_pr_yml_test["CI pr.yml:test"]
   r_api_v2_connectors_never_commit("api.v2.connectors-never-commit (doc-only)")
-  r_api_v2_connectors_no_cross_calls("api.v2.connectors-no-cross-calls (doc-only)")
+  r_api_v2_connectors_no_cross_calls("api.v2.connectors-no-cross-calls (ratcheted)")
+  e_import_linter_pyproject_toml["import-linter pyproject.toml"]
+  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
   r_api_v2_connectors_reads_no_mutations("api.v2.connectors-reads-no-mutations (enforced)")
   r_api_v2_crud_checks_cover_every_resource("api.v2.crud-checks-cover-every-resource (enforced)")
+  r_api_v2_import_layers("api.v2.import-layers (enforced)")
+  r_api_v2_pure_modules_no_database("api.v2.pure-modules-no-database (ratcheted)")
+  r_api_v2_routes_import_no_database_access("api.v2.routes-import-no-database-access (enforced)")
   r_api_v2_routes_no_sessions_or_sql("api.v2.routes-no-sessions-or-sql (doc-only)")
   r_api_v2_services_no_sql("api.v2.services-no-sql (doc-only)")
   r_api_v2_session_modules_no_queries("api.v2.session-modules-no-queries (enforced)")
+  r_api_v2_types_transformations_no_validators("api.v2.types-transformations-no-validators (ratcheted)")
   r_api_v2_user_services_no_sql("api.v2.user-services-no-sql (enforced)")
   r_api_v2_validators_transformations_no_db("api.v2.validators-transformations-no-db (enforced)")
   r_api_routes_shared_query_parameters -.-> gap_unenforced
   r_api_v2_connectors_mutations_no_reads --> e_pytest_tests_unit_v2_test_data_crud_boundaries_py
   e_pytest_tests_unit_v2_test_data_crud_boundaries_py --> j_CI_pr_yml_test
   r_api_v2_connectors_never_commit -.-> gap_unenforced
-  r_api_v2_connectors_no_cross_calls -.-> gap_unenforced
+  r_api_v2_connectors_no_cross_calls --> e_import_linter_pyproject_toml
+  e_import_linter_pyproject_toml --> j_CI_pr_yml_quality_guards
   r_api_v2_connectors_reads_no_mutations --> e_pytest_tests_unit_v2_test_data_crud_boundaries_py
   r_api_v2_crud_checks_cover_every_resource --> e_pytest_tests_unit_v2_test_data_crud_boundaries_py
+  r_api_v2_import_layers --> e_import_linter_pyproject_toml
+  r_api_v2_pure_modules_no_database --> e_import_linter_pyproject_toml
+  r_api_v2_routes_import_no_database_access --> e_import_linter_pyproject_toml
   r_api_v2_routes_no_sessions_or_sql -.-> gap_unenforced
   r_api_v2_services_no_sql -.-> gap_unenforced
   r_api_v2_session_modules_no_queries --> e_pytest_tests_unit_v2_test_data_crud_boundaries_py
+  r_api_v2_types_transformations_no_validators --> e_import_linter_pyproject_toml
   r_api_v2_user_services_no_sql --> e_pytest_tests_unit_v2_test_data_crud_boundaries_py
   r_api_v2_validators_transformations_no_db --> e_pytest_tests_unit_v2_test_data_crud_boundaries_py
 ```

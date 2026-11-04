@@ -72,7 +72,8 @@ gap is visible, rather than leaving it out.
 | `ruff` | `mode` = `format`, `lint` (with `codes`) or `per-file-ignore` (with `pattern`, `codes`) | Codes are selected / the ignore entry exists and covers only [files allowed file-level exceptions](#file-level-exceptions) |
 | `mypy` | `paths` | Each path is in `[tool.mypy].files` |
 | `workflow-job` | optional `step` | The CI job exists (the job itself is the check) |
-| `pyright`, `import-linter` | `config` (+ `contract` for Import Linter) | The config file exists |
+| `pyright` | `config` | The config file exists |
+| `import-linter` | `config`, `contract`, optional `allowed_ignore_imports` | The contract with that `id` exists, and its `ignore_imports` equals the rule's baseline entries plus `allowed_ignore_imports`, with `unmatched_ignore_imports_alerting = "error"` (see "Baselines") |
 | `docs-guard` | `doc`, `marker` | The doc exists |
 | `llm-review` | `prompt`, `model` | The prompt exists; judgment tier only |
 | `none` | | Nothing; only for `doc-only` and `advisory` rules |
@@ -124,6 +125,14 @@ fail the guard yet.
 - Other enforcers (mypy, Pyright, Import Linter, custom guards) may start
   `ratcheted` with a baseline file of tolerated violations. Baselines may only
   shrink: the guard compares counts against the base branch.
+- **Import Linter** tolerates a violation through the contract's
+  `ignore_imports` in `pyproject.toml`. The rule's baseline file lists the same
+  entries, one per line, so adding one needs a change under the code-owned
+  `rules/` directory; imports the rule allows by design, rather than tolerates,
+  go in `enforcer.allowed_ignore_imports`. The guard fails when the contract's
+  `ignore_imports` and those two lists differ, and
+  `unmatched_ignore_imports_alerting = "error"` makes Import Linter fail on an
+  entry that no longer matches, so fixing an import forces the entry out.
 - Moving a rule from enforced/ratcheted to advisory/doc-only needs an explicit
   `[rule.downgrade] reason`.
 
@@ -186,6 +195,7 @@ describe:
 - a ruff format check in CI, an explicitly selected ruff code, or a ruff
   per-file ignore;
 - a `[tool.mypy].files` entry;
+- an Import Linter contract in `pyproject.toml`;
 - a test matching `[discovery].guard_test_globs` or listed in
   `extra_guard_tests`;
 - a job in a `[discovery].workflows` file.
