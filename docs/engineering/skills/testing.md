@@ -41,7 +41,8 @@ collect, and fails on a test whose body contains none of:
   `self.fail`;
 - a call to a test helper that does one of these, followed through further
   helpers: a function of the same file called by name, a method of the
-  test's own class called through `self`, `cls` or `super()`, or a function
+  test's own class called through `self`, `cls` or `super()` (looked up in
+  Python's method resolution order), or a function
   imported by name (`from tests.unit.support import check_response`, at the
   top of the file or inside the test, also through a re-export or a star
   import) from test code: a module under a `tests` directory, a test file or
@@ -52,8 +53,11 @@ function, class or lambda assigned to a name in the body counts only when the
 body refers to it by name: a stand-in that raises `AssertionError` when the
 code calls it is a check once the test passes it to the code. `self` in a
 stand-in class's methods is the stand-in, not the test's class. Production
-code isn't a helper, even if it raises on bad input, and neither is a name
-the test binds itself, such as a fixture parameter called like a function.
+code isn't a helper, even if it raises on bad input. A name resolves from
+the call's own scope outward, as in Python: a parameter (such as a fixture
+called like a function), a local variable, a lambda or comprehension
+variable, or an import inside the test hides a module-level helper of the
+same name, but a name bound only in a nested function doesn't.
 
 The guard collects tests as pytest does, for what it can read without
 importing anything:
@@ -64,10 +68,15 @@ importing anything:
   aren't dataclasses, including methods and nested `Test*` classes inherited
   from bases in test code;
 - methods of `unittest.TestCase` subclasses;
-- test functions and classes imported by name into a test module.
+- test functions and classes imported into a test module, by name or with a
+  star import, under the name the import binds.
 
+Methods are looked up as Python looks them up, including those in `if`
+blocks of a class body; a later definition replaces an earlier one, and an
+attribute such as `test_inherited = None` switches an inherited test off.
 The nearest `__test__` setting on a module or class decides whether it is
-collected, as for pytest. `scripts/rules/tests/` runs under
+collected, as for pytest: `False` switches a class off, and `True` collects
+a class whatever its name. `scripts/rules/tests/` runs under
 `unittest discover`, which collects only `TestCase` subclasses and ignores
 `__test__`. A base class outside test code isn't read, so an `__init__`
 there isn't seen.

@@ -1,5 +1,6 @@
 # Tolerated test functions that check nothing, for api.quality.tests-assert:
-# one "<path>::<test>" per line, where <test> is Class::method for a method.
+# one "<path>::<test>" per line, where <test> is Class::method for a method
+# and Outer::Inner::method for a method of a nested class.
 # Comments go on lines of their own. This list may only shrink: give a test
 # a check, then remove its line and lower the rule's baseline count.
 tests/unit/data/test_places.py::TestValidatePlaceCode::test__given_valid_place_code__no_error

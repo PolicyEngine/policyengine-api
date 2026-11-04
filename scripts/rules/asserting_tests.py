@@ -31,12 +31,15 @@ module-level ``test*`` functions, also in ``if``, ``try`` and ``with`` blocks,
 except fixtures; ``test*`` methods of ``Test*`` classes that have no
 ``__init__`` or ``__new__`` and aren't dataclasses, including methods and
 nested ``Test*`` classes inherited from bases in test code; ``TestCase``
-subclasses; and test functions and classes imported by name into the test
-module. The nearest ``__test__`` setting on a module or class decides whether
-it is collected. Files under ``check_index.UNITTEST_DIRECTORIES`` run under
-``unittest discover``, which collects only ``TestCase`` subclasses and ignores
-``__test__``. A base class outside test code isn't read, so an ``__init__``
-there isn't seen. The analysis is in scripts/rules/check_index.py.
+subclasses; and test functions and classes imported into the test module, by
+name or with a star import, under the name the import binds. Methods are
+looked up in Python's method resolution order. The nearest ``__test__``
+setting on a module or class decides whether it is collected. Files under
+``check_modules.UNITTEST_DIRECTORIES`` run under ``unittest discover``, which
+collects only ``TestCase`` subclasses and ignores ``__test__``. A base class
+outside test code isn't read, so an ``__init__`` there isn't seen. The
+analysis is in scripts/rules/check_index.py, check_modules.py and
+check_bodies.py.
 
 While the rule is ratcheted, its baseline file lists the tolerated tests, one
 ``<path>::<test>`` per line (``<test>`` is ``Class::method`` for a method). A
@@ -54,7 +57,8 @@ from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from scripts.rules.check_index import CheckIndex, UncheckedTest, is_test_file
+from scripts.rules.check_index import CheckIndex
+from scripts.rules.check_modules import UncheckedTest, is_test_file
 from scripts.rules.load import load_registry
 from scripts.rules.model import Violation
 
@@ -64,8 +68,9 @@ if TYPE_CHECKING:
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RULE_ID = "api.quality.tests-assert"
 CHECK_NAME = "asserting-tests"
-# CheckIndex, UncheckedTest and is_test_file live in scripts/rules/check_index.py
-# and are part of this module's public interface.
+# The analysis's index, test record and file filter are part of this
+# module's public interface; they are defined in check_index.py and
+# check_modules.py.
 __all__ = [
     "CHECK_NAME",
     "REPO_ROOT",
