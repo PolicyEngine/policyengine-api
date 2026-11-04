@@ -162,8 +162,8 @@ class EconomicImpactResult(BaseModel):
     stored failure is still returned: once it has passed, a request finds no
     record and submits a new job. It is the longest wait, since a deploy that
     changes the versions or worker app a request resolves to stops the record
-    being found sooner.
-    It is None when no failure is stored or its lifetime cannot be read.
+    being found sooner. It is None when no failure is stored, the next request
+    would answer from a newer job, or the failure's lifetime cannot be read.
     """
 
     status: ImpactStatus

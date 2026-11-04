@@ -358,17 +358,16 @@ class StoredImpactMixin:
     ) -> CachedReformImpact | None:
         """Return the stored failure when the next request would answer from it.
 
-        A job polled through another record's lookup, such as one found by the
-        options-hash prefix or on a worker app the request no longer resolves
-        to, or a late poll of a job a newer one has replaced, fails onto a
-        record the next request does not select: that request starts a new run
-        or answers from the newer job. Then None, since this failure's lifetime
-        says nothing about when. The lookup runs on a copy of the options,
-        because its refresh rewrites the options it is given.
+        A late poll of a job that a newer one has replaced fails onto a record
+        the next request does not select: that request answers from the newer
+        job. Then None, since this failure's lifetime says nothing about when
+        a new run can start. The check is the cache lookup alone, with no
+        request to the simulation API; a deploy that changes the worker app a
+        request resolves to can still start a new run sooner.
         """
         if stored_failure is None:
             return None
-        next_answer = self._get_reusable_impact(setup_options.model_copy())
+        next_answer = self._get_most_recent_impact(setup_options)
         if (
             next_answer is None
             or next_answer.execution_id != stored_failure.execution_id

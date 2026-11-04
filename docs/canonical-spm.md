@@ -376,9 +376,8 @@ failure. A 502 for a stored failure also carries `retry_after_seconds`: the
 whole seconds, rounded up, until lookups stop finding that failure (the
 earlier of its record's expiry and its scope index's), after which the next
 request submits a new job. It is null when no failure is stored, when the
-next request would not answer from this failure (a late poll of a job that a
-newer one replaced, or a job found under another worker app), or when the
-cache cannot be read. It is the longest wait: a deploy that changes the
+next request would answer from a newer job (a late poll of a job that a newer
+one replaced), or when the cache cannot be read. It is the longest wait: a deploy that changes the
 versions or worker app a request resolves to starts a new run sooner.
 
 Before cache access or submission,

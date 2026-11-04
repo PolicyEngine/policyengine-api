@@ -184,9 +184,10 @@ class ImpactExecutionMixin:
         ``RETRYABLE_FAILURE_SECONDS``. Until then every request gets the same
         error, which ends with ``retry_note`` to say when to try again; after
         it, the next request finds no record and submits a new job. No other
-        job's record is read or changed, and no submission claim is held at
-        this point: it was released once the job was handed off. Other failed
-        jobs, and typed SPM failures, are stored as before.
+        job's record is changed (the scope's records are read only to check
+        that the next request answers from this one), and no submission claim
+        is held at this point: it was released once the job was handed off.
+        Other failed jobs, and typed SPM failures, are stored as before.
         """
         message = f"{reason}. {retry_note}"
         stored_failure = None

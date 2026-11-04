@@ -261,7 +261,7 @@ class TestEconomyService:
             )
             # The next request's lookup answers from this stored failure.
             next_lookup = MagicMock(return_value=stored_failure)
-            economy_service._get_reusable_impact = next_lookup
+            economy_service._get_most_recent_impact = next_lookup
             mock_reform_impacts_service.get_reform_impact_seconds_left.return_value = (
                 120
             )
@@ -293,10 +293,7 @@ class TestEconomyService:
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
                 stored_failure
             )
-            # The lookup ran on a copy, so this request's options are unchanged.
-            (looked_up_options,) = next_lookup.call_args.args
-            assert looked_up_options is not state_setup_options
-            assert looked_up_options == state_setup_options
+            next_lookup.assert_called_once_with(state_setup_options)
 
         @pytest.mark.usefixtures("mock_logger")
         @pytest.mark.parametrize(
@@ -323,7 +320,7 @@ class TestEconomyService:
             )
             # The next request's lookup answers from this stored failure.
             next_lookup = MagicMock(return_value=stored_failure)
-            economy_service._get_reusable_impact = next_lookup
+            economy_service._get_most_recent_impact = next_lookup
             mock_reform_impacts_service.get_reform_impact_seconds_left.return_value = (
                 2_591_000
             )
@@ -346,12 +343,10 @@ class TestEconomyService:
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
                 stored_failure
             )
-            # The lookup ran on a copy, so this request's options are unchanged.
-            (looked_up_options,) = next_lookup.call_args.args
-            assert looked_up_options is not region_setup_options
-            assert looked_up_options == region_setup_options
+            next_lookup.assert_called_once_with(region_setup_options)
 
         @pytest.mark.usefixtures("mock_logger")
+        @pytest.mark.parametrize("region", ["state/ca", MOCK_REGION])
         @pytest.mark.parametrize(
             "next_answer",
             [None, create_mock_reform_impact(status="computing")],
@@ -363,6 +358,7 @@ class TestEconomyService:
             setup_options,
             mock_reform_impacts_service,
             next_answer,
+            region,
         ):
             # Given: the failure is stored, but the next request would start a
             # new run or answer from a newer job instead.
@@ -376,11 +372,13 @@ class TestEconomyService:
             )
             if next_answer is not None:
                 next_answer.execution_id = "newer-job"
-            economy_service._get_reusable_impact = MagicMock(return_value=next_answer)
+            economy_service._get_most_recent_impact = MagicMock(
+                return_value=next_answer
+            )
 
             # When
             result = economy_service._handle_execution_state(
-                setup_options.model_copy(update={"region": "state/ca"}),
+                setup_options.model_copy(update={"region": region}),
                 "failed",
                 reform_impact,
                 execution,

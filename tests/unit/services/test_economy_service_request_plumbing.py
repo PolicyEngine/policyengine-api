@@ -1016,6 +1016,26 @@ def test_a_failed_us_state_job_is_returned_for_two_minutes_then_resubmitted(
     ] == [("state/ca", "second-state-job", "computing")]
 
 
+def test_a_failing_poll_asks_the_simulation_api_for_no_worker_app(
+    economy_service, mock_simulation_entrypoint
+):
+    _finish_jobs_with(
+        mock_simulation_entrypoint, status="failed", error="out of memory"
+    )
+    request = _us_request("state/ca")
+    economy_service.get_economic_impact(request, time_period="2025")
+    resolutions_before_the_poll = mock_simulation_entrypoint.resolve_app_name.call_count
+
+    failed = economy_service.get_economic_impact(request, time_period="2025")
+
+    assert failed.retry_after_seconds == 120
+    # Checking which record the next request answers from reads only the cache.
+    assert (
+        mock_simulation_entrypoint.resolve_app_name.call_count
+        == resolutions_before_the_poll
+    )
+
+
 def test_a_failed_us_national_job_is_still_replayed(
     economy_service,
     mock_simulation_entrypoint,
