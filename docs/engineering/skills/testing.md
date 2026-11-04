@@ -41,23 +41,36 @@ collect, and fails on a test whose body contains none of:
   `self.fail`;
 - a call to a test helper that does one of these, followed through further
   helpers: a function of the same file called by name, a method of the
-  test's own class called through `self` or `cls`, or a function imported by
-  name (`from tests.unit.support import check_response`, at the top of the
-  file or inside the test) from test code: a module under a `tests`
-  directory, a test file or a `conftest.py`.
+  test's own class called through `self`, `cls` or `super()`, or a function
+  imported by name (`from tests.unit.support import check_response`, at the
+  top of the file or inside the test, also through a re-export or a star
+  import) from test code: a module under a `tests` directory, a test file or
+  a `conftest.py`.
 
 Only the test's body counts, not its decorators or default arguments. A
-function or class defined in the body counts only when the body refers to it
-by name: a stand-in that raises `AssertionError` when the code calls it is a
-check once the test passes it to the code. Production code isn't a helper,
-even if it raises on bad input.
+function, class or lambda assigned to a name in the body counts only when the
+body refers to it by name: a stand-in that raises `AssertionError` when the
+code calls it is a check once the test passes it to the code. `self` in a
+stand-in class's methods is the stand-in, not the test's class. Production
+code isn't a helper, even if it raises on bad input, and neither is a name
+the test binds itself, such as a fixture parameter called like a function.
 
-The guard collects tests as pytest does: module-level `test*` functions, also
-inside `if`, `try` and `with` blocks; `test*` methods of `Test*` classes
-without an `__init__`, including methods inherited from a mixin and nested
-`Test*` classes; and methods of `unittest.TestCase` subclasses, also through
-a base class in test code. `__test__ = False` on a module or class switches
-collection off, as it does for pytest.
+The guard collects tests as pytest does, for what it can read without
+importing anything:
+
+- module-level `test*` functions, also inside `if`, `try` and `with` blocks,
+  except pytest fixtures;
+- `test*` methods of `Test*` classes that have no `__init__` or `__new__` and
+  aren't dataclasses, including methods and nested `Test*` classes inherited
+  from bases in test code;
+- methods of `unittest.TestCase` subclasses;
+- test functions and classes imported by name into a test module.
+
+The nearest `__test__` setting on a module or class decides whether it is
+collected, as for pytest. `scripts/rules/tests/` runs under
+`unittest discover`, which collects only `TestCase` subclasses and ignores
+`__test__`. A base class outside test code isn't read, so an `__init__`
+there isn't seen.
 
 A test that only shows that a call doesn't raise checks nothing: assert what
 the call returns or what it changes instead. A helper reached any other way
