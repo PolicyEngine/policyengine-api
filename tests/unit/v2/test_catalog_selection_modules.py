@@ -272,6 +272,23 @@ def _tracked_files() -> list[str]:
     return sorted(name for name in listed.stdout.split("\0") if name)
 
 
+def test_the_name_search_matches_module_references_only() -> None:
+    references = (
+        'patch("policyengine_api.data.v2.catalog.catalog_selection.select_catalog")',
+        "See `policyengine_api/data/v2/catalog/catalog_selection.py`.",
+        "from policyengine_api.data.v2.catalog import catalog_selection",
+    )
+    unrelated = (
+        "catalog_selection = select_catalog(session, country_id='us')",
+        "The catalog_selection step picks one version.",
+        "from policyengine_api.data.v2.catalog import catalog_selection_reads",
+        "policyengine_api.data.v2.catalog.catalog_selection_validation",
+    )
+
+    assert all(FORMER_MODULE_NAME.search(line) for line in references)
+    assert not any(FORMER_MODULE_NAME.search(line) for line in unrelated)
+
+
 def test_no_file_names_the_former_mixed_module() -> None:
     """Search every tracked file, which catches mock.patch targets and docs too."""
     this_file = Path(__file__).resolve().relative_to(PROJECT_ROOT).as_posix()
