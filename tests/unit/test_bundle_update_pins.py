@@ -221,10 +221,11 @@ def test_existing_pull_request_is_found_by_exact_branch(update_checkout):
 
 # --- The tracking issue (rule api.process.pr-tracking-issue) ---------------
 
-# Every bundle-update pull request names the same open issue, so a pull
-# request closed without merging, as superseded ones are, leaves no issue
-# behind: the next one to merge closes it.
-ISSUE_TITLE = "Update the PolicyEngine bundle"
+# Each version's pull request names an issue of its own: merging closes it
+# through the Fixes line, and close-bundle-update-issue.yml closes it when the
+# pull request is closed without merging. No open pull request names an issue
+# that another pull request's merge closed.
+ISSUE_TITLE = f"Update PolicyEngine bundle to {TARGET_VERSION}"
 
 
 def _calls_to(calls, *command):
@@ -260,7 +261,23 @@ def test_a_new_pull_request_names_a_new_tracking_issue_first(update_checkout):
     assert issue[issue.index("--title") + 1] == ISSUE_TITLE
     description = _pull_request_description(calls)
     assert description.split("\n")[:3] == ["Fixes #4321", "", "## Summary"]
-    assert calls.index(issue) < calls.index(_calls_to(calls, "pr", "create")[0])
+
+
+def test_the_tracking_issue_is_resolved_after_the_lock_and_before_the_push(
+    update_checkout,
+):
+    """A failed lock opens no issue, and a failed lookup pushes no branch."""
+    result, calls = run_update(update_checkout)
+
+    assert result.returncode == 0, result.stderr
+    order = [
+        calls.index(["uv", "lock", "--check"]),
+        calls.index(_calls_to(calls, "issue", "list")[0]),
+        calls.index(_calls_to(calls, "issue", "create")[0]),
+        next(index for index, call in enumerate(calls) if call[:2] == ["git", "push"]),
+        calls.index(_calls_to(calls, "pr", "create")[0]),
+    ]
+    assert order == sorted(order)
 
 
 def test_a_new_pull_request_reuses_the_oldest_open_tracking_issue(update_checkout):
@@ -282,7 +299,8 @@ def test_issues_with_other_titles_are_not_reused(update_checkout):
     result, calls = run_update(
         update_checkout,
         **_open_issues(
-            (4200, f"Update PolicyEngine bundle to {TARGET_VERSION}"),
+            (4200, "Update PolicyEngine bundle to 4.0.9"),
+            (4150, "Update the PolicyEngine bundle"),
             (4100, "Relock dependencies"),
             (4000, f"{ISSUE_TITLE} later"),
         ),
@@ -318,9 +336,13 @@ def test_a_pull_request_for_an_existing_branch_names_its_tracking_issue_first(
     assert _pull_request_description(calls).startswith("Fixes #4321\n\n## Summary")
 
 
-def test_a_failed_issue_lookup_opens_no_issue_and_no_pull_request(update_checkout):
+def test_a_failed_issue_lookup_pushes_nothing_and_opens_nothing(update_checkout):
     result, calls = run_update(update_checkout, BUNDLE_TEST_ISSUE_LIST_FAIL="1")
 
     assert result.returncode != 0
+    assert "Could not list the open issues in PolicyEngine/policyengine-api" in (
+        result.stderr
+    )
+    assert not any(call[:2] in (["git", "commit"], ["git", "push"]) for call in calls)
     assert _calls_to(calls, "issue", "create") == []
     assert _calls_to(calls, "pr", "create") == []
