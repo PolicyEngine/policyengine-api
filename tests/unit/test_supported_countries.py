@@ -50,7 +50,7 @@ sys.modules["policyengine.bundle"] = installed_bundle
 from pydantic import TypeAdapter
 
 from policyengine_api import constants
-from policyengine_api.data.v2.catalog import catalog_selection, extraction
+from policyengine_api.data.v2.catalog import catalog_selection_validation, extraction
 from policyengine_api.query_parameters import CountryId
 from scripts import process_v1_household_mirror_event
 
@@ -75,7 +75,9 @@ print(
             "extracted_countries": list(extraction.SUPPORTED_COUNTRIES),
             "required_dependencies": list(extraction.REQUIRED_DEPENDENCIES),
             "installed_models": captured_arguments["models"],
-            "dual_write_countries": sorted(catalog_selection.SUPPORTED_V2_COUNTRY_IDS),
+            "dual_write_countries": sorted(
+                catalog_selection_validation.SUPPORTED_V2_COUNTRY_IDS
+            ),
             "household_copy_countries": list(country_option.choices),
             "v1_countries": list(constants.COUNTRIES),
             "v1_country_packages": list(constants.COUNTRY_PACKAGE_NAMES),

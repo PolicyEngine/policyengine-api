@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogNotPublishedError,
 )
 from policyengine_api.data.v2.models import (
