@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 59 | 0 | 1 | 13 | 73 |
+| mechanical | 60 | 0 | 1 | 12 | 73 |
 | metric | 1 | 0 | 0 | 0 | 1 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 60 of 75 rules.
+**Blocking:** 61 of 75 rules.
 
 ## Gaps
 
@@ -25,7 +25,6 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 - `api.process.agents-never-bypass`: Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human.
 - `api.process.agents-suppress-as-last-resort`: Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason.
 - `api.process.makefile-phony`: Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed.
-- `api.process.pr-tracking-issue`: Every PR has a tracking issue in this repository, and the first line of its description is Fixes #ISSUE_NUMBER.
 - `api.process.rule-machinery-code-owned`: Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author.
 - `api.routes.shared-query-parameters`: Routes that accept query parameters define them through the shared typed query models, never with a second manual parser.
 - `api.v2.connectors-never-commit`: v2 connectors receive a session from the service and never open, commit, roll back or close it.
@@ -333,7 +332,7 @@ flowchart LR
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `api.quality.alembic-revisions-unused-imports` | Ruff neither lints nor formats Alembic revision files (extend-exclude in pyproject.toml), because they must stay exactly as Alembic generates them. | mechanical | advisory | no | nothing | — | — |
-| `api.quality.ci-cd-scripts-ruff-exemptions` | CI/CD scripts under .github may print their results, fetch fixed URLs, have hyphenated file names and import the lazily loaded packages at module level (T201, S310, N999, TID253); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of N999, S310, T201, TID253 for `.github/**` | `pr.yml:lint` | — |
+| `api.quality.ci-cd-scripts-ruff-exemptions` | CI/CD scripts under .github may print their results, run other programs, fetch fixed URLs, have hyphenated file names and import the lazily loaded packages at module level (T201, S603, S607, S310, N999, TID253); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of N999, S310, S603, S607, T201, TID253 for `.github/**` | `pr.yml:lint` | — |
 | `api.quality.command-line-modules-ruff-exemptions` | Application modules that also run as command-line programs (if __name__ == "__main__") may print their output (T201); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of T201 for `policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/privilege_reconciliation,data/v2/user_association_migration_qualification,worker_spm_release}.py` | `pr.yml:lint` | — |
 | `api.quality.command-line-scripts-ruff-exemptions` | Command-line scripts under scripts/ may print their output, run other programs, fetch fixed URLs, stamp today's date and pick random samples (T201, S603, S607, S310, DTZ011, S311); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of DTZ011, S310, S311, S603, S607, T201 for `scripts/**` | `pr.yml:lint` | — |
 | `api.quality.environment-variables-load` | Required environment variables and credentials load in a deployed-like environment. | mechanical | enforced | yes | CI job `test_env_vars` | `pr.yml:test_env_vars` | — |
@@ -351,7 +350,7 @@ flowchart LR
   r_api_quality_alembic_revisions_unused_imports("api.quality.alembic-revisions-unused-imports (advisory)")
   gap_unenforced>"not enforced"]
   r_api_quality_ci_cd_scripts_ruff_exemptions("api.quality.ci-cd-scripts-ruff-exemptions (enforced)")
-  e_ruff_per_file_ignore_of_N999__S310__T201__TID253_for__github___["ruff per-file ignore of N999, S310, T201, TID253 for .github/**"]
+  e_ruff_per_file_ignore_of_N999__S310__S603__S607__T201__TID253_for__github___["ruff per-file ignore of N999, S310, S603, S607, T201, TID253 for .github/**"]
   j_CI_pr_yml_lint["CI pr.yml:lint"]
   r_api_quality_command_line_modules_ruff_exemptions("api.quality.command-line-modules-ruff-exemptions (enforced)")
   e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_privilege_reconciliation_data_v2_user_association_migration_qualification_worker_spm_release__py["ruff per-file ignore of T201 for policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/privilege_reconciliation,data/v2/user_association_migration_qualification,worker_spm_release}.py"]
@@ -381,8 +380,8 @@ flowchart LR
   r_api_quality_unittest_ruff_exemptions("api.quality.unittest-ruff-exemptions (enforced)")
   e_ruff_per_file_ignore_of_PT_for_scripts_rules_tests___["ruff per-file ignore of PT for scripts/rules/tests/**"]
   r_api_quality_alembic_revisions_unused_imports -.-> gap_unenforced
-  r_api_quality_ci_cd_scripts_ruff_exemptions --> e_ruff_per_file_ignore_of_N999__S310__T201__TID253_for__github___
-  e_ruff_per_file_ignore_of_N999__S310__T201__TID253_for__github___ --> j_CI_pr_yml_lint
+  r_api_quality_ci_cd_scripts_ruff_exemptions --> e_ruff_per_file_ignore_of_N999__S310__S603__S607__T201__TID253_for__github___
+  e_ruff_per_file_ignore_of_N999__S310__S603__S607__T201__TID253_for__github___ --> j_CI_pr_yml_lint
   r_api_quality_command_line_modules_ruff_exemptions --> e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_privilege_reconciliation_data_v2_user_association_migration_qualification_worker_spm_release__py
   e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_privilege_reconciliation_data_v2_user_association_migration_qualification_worker_spm_release__py --> j_CI_pr_yml_lint
   r_api_quality_command_line_scripts_ruff_exemptions --> e_ruff_per_file_ignore_of_DTZ011__S310__S311__S603__S607__T201_for_scripts___
@@ -480,7 +479,7 @@ flowchart LR
 | `api.process.cloud-run-image-builds` | The Cloud Run container image builds. | mechanical | enforced | yes | CI job `test_cloud_run_container_builds` | `pr.yml:test_cloud_run_container_builds` | — |
 | `api.process.docker-image-builds` | The API Docker image builds. | mechanical | enforced | yes | CI job `test_container_builds` | `pr.yml:test_container_builds` | — |
 | `api.process.makefile-phony` | Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed. | mechanical | doc-only | no | nothing | — | — |
-| `api.process.pr-tracking-issue` | Every PR has a tracking issue in this repository, and the first line of its description is Fixes #ISSUE_NUMBER. | mechanical | doc-only | no | nothing | — | — |
+| `api.process.pr-tracking-issue` | The first line of every PR's description is Fixes #ISSUE_NUMBER, naming an open issue, not a pull request, in this repository; automated PRs open or reuse such an issue. | mechanical | enforced | yes | CI job `pr-description` | `pr-description.yml:pr-description` | yes |
 | `api.process.rule-machinery-code-owned` | Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author. | mechanical | doc-only | no | nothing | — | — |
 | `api.process.rules-registry` | Every rule is registered in rules/registry.toml, is enforced where it claims to be, and its rendered views are current. | mechanical | enforced | yes | quality guard `rules-registry` | `pr.yml:quality-guards` | **unproven** |
 | `api.process.stacked-prs-full-ci-at-bottom` | In a stack of pull requests, only the lowest unmerged one runs the full PR workflow. Every pr.yml job is needed by the CI complete gate, which fails on the pull requests above it and otherwise passes only when every job passed, so a stack merges bottom-up and nothing merges untested. | mechanical | enforced | yes | pytest `tests/unit/test_ci_complete_gate.py` | `pr.yml:test`, `pr.yml:ci-complete` | yes |
@@ -504,7 +503,9 @@ flowchart LR
   e_CI_job_test_container_builds["CI job test_container_builds"]
   j_CI_pr_yml_test_container_builds["CI pr.yml:test_container_builds"]
   r_api_process_makefile_phony("api.process.makefile-phony (doc-only)")
-  r_api_process_pr_tracking_issue("api.process.pr-tracking-issue (doc-only)")
+  r_api_process_pr_tracking_issue("api.process.pr-tracking-issue (enforced)")
+  e_CI_job_pr_description["CI job pr-description"]
+  j_CI_pr_description_yml_pr_description["CI pr-description.yml:pr-description"]
   r_api_process_rule_machinery_code_owned("api.process.rule-machinery-code-owned (doc-only)")
   r_api_process_rules_registry("api.process.rules-registry (enforced)")
   r_api_process_stacked_prs_full_ci_at_bottom("api.process.stacked-prs-full-ci-at-bottom (enforced)")
@@ -523,7 +524,8 @@ flowchart LR
   r_api_process_docker_image_builds --> e_CI_job_test_container_builds
   e_CI_job_test_container_builds --> j_CI_pr_yml_test_container_builds
   r_api_process_makefile_phony -.-> gap_unenforced
-  r_api_process_pr_tracking_issue -.-> gap_unenforced
+  r_api_process_pr_tracking_issue --> e_CI_job_pr_description
+  e_CI_job_pr_description --> j_CI_pr_description_yml_pr_description
   r_api_process_rule_machinery_code_owned -.-> gap_unenforced
   r_api_process_rules_registry --> e_quality_guard_rules_registry
   r_api_process_stacked_prs_full_ci_at_bottom --> e_pytest_tests_unit_test_ci_complete_gate_py

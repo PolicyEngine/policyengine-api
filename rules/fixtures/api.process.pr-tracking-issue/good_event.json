@@ -1,0 +1,13 @@
+{
+  "action": "opened",
+  "number": 4169,
+  "pull_request": {
+    "number": 4169,
+    "state": "open",
+    "title": "Update PolicyEngine bundle to 6.13.0",
+    "body": "Fixes #4170\n\n## Summary\n\nUpdate PolicyEngine .py bundle from 6.12.0 to 6.13.0.\n\n## Bundled versions\n\n- policyengine: 6.13.0\n- policyengine-core: 3.33.3\n- policyengine-us: 2.2.1\n- policyengine-uk: 2.151.0\n- spm-calculator: 1.0.0\n\n## Certified data releases\n\n- US: populace-us-2024-spm-20260915\n- UK: microcosm-uk-2024-25-national-20261025T091414Z-a6299504\n\n---\nGenerated automatically by GitHub Actions"
+  },
+  "repository": {
+    "full_name": "PolicyEngine/policyengine-api"
+  }
+}

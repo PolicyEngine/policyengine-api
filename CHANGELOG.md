@@ -1,3 +1,17 @@
+## [5.25.0] - 2026-11-04
+
+### Added
+
+- Check that every pull request description starts with `Fixes #N` for an open issue in this repository, and start automated PolicyEngine bundle-update pull requests with that line.
+
+
+## [5.24.0] - 2026-11-04
+
+### Added
+
+- A failed economy calculation's 502 body now has `retry_after_seconds`: the longest time the Public API keeps returning the stored failure before a request starts a new run, read from the cache's own expiry of the stored failure and its lookup index, or null when no failure is stored or its lifetime cannot be read.
+
+
 ## [5.23.1] - 2026-11-04
 
 ### Fixed
