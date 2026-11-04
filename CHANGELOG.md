@@ -1,3 +1,10 @@
+## [5.23.1] - 2026-11-04
+
+### Fixed
+
+- Release runs tag each release commit with its version again. The tag step read the version from the removed `setup.py` and ignored the failure, so no tag was created after 3.34.3; it now reads `pyproject.toml`, pushes only the release tag, and fails if the version is missing or the tag already names another commit.
+
+
 ## [5.23.0] - 2026-11-03
 
 ### Added
