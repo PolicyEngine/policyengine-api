@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import textwrap
 import tomllib
 import unittest
 
-from scripts.rules.model import Baseline, Enforcer, Kind, Rule, Status, Tier
+from scripts.rules.model import Baseline, CiRef, Enforcer, Kind, Rule, Status, Tier
 from scripts.rules.resolve import resolve_enforcer
 from scripts.rules.tests.support import Repo
 
@@ -67,12 +68,11 @@ def import_linter_rule(
     baseline: Baseline | None = None,
     allowed: object = None,
     sha256: str | None = None,
-    config: str = "pyproject.toml",
 ) -> Rule:
-    fields: dict[str, object] = {"config": config, "contract": contract}
+    fields: dict[str, object] = {"config": "pyproject.toml", "contract": contract}
     if allowed is not None:
         fields["allowed_ignore_imports"] = allowed
-    if sha256 is None and contract != "pkg-missing" and config == "pyproject.toml":
+    if sha256 is None and contract not in ("", "pkg-missing"):
         sha256 = fingerprint(CONFIG, contract)
     if sha256 is not None:
         fields["contract_sha256"] = sha256
@@ -289,11 +289,61 @@ class TestImportLinterEnforcer(unittest.TestCase):
             ],
         )
 
+    def test_an_empty_contract_or_config_is_reported(self) -> None:
+        rule = import_linter_rule("", sha256="")
+
+        self.assertEqual(
+            self.messages(rule),
+            [
+                "[ex.r] enforcer: enforcer.config and enforcer.contract must name "
+                "the config file and the contract's id. Fix: set both, for "
+                'example config = "pyproject.toml".'
+            ],
+        )
+
+    def test_ci_must_run_every_contract_from_the_named_config(self) -> None:
+        ci = (CiRef(".github/workflows/pr.yml", "quality-guards", "lint-imports"),)
+        for command, accepted in (
+            ("uv run --frozen --extra dev lint-imports --config pyproject.toml", True),
+            ("lint-imports --config pyproject.toml", True),
+            ("lint-imports --config pyproject.toml --contract pkg-layers", False),
+            ("lint-imports --config pyproject.toml || true", False),
+            ("lint-imports", False),
+            ("lint-imports --config pyproject.toml.bak", False),
+        ):
+            with self.subTest(command=command):
+                self.repo.write(
+                    ".github/workflows/pr.yml",
+                    f"jobs:\n  quality-guards:\n    steps:\n      - run: {command}\n",
+                )
+                rule = dataclasses.replace(import_linter_rule("pkg-layers"), ci=ci)
+                messages = self.messages(rule)
+                expected = (
+                    []
+                    if accepted
+                    else [
+                        "[ex.r] enforcer: job 'quality-guards' in "
+                        ".github/workflows/pr.yml runs Import Linter as "
+                        f"'{command}', which may skip contracts or ignore failures. "
+                        "Fix: run exactly 'lint-imports --config pyproject.toml', "
+                        "optionally after 'uv run ...'."
+                    ]
+                )
+                self.assertEqual(messages, expected)
+
     def test_a_config_that_is_not_toml_is_reported(self) -> None:
         self.repo.write("setup.cfg", "[importlinter]\nroot_package = pkg\n")
 
         self.assertEqual(
-            self.messages(import_linter_rule("pkg-layers", config="setup.cfg")),
+            self.messages(
+                dataclasses.replace(
+                    import_linter_rule("pkg-layers"),
+                    enforcer=Enforcer(
+                        Kind.IMPORT_LINTER,
+                        {"config": "setup.cfg", "contract": "pkg-layers"},
+                    ),
+                )
+            ),
             [
                 "[ex.r] enforcer: setup.cfg is not a TOML file, so the rules "
                 "guard can't read its contracts. Fix: keep the Import Linter "

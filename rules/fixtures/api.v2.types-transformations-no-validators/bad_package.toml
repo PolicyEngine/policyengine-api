@@ -1,7 +1,14 @@
 # Proof fixture for rule api.v2.types-transformations-no-validators. The
-# contract must reject it: a types module reaches its validators module through
-# a helper module. A direct import, as the households and policies types modules
-# make today, is rejected too.
+# contract must reject it, reporting exactly the expected violations: a types
+# module reaches its validators through a helper module, a transformations
+# module imports its validators as the households one does today, and a
+# nested types module imports its validators.
+
+expected_violations = [
+    "fixture_api.services.v2.households.transformations -> fixture_api.services.v2.households.validators",
+    "fixture_api.services.v2.metadata.parameters.types -> fixture_api.services.v2.metadata.parameters.validators",
+    "fixture_api.services.v2.policies.types -> fixture_api.services.v2.policies.validators",
+]
 
 [modules]
 "fixture_api/services/v2/policies/types.py" = """
@@ -11,5 +18,14 @@ from fixture_api.services.v2.policies.json_values import StrictJsonValue
 from fixture_api.services.v2.policies.validators import require_json_value
 """
 "fixture_api/services/v2/policies/validators.py" = """
-from packaging.version import Version
+"""
+"fixture_api/services/v2/households/transformations.py" = """
+from fixture_api.services.v2.households.validators import normalize_household_document
+"""
+"fixture_api/services/v2/households/validators.py" = """
+"""
+"fixture_api/services/v2/metadata/parameters/types.py" = """
+from fixture_api.services.v2.metadata.parameters.validators import validate_path
+"""
+"fixture_api/services/v2/metadata/parameters/validators.py" = """
 """

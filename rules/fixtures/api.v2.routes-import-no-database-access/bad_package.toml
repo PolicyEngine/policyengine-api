@@ -1,10 +1,27 @@
 # Proof fixture for rule api.v2.routes-import-no-database-access. The contract
-# must reject it: a route module imports a connector.
+# must reject it, reporting exactly the expected violations: route modules
+# import a connector, a session module and the v2 database module. Import
+# Linter names the source and forbidden modules as the contract lists them.
+
+expected_violations = [
+    "fixture_api.fastapi_routes.v2 -> fixture_api.data.v2.database",
+    "fixture_api.fastapi_routes.v2 -> fixture_api.services.v2.households.database_session",
+    "fixture_api.fastapi_routes.v2 -> fixture_api.services.v2.policies.database_connectors",
+]
 
 [modules]
 "fixture_api/fastapi_routes/v2/policies/routes.py" = """
 from fixture_api.services.v2.policies.database_connectors.reads import read_policy
 """
+"fixture_api/fastapi_routes/v2/households/routes.py" = """
+from fixture_api.services.v2.households.database_session import HouseholdDatabaseSession
+"""
+"fixture_api/fastapi_routes/v2/metadata/common.py" = """
+from fixture_api.data.v2.database import get_v2_session_factory
+"""
 "fixture_api/services/v2/policies/database_connectors/reads.py" = """
-from sqlmodel import Session, select
+"""
+"fixture_api/services/v2/households/database_session.py" = """
+"""
+"fixture_api/data/v2/database.py" = """
 """

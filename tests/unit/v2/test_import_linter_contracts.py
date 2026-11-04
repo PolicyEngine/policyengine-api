@@ -10,6 +10,7 @@ keep it. The contract keeps only the exceptions the rule allows by design
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -20,6 +21,10 @@ PROJECT_ROOT = Path(__file__).parents[3]
 FIXTURES = PROJECT_ROOT / "rules" / "fixtures"
 FIXTURE_PACKAGE = "fixture_api"
 APPLICATION_PACKAGE = re.compile(r"\bpolicyengine_api\b")
+# How Import Linter's report names each import a broken contract forbids.
+REPORTED_VIOLATION = re.compile(r"(\S+) is not allowed to import (\S+?):")
+# Wide enough that the report never wraps a line.
+REPORT_ENVIRONMENT = {**os.environ, "COLUMNS": "1000"}
 RUN_IMPORT_LINTER = (
     "import sys; from importlinter.cli import lint_imports_command; "
     "sys.exit(lint_imports_command())"
@@ -119,15 +124,36 @@ def _lint_fixture(rule_id: str, fixture: str, root: Path) -> str:
         text=True,
         check=False,
         timeout=120,
+        env=REPORT_ENVIRONMENT,
     )
     return completed.stdout + completed.stderr
 
 
+def _reported_violations(report: str) -> set[str]:
+    """Return each forbidden import the report names, as ``importer -> imported``."""
+    flattened = " ".join(report.split())
+    return {
+        f"{importer} -> {imported}"
+        for importer, imported in REPORTED_VIOLATION.findall(flattened)
+    }
+
+
 def _assert_proof(rule_id: str, tmp_path: Path) -> None:
+    """Require the bad package to break the contract at exactly its expected imports.
+
+    The bad package has one violation per source and forbidden module pattern
+    the rule's statement names, so narrowing the contract fails its proof.
+    """
+    expected = set(
+        tomllib.loads((FIXTURES / rule_id / "bad_package.toml").read_text())[
+            "expected_violations"
+        ]
+    )
     rejected = _lint_fixture(rule_id, "bad_package.toml", tmp_path / "bad")
     accepted = _lint_fixture(rule_id, "good_package.toml", tmp_path / "good")
 
     assert "Contracts: 0 kept, 1 broken." in rejected, rejected
+    assert _reported_violations(rejected) == expected, rejected
     assert "Contracts: 1 kept, 0 broken." in accepted, accepted
 
 
@@ -154,6 +180,34 @@ def test_rule_proof_types_transformations_no_validators(tmp_path: Path) -> None:
 def test_rule_proof_connectors_no_cross_calls(tmp_path: Path) -> None:
     """Proof for rule api.v2.connectors-no-cross-calls."""
     _assert_proof("api.v2.connectors-no-cross-calls", tmp_path)
+
+
+def test_the_repository_keeps_every_import_contract() -> None:
+    """Run the real contracts, so a release run catches PRs that combine badly.
+
+    The quality-guards job runs the same command on every pull request; two
+    pull requests that each pass can still combine into a broken contract.
+    """
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            RUN_IMPORT_LINTER,
+            "--config",
+            "pyproject.toml",
+            "--no-cache",
+        ],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+        env=REPORT_ENVIRONMENT,
+    )
+    report = completed.stdout + completed.stderr
+
+    assert completed.returncode == 0, report
+    assert " 0 broken." in report, report
 
 
 def test_imports_made_only_under_type_checking_count(tmp_path: Path) -> None:
