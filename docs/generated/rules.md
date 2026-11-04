@@ -446,7 +446,7 @@ flowchart LR
 
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `api.dependencies.declared-and-used` | pyproject.toml declares what policyengine_api imports and nothing else: deptry finds no import that no declared distribution provides (DEP001), no declared runtime dependency the package never imports (DEP002), no import of a module installed only as another package's dependency (DEP003), no import of a dev-extra-only dependency (DEP004) and no declared standard-library module (DEP005), apart from the findings rules/baselines/deptry.txt lists and the rule's not-imported-package exceptions. | mechanical | ratcheted | yes | quality guard `declared-dependencies` | `pr.yml:quality-guards` | yes |
+| `api.dependencies.declared-and-used` | pyproject.toml declares what policyengine_api imports and nothing else: deptry finds no import that no declared distribution provides (DEP001), no declared runtime dependency the package never imports (DEP002), no import of a module installed only as another package's dependency (DEP003), no import of a dev-extra-only dependency (DEP004) and no declared standard-library module (DEP005), apart from the findings rules/baselines/deptry.txt lists and the rule's not-imported-package exceptions. | mechanical | ratcheted | yes | quality guard `declared-dependencies` | `pr.yml:quality-guards`, `push.yml:quality-guards` | yes |
 | `api.dependencies.install-from-lock` | Every install of Python packages in a workflow, a shell script, a Makefile, a Dockerfile or a Modal image installs exactly what uv.lock pins (uv sync --frozen, uv run --frozen), unless it is a registered exception. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards` | yes |
 | `api.dependencies.lock-committed` | Every directory with a pyproject.toml has a committed uv.lock beside it, and a pull request CI job runs uv lock --check for it. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards`, `pr.yml:quality-guards` | yes |
 | `api.dependencies.scheduled-relock` | A workflow on a schedule relocks every uv.lock with upgrades and opens or updates a pull request with the result. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards` | yes |
@@ -457,6 +457,7 @@ flowchart LR
   r_api_dependencies_declared_and_used("api.dependencies.declared-and-used (ratcheted)")
   e_quality_guard_declared_dependencies["quality guard declared-dependencies"]
   j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
+  j_CI_push_yml_quality_guards["CI push.yml:quality-guards"]
   r_api_dependencies_install_from_lock("api.dependencies.install-from-lock (enforced)")
   e_quality_guard_locked_installs["quality guard locked-installs"]
   r_api_dependencies_lock_committed("api.dependencies.lock-committed (enforced)")
@@ -464,6 +465,7 @@ flowchart LR
   r_api_dependencies_test_from_lock("api.dependencies.test-from-lock (enforced)")
   r_api_dependencies_declared_and_used --> e_quality_guard_declared_dependencies
   e_quality_guard_declared_dependencies --> j_CI_pr_yml_quality_guards
+  e_quality_guard_declared_dependencies --> j_CI_push_yml_quality_guards
   r_api_dependencies_install_from_lock --> e_quality_guard_locked_installs
   e_quality_guard_locked_installs --> j_CI_pr_yml_quality_guards
   r_api_dependencies_lock_committed --> e_quality_guard_locked_installs

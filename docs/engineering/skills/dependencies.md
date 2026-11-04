@@ -60,7 +60,10 @@ distributions `policyengine_api` imports, and nothing it doesn't use. The
 runs [deptry](https://deptry.com/) on `policyengine_api` in the uv.lock
 environment (`uv run --frozen --extra dev`) and fails on:
 
-- **DEP001**: an import that no declared distribution provides;
+- **DEP001**: an import whose top-level module no declared distribution
+  provides. deptry checks only the top-level name, so `from google.cloud
+  import bigquery` passes while any declared distribution provides
+  `google`;
 - **DEP002**: a declared runtime dependency that the package never imports;
 - **DEP003**: an import of a module installed only because another package
   depends on it, such as `starlette` through FastAPI. Declare it, so a change
@@ -69,7 +72,11 @@ environment (`uv run --frozen --extra dev`) and fails on:
 - **DEP005**: a standard-library module declared as a dependency.
 
 Each error message says how to fix the finding. Run the guard with
-`python scripts/run_quality_guards.py`.
+`python scripts/run_quality_guards.py`. It runs deptry on Python 3.12, as
+`make install` does, unless `UV_PYTHON` says otherwise, and uv first syncs
+`.venv` to `uv.lock`: a `.venv` on another Python, or without the `dev` extra,
+is rebuilt. The pull request and merge `quality-guards` jobs install uv and
+sync the environment before the guard runs.
 
 The rule is ratcheted: `rules/baselines/deptry.txt` lists today's findings as
 `<code> <module>`, one per line, and a finding not listed there fails. The list
@@ -83,13 +90,24 @@ A declared package that the application loads by name, not by import, is a
 file that loads it. Today these are gunicorn
 and uvicorn, which `gcp/cloud_run/start.sh` runs, and pymysql, the driver
 `policyengine_api/data/orm.py` names. An exception covers only that package's
-DEP002 finding, and fails once the file stops naming the package or deptry
-stops reporting it.
+DEP002 finding. It fails once no line of code in the file (a line that isn't a
+comment) names the package, or once deptry stops reporting it. It can't name
+`pyproject.toml` or `uv.lock`, which list every declared package.
 
-deptry's settings are `[tool.deptry]` in `pyproject.toml`. The guard fails
-unless that table holds exactly `known_first_party = ["policyengine_api"]` and
-`pep621_dev_dependency_groups = ["dev"]`, so a tolerated finding is never
-hidden in a deptry ignore setting.
+A tolerated finding lives only in the baseline or an exception, both
+code-owned. The guard also fails on anything else that would hide a finding
+from deptry:
+
+- `[tool.deptry]` in `pyproject.toml` holding anything but
+  `known_first_party = ["policyengine_api"]` and
+  `optional_dependencies_dev_groups = ["dev"]`;
+- a `[project.optional-dependencies]` group other than `dev`. deptry counts
+  such a group as runtime dependencies, but the Cloud Run image installs no
+  extras, so declare a runtime dependency in `[project].dependencies`;
+- an inline `# deptry: ignore` comment in `policyengine_api`;
+- an `.ignore` file at the repository root or in `policyengine_api`, or a
+  tracked file in `policyengine_api` that a git ignore rule matches, because
+  deptry doesn't scan the files those list.
 
 ## Exceptions
 

@@ -21,7 +21,10 @@ python -m unittest discover -s scripts/rules/tests -t .            # the tool's 
 ```
 
 All commands use only the standard library, so they run without installing the
-project.
+project, except the `declared-dependencies` guard and its tests in the tool's
+tests. They run deptry through `uv run --frozen --extra dev`, so they need uv,
+and uv first syncs `.venv` to `uv.lock` on Python 3.12
+([dependencies.md](dependencies.md#we-declare-what-we-import)).
 
 ## Adding or changing a rule
 

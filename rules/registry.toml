@@ -1357,6 +1357,10 @@ name = "declared-dependencies"
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
 invocation = "run_quality_guards.py"
+[[rule.ci]]
+workflow = ".github/workflows/push.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
 [rule.baseline]
 file = "rules/baselines/deptry.txt"
 count = 16

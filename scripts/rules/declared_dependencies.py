@@ -3,7 +3,7 @@
 deptry reads ``[project]`` in pyproject.toml and the imports in policyengine_api,
 in the repository's uv.lock environment, and reports:
 
-- DEP001: an imported module that no declared distribution provides;
+- DEP001: an import whose top-level module no declared distribution provides;
 - DEP002: a declared runtime dependency that the package never imports;
 - DEP003: an imported module installed only as another package's dependency;
 - DEP004: a module declared only in the dev extra but imported by the package;
@@ -15,21 +15,31 @@ shrinks. A declared package the application loads by name rather than by import
 (a server the start command runs, a database driver named in a connection URL)
 is a ``[[rule.exception]]`` with ``category = "not-imported-package"``,
 ``match`` set to the package's name and ``path`` set to the file that loads it;
-it covers only that package's DEP002 finding, and fails once the file stops
-naming the package or deptry stops reporting it.
+it covers only that package's DEP002 finding, and fails once no line of code in
+the file (a line that isn't a comment) names the package, or deptry stops
+reporting it.
 
-pyproject.toml's ``[tool.deptry]`` table must hold exactly ``REQUIRED_SETTINGS``,
-so tolerated findings live in the code-owned baseline and registry, never in a
-deptry ignore setting.
+Tolerated findings live only in the code-owned baseline and registry. So the
+guard also fails when anything else would hide a finding from deptry:
+
+- a ``[tool.deptry]`` table in pyproject.toml other than ``REQUIRED_SETTINGS``;
+- a ``[project.optional-dependencies]`` group other than the dev groups, which
+  deptry would count as runtime dependencies although Cloud Run installs no
+  extras;
+- an inline ``# deptry: ignore`` comment in the package;
+- an ``.ignore`` file, or a tracked package file a git ignore rule matches,
+  because deptry doesn't scan the files those list.
 
 The rule: docs/engineering/skills/dependencies.md. Standard library only; it
-runs deptry through ``uv run --frozen``.
+runs deptry through ``uv run --frozen --extra dev``, so uv first syncs .venv to
+uv.lock, on Python 3.12 unless ``UV_PYTHON`` says otherwise.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -52,10 +62,22 @@ CHECK_NAME = "declared-dependencies"
 PACKAGE = "policyengine_api"
 NOT_IMPORTED = "not-imported-package"
 UNUSED = "DEP002"
+DEV_GROUPS = ["dev"]
 REQUIRED_SETTINGS = {
     "known_first_party": [PACKAGE],
-    "pep621_dev_dependency_groups": ["dev"],
+    "optional_dependencies_dev_groups": DEV_GROUPS,
 }
+# deptry skips an import on a line with this comment (``# deptry: ignore`` or
+# ``# deptry: ignore[DEP001,DEP003]``).
+INLINE_IGNORE = re.compile(r"#\s*deptry\s*:\s*ignore", re.IGNORECASE)
+SCANNED_SUFFIXES = (".py", ".ipynb")
+# Files that list every declared package, so naming a package there shows
+# nothing about whether the application loads it.
+DECLARATION_FILES = frozenset({"pyproject.toml", "uv.lock"})
+_HIDDEN_FIX = (
+    "remove it; tolerate a finding in the rule's baseline, or as a "
+    "not-imported-package exception in rules/registry.toml"
+)
 # uv runs deptry on the Cloud Run image's Python, as the Makefile and CI jobs
 # do, unless UV_PYTHON says otherwise. Without it, uv would follow
 # .python-version and rebuild .venv on another Python.
@@ -197,7 +219,11 @@ def deptry_findings(root: Path) -> list[Finding]:
 
 
 def settings_violations(root: Path) -> list[Violation]:
-    """Report a ``[tool.deptry]`` table that differs from ``REQUIRED_SETTINGS``."""
+    """Report pyproject.toml settings that would change what deptry reports.
+
+    ``[tool.deptry]`` must equal ``REQUIRED_SETTINGS``, and every
+    ``[project.optional-dependencies]`` group must be a dev group.
+    """
     pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
     settings = pyproject.get("tool", {}).get("deptry", {})
     fix = (
@@ -222,6 +248,108 @@ def settings_violations(root: Path) -> list[Violation]:
             RULE_ID, CHECK_NAME, f"pyproject.toml's [tool.deptry] sets {key}", fix
         )
         for key in sorted(set(settings) - set(REQUIRED_SETTINGS))
+    )
+    extras = pyproject.get("project", {}).get("optional-dependencies", {})
+    violations.extend(
+        Violation(
+            RULE_ID,
+            CHECK_NAME,
+            "pyproject.toml's [project.optional-dependencies] has the group "
+            f"{group}, which deptry counts as runtime dependencies",
+            "the Cloud Run image installs no extras (uv sync --frozen --no-dev in "
+            "gcp/cloud_run/Dockerfile), so declare a runtime dependency in "
+            "[project].dependencies; a group of development tools goes in "
+            f"DEV_GROUPS in scripts/rules/declared_dependencies.py and {RULE_ID}'s "
+            "optional_dependencies_dev_groups in pyproject.toml",
+        )
+        for group in sorted(set(extras) - set(DEV_GROUPS))
+    )
+    return violations
+
+
+def _package_files(root: Path) -> list[Path]:
+    """Return the files under ``root``'s package that deptry scans for imports."""
+    package = root / PACKAGE
+    return sorted(
+        path
+        for path in package.rglob("*")
+        if path.is_file() and path.suffix in SCANNED_SUFFIXES
+    )
+
+
+def inline_ignore_violations(root: Path) -> list[Violation]:
+    """Report every inline ``# deptry: ignore`` comment in the package."""
+    violations = []
+    for path in _package_files(root):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        violations.extend(
+            Violation(
+                RULE_ID,
+                CHECK_NAME,
+                f"{path.relative_to(root).as_posix()}:{number} has a deptry ignore "
+                "comment",
+                _HIDDEN_FIX,
+            )
+            for number, line in enumerate(text.splitlines(), start=1)
+            if INLINE_IGNORE.search(line)
+        )
+    return violations
+
+
+def _git_ignored_package_files(root: Path) -> list[str]:
+    """Return tracked package files that a git ignore rule matches.
+
+    A directory that isn't a git checkout (a test's temporary tree) has none.
+    """
+    if not (root / ".git").exists():
+        return []
+    listed = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "-z",
+            "--cached",
+            "--ignored",
+            "--exclude-standard",
+            "--",
+            PACKAGE,
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split("\0")
+    return sorted(path for path in listed if path)
+
+
+def ignored_file_violations(root: Path) -> list[Violation]:
+    """Report ignore rules that would keep package files out of deptry's scan.
+
+    deptry's file walker skips what ``.gitignore``, ``.git/info/exclude``, the
+    global git excludes file and ``.ignore`` files list.
+    """
+    violations = [
+        Violation(
+            RULE_ID,
+            CHECK_NAME,
+            f"{path} is tracked, but a git ignore rule matches it, so deptry "
+            "doesn't scan it",
+            f"remove the rule that matches it (git check-ignore -v --no-index "
+            f"{path} names it), or delete the file",
+        )
+        for path in _git_ignored_package_files(root)
+    ]
+    ignore_files = [root / ".ignore", *sorted((root / PACKAGE).rglob(".ignore"))]
+    violations.extend(
+        Violation(
+            RULE_ID,
+            CHECK_NAME,
+            f"{path.relative_to(root).as_posix()} is an ignore file, so deptry "
+            "doesn't scan the files it lists",
+            _HIDDEN_FIX,
+        )
+        for path in ignore_files
+        if path.is_file()
     )
     return violations
 
@@ -284,12 +412,19 @@ def _exception_problems(root: Path, exception: RuleException) -> list[str]:
         )
     if problems or exception.match is None:
         return problems
+    if exception.path in DECLARATION_FILES:
+        return [
+            f"{where} names a file that lists every declared package, so it "
+            "can't show that the application loads one"
+        ]
     if not any(
-        exception.match in path.read_text(encoding="utf-8", errors="replace")
+        exception.match in line
         for path in root.glob(exception.path)
         if path.is_file()
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+        if not line.lstrip().startswith("#")
     ):
-        problems.append(f"{where}: the file doesn't name {exception.match}")
+        problems.append(f"{where}: no line of code in the file names {exception.match}")
     return problems
 
 
@@ -365,7 +500,11 @@ def run_check(root: Path = REPO_ROOT) -> list[Violation]:
                 "register the rule",
             )
         ]
-    violations = settings_violations(root)
+    violations = [
+        *settings_violations(root),
+        *inline_ignore_violations(root),
+        *ignored_file_violations(root),
+    ]
     try:
         findings = deptry_findings(root)
     except DeptryUnavailableError as error:
