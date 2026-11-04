@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from scripts.rules.load import REGISTRY_PATH, load_text
 from scripts.rules.model import Registry, Status, Violation
+from scripts.rules.validate import baseline_entry_lines
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -92,3 +93,51 @@ def check_baselines(
         for rule_id in sorted(current_ids - {rule.id for rule in base.rules})
     )
     return violations, notes
+
+
+def _entries_at(root: Path, ref: str, path: str) -> set[str] | None:
+    """Return a baseline file's entries as they are on ``ref``, or None if absent."""
+    shown = subprocess.run(
+        ["git", "show", f"{ref}:{path}"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if shown.returncode != 0:
+        return None
+    return set(baseline_entry_lines(shown.stdout))
+
+
+def check_baseline_entries(
+    root: Path, current: Registry, base: Registry, ref: str
+) -> list[Violation]:
+    """Report baseline entries that the base branch's copy of the file lacks.
+
+    A baseline may only shrink, so an entry can't be swapped for a new one at
+    the same count. A rule or baseline file that is new on this branch has
+    nothing to compare against.
+    """
+    violations = []
+    for old in base.rules:
+        new = current.rule(old.id)
+        if new is None or old.baseline is None or new.baseline is None:
+            continue
+        before = _entries_at(root, ref, old.baseline.file)
+        current_file = root / new.baseline.file
+        if before is None or not current_file.is_file():
+            continue
+        added = sorted(
+            set(baseline_entry_lines(current_file.read_text(encoding="utf-8"))) - before
+        )
+        if added:
+            violations.append(
+                Violation(
+                    new.id,
+                    "baseline",
+                    f"{new.baseline.file} lists entries the base branch's copy "
+                    f"doesn't: {', '.join(added)}",
+                    "fix the new violations instead of adding them to the baseline",
+                )
+            )
+    return violations

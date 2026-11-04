@@ -126,7 +126,8 @@ fail the guard yet.
   `# noqa: CODE  # reason`, except in the files below.
 - Other enforcers (mypy, Pyright, Import Linter, custom guards) may start
   `ratcheted` with a baseline file of tolerated violations. Baselines may only
-  shrink: the guard compares counts against the base branch.
+  shrink: the guard compares each baseline's count and its entries against the
+  base branch, so an entry can't be swapped for a new one at the same count.
 - Moving a rule from enforced/ratcheted to advisory/doc-only needs an explicit
   `[rule.downgrade] reason`.
 

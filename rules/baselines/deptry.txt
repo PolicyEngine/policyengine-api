@@ -1,6 +1,7 @@
 # Tolerated existing deptry findings for api.dependencies.declared-and-used,
-# one "<code> <module>" per line. This list may only shrink: fix a finding,
-# then remove its line and lower the rule's baseline count.
+# one "<code> <module>" per line, with comments on lines of their own. This
+# list may only shrink: fix a finding, then remove its line and lower the
+# rule's baseline count.
 #
 # Declared runtime dependencies that policyengine_api never imports (DEP002).
 DEP002 assertpy

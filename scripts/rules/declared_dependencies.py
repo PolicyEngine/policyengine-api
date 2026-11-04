@@ -6,7 +6,7 @@ in the repository's uv.lock environment, and reports:
 - DEP001: an import whose top-level module no declared distribution provides;
 - DEP002: a declared runtime dependency that the package never imports;
 - DEP003: an imported module installed only as another package's dependency;
-- DEP004: a module declared only in the dev extra but imported by the package;
+- DEP004: an import of a module declared only as a development dependency;
 - DEP005: a standard-library module declared as a dependency.
 
 A finding fails unless the rule's baseline file lists it, as ``<code> <module>``.
@@ -15,9 +15,10 @@ shrinks. A declared package the application loads by name rather than by import
 (a server the start command runs, a database driver named in a connection URL)
 is a ``[[rule.exception]]`` with ``category = "not-imported-package"``,
 ``match`` set to the package's name and ``path`` set to the file that loads it;
-it covers only that package's DEP002 finding, and fails once no line of code in
-the file (a line that isn't a comment) names the package, or deptry stops
-reporting it.
+it covers only that package's DEP002 finding. ``path`` must be one file's exact
+path from the repository root, and not a file that lists every package; the
+exception fails once no line in the file other than a whole-line comment names
+the package, or once deptry stops reporting it.
 
 Tolerated findings live only in the code-owned baseline and registry. So the
 guard also fails when anything else would hide a finding from deptry:
@@ -26,9 +27,14 @@ guard also fails when anything else would hide a finding from deptry:
 - a ``[project.optional-dependencies]`` group other than the dev groups, which
   deptry would count as runtime dependencies although Cloud Run installs no
   extras;
+- a ``[project].dependencies`` entry with an environment marker, which deptry
+  ignores, so a marker that never holds would declare a package uv never
+  installs;
 - an inline ``# deptry: ignore`` comment in the package;
-- an ``.ignore`` file, or a tracked package file a git ignore rule matches,
-  because deptry doesn't scan the files those list.
+- a tracked package file deptry didn't scan (an ignore rule lists it: a
+  ``.gitignore``, ``.git/info/exclude``, the global git excludes file, or an
+  ``.ignore`` file here or in a parent directory), or one it couldn't parse.
+  The guard reads the files deptry scanned from its verbose log.
 
 The rule: docs/engineering/skills/dependencies.md. Standard library only; it
 runs deptry through ``uv run --frozen --extra dev``, so uv first syncs .venv to
@@ -46,7 +52,7 @@ import tempfile
 import tomllib
 from collections import defaultdict
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from scripts.rules.file_length import baseline_paths
@@ -73,7 +79,17 @@ INLINE_IGNORE = re.compile(r"#\s*deptry\s*:\s*ignore", re.IGNORECASE)
 SCANNED_SUFFIXES = (".py", ".ipynb")
 # Files that list every declared package, so naming a package there shows
 # nothing about whether the application loads it.
-DECLARATION_FILES = frozenset({"pyproject.toml", "uv.lock"})
+DECLARATION_FILES = frozenset(
+    {"pyproject.toml", "uv.lock", "rules/registry.toml", "docs/generated/rules.md"}
+)
+GLOB_CHARACTERS = frozenset("*?[")
+# deptry's verbose log lists the files it scans after this line, one per line,
+# and ends the list with a blank line.
+SCANNED_FILES_HEADING = "Python files to scan for imports:"
+UNPARSED_FILE = re.compile(
+    r"^Warning: Skipping processing of (?P<path>.+?) because of the following error:",
+    re.MULTILINE,
+)
 _HIDDEN_FIX = (
     "remove it; tolerate a finding in the rule's baseline, or as a "
     "not-imported-package exception in rules/registry.toml"
@@ -105,12 +121,16 @@ _DEV_ONLY_FIX = (
     "move it to [project].dependencies in pyproject.toml and run uv lock, or "
     f"stop importing it from {PACKAGE}"
 )
+_SKIPPED_FILE_FIX = (
+    "find the rule that hides it (git check-ignore -v --no-index <path>, or an "
+    ".ignore file in its directory or a parent directory) and remove it"
+)
 _STANDARD_LIBRARY_FIX = "remove it from pyproject.toml and run uv lock"
 _UNKNOWN_FIX = "see https://deptry.com/rules-violations/ for what the code means"
 
 
 class DeptryUnavailableError(Exception):
-    """deptry could not run, or ran without writing its report."""
+    """deptry could not run, or ran without writing its report and file list."""
 
 
 @dataclass(frozen=True)
@@ -149,6 +169,8 @@ def _deptry_command(output: Path) -> list[str]:
         str(REPO_ROOT),
         "deptry",
         PACKAGE,
+        # The verbose log lists the files deptry scanned and those it skipped.
+        "--verbose",
         "--json-output",
         str(output),
     ]
@@ -180,12 +202,40 @@ def _parse_report(report: object) -> list[Finding]:
     return findings
 
 
-def deptry_findings(root: Path) -> list[Finding]:
+def scanned_files_from_log(log: str) -> frozenset[str]:
+    """Return the files deptry's verbose log says it scanned for imports.
+
+    Raise DeptryUnavailableError when the log has no such list.
+    """
+    lines = log.splitlines()
+    if SCANNED_FILES_HEADING not in lines:
+        msg = "deptry's verbose log doesn't list the files it scanned"
+        raise DeptryUnavailableError(msg)
+    start = lines.index(SCANNED_FILES_HEADING) + 1
+    scanned = []
+    for line in lines[start:]:
+        if not line.strip():
+            break
+        scanned.append(Path(line.strip()).as_posix())
+    return frozenset(scanned)
+
+
+@dataclass(frozen=True)
+class DeptryRun:
+    """What one deptry run reported, and which files it read."""
+
+    findings: list[Finding]
+    scanned_files: frozenset[str]
+    unparsed_files: tuple[str, ...]
+
+
+def run_deptry(root: Path) -> DeptryRun:
     """Run deptry on ``root``'s policyengine_api and return what it reports.
 
     deptry reads ``root``'s pyproject.toml and runs in this repository's
     uv.lock environment, which has every package a proof fixture imports.
-    Raise DeptryUnavailableError when it cannot run or writes no report.
+    Raise DeptryUnavailableError when it cannot run, writes no report, or its
+    log doesn't list the files it scanned.
     """
     with tempfile.TemporaryDirectory() as directory:
         output = Path(directory) / "deptry.json"
@@ -215,7 +265,15 @@ def deptry_findings(root: Path) -> list[Finding]:
         except json.JSONDecodeError as error:
             msg = f"deptry's JSON report doesn't parse: {error}"
             raise DeptryUnavailableError(msg) from error
-    return _parse_report(report)
+    unparsed = sorted(
+        Path(match.group("path")).as_posix()
+        for match in UNPARSED_FILE.finditer(completed.stderr)
+    )
+    return DeptryRun(
+        findings=_parse_report(report),
+        scanned_files=scanned_files_from_log(completed.stderr),
+        unparsed_files=tuple(unparsed),
+    )
 
 
 def settings_violations(root: Path) -> list[Violation]:
@@ -249,6 +307,19 @@ def settings_violations(root: Path) -> list[Violation]:
         )
         for key in sorted(set(settings) - set(REQUIRED_SETTINGS))
     )
+    violations.extend(
+        Violation(
+            RULE_ID,
+            CHECK_NAME,
+            f"pyproject.toml declares {requirement} with an environment marker, "
+            "which deptry ignores",
+            "remove the marker: the Cloud Run image runs on one Python and "
+            "platform, and a marker that never holds there would declare a "
+            "package uv never installs",
+        )
+        for requirement in pyproject.get("project", {}).get("dependencies", [])
+        if ";" in requirement
+    )
     extras = pyproject.get("project", {}).get("optional-dependencies", {})
     violations.extend(
         Violation(
@@ -259,8 +330,9 @@ def settings_violations(root: Path) -> list[Violation]:
             "the Cloud Run image installs no extras (uv sync --frozen --no-dev in "
             "gcp/cloud_run/Dockerfile), so declare a runtime dependency in "
             "[project].dependencies; a group of development tools goes in "
-            f"DEV_GROUPS in scripts/rules/declared_dependencies.py and {RULE_ID}'s "
-            "optional_dependencies_dev_groups in pyproject.toml",
+            "DEV_GROUPS in scripts/rules/declared_dependencies.py and in "
+            "optional_dependencies_dev_groups under [tool.deptry] in "
+            "pyproject.toml",
         )
         for group in sorted(set(extras) - set(DEV_GROUPS))
     )
@@ -296,62 +368,60 @@ def inline_ignore_violations(root: Path) -> list[Violation]:
     return violations
 
 
-def _git_ignored_package_files(root: Path) -> list[str]:
-    """Return tracked package files that a git ignore rule matches.
+def _tracked_package_files(root: Path) -> list[str]:
+    """Return the package's tracked files that deptry should scan.
 
-    A directory that isn't a git checkout (a test's temporary tree) has none.
+    A directory that isn't a git checkout (a proof fixture, a test's temporary
+    tree) has every such file under the package counted.
     """
     if not (root / ".git").exists():
-        return []
+        return [path.relative_to(root).as_posix() for path in _package_files(root)]
     listed = subprocess.run(
-        [
-            "git",
-            "ls-files",
-            "-z",
-            "--cached",
-            "--ignored",
-            "--exclude-standard",
-            "--",
-            PACKAGE,
-        ],
+        ["git", "ls-files", "-z", "--", PACKAGE],
         cwd=root,
         capture_output=True,
         text=True,
         check=True,
     ).stdout.split("\0")
-    return sorted(path for path in listed if path)
+    return sorted(
+        path
+        for path in listed
+        if path.endswith(SCANNED_SUFFIXES) and (root / path).is_file()
+    )
 
 
-def ignored_file_violations(root: Path) -> list[Violation]:
-    """Report ignore rules that would keep package files out of deptry's scan.
+def unscanned_file_violations(root: Path, scanned: Iterable[str]) -> list[Violation]:
+    """Report tracked package files that deptry didn't scan.
 
     deptry's file walker skips what ``.gitignore``, ``.git/info/exclude``, the
-    global git excludes file and ``.ignore`` files list.
+    global git excludes file and ``.ignore`` files list. An untracked file
+    deptry scanned or skipped is not reported.
     """
-    violations = [
+    scanned = set(scanned)
+    return [
         Violation(
             RULE_ID,
             CHECK_NAME,
-            f"{path} is tracked, but a git ignore rule matches it, so deptry "
-            "doesn't scan it",
-            f"remove the rule that matches it (git check-ignore -v --no-index "
-            f"{path} names it), or delete the file",
+            f"{path} is tracked, but deptry didn't scan it, so its imports aren't "
+            "checked",
+            _SKIPPED_FILE_FIX.replace("<path>", path),
         )
-        for path in _git_ignored_package_files(root)
+        for path in _tracked_package_files(root)
+        if path not in scanned
     ]
-    ignore_files = [root / ".ignore", *sorted((root / PACKAGE).rglob(".ignore"))]
-    violations.extend(
+
+
+def unparsed_file_violations(run: DeptryRun) -> list[Violation]:
+    """Report the files deptry skipped because it couldn't parse them."""
+    return [
         Violation(
             RULE_ID,
             CHECK_NAME,
-            f"{path.relative_to(root).as_posix()} is an ignore file, so deptry "
-            "doesn't scan the files it lists",
-            _HIDDEN_FIX,
+            f"deptry couldn't parse {path}, so it didn't check that file's imports",
+            f"fix the error deptry reports for it (deptry {PACKAGE} prints it)",
         )
-        for path in ignore_files
-        if path.is_file()
-    )
-    return violations
+        for path in run.unparsed_files
+    ]
 
 
 def _where(findings: Sequence[Finding]) -> str:
@@ -384,7 +454,7 @@ def _finding_violation(findings: Sequence[Finding]) -> Violation:
         ),
         "DEP004": (
             f"{module} is imported in {_where(findings)}, but is declared only "
-            "in the dev extra",
+            "as a development dependency",
             _DEV_ONLY_FIX,
         ),
         "DEP005": (
@@ -412,16 +482,27 @@ def _exception_problems(root: Path, exception: RuleException) -> list[str]:
         )
     if problems or exception.match is None:
         return problems
+    path = PurePosixPath(exception.path)
+    if (
+        GLOB_CHARACTERS & set(exception.path)
+        or path.is_absolute()
+        or path.as_posix() != exception.path
+        or any(part in {".", ".."} for part in exception.path.split("/"))
+    ):
+        return [
+            f"{where} must name one file by its exact path from the repository root"
+        ]
     if exception.path in DECLARATION_FILES:
         return [
             f"{where} names a file that lists every declared package, so it "
             "can't show that the application loads one"
         ]
+    file = root / exception.path
+    if not file.is_file():
+        return [f"{where}: the file doesn't exist"]
     if not any(
         exception.match in line
-        for path in root.glob(exception.path)
-        if path.is_file()
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+        for line in file.read_text(encoding="utf-8", errors="replace").splitlines()
         if not line.lstrip().startswith("#")
     ):
         problems.append(f"{where}: no line of code in the file names {exception.match}")
@@ -500,13 +581,9 @@ def run_check(root: Path = REPO_ROOT) -> list[Violation]:
                 "register the rule",
             )
         ]
-    violations = [
-        *settings_violations(root),
-        *inline_ignore_violations(root),
-        *ignored_file_violations(root),
-    ]
+    violations = [*settings_violations(root), *inline_ignore_violations(root)]
     try:
-        findings = deptry_findings(root)
+        run = run_deptry(root)
     except DeptryUnavailableError as error:
         return [
             *violations,
@@ -521,9 +598,11 @@ def run_check(root: Path = REPO_ROOT) -> list[Violation]:
     baseline_file = rule.baseline.file if rule.baseline is not None else None
     return [
         *violations,
+        *unscanned_file_violations(root, run.scanned_files),
+        *unparsed_file_violations(run),
         *compare(
             root,
-            findings,
+            run.findings,
             baseline_paths(root, baseline_file),
             baseline_file,
             rule.exceptions,

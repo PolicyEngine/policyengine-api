@@ -54,13 +54,18 @@ PROOF_FILE_FIELDS = (
 )
 
 
+def baseline_entry_lines(text: str) -> list[str]:
+    """Return a baseline's entries, skipping blank and ``#`` comment lines."""
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
 def baseline_entries(path: Path) -> int:
     """Count the entries in a baseline file, skipping blank and ``#`` comment lines."""
-    return sum(
-        1
-        for line in path.read_text().splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    )
+    return len(baseline_entry_lines(path.read_text()))
 
 
 def _check_fields(

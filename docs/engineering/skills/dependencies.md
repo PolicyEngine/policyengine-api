@@ -68,7 +68,8 @@ environment (`uv run --frozen --extra dev`) and fails on:
 - **DEP003**: an import of a module installed only because another package
   depends on it, such as `starlette` through FastAPI. Declare it, so a change
   to the other package can't remove it;
-- **DEP004**: an import of a package declared only in the `dev` extra;
+- **DEP004**: an import of a package declared only as a development
+  dependency: in the `dev` extra or a `[dependency-groups]` group;
 - **DEP005**: a standard-library module declared as a dependency.
 
 Each error message says how to fix the finding. Run the guard with
@@ -79,9 +80,11 @@ is rebuilt. The pull request and merge `quality-guards` jobs install uv and
 sync the environment before the guard runs.
 
 The rule is ratcheted: `rules/baselines/deptry.txt` lists today's findings as
-`<code> <module>`, one per line, and a finding not listed there fails. The list
-may only shrink. Fixing a finding makes its line fail as stale, so remove the
-line and lower `count` in the rule's `[rule.baseline]`.
+`<code> <module>`, one per line, and a finding not listed there fails. Comments
+go on lines of their own. The list may only shrink: the registry guard fails a
+pull request whose baseline has a higher count than the base branch's, or any
+entry the base branch's copy doesn't. Fixing a finding makes its line fail as
+stale, so remove the line and lower `count` in the rule's `[rule.baseline]`.
 
 A declared package that the application loads by name, not by import, is a
 `[[rule.exception]]` on the rule, with
@@ -90,9 +93,11 @@ A declared package that the application loads by name, not by import, is a
 file that loads it. Today these are gunicorn
 and uvicorn, which `gcp/cloud_run/start.sh` runs, and pymysql, the driver
 `policyengine_api/data/orm.py` names. An exception covers only that package's
-DEP002 finding. It fails once no line of code in the file (a line that isn't a
-comment) names the package, or once deptry stops reporting it. It can't name
-`pyproject.toml` or `uv.lock`, which list every declared package.
+DEP002 finding. Its `path` must be one file's exact path from the repository
+root, not a glob, and can't be `pyproject.toml`, `uv.lock`,
+`rules/registry.toml` or `docs/generated/rules.md`, which list every declared
+package or exception. It fails once no line in the file other than a
+whole-line comment names the package, or once deptry stops reporting it.
 
 A tolerated finding lives only in the baseline or an exception, both
 code-owned. The guard also fails on anything else that would hide a finding
@@ -104,10 +109,22 @@ from deptry:
 - a `[project.optional-dependencies]` group other than `dev`. deptry counts
   such a group as runtime dependencies, but the Cloud Run image installs no
   extras, so declare a runtime dependency in `[project].dependencies`;
+- a `[project].dependencies` entry with an environment marker. deptry ignores
+  markers, so a marker that never holds would declare a package that uv never
+  installs;
 - an inline `# deptry: ignore` comment in `policyengine_api`;
-- an `.ignore` file at the repository root or in `policyengine_api`, or a
-  tracked file in `policyengine_api` that a git ignore rule matches, because
-  deptry doesn't scan the files those list.
+- a tracked file in `policyengine_api` that deptry didn't scan, because a
+  `.gitignore`, `.git/info/exclude`, the global git excludes file, or an
+  `.ignore` file in its directory or a parent directory lists it. The guard
+  compares the files deptry's verbose log says it scanned with `git ls-files`;
+- a file in `policyengine_api` that deptry couldn't parse, which it skips with
+  a warning.
+
+The guard can't see one more case: deptry treats every module and directory
+directly in `policyengine_api/` (`api`, `utils`, `data`, ...) as the project's
+own, so a new `policyengine_api/redis.py` would make `import redis` look
+local. Don't name a top-level module of the package after a third-party
+package.
 
 ## Exceptions
 
