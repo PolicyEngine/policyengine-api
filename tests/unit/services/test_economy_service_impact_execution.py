@@ -255,6 +255,9 @@ class TestEconomyService:
             execution = ModalSimulationExecution(
                 job_id=MOCK_EXECUTION_ID, status="failed", error="out of memory"
             )
+            mock_reform_impacts_service.get_reform_impact_seconds_left.return_value = (
+                120
+            )
 
             # When
             result = economy_service._handle_execution_state(
@@ -272,11 +275,16 @@ class TestEconomyService:
             mock_logger.log_struct.assert_any_call(
                 {"message": expected_message}, severity="ERROR"
             )
-            assert result == EconomicImpactResult.error(expected_message)
+            assert result == EconomicImpactResult.error(
+                expected_message, retry_after_seconds=120
+            )
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once_with(
                 execution_id=MOCK_EXECUTION_ID,
                 message=expected_message,
                 keep_seconds=120,
+            )
+            mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
+                MOCK_EXECUTION_ID
             )
 
         @pytest.mark.usefixtures("mock_logger")
@@ -298,6 +306,9 @@ class TestEconomyService:
             execution = ModalSimulationExecution(
                 job_id=MOCK_EXECUTION_ID, status="failed", error="out of memory"
             )
+            mock_reform_impacts_service.get_reform_impact_seconds_left.return_value = (
+                2_591_000
+            )
 
             # When
             result = economy_service._handle_execution_state(
@@ -306,11 +317,16 @@ class TestEconomyService:
 
             # Then
             expected_message = "Simulation entrypoint execution failed: out of memory"
-            assert result == EconomicImpactResult.error(expected_message)
+            assert result == EconomicImpactResult.error(
+                expected_message, retry_after_seconds=2_591_000
+            )
             # Without keep_seconds the error has the cache's 30-day lifetime.
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once_with(
                 execution_id=MOCK_EXECUTION_ID,
                 message=expected_message,
+            )
+            mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
+                MOCK_EXECUTION_ID
             )
 
         @pytest.mark.usefixtures("mock_logger")
@@ -389,3 +405,55 @@ class TestEconomyService:
             # Then
             assert result.status == ImpactStatus.COMPUTING
             assert result.data is None
+
+    class TestHandleFailedImpact:
+        @pytest.fixture
+        def economy_service(self):
+            return EconomyService()
+
+        @pytest.mark.usefixtures("mock_logger")
+        def test__given_stored_failure__answers_with_the_seconds_it_is_still_kept(
+            self,
+            economy_service,
+            mock_reform_impacts_service,
+        ):
+            # Given
+            stored_failure = create_mock_reform_impact(
+                status="error",
+                message="Simulation entrypoint execution failed: out of memory",
+            )
+            seconds_left = mock_reform_impacts_service.get_reform_impact_seconds_left
+            seconds_left.return_value = 75
+
+            # When
+            result = economy_service._handle_failed_impact(stored_failure)
+
+            # Then
+            assert result == EconomicImpactResult.error(
+                "Simulation entrypoint execution failed: out of memory",
+                retry_after_seconds=75,
+            )
+            mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
+                MOCK_EXECUTION_ID
+            )
+
+        @pytest.mark.usefixtures("mock_logger")
+        def test__given_stored_failure_without_a_worker_handle__answers_with_none(
+            self,
+            economy_service,
+            mock_reform_impacts_service,
+        ):
+            # Given: a record whose worker handle was cleared cannot be looked up.
+            stored_failure = create_mock_reform_impact(
+                status="error", message="Simulation entrypoint execution failed"
+            )
+            stored_failure.execution_id = None
+
+            # When
+            result = economy_service._handle_failed_impact(stored_failure)
+
+            # Then
+            assert result == EconomicImpactResult.error(
+                "Simulation entrypoint execution failed", retry_after_seconds=None
+            )
+            mock_reform_impacts_service.get_reform_impact_seconds_left.assert_not_called()

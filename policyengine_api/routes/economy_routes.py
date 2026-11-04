@@ -94,7 +94,9 @@ def get_economic_impact(
     simulation finishes, and while computing the body also carries the stage
     fields the Simulation Entrypoint reports. Invalid query parameters give 400,
     a policy ID the country does not have gives 404 and a failed calculation
-    gives 502.
+    gives 502. A 502 body's ``retry_after_seconds`` is how long API v1 keeps
+    returning the stored failure before a request starts a new run, or null
+    when no failure is stored or its lifetime cannot be read.
     """
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
@@ -124,13 +126,14 @@ def get_economic_impact(
     except PolicyNotFoundError as error:
         return _policy_not_found_response(error)
 
-    result_dict: dict[str, str | dict | None] = economic_impact_result.to_dict()
+    result_dict: dict[str, str | dict | int | None] = economic_impact_result.to_dict()
 
     if result_dict["status"] == "error":
         return _make_error_response(
             result_dict["message"],
             HTTPStatus.BAD_GATEWAY,
             result=None,
+            retry_after_seconds=result_dict.get("retry_after_seconds"),
         )
 
     body = {

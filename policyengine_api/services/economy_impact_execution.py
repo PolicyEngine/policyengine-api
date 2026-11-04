@@ -108,7 +108,9 @@ class ImpactExecutionMixin:
                 {"message": error_message},
                 severity="ERROR",
             )
-            return EconomicImpactResult.error(message=error_message)
+            return self._stored_failure_result(
+                error_message, reform_impact.execution_id
+            )
 
         if execution_state in EXECUTION_STATUSES_PENDING:
             logger.log_struct(
@@ -191,7 +193,7 @@ class ImpactExecutionMixin:
                 execution_id=reform_impact.execution_id,
                 keep_seconds=RETRYABLE_FAILURE_SECONDS,
             )
-        return EconomicImpactResult.error(message=message)
+        return self._stored_failure_result(message, reform_impact.execution_id)
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_COMPLETED)
@@ -269,11 +271,11 @@ class ImpactExecutionMixin:
                 most_recent_impact.error_code, most_recent_impact.message
             )
         # Failed executions have no successful output or SPM receipts to
-        # validate. Replay their original failure on every later poll.
-        return EconomicImpactResult.error(
-            message=(
-                most_recent_impact.message or "Simulation entrypoint execution failed"
-            )
+        # validate. Replay their original failure on every later poll, with
+        # the seconds until its record expires and a new job can start.
+        return self._stored_failure_result(
+            most_recent_impact.message or "Simulation entrypoint execution failed",
+            most_recent_impact.execution_id,
         )
 
     @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_POLL_ACTIVE))

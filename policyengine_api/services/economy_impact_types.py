@@ -158,24 +158,29 @@ class EconomicImpactResult(BaseModel):
     """The status of an economic impact calculation and, once complete, its result.
 
     ``data`` holds the reform impact JSON when the status is ok, and ``message``
-    explains an error.
+    explains an error. For an error, ``retry_after_seconds`` is how long the
+    stored failure is still returned: once it has passed, a request finds no
+    record and submits a new job. It is None when no failure is stored or its
+    lifetime cannot be read.
     """
 
     status: ImpactStatus
     data: dict | None = None
     message: str | None = None
+    retry_after_seconds: int | None = None
     # Stage fields relayed from the Simulation Entrypoint while computing.
     # Kept out of to_dict(); the route adds them only when present.
     run_progress: SimulationRunProgress | None = None
 
     model_config = {"frozen": True}  # Make model immutable
 
-    def to_dict(self) -> dict[str, str | dict | None]:
+    def to_dict(self) -> dict[str, str | dict | int | None]:
         """Convert the EconomicImpactResult to a dictionary."""
         return {
             "status": self.status.value,
             "data": self.data,
             "message": self.message,
+            "retry_after_seconds": self.retry_after_seconds,
         }
 
     @classmethod
@@ -191,10 +196,17 @@ class EconomicImpactResult(BaseModel):
         return cls(status=ImpactStatus.COMPUTING, data=None, run_progress=run_progress)
 
     @classmethod
-    def error(cls, message: str) -> "EconomicImpactResult":
+    def error(
+        cls, message: str, *, retry_after_seconds: int | None = None
+    ) -> "EconomicImpactResult":
         """Create an EconomicImpactResult for an error in the impact calculation."""
         logger.log_struct({"message": message}, severity="ERROR")
-        return cls(status=ImpactStatus.ERROR, data=None, message=message)
+        return cls(
+            status=ImpactStatus.ERROR,
+            data=None,
+            message=message,
+            retry_after_seconds=retry_after_seconds,
+        )
 
 
 class BudgetWindowEconomicImpactResult(BaseModel):

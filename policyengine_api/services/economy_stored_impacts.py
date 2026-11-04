@@ -14,6 +14,7 @@ from policyengine_api.runtime_cache.reform_impacts import (
 )
 from policyengine_api.services.economy_impact_types import (
     LOCAL_AREA_BREAKDOWN_RESULT_SCHEMA_VERSION,
+    EconomicImpactResult,
     EconomicImpactSetupOptions,
     ImpactAction,
     ImpactStatus,
@@ -349,6 +350,24 @@ class StoredImpactMixin:
                 }
             )
             raise
+
+    def _stored_failure_result(
+        self, message: str, execution_id: str | None
+    ) -> EconomicImpactResult:
+        """Return a stored failure with the seconds until its record expires.
+
+        Read from the record after it is written, so a fresh failure and a
+        replayed one both say how long API v1 will keep returning it. None
+        when there is no record to read.
+        """
+        retry_after_seconds = (
+            self._reform_impacts.get_reform_impact_seconds_left(execution_id)
+            if execution_id
+            else None
+        )
+        return EconomicImpactResult.error(
+            message=message, retry_after_seconds=retry_after_seconds
+        )
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_PERSIST_FAILED)

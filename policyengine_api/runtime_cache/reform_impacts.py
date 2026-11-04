@@ -1,6 +1,7 @@
 """Recoverable reform-impact caching and submission coordination."""
 
 import hashlib
+import math
 import re
 import time
 from dataclasses import asdict, dataclass, replace
@@ -426,6 +427,21 @@ class ReformImpactCache:
                 schema_version=REFORM_IMPACT_SCHEMA_VERSION,
             )
         )
+
+    def record_seconds_left(self, execution_id: str) -> int | None:
+        """Return the whole seconds until the job's record expires, rounded up.
+
+        Read from the cache's own expiry, so it holds for a record whatever
+        lifetime it was written with. Return None when the record is missing,
+        never expires, or the cache cannot be read.
+        """
+        try:
+            milliseconds = self.client.pttl(self._record_key(execution_id))
+        except Exception:  # noqa: BLE001  # a cache outage reads as unknown, never a failed request
+            return None
+        if not isinstance(milliseconds, int) or milliseconds < 0:
+            return None
+        return math.ceil(milliseconds / 1000)
 
     def _from_index(self, index: str, limit: int) -> list[CachedReformImpact]:
         try:

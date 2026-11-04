@@ -73,6 +73,10 @@ class CacheBackend(Protocol):
         """Delete every given key and return how many existed."""
         ...
 
+    def pttl(self, key: str) -> object:
+        """Return the key's milliseconds to live; -2 if missing, -1 if no expiry."""
+        ...
+
     def pipeline(self, *, transaction: bool = True) -> CachePipeline:
         """Return a pipeline whose commands run together on ``execute``."""
         ...

@@ -293,3 +293,39 @@ def test_failed_terminal_error_write_keeps_existing_worker_handle(monkeypatch):
     unchanged = cache.get_by_execution_id("job")
     assert unchanged.status == "computing"
     assert unchanged.execution_id == "job"
+
+
+def test_record_seconds_left_rounds_the_record_lifetime_up() -> None:
+    backend = InMemoryCacheBackend()
+    cache = ReformImpactCache(backend, _namespace())
+    assert cache.set(_impact("failed-job", "hash", 1), record_ttl_seconds=120)
+
+    backend.advance(0.4)
+    just_after_write = cache.record_seconds_left("failed-job")
+    backend.advance(119.5)
+    in_last_second = cache.record_seconds_left("failed-job")
+    backend.advance(1)
+    after_expiry = cache.record_seconds_left("failed-job")
+
+    # Rounded up, so a client that waits this long never asks before expiry.
+    assert just_after_write == 120
+    assert in_last_second == 1
+    assert after_expiry is None
+
+
+def test_record_seconds_left_is_none_without_a_record_or_a_reachable_cache(
+    monkeypatch,
+) -> None:
+    backend = InMemoryCacheBackend()
+    cache = ReformImpactCache(backend, _namespace())
+    assert cache.set(_impact("stored-job", "hash", 1))
+
+    def unreachable_cache(_key: str) -> int:
+        raise ConnectionError
+
+    missing = cache.record_seconds_left("missing-job")
+    monkeypatch.setattr(backend, "pttl", unreachable_cache)
+    unreachable = cache.record_seconds_left("stored-job")
+
+    assert missing is None
+    assert unreachable is None

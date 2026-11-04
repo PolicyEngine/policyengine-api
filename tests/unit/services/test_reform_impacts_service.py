@@ -210,6 +210,22 @@ def test_a_briefly_kept_error_expires_and_leaves_other_records() -> None:
     ]
 
 
+def test_a_failed_records_seconds_left_count_down_to_its_expiry() -> None:
+    backend = InMemoryCacheBackend()
+    service = ReformImpactsService(
+        ReformImpactCache(backend, CacheNamespace("test", "api"))
+    )
+    _create_impact(service, execution_id="failed-job", options_hash="hash", day=1)
+    service.set_error_reform_impact(
+        "failed-job", message="out of memory", keep_seconds=120
+    )
+
+    backend.advance(30)
+
+    assert service.get_reform_impact_seconds_left("failed-job") == 90
+    assert service.get_reform_impact_seconds_left("missing-job") is None
+
+
 def test_impact_cached_under_previous_economy_schema_version_is_not_matched(
     service,
 ):
