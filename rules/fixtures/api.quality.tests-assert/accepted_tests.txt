@@ -1,0 +1,93 @@
+# Proof fixture for api.quality.tests-assert (the accepted case).
+# The proof test reads this text as a test module. Every test below checks
+# something, in each of the forms the guard accepts, and the functions that
+# aren't tests need no check, so the guard reports nothing. The fixture is a
+# .txt file so that neither ruff nor pytest reads it.
+import unittest
+from unittest import mock
+
+import pytest
+from pytest import raises
+
+test_cases = [1, 2]
+
+
+def compute():
+    return 1
+
+
+def check_result(value):
+    assert value == 1
+
+
+def check_through_another_helper(value):
+    check_result(value)
+
+
+def test_asserts():
+    assert compute() == 1
+
+
+def test_expects_an_error():
+    with pytest.raises(ZeroDivisionError):
+        _ = 1 / 0
+
+
+def test_expects_an_error_with_an_imported_name():
+    with raises(ZeroDivisionError):
+        _ = 1 / 0
+
+
+def test_fails_explicitly():
+    if compute() != 1:
+        pytest.fail("wrong result")
+
+
+def test_checks_a_mock():
+    callback = mock.Mock()
+    callback()
+    callback.assert_called_once_with()
+
+
+def test_raises_assertion_error():
+    if compute() != 1:
+        msg = "wrong result"
+        raise AssertionError(msg)
+
+
+def test_a_stand_in_raises_assertion_error():
+    def unexpected_call():
+        raise AssertionError
+
+    compute()
+    del unexpected_call
+
+
+def test_calls_a_helper_that_checks():
+    check_result(compute())
+
+
+def test_calls_a_helper_that_calls_a_checking_helper():
+    check_through_another_helper(compute())
+
+
+class TestThing:
+    def test_method_asserts(self):
+        assert compute()
+
+    def helper(self):
+        compute()
+
+
+class Helpers:
+    def test_like_name_outside_a_test_class(self):
+        compute()
+
+
+class ThingCase(unittest.TestCase):
+    def test_unittest_assertion(self):
+        self.assertEqual(compute(), 1)
+
+    def test_unittest_fail(self):
+        if compute() != 1:
+            self.fail("wrong result")
