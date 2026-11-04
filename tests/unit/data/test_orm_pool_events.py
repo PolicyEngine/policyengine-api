@@ -115,15 +115,20 @@ def runtime(monkeypatch):
 
 @pytest.fixture
 def connector_logger():
-    """Yield the connector's refresh logger, restored afterwards."""
+    """Yield the connector's refresh logger, enabled, and restore it afterwards."""
     connector_logger = logging.getLogger(orm_pool_events.CONNECTOR_REFRESH_LOGGER)
     saved_handlers = list(connector_logger.handlers)
     saved_level = connector_logger.level
     saved_propagate = connector_logger.propagate
+    was_disabled = connector_logger.disabled
+    # Alembic tests run logging.config.fileConfig, which disables loggers that
+    # already exist, so re-enable this one while the test logs on it.
+    connector_logger.disabled = False
     yield connector_logger
     connector_logger.handlers[:] = saved_handlers
     connector_logger.setLevel(saved_level)
     connector_logger.propagate = saved_propagate
+    connector_logger.disabled = was_disabled
 
 
 @pytest.fixture
