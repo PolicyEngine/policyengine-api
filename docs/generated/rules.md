@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 59 | 0 | 1 | 13 | 73 |
+| mechanical | 60 | 0 | 1 | 13 | 74 |
 | metric | 1 | 0 | 0 | 0 | 1 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 60 of 75 rules.
+**Blocking:** 61 of 76 rules.
 
 ## Gaps
 
@@ -201,6 +201,7 @@ flowchart LR
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `api.catalog.extractor-import-isolation` | The catalog extractor never imports PolicyEngine core, country packages or v1 metadata directly. | mechanical | enforced | yes | pytest `tests/unit/v2/test_catalog_extraction.py` | `pr.yml:test` | **unproven** |
+| `api.catalog.selection-validation-no-database` | Importing catalog_selection_validation (catalog version validation, its error types and SelectedCatalog) loads no SQLAlchemy, SQLModel, v2 table model or v2 database module; the catalog query lives in catalog_selection_reads. | mechanical | enforced | yes | pytest `tests/unit/v2/test_catalog_selection_modules.py` | `pr.yml:test` | yes |
 | `api.metadata.read-modules-isolated` | v2 metadata read modules never import PolicyEngine packages or v1 metadata sources. | mechanical | enforced | yes | pytest `tests/unit/v2/test_metadata_service.py` | `pr.yml:test` | **unproven** |
 | `api.reports.v1-persistence-only` | The existing report route and service import only v1 persistence. | mechanical | enforced | yes | pytest `tests/unit/v2/test_report_v1_runtime_selection.py` | `pr.yml:test` | **unproven** |
 | `api.stage12.comparison-tables-isolated` | Serving routes and services never read the Stage 12 comparison tables, and production tables never depend on them. | mechanical | enforced | yes | pytest `tests/unit/v2/test_stage12_comparison_isolation.py` | `pr.yml:test` | **unproven** |
@@ -212,6 +213,8 @@ flowchart LR
   r_api_catalog_extractor_import_isolation("api.catalog.extractor-import-isolation (enforced)")
   e_pytest_tests_unit_v2_test_catalog_extraction_py["pytest tests/unit/v2/test_catalog_extraction.py"]
   j_CI_pr_yml_test["CI pr.yml:test"]
+  r_api_catalog_selection_validation_no_database("api.catalog.selection-validation-no-database (enforced)")
+  e_pytest_tests_unit_v2_test_catalog_selection_modules_py["pytest tests/unit/v2/test_catalog_selection_modules.py"]
   r_api_metadata_read_modules_isolated("api.metadata.read-modules-isolated (enforced)")
   e_pytest_tests_unit_v2_test_metadata_service_py["pytest tests/unit/v2/test_metadata_service.py"]
   r_api_reports_v1_persistence_only("api.reports.v1-persistence-only (enforced)")
@@ -223,6 +226,8 @@ flowchart LR
   e_pytest_tests_unit_v2_test_model_persistence_py["pytest tests/unit/v2/test_model_persistence.py"]
   r_api_catalog_extractor_import_isolation --> e_pytest_tests_unit_v2_test_catalog_extraction_py
   e_pytest_tests_unit_v2_test_catalog_extraction_py --> j_CI_pr_yml_test
+  r_api_catalog_selection_validation_no_database --> e_pytest_tests_unit_v2_test_catalog_selection_modules_py
+  e_pytest_tests_unit_v2_test_catalog_selection_modules_py --> j_CI_pr_yml_test
   r_api_metadata_read_modules_isolated --> e_pytest_tests_unit_v2_test_metadata_service_py
   e_pytest_tests_unit_v2_test_metadata_service_py --> j_CI_pr_yml_test
   r_api_reports_v1_persistence_only --> e_pytest_tests_unit_v2_test_report_v1_runtime_selection_py

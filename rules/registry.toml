@@ -66,6 +66,8 @@ guard_test_globs = [
   "tests/unit/v2/test_stage12_comparison_isolation.py",
 ]
 extra_guard_tests = [
+  "tests/unit/v2/test_catalog_selection_modules.py::test_importing_the_validation_module_loads_no_database_code",
+  "tests/unit/v2/test_catalog_selection_modules.py::test_the_validation_module_imports_no_database_code",
   "tests/unit/v2/test_catalog_extraction.py::test_extractor_has_no_direct_core_country_or_v1_metadata_imports",
   "tests/unit/v2/test_catalog_extraction.py::test_extractor_modules_have_no_direct_core_country_or_v1_metadata_imports",
   "tests/unit/v2/test_catalog_initialization.py::test_initializer_is_not_imported_by_application_startup_modules",
@@ -526,6 +528,30 @@ nodes = [
 workflow = ".github/workflows/pr.yml"
 job = "test"
 invocation = "make test"
+
+[[rule]]
+id = "api.catalog.selection-validation-no-database"
+category = "isolation"
+statement = "Importing catalog_selection_validation (catalog version validation, its error types and SelectedCatalog) loads no SQLAlchemy, SQLModel, v2 table model or v2 database module; the catalog query lives in catalog_selection_reads."
+rationale = "docs/engineering/skills/v2-code-organization.md#dependency-direction"
+scope = ["policyengine_api/data/v2/catalog/__init__.py", "policyengine_api/data/v2/catalog/catalog_selection_validation.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/v2/test_catalog_selection_modules.py::test_the_validation_module_imports_no_database_code",
+  "tests/unit/v2/test_catalog_selection_modules.py::test_importing_the_validation_module_loads_no_database_code",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.catalog.selection-validation-no-database/bad_catalog_validation.py"
+good_fixture = "rules/fixtures/api.catalog.selection-validation-no-database/good_catalog_validation.py"
+test = "tests/unit/v2/test_catalog_selection_modules.py::test_rule_proof_selection_validation_no_database"
 
 [[rule]]
 id = "api.metadata.read-modules-isolated"

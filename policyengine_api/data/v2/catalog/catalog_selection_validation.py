@@ -1,6 +1,7 @@
 """Version validation, error types and the result type for v2 catalog selection.
 
-This module imports no SQLAlchemy, SQLModel or database module, so v2
+Importing this module loads no SQLAlchemy, SQLModel, table model or database
+module (rule ``api.catalog.selection-validation-no-database``), so v2
 validators, transformations, types and routes can use it. The one database
 read, ``select_catalog``, is in ``catalog_selection_reads``.
 """
