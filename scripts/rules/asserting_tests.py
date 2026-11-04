@@ -2,21 +2,32 @@
 
 A test that checks nothing passes whatever the code returns, as long as nothing
 raises. The guard reads every tracked test file (``test_*.py`` or
-``*_test.py``, outside fixture directories) with ``ast`` and fails on any
-test function, as pytest and unittest collect them, that contains none of:
+``*_test.py``, apart from the rules' proof fixtures) with ``ast``, finds the
+tests pytest and unittest collect from it, and fails on any test that
+contains none of:
 
 - an ``assert`` statement, or ``raise AssertionError``;
 - ``pytest.raises``, ``pytest.warns``, ``pytest.deprecated_call`` or
-  ``pytest.fail``, also when imported from pytest by name;
-- a call to a function or method whose name starts with ``assert``, such as
-  unittest's ``self.assertEqual``, a mock's ``assert_called_once_with`` or
-  ``assert_frame_equal``, or unittest's ``self.fail``;
-- a call to a helper that does one of these: a function defined in the same
-  file, or imported by name from another module in the repository, followed
-  through further helpers.
+  ``pytest.fail``, also through ``import pytest as ...`` or a by-name import;
+- a call to a function or method whose name starts with ``assert`` or
+  ``_assert``, such as unittest's ``self.assertEqual``, a mock's
+  ``assert_called_once_with`` or ``assert_frame_equal``, also when imported
+  under another name, or unittest's ``self.fail``;
+- a call to a helper that does one of these, followed through further
+  helpers: a function of the same file called by name, a method of the test's
+  own class called through ``self`` or ``cls``, or a function imported by name
+  from test code (a module under a ``tests`` directory, a test file or a
+  ``conftest.py``). Production code isn't a helper.
 
-Nested functions count as part of the test, so a stand-in that raises
-``AssertionError`` when it is called is a check.
+Only the test's body counts, not its decorators or default arguments. A
+function or class defined in the body counts only when the body refers to it
+by name, as a stand-in the code calls does.
+
+Collection follows pytest: module-level ``test*`` functions, also in ``if``,
+``try`` and ``with`` blocks; ``test*`` methods of ``Test*`` classes without an
+``__init__``, including inherited ones and nested ``Test*`` classes; and
+``unittest.TestCase`` subclasses, also through a base the guard can resolve.
+``__test__ = False`` on a module or class switches collection off.
 
 While the rule is ratcheted, its baseline file lists the tolerated tests, one
 ``<path>::<test>`` per line (``<test>`` is ``Class::method`` for a method). A
@@ -32,7 +43,7 @@ from __future__ import annotations
 import ast
 import subprocess
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
@@ -47,7 +58,12 @@ RULE_ID = "api.quality.tests-assert"
 CHECK_NAME = "asserting-tests"
 SEPARATOR = "::"
 PYTEST_CHECKS = frozenset({"raises", "warns", "deprecated_call", "fail"})
-FIXTURE_DIRECTORY = "fixtures"
+ASSERT_PREFIXES = ("assert", "_assert")
+# Proof fixtures for the rules: test data that no test runner collects.
+EXCLUDED_PREFIXES = ("rules/fixtures/", "scripts/rules/tests/fixtures/")
+TEST_DIRECTORY = "tests"
+PYTEST = "pytest"
+UNITTEST = "unittest"
 FIX = (
     "check its outcome: assert on what the code returns or changes, use "
     "pytest.raises for an expected error, or call a helper that asserts; a test "
@@ -75,14 +91,22 @@ class UncheckedTest:
 def is_test_file(path: str) -> bool:
     """Whether pytest or unittest collects tests from ``path``.
 
-    Files under a ``fixtures`` directory hold test data, not tests.
+    The rule-proof fixture directories hold test data that no test runner
+    collects.
     """
-    parts = PurePosixPath(path).parts
-    name = parts[-1]
+    name = PurePosixPath(path).name
     return (
         name.endswith(".py")
         and (name.startswith("test_") or name.endswith("_test.py"))
-        and FIXTURE_DIRECTORY not in parts[:-1]
+        and not path.startswith(EXCLUDED_PREFIXES)
+    )
+
+
+def _is_test_code(path: str) -> bool:
+    """Whether ``path`` is test code, whose helpers the guard follows."""
+    parts = PurePosixPath(path).parts
+    return (
+        TEST_DIRECTORY in parts[:-1] or parts[-1] == "conftest.py" or is_test_file(path)
     )
 
 
@@ -100,42 +124,64 @@ def _raises_assertion_error(node: ast.Raise) -> bool:
     return isinstance(raised, ast.Name) and raised.id == "AssertionError"
 
 
-def _is_checking_call(call: ast.Call, pytest_names: frozenset[str]) -> bool:
-    """Whether a call is a check: an assert function, pytest's, or ``self.fail``."""
-    name = _called_name(call)
-    if name is None:
-        return False
-    function = call.func
-    owner = (
-        function.value.id
-        if isinstance(function, ast.Attribute) and isinstance(function.value, ast.Name)
-        else None
+def _module_statements(body: Iterable[ast.stmt]) -> Iterator[ast.stmt]:
+    """Yield a module's statements, including those in if, try and with blocks."""
+    for node in body:
+        yield node
+        blocks: list[list[ast.stmt]] = []
+        if isinstance(node, ast.If):
+            blocks = [node.body, node.orelse]
+        elif isinstance(node, (ast.Try, ast.TryStar)):
+            blocks = [node.body, node.orelse, node.finalbody]
+            blocks += [handler.body for handler in node.handlers]
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            blocks = [node.body]
+        for block in blocks:
+            yield from _module_statements(block)
+
+
+def _switched_off(body: Iterable[ast.stmt]) -> bool:
+    """Whether a module or class body sets ``__test__ = False``."""
+    return any(
+        isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "__test__"
+            for target in node.targets
+        )
+        and isinstance(node.value, ast.Constant)
+        and node.value.value is False
+        for node in body
     )
-    return (
-        name.startswith(("assert", "_assert"))
-        or (owner == "pytest" and name in PYTEST_CHECKS)
-        or (owner == "self" and name == "fail")
-        or (isinstance(function, ast.Name) and name in pytest_names)
+
+
+def _defines_init(node: ast.ClassDef) -> bool:
+    return any(
+        isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and statement.name == "__init__"
+        for statement in node.body
     )
 
 
-def _is_direct_check(node: ast.AST, pytest_names: frozenset[str]) -> bool:
-    """Whether ``node`` is itself a check, without following any helper."""
-    if isinstance(node, ast.Assert):
-        return True
-    if isinstance(node, ast.Raise):
-        return _raises_assertion_error(node)
-    return isinstance(node, ast.Call) and _is_checking_call(node, pytest_names)
-
-
-@dataclass
+@dataclass(eq=False)
 class _Module:
     """What the guard needs from one parsed module."""
 
+    path: str
     tree: ast.Module
-    functions: dict[str, list[FunctionNode]]
-    imported_functions: dict[str, tuple[str, str]]
+    functions: dict[str, FunctionNode]
+    classes: dict[str, ast.ClassDef]
+    imports: dict[str, tuple[str, str]]
+    pytest_modules: frozenset[str]
     pytest_names: frozenset[str]
+    assert_names: frozenset[str]
+
+
+@dataclass(eq=False)
+class _Class:
+    """A class and the module that defines it."""
+
+    module: _Module
+    node: ast.ClassDef
 
 
 def _module_path(importer: str, module: str | None, level: int) -> str | None:
@@ -147,109 +193,347 @@ def _module_path(importer: str, module: str | None, level: int) -> str | None:
         package = package.parent
     stem = package.as_posix() if package.as_posix() != "." else ""
     if module:
-        stem = (
-            f"{stem}/{module.replace('.', '/')}" if stem else module.replace(".", "/")
-        )
+        dotted = module.replace(".", "/")
+        stem = f"{stem}/{dotted}" if stem else dotted
     return stem or None
 
 
-def _parse_module(path: str, tree: ast.Module) -> _Module:
-    functions: dict[str, list[FunctionNode]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            functions.setdefault(node.name, []).append(node)
-    imported: dict[str, tuple[str, str]] = {}
-    pytest_names = set()
-    for node in tree.body:
-        if not isinstance(node, ast.ImportFrom):
-            continue
-        if node.module == "pytest" and node.level == 0:
-            pytest_names.update(
-                alias.asname or alias.name
-                for alias in node.names
-                if alias.name in PYTEST_CHECKS
-            )
-            continue
-        stem = _module_path(path, node.module, node.level)
-        if stem is None:
-            continue
+@dataclass
+class _ImportBindings:
+    """The names a module's imports bind, as the guard reads them."""
+
+    imports: dict[str, tuple[str, str]] = field(default_factory=dict)
+    pytest_modules: set[str] = field(default_factory=lambda: {"pytest"})
+    pytest_names: set[str] = field(default_factory=set)
+    assert_names: set[str] = field(default_factory=set)
+
+    def add_from_import(self, path: str, node: ast.ImportFrom) -> None:
+        """Record what ``from module import name`` binds in module ``path``."""
         for alias in node.names:
-            imported[alias.asname or alias.name] = (stem, alias.name)
-    return _Module(tree, functions, imported, frozenset(pytest_names))
+            bound = alias.asname or alias.name
+            if alias.name.startswith(ASSERT_PREFIXES):
+                self.assert_names.add(bound)
+            if node.module == "pytest" and node.level == 0:
+                if alias.name in PYTEST_CHECKS:
+                    self.pytest_names.add(bound)
+                continue
+            stem = _module_path(path, node.module, node.level)
+            if stem is not None:
+                self.imports[bound] = (stem, alias.name)
+
+
+def _parse_module(path: str, text: str) -> _Module:
+    """Parse ``text`` as module ``path``; raise SyntaxError if it doesn't parse."""
+    tree = ast.parse(text.removeprefix("﻿"), filename=path)
+    functions: dict[str, FunctionNode] = {}
+    classes: dict[str, ast.ClassDef] = {}
+    for node in _module_statements(tree.body):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            functions[node.name] = node
+        elif isinstance(node, ast.ClassDef):
+            classes[node.name] = node
+    bindings = _ImportBindings()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            bindings.pytest_modules.update(
+                alias.asname
+                for alias in node.names
+                if alias.name == "pytest" and alias.asname
+            )
+        elif isinstance(node, ast.ImportFrom):
+            bindings.add_from_import(path, node)
+    return _Module(
+        path,
+        tree,
+        functions,
+        classes,
+        bindings.imports,
+        frozenset(bindings.pytest_modules),
+        frozenset(bindings.pytest_names),
+        frozenset(bindings.assert_names),
+    )
+
+
+def _is_direct_check(node: ast.AST, module: _Module) -> bool:
+    """Whether ``node`` is itself a check, without following any helper."""
+    if isinstance(node, ast.Assert):
+        return True
+    if isinstance(node, ast.Raise):
+        return _raises_assertion_error(node)
+    if not isinstance(node, ast.Call):
+        return False
+    name = _called_name(node)
+    function = node.func
+    owner = (
+        function.value.id
+        if isinstance(function, ast.Attribute) and isinstance(function.value, ast.Name)
+        else None
+    )
+    return name is not None and (
+        name.startswith(ASSERT_PREFIXES)
+        or (owner in module.pytest_modules and name in PYTEST_CHECKS)
+        or (owner == "self" and name == "fail")
+        or (
+            isinstance(function, ast.Name)
+            and (name in module.pytest_names or name in module.assert_names)
+        )
+    )
+
+
+def _body_nodes(function: FunctionNode) -> tuple[list[ast.AST], frozenset[str]]:
+    """Return the nodes of a function's body that run, and its nested names.
+
+    Decorators and default arguments are left out. A function or class defined
+    inside the body counts only when the body refers to it by name, as a
+    stand-in the code calls does; a used stand-in class counts with every
+    method in it.
+    """
+    nested: dict[str, list[FunctionNode | ast.ClassDef]] = {}
+    included: list[ast.AST] = []
+    loaded: set[str] = set()
+
+    def visit(statements: Iterable[ast.AST]) -> None:
+        stack = list(statements)
+        while stack:
+            current = stack.pop()
+            if isinstance(
+                current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            ):
+                nested.setdefault(current.name, []).append(current)
+                continue
+            included.append(current)
+            if isinstance(current, ast.Name) and isinstance(current.ctx, ast.Load):
+                loaded.add(current.id)
+            stack.extend(ast.iter_child_nodes(current))
+
+    visit(function.body)
+    used: set[str] = set()
+    while unused := (loaded & set(nested)) - used:
+        for name in sorted(unused):
+            used.add(name)
+            for definition in nested[name]:
+                visit(_definition_body(definition))
+    return included, frozenset(nested)
+
+
+def _definition_body(definition: FunctionNode | ast.ClassDef) -> list[ast.AST]:
+    """Return what runs of a nested function, or of every method of a class."""
+    if not isinstance(definition, ast.ClassDef):
+        return list(definition.body)
+    body: list[ast.AST] = []
+    for statement in definition.body:
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            body.extend(statement.body)
+        else:
+            body.append(statement)
+    return body
 
 
 class CheckIndex:
-    """Which functions check something, across the repository's modules."""
+    """Which tests and helpers check something, across the repository's modules."""
 
     def __init__(self, root: Path) -> None:
         """Index modules under ``root``, reading each one only when needed."""
         self.root = root
         self._modules: dict[str, _Module | None] = {}
-        self._checking: dict[tuple[str, str], bool] = {}
+        self._results: dict[tuple[object, ...], bool] = {}
+        self._in_progress: set[tuple[object, ...]] = set()
+        self._reached_cycle = False
 
-    def _module(self, path: str, text: str | None = None) -> _Module | None:
+    def _read(self, path: str) -> str:
+        return (self.root / path).read_text(encoding="utf-8", errors="replace")
+
+    def _test_module(self, path: str, text: str | None) -> _Module:
+        """Parse the test module itself; raise SyntaxError if it doesn't parse."""
+        module = _parse_module(path, self._read(path) if text is None else text)
+        self._modules[path] = module
+        return module
+
+    def _helper_module(self, path: str) -> _Module | None:
+        """Parse a module a test imports from, or None if it doesn't parse."""
         if path not in self._modules:
-            if text is None:
-                file = self.root / path
-                if not file.is_file():
-                    self._modules[path] = None
-                    return None
-                text = file.read_text(encoding="utf-8", errors="replace")
-            self._modules[path] = _parse_module(path, ast.parse(text, filename=path))
+            try:
+                self._modules[path] = _parse_module(path, self._read(path))
+            except (SyntaxError, ValueError):
+                self._modules[path] = None
         return self._modules[path]
 
-    def _resolve(self, stem: str) -> str | None:
-        """Return the tracked file for module path ``stem``, if there is one."""
+    def _imported(self, module: _Module, name: str) -> tuple[_Module, str] | None:
+        """Resolve a by-name import to the test-code module and name it binds."""
+        if name not in module.imports:
+            return None
+        stem, original = module.imports[name]
         for candidate in (f"{stem}.py", f"{stem}/__init__.py"):
-            if (self.root / candidate).is_file():
-                return candidate
+            if (self.root / candidate).is_file() and _is_test_code(candidate):
+                target = self._helper_module(candidate)
+                return None if target is None else (target, original)
         return None
 
-    def _function_checks(self, path: str, name: str) -> bool:
-        """Whether a function ``name`` in module ``path`` checks something."""
-        key = (path, name)
-        if key in self._checking:
-            return self._checking[key]
-        # A helper that calls itself, directly or through others, is assumed not
-        # to check anything until one of its calls is shown to.
-        self._checking[key] = False
-        module = self._module(path)
-        result = False
-        if module is not None:
-            if name in module.functions:
-                result = any(
-                    self._body_checks(path, module, function)
-                    for function in module.functions[name]
+    def _base_classes(self, cls: _Class) -> list[_Class]:
+        """Return the bases of ``cls`` that resolve to classes in test code."""
+        bases = []
+        for base in cls.node.bases:
+            if not isinstance(base, ast.Name):
+                continue
+            if base.id in cls.module.classes:
+                bases.append(_Class(cls.module, cls.module.classes[base.id]))
+                continue
+            imported = self._imported(cls.module, base.id)
+            if imported is not None and imported[1] in imported[0].classes:
+                bases.append(_Class(imported[0], imported[0].classes[imported[1]]))
+        return bases
+
+    def _ancestry(self, cls: _Class) -> list[_Class]:
+        """Return ``cls`` and every base that resolves, nearest first."""
+        found: list[_Class] = []
+        seen: set[tuple[str, int]] = set()
+        pending = [cls]
+        while pending:
+            current = pending.pop(0)
+            key = (current.module.path, current.node.lineno)
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(current)
+            pending.extend(self._base_classes(current))
+        return found
+
+    def _collection(self, cls: _Class) -> str | None:
+        """Return how a test runner collects ``cls``: unittest, pytest, or None."""
+        ancestry = self._ancestry(cls)
+        if any(_switched_off(member.node.body) for member in ancestry):
+            return None
+        for member in ancestry:
+            for base in member.node.bases:
+                name = (
+                    base.id
+                    if isinstance(base, ast.Name)
+                    else base.attr
+                    if isinstance(base, ast.Attribute)
+                    else ""
                 )
-            elif name in module.imported_functions:
-                stem, original = module.imported_functions[name]
-                target = self._resolve(stem)
-                result = target is not None and self._function_checks(target, original)
-        self._checking[key] = result
-        return result
+                if name.endswith("TestCase"):
+                    return UNITTEST
+        if cls.node.name.startswith("Test") and not any(
+            _defines_init(member.node) for member in ancestry
+        ):
+            return PYTEST
+        return None
 
-    def _body_checks(self, path: str, module: _Module, function: FunctionNode) -> bool:
-        for node in ast.walk(function):
-            if _is_direct_check(node, module.pytest_names):
-                return True
-            if isinstance(node, ast.Call) and self._calls_checking_helper(
-                path, module, node, function.name
+    def _class_tests(
+        self, cls: _Class, prefix: str, collection: str
+    ) -> Iterator[tuple[str, _Module, FunctionNode, _Class]]:
+        qualified = f"{prefix}{cls.node.name}{SEPARATOR}"
+        seen: set[str] = set()
+        for member in self._ancestry(cls):
+            for node in member.node.body:
+                if (
+                    isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name.startswith("test")
+                    and node.name not in seen
+                ):
+                    seen.add(node.name)
+                    yield f"{qualified}{node.name}", member.module, node, cls
+        if collection != PYTEST:
+            return
+        for node in cls.node.body:
+            if isinstance(node, ast.ClassDef):
+                nested = _Class(cls.module, node)
+                nested_collection = self._collection(nested)
+                if nested_collection is not None:
+                    yield from self._class_tests(nested, qualified, nested_collection)
+
+    def _collected_tests(
+        self, module: _Module
+    ) -> Iterator[tuple[str, _Module, FunctionNode, _Class | None]]:
+        """Yield each test pytest or unittest would collect from ``module``."""
+        if _switched_off(module.tree.body):
+            return
+        for node in _module_statements(module.tree.body):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if (
+                    node.name.startswith("test")
+                    and module.functions.get(node.name) is node
+                ):
+                    yield node.name, module, node, None
+            elif (
+                isinstance(node, ast.ClassDef) and module.classes.get(node.name) is node
             ):
-                return True
-        return False
+                cls = _Class(module, node)
+                collection = self._collection(cls)
+                if collection is not None:
+                    yield from self._class_tests(cls, "", collection)
 
-    def _calls_checking_helper(
-        self, path: str, module: _Module, call: ast.Call, caller: str
+    def _method(self, owner: _Class, name: str) -> tuple[_Module, FunctionNode] | None:
+        for member in self._ancestry(owner):
+            for node in member.node.body:
+                if (
+                    isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name == name
+                ):
+                    return member.module, node
+        return None
+
+    def _helper(
+        self,
+        module: _Module,
+        call: ast.Call,
+        owner: _Class | None,
+        nested: frozenset[str],
+    ) -> tuple[_Module, FunctionNode, _Class | None] | None:
+        """Return the helper ``call`` calls, if the guard can tell which it is."""
+        function = call.func
+        if isinstance(function, ast.Name):
+            name = function.id
+            if name in nested:
+                return None
+            if name in module.functions:
+                return module, module.functions[name], None
+            imported = self._imported(module, name)
+            if imported is not None and imported[1] in imported[0].functions:
+                return imported[0], imported[0].functions[imported[1]], None
+            return None
+        if (
+            owner is not None
+            and isinstance(function, ast.Attribute)
+            and isinstance(function.value, ast.Name)
+            and function.value.id in {"self", "cls"}
+        ):
+            method = self._method(owner, function.attr)
+            if method is not None:
+                return method[0], method[1], owner
+        return None
+
+    def _checks(
+        self, module: _Module, function: FunctionNode, owner: _Class | None
     ) -> bool:
-        """Whether ``call`` calls a helper, other than ``caller``, that checks."""
-        name = _called_name(call)
-        known = name in module.functions or name in module.imported_functions
-        return (
-            name is not None
-            and name != caller
-            and known
-            and self._function_checks(path, name)
-        )
+        """Whether ``function`` checks something, directly or through a helper."""
+        owner_key = None if owner is None else (owner.module.path, owner.node.lineno)
+        key = (module.path, function.lineno, function.col_offset, owner_key)
+        if key in self._results:
+            return self._results[key]
+        if key in self._in_progress:
+            # A helper reached again through its own calls: its result isn't
+            # known yet, so nothing that depends on it is stored as False.
+            self._reached_cycle = True
+            return False
+        outer_reached_cycle = self._reached_cycle
+        self._reached_cycle = False
+        self._in_progress.add(key)
+        try:
+            included, nested = _body_nodes(function)
+            result = any(_is_direct_check(node, module) for node in included) or any(
+                (helper := self._helper(module, node, owner, nested)) is not None
+                and self._checks(*helper)
+                for node in included
+                if isinstance(node, ast.Call)
+            )
+        finally:
+            self._in_progress.discard(key)
+        if result or not self._reached_cycle:
+            self._results[key] = result
+        self._reached_cycle = self._reached_cycle or outer_reached_cycle
+        return result
 
     def unchecked_tests(
         self, path: str, text: str | None = None
@@ -259,35 +543,18 @@ class CheckIndex:
         Read ``text`` as the module's source when given. Raise SyntaxError when
         the module doesn't parse.
         """
-        module = self._module(path, text)
-        if module is None:
-            return []
-        return [
-            UncheckedTest(path, function.lineno, name)
-            for name, function in _collected_tests(module.tree.body, "")
-            if not self._body_checks(path, module, function)
-        ]
-
-
-def _is_test_class(node: ast.ClassDef) -> bool:
-    """Whether pytest collects tests from the class: ``Test*`` or a TestCase."""
-    return node.name.startswith("Test") or any(
-        (isinstance(base, ast.Name) and base.id.endswith("TestCase"))
-        or (isinstance(base, ast.Attribute) and base.attr.endswith("TestCase"))
-        for base in node.bases
-    )
-
-
-def _collected_tests(
-    body: Iterable[ast.stmt], prefix: str
-) -> Iterator[tuple[str, FunctionNode]]:
-    """Yield ``(qualified name, function)`` for each test pytest would collect."""
-    for node in body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name.startswith("test"):
-                yield f"{prefix}{node.name}", node
-        elif isinstance(node, ast.ClassDef) and _is_test_class(node):
-            yield from _collected_tests(node.body, f"{prefix}{node.name}{SEPARATOR}")
+        module = self._test_module(path, text)
+        unchecked = []
+        for name, defining_module, function, owner in self._collected_tests(module):
+            self._reached_cycle = False
+            if not self._checks(defining_module, function, owner):
+                line = (
+                    function.lineno
+                    if defining_module is module or owner is None
+                    else owner.node.lineno
+                )
+                unchecked.append(UncheckedTest(path, line, name))
+        return unchecked
 
 
 def _describe(test: UncheckedTest) -> str:
@@ -378,7 +645,7 @@ def run_check(root: Path = REPO_ROOT) -> list[Violation]:
     for path in _tracked_test_files(root):
         try:
             found.extend(index.unchecked_tests(path))
-        except SyntaxError:
+        except (SyntaxError, ValueError):
             violations.append(
                 Violation(
                     RULE_ID,

@@ -28,34 +28,50 @@ versions the Cloud Run image installs (`gcp/cloud_run/Dockerfile`):
 that checks nothing passes whatever the code returns, as long as nothing
 raises. The `asserting-tests` quality guard
 (`scripts/rules/asserting_tests.py`) reads every tracked `test_*.py` and
-`*_test.py` file outside a `fixtures` directory, and fails on a test function,
-as pytest and unittest collect them, that contains none of:
+`*_test.py` file, apart from the rules' proof fixtures under `rules/fixtures/`
+and `scripts/rules/tests/fixtures/`. It finds the tests pytest and unittest
+collect, and fails on a test whose body contains none of:
 
 - an `assert` statement, or `raise AssertionError`;
 - `pytest.raises`, `pytest.warns`, `pytest.deprecated_call` or `pytest.fail`,
-  also when imported from pytest by name;
-- a call to a function or method whose name starts with `assert`, such as
-  `self.assertEqual`, a mock's `assert_called_once_with` or
-  `assert_frame_equal`, or unittest's `self.fail`;
-- a call to a helper that does one of these, defined in the same file or
-  imported by name (`from tests.unit.support import check_response`) from
-  another module in the repository. The guard follows helpers through other
-  helpers.
+  also through `import pytest as pt` or `from pytest import raises`;
+- a call to a function or method whose name starts with `assert` or
+  `_assert`, such as `self.assertEqual`, a mock's `assert_called_once_with`
+  or `assert_frame_equal` (also imported under another name), or unittest's
+  `self.fail`;
+- a call to a test helper that does one of these, followed through further
+  helpers: a function of the same file called by name, a method of the
+  test's own class called through `self` or `cls`, or a function imported by
+  name (`from tests.unit.support import check_response`, at the top of the
+  file or inside the test) from test code: a module under a `tests`
+  directory, a test file or a `conftest.py`.
 
-A function nested in the test counts as part of it, so a stand-in that raises
-`AssertionError` when the code calls it is a check.
+Only the test's body counts, not its decorators or default arguments. A
+function or class defined in the body counts only when the body refers to it
+by name: a stand-in that raises `AssertionError` when the code calls it is a
+check once the test passes it to the code. Production code isn't a helper,
+even if it raises on bad input.
+
+The guard collects tests as pytest does: module-level `test*` functions, also
+inside `if`, `try` and `with` blocks; `test*` methods of `Test*` classes
+without an `__init__`, including methods inherited from a mixin and nested
+`Test*` classes; and methods of `unittest.TestCase` subclasses, also through
+a base class in test code. `__test__ = False` on a module or class switches
+collection off, as it does for pytest.
 
 A test that only shows that a call doesn't raise checks nothing: assert what
-the call returns or what it changes instead. A test whose check is a helper
-imported some other way (`import tests.unit.support as support`, then
-`support.check(...)`) needs the helper named `assert_...`, or a by-name
-import.
+the call returns or what it changes instead. A helper reached any other way
+(`support.check(...)` after `import tests.unit.support as support`, or a
+method of another object) isn't followed, so name it `assert_...` or import
+it by name.
 
 The rule is ratcheted. `rules/baselines/tests-without-checks.txt` lists the
-22 tests that check nothing today, as `<path>::<test>` (`<test>` is
-`Class::method` for a method). A test not listed there fails, and a listed
-one that is gone, renamed or now checks something fails as stale: remove its
-line and lower the rule's baseline `count`.
+22 tests that checked nothing when the rule was added, as `<path>::<test>`
+(`<test>` is `Class::method` for a method). A test not listed there fails,
+and a listed one that is gone or now checks something fails as stale: remove
+its line and lower the rule's baseline `count`. Renaming or moving a listed
+test also fails, because its new entry is one the base branch's baseline
+lacks, so give it a check in the same change.
 
 ## Tests That Run a Country Model
 

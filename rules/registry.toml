@@ -1495,9 +1495,9 @@ invocation = "unittest discover -s scripts/rules/tests"
 [[rule]]
 id = "api.quality.tests-assert"
 category = "quality"
-statement = "Every test function checks something: it contains an assert, a raise AssertionError, pytest.raises, pytest.warns, pytest.deprecated_call or pytest.fail, a call to an assert function or method (unittest's self.assertEqual, a mock's assert_called_once_with) or self.fail, or a call to a helper that does, defined in the same file or imported by name from another repository module; apart from the tests rules/baselines/tests-without-checks.txt lists."
+statement = "Every test function pytest or unittest collects checks something: its body contains an assert, a raise AssertionError, pytest.raises, pytest.warns, pytest.deprecated_call or pytest.fail, a call to an assert function or method (unittest's self.assertEqual, a mock's assert_called_once_with) or self.fail, or a call to a test helper that does (a function of the same file, a method of the test's class, or a function imported by name from test code); apart from the tests rules/baselines/tests-without-checks.txt lists."
 rationale = "docs/engineering/skills/testing.md#every-test-checks-something"
-scope = ["tests/**/test_*.py", "scripts/rules/tests/test_*.py"]
+scope = ["**/test_*.py"]
 tier = "mechanical"
 status = "ratcheted"
 autofix = false
