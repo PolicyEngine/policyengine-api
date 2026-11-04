@@ -2,8 +2,10 @@
 
 Non-test code reaches relational databases only through SQLAlchemy engines,
 connections and sessions, and changes persistent schema only through Alembic
-revisions. The two declared exceptions, both in catalog publication staging,
-are explained in docs/engineering/skills/alembic-migrations.md under
+revisions. The rule's exceptions are its [[rule.exception]] entries in
+rules/registry.toml, which these tests read: each names a module and the one
+construct it may use, or a path pattern (the Alembic revisions) the check
+doesn't scan. docs/engineering/skills/alembic-migrations.md explains them under
 "Database access through SQLAlchemy and Alembic".
 
 Like the api.data.runtime-sql-confined guard in test_runtime_sql_boundaries.py,
@@ -16,13 +18,19 @@ from __future__ import annotations
 
 import ast
 import re
+from functools import cache
 from pathlib import Path
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v2.catalog.publication_staging import STAGING_METADATA
+from scripts.rules.file_length import is_excluded
+from scripts.rules.load import load_registry
+
+if TYPE_CHECKING:
+    from scripts.rules.model import RuleException
 
 PROJECT_ROOT = Path(__file__).parents[3]
 NON_TEST_ROOTS = ("policyengine_api", "scripts", "migrations", ".github")
@@ -87,31 +95,45 @@ SCHEMA_CHANGING_SQL = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
-PUBLICATION_STAGING_MODULE = "policyengine_api/data/v2/catalog/publication_staging.py"
-ORM_POOL_EVENTS_MODULE = "policyengine_api/data/orm_pool_events.py"
-# Catalog publication streams rows with Postgres COPY ... FROM STDIN, which
-# SQLAlchemy has no API for. It runs COPY through the psycopg connection beneath
-# a SQLAlchemy Connection that SQLAlchemy opened and still manages, and uses
-# psycopg's SQL composition and JSONB adapter to do it.
-# The v1 pool's diagnostics read the file descriptor and local port of
-# pymysql's socket, from the driver connection a SQLAlchemy pool event passes
-# them, to record which socket a connection used. They never read or write
-# through it.
-DECLARED_DRIVER_ACCESS = frozenset(
-    {
-        (PUBLICATION_STAGING_MODULE, "import psycopg.sql"),
-        (PUBLICATION_STAGING_MODULE, "import psycopg.types.json.Jsonb"),
-        (PUBLICATION_STAGING_MODULE, "attribute .driver_connection"),
-        (ORM_POOL_EVENTS_MODULE, "attribute ._sock"),
-    }
-)
-# Catalog publication creates its staging tables as TEMPORARY tables that
-# Postgres drops at commit, so they never outlive the publishing transaction.
-# test_publication_staging_tables_are_temporary_and_dropped_at_commit checks
-# every table on STAGING_METADATA.
-DECLARED_SCHEMA_CHANGES = frozenset(
-    {(PUBLICATION_STAGING_MODULE, "call STAGING_METADATA.create_all()")}
-)
+RULE_ID = "api.data.sqlalchemy-and-alembic-only"
+# The rule's [[rule.exception]] entries in rules/registry.toml, by category:
+# - driver-access: one driver import or driver-connection access, named by
+#   its path and, in match, the construct find_driver_access reports;
+# - schema-change: one schema change, named the same way for
+#   find_schema_changes;
+# - migration-revision: a path pattern this check doesn't scan at all.
+DRIVER_ACCESS_CATEGORY = "driver-access"
+SCHEMA_CHANGE_CATEGORY = "schema-change"
+UNSCANNED_CATEGORY = "migration-revision"
+CONSTRUCT_CATEGORIES = (DRIVER_ACCESS_CATEGORY, SCHEMA_CHANGE_CATEGORY)
+
+
+@cache
+def rule_exceptions() -> tuple[RuleException, ...]:
+    """Return the rule's [[rule.exception]] entries from rules/registry.toml."""
+    registry, violations = load_registry(PROJECT_ROOT)
+    assert registry is not None, violations
+    rule = registry.rule(RULE_ID)
+    assert rule is not None, f"rules/registry.toml has no rule {RULE_ID}"
+    return rule.exceptions
+
+
+def declared_constructs(category: str) -> frozenset[tuple[str, str]]:
+    """Return the (module, construct) pairs the registry allows in ``category``."""
+    return frozenset(
+        (exception.path, exception.match)
+        for exception in rule_exceptions()
+        if exception.category == category and exception.match is not None
+    )
+
+
+def unscanned_patterns() -> tuple[str, ...]:
+    """Return the path patterns the registry takes out of this check entirely."""
+    return tuple(
+        exception.path
+        for exception in rule_exceptions()
+        if exception.category == UNSCANNED_CATEGORY
+    )
 
 
 class DatabaseAccessFinding(NamedTuple):
@@ -127,31 +149,30 @@ class DatabaseAccessFinding(NamedTuple):
         return (self.module_path, self.construct)
 
 
+def _python_modules(project_root: Path) -> list[str]:
+    """Return every Python module under NON_TEST_ROOTS outside a tests directory."""
+    return [
+        module_file.relative_to(project_root).as_posix()
+        for root_name in NON_TEST_ROOTS
+        for module_file in sorted((project_root / root_name).rglob("*.py"))
+        if "tests" not in module_file.relative_to(project_root).parts[:-1]
+    ]
+
+
 def non_test_python_modules(project_root: Path = PROJECT_ROOT) -> list[str]:
     """Return every non-test Python module the rule covers, as relative paths.
 
-    Tests and the generated Alembic revisions under migrations/*/versions/ are
-    excluded.
+    Tests are excluded, and so are the paths the rule's migration-revision
+    exceptions in rules/registry.toml name: the generated Alembic revisions.
     """
-    module_paths = []
-    for root_name in NON_TEST_ROOTS:
-        for module_file in sorted((project_root / root_name).rglob("*.py")):
-            relative_path = module_file.relative_to(project_root)
-            if not _is_test_or_alembic_revision(relative_path):
-                module_paths.append(relative_path.as_posix())
+    patterns = unscanned_patterns()
+    module_paths = [
+        module_path
+        for module_path in _python_modules(project_root)
+        if not is_excluded(module_path, patterns)
+    ]
     assert module_paths, f"no Python modules found under {NON_TEST_ROOTS}"
     return module_paths
-
-
-def _is_test_or_alembic_revision(relative_path: Path) -> bool:
-    directory_names = relative_path.parts[:-1]
-    if "tests" in directory_names:
-        return True
-    return (
-        len(directory_names) >= 3
-        and directory_names[0] == "migrations"
-        and directory_names[2] == "versions"
-    )
 
 
 def _read_module(module_path: str) -> str:
@@ -423,6 +444,34 @@ def _assert_only_declared(
     )
 
 
+def test_rule_exceptions_name_a_known_category_and_what_they_allow() -> None:
+    """Each exception names a construct in one file, or a pattern never scanned."""
+    exceptions = rule_exceptions()
+    assert exceptions, f"{RULE_ID} has no [[rule.exception]] entries"
+    problems = []
+    for exception in exceptions:
+        where = f"exception for {exception.path}"
+        if exception.category in CONSTRUCT_CATEGORIES:
+            if exception.match is None:
+                problems.append(f"{where} names no construct: set match")
+            if not (PROJECT_ROOT / exception.path).is_file():
+                problems.append(f"{where} must name one existing file")
+        elif exception.category == UNSCANNED_CATEGORY:
+            if exception.match is not None:
+                problems.append(f"{where} skips whole files, so it takes no match")
+            if not any(
+                is_excluded(module_path, (exception.path,))
+                for module_path in _python_modules(PROJECT_ROOT)
+            ):
+                problems.append(f"{where} matches no module: remove it")
+        else:
+            problems.append(
+                f"{where} has unknown category {exception.category!r}: use one of "
+                f"{[*CONSTRUCT_CATEGORIES, UNSCANNED_CATEGORY]}"
+            )
+    assert not problems, "\n".join(problems)
+
+
 def test_non_test_code_reaches_database_drivers_only_where_declared() -> None:
     findings = [
         finding
@@ -430,7 +479,9 @@ def test_non_test_code_reaches_database_drivers_only_where_declared() -> None:
         for finding in find_driver_access(_read_module(module_path), module_path)
     ]
     _assert_only_declared(
-        findings, DECLARED_DRIVER_ACCESS, "Direct database-driver access"
+        findings,
+        declared_constructs(DRIVER_ACCESS_CATEGORY),
+        "Direct database-driver access",
     )
 
 
@@ -441,7 +492,9 @@ def test_non_test_code_changes_schema_only_through_alembic() -> None:
         for finding in find_schema_changes(_read_module(module_path), module_path)
     ]
     _assert_only_declared(
-        findings, DECLARED_SCHEMA_CHANGES, "Schema change outside Alembic"
+        findings,
+        declared_constructs(SCHEMA_CHANGE_CATEGORY),
+        "Schema change outside Alembic",
     )
 
 
