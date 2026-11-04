@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -17,11 +18,13 @@ from scripts.rules.declared_dependencies import (
     DeptryUnavailableError,
     Finding,
     compare,
-    deptry_findings,
-    ignored_file_violations,
     inline_ignore_violations,
     run_check,
+    run_deptry,
+    scanned_files_from_log,
     settings_violations,
+    unparsed_file_violations,
+    unscanned_file_violations,
 )
 from scripts.rules.model import RuleException
 from scripts.rules.resolve import workflow_jobs
@@ -72,6 +75,21 @@ def _git(root: Path, *arguments: str) -> None:
     subprocess.run(["git", *arguments], cwd=root, check=True, capture_output=True)
 
 
+def _accepted_copy(directory: str) -> Path:
+    """Copy the accepted fixture into ``directory`` and track it in a new git repo."""
+    root = Path(directory) / "project"
+    shutil.copytree(FIXTURES / "accepted", root)
+    _git(root, "init", "--quiet")
+    _git(root, "add", ".")
+    return root
+
+
+def _exception_at(path: str, package: str = "openai") -> RuleException:
+    return RuleException(
+        path=path, reason="Loads it.", match=package, category=NOT_IMPORTED
+    )
+
+
 def _job_text(workflow_text: str, job_id: str) -> str:
     """Return the lines of ``job_id``'s block in a workflow, up to the next job."""
     lines = workflow_text.splitlines()
@@ -91,7 +109,11 @@ class TestDeclaredDependenciesProof(unittest.TestCase):
     """Proof: deptry's findings in the rejected fixture fail, the accepted pass."""
 
     def test_rule_proof_declared_and_used(self) -> None:
-        rejected = deptry_findings(FIXTURES / "rejected")
+        rejected_run = run_deptry(FIXTURES / "rejected")
+        rejected = rejected_run.findings
+        self.assertEqual(
+            rejected_run.scanned_files, {"policyengine_api/application.py"}
+        )
         self.assertEqual(
             _entries(rejected),
             {
@@ -106,7 +128,7 @@ class TestDeclaredDependenciesProof(unittest.TestCase):
         violations = compare(FIXTURES / "rejected", rejected, set(), BASELINE_FILE, ())
         self.assertEqual(len(violations), 6)
         self.assertEqual({violation.rule_id for violation in violations}, {RULE_ID})
-        self.assertEqual(deptry_findings(FIXTURES / "accepted"), [])
+        self.assertEqual(run_deptry(FIXTURES / "accepted").findings, [])
 
 
 class TestFindingMessages(unittest.TestCase):
@@ -131,7 +153,7 @@ class TestFindingMessages(unittest.TestCase):
             ),
             _finding("DEP004", "pytest", "policyengine_api/asgi.py"): (
                 "pytest is imported in policyengine_api/asgi.py:3, but is "
-                "declared only in the dev extra",
+                "declared only as a development dependency",
                 "move it to [project].dependencies",
             ),
             _finding("DEP005", "json"): (
@@ -352,6 +374,58 @@ class TestNotImportedExceptions(unittest.TestCase):
         )
 
 
+class TestExceptionPaths(unittest.TestCase):
+    """An exception names one file that loads the package, by its exact path."""
+
+    def _messages_for(self, path: str) -> list[str]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for listed in (
+                "pyproject.toml",
+                "uv.lock",
+                "rules/registry.toml",
+                "docs/generated/rules.md",
+            ):
+                _write(root, listed, 'name = "openai"\n')
+            violations = compare(
+                root,
+                [_finding("DEP002", "openai")],
+                set(),
+                BASELINE_FILE,
+                (_exception_at(path),),
+            )
+            return [violation.message for violation in violations][1:]
+
+    def test_a_glob_or_an_unnormalized_path_fails(self) -> None:
+        for path in ("*.toml", "pyproject.tom[l]", "./pyproject.toml", "/etc/hosts"):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    self._messages_for(path),
+                    [
+                        f"exception for {path} must name one file by its exact "
+                        "path from the repository root"
+                    ],
+                )
+
+    def test_a_file_that_lists_every_package_or_exception_fails(self) -> None:
+        for path in ("rules/registry.toml", "docs/generated/rules.md"):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    self._messages_for(path),
+                    [
+                        f"exception for {path} names a file that lists every "
+                        "declared package, so it can't show that the application "
+                        "loads one"
+                    ],
+                )
+
+    def test_a_missing_file_fails(self) -> None:
+        self.assertEqual(
+            self._messages_for("gcp/cloud_run/start.sh"),
+            ["exception for gcp/cloud_run/start.sh: the file doesn't exist"],
+        )
+
+
 class TestSettings(unittest.TestCase):
     """pyproject.toml's [tool.deptry] holds only the settings the rule requires."""
 
@@ -417,6 +491,19 @@ class TestSettings(unittest.TestCase):
             ],
         )
 
+    def test_a_dependency_with_an_environment_marker_fails(self) -> None:
+        messages = self._violations_for(
+            '[project]\ndependencies = ["flask", '
+            "\"starlette; python_version < '3'\"]\n" + REQUIRED_TABLE
+        )
+        self.assertEqual(
+            messages,
+            [
+                "pyproject.toml declares starlette; python_version < '3' with an "
+                "environment marker, which deptry ignores"
+            ],
+        )
+
     def test_an_extra_that_is_not_a_dev_group_fails(self) -> None:
         messages = self._violations_for(
             "[project.optional-dependencies]\ndev = ['pytest']\n"
@@ -464,48 +551,90 @@ class TestIgnoreComments(unittest.TestCase):
         self.assertEqual(inline_ignore_violations(REPO_ROOT), [])
 
 
-class TestIgnoredFiles(unittest.TestCase):
-    """deptry skips files that ignore rules list, so the package has none."""
+class TestScannedFiles(unittest.TestCase):
+    """Every tracked package file is scanned and parsed by deptry."""
 
-    def test_a_tracked_file_an_ignore_rule_matches_fails(self) -> None:
+    def test_reads_the_scanned_files_from_deptrys_log(self) -> None:
+        log = (
+            "Collecting Python files to scan...\n"
+            "Python files to scan for imports:\n"
+            "policyengine_api/a.py\n"
+            "policyengine_api/sub/b.py\n"
+            "\n"
+            "Scanning 2 files...\n"
+        )
+        self.assertEqual(
+            scanned_files_from_log(log),
+            {"policyengine_api/a.py", "policyengine_api/sub/b.py"},
+        )
+
+    def test_a_log_without_the_scanned_files_is_an_error(self) -> None:
+        with self.assertRaises(DeptryUnavailableError) as raised:
+            scanned_files_from_log("Scanning 2 files...\n")
+        self.assertIn("doesn't list the files it scanned", str(raised.exception))
+
+    def test_a_tracked_file_deptry_did_not_scan_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _git(root, "init", "--quiet")
             _write(root, "policyengine_api/hidden.py", "import yaml\n")
             _write(root, "policyengine_api/module.py", "import flask\n")
             _git(root, "add", "policyengine_api")
-            _write(root, ".gitignore", "policyengine_api/hidden.py\n")
+            _write(root, "policyengine_api/untracked.py", "import yaml\n")
             messages = [
-                violation.message for violation in ignored_file_violations(root)
+                violation.message
+                for violation in unscanned_file_violations(
+                    root, {"policyengine_api/module.py"}
+                )
             ]
         self.assertEqual(
             messages,
             [
-                "policyengine_api/hidden.py is tracked, but a git ignore rule "
-                "matches it, so deptry doesn't scan it"
+                "policyengine_api/hidden.py is tracked, but deptry didn't scan it, "
+                "so its imports aren't checked"
             ],
         )
 
-    def test_an_ignore_file_fails(self) -> None:
+    def test_an_ignore_file_that_hides_a_package_file_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = _accepted_copy(directory)
+            _write(root, "policyengine_api/hidden.py", "import yaml\n")
+            _git(root, "add", "policyengine_api/hidden.py")
             _write(root, ".ignore", "policyengine_api/hidden.py\n")
-            _write(root, "policyengine_api/sub/.ignore", "*.py\n")
-            _write(root, "scripts/.ignore", "*.py\n")
+            run = run_deptry(root)
             messages = [
-                violation.message for violation in ignored_file_violations(root)
+                violation.message
+                for violation in unscanned_file_violations(root, run.scanned_files)
             ]
+        self.assertEqual(run.findings, [])
         self.assertEqual(
             messages,
             [
-                ".ignore is an ignore file, so deptry doesn't scan the files it lists",
-                "policyengine_api/sub/.ignore is an ignore file, so deptry doesn't "
-                "scan the files it lists",
+                "policyengine_api/hidden.py is tracked, but deptry didn't scan it, "
+                "so its imports aren't checked"
             ],
         )
 
-    def test_the_repository_has_no_ignored_package_file(self) -> None:
-        self.assertEqual(ignored_file_violations(REPO_ROOT), [])
+    def test_an_ignore_file_listing_no_package_file_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = _accepted_copy(directory)
+            _write(root, ".ignore", "uv.lock\ndocs/generated/\n")
+            run = run_deptry(root)
+            self.assertEqual(unscanned_file_violations(root, run.scanned_files), [])
+
+    def test_a_file_deptry_cannot_parse_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = _accepted_copy(directory)
+            _write(root, "policyengine_api/broken.py", "import yaml\ndef broken(:\n")
+            run = run_deptry(root)
+        self.assertEqual(run.unparsed_files, ("policyengine_api/broken.py",))
+        self.assertEqual(
+            [violation.message for violation in unparsed_file_violations(run)],
+            [
+                "deptry couldn't parse policyengine_api/broken.py, so it didn't "
+                "check that file's imports"
+            ],
+        )
 
 
 class TestWorkflows(unittest.TestCase):
@@ -548,7 +677,7 @@ class TestDeptryUnavailable(unittest.TestCase):
             self.assertRaises(DeptryUnavailableError) as raised,
         ):
             which.return_value = None
-            deptry_findings(FIXTURES / "accepted")
+            run_deptry(FIXTURES / "accepted")
         self.assertIn("uv is not installed", str(raised.exception))
 
     def test_deptry_that_writes_no_report_is_an_error(self) -> None:
@@ -562,7 +691,7 @@ class TestDeptryUnavailable(unittest.TestCase):
             ),
             self.assertRaises(DeptryUnavailableError) as raised,
         ):
-            deptry_findings(FIXTURES / "accepted")
+            run_deptry(FIXTURES / "accepted")
         self.assertIn("exited with 2", str(raised.exception))
         self.assertIn("error: no such option", str(raised.exception))
 
