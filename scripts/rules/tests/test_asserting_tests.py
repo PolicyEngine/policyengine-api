@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 
@@ -487,6 +488,287 @@ class TestHelperResolution(unittest.TestCase):
                 assert True
             """
         self.assertEqual(_unchecked_source(source, files), ["test_uses_broken_helper"])
+
+
+class TestSecondReview(unittest.TestCase):
+    """Cases from the second review: scopes, collection details and run time."""
+
+    def test_a_parameter_or_local_with_a_helpers_name_is_not_the_helper(self) -> None:
+        source = """
+            import pytest
+
+
+            @pytest.fixture
+            def sessions():
+                pytest.fail("no database")
+
+
+            def build(value):
+                assert value
+
+
+            def test_calls_its_fixture(sessions):
+                sessions()
+
+
+            def test_calls_a_local(value):
+                build = dict
+                build(a=value)
+            """
+        self.assertEqual(
+            _unchecked_source(source), ["test_calls_its_fixture", "test_calls_a_local"]
+        )
+
+    def test_an_import_inside_a_test_binds_only_in_that_test(self) -> None:
+        files = {
+            "tests/lenient.py": "def check(value):\n    return value\n",
+            "tests/strict.py": "def check(value):\n    assert value\n",
+        }
+        source = """
+            from tests.lenient import check
+
+
+            def test_lenient_checks_nothing():
+                check(1)
+
+
+            def test_strict():
+                from tests.strict import check
+
+                check(1)
+            """
+        self.assertEqual(
+            _unchecked_source(source, files), ["test_lenient_checks_nothing"]
+        )
+
+    def test_a_fixture_named_like_a_test_is_not_a_test(self) -> None:
+        source = """
+            import pytest
+            from pytest import fixture
+
+
+            @pytest.fixture
+            def test_user():
+                return 1
+
+
+            @fixture(scope="module")
+            def test_engine():
+                return 2
+
+
+            def test_real(test_user):
+                print(test_user)
+            """
+        self.assertEqual(_unchecked_source(source), ["test_real"])
+
+    def test_the_nearest_dunder_test_wins(self) -> None:
+        source = """
+            class TestBase:
+                __test__ = False
+
+                def test_inherited(self):
+                    print(1)
+
+
+            class TestConcrete(TestBase):
+                __test__ = True
+
+                def test_own(self):
+                    print(2)
+
+
+            class TestAnnotated:
+                __test__: bool = False
+
+                def test_not_collected(self):
+                    print(3)
+            """
+        self.assertEqual(
+            _unchecked_source(source),
+            ["TestConcrete::test_own", "TestConcrete::test_inherited"],
+        )
+
+    def test_unittest_discover_runs_switched_off_cases_and_only_cases(self) -> None:
+        source = textwrap.dedent(
+            """
+            import unittest
+
+
+            class Case(unittest.TestCase):
+                __test__ = False
+
+                def test_still_run(self):
+                    print(1)
+
+
+            def test_module_function_unittest_never_runs():
+                print(2)
+
+
+            class TestPlainClass:
+                def test_unittest_never_runs(self):
+                    print(3)
+            """
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            unchecked = _unchecked(
+                Path(directory), "scripts/rules/tests/test_module.py", source
+            )
+        self.assertEqual(unchecked, ["Case::test_still_run"])
+
+    def test_more_inherited_and_imported_tests_are_read(self) -> None:
+        files = {
+            "tests/mixins.py": """
+                class SharedTests:
+                    def test_shared(self):
+                        print(1)
+
+                    class TestNestedShared:
+                        def test_nested(self):
+                            print(2)
+                """,
+            "tests/shared.py": """
+                def test_imported_function():
+                    print(3)
+
+
+                class TestImportedClass:
+                    def test_imported_method(self):
+                        print(4)
+                """,
+        }
+        source = """
+            from tests import mixins
+            from tests.shared import TestImportedClass, test_imported_function
+
+
+            class TestUsesMixin(mixins.SharedTests):
+                if True:
+                    def test_in_class_if(self):
+                        print(5)
+            """
+        self.assertEqual(
+            sorted(_unchecked_source(source, files)),
+            [
+                "TestImportedClass::test_imported_method",
+                "TestUsesMixin::TestNestedShared::test_nested",
+                "TestUsesMixin::test_in_class_if",
+                "TestUsesMixin::test_shared",
+                "test_imported_function",
+            ],
+        )
+
+    def test_dataclasses_and_classes_with_new_are_not_collected(self) -> None:
+        source = """
+            from dataclasses import dataclass
+
+
+            @dataclass
+            class TestRecord:
+                value: int = 1
+
+                def test_not_collected(self):
+                    print(1)
+
+
+            class TestWithNew:
+                def __new__(cls):
+                    return super().__new__(cls)
+
+                def test_not_collected(self):
+                    print(2)
+            """
+        self.assertEqual(_unchecked_source(source), [])
+
+    def test_re_exported_star_imported_and_super_helpers_are_followed(self) -> None:
+        files = {
+            "tests/helpers/__init__.py": "from tests.helpers.checks import check\n",
+            "tests/helpers/checks.py": "def check(value):\n    assert value\n",
+            "tests/star.py": "def check_star(value):\n    assert value\n",
+        }
+        source = """
+            from tests.helpers import check
+            from tests.star import *
+
+
+            class Base:
+                def verify(self, value):
+                    assert value
+
+
+            class TestThing(Base):
+                def verify(self, value):
+                    super().verify(value)
+
+                def test_super(self):
+                    self.verify(1)
+
+
+            def test_re_exported():
+                check(1)
+
+
+            def test_star():
+                check_star(1)
+            """
+        self.assertEqual(_unchecked_source(source, files), [])
+
+    def test_self_in_a_stand_in_class_is_not_the_test_class(self) -> None:
+        source = """
+            class TestService:
+                def save(self, row):
+                    assert row
+
+                def test_uses_a_fake(self, service):
+                    class FakeStore:
+                        def put(self, row):
+                            self.save(row)
+
+                        def save(self, row):
+                            return row
+
+                    service(FakeStore())
+            """
+        self.assertEqual(_unchecked_source(source), ["TestService::test_uses_a_fake"])
+
+    def test_an_unused_lambda_is_not_a_check(self) -> None:
+        source = """
+            import unittest
+
+
+            class Case(unittest.TestCase):
+                def test_unused_lambda(self):
+                    on_error = lambda: self.fail("x")
+                    print(1)
+
+                def test_passed_lambda(self):
+                    run(lambda: self.fail("x"))
+            """
+        self.assertEqual(_unchecked_source(source), ["Case::test_unused_lambda"])
+
+    def test_helpers_that_call_each_other_take_little_time(self) -> None:
+        layers = "\n".join(
+            f"def layer_{index}(value):\n    return layer_{index + 1}(value)\n"
+            for index in range(24)
+        )
+        source = (
+            f"{layers}\ndef layer_24(value):\n    return layer_24(value)\n\n"
+            "def test_layers():\n    layer_0(1)\n\n"
+            "def test_layers_again():\n    layer_3(1)\n"
+        )
+        clique = "\n".join(
+            f"def clique_{index}(value):\n"
+            + "".join(
+                f"    clique_{other}(value)\n" for other in range(9) if other != index
+            )
+            for index in range(9)
+        )
+        source += f"\n{clique}\ndef test_clique():\n    clique_0(1)\n"
+        started = time.monotonic()
+        unchecked = _unchecked_source(source)
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertEqual(unchecked, ["test_layers", "test_layers_again", "test_clique"])
 
 
 class TestBaseline(unittest.TestCase):
