@@ -97,8 +97,8 @@ def get_economic_impact(
     gives 502. A 502 body's ``retry_after_seconds`` is how long the Public API
     keeps returning the stored failure before a request starts a new run, or
     null when no failure is stored or its lifetime cannot be read. It is the
-    longest wait: a deploy that changes the country model or .py versions lets
-    a request start a new run sooner.
+    longest wait: a deploy that changes the versions or worker app a request
+    resolves to lets a request start a new run sooner.
     """
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(

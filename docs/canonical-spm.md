@@ -372,7 +372,14 @@ state can be requested again, so a client can retry one state of a
 nationwide report's congressional districts. Any other failed job, such as
 a national, congressional district or place job, is still stored and
 returned again for the cache lifetime of 30 days, and so is a typed SPM
-failure.
+failure. A 502 for a stored failure also carries `retry_after_seconds`: the
+whole seconds, rounded up, until lookups stop finding that failure (the
+earlier of its record's expiry and its scope index's), after which the next
+request submits a new job. It is null when no failure is stored, when the
+next request would not answer from this failure (a late poll of a job that a
+newer one replaced, or a job found under another worker app), or when the
+cache cannot be read. It is the longest wait: a deploy that changes the
+versions or worker app a request resolves to starts a new run sooner.
 
 Before cache access or submission,
 the API validates the selected worker application's `canonical-spm-v1` capability

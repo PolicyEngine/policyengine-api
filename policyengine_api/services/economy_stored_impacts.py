@@ -351,6 +351,31 @@ class StoredImpactMixin:
             )
             raise
 
+    def _failure_the_next_request_answers_from(
+        self,
+        stored_failure: CachedReformImpact | None,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> CachedReformImpact | None:
+        """Return the stored failure when the next request would answer from it.
+
+        A job polled through another record's lookup, such as one found by the
+        options-hash prefix or on a worker app the request no longer resolves
+        to, or a late poll of a job a newer one has replaced, fails onto a
+        record the next request does not select: that request starts a new run
+        or answers from the newer job. Then None, since this failure's lifetime
+        says nothing about when. The lookup runs on a copy of the options,
+        because its refresh rewrites the options it is given.
+        """
+        if stored_failure is None:
+            return None
+        next_answer = self._get_reusable_impact(setup_options.model_copy())
+        if (
+            next_answer is None
+            or next_answer.execution_id != stored_failure.execution_id
+        ):
+            return None
+        return stored_failure
+
     def _stored_failure_result(
         self, message: str, stored_failure: CachedReformImpact | None
     ) -> EconomicImpactResult:

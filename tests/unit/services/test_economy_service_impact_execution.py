@@ -259,6 +259,9 @@ class TestEconomyService:
             mock_reform_impacts_service.set_error_reform_impact.return_value = (
                 stored_failure
             )
+            # The next request's lookup answers from this stored failure.
+            next_lookup = MagicMock(return_value=stored_failure)
+            economy_service._get_reusable_impact = next_lookup
             mock_reform_impacts_service.get_reform_impact_seconds_left.return_value = (
                 120
             )
@@ -290,6 +293,10 @@ class TestEconomyService:
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
                 stored_failure
             )
+            # The lookup ran on a copy, so this request's options are unchanged.
+            (looked_up_options,) = next_lookup.call_args.args
+            assert looked_up_options is not state_setup_options
+            assert looked_up_options == state_setup_options
 
         @pytest.mark.usefixtures("mock_logger")
         @pytest.mark.parametrize(
@@ -314,6 +321,9 @@ class TestEconomyService:
             mock_reform_impacts_service.set_error_reform_impact.return_value = (
                 stored_failure
             )
+            # The next request's lookup answers from this stored failure.
+            next_lookup = MagicMock(return_value=stored_failure)
+            economy_service._get_reusable_impact = next_lookup
             mock_reform_impacts_service.get_reform_impact_seconds_left.return_value = (
                 2_591_000
             )
@@ -336,6 +346,50 @@ class TestEconomyService:
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
                 stored_failure
             )
+            # The lookup ran on a copy, so this request's options are unchanged.
+            (looked_up_options,) = next_lookup.call_args.args
+            assert looked_up_options is not region_setup_options
+            assert looked_up_options == region_setup_options
+
+        @pytest.mark.usefixtures("mock_logger")
+        @pytest.mark.parametrize(
+            "next_answer",
+            [None, create_mock_reform_impact(status="computing")],
+            ids=["no-record", "another-record"],
+        )
+        def test__given_the_next_lookup_uses_another_record__gives_no_seconds(
+            self,
+            economy_service,
+            setup_options,
+            mock_reform_impacts_service,
+            next_answer,
+        ):
+            # Given: the failure is stored, but the next request would start a
+            # new run or answer from a newer job instead.
+            reform_impact = create_mock_reform_impact(status="computing")
+            execution = ModalSimulationExecution(
+                job_id=MOCK_EXECUTION_ID, status="failed", error="out of memory"
+            )
+            stored_failure = create_mock_reform_impact(status="error")
+            mock_reform_impacts_service.set_error_reform_impact.return_value = (
+                stored_failure
+            )
+            if next_answer is not None:
+                next_answer.execution_id = "newer-job"
+            economy_service._get_reusable_impact = MagicMock(return_value=next_answer)
+
+            # When
+            result = economy_service._handle_execution_state(
+                setup_options.model_copy(update={"region": "state/ca"}),
+                "failed",
+                reform_impact,
+                execution,
+            )
+
+            # Then
+            assert result.status == ImpactStatus.ERROR
+            assert result.retry_after_seconds is None
+            mock_reform_impacts_service.get_reform_impact_seconds_left.assert_not_called()
 
         @pytest.mark.usefixtures("mock_logger")
         @pytest.mark.parametrize("region", ["state/ca", MOCK_REGION])

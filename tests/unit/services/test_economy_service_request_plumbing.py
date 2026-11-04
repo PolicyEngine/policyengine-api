@@ -929,6 +929,9 @@ def test_a_late_poll_of_a_failed_breakdown_leaves_the_next_job_alone(
     )
 
     assert result.status == ImpactStatus.ERROR
+    # The next request answers from the second job, so this failure's lifetime
+    # says nothing about when a new run can start.
+    assert result.retry_after_seconds is None
     second_record = cache.get_by_execution_id("second-breakdown-job")
     assert second_record is not None
     assert second_record.status == "computing"

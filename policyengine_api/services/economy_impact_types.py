@@ -161,7 +161,8 @@ class EconomicImpactResult(BaseModel):
     explains an error. For an error, ``retry_after_seconds`` is how long the
     stored failure is still returned: once it has passed, a request finds no
     record and submits a new job. It is the longest wait, since a deploy that
-    changes the runtime cache version stops the record being found sooner.
+    changes the versions or worker app a request resolves to stops the record
+    being found sooner.
     It is None when no failure is stored or its lifetime cannot be read.
     """
 

@@ -108,7 +108,12 @@ class ImpactExecutionMixin:
                 {"message": error_message},
                 severity="ERROR",
             )
-            return self._stored_failure_result(error_message, stored_failure)
+            return self._stored_failure_result(
+                error_message,
+                self._failure_the_next_request_answers_from(
+                    stored_failure, setup_options
+                ),
+            )
 
         if execution_state in EXECUTION_STATUSES_PENDING:
             logger.log_struct(
@@ -192,7 +197,10 @@ class ImpactExecutionMixin:
                 execution_id=reform_impact.execution_id,
                 keep_seconds=RETRYABLE_FAILURE_SECONDS,
             )
-        return self._stored_failure_result(message, stored_failure)
+        return self._stored_failure_result(
+            message,
+            self._failure_the_next_request_answers_from(stored_failure, setup_options),
+        )
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_COMPLETED)
