@@ -105,8 +105,8 @@ class _TrackedNetworkStream(httpcore.NetworkStream):
                 attempt.note_socket_failure(self._stream, "read", error)
             raise
         if not data and attempt is not None:
-            # The server closed the connection; h11 raises RemoteProtocolError
-            # if a response was still expected.
+            # The server closed or reset the connection (over TLS the two read
+            # the same); h11 raises RemoteProtocolError if a response was due.
             attempt.note_socket_failure(self._stream, "read", None)
         return data
 
@@ -269,13 +269,13 @@ class SimulationEntrypointTransport(httpx.BaseTransport):
         except RETRYABLE_GET_ERRORS:
             if not retry_follows:
                 raise
-        request.extensions = {
-            **request.extensions,
-            "timeout": _retry_timeouts(request.extensions.get("timeout")),
-        }
         with self._open_transport() as retry_transport:
             return self._send_attempt(
-                retry_transport, request, number=2, retry_follows=False
+                retry_transport,
+                request,
+                number=2,
+                retry_follows=False,
+                timeouts=_retry_timeouts(request.extensions.get("timeout")),
             )
 
     @override
@@ -289,20 +289,34 @@ class SimulationEntrypointTransport(httpx.BaseTransport):
         *,
         number: int,
         retry_follows: bool,
+        timeouts: dict[str, float] | None = None,
     ) -> httpx.Response:
-        """Send ``request`` once and read the whole response.
+        """Send a copy of ``request`` once and read the whole response.
 
-        The body is read here so that a connection that breaks while the body
+        The copy carries this attempt's trace callback and, for a retry, its
+        lower ``timeouts``. ``request`` itself is left unchanged, because the
+        client's auth flow may send it again (GatewayBearerAuth resends it
+        after a 401), and that send must have the client's own timeouts. The
+        body is read here so that a connection that breaks while the body
         arrives is retried and recorded like one that breaks before the headers.
         """
         attempt = RequestAttempt(
             method=request.method, path=request.url.path, number=number
         )
-        request.extensions = {**request.extensions, "trace": attempt.on_trace}
+        extensions = {**request.extensions, "trace": attempt.on_trace}
+        if timeouts is not None:
+            extensions["timeout"] = timeouts
+        attempt_request = httpx.Request(
+            request.method,
+            request.url,
+            headers=request.headers,
+            stream=request.stream,
+            extensions=extensions,
+        )
         started_at = time.perf_counter()
         with recording(attempt):
             try:
-                response = transport.handle_request(request)
+                response = transport.handle_request(attempt_request)
                 try:
                     response.read()
                 except BaseException:

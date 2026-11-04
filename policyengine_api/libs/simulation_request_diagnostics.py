@@ -150,8 +150,10 @@ class RequestAttempt:
         """Note the socket's state when an operation on it first fails.
 
         ``operation`` is ``read``, ``write`` or ``tls_handshake``. ``error`` is
-        None for a read that returned no data because the server closed the
-        connection. This runs before httpcore closes the connection, while the
+        None for a read that returned no data (``failure.socket_eof``): the
+        server closed or reset the connection. Over TLS the two cannot be told
+        apart, because Python's ``ssl`` module turns a reset into the end of the
+        stream. This runs before httpcore closes the connection, while the
         socket is still open, except after a failed TLS handshake, which closes
         it; the connection's file descriptor and local port from when it
         connected are recorded separately. Later failures in the same attempt

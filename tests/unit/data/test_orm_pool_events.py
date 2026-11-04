@@ -49,11 +49,21 @@ class SocketCarryingConnection(sqlite3.Connection):
             "database_connection.local_port": self._sock.getsockname()[1],
         }
 
-    def break_like_pymysql(self):
-        """Lose the connection: drop the socket, as pymysql's _force_close does."""
+    def break_like_pymysql(self, error=None):
+        """Lose the connection: drop the socket, as pymysql's _force_close does.
+
+        With ``error``, the next ping raises it instead of finding a closed
+        SQLite database.
+        """
         self._sock.close()
         self._sock = None
+        self.ping_error = error
         super().close()
+
+    def cursor(self, *args, **kwargs):
+        if getattr(self, "ping_error", None) is not None:
+            raise self.ping_error
+        return super().cursor(*args, **kwargs)
 
     def close(self):
         if self._sock is not None:
@@ -64,6 +74,28 @@ class SocketCarryingConnection(sqlite3.Connection):
 
 class LostConnectionError(Exception):
     """A driver error whose first argument is the driver's error code."""
+
+
+class OperationalError(sqlite3.OperationalError):
+    """Shaped like pymysql.err.OperationalError: (code, message) arguments.
+
+    It subclasses SQLite's error so that SQLAlchemy's SQLite dialect treats it
+    as a DBAPI error, as the MySQL dialect treats pymysql's.
+    """
+
+
+def pymysql_lost_connection_error():
+    """Return OperationalError(2013, ...) caused by a ConnectionResetError.
+
+    This is how pymysql raises a lost connection: its socket read fails, and
+    _read_bytes raises OperationalError(CR_SERVER_LOST, ...) from the OSError.
+    """
+    os_error = ConnectionResetError(errno.ECONNRESET, "Connection reset by peer")
+    driver_error = OperationalError(
+        2013, "Lost connection to MySQL server during query"
+    )
+    driver_error.__cause__ = os_error
+    return driver_error
 
 
 def lost_connection_error():
@@ -167,6 +199,57 @@ def test_failed_pre_ping_records_its_cause_and_the_lost_socket(runtime, engine_f
     )
     assert close[1:] == ("INFO", {**ENGINE_FIELD, **first.socket_fields})
     assert reconnect[1:] == ("INFO", {**ENGINE_FIELD, **second.socket_fields})
+
+
+def test_failed_pre_ping_records_the_driver_code_and_errno(
+    runtime, engine_factory, monkeypatch
+):
+    engine, connections = engine_factory(pool_size=1, max_overflow=0)
+    # The MySQL dialect counts error 2013 as a disconnect; SQLite's doesn't.
+    sqlite_is_disconnect = engine.dialect.is_disconnect
+    monkeypatch.setattr(
+        engine.dialect,
+        "is_disconnect",
+        lambda error, *arguments: (
+            isinstance(error, OperationalError)
+            or sqlite_is_disconnect(error, *arguments)
+        ),
+    )
+    with engine.connect() as connection:
+        connection.exec_driver_sql("select 1")
+    [first] = connections
+    first.break_like_pymysql(pymysql_lost_connection_error())
+
+    with engine.connect() as connection:
+        connection.exec_driver_sql("select 1")
+
+    assert runtime.names() == [
+        "database_pool.connect",
+        "database_pool.error",
+        "database_pool.invalidate",
+        "database_pool.close",
+        "database_pool.connect",
+    ]
+    _connect, error, invalidate, close, _reconnect = runtime.events
+    assert error[1:] == (
+        "WARNING",
+        {
+            **ENGINE_FIELD,
+            "database_error.is_pre_ping": True,
+            "database_error.is_disconnect": True,
+            "database_error.error_type": "OperationalError",
+            "database_error.driver_error_code": 2013,
+            "database_error.os_error_type": "ConnectionResetError",
+            "database_error.os_errno": errno.ECONNRESET,
+            "database_error.os_errno_name": "ECONNRESET",
+        },
+    )
+    assert invalidate[2] == {
+        **ENGINE_FIELD,
+        **first.socket_fields,
+        "database_failure.error_type": "InvalidatePoolError",
+    }
+    assert close[2] == {**ENGINE_FIELD, **first.socket_fields}
 
 
 def test_invalidations_keep_the_socket_and_the_driver_error(runtime, engine_factory):
@@ -300,25 +383,51 @@ def test_engine_listens_for_connections_closes_and_errors_only():
     engine.dispose()
 
 
-def test_connector_refresh_messages_reach_the_logs_at_info(runtime, connector_logger):
+def test_connector_refresh_messages_reach_the_logs_as_fixed_text(
+    runtime, connector_logger
+):
     orm_pool_events.record_connector_refresh_logs()
     orm_pool_events.record_connector_refresh_logs()
-
-    logging.getLogger("google.cloud.sql.connector.lazy").debug(
-        "['project:region:instance']: Connection info refresh operation started"
+    lazy_logger = logging.getLogger("google.cloud.sql.connector.lazy")
+    # The messages the connector's lazy refresh module logs, already formatted
+    # as it formats them, with the instance's connection name in front.
+    prefix = "['project:region:instance']: "
+    connector_messages = [
+        f"{prefix}Connection info refresh operation started",
+        f"{prefix}Connection info refresh operation failed: "
+        "403 Forbidden: the caller lacks cloudsql.instances.connect",
+        f"{prefix}Connection info refresh operation completed successfully",
+        f"{prefix}Current certificate expiration = 2026-11-04 12:00:00+00:00",
+        f"{prefix}Connection info is still valid, using cached info",
+        f"{prefix}a message the connector does not log",
+    ]
+    for message in connector_messages:
+        lazy_logger.debug(message)
+    timeout = TimeoutError("timed out")
+    lazy_logger.warning(
+        "['project:region:instance']: Connection info refresh operation failed",
+        exc_info=(TimeoutError, timeout, None),
     )
-    logging.getLogger("google.cloud.sql.connector.lazy").warning("refresh failed")
 
+    logger_field = {"logger_name": "google.cloud.sql.connector.lazy"}
     assert runtime.logs == [
+        ("Connection info refresh operation started", "INFO", logger_field),
+        ("Connection info refresh operation failed", "INFO", logger_field),
         (
-            "['project:region:instance']: Connection info refresh operation started",
+            "Connection info refresh operation completed successfully",
             "INFO",
-            {"logger_name": "google.cloud.sql.connector.lazy"},
+            logger_field,
         ),
         (
-            "refresh failed",
+            "Current certificate expiration",
+            "INFO",
+            {**logger_field, "certificate_expiration": "2026-11-04 12:00:00+00:00"},
+        ),
+        ("Connection info is still valid, using cached info", "INFO", logger_field),
+        (
+            "Connection info refresh operation failed",
             "WARNING",
-            {"logger_name": "google.cloud.sql.connector.lazy"},
+            {**logger_field, "error_type": "TimeoutError"},
         ),
     ]
     assert len(connector_logger.handlers) == 1

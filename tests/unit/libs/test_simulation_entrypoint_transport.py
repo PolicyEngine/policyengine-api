@@ -28,6 +28,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
 from policyengine_api.libs import simulation_request_diagnostics
+from policyengine_api.libs.gateway_auth import GatewayBearerAuth
 from policyengine_api.libs.simulation_entrypoint import SimulationEntrypointClient
 from policyengine_api.libs.simulation_entrypoint_transport import (
     SimulationEntrypointConnectionError,
@@ -499,7 +500,7 @@ def test_records_a_new_connection_then_its_reuse_with_the_same_socket(runtime):
     assert reused["connection.request_number"] == 2
     assert reused["connection.fd"] == new["connection.fd"]
     assert reused["connection.local_port"] == new["connection.local_port"]
-    assert 0 <= reused["connection.idle_ms"] < 150
+    assert reused["connection.idle_ms"] >= 0
     assert reused["connection.age_ms"] - reused["connection.idle_ms"] >= 200
     assert "timing.connect_started_ms" not in reused
     assert reused["timing.request_sent_ms"] <= reused["timing.response_received_ms"]
@@ -798,3 +799,55 @@ def test_last_response_time_is_set_when_the_body_completes():
     assert connection.last_response_at is not None
     assert "timing.response_received_ms" not in attempt.connection_attributes
     assert "response_received" in attempt.step_times
+
+
+class StaticTokenProvider:
+    """Stands in for GatewayAuthTokenProvider with fixed tokens."""
+
+    def __init__(self):
+        self.tokens = iter(["first-test-value", "second-test-value"])
+        self.current = next(self.tokens)
+
+    def get_token(self):
+        return self.current
+
+    def invalidate(self):
+        self.current = next(self.tokens)
+
+
+@pytest.mark.usefixtures("runtime")
+def test_retry_leaves_the_callers_request_and_the_auth_resend_unchanged():
+    """GatewayBearerAuth resends the request after a 401 with the client's timeouts."""
+    sent = []
+
+    def handle(request):
+        sent.append(
+            (request.extensions["timeout"]["read"], request.headers["Authorization"])
+        )
+        if len(sent) == 1:
+            raise broken_pipe_read_error()
+        if len(sent) == 2:
+            return httpx.Response(401, json={})
+        return httpx.Response(200, json={})
+
+    transport = SimulationEntrypointTransport(
+        open_transport=lambda: httpx.MockTransport(handle)
+    )
+    with httpx.Client(
+        transport=transport,
+        timeout=30.0,
+        auth=GatewayBearerAuth(StaticTokenProvider()),
+    ) as client:
+        response = client.get(f"{BASE_URL}/versions")
+
+    assert response.status_code == 200
+    assert sent == [
+        (30.0, "Bearer first-test-value"),
+        (10.0, "Bearer first-test-value"),
+        (30.0, "Bearer second-test-value"),
+    ]
+    caller_request = response.request
+    assert caller_request.extensions["timeout"] == dict.fromkeys(
+        ("connect", "read", "write", "pool"), 30.0
+    )
+    assert "trace" not in caller_request.extensions

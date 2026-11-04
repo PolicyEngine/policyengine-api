@@ -468,7 +468,10 @@ def test_rule_proof_sqlalchemy_and_alembic_only() -> None:
 
     bad_driver_access = find_driver_access(bad_source, bad_fixture)
     bad_schema_changes = find_schema_changes(bad_source, bad_fixture)
-    assert {finding.construct for finding in bad_driver_access} == {"import psycopg"}
+    assert {finding.construct for finding in bad_driver_access} == {
+        "import psycopg",
+        "attribute ._sock",
+    }
     assert {finding.construct for finding in bad_schema_changes} == {
         "call V1Base.metadata.create_all()"
     }

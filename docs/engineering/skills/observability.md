@@ -107,32 +107,51 @@ Each request the client sends, a retry included, is one
   whether a retry follows. It never records the error's message, which can
   quote a response header.
 - When a read, a write or a TLS handshake on the connection fails, or a read
-  returns no data because the server closed the connection, the attempt also
-  records the socket's file descriptor, local port and readiness at that
-  moment (`failure.socket_*`). It never reads the socket's pending error
+  returns no data, the attempt also records the socket's file descriptor,
+  local port and readiness at that moment (`failure.socket_*`).
+  `failure.socket_eof` means the read returned no data: the server closed or
+  reset the connection. Over TLS the two can't be told apart, because Python's
+  `ssl` module turns a reset into the end of the stream. It never reads the socket's pending error
   (`SO_ERROR`): reading it clears it, and on a reassigned file descriptor it
   would clear another socket's error. A failed TLS handshake closes the
   socket, so the connection's file descriptor and local port from when it
   connected are recorded instead.
 
-The v1 Cloud SQL pool (`policyengine_api/data/orm_pool_events.py`) records:
+The v1 Cloud SQL pool (`policyengine_api/data/orm_pool_events.py`) records
+the following events. Every one carries `database_pool.engine`
+(`v1_cloud_sql`), and none carries an error message.
 
-- `database_pool.connect`, `database_pool.invalidate`,
-  `database_pool.soft_invalidate`, `database_pool.close` and
-  `database_pool.close_detached`, each with the database socket's file
-  descriptor and local port. The connect listener saves them in the pool
-  entry's `info`, because pymysql drops its socket before it raises the error
-  that invalidates a connection.
-- `database_pool.error` for each database error, with whether it came from
-  the checkout ping (`pool_pre_ping`) and was a disconnect, the error's type,
-  the driver's error code and the `OSError` in its chain, never its message. A
+- `database_pool.connect`, `database_pool.close` and
+  `database_pool.close_detached`, with `database_connection.fd` and
+  `database_connection.local_port`. The connect listener saves them in the
+  pool entry's `info`, because pymysql drops its socket before it raises the
+  error that invalidates a connection, and the other listeners read them back.
+- `database_pool.invalidate` and `database_pool.soft_invalidate`, with the
+  saved fd and local port and `database_failure.error_type`,
+  `database_failure.driver_error_code`, `database_failure.os_error_type`,
+  `database_failure.os_errno`, `database_failure.os_errno_name` and
+  `database_failure.os_error_reason`.
+- `database_pool.error` for each database error, with
+  `database_error.is_pre_ping`, `database_error.is_disconnect`,
+  `database_error.error_type`, `database_error.driver_error_code`,
+  `database_error.os_error_type`, `database_error.os_errno`,
+  `database_error.os_errno_name` and `database_error.os_error_reason`. A
   failed ping invalidates the connection with a bare `InvalidatePoolError`, so
   only this record has the ping's cause.
 
-The pool also sends every message from the Cloud SQL connector's lazy refresh
-module to the logs at INFO: a certificate refresh starting, completing or
-failing, the new certificate's expiry, and, for each new database connection,
-that the cached certificate is still valid.
+An `os_error_reason` field is an `ssl.SSLError`'s OpenSSL reason, given in
+place of an errno name.
+
+The pool also sends the Cloud SQL connector's lazy refresh module's fixed
+messages to the logs, as fixed text, at INFO or the record's higher level:
+
+- a certificate refresh starting, completing or failing. A failed refresh's
+  message ends with the exception's text, which is left out; if the record
+  carries the exception, its type is recorded instead (`error_type`);
+- the new certificate's expiry (`certificate_expiration`);
+- for each new database connection, that the cached certificate is still valid.
+
+Other messages from that logger are dropped.
 
 A file descriptor number is free for reuse as soon as its socket closes. A
 database connection that opens with the number of an HTTP connection that is

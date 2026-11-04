@@ -29,7 +29,9 @@ Records carry error types and codes, never messages.
 
 The Cloud SQL connector logs each certificate refresh at DEBUG, and the
 observability runtime's standard-library log handler skips ``google.`` loggers,
-so the connector's refresh messages are sent to the runtime here, at INFO.
+so the connector's refresh messages are sent to the runtime here, at INFO. Only
+the connector's fixed messages are sent, as fixed text: a failed refresh's
+message ends with the exception's text, which is left out.
 """
 
 from __future__ import annotations
@@ -202,27 +204,67 @@ def _record_error(context: ExceptionContext) -> None:
         )
 
 
+# The fixed messages the connector's lazy refresh module logs, after its
+# "['<instance connection name>']: " prefix. Anything after one of them, such
+# as a failed refresh's exception text, is never sent.
+CONNECTOR_REFRESH_MESSAGES = (
+    "Connection info is still valid, using cached info",
+    "Connection info refresh operation started",
+    "Connection info refresh operation failed",
+    "Connection info refresh operation completed successfully",
+    "Current certificate expiration",
+)
+CERTIFICATE_EXPIRATION_MESSAGE = "Current certificate expiration"
+
+
+def _connector_record(record: logging.LogRecord) -> tuple[str, dict[str, str]] | None:
+    """Return the fixed message and attributes to send for ``record``, if any.
+
+    The certificate expiration message also gives the expiry time. A record
+    that carries an exception gives its type, never its text. A message that
+    is not one of the connector's fixed messages gives None.
+    """
+    text = record.getMessage()
+    _prefix, separator, message = text.partition("]: ")
+    if not separator:
+        message = text
+    for fixed_message in CONNECTOR_REFRESH_MESSAGES:
+        if not message.startswith(fixed_message):
+            continue
+        attributes = {"logger_name": record.name}
+        if fixed_message == CERTIFICATE_EXPIRATION_MESSAGE:
+            _label, equals, expiration = message.partition(" = ")
+            if equals:
+                attributes["certificate_expiration"] = expiration.strip()
+        if record.exc_info and record.exc_info[0] is not None:
+            attributes["error_type"] = record.exc_info[0].__name__
+        return fixed_message, attributes
+    return None
+
+
 class ConnectorRefreshLogHandler(logging.Handler):
-    """Send the Cloud SQL connector's refresh messages to the runtime, at INFO."""
+    """Send the Cloud SQL connector's fixed refresh messages to the runtime."""
 
     @override
     def emit(self, record: logging.LogRecord) -> None:
         # Logging must never affect the connector.
         with contextlib.suppress(Exception):
+            forwarded = _connector_record(record)
+            if forwarded is None:
+                return
+            message, attributes = forwarded
             severity = "INFO" if record.levelno <= logging.INFO else record.levelname
-            get_runtime().log(
-                record.getMessage(),
-                severity=severity,
-                attributes={"logger_name": record.name},
-            )
+            get_runtime().log(message, severity=severity, attributes=attributes)
 
 
 def record_connector_refresh_logs() -> None:
     """Send the connector's certificate refresh messages to the logs at INFO.
 
-    Every message the connector's lazy refresh module logs is sent: a refresh
-    starting, completing or failing, the new certificate's expiry, and, for
-    each new database connection, that the cached certificate is still valid.
+    The connector's lazy refresh module's fixed messages are sent, as fixed
+    text, at INFO or the record's higher level: a refresh starting, completing
+    or failing (without the exception's text), the new certificate's expiry
+    time, and, for each new database connection, that the cached certificate
+    is still valid. Other messages from that logger are dropped.
     Propagation stops at that module's logger, so its DEBUG messages reach no
     other handler. The logger gets one handler however often this is called,
     for however many engines; stop_recording_connector_refresh_logs undoes it.
