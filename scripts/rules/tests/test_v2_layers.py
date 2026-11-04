@@ -128,17 +128,17 @@ class TestLayerAssignment(unittest.TestCase):
 class TestCallChecks(unittest.TestCase):
     def test_only_calls_on_a_session_count_as_session_calls(self) -> None:
         source = """
-            def handle(session, request_session, names: set, cache: dict):
+            def handle(session, read_session, names: set, cache: dict):
                 names.add("a")
                 cache.get("b")
-                request_session.exec("c")
+                read_session.exec("c")
                 session.get("d")
         """
 
         self.assertEqual(
             _findings({ROUTE: source}, ROUTES_RULE),
             {
-                f"{ROUTE} calls request_session.exec",
+                f"{ROUTE} calls read_session.exec",
                 f"{ROUTE} calls session.get",
             },
         )
@@ -307,6 +307,10 @@ class TestEveryLayerIsChecked(unittest.TestCase):
             _findings({SERVICE: source}, SERVICES_RULE),
             {
                 f"{SERVICE} calls Policy.__table__.select",
+                f"{SERVICE} calls sqlalchemy.and_",
+                f"{SERVICE} calls sqlalchemy.func.lower",
+                f"{SERVICE} calls sqlalchemy.or_",
+                f"{SERVICE} calls sqlmodel.col",
                 f"{SERVICE} imports sqlalchemy.and_",
                 f"{SERVICE} imports sqlalchemy.func",
                 f"{SERVICE} imports sqlalchemy.or_",
@@ -324,6 +328,155 @@ class TestEveryLayerIsChecked(unittest.TestCase):
         """
 
         self.assertEqual(_findings({ROUTE: source}, ROUTES_RULE), set())
+
+
+class TestSecondReview(unittest.TestCase):
+    """Cases from the second review round."""
+
+    def test_routes_and_pure_layers_may_call_no_session_method_at_all(self) -> None:
+        source = """
+            def handle(session, row):
+                session.get_one(row, 1)
+                session.bulk_save_objects([row])
+                session.connection()
+                session.expunge(row)
+        """
+        validator = "policyengine_api/services/v2/policies/validators.py"
+
+        for path, rule_id in ((ROUTE, ROUTES_RULE), (validator, PURE_RULE)):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    _findings({path: source}, rule_id),
+                    {
+                        f"{path} calls session.bulk_save_objects",
+                        f"{path} calls session.connection",
+                        f"{path} calls session.expunge",
+                        f"{path} calls session.get_one",
+                    },
+                )
+
+    def test_services_and_connectors_know_every_relevant_session_method(self) -> None:
+        service_source = """
+            class Service:
+                def run(self, rows):
+                    with self._database_session.transaction():
+                        self._session.get_one(rows, 1)
+                        self._session.bulk_insert_mappings(rows, [])
+        """
+        connector_source = """
+            def write(session):
+                session.reset()
+                session.invalidate()
+        """
+
+        self.assertEqual(
+            _findings({SERVICE: service_source}, SERVICES_RULE),
+            {
+                f"{SERVICE} calls _session.bulk_insert_mappings",
+                f"{SERVICE} calls _session.get_one",
+            },
+        )
+        self.assertEqual(
+            _findings({CONNECTOR: connector_source}, CONNECTORS_RULE),
+            {
+                f"{CONNECTOR} calls session.invalidate",
+                f"{CONNECTOR} calls session.reset",
+            },
+        )
+
+    def test_manifest_layers_get_their_layer_s_checks(self) -> None:
+        process_state = "policyengine_api/services/v2/metadata/selected_catalogs.py"
+        support = "policyengine_api/fastapi_routes/v2/metadata/response_cache.py"
+        manifest = {process_state: "process-state", support: "http-support"}
+        files = {
+            process_state: (
+                "from policyengine_api.data.orm import get_v1_session_factory\n"
+                "from .database_connectors.reads import read_rows\n"
+                "def load(session):\n"
+                "    get_v1_session_factory()\n"
+                "    return session.exec(read_rows)\n"
+            ),
+            support: "def keep(session, row):\n    session.add(row)\n",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_files(files, root)
+            found = {
+                (finding.rule_id, str(finding)) for finding in scan(root, manifest)
+            }
+
+        self.assertEqual(
+            found,
+            {
+                (PURE_RULE, f"{process_state} calls get_v1_session_factory"),
+                (PURE_RULE, f"{process_state} calls session.exec"),
+                (PURE_RULE, f"{process_state} imports policyengine_api.data.orm"),
+                (
+                    PURE_RULE,
+                    f"{process_state} imports "
+                    "policyengine_api.services.v2.metadata.database_connectors.reads",
+                ),
+                (ROUTES_RULE, f"{support} calls session.add"),
+            },
+        )
+
+    def test_a_session_module_below_a_resource_package_has_no_layer(self) -> None:
+        nested = "policyengine_api/services/v2/metadata/catalogs/database_session.py"
+
+        self.assertIsNone(assign_layer(nested, {}))
+        self.assertEqual(
+            assign_layer(
+                "policyengine_api/services/v2/metadata/database_session.py", {}
+            ),
+            "session",
+        )
+
+    def test_every_call_into_sqlalchemy_counts_except_its_exceptions(self) -> None:
+        source = """
+            import sqlalchemy.exc
+
+
+            def build(Policy):
+                try:
+                    return sqlalchemy.and_(sqlalchemy.func.lower(Policy.name) == "x")
+                except sqlalchemy.exc.IntegrityError:
+                    raise sqlalchemy.exc.IntegrityError("x", None, None)
+        """
+
+        self.assertEqual(
+            _findings({SERVICE: source}, SERVICES_RULE),
+            {
+                f"{SERVICE} calls sqlalchemy.and_",
+                f"{SERVICE} calls sqlalchemy.func.lower",
+            },
+        )
+
+    def test_web_sessions_and_clients_are_not_database_sessions(self) -> None:
+        source = """
+            def handle(self, http_request, requests_session):
+                self.request.session.get("user")
+                http_request.session.get("user")
+                self._client_session.get("https://example.org")
+                requests_session.get("https://example.org")
+        """
+
+        self.assertEqual(_findings({ROUTE: source}, ROUTES_RULE), set())
+
+    def test_only_a_builder_called_on_a_table_counts(self) -> None:
+        source = """
+            from policyengine_api.data.v2.models import Policy
+
+
+            def build(rows):
+                Policy.__table__.insert().values(name="x")
+                Policy.__table__.columns.values()
+                rows[Policy.__table__.name].values()
+        """
+
+        self.assertEqual(
+            _findings({SERVICE: source}, SERVICES_RULE),
+            {f"{SERVICE} calls Policy.__table__.insert"},
+        )
 
 
 class TestBaselineAndManifest(unittest.TestCase):
