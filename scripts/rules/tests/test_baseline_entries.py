@@ -35,6 +35,21 @@ class TestBaselineEntries(unittest.TestCase):
             messages,
         )
 
+    def test_an_added_copy_of_a_listed_entry_fails_at_the_same_count(self) -> None:
+        with Repo(with_rule(RATCHETED_RULE.format(count=3)), render=False) as repo:
+            repo.write(BASELINE, "pkg/routes.py\npkg/routes.py\npkg/models.py\n")
+            repo.render()
+            _commit_base(repo)
+            repo.write(BASELINE, "pkg/routes.py\npkg/routes.py\npkg/routes.py\n")
+            messages = repo.messages(base_ref="HEAD")
+        self.assertIn(
+            "[ex.layers.ratcheted] baseline: rules/baselines/ratcheted.txt lists "
+            "entries the base branch's copy doesn't: pkg/routes.py (3 times, the "
+            "base branch 2). Fix: fix the new violations instead of adding them to "
+            "the baseline.",
+            messages,
+        )
+
     def test_a_removed_entry_passes(self) -> None:
         with Repo(with_rule(RATCHETED_RULE.format(count=2)), render=False) as repo:
             repo.write(BASELINE, "pkg/routes.py\npkg/models.py\n")
