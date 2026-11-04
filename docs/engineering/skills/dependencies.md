@@ -8,7 +8,9 @@ The Cloud Run image installs exactly the versions in `uv.lock`
 (`uv sync --frozen` in `gcp/cloud_run/Dockerfile`). Everything else installs
 and tests the same versions, so that CI tests what production runs. Four rules
 say how; the `locked-installs` quality guard (`scripts/rules/locked_installs.py`)
-checks all four in the pull request `quality-guards` job.
+checks all four in the pull request `quality-guards` job. A fifth rule,
+[below](#we-declare-what-we-import), checks that `pyproject.toml` declares what
+the package imports.
 
 ## We use uv.lock
 
@@ -49,6 +51,45 @@ every `uv.lock` with upgrades and opens or updates a pull request, whose CI
 tests the new versions. Here it is `.github/workflows/relock-dependencies.yml`.
 The guard reads the workflow's configuration and the scripts its jobs run; it
 does not run the workflow.
+
+## We declare what we import
+
+`api.dependencies.declared-and-used`: `pyproject.toml` declares the
+distributions `policyengine_api` imports, and nothing it doesn't use. The
+`declared-dependencies` quality guard (`scripts/rules/declared_dependencies.py`)
+runs [deptry](https://deptry.com/) on `policyengine_api` in the uv.lock
+environment (`uv run --frozen --extra dev`) and fails on:
+
+- **DEP001**: an import that no declared distribution provides;
+- **DEP002**: a declared runtime dependency that the package never imports;
+- **DEP003**: an import of a module installed only because another package
+  depends on it, such as `starlette` through FastAPI. Declare it, so a change
+  to the other package can't remove it;
+- **DEP004**: an import of a package declared only in the `dev` extra;
+- **DEP005**: a standard-library module declared as a dependency.
+
+Each error message says how to fix the finding. Run the guard with
+`python scripts/run_quality_guards.py`.
+
+The rule is ratcheted: `rules/baselines/deptry.txt` lists today's findings as
+`<code> <module>`, one per line, and a finding not listed there fails. The list
+may only shrink. Fixing a finding makes its line fail as stale, so remove the
+line and lower `count` in the rule's `[rule.baseline]`.
+
+A declared package that the application loads by name, not by import, is a
+`[[rule.exception]]` on the rule, with
+`category = "not-imported-package"`, `match` set to the package's name as
+`pyproject.toml` writes it (without extras or version), and `path` set to the
+file that loads it. Today these are gunicorn
+and uvicorn, which `gcp/cloud_run/start.sh` runs, and pymysql, the driver
+`policyengine_api/data/orm.py` names. An exception covers only that package's
+DEP002 finding, and fails once the file stops naming the package or deptry
+stops reporting it.
+
+deptry's settings are `[tool.deptry]` in `pyproject.toml`. The guard fails
+unless that table holds exactly `known_first_party = ["policyengine_api"]` and
+`pep621_dev_dependency_groups = ["dev"]`, so a tolerated finding is never
+hidden in a deptry ignore setting.
 
 ## Exceptions
 

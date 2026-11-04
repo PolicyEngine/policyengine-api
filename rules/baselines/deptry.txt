@@ -1,0 +1,25 @@
+# Tolerated existing deptry findings for api.dependencies.declared-and-used,
+# one "<code> <module>" per line. This list may only shrink: fix a finding,
+# then remove its line and lower the rule's baseline count.
+#
+# Declared runtime dependencies that policyengine_api never imports (DEP002).
+DEP002 assertpy
+DEP002 click
+DEP002 faiss-cpu
+DEP002 markupsafe
+DEP002 microdf_python
+DEP002 openai
+DEP002 rq
+DEP002 streamlit
+# Modules policyengine_api imports that pyproject.toml doesn't declare, which
+# are installed only as other packages' dependencies (DEP003): the
+# policyengine[models] bundle installs the country models and their
+# dependencies, and FastAPI installs starlette.
+DEP003 dpath
+DEP003 jsonschema
+DEP003 numpy
+DEP003 policyengine_core
+DEP003 policyengine_uk
+DEP003 policyengine_us
+DEP003 spm_calculator
+DEP003 starlette

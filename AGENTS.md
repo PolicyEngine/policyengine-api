@@ -129,7 +129,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Dependencies and uv.lock
 
-- Checked: `api.dependencies.install-from-lock`, `api.dependencies.lock-committed`, `api.dependencies.scheduled-relock`, `api.dependencies.test-from-lock`
+- Checked: `api.dependencies.declared-and-used`, `api.dependencies.install-from-lock`, `api.dependencies.lock-committed`, `api.dependencies.scheduled-relock`, `api.dependencies.test-from-lock`
 
 ### Process and repository hygiene
 

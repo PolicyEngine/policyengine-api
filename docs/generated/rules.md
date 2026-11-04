@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 59 | 0 | 1 | 13 | 73 |
+| mechanical | 59 | 1 | 1 | 13 | 74 |
 | metric | 1 | 0 | 0 | 0 | 1 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 60 of 75 rules.
+**Blocking:** 61 of 76 rules.
 
 ## Gaps
 
@@ -66,10 +66,13 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Ratcheted (existing violations still tolerated)
 
-- None.
+- `api.dependencies.declared-and-used`: 16 remaining in `rules/baselines/deptry.txt`
 
 ### Exceptions and review dates
 
+- `api.dependencies.declared-and-used`: exception for `gcp/cloud_run/start.sh` (`gunicorn`) allowed as a not-imported-package (The Cloud Run start command runs gunicorn as the server process; no module imports it.)
+- `api.dependencies.declared-and-used`: exception for `gcp/cloud_run/start.sh` (`uvicorn`) allowed as a not-imported-package (gunicorn loads uvicorn's worker class by name (--worker-class uvicorn.workers.UvicornWorker); no module imports it.)
+- `api.dependencies.declared-and-used`: exception for `policyengine_api/data/orm.py` (`pymysql`) allowed as a not-imported-package (The Cloud SQL connector loads the MySQL driver by name (driver="pymysql"), as SQLAlchemy's mysql+pymysql dialect does; no module imports it.)
 - `api.dependencies.install-from-lock`: exception for `.github/scripts/install_locked_ruff.sh` (`pip install "ruff==`) allowed as a pinned-tool (Installs the ruff version uv.lock pins, read from uv.lock, without installing the whole project for the lint job.)
 - `api.dependencies.install-from-lock`: exception for `.github/scripts/verify_observability_collector.sh` (`uv run --no-project --with grpcio --with opentelemetry-proto`) until the deploy job syncs the project with uv sync --frozen and the check runs through uv run --frozen (The collector check runs in the deploy job without installing the project; grpcio and opentelemetry-proto are locked only as transitive dependencies of the project.)
 - `api.dependencies.install-from-lock`: exception for `.github/workflows/pr.yml` (`pip install "shellcheck-py==`) allowed as a pinned-tool (shellcheck is a command-line tool the ci-scripts guard runs; it is not a dependency of the project.)
@@ -443,6 +446,7 @@ flowchart LR
 
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| `api.dependencies.declared-and-used` | pyproject.toml declares what policyengine_api imports and nothing else: deptry finds no import that no declared distribution provides (DEP001), no declared runtime dependency the package never imports (DEP002), no import of a module installed only as another package's dependency (DEP003), no import of a dev-extra-only dependency (DEP004) and no declared standard-library module (DEP005), apart from the findings rules/baselines/deptry.txt lists and the rule's not-imported-package exceptions. | mechanical | ratcheted | yes | quality guard `declared-dependencies` | `pr.yml:quality-guards` | yes |
 | `api.dependencies.install-from-lock` | Every install of Python packages in a workflow, a shell script, a Makefile, a Dockerfile or a Modal image installs exactly what uv.lock pins (uv sync --frozen, uv run --frozen), unless it is a registered exception. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards` | yes |
 | `api.dependencies.lock-committed` | Every directory with a pyproject.toml has a committed uv.lock beside it, and a pull request CI job runs uv lock --check for it. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards`, `pr.yml:quality-guards` | yes |
 | `api.dependencies.scheduled-relock` | A workflow on a schedule relocks every uv.lock with upgrades and opens or updates a pull request with the result. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards` | yes |
@@ -450,12 +454,16 @@ flowchart LR
 
 ```mermaid
 flowchart LR
+  r_api_dependencies_declared_and_used("api.dependencies.declared-and-used (ratcheted)")
+  e_quality_guard_declared_dependencies["quality guard declared-dependencies"]
+  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
   r_api_dependencies_install_from_lock("api.dependencies.install-from-lock (enforced)")
   e_quality_guard_locked_installs["quality guard locked-installs"]
-  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
   r_api_dependencies_lock_committed("api.dependencies.lock-committed (enforced)")
   r_api_dependencies_scheduled_relock("api.dependencies.scheduled-relock (enforced)")
   r_api_dependencies_test_from_lock("api.dependencies.test-from-lock (enforced)")
+  r_api_dependencies_declared_and_used --> e_quality_guard_declared_dependencies
+  e_quality_guard_declared_dependencies --> j_CI_pr_yml_quality_guards
   r_api_dependencies_install_from_lock --> e_quality_guard_locked_installs
   e_quality_guard_locked_installs --> j_CI_pr_yml_quality_guards
   r_api_dependencies_lock_committed --> e_quality_guard_locked_installs

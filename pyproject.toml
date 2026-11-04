@@ -64,6 +64,10 @@ dependencies = [
 dev = [
     "build",
     "coverage",
+    # The declared-dependencies quality guard runs it
+    # (api.dependencies.declared-and-used); its findings and report format can
+    # change between minor versions, so an upgrade is its own change.
+    "deptry>=0.25.1,<0.26",
     "mypy>=1.15,<2",
     "pytest",
     "pytest-snapshot",
@@ -79,6 +83,18 @@ dev = [
 telemetry-error-issues = [
     "google-cloud-bigquery>=3.30,<4",
 ]
+
+# The declared-dependencies quality guard (scripts/rules/declared_dependencies.py)
+# runs deptry on policyengine_api and requires exactly these settings
+# (api.dependencies.declared-and-used). Tolerated findings live in
+# rules/baselines/deptry.txt and the rule's exceptions in rules/registry.toml,
+# never in a deptry ignore setting here.
+[tool.deptry]
+# policyengine_api is a namespace package, so deptry doesn't detect it as the
+# project's own code without this.
+known_first_party = ["policyengine_api"]
+# The dev extra holds development tools, not runtime dependencies.
+pep621_dev_dependency_groups = ["dev"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["policyengine_api"]
