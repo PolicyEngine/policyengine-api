@@ -1,8 +1,19 @@
 # API v2 Code Organization
 
 Organize API v2 code first by resource and then by one explicit technical
-responsibility. Route modules must not open database sessions or construct SQL.
-Service modules must sequence work but must not construct or execute SQL.
+responsibility. Route modules must not open database sessions or construct SQL
+(rule `api.v2.routes-no-sessions-or-sql`). Service modules must sequence work
+but must not construct or execute SQL (rule `api.v2.services-no-sql`).
+
+Every `.py` file under `policyengine_api/services/v2` and
+`policyengine_api/fastapi_routes/v2` has a layer, which the `v2-layers` quality
+guard (`scripts/rules/v2_layers.py`) takes from the file's name: `services.py`,
+`validators.py`, `transformations.py`, `types.py`, `database_session.py`,
+`database_connectors/<creates|reads|updates|deletes>[_name].py`, `routes.py`,
+`<name>_routes.py`, `request_models.py`, `response_models.py` or `__init__.py`.
+A file with another name needs an entry, with its layer and a reason, in
+`rules/v2-layer-manifest.toml`, or the guard fails (rule
+`api.v2.files-assigned-to-layers`).
 
 ## HTTP adapters
 
@@ -40,7 +51,12 @@ individual resource paths.
 
 Request models describe HTTP bodies. Response models describe public response
 response structures and OpenAPI output. Route functions handle HTTP-only conditions,
-invoke one service method, and convert typed failures to HTTP responses.
+invoke one service method, and convert typed failures to HTTP responses. No module
+under `fastapi_routes/v2` imports SQLAlchemy, SQLModel, a connector, a
+`database_session` module or `policyengine_api.data.v2.database`, or calls a
+SQL builder, a session method or a session factory (rule
+`api.v2.routes-no-sessions-or-sql`; today's `sqlalchemy.exc` imports are in its
+baseline).
 
 ## Resource service packages
 
@@ -86,8 +102,9 @@ or more connector functions. A service may expose an entrypoint that accepts an
 existing session when several resources must change atomically in one caller-
 owned transaction.
 
-Do not construct SQL expressions, call `Session.exec`, or define HTTP response
-models in this module.
+Do not construct SQL expressions, call `Session.exec` or another data-access
+session method, or define HTTP response models in this module (rule
+`api.v2.services-no-sql`, which also forbids importing FastAPI or Starlette).
 
 ### `validators.py`
 
@@ -147,7 +164,7 @@ ORM rows belongs in this package. Organize connector files by CRUD operation:
 - `deletes.py` removes rows.
 
 Connector functions receive a session from the service. They do not open,
-commit, roll back, or close it. They do not call route functions, perform
+commit, roll back, or close it (rule `api.v2.connectors-never-commit`). They do not call route functions, perform
 request-level or business validation, or convert rows into public response
 types. Connector modules do not call one another to sequence a workflow; the
 service makes that ordering explicit. They never import one another (rule

@@ -175,7 +175,7 @@ class TestCallChecks(unittest.TestCase):
     def test_package_and_relative_imports_are_resolved(self) -> None:
         source = """
             from policyengine_api.data.v2 import database
-            from ... import database_session
+            from .. import database_session
         """
 
         self.assertEqual(

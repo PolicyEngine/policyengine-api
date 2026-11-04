@@ -1,0 +1,50 @@
+# Layers for the API v2 files whose names don't give one.
+#
+# The v2-layers quality guard (scripts/rules/v2_layers.py) assigns every .py
+# file under policyengine_api/services/v2 and policyengine_api/fastapi_routes/v2
+# a layer by its file name: services.py, validators.py, transformations.py,
+# types.py, database_session.py, database_connectors/<operation>[_name].py,
+# routes.py, <name>_routes.py, request_models.py, response_models.py or
+# __init__.py. A file with another name needs an entry here, or the guard fails
+# (rule api.v2.files-assigned-to-layers). Every file under fastapi_routes/v2
+# follows rule api.v2.routes-no-sessions-or-sql whatever its layer.
+#
+# Layers: http-model (request or response schemas), http-support (shared HTTP
+# code for route modules) and process-state (data a service keeps for the
+# process, docs/engineering/skills/v2-code-organization.md#resource-service-packages).
+
+[files."policyengine_api/fastapi_routes/v2/errors.py"]
+layer = "http-support"
+reason = "The error response and serialization every v2 route shares."
+
+[files."policyengine_api/fastapi_routes/v2/households/document_models.py"]
+layer = "http-model"
+reason = "Household document schemas shared by the request and response models."
+
+[files."policyengine_api/fastapi_routes/v2/metadata/common.py"]
+layer = "http-support"
+reason = "Runs metadata reads for the route modules and maps their failures to HTTP, and the route class that sets caching headers."
+
+[files."policyengine_api/fastapi_routes/v2/metadata/query_dependencies.py"]
+layer = "http-support"
+reason = "Typed FastAPI dependencies for the shared metadata query models."
+
+[files."policyengine_api/fastapi_routes/v2/metadata/response_cache.py"]
+layer = "http-support"
+reason = "The process-wide store of serialized whole-version responses and their entity tags."
+
+[files."policyengine_api/fastapi_routes/v2/metadata/search_file_response.py"]
+layer = "http-support"
+reason = "The HTTP representation of a stored parameter search file, with content encoding."
+
+[files."policyengine_api/fastapi_routes/v2/user_auth.py"]
+layer = "http-support"
+reason = "Resolves request credentials to an account principal for user-owned routes."
+
+[files."policyengine_api/fastapi_routes/v2/user_resources.py"]
+layer = "http-support"
+reason = "HTTP conventions shared by the user-owned resource routes."
+
+[files."policyengine_api/services/v2/metadata/selected_catalogs.py"]
+layer = "process-state"
+reason = "The catalog versions metadata reads have selected, kept for the process."
