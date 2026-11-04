@@ -228,19 +228,24 @@ and fails on a suppression that lacks either:
 - **a code**: `# noqa` and its file-level forms `# ruff: noqa` and
   `# flake8: noqa` list ruff codes (`# noqa: E402`), a range suppression
   `# ruff: disable[T201]` lists ruff codes in brackets (its closing
-  `# ruff: enable[T201]` needs neither), and `# type: ignore` lists mypy
-  error codes (`# type: ignore[arg-type]`). Brackets that hold no code, such
-  as `[]` or `[,]`, name none: mypy then ignores every error on the line;
+  `# ruff: enable[T201]` needs neither), so does ruff's trailing
+  `# ruff: ignore[E501]` (a preview feature in ruff 0.15), and
+  `# type: ignore` lists mypy error codes (`# type: ignore[arg-type]`).
+  Brackets that hold no code, such as `[]` or `[,]`, name none: mypy then
+  ignores every error on the line. As in mypy, `type: ignore` counts only at
+  the start of a comment and with no space before its colon;
 - **a reason**: another `#` part of the same comment that is neither a
   suppression nor another tool's directive, such as `fmt: skip`,
   `pragma: no cover`, `pyright: ignore`, `nosec` or `mypy: ignore-errors`:
   `# noqa: E402  # the path setup must run first` or
   `# type: ignore[arg-type]  # the stub's annotation is too narrow`. The
-  guard recognizes a directive by its syntax, so a reason may start with a
-  tool's name and a colon (`# mypy: the plugin can't see it`). Text after the
-  codes in the same part (`# noqa: E402 path setup`) doesn't count. Put the
-  reason after `type: ignore`: mypy reads `type: ignore` only at the start of
-  a comment.
+  guard recognizes a directive only when the whole part is in its tool's
+  syntax, so a reason may start with a tool's name and a colon
+  (`# mypy: the plugin can't see it`, `# fmt: on purpose, the columns line
+  up`). A type comment at the start of the comment (`# type: list[int]`)
+  isn't a reason either. Text after the codes in the same part
+  (`# noqa: E402 path setup`) doesn't count. Put the reason after
+  `type: ignore`, which mypy reads only at the start of a comment.
 
 The rule is ratcheted. `rules/baselines/suppressions.txt` lists today's
 unexplained suppressions as `<path> :: <source line>`, one line per

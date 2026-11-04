@@ -6,8 +6,9 @@ switches off and why:
 
 - a ``noqa`` comment, line-level or file-level (``# ruff: noqa``,
   ``# flake8: noqa``), lists its ruff codes;
-- a range suppression, ``# ruff: disable[CODE]``, lists its ruff codes in
-  brackets;
+- a range suppression, ``# ruff: disable[CODE]``, and ruff's trailing
+  ``# ruff: ignore[CODE]`` (a preview feature in ruff 0.15) list their ruff
+  codes in brackets;
 - a ``type: ignore`` comment lists its mypy error codes in brackets;
 - the comment also holds a reason, a ``#`` part that is neither a suppression
   nor another tool's directive (``fmt: skip``, ``pragma: no cover``):
@@ -63,32 +64,42 @@ REASON = "a reason"
 # every error on the line.
 _NOQA = re.compile(r"(?:(?:ruff|flake8)\s*:\s*)?(?i:noqa)\b(?P<rest>.*)")
 _NOQA_CODES = re.compile(r"\s*:\s*[A-Z]+[0-9]+", re.IGNORECASE)
-_RUFF_DISABLE = re.compile(r"ruff\s*:\s*disable\b(?P<rest>.*)")
-_TYPE_IGNORE = re.compile(r"type\s*:\s*ignore\b(?P<rest>.*)")
+# The range form, and ruff's trailing ignore[CODE] form (a preview feature in
+# ruff 0.15), both list their codes in brackets.
+_RUFF_BRACKETED = re.compile(r"ruff\s*:\s*(?:disable|ignore)\b(?P<rest>.*)")
+# CPython and mypy read these only at the start of a comment, with no space
+# before the colon. Any other text after the prefix is a type comment.
+_TYPE_IGNORE = re.compile(r"type:\s*ignore\b(?P<rest>.*)")
+_TYPE_COMMENT = re.compile(r"type:\s*\S")
 _BRACKETED_CODES = re.compile(r"\s*\[(?P<codes>[^\]]*)\]")
 # Other tools' directives, which aren't reasons when they share a comment with
-# a suppression. Each pattern matches the directive's own syntax, so that a
-# reason that starts with a tool's name and a colon still counts.
+# a suppression. Each pattern matches a whole directive in its tool's syntax,
+# so that a reason that starts with a tool's name and a colon still counts.
 _OTHER_DIRECTIVES = tuple(
     re.compile(pattern)
     for pattern in (
-        r"fmt:\s*(?:skip|off|on)\b",
-        r"pragma:?\s*no\s+(?:cover|branch)\b",
-        r"pyright:\s*(?:ignore\b|basic\b|standard\b|strict\b|report\w+\s*=)",
+        r"fmt:\s*(?:skip|off|on)\s*$",
+        r"(?i:pragma)[:\s]?\s*(?i:no)\s*(?i:cover|branch)\b",
+        r"pyright:\s*(?:ignore(?:\[[^\]]*\])?|basic|standard|strict"
+        r"|report\w+\s*=\s*\S+(?:\s*,\s*report\w+\s*=\s*\S+)*)\s*$",
         r"mypy:\s*[\w-]+(?:\s*=\s*\S+)?(?:\s*,\s*[\w-]+(?:\s*=\s*\S+)?)*\s*$",
-        r"isort:\s*(?:skip_file|skip|off|on|split|dont-add-imports?)\b",
-        r"pylint:\s*(?:disable-next|disable|enable|skip-file)\b",
-        r"ruff:\s*(?:enable\b|isort\s*:)",
-        r"ty:\s*ignore\b",
-        r"pyrefly:\s*ignore\b",
-        r"pyre-(?:ignore|fixme)\b",
-        r"pytype:\s*(?:disable|enable)=",
-        r"yapf:\s*(?:disable|enable)\b",
-        r"nosec\b",
-        r"nosemgrep\b",
-        r"NOSONAR\b",
-        r"noinspection\b",
-        r"codespell:\s*ignore\b",
+        r"isort:\s*(?:skip_file|skip|off|on|split)\s*$",
+        r"isort:\s*dont-add-imports?\b.*$",
+        r"pylint:\s*(?:disable-next|disable|enable|skip-file)"
+        r"(?:\s*=\s*[\w-]+(?:\s*,\s*[\w-]+)*)?\s*$",
+        r"ruff\s*:\s*(?:enable\s*\[[^\]]*\]|isort\s*:\s*(?:skip_file|skip|off|on|split))"
+        r"\s*$",
+        r"type:\s*ignore\b",
+        r"ty:\s*ignore(?:\[[^\]]*\])?\s*$",
+        r"pyrefly:\s*ignore(?:\[[^\]]*\])?\s*$",
+        r"pyre-(?:ignore|fixme)(?:\[[^\]]*\])?(?::.*)?$",
+        r"pytype:\s*(?:disable|enable)=[\w,-]+\s*$",
+        r"yapf:\s*(?:disable|enable)\s*$",
+        r"nosec(?:\s+[A-Z]+\d+(?:\s*,\s*[A-Z]+\d+)*)?\s*$",
+        r"nosemgrep(?::\s*[\w.,\s-]+)?$",
+        r"NOSONAR\b.*$",
+        r"noinspection\s+\w+(?:\s*,\s*\w+)*\s*$",
+        r"codespell:\s*ignore\b.*$",
     )
 )
 SOURCE_SUFFIXES = (".py", ".pyi")
@@ -116,18 +127,35 @@ class Suppression:
         return f"{self.path}{SEPARATOR}{self.source_line.strip()}"
 
 
-def _suppression_has_code(part: str) -> bool | None:
-    """Return whether ``part`` names its codes, or None if it isn't a suppression."""
+def _brackets_name_a_code(rest: str) -> bool:
+    codes = _BRACKETED_CODES.match(rest)
+    return codes is not None and any(
+        code.strip() for code in codes.group("codes").split(",")
+    )
+
+
+def _suppression_has_code(part: str, *, first: bool) -> bool | None:
+    """Return whether ``part`` names its codes, or None if it isn't a suppression.
+
+    A type: ignore counts only as the comment's ``first`` part, as mypy reads it.
+    """
     noqa = _NOQA.match(part)
     if noqa is not None:
         return _NOQA_CODES.match(noqa.group("rest")) is not None
-    for bracketed in (_RUFF_DISABLE.match(part), _TYPE_IGNORE.match(part)):
-        if bracketed is not None:
-            codes = _BRACKETED_CODES.match(bracketed.group("rest"))
-            return codes is not None and any(
-                code.strip() for code in codes.group("codes").split(",")
-            )
+    ruff_bracketed = _RUFF_BRACKETED.match(part)
+    if ruff_bracketed is not None:
+        return _brackets_name_a_code(ruff_bracketed.group("rest"))
+    type_ignore = _TYPE_IGNORE.match(part) if first else None
+    if type_ignore is not None:
+        return _brackets_name_a_code(type_ignore.group("rest"))
     return None
+
+
+def _is_reason(part: str, *, first: bool) -> bool:
+    """Whether a part that isn't a suppression is a reason, not a directive."""
+    if first and _TYPE_COMMENT.match(part):
+        return False
+    return not any(directive.match(part) for directive in _OTHER_DIRECTIVES)
 
 
 def comment_problems(comment: str) -> tuple[str, ...]:
@@ -140,11 +168,11 @@ def comment_problems(comment: str) -> tuple[str, ...]:
     parts = [part.strip() for part in comment.split("#") if part.strip()]
     suppressions = []
     has_reason = False
-    for part in parts:
-        named = _suppression_has_code(part)
+    for index, part in enumerate(parts):
+        named = _suppression_has_code(part, first=index == 0)
         if named is not None:
             suppressions.append(named)
-        elif not any(directive.match(part) for directive in _OTHER_DIRECTIVES):
+        elif _is_reason(part, first=index == 0):
             has_reason = True
     if not suppressions:
         return ()
