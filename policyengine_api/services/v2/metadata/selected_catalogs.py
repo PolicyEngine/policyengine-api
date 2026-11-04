@@ -6,7 +6,9 @@ import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
+    from policyengine_api.data.v2.catalog.catalog_selection_validation import (
+        SelectedCatalog,
+    )
 
 CatalogSelectionKey = tuple[str, str | None]
 """A country ID and the requested PolicyEngine.py version.

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
 )
 from policyengine_api.fastapi_routes import dependencies as route_dependencies

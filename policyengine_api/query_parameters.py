@@ -26,7 +26,7 @@ from pydantic import (
 )
 
 from policyengine_api.constants import LOCAL_AREA_BREAKDOWN_REGIONS
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     validate_policyengine_version,
 )
 from policyengine_api.services.economic_impact_request import LocalAreaBreakdown
