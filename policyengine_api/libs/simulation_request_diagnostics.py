@@ -8,12 +8,14 @@ other API record, with the inbound request's ID and trace.
 An attempt learns when each step happened from httpcore's trace events (the
 httpx ``trace`` request extension), and which connection it used from the
 connection's network stream, which binds itself to the current attempt when the
-attempt reads or writes on it. A reused connection sends no connect or TLS trace
-events, so only the stream can say which connection it was, how old it is and
-how long it sat idle.
+attempt starts TLS, reads or writes on it. A reused connection sends no connect
+or TLS trace events, so only the stream can say which connection it was, how
+old it is and how long it sat idle.
 
-Recording never changes a request's outcome: every step that reads a socket or
-emits a record suppresses its own errors.
+Recording never changes a request's outcome: it only reads a socket's
+identity and readiness, never its pending error, and every step that reads a
+socket or emits a record suppresses its own errors. Records carry error types
+and errno values, never error messages, which can quote response data.
 """
 
 from __future__ import annotations
@@ -29,7 +31,6 @@ from typing import TYPE_CHECKING
 from policyengine_api.observability import get_runtime
 from policyengine_api.observability.sockets import (
     os_error_attributes,
-    pending_socket_error,
     prefixed,
     socket_identity,
 )
@@ -41,7 +42,9 @@ if TYPE_CHECKING:
     import httpx
 
 REQUEST_EVENT = "simulation_entrypoint.request"
-ERROR_MESSAGE_LENGTH = 200
+# httpcore emits this when a response body has been read to its end, before the
+# connection goes back to the pool for another request to take.
+RESPONSE_BODY_COMPLETE = "http11.receive_response_body.complete"
 
 # httpcore trace event -> the step recorded as ``timing.<step>_ms``, the
 # milliseconds from the start of the attempt to that event. httpcore names
@@ -60,7 +63,7 @@ TRACE_STEPS: Mapping[str, str] = MappingProxyType(
         "http11.send_request_body.failed": "request_send_failed",
         "http11.receive_response_headers.complete": "response_headers_received",
         "http11.receive_response_headers.failed": "response_headers_failed",
-        "http11.receive_response_body.complete": "response_received",
+        RESPONSE_BODY_COMPLETE: "response_received",
         "http11.receive_response_body.failed": "response_read_failed",
     }
 )
@@ -86,7 +89,7 @@ class ConnectionRecord:
 
     @classmethod
     def for_stream(cls, stream: httpcore.NetworkStream) -> ConnectionRecord:
-        """Describe a connection that ``stream`` has just opened."""
+        """Describe a connection that ``stream`` has just opened over TCP."""
         identity: dict[str, int] = {}
         with contextlib.suppress(Exception):
             identity = socket_identity(stream.get_extra_info("socket"))
@@ -115,9 +118,13 @@ class RequestAttempt:
             step = TRACE_STEPS.get(event_name)
             if step is not None:
                 self.step_times.setdefault(step, self._elapsed_ms())
+            if event_name == RESPONSE_BODY_COMPLETE and self.connection is not None:
+                # Set before httpcore returns the connection to the pool, so the
+                # next request on it never reads an older time.
+                self.connection.last_response_at = time.monotonic()
 
     def use_connection(self, connection: ConnectionRecord) -> None:
-        """Note the connection this attempt first reads or writes on."""
+        """Note the connection this attempt first starts TLS, reads or writes on."""
         with contextlib.suppress(Exception):
             if self.connection is not None:
                 return
@@ -135,34 +142,41 @@ class RequestAttempt:
                 )
 
     def note_socket_failure(
-        self, stream: httpcore.NetworkStream, operation: str, error: BaseException
+        self,
+        stream: httpcore.NetworkStream,
+        operation: str,
+        error: BaseException | None,
     ) -> None:
-        """Read the socket's state when a read or write on it first fails.
+        """Note the socket's state when an operation on it first fails.
 
-        This runs before httpcore closes the connection, while the socket is
-        still open. Later failures in the same attempt keep the first's state.
+        ``operation`` is ``read``, ``write`` or ``tls_handshake``. ``error`` is
+        None for a read that returned no data because the server closed the
+        connection. This runs before httpcore closes the connection, while the
+        socket is still open, except after a failed TLS handshake, which closes
+        it; the connection's file descriptor and local port from when it
+        connected are recorded separately. Later failures in the same attempt
+        keep the first's state.
         """
         with contextlib.suppress(Exception):
             if self.socket_failure:
                 return
             failure: dict[str, int | str | bool] = {
                 "failure.socket_operation": operation,
-                **prefixed("failure.socket_", os_error_attributes(error)),
+                "failure.socket_eof": error is None,
             }
+            if error is not None:
+                failure.update(prefixed("failure.socket_", os_error_attributes(error)))
             readable = stream.get_extra_info("is_readable")
             if isinstance(readable, bool):
                 failure["failure.socket_readable"] = readable
             sock = stream.get_extra_info("socket")
             if sock is not None:
                 failure.update(prefixed("failure.socket_", socket_identity(sock)))
-                failure.update(prefixed("failure.socket_", pending_socket_error(sock)))
             self.socket_failure = failure
 
     def record_response(self, response: httpx.Response) -> None:
         """Record an attempt that received a complete response."""
         with contextlib.suppress(Exception):
-            if self.connection is not None:
-                self.connection.last_response_at = time.monotonic()
             self._emit(
                 "INFO",
                 {
@@ -178,7 +192,6 @@ class RequestAttempt:
                 "simulation_request.outcome": "error",
                 "simulation_request.will_retry": will_retry,
                 "failure.error_type": type(error).__name__,
-                "failure.error_message": str(error)[:ERROR_MESSAGE_LENGTH],
                 **prefixed("failure.", os_error_attributes(error)),
                 **self.socket_failure,
             }
@@ -227,7 +240,9 @@ class RequestAttempt:
             )
 
     def _connection_reuse(self) -> dict[str, bool]:
-        # httpcore traces connecting only when it opens a connection.
+        # httpcore traces connecting only when it opens a connection, so this
+        # says whether the attempt tried to open one: it is true for a
+        # connection that was refused, which has no file descriptor.
         if "connect_started" in self.step_times:
             return {"connection.new": True}
         if self.connection is not None:

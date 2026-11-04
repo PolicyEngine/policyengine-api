@@ -67,31 +67,79 @@ to Modal as a separate function argument.
 The client's transport (`policyengine_api/libs/simulation_entrypoint_transport.py`)
 sends a GET once more, on a new connection, after `httpx.ReadError`,
 `httpx.WriteError` or `httpx.RemoteProtocolError`. It never retries a POST,
-which may already have submitted a job, a timeout or an HTTP error status. A
-GET that gets no response, after that retry where it applies, raises
+which may already have submitted a job, a timeout or an HTTP error status. The
+retry's connect, read, write and pool timeouts are each at most 10 seconds
+(`RETRY_TIMEOUT_SECONDS`), or the request's own if lower, and a retry that
+times out is not retried again.
+
+A GET that gets no response, after that retry where it applies, raises
 `SimulationEntrypointConnectionError`, which the economy routes answer with
-502.
+502. There are two exceptions:
+
+- For a finished stored impact, the annual economy route asks which worker app
+  the request resolves to, to check whether the impact is out of date
+  (`_should_refresh_cached_impact` in `services/economy_stored_impacts.py`).
+  If that request gets no response, the route answers from the stored impact
+  as it is.
+- `health_check` (`GET /health` on the simulation service) returns False, and
+  `/simulation-gateway-check` answers 503.
+
+Because the client is given its transport, httpx doesn't read the
+`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` or `NO_PROXY` environment variables
+for it: httpx builds proxy transports from them only when it builds its own
+transport. None of them is set where the API runs. Setting one has no effect
+on this client.
 
 Each request the client sends, a retry included, is one
 `simulation_entrypoint.request` event through the observability runtime
-(`policyengine_api/libs/simulation_request_diagnostics.py`). Its attributes
-say whether the request opened a new connection or reused one, the connection's
-age, idle time, file descriptor and local port, and, from httpcore's trace
-events, when each step happened (`timing.<step>_ms`). A failed attempt also
-records the socket's state when the read or write failed (`SO_ERROR`, file
-descriptor, local port), the `OSError` in the exception chain, the time from
-sending the request to the failure, and whether a retry follows.
+(`policyengine_api/libs/simulation_request_diagnostics.py`):
 
-The v1 Cloud SQL pool records `database_pool.connect`,
-`database_pool.invalidate` and `database_pool.soft_invalidate` events with the
-database socket's file descriptor and local port
-(`policyengine_api/data/orm_pool_events.py`), and sends the Cloud SQL
-connector's certificate refresh messages to the logs at INFO. A file
-descriptor number is reused as soon as its socket closes, so a database socket
-with an HTTP connection's number shows interference only while that HTTP
-connection is still open. A failed attempt whose `failure.socket_local_port`
-differs from its `connection.local_port` had its file descriptor reassigned to
-another socket.
+- `connection.new` says whether the attempt tried to open a new connection. It
+  is true for a connection that was refused, which has no file descriptor.
+- A connection that opened records its age, file descriptor, local port and
+  request number. A reused one also records its idle time, which runs from
+  the end of the last response read on it (httpcore's
+  `http11.receive_response_body.complete` trace event, before the connection
+  goes back to the pool).
+- httpcore's trace events give when each step happened (`timing.<step>_ms`).
+- A failed attempt records the type, errno and errno name of the `OSError` in
+  the exception chain, the time from sending the request to the failure, and
+  whether a retry follows. It never records the error's message, which can
+  quote a response header.
+- When a read, a write or a TLS handshake on the connection fails, or a read
+  returns no data because the server closed the connection, the attempt also
+  records the socket's file descriptor, local port and readiness at that
+  moment (`failure.socket_*`). It never reads the socket's pending error
+  (`SO_ERROR`): reading it clears it, and on a reassigned file descriptor it
+  would clear another socket's error. A failed TLS handshake closes the
+  socket, so the connection's file descriptor and local port from when it
+  connected are recorded instead.
+
+The v1 Cloud SQL pool (`policyengine_api/data/orm_pool_events.py`) records:
+
+- `database_pool.connect`, `database_pool.invalidate`,
+  `database_pool.soft_invalidate`, `database_pool.close` and
+  `database_pool.close_detached`, each with the database socket's file
+  descriptor and local port. The connect listener saves them in the pool
+  entry's `info`, because pymysql drops its socket before it raises the error
+  that invalidates a connection.
+- `database_pool.error` for each database error, with whether it came from
+  the checkout ping (`pool_pre_ping`) and was a disconnect, the error's type,
+  the driver's error code and the `OSError` in its chain, never its message. A
+  failed ping invalidates the connection with a bare `InvalidatePoolError`, so
+  only this record has the ping's cause.
+
+The pool also sends every message from the Cloud SQL connector's lazy refresh
+module to the logs at INFO: a certificate refresh starting, completing or
+failing, the new certificate's expiry, and, for each new database connection,
+that the cached certificate is still valid.
+
+A file descriptor number is free for reuse as soon as its socket closes. A
+database connection that opens with the number of an HTTP connection that is
+still open, with no close recorded for that number in between, would show that
+the HTTP connection's socket was closed underneath it. A failed attempt whose
+`failure.socket_local_port` differs from its `connection.local_port` had its
+file descriptor reassigned to another socket.
 
 ## Runtime stages
 

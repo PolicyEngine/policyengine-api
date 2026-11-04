@@ -48,6 +48,9 @@ DATABASE_DRIVER_MODULES = (
 # SQLAlchemy connection or engine.
 DRIVER_CONNECTION_ATTRIBUTES = frozenset({"driver_connection", "dbapi_connection"})
 DRIVER_CONNECTION_METHODS = frozenset({"raw_connection"})
+# Private attributes of a driver connection, such as pymysql's socket, whether
+# read as an attribute or through getattr(connection, "_sock", ...).
+DRIVER_PRIVATE_ATTRIBUTES = frozenset({"_sock"})
 
 SCHEMA_COLLECTION_METHODS = frozenset({"create_all", "drop_all"})
 SCHEMA_OBJECT_METHODS = frozenset({"create", "drop"})
@@ -85,15 +88,21 @@ SCHEMA_CHANGING_SQL = re.compile(
 )
 
 PUBLICATION_STAGING_MODULE = "policyengine_api/data/v2/catalog/publication_staging.py"
+ORM_POOL_EVENTS_MODULE = "policyengine_api/data/orm_pool_events.py"
 # Catalog publication streams rows with Postgres COPY ... FROM STDIN, which
 # SQLAlchemy has no API for. It runs COPY through the psycopg connection beneath
 # a SQLAlchemy Connection that SQLAlchemy opened and still manages, and uses
 # psycopg's SQL composition and JSONB adapter to do it.
+# The v1 pool's diagnostics read the file descriptor and local port of
+# pymysql's socket, from the driver connection a SQLAlchemy pool event passes
+# them, to record which socket a connection used. They never read or write
+# through it.
 DECLARED_DRIVER_ACCESS = frozenset(
     {
         (PUBLICATION_STAGING_MODULE, "import psycopg.sql"),
         (PUBLICATION_STAGING_MODULE, "import psycopg.types.json.Jsonb"),
         (PUBLICATION_STAGING_MODULE, "attribute .driver_connection"),
+        (ORM_POOL_EVENTS_MODULE, "attribute ._sock"),
     }
 )
 # Catalog publication creates its staging tables as TEMPORARY tables that
@@ -188,8 +197,18 @@ def _driver_access_constructs(node: ast.AST) -> list[str]:
         for imported_name in _imported_names(node)
         if _is_driver_module(imported_name)
     ]
-    if isinstance(node, ast.Attribute) and node.attr in DRIVER_CONNECTION_ATTRIBUTES:
+    if isinstance(node, ast.Attribute) and node.attr in (
+        DRIVER_CONNECTION_ATTRIBUTES | DRIVER_PRIVATE_ATTRIBUTES
+    ):
         constructs.append(f"attribute .{node.attr}")
+    if (
+        isinstance(node, ast.Call)
+        and _called_name(node) == "getattr"
+        and len(node.args) >= 2
+        and isinstance(node.args[1], ast.Constant)
+        and node.args[1].value in DRIVER_PRIVATE_ATTRIBUTES
+    ):
+        constructs.append(f"attribute .{node.args[1].value}")
     if isinstance(node, ast.Call) and _called_name(node) in DRIVER_CONNECTION_METHODS:
         constructs.append(f"call .{_called_name(node)}()")
     return constructs
@@ -202,7 +221,8 @@ def find_driver_access(
 
     Covers import statements, importlib.import_module and __import__ calls
     naming a driver module, the driver_connection and dbapi_connection
-    attributes, and raw_connection() calls.
+    attributes, raw_connection() calls, and a driver connection's private
+    attributes (pymysql's ``_sock``), read directly or through getattr.
     """
     return [
         DatabaseAccessFinding(module_path, node.lineno, construct)

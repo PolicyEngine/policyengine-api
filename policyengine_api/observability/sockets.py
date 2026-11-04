@@ -1,18 +1,19 @@
 """Describe sockets and the operating-system errors behind connection failures.
 
-These helpers build attributes for diagnostic records. They never raise: a
-socket that is closed, or an object that is not a socket, gives fewer fields.
+These helpers build attributes for diagnostic records. They only read: none
+changes a socket's state. They never raise: a socket that is closed, or an
+object that is not a socket, gives fewer fields.
 """
 
 from __future__ import annotations
 
 import contextlib
 import errno
-import socket
 import ssl
 from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
+    import socket
     from collections.abc import Mapping
 
 Value = TypeVar("Value")
@@ -32,22 +33,6 @@ def socket_identity(sock: socket.socket) -> dict[str, int]:
         if isinstance(address, tuple):
             identity["local_port"] = address[1]
     return identity
-
-
-def pending_socket_error(sock: socket.socket) -> dict[str, int | str]:
-    """Return a socket's pending error (``SO_ERROR``) and its errno name.
-
-    Reading ``SO_ERROR`` clears it. Return nothing for a closed socket.
-    """
-    pending: dict[str, int | str] = {}
-    with contextlib.suppress(Exception):
-        if sock.fileno() < 0:
-            return pending
-        code = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-        pending["so_error"] = code
-        if code:
-            pending["so_error_name"] = errno.errorcode.get(code, str(code))
-    return pending
 
 
 def find_os_error(error: BaseException) -> OSError | None:

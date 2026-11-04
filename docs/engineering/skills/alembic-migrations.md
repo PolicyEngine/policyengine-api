@@ -82,7 +82,9 @@ revisions under `migrations/*/versions/`. It parses each module and reports:
   `sqlite3`, `asyncpg`, `pg8000`, `aiosqlite` or `aiomysql`, including through
   `importlib.import_module`;
 - access to the driver connection beneath SQLAlchemy: the `driver_connection`
-  and `dbapi_connection` attributes and `raw_connection()`;
+  and `dbapi_connection` attributes and `raw_connection()`, and a driver
+  connection's private attributes (pymysql's socket, `_sock`), read as an
+  attribute or through `getattr`;
 - `create_all()`, `drop_all()`, and `create()` or `drop()` on a table, index
   or sequence; SQLAlchemy DDL constructs such as `CreateTable`; and `op.*`
   calls or `alembic.op` imports outside `migrations/`;
@@ -92,10 +94,11 @@ revisions under `migrations/*/versions/`. It parses each module and reports:
 
 ### Declared exceptions
 
-The guard allows exactly two exceptions, both in
+The guard allows exactly three exceptions. The first two are in
 `policyengine_api/data/v2/catalog/publication_staging.py`, which stages a
-metadata catalog before publishing it. The guard fails when either exception
-gains a name or a file, and when either is no longer used.
+metadata catalog before publishing it; the third is in
+`policyengine_api/data/orm_pool_events.py`. The guard fails when any exception
+gains a name or a file, and when any is no longer used.
 
 1. **COPY through the driver connection.** Publication writes rows with
    Postgres `COPY ... FROM STDIN`, which SQLAlchemy has no API for. `copy_rows`
@@ -110,6 +113,14 @@ gains a name or a file, and when either is no longer used.
    commits, so they are not persistent schema. The guard checks that every
    table on `STAGING_METADATA` compiles to `CREATE TEMPORARY TABLE ... ON
    COMMIT DROP`.
+3. **The v1 pool's socket diagnostics.** The listeners that record the v1
+   Cloud SQL pool's connects, invalidations and closes read the file
+   descriptor and local port of pymysql's socket, `getattr(connection,
+   "_sock", None)`, from the driver connection SQLAlchemy's `connect` pool
+   event passes them. SQLAlchemy has no API for a connection's socket, and
+   the records need it to show whether a database reconnect reused or closed
+   an HTTP connection's socket. The listeners never read or write through the
+   socket or the driver connection, and import no driver.
 
 A new exception is a rule change: add it to the guard's declared sets, explain
 here why SQLAlchemy or Alembic can't do the job, and get it reviewed as one.

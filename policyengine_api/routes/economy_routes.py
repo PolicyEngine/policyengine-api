@@ -114,13 +114,17 @@ def get_economic_impact(
     fields the Simulation Entrypoint reports. Invalid query parameters give 400,
     a policy ID the country does not have gives 404, and a failed calculation,
     or a request to the simulation service that gets no response (after one
-    retry if its connection broke), gives 502. A 502 body's
-    ``retry_after_seconds`` is how long the Public API keeps returning the
-    stored failure before a request starts a new run, or null when no failure
-    is stored, the next request would answer from a newer job, or the
-    failure's lifetime cannot be read. It is the longest wait: a deploy that
-    changes the versions or worker app a request resolves to lets a request
-    start a new run sooner.
+    retry if its connection broke), gives 502. One request is an exception:
+    for a finished stored impact, the route asks the simulation service which
+    worker app the request resolves to, to check whether the impact is out of
+    date, and if that request gets no response it answers from the stored
+    impact as it is.
+    A 502 body's ``retry_after_seconds`` is how long the Public API keeps
+    returning the stored failure before a request starts a new run, or null
+    when no failure is stored, the next request would answer from a newer
+    job, or the failure's lifetime cannot be read. It is the longest wait: a
+    deploy that changes the versions or worker app a request resolves to lets
+    a request start a new run sooner.
     """
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
