@@ -299,39 +299,6 @@ class TestNotImportedExceptions(unittest.TestCase):
             ],
         )
 
-    def test_exception_cannot_name_the_files_that_declare_every_package(self) -> None:
-        exceptions = tuple(
-            RuleException(
-                path=path, reason="Lists it.", match="openai", category=NOT_IMPORTED
-            )
-            for path in ("pyproject.toml", "uv.lock")
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            _write(root, "pyproject.toml", 'dependencies = ["openai"]\n')
-            _write(root, "uv.lock", 'name = "openai"\n')
-            messages = [
-                violation.message
-                for violation in compare(
-                    root,
-                    [_finding("DEP002", "openai")],
-                    set(),
-                    BASELINE_FILE,
-                    exceptions,
-                )
-            ]
-        self.assertEqual(
-            messages,
-            [
-                "openai is declared in pyproject.toml, but policyengine_api never "
-                "imports it",
-                "exception for pyproject.toml names a file that lists every declared "
-                "package, so it can't show that the application loads one",
-                "exception for uv.lock names a file that lists every declared "
-                "package, so it can't show that the application loads one",
-            ],
-        )
-
     def test_exception_for_a_package_deptry_no_longer_reports_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = _root_with_start_script(directory, "exec gunicorn app\n")
@@ -375,18 +342,13 @@ class TestNotImportedExceptions(unittest.TestCase):
 
 
 class TestExceptionPaths(unittest.TestCase):
-    """An exception names one file that loads the package, by its exact path."""
+    """An exception names, by its exact path, one file the application runs from."""
 
-    def _messages_for(self, path: str) -> list[str]:
+    def _messages_for(self, path: str, files: tuple[str, ...] = ()) -> list[str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for listed in (
-                "pyproject.toml",
-                "uv.lock",
-                "rules/registry.toml",
-                "docs/generated/rules.md",
-            ):
-                _write(root, listed, 'name = "openai"\n')
+            for listed in files:
+                _write(root, listed, "openai --serve\n")
             violations = compare(
                 root,
                 [_finding("DEP002", "openai")],
@@ -394,34 +356,55 @@ class TestExceptionPaths(unittest.TestCase):
                 BASELINE_FILE,
                 (_exception_at(path),),
             )
-            return [violation.message for violation in violations][1:]
+            return [violation.message for violation in violations]
 
     def test_a_glob_or_an_unnormalized_path_fails(self) -> None:
-        for path in ("*.toml", "pyproject.tom[l]", "./pyproject.toml", "/etc/hosts"):
+        for path in ("*.sh", "start.s[h]", "./start.sh", "/etc/start.sh"):
             with self.subTest(path=path):
                 self.assertEqual(
-                    self._messages_for(path),
+                    self._messages_for(path, ("start.sh",))[1:],
                     [
                         f"exception for {path} must name one file by its exact "
                         "path from the repository root"
                     ],
                 )
 
-    def test_a_file_that_lists_every_package_or_exception_fails(self) -> None:
-        for path in ("rules/registry.toml", "docs/generated/rules.md"):
+    def test_a_file_the_application_does_not_run_from_fails(self) -> None:
+        for path in (
+            "pyproject.toml",
+            "uv.lock",
+            "rules/registry.toml",
+            "rules/baselines/deptry.txt",
+            "docs/generated/rules.md",
+            "changelog.d/4175.added.md",
+            "tests/unit/test_server.py",
+            "scripts/serve.py",
+        ):
             with self.subTest(path=path):
                 self.assertEqual(
-                    self._messages_for(path),
+                    self._messages_for(path, (path,))[1:],
                     [
-                        f"exception for {path} names a file that lists every "
-                        "declared package, so it can't show that the application "
-                        "loads one"
+                        f"exception for {path} names a file the application doesn't "
+                        "run from: it must be a shell script, a Dockerfile or a "
+                        "module in policyengine_api"
                     ],
                 )
 
+    def test_a_script_a_dockerfile_or_a_package_module_covers_the_finding(
+        self,
+    ) -> None:
+        for path in (
+            "gcp/cloud_run/start.sh",
+            "gcp/cloud_run/Dockerfile",
+            "docker/Dockerfile",
+            "policyengine_api/data/orm.py",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self._messages_for(path, (path,)), [])
+
     def test_a_missing_file_fails(self) -> None:
         self.assertEqual(
-            self._messages_for("gcp/cloud_run/start.sh"),
+            self._messages_for("gcp/cloud_run/start.sh")[1:],
             ["exception for gcp/cloud_run/start.sh: the file doesn't exist"],
         )
 
