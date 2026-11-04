@@ -301,9 +301,33 @@ job = "quality-guards"
 invocation = "unittest discover -s scripts/rules/tests"
 
 [[rule]]
+id = "api.v2.session-modules-no-data-access"
+category = "v2-layers"
+statement = "v2 database_session modules sit directly in their resource package and only open, commit, roll back and close sessions: they call no data-access session method (add, get, merge, exec, execute and so on) or SQL builder, and import no connector."
+rationale = "docs/engineering/skills/v2-code-organization.md#database_sessionpy"
+scope = ["policyengine_api/services/v2/*/database_session.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.session-modules-no-data-access/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.session-modules-no-data-access/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_session_modules_no_data_access"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
 id = "api.v2.connectors-never-commit"
 category = "v2-layers"
-statement = "v2 connectors receive a session from the service and never open, commit, roll back or close it, or import the v1 ORM, the v2 database or a database_session module."
+statement = "v2 connectors receive a session from the service and never open (with a session factory or a database_session container), commit, roll back or close it, or import the v1 ORM, the v2 database or a database_session module."
 rationale = "docs/engineering/skills/v2-code-organization.md#database_connectors"
 scope = ["policyengine_api/services/v2/*/database_connectors/*.py"]
 tier = "mechanical"

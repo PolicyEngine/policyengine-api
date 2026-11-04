@@ -27,21 +27,24 @@ Then each file's imports and calls are checked against its layer's rule:
   method, SQLAlchemy or SQLModel function or session factory.
 
 ``database_session.py`` modules, directly in a resource package, own the
-session's lifetime; rule ``api.v2.session-modules-no-queries`` checks them.
+session's lifetime (``api.v2.session-modules-no-data-access``): they call no
+data-access session method or SQL builder and import no connector.
 
 A method call counts as a session call when its receiver is named ``session``
 or ``<something>_session`` (``session.add``, ``self._session.exec``), but not
-when it is a request's ``.session`` (Starlette's session data) or named like
-an HTTP or client session (``http_session``, ``requests_session``), or only
-contains the word (``sessions_router``). Routes and the pure layers may call
-no method on a session; services and connectors may not call the methods
-listed below. A call into SQLAlchemy or SQLModel counts, except to its
-exception classes; so does a builder called on a model's ``__table__``. A
-session factory is any call into ``policyengine_api.data.orm`` or
-``policyengine_api.data.v2.database``, or SQLAlchemy's ``Session``,
-``sessionmaker`` or ``create_engine``. Imports made only under
-``TYPE_CHECKING`` count. Not recognised: a session bound to another name, an
-alias of a model's table, and a name re-exported through another module.
+when it is the ``.session`` of a request or websocket (Starlette's session
+data), or named like an HTTP or client session (``http_session``,
+``requests_session``), or only contains the word (``sessions_router``).
+Routes and the pure layers may call no method on a session; services,
+connectors and session modules may not call the methods listed below. A call
+into SQLAlchemy or SQLModel counts, except to its exception classes; so does a
+builder called on a model's ``__table__``. A session factory is any call into
+``policyengine_api.data.orm`` or ``policyengine_api.data.v2.database``,
+SQLAlchemy's ``Session``, ``sessionmaker`` or ``create_engine``, or an injected
+``*session_factory`` (or its ``begin()``); services may open sessions, and
+nothing else checked here may. Imports made only under ``TYPE_CHECKING``
+count. Not recognised: a session bound to another name, an alias of a model's
+table, and a name re-exported through another module.
 
 A ratcheted rule's baseline file lists its tolerated findings, one line per
 occurrence, as the guard prints them. More occurrences than the baseline lists
@@ -79,7 +82,15 @@ ROUTES_RULE = "api.v2.routes-no-sessions-or-sql"
 SERVICES_RULE = "api.v2.services-no-sql"
 CONNECTORS_RULE = "api.v2.connectors-never-commit"
 PURE_RULE = "api.v2.pure-modules-no-session-calls"
-RULES = (FILES_RULE, ROUTES_RULE, SERVICES_RULE, CONNECTORS_RULE, PURE_RULE)
+SESSION_RULE = "api.v2.session-modules-no-data-access"
+RULES = (
+    FILES_RULE,
+    ROUTES_RULE,
+    SERVICES_RULE,
+    CONNECTORS_RULE,
+    PURE_RULE,
+    SESSION_RULE,
+)
 
 SERVICE_FILE_LAYERS = {
     "services.py": "service",
@@ -152,8 +163,12 @@ DATA_ACCESS_METHODS = frozenset(
         "scalars",
     }
 )
+# A database_session container's context managers, which open a session.
+CONTAINER_METHODS = frozenset({"read", "transaction"})
 # Receiver name prefixes, before "_session", of web rather than database sessions.
-WEB_SESSION_WORDS = ("client", "http", "request")
+WEB_SESSION_WORDS = ("client", "http", "requests")
+# Owners whose ``.session`` is Starlette's session data, not a database session.
+REQUEST_OWNERS = frozenset({"req", "request", "websocket", "ws"})
 HTTP_PACKAGES = ("fastapi", "starlette")
 
 FIXES = {
@@ -182,6 +197,10 @@ FIXES = {
         "validators, transformations and types work on values and loaded rows; "
         "load them in a connector and pass them in from the service "
         f"({ORGANIZATION_DOC})"
+    ),
+    SESSION_RULE: (
+        "a database_session module only opens, commits, rolls back and closes "
+        f"sessions; read and write rows in a connector ({ORGANIZATION_DOC})"
     ),
 }
 
@@ -334,6 +353,12 @@ def _is_route_forbidden_import(module: str) -> bool:
     )
 
 
+def _is_connector_module(module: str) -> bool:
+    return _within(module, "policyengine_api.services.v2") and (
+        "database_connectors" in module.split(".")
+    )
+
+
 def _is_connector_forbidden_import(module: str) -> bool:
     parts = module.split(".")
     return _within_any(module, DATABASE_PACKAGES) or (
@@ -387,12 +412,17 @@ def _receiver_name(node: ast.expr) -> str:
     return ""
 
 
+def _is_request_owner(node: ast.expr) -> bool:
+    name = _receiver_name(node).lower().lstrip("_")
+    return name in REQUEST_OWNERS or name.endswith("_request")
+
+
 def _is_session_receiver(node: ast.expr) -> bool:
     """Whether a method's receiver is a database session or its container."""
     if (
         isinstance(node, ast.Attribute)
         and node.attr == "session"
-        and "request" in _receiver_name(node.value).lower()
+        and _is_request_owner(node.value)
     ):
         return False
     name = _receiver_name(node).lower().lstrip("_")
@@ -400,6 +430,28 @@ def _is_session_receiver(node: ast.expr) -> bool:
         return True
     prefix = name.removesuffix("_session")
     return prefix != name and not any(word in prefix for word in WEB_SESSION_WORDS)
+
+
+def _is_session_factory_name(name: str) -> bool:
+    return name.lower().lstrip("_").endswith("session_factory")
+
+
+def _injected_factory_detail(call: ast.Call) -> str | None:
+    """Return ``calls <factory>`` when a call opens a session from an injected factory.
+
+    ``session_factory()``, ``self._session_factory()`` and
+    ``session_factory.begin()`` count.
+    """
+    func = call.func
+    if _is_session_factory_name(_receiver_name(func)):
+        return f"calls {_receiver_name(func)}"
+    if (
+        isinstance(func, ast.Attribute)
+        and func.attr == "begin"
+        and _is_session_factory_name(_receiver_name(func.value))
+    ):
+        return f"calls {_receiver_name(func.value)}.begin"
+    return None
 
 
 def _calls_on_a_table(call: ast.Call) -> bool:
@@ -422,7 +474,9 @@ class LayerPolicy:
 
     ``session_methods`` of None forbids every method on a session.
     ``checks_sql_calls`` forbids every call into SQLAlchemy or SQLModel but
-    its exception classes, and builders called on a model's ``__table__``.
+    its exception classes; ``checks_builders`` only its SQL builders. Either
+    also forbids builders called on a model's ``__table__``.
+    ``checks_factories`` forbids opening a session from a session factory.
     """
 
     rule_id: str
@@ -431,6 +485,7 @@ class LayerPolicy:
     checks_sql_calls: bool
     checks_factories: bool
     forbidden_name: Callable[[str], bool] = _never
+    checks_builders: bool = False
 
 
 ROUTE_POLICY = LayerPolicy(
@@ -460,9 +515,17 @@ LAYER_POLICIES = {
     "connector": LayerPolicy(
         CONNECTORS_RULE,
         _is_connector_forbidden_import,
-        TRANSACTION_METHODS,
+        TRANSACTION_METHODS | CONTAINER_METHODS,
         checks_sql_calls=False,
         checks_factories=True,
+    ),
+    "session": LayerPolicy(
+        SESSION_RULE,
+        _is_connector_module,
+        DATA_ACCESS_METHODS,
+        checks_sql_calls=False,
+        checks_factories=False,
+        checks_builders=True,
     ),
     **dict.fromkeys(PURE_LAYERS, PURE_POLICY),
 }
@@ -505,6 +568,8 @@ def _named_call_details(dotted: str, policy: LayerPolicy) -> list[str]:
         return [f"calls {last}"] if policy.checks_factories else []
     if policy.checks_sql_calls and from_sql and not _within(dotted, SQL_EXCEPTIONS):
         return [f"calls {dotted}"]
+    if policy.checks_builders and from_sql and last in SQL_BUILDERS:
+        return [f"calls {dotted}"]
     return []
 
 
@@ -515,8 +580,11 @@ def _call_details(
     dotted = _dotted_name(call.func, imported)
     if dotted is not None:
         details.extend(_named_call_details(dotted, policy))
-    if policy.checks_sql_calls and _calls_on_a_table(call):
+    if (policy.checks_sql_calls or policy.checks_builders) and _calls_on_a_table(call):
         details.append(f"calls {ast.unparse(call.func)}")
+    factory = _injected_factory_detail(call) if policy.checks_factories else None
+    if factory is not None:
+        details.append(factory)
     func = call.func
     forbidden_method = isinstance(func, ast.Attribute) and (
         policy.session_methods is None or func.attr in policy.session_methods

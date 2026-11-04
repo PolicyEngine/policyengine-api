@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 67 | 4 | 1 | 8 | 80 |
+| mechanical | 68 | 4 | 1 | 8 | 81 |
 | metric | 1 | 0 | 0 | 0 | 1 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 72 of 82 rules.
+**Blocking:** 73 of 83 rules.
 
 ## Gaps
 
@@ -82,7 +82,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `api.routes.shared-query-parameters` | Routes that accept query parameters define them through the shared typed query models, never with a second manual parser. | mechanical | doc-only | no | nothing | — | — |
 | `api.v2.connectors-mutations-no-reads` | v2 mutation connectors (creates, updates, deletes) never issue select or get reads. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | **unproven** |
-| `api.v2.connectors-never-commit` | v2 connectors receive a session from the service and never open, commit, roll back or close it, or import the v1 ORM, the v2 database or a database_session module. | mechanical | enforced | yes | quality guard `v2-layers` | `pr.yml:quality-guards` | yes |
+| `api.v2.connectors-never-commit` | v2 connectors receive a session from the service and never open (with a session factory or a database_session container), commit, roll back or close it, or import the v1 ORM, the v2 database or a database_session module. | mechanical | enforced | yes | quality guard `v2-layers` | `pr.yml:quality-guards` | yes |
 | `api.v2.connectors-no-cross-calls` | v2 connector modules never import one another, so they cannot call one another to sequence a workflow; the service does the sequencing. | mechanical | ratcheted | yes | import-linter `pyproject.toml` | `pr.yml:quality-guards` | yes |
 | `api.v2.connectors-reads-no-mutations` | v2 read connectors never insert, add or delete rows. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | **unproven** |
 | `api.v2.crud-checks-cover-every-resource` | The v2 CRUD boundary checks find modules by filename, so every resource package is covered, and every connector module is named as a create, read, update or delete module. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | **unproven** |
@@ -93,6 +93,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 | `api.v2.routes-import-no-database-access` | v2 route modules never import a connector, a database_session module or the v2 database module; they call a service, which does. | mechanical | enforced | yes | import-linter `pyproject.toml` | `pr.yml:quality-guards` | yes |
 | `api.v2.routes-no-sessions-or-sql` | v2 route modules never open database sessions or construct SQL: they import no SQLAlchemy, SQLModel, connector, database_session, v1 ORM or v2 database module, and call no SQL builder, session method or session factory; they call one service method and map typed failures to HTTP. | mechanical | ratcheted | yes | quality guard `v2-layers` | `pr.yml:quality-guards` | yes |
 | `api.v2.services-no-sql` | v2 services sequence work but never construct SQL expressions (they import nothing from SQLAlchemy or SQLModel but the Session type and sqlalchemy.exc), call Session.exec or another data-access session method, or define HTTP response models (they import no FastAPI or Starlette). | mechanical | enforced | yes | quality guard `v2-layers` | `pr.yml:quality-guards` | yes |
+| `api.v2.session-modules-no-data-access` | v2 database_session modules sit directly in their resource package and only open, commit, roll back and close sessions: they call no data-access session method (add, get, merge, exec, execute and so on) or SQL builder, and import no connector. | mechanical | enforced | yes | quality guard `v2-layers` | `pr.yml:quality-guards` | yes |
 | `api.v2.session-modules-no-queries` | v2 database_session modules own session lifetime only and never build select, insert, update, delete or exec calls. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | **unproven** |
 | `api.v2.types-transformations-no-validators` | v2 types and transformations modules never import a validators module, directly or through other modules; validators import types, not the reverse. | mechanical | ratcheted | yes | import-linter `pyproject.toml` | `pr.yml:quality-guards` | yes |
 | `api.v2.user-services-no-sql` | v2 user services (identity, accounts, legacy references and user associations) never build or run SQL themselves or import SQLAlchemy; their connectors do. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | yes |
@@ -119,6 +120,7 @@ flowchart LR
   r_api_v2_routes_import_no_database_access("api.v2.routes-import-no-database-access (enforced)")
   r_api_v2_routes_no_sessions_or_sql("api.v2.routes-no-sessions-or-sql (ratcheted)")
   r_api_v2_services_no_sql("api.v2.services-no-sql (enforced)")
+  r_api_v2_session_modules_no_data_access("api.v2.session-modules-no-data-access (enforced)")
   r_api_v2_session_modules_no_queries("api.v2.session-modules-no-queries (enforced)")
   r_api_v2_types_transformations_no_validators("api.v2.types-transformations-no-validators (ratcheted)")
   r_api_v2_user_services_no_sql("api.v2.user-services-no-sql (enforced)")
@@ -139,6 +141,7 @@ flowchart LR
   r_api_v2_routes_import_no_database_access --> e_import_linter_pyproject_toml
   r_api_v2_routes_no_sessions_or_sql --> e_quality_guard_v2_layers
   r_api_v2_services_no_sql --> e_quality_guard_v2_layers
+  r_api_v2_session_modules_no_data_access --> e_quality_guard_v2_layers
   r_api_v2_session_modules_no_queries --> e_pytest_tests_unit_v2_test_data_crud_boundaries_py
   r_api_v2_types_transformations_no_validators --> e_import_linter_pyproject_toml
   r_api_v2_user_services_no_sql --> e_pytest_tests_unit_v2_test_data_crud_boundaries_py

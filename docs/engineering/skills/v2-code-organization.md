@@ -25,11 +25,14 @@ A `database_session.py` sits directly in its resource package.
 The guard counts a method call as a session call when its receiver is named
 `session` or `<something>_session`, but not a request's `.session` or an HTTP
 or client session (`http_session`, `requests_session`). Route modules and the
-pure layers may call no method on a session at all. A call into SQLAlchemy or
-SQLModel counts, except to its exception classes, and so does a builder called
-on a model's `__table__`. A session factory is any call into
-`policyengine_api.data.orm` or `policyengine_api.data.v2.database`, or
-SQLAlchemy's `Session`, `sessionmaker` or `create_engine`. The guard doesn't
+pure layers may call no method on a session at all. In routes, services and
+the pure layers a call into SQLAlchemy or SQLModel counts, except to its
+exception classes and, in services, to a session factory; a builder called on
+a model's `__table__` counts too. A session factory is any call into
+`policyengine_api.data.orm` or `policyengine_api.data.v2.database`,
+SQLAlchemy's `Session`, `sessionmaker` or `create_engine`, or an injected
+`*session_factory` or its `begin()`; only services and `database_session`
+modules may use one. The guard doesn't
 recognise a session bound to another name, an alias of a model's table, or a
 name re-exported through another module. A ratcheted rule's baseline lists one
 line per tolerated occurrence.
@@ -171,7 +174,9 @@ baseline).
 Define the resource's database-session lifetime container. It may open and
 close sessions, begin transactions, commit, or roll back. It must not construct
 SQL, choose records, validate business rules, transform records into response
-types, or determine multi-step operation order.
+types, or determine multi-step operation order. It calls no data-access
+session method (`add`, `get`, `merge`, `exec`, `execute` and so on) and
+imports no connector (rule `api.v2.session-modules-no-data-access`).
 
 Composition code should construct this container and inject it into the
 service. A request-scoped read service may wrap one already-open session; a
