@@ -148,6 +148,64 @@ class TestCommentProblems(unittest.TestCase):
                 self.assertEqual(comment_problems(comment), NO_REASON)
         self.assertEqual(comment_problems("# noqa: E501  # fmt: skip  # generated"), ())
 
+    def test_ruff_range_suppressions_need_a_code_and_a_reason(self) -> None:
+        cases = {
+            "# ruff: disable[T201]": NO_REASON,
+            "# ruff: disable[T201]  # the command prints its report": (),
+            "# ruff: disable[]  # prints": NO_CODE,
+            "# ruff: disable": NEITHER,
+            "# ruff: enable[T201]": (),
+        }
+        for comment, missing in cases.items():
+            with self.subTest(comment=comment):
+                self.assertEqual(comment_problems(comment), missing)
+
+    def test_a_type_ignore_whose_brackets_hold_no_code_names_none(self) -> None:
+        for comment in (
+            "# type: ignore[,]  # the stub is wrong",
+            "# type: ignore[ , ]  # the stub is wrong",
+        ):
+            with self.subTest(comment=comment):
+                self.assertEqual(comment_problems(comment), NO_CODE)
+        self.assertEqual(
+            comment_problems("# type: ignore[arg-type, misc]  # the stub is wrong"),
+            (),
+        )
+
+    def test_a_reason_may_start_with_a_tool_name_and_a_colon(self) -> None:
+        for comment in (
+            "# noqa: F401  # mypy: the plugin cannot see it",
+            "# type: ignore[arg-type]  # Type: the stub says str but bytes work",
+            "# type: ignore[arg-type]  # type: the stub says str but bytes work",
+            "# noqa: S603  # Ruff: false positive, the arguments are constants",
+            "# noqa: E501  # fmt: the formatter would split this URL",
+            "# noqa: E501  # isort: keep this order, the import has side effects",
+            "# noqa: E501  # pragma: the URL can't be split",
+        ):
+            with self.subTest(comment=comment):
+                self.assertEqual(comment_problems(comment), ())
+
+    def test_more_tools_directives_are_not_reasons(self) -> None:
+        for comment in (
+            "# noqa: E501  # ty: ignore[unresolved-import]",
+            "# noqa: E501  # pyrefly: ignore",
+            "# noqa: E501  # pyre-ignore[16]",
+            "# noqa: E501  # pyre-fixme[16]",
+            "# noqa: E501  # pytype: disable=attribute-error",
+            "# noqa: E501  # yapf: disable",
+            "# noqa: E501  # nosemgrep",
+            "# noqa: E501  # NOSONAR",
+            "# noqa: E501  # noinspection PyUnresolvedReferences",
+            "# noqa: E501  # codespell:ignore",
+            "# noqa: E501  # pragma no cover",
+            "# noqa: E501  # ruff: isort: skip",
+            "# noqa: E501  # ruff: enable[E501]",
+            "# noqa: E501  # mypy: disable-error-code=misc, warn-unreachable",
+            "# noqa: E501  # pylint: disable=line-too-long",
+        ):
+            with self.subTest(comment=comment):
+                self.assertEqual(comment_problems(comment), NO_REASON)
+
     def test_entries_use_the_lines_tokenize_counts(self) -> None:
         source = (
             "a = 1\n\x0c\nimport os  # noqa: F401\n"
@@ -259,12 +317,14 @@ class TestRunCheck(unittest.TestCase):
             (root / "pkg" / "old.py").write_text("import os  # noqa: F401\n")
             (root / "pkg" / "new.py").write_text("import sys  # noqa: F401\n")
             (root / "pkg" / "broken.py").write_text('TEXT = """never closed\n')
+            (root / "pkg" / "stub.pyi").write_text("import os  # noqa: F401\n")
             messages = [violation.message for violation in run_check(root)]
         self.assertEqual(
             messages,
             [
                 "pkg/broken.py doesn't tokenize, so its suppressions can't be checked",
                 "pkg/new.py:1: `# noqa: F401` gives no reason",
+                "pkg/stub.pyi:1: `# noqa: F401` gives no reason",
             ],
         )
 
