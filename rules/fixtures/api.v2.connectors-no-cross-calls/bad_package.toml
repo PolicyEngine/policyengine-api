@@ -1,0 +1,11 @@
+# Proof fixture for rule api.v2.connectors-no-cross-calls. The contract must
+# reject it: one read connector imports another, as the metadata reads_*
+# connectors import reads today.
+
+[modules]
+"fixture_api/services/v2/metadata/database_connectors/reads.py" = """
+from sqlmodel import Session, select
+"""
+"fixture_api/services/v2/metadata/database_connectors/reads_variables.py" = """
+from fixture_api.services.v2.metadata.database_connectors.reads import read_rows
+"""

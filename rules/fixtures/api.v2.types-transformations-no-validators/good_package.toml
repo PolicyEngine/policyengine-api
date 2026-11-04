@@ -1,0 +1,13 @@
+# Proof fixture for rule api.v2.types-transformations-no-validators. The
+# contract must accept it: the validators module imports the types module.
+
+[modules]
+"fixture_api/services/v2/policies/types.py" = """
+from pydantic import BaseModel
+"""
+"fixture_api/services/v2/policies/validators.py" = """
+from fixture_api.services.v2.policies.types import PolicyCreationInput
+"""
+"fixture_api/services/v2/policies/transformations.py" = """
+from fixture_api.services.v2.policies.types import PolicyRead
+"""

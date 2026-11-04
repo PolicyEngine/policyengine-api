@@ -1,0 +1,15 @@
+# Proof fixture for rule api.v2.pure-modules-no-database. The contract must
+# reject it. This is the shape of the former catalog selection module: a types
+# module imports shared query parameters, which import version validation kept
+# beside a catalog query, so the types module reaches SQLModel.
+
+[modules]
+"fixture_api/services/v2/policies/types.py" = """
+from fixture_api.query_parameters import PolicyEngineVersion
+"""
+"fixture_api/query_parameters.py" = """
+from fixture_api.data.v2.catalog.selection import validate_policyengine_version
+"""
+"fixture_api/data/v2/catalog/selection.py" = """
+from sqlmodel import Session, select
+"""

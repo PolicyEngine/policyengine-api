@@ -1,0 +1,10 @@
+# Proof fixture for rule api.v2.routes-import-no-database-access. The contract
+# must reject it: a route module imports a connector.
+
+[modules]
+"fixture_api/fastapi_routes/v2/policies/routes.py" = """
+from fixture_api.services.v2.policies.database_connectors.reads import read_policy
+"""
+"fixture_api/services/v2/policies/database_connectors/reads.py" = """
+from sqlmodel import Session, select
+"""

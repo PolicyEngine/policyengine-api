@@ -1,0 +1,29 @@
+# Proof fixture for rule api.v2.pure-modules-no-database. The contract must
+# accept it: the types module's version validation imports no database code,
+# and the validator reaches SQLModel only through the table models, which the
+# rule allows.
+
+[modules]
+"fixture_api/services/v2/policies/types.py" = """
+from fixture_api.query_parameters import PolicyEngineVersion
+"""
+"fixture_api/services/v2/policies/validators.py" = """
+from fixture_api.data.v2.models import Policy
+"""
+"fixture_api/query_parameters.py" = """
+from fixture_api.data.v2.catalog.selection_validation import validate_policyengine_version
+"""
+"fixture_api/data/v2/catalog/selection_validation.py" = """
+from packaging.version import Version
+"""
+"fixture_api/data/v2/catalog/selection_reads.py" = """
+from sqlmodel import Session, select
+"""
+"fixture_api/data/v2/models/__init__.py" = """
+import sqlmodel
+from fixture_api.data.v2.models.policies import Policy
+"""
+"fixture_api/data/v2/models/policies.py" = """
+import sqlalchemy
+import sqlmodel
+"""
