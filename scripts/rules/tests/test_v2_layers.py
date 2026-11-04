@@ -236,6 +236,7 @@ class TestEveryLayerIsChecked(unittest.TestCase):
                         f"{path} calls session.commit",
                         f"{path} calls session.exec",
                         f"{path} calls sqlmodel.select",
+                        f"{path} imports sqlmodel.select",
                     },
                 )
 

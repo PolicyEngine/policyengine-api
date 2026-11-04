@@ -21,21 +21,27 @@ Then each file's imports and calls are checked against its layer's rule:
   a session, call no session factory, and import no v1 ORM, v2 database or
   ``database_session`` module;
 - validators, transformations, types, process-state modules and package
-  ``__init__`` files (``api.v2.pure-modules-no-session-calls``) call no session
-  method, SQL builder or session factory.
+  ``__init__`` files (``api.v2.pure-modules-no-session-calls``) import nothing
+  from SQLAlchemy or SQLModel but the ``Session`` type, import no connector,
+  ``database_session``, v1 ORM or v2 database module, and call no session
+  method, SQLAlchemy or SQLModel function or session factory.
 
-``database_session.py`` modules own the session's lifetime; rule
-``api.v2.session-modules-no-queries`` checks them.
+``database_session.py`` modules, directly in a resource package, own the
+session's lifetime; rule ``api.v2.session-modules-no-queries`` checks them.
 
 A method call counts as a session call when its receiver is named ``session``
 or ``<something>_session`` (``session.add``, ``self._session.exec``), but not
-``request.session`` (Starlette's session data), ``http_session`` or names that
-only contain the word (``sessions_router``). A SQL builder counts when it was
-imported from SQLAlchemy or SQLModel, or is called on a model's ``__table__``;
-a session factory, when it was imported from ``policyengine_api.data.orm`` or
-``policyengine_api.data.v2.database``, or is ``Session``, ``sessionmaker`` or
-``create_engine`` from SQLAlchemy or SQLModel. Imports made only under
-``TYPE_CHECKING`` count.
+when it is a request's ``.session`` (Starlette's session data) or named like
+an HTTP or client session (``http_session``, ``requests_session``), or only
+contains the word (``sessions_router``). Routes and the pure layers may call
+no method on a session; services and connectors may not call the methods
+listed below. A call into SQLAlchemy or SQLModel counts, except to its
+exception classes; so does a builder called on a model's ``__table__``. A
+session factory is any call into ``policyengine_api.data.orm`` or
+``policyengine_api.data.v2.database``, or SQLAlchemy's ``Session``,
+``sessionmaker`` or ``create_engine``. Imports made only under
+``TYPE_CHECKING`` count. Not recognised: a session bound to another name, an
+alias of a model's table, and a name re-exported through another module.
 
 A ratcheted rule's baseline file lists its tolerated findings, one line per
 occurrence, as the guard prints them. More occurrences than the baseline lists
@@ -98,9 +104,11 @@ PURE_LAYERS = frozenset(
 
 SQL_PACKAGES = ("sqlalchemy", "sqlmodel")
 DATABASE_PACKAGES = ("policyengine_api.data.orm", "policyengine_api.data.v2.database")
+SESSION_TYPES = ("sqlmodel.Session", "sqlalchemy.orm.Session")
+SQL_EXCEPTIONS = "sqlalchemy.exc"
 # What a service may import from SQLAlchemy or SQLModel: the session type, for
 # annotations, and the exception classes, to raise typed failures.
-SERVICE_SQL_IMPORTS = ("sqlmodel.Session", "sqlalchemy.orm.Session", "sqlalchemy.exc")
+SERVICE_SQL_IMPORTS = (*SESSION_TYPES, SQL_EXCEPTIONS)
 SQL_BUILDERS = frozenset(
     {
         "delete",
@@ -119,17 +127,24 @@ SQL_BUILDERS = frozenset(
 )
 SQL_SESSION_FACTORIES = frozenset({"Session", "create_engine", "sessionmaker"})
 TRANSACTION_METHODS = frozenset(
-    {"begin", "begin_nested", "close", "commit", "rollback"}
+    {"begin", "begin_nested", "close", "commit", "invalidate", "reset", "rollback"}
 )
 DATA_ACCESS_METHODS = frozenset(
     {
         "add",
         "add_all",
+        "bulk_insert_mappings",
+        "bulk_save_objects",
+        "bulk_update_mappings",
+        "connection",
         "delete",
         "exec",
         "execute",
+        "expunge",
+        "expunge_all",
         "flush",
         "get",
+        "get_one",
         "merge",
         "query",
         "refresh",
@@ -137,9 +152,8 @@ DATA_ACCESS_METHODS = frozenset(
         "scalars",
     }
 )
-# A database_session container's context managers.
-CONTAINER_METHODS = frozenset({"read", "transaction"})
-ALL_SESSION_METHODS = DATA_ACCESS_METHODS | TRANSACTION_METHODS | CONTAINER_METHODS
+# Receiver name prefixes, before "_session", of web rather than database sessions.
+WEB_SESSION_WORDS = ("client", "http", "request")
 HTTP_PACKAGES = ("fastapi", "starlette")
 
 FIXES = {
@@ -229,7 +243,10 @@ def _service_layer(parts: tuple[str, ...]) -> str | None:
     if name == "__init__.py":
         return "connector" if in_connector_package else "package"
     if "database_connectors" not in resource_parts:
-        return SERVICE_FILE_LAYERS.get(name) if resource_parts else None
+        layer = SERVICE_FILE_LAYERS.get(name) if resource_parts else None
+        # A session module sits directly in its resource package, where the
+        # session-module rule looks for it.
+        return None if layer == "session" and len(resource_parts) > 1 else layer
     stem = name.removesuffix(".py")
     is_operation = any(
         stem == operation or stem.startswith(f"{operation}_")
@@ -334,6 +351,16 @@ def _is_service_forbidden_sql_name(name: str) -> bool:
     )
 
 
+def _is_pure_forbidden_import(module: str) -> bool:
+    return _within_any(module, DATABASE_PACKAGES) or _is_session_or_connector_module(
+        module
+    )
+
+
+def _is_pure_forbidden_sql_name(name: str) -> bool:
+    return _within_any(name, SQL_PACKAGES) and not _within_any(name, SESSION_TYPES)
+
+
 def _never(_module: str) -> bool:
     return False
 
@@ -365,22 +392,25 @@ def _is_session_receiver(node: ast.expr) -> bool:
     if (
         isinstance(node, ast.Attribute)
         and node.attr == "session"
-        and isinstance(node.value, ast.Name)
-        and node.value.id == "request"
+        and "request" in _receiver_name(node.value).lower()
     ):
         return False
     name = _receiver_name(node).lower().lstrip("_")
-    if name.startswith("http"):
-        return False
-    return name == "session" or name.endswith("_session")
+    if name == "session":
+        return True
+    prefix = name.removesuffix("_session")
+    return prefix != name and not any(word in prefix for word in WEB_SESSION_WORDS)
 
 
 def _calls_on_a_table(call: ast.Call) -> bool:
-    """Whether a call is a SQL builder on a table, as ``Model.__table__.select()``."""
+    """Whether a call is a SQL builder on a table, as ``Model.__table__.insert()``."""
     func = call.func
-    if not isinstance(func, ast.Attribute) or func.attr not in SQL_BUILDERS:
-        return False
-    return "__table__" in ast.unparse(func.value).split(".")
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr in SQL_BUILDERS - {"values"}
+        and isinstance(func.value, ast.Attribute)
+        and func.value.attr == "__table__"
+    )
 
 
 # --- policies -------------------------------------------------------------
@@ -388,12 +418,17 @@ def _calls_on_a_table(call: ast.Call) -> bool:
 
 @dataclass(frozen=True)
 class LayerPolicy:
-    """What one layer's rule forbids: imports, session methods and call kinds."""
+    """What one layer's rule forbids: imports, session methods and call kinds.
+
+    ``session_methods`` of None forbids every method on a session.
+    ``checks_sql_calls`` forbids every call into SQLAlchemy or SQLModel but
+    its exception classes, and builders called on a model's ``__table__``.
+    """
 
     rule_id: str
     forbidden_module: Callable[[str], bool]
-    session_methods: frozenset[str]
-    checks_builders: bool
+    session_methods: frozenset[str] | None
+    checks_sql_calls: bool
     checks_factories: bool
     forbidden_name: Callable[[str], bool] = _never
 
@@ -401,23 +436,24 @@ class LayerPolicy:
 ROUTE_POLICY = LayerPolicy(
     ROUTES_RULE,
     _is_route_forbidden_import,
-    ALL_SESSION_METHODS,
-    checks_builders=True,
+    None,
+    checks_sql_calls=True,
     checks_factories=True,
 )
 PURE_POLICY = LayerPolicy(
     PURE_RULE,
-    _never,
-    ALL_SESSION_METHODS,
-    checks_builders=True,
+    _is_pure_forbidden_import,
+    None,
+    checks_sql_calls=True,
     checks_factories=True,
+    forbidden_name=_is_pure_forbidden_sql_name,
 )
 LAYER_POLICIES = {
     "service": LayerPolicy(
         SERVICES_RULE,
         _is_http_import,
         DATA_ACCESS_METHODS,
-        checks_builders=True,
+        checks_sql_calls=True,
         checks_factories=False,
         forbidden_name=_is_service_forbidden_sql_name,
     ),
@@ -425,7 +461,7 @@ LAYER_POLICIES = {
         CONNECTORS_RULE,
         _is_connector_forbidden_import,
         TRANSACTION_METHODS,
-        checks_builders=False,
+        checks_sql_calls=False,
         checks_factories=True,
     ),
     **dict.fromkeys(PURE_LAYERS, PURE_POLICY),
@@ -461,16 +497,15 @@ def _named_call_details(dotted: str, policy: LayerPolicy) -> list[str]:
     For example ``calls sqlmodel.select`` or ``calls get_v2_session_factory``.
     """
     last = dotted.rsplit(".", 1)[-1]
-    details = []
     from_sql = _within_any(dotted, SQL_PACKAGES)
-    if policy.checks_builders and from_sql and last in SQL_BUILDERS:
-        details.append(f"calls {dotted}")
     opens_a_session = _within_any(dotted, DATABASE_PACKAGES) or (
         from_sql and last in SQL_SESSION_FACTORIES
     )
-    if policy.checks_factories and opens_a_session:
-        details.append(f"calls {last}")
-    return details
+    if opens_a_session:
+        return [f"calls {last}"] if policy.checks_factories else []
+    if policy.checks_sql_calls and from_sql and not _within(dotted, SQL_EXCEPTIONS):
+        return [f"calls {dotted}"]
+    return []
 
 
 def _call_details(
@@ -480,14 +515,13 @@ def _call_details(
     dotted = _dotted_name(call.func, imported)
     if dotted is not None:
         details.extend(_named_call_details(dotted, policy))
-    if policy.checks_builders and _calls_on_a_table(call):
+    if policy.checks_sql_calls and _calls_on_a_table(call):
         details.append(f"calls {ast.unparse(call.func)}")
     func = call.func
-    if (
-        isinstance(func, ast.Attribute)
-        and func.attr in policy.session_methods
-        and _is_session_receiver(func.value)
-    ):
+    forbidden_method = isinstance(func, ast.Attribute) and (
+        policy.session_methods is None or func.attr in policy.session_methods
+    )
+    if forbidden_method and _is_session_receiver(func.value):
         details.append(f"calls {_receiver_name(func.value)}.{func.attr}")
     return details
 

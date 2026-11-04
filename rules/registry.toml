@@ -279,9 +279,9 @@ test = "tests/unit/v2/test_data_crud_boundaries.py::test_rule_proof_user_service
 [[rule]]
 id = "api.v2.pure-modules-no-session-calls"
 category = "v2-layers"
-statement = "v2 validators, transformations, types, process-state modules and package __init__ files call no session method, SQL builder or session factory; they work on values and rows a connector loaded."
+statement = "v2 validators, transformations, types, process-state modules and package __init__ files import nothing from SQLAlchemy or SQLModel but the Session type, import no connector, database_session, v1 ORM or v2 database module, and call no session method, SQLAlchemy or SQLModel function or session factory; they work on values and rows a connector loaded."
 rationale = "docs/engineering/skills/v2-code-organization.md#validatorspy"
-scope = ["policyengine_api/services/v2/*/validators.py", "policyengine_api/services/v2/*/transformations.py", "policyengine_api/services/v2/*/types.py", "policyengine_api/services/v2/metadata/selected_catalogs.py", "policyengine_api/services/v2/**/__init__.py"]
+scope = ["policyengine_api/services/v2/*/validators.py", "policyengine_api/services/v2/*/transformations.py", "policyengine_api/services/v2/*/types.py", "policyengine_api/services/v2/metadata/selected_catalogs.py", "policyengine_api/services/v2/__init__.py", "policyengine_api/services/v2/*/__init__.py"]
 tier = "mechanical"
 status = "enforced"
 autofix = false

@@ -8,6 +8,7 @@ expected_findings = [
     "policyengine_api/services/v2/policies/__init__.py calls session.commit",
     "policyengine_api/services/v2/policies/types.py calls session.exec",
     "policyengine_api/services/v2/policies/types.py calls sqlmodel.select",
+    "policyengine_api/services/v2/policies/types.py imports sqlmodel.select",
     "policyengine_api/services/v2/policies/validators.py calls session.get",
 ]
 

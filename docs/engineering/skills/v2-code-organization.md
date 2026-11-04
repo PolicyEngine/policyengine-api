@@ -20,13 +20,19 @@ A file with another name needs an entry, with its layer and a reason, in
 `services/v2` the layer `service`, `validator`, `transformation`, `types` or
 `process-state`, and a file under `fastapi_routes/v2` the layer `route`,
 `http-model` or `http-support`; each layer follows that layer's rules below.
+A `database_session.py` sits directly in its resource package.
 
 The guard counts a method call as a session call when its receiver is named
-`session` or `<something>_session` (not `request.session` or `http_session`),
-a SQL builder when it was imported from SQLAlchemy or SQLModel or is called on
-a model's `__table__`, and a session factory when it comes from
-`policyengine_api.data.orm` or `policyengine_api.data.v2.database`. A
-ratcheted rule's baseline lists one line per tolerated occurrence.
+`session` or `<something>_session`, but not a request's `.session` or an HTTP
+or client session (`http_session`, `requests_session`). Route modules and the
+pure layers may call no method on a session at all. A call into SQLAlchemy or
+SQLModel counts, except to its exception classes, and so does a builder called
+on a model's `__table__`. A session factory is any call into
+`policyengine_api.data.orm` or `policyengine_api.data.v2.database`, or
+SQLAlchemy's `Session`, `sessionmaker` or `create_engine`. The guard doesn't
+recognise a session bound to another name, an alias of a model's table, or a
+name re-exported through another module. A ratcheted rule's baseline lists one
+line per tolerated occurrence.
 
 ## HTTP adapters
 
@@ -66,8 +72,9 @@ Request models describe HTTP bodies. Response models describe public response
 response structures and OpenAPI output. Route functions handle HTTP-only conditions,
 invoke one service method, and convert typed failures to HTTP responses. No module
 under `fastapi_routes/v2` imports SQLAlchemy, SQLModel, a connector, a
-`database_session` module or `policyengine_api.data.v2.database`, or calls a
-SQL builder, a session method or a session factory (rule
+`database_session` module, the v1 ORM module `policyengine_api.data.orm` or
+`policyengine_api.data.v2.database`, or calls a SQLAlchemy or SQLModel
+function, a session method or a session factory (rule
 `api.v2.routes-no-sessions-or-sql`; today's `sqlalchemy.exc` imports are in its
 baseline).
 
@@ -125,7 +132,9 @@ Define functions that inspect already-available values and either return a
 validated value or raise a typed exception. Validators must not load records,
 open sessions, execute SQL, mutate database rows, or construct HTTP responses.
 Validators, transformations, types, process-state modules and package
-`__init__` files call no session method, SQL builder or session factory (rule
+`__init__` files import nothing from SQLAlchemy or SQLModel but the `Session`
+type, import no connector or session module, and call no session method,
+SQLAlchemy or SQLModel function or session factory (rule
 `api.v2.pure-modules-no-session-calls`).
 
 When validation depends on stored state, a database connector loads the
