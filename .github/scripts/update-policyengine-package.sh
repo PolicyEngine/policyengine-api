@@ -5,8 +5,16 @@
 # fragment, and open a single-version PR on branch
 # auto/update-policyengine-bundle-<version>.
 #
+# Every PR names its tracking issue on the first line of its description
+# (rule api.process.pr-tracking-issue): the oldest open issue titled
+# "Update PolicyEngine bundle to <version>", or a new one when none is open.
+# Merging the PR closes it.
+#
 # Environment:
-#   GH_TOKEN must be set for gh.
+#   GH_TOKEN must be set for gh: a token that can write issues and pull
+#     requests.
+#   GITHUB_REPOSITORY is owner/name of the repository the tracking issue is in
+#     (set by the runner; default: PolicyEngine/policyengine-api).
 #   LATEST_OVERRIDE may be set to target an exact version (the
 #     repository_dispatch trigger passes the just-released version here);
 #     otherwise the latest version on PyPI is used.
@@ -19,8 +27,47 @@ if [[ "${1:-}" == "--dry-run" ]]; then
   DRY_RUN=1
 fi
 
+REPOSITORY="${GITHUB_REPOSITORY:-PolicyEngine/policyengine-api}"
+ISSUE_NUMBER=""
+
+# Set ISSUE_NUMBER to the oldest open tracking issue for LATEST, opening one
+# when none is open. This sets a variable rather than printing, because bash
+# turns off set -e inside $(...), and a failed lookup must not open a
+# duplicate issue.
+find_or_open_tracking_issue() {
+  local title="Update PolicyEngine bundle to ${LATEST}"
+  local issue_number
+  local issue_url
+
+  issue_number="$(
+    gh issue list \
+      --repo "${REPOSITORY}" \
+      --state open \
+      --limit 1000 \
+      --json number,title \
+      --jq "map(select(.title == \"${title}\")) | sort_by(.number) | .[0].number // empty"
+  )"
+  if [[ -z "${issue_number}" ]]; then
+    issue_url="$(
+      gh issue create \
+        --repo "${REPOSITORY}" \
+        --title "${title}" \
+        --body "Tracks the automated update of the PolicyEngine .py bundle to ${LATEST} by .github/workflows/update-policyengine-bundle.yaml. The update pull request names this issue on the first line of its description and closes it when it merges."
+    )"
+    issue_number="${issue_url##*/}"
+  fi
+
+  if [[ ! "${issue_number}" =~ ^[0-9]+$ ]]; then
+    echo "Could not resolve the tracking issue for PolicyEngine bundle ${LATEST}: ${issue_number}" >&2
+    exit 1
+  fi
+  ISSUE_NUMBER="${issue_number}"
+}
+
 create_pr_body() {
   cat <<EOF
+Fixes #${ISSUE_NUMBER}
+
 ## Summary
 
 Update PolicyEngine .py bundle from ${CURRENT} to ${LATEST}.
@@ -101,6 +148,7 @@ fi
 
 if git ls-remote --exit-code --heads origin "$BRANCH" &>/dev/null; then
   echo "Remote branch '${BRANCH}' already exists without an open PR. Creating PR."
+  find_or_open_tracking_issue
   gh pr create \
     --base master \
     --head "$BRANCH" \
@@ -169,6 +217,7 @@ git add pyproject.toml docker/Dockerfile uv.lock "$FRAGMENT"
 git commit -m "Update PolicyEngine bundle to ${LATEST}"
 git push -u origin "$BRANCH"
 
+find_or_open_tracking_issue
 gh pr create \
   --base master \
   --title "Update PolicyEngine bundle to ${LATEST}" \

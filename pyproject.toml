@@ -142,9 +142,10 @@ exclude = ["migrations/*/versions/*.py"]
 # The shared rules tool needs only the standard library, so its tests use
 # unittest on purpose; pytest-style rules don't apply to them.
 "scripts/rules/tests/**" = ["PT"]
-# CI/CD scripts print their results, fetch fixed URLs, may have hyphenated
-# file names and may import the lazily loaded packages at module level.
-".github/**" = ["N999", "S310", "T201", "TID253"]
+# CI/CD scripts print their results, run other programs (such as gh), fetch
+# fixed URLs, may have hyphenated file names and may import the lazily loaded
+# packages at module level.
+".github/**" = ["N999", "S310", "S603", "S607", "T201", "TID253"]
 # Command-line scripts print their output, run other programs, fetch fixed
 # URLs, stamp today's date and pick random samples.
 "scripts/**" = [

@@ -1,0 +1,52 @@
+name: PR description
+
+# Rule api.process.pr-tracking-issue: the first line of every pull request's
+# description is "Fixes #ISSUE_NUMBER", naming an open issue in this
+# repository. See docs/engineering/skills/github-prs.md#tracking-issues.
+#
+# A separate workflow from pr.yml, so that editing a description reruns only
+# this check, not the whole of CI. It has no branches or paths filter and no
+# stack condition: it is cheap, so every open pull request runs it, including
+# each one in a stack. CI complete in pr.yml can't need a job in another
+# workflow, so the master ruleset requires this job's check on its own.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+# The check reads the description from the event payload and looks the issue
+# up with the job's token, so it needs only read access. Pull requests from
+# forks get a read-only token, which is enough.
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-description:
+    name: PR description
+    # GitHub also sends "edited" for closed pull requests. Merging closed the
+    # issue a merged pull request names, so checking one would fail.
+    if: ${{ github.event.pull_request.state == 'open' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout the check script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts/check_pr_description.py
+          sparse-checkout-cone-mode: false
+      # The script needs only the standard library and gh, which the runner
+      # image provides, so nothing is installed.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check the first line and the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/check_pr_description.py
