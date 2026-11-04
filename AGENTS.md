@@ -121,7 +121,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Code quality and types
 
-- Checked: `api.quality.alembic-revisions-unused-imports`, `api.quality.ci-cd-scripts-ruff-exemptions`, `api.quality.command-line-modules-ruff-exemptions`, `api.quality.command-line-scripts-ruff-exemptions`, `api.quality.environment-variables-load`, `api.quality.file-length`, `api.quality.mypy-v2`, `api.quality.ruff-format`, `api.quality.ruff-lint`, `api.quality.runtime-evaluated-models-resolve`, `api.quality.tests-pass`, `api.quality.tests-ruff-exemptions`, `api.quality.unittest-ruff-exemptions`
+- Checked: `api.quality.alembic-revisions-unused-imports`, `api.quality.ci-cd-scripts-ruff-exemptions`, `api.quality.command-line-modules-ruff-exemptions`, `api.quality.command-line-scripts-ruff-exemptions`, `api.quality.environment-variables-load`, `api.quality.file-length`, `api.quality.mypy-v2`, `api.quality.ruff-format`, `api.quality.ruff-lint`, `api.quality.runtime-evaluated-models-resolve`, `api.quality.suppressions-explained`, `api.quality.tests-pass`, `api.quality.tests-ruff-exemptions`, `api.quality.unittest-ruff-exemptions`
 
 ### Observability
 
@@ -140,7 +140,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 - Checked: `api.agents.adapters-point-to-agents-md`, `api.process.changelog-fragment`, `api.process.cloud-run-image-builds`, `api.process.docker-image-builds`, `api.process.pr-tracking-issue`, `api.process.rules-registry`, `api.process.stacked-prs-full-ci-at-bottom`
 - `api.process.agents-never-bypass`: Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human. (doc-only, not checked: follow it yourself)
-- `api.process.agents-suppress-as-last-resort`: Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason. (doc-only, not checked: follow it yourself)
+- `api.process.agents-suppress-as-last-resort`: Agents add an inline suppression (noqa or type: ignore) only when neither a code change nor a checker setting removes the finding, and a PR lists every inline suppression it adds, with the reason. That each suppression names its code and gives its reason is the mechanical rule api.quality.suppressions-explained. (doc-only, not checked: follow it yourself)
 - `api.process.makefile-phony`: Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed. (doc-only, not checked: follow it yourself)
 - `api.process.rule-machinery-code-owned`: Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author. (doc-only, not checked: follow it yourself)
 

@@ -1,0 +1,35 @@
+# Tolerated inline suppressions that name no code or give no reason, for
+# api.quality.suppressions-explained: one "<path> :: <source line>" per
+# occurrence, so a file with two identical lines lists the entry twice.
+# Comments go on lines of their own. This list may only shrink: give a
+# suppression its reason (or remove it), then remove its line and lower
+# the rule's baseline count.
+policyengine_api/api.py :: # ruff: noqa: E402
+policyengine_api/data/v2/models/__init__.py :: from policyengine_api.data.v2.models.associations import (  # noqa: E402
+policyengine_api/data/v2/models/__init__.py :: from policyengine_api.data.v2.models.comparison_runs import (  # noqa: E402
+policyengine_api/data/v2/models/__init__.py :: from policyengine_api.data.v2.models.countries import Country  # noqa: E402
+policyengine_api/data/v2/models/__init__.py :: from policyengine_api.data.v2.models.household_mappings import (  # noqa: E402
+policyengine_api/data/v2/models/__init__.py :: from policyengine_api.data.v2.models.households import (  # noqa: E402
+policyengine_api/data/v2/models/__init__.py :: from policyengine_api.data.v2.models.metadata import (  # noqa: E402
+policyengine_api/data/v2/models/__init__.py :: from policyengine_api.data.v2.models.policies import (  # noqa: E402
+policyengine_api/data/v2/models/__init__.py :: from policyengine_api.data.v2.models.policy_mappings import (  # noqa: E402
+policyengine_api/data/v2/models/__init__.py :: from policyengine_api.data.v2.models.reports import (  # noqa: E402
+policyengine_api/data/v2/models/__init__.py :: from policyengine_api.data.v2.models.simulations import (  # noqa: E402
+policyengine_api/data/v2/models/__init__.py :: from policyengine_api.data.v2.models.users import (  # noqa: E402
+policyengine_api/fastapi_routes/query_parameters.py :: dependency.__signature__ = Signature(  # type: ignore[attr-defined]
+policyengine_api/fastapi_routes/v2/user_resources.py :: from fastapi import Request  # noqa: TC002
+policyengine_api/libs/auth0_management.py :: return client.request(method, url, **kwargs)  # type: ignore[arg-type]
+policyengine_api/libs/auth0_management.py :: return self._http_client.request(method, url, **kwargs)  # type: ignore[arg-type]
+policyengine_api/libs/gateway_auth.py :: return self._token  # type: ignore[return-value]
+policyengine_api/runtime_cache/reform_impacts.py :: keys = self.client.zrevrange(index, 0, max(limit - 1, 0))  # type: ignore[attr-defined]
+policyengine_api/services/v2/households/transformations.py :: from policyengine_core.periods import (  # type: ignore[import-untyped]
+policyengine_api/services/v2/policies/transformations.py :: from policyengine_core.periods import (  # type: ignore[import-untyped]
+policyengine_api/utils/__init__.py :: from .cache_utils import *  # noqa: F403
+policyengine_api/utils/__init__.py :: from .json import *  # noqa: F403
+scripts/export_migration_contracts.py :: from policyengine_api.migration_registry import ROUTE_GROUPS  # noqa: E402
+scripts/export_migration_contracts.py :: from tests.contract.registry import APP_V2_WORKFLOW_CONTRACTS  # noqa: E402
+scripts/run_quality_guards.py :: from scripts.guards import migration_contracts  # noqa: E402
+scripts/run_quality_guards.py :: from scripts.rules import guard as rules_guard  # noqa: E402
+tests/unit/services/test_user_policy_service.py :: UserPolicyPersistenceError("raw-exception-text")  # type: ignore[arg-type]
+tests/unit/v2/test_legacy_reference_service.py :: LegacyReferenceDatabaseSession(reject_session)  # type: ignore[arg-type]
+tests/unit/v2/test_metadata_response_cache.py :: cache._keep = keep_after_another_request_arrives  # type: ignore[method-assign]

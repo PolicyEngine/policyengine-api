@@ -216,6 +216,34 @@ justification as a suppression.
 A pull request that adds inline suppressions lists each one in its
 description, with the reason a code change or setting wasn't used.
 
+### The form of a suppression
+
+`api.quality.suppressions-explained`: every inline suppression names what it
+suppresses and says why. The `suppressions` quality guard
+(`scripts/rules/suppressions.py`) reads every tracked Python file with
+`tokenize`, so only real comments count, and fails on a suppression that lacks
+either:
+
+- **a code**: `# noqa` and its file-level forms `# ruff: noqa` and
+  `# flake8: noqa` list ruff codes (`# noqa: E402`), and `# type: ignore`
+  lists mypy error codes (`# type: ignore[arg-type]`);
+- **a reason**: another `#` part of the same comment that isn't a
+  suppression: `# noqa: E402  # the path setup must run first` or
+  `# type: ignore[arg-type]  # the stub's annotation is too narrow`. Text
+  after the codes in the same part (`# noqa: E402 path setup`) doesn't count.
+
+The rule is ratcheted. `rules/baselines/suppressions.txt` lists today's
+unexplained suppressions as `<path> :: <source line>`, one line per
+occurrence. A suppression not listed there fails, and a listed one that is
+gone or now explained fails as stale, so give it its reason, remove its line
+and lower the rule's baseline `count`. Editing a listed line also makes it
+fail, because its entry no longer matches: add the reason in the same change.
+
+Ruff's PGH003 and PGH004, selected with every other ruff rule, already reject
+a `type: ignore` or `noqa` without a code. This rule adds the reason, and
+covers file-level `noqa` too. Whether the suppression should exist at all is
+still the judgment rule `api.process.agents-suppress-as-last-resort` above.
+
 ## Hidden rules
 
 The guard fails when something enforces a rule that the registry doesn't
