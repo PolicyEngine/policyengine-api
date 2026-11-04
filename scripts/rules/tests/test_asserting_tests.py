@@ -771,6 +771,262 @@ class TestSecondReview(unittest.TestCase):
         self.assertEqual(unchecked, ["test_layers", "test_layers_again", "test_clique"])
 
 
+class TestThirdReview(unittest.TestCase):
+    """Cases from the third review: cycles, method order, scopes and lines."""
+
+    def test_a_cycle_does_not_hide_a_check_from_a_later_test(self) -> None:
+        source = """
+            def helper_r(value):
+                helper_d(value)
+                helper_c(value)
+                helper_a(value)
+
+
+            def helper_a(value):
+                helper_r(value)
+                helper_x(value)
+
+
+            def helper_x(value):
+                helper_a(value)
+
+
+            def helper_c(value):
+                helper_x(value)
+
+
+            def helper_d(value):
+                assert value
+
+
+            def test_r():
+                helper_r(1)
+
+
+            def test_c():
+                helper_c(1)
+            """
+        self.assertEqual(_unchecked_source(source), [])
+
+    def test_methods_resolve_in_python_method_order(self) -> None:
+        source = """
+            class Lenient:
+                def check(self, value):
+                    return value
+
+
+            class Strict:
+                def check(self, value):
+                    assert value
+
+
+            class Middle(Lenient):
+                pass
+
+
+            class TestDiamond(Middle, Strict):
+                def test_uses_the_lenient_check(self):
+                    self.check(0)
+            """
+        self.assertEqual(
+            _unchecked_source(source), ["TestDiamond::test_uses_the_lenient_check"]
+        )
+
+    def test_methods_in_blocks_and_redefinitions_resolve_like_python(self) -> None:
+        source = """
+            class TestBlock:
+                if True:
+                    def check(self, value):
+                        assert value
+
+                def test_uses_a_method_in_a_block(self):
+                    self.check(1)
+
+                def test_defined_twice(self):
+                    print(1)
+
+                def test_defined_twice(self):
+                    assert True
+
+
+            class TestBase:
+                def test_switched_off(self):
+                    print(1)
+
+
+            class TestChild(TestBase):
+                test_switched_off = None
+            """
+        self.assertEqual(_unchecked_source(source), ["TestBase::test_switched_off"])
+
+    def test_names_resolve_in_their_own_scope(self) -> None:
+        files = {"policyengine_api/utils.py": "def check(value):\n    return value\n"}
+        source = """
+            import unittest
+
+
+            def check(value):
+                assert value
+
+
+            def test_local_production_import():
+                from policyengine_api.utils import check
+
+                check(1)
+
+
+            def test_lambda_parameter(service):
+                service.run(lambda check: check(1))
+
+
+            def test_inner_scope_names_do_not_hide_the_helper(rows):
+                def inner():
+                    check = 1
+                    return check
+
+                def outer():
+                    def deeper(check):
+                        return check
+
+                    return deeper
+
+                _ = [check for check in rows]
+                check(1)
+
+
+            class Case(unittest.TestCase):
+                def check(self, value):
+                    self.assertTrue(value)
+
+                def test_replacement_method_has_its_own_self(self, monkeypatch):
+                    def replacement(self):
+                        self.check()
+
+                    monkeypatch.setattr("module.Thing.run", replacement)
+
+                def test_stand_in_with_its_own_fail(self, service):
+                    class Stand:
+                        def fail(self, message):
+                            return message
+
+                        def run(self):
+                            self.fail("x")
+
+                    service(Stand())
+            """
+        self.assertEqual(
+            _unchecked_source(source, files),
+            [
+                "test_local_production_import",
+                "test_lambda_parameter",
+                "Case::test_replacement_method_has_its_own_self",
+                "Case::test_stand_in_with_its_own_fail",
+            ],
+        )
+
+    def test_a_module_import_after_a_definition_wins(self) -> None:
+        files = {"policyengine_api/utils.py": "def check(value):\n    return value\n"}
+        source = """
+            def check(value):
+                assert value
+
+
+            from policyengine_api.utils import check
+
+
+            def test_uses_the_import():
+                check(1)
+            """
+        self.assertEqual(_unchecked_source(source, files), ["test_uses_the_import"])
+
+    def test_imported_tests_take_the_name_the_import_binds(self) -> None:
+        files = {
+            "tests/shared.py": """
+                class TestOriginal:
+                    def test_original(self):
+                        print(1)
+
+
+                class SharedChecks:
+                    def test_from_alias(self):
+                        print(2)
+
+
+                def test_star_function():
+                    print(3)
+
+
+                class Switched:
+                    __test__ = True
+
+                    def test_switched_on(self):
+                        print(4)
+                """
+        }
+        source = """
+            from tests.shared import SharedChecks as TestAliased
+            from tests.shared import TestOriginal as Original
+            from tests.shared import *
+            """
+        self.assertEqual(
+            sorted(_unchecked_source(source, files)),
+            [
+                "Switched::test_switched_on",
+                "TestAliased::test_from_alias",
+                "TestOriginal::test_original",
+                "test_star_function",
+            ],
+        )
+
+    def test_imported_and_inherited_tests_are_reported_in_the_test_file(self) -> None:
+        files = {
+            "tests/shared.py": """
+                class SharedChecks:
+                    def test_shared(self):
+                        print(1)
+
+                    class TestNested:
+                        def test_nested(self):
+                            print(2)
+
+
+                def test_imported_function():
+                    print(3)
+                """
+        }
+        source = textwrap.dedent(
+            """
+            from tests.shared import SharedChecks, test_imported_function
+
+
+            class TestUses(SharedChecks):
+                pass
+            """
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative_path, text in files.items():
+                _write(root, relative_path, text)
+            found = CheckIndex(root).unchecked_tests("tests/test_module.py", source)
+        self.assertEqual(
+            sorted((test.name, test.line) for test in found),
+            [
+                ("TestUses::TestNested::test_nested", 5),
+                ("TestUses::test_shared", 5),
+                ("test_imported_function", 2),
+            ],
+        )
+
+    def test_a_class_nested_in_itself_ends(self) -> None:
+        source = """
+            class TestOuter:
+                class TestOuter(TestOuter):
+                    def test_inner(self):
+                        print(1)
+            """
+        self.assertIn("TestOuter::TestOuter::test_inner", _unchecked_source(source))
+
+
 class TestBaseline(unittest.TestCase):
     """The baseline tolerates listed tests and may only shrink."""
 
