@@ -28,19 +28,8 @@ TABLE_MODELS_PACKAGE = "policyengine_api.data.v2.models"
 RUNTIME_DATABASE_PACKAGES = (*DATABASE_PACKAGES, TABLE_MODELS_PACKAGE)
 FORMER_MODULE = "policyengine_api.data.v2.catalog.catalog_selection"
 FORMER_MODULE_NAME = re.compile(r"\bcatalog_selection\b")
-SEARCHED_DIRECTORIES = (
-    ".github",
-    "docs",
-    "gcp",
-    "migrations",
-    "policyengine_api",
-    "rules",
-    "scripts",
-    "tests",
-)
-SEARCHED_SUFFIXES = frozenset(
-    {".cfg", ".ini", ".md", ".py", ".sh", ".toml", ".txt", ".yaml", ".yml"}
-)
+# Release notes may name the former module: they describe past releases.
+RELEASE_NOTES = ("CHANGELOG.md", "changelog.d/")
 LOADED_MODULES_SCRIPT = """
 import importlib
 import json
@@ -136,24 +125,23 @@ def _database_modules_loaded_by(
     ]
 
 
+def _database_imports_in(path: Path, module_name: str) -> list[str]:
+    """List the imports of database code a module's own source makes.
+
+    These are SQLAlchemy, SQLModel and the v2 database module anywhere, even
+    under TYPE_CHECKING, and the v2 table models outside TYPE_CHECKING.
+    """
+    imported = _imported_modules(ast.parse(path.read_text("utf-8")), module_name)
+    return [
+        imported_name
+        for imported_name, at_runtime in imported
+        if any(_is_within(imported_name, package) for package in DATABASE_PACKAGES)
+        or (at_runtime and _is_within(imported_name, TABLE_MODELS_PACKAGE))
+    ]
+
+
 def test_the_validation_module_imports_no_database_code() -> None:
-    imported = _imported_modules(
-        ast.parse(VALIDATION_MODULE.read_text("utf-8")), VALIDATION_MODULE_NAME
-    )
-
-    database_imports = [
-        module_name
-        for module_name, _ in imported
-        if any(_is_within(module_name, package) for package in DATABASE_PACKAGES)
-    ]
-    runtime_table_model_imports = [
-        module_name
-        for module_name, at_runtime in imported
-        if at_runtime and _is_within(module_name, TABLE_MODELS_PACKAGE)
-    ]
-
-    assert database_imports == []
-    assert runtime_table_model_imports == []
+    assert _database_imports_in(VALIDATION_MODULE, VALIDATION_MODULE_NAME) == []
 
 
 def test_importing_the_validation_module_loads_no_database_code() -> None:
@@ -161,9 +149,46 @@ def test_importing_the_validation_module_loads_no_database_code() -> None:
 
 
 def test_rule_proof_selection_validation_no_database() -> None:
-    """Proof for rule api.catalog.selection-validation-no-database."""
+    """Proof for rule api.catalog.selection-validation-no-database.
+
+    Both of the rule's checks reject the bad fixture and accept the good one.
+    """
+    bad_fixture = PROOF_FIXTURES / "bad_catalog_validation.py"
+    good_fixture = PROOF_FIXTURES / "good_catalog_validation.py"
+
+    assert _database_imports_in(bad_fixture, "bad_catalog_validation")
+    assert not _database_imports_in(good_fixture, "good_catalog_validation")
     assert _database_modules_loaded_by("bad_catalog_validation", (PROOF_FIXTURES,))
     assert not _database_modules_loaded_by("good_catalog_validation", (PROOF_FIXTURES,))
+
+
+def test_only_imports_under_type_checking_count_as_annotation_only() -> None:
+    tree = ast.parse(
+        "import typing\n"
+        "from typing import TYPE_CHECKING\n"
+        "if TYPE_CHECKING:\n"
+        "    from policyengine_api.data.v2.models import Policy\n"
+        "if typing.TYPE_CHECKING:\n"
+        "    from policyengine_api.data.v2.models import Report\n"
+        "if __debug__:\n"
+        "    from policyengine_api.data.v2.models import Household\n"
+        "def load():\n"
+        "    if True:\n"
+        "        from policyengine_api.data.v2.models import Simulation\n"
+    )
+
+    at_runtime = {
+        module_name: runtime
+        for module_name, runtime in _imported_modules(tree, VALIDATION_MODULE_NAME)
+        if module_name.startswith(f"{TABLE_MODELS_PACKAGE}.")
+    }
+
+    assert at_runtime == {
+        f"{TABLE_MODELS_PACKAGE}.Policy": False,
+        f"{TABLE_MODELS_PACKAGE}.Report": False,
+        f"{TABLE_MODELS_PACKAGE}.Household": True,
+        f"{TABLE_MODELS_PACKAGE}.Simulation": True,
+    }
 
 
 def test_the_import_helper_resolves_package_and_relative_imports() -> None:
@@ -236,17 +261,29 @@ def test_no_code_imports_the_former_mixed_module() -> None:
     assert not (CATALOG_DIRECTORY / "catalog_selection.py").exists()
 
 
+def _tracked_files() -> list[str]:
+    listed = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return sorted(name for name in listed.stdout.split("\0") if name)
+
+
 def test_no_file_names_the_former_mixed_module() -> None:
-    """Catch string references too, such as mock.patch targets and docs."""
-    this_file = Path(__file__).resolve()
+    """Search every tracked file, which catches mock.patch targets and docs too."""
+    this_file = Path(__file__).resolve().relative_to(PROJECT_ROOT).as_posix()
     naming_files = [
-        str(path.relative_to(PROJECT_ROOT))
-        for directory in SEARCHED_DIRECTORIES
-        for path in sorted((PROJECT_ROOT / directory).rglob("*"))
-        if path.suffix in SEARCHED_SUFFIXES
-        and path.is_file()
-        and path.resolve() != this_file
-        and FORMER_MODULE_NAME.search(path.read_text("utf-8", errors="replace"))
+        name
+        for name in _tracked_files()
+        if name != this_file
+        and not name.startswith(RELEASE_NOTES)
+        and (PROJECT_ROOT / name).is_file()
+        and FORMER_MODULE_NAME.search(
+            (PROJECT_ROOT / name).read_text("utf-8", errors="replace")
+        )
     ]
 
     assert naming_files == []

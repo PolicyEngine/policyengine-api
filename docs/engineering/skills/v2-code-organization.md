@@ -177,8 +177,8 @@ Catalog version validation, its error types and `SelectedCatalog` live in
 `policyengine_api/data/v2/catalog/catalog_selection_validation.py`, which
 loads no database code, so validators, transformations, types and routes may
 import it (rule `api.catalog.selection-validation-no-database`). The catalog
-query itself, `select_catalog`, is in `catalog_selection_reads.py`, and only
-database connectors call it.
+query itself, `select_catalog`, is in `catalog_selection_reads.py`; the
+policies and metadata read connectors call it.
 
 Database connectors may consume service-layer input types when inserting or
 updating rows. They must not import route modules. Validators and

@@ -1,7 +1,7 @@
 """The database read that selects one v2 catalog by PolicyEngine.py version.
 
 Version validation, the error types and ``SelectedCatalog`` are in
-``catalog_selection_validation``, which imports no database code.
+``catalog_selection_validation``, which loads no database code when imported.
 """
 
 from __future__ import annotations
