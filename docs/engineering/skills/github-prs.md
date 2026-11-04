@@ -52,11 +52,13 @@ GITHUB_EVENT_PATH=/tmp/event.json GITHUB_REPOSITORY=PolicyEngine/policyengine-ap
 Automated pull requests follow the rule too:
 
 - The PolicyEngine bundle update (`update-policyengine-package.sh`) reuses the
-  oldest open "Update the PolicyEngine bundle" issue or opens one. Every open
-  bundle-update pull request names it, so closing a superseded one leaves no
-  issue behind; the first to merge closes it. A bundle-update pull request
-  opened before the rule has no `Fixes` line, and rerunning the workflow
-  doesn't add one: edit its description.
+  oldest open "Update PolicyEngine bundle to <version>" issue or opens one, so
+  each version's pull request has an issue of its own. Merging the pull
+  request closes it; closing the pull request without merging, as when a
+  newer version supersedes it, runs `close-bundle-update-issue.yml`, which
+  closes it too. A bundle-update pull request opened before the rule has no
+  `Fixes` line, and rerunning the workflow doesn't add one: edit its
+  description.
 - The daily relock (`open_relock_pull_request.sh`) reuses the open "Relock
   dependencies" issue or opens one, and rewrites the description of a relock
   pull request that is already open.

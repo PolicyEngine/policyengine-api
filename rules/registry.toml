@@ -1395,6 +1395,8 @@ scope = [
   ".github/scripts/check_pr_description.py",
   ".github/scripts/open_relock_pull_request.sh",
   ".github/scripts/update-policyengine-package.sh",
+  ".github/scripts/close_bundle_update_issue.sh",
+  ".github/workflows/close-bundle-update-issue.yml",
 ]
 tier = "mechanical"
 status = "enforced"

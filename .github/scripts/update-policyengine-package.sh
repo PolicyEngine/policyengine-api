@@ -7,10 +7,12 @@
 #
 # Every PR names its tracking issue on the first line of its description
 # (rule api.process.pr-tracking-issue): the oldest open issue titled
-# "Update the PolicyEngine bundle", or a new one when none is open. Every
-# bundle-update PR shares it, so one closed without merging, as superseded
-# ones are, leaves no issue open: the first to merge closes it, and the next
-# update opens a new one.
+# "Update PolicyEngine bundle to <version>", or a new one when none is open.
+# Each version has its own issue. Merging the PR closes it through the Fixes
+# line; close-bundle-update-issue.yml closes it when the PR is closed without
+# merging, as superseded updates are. The issue is resolved after the lock
+# and before the branch is pushed, so a failed update opens no issue and a
+# failed lookup pushes no branch.
 #
 # Environment:
 #   GH_TOKEN must be set for gh: a token that can write issues and pull
@@ -32,35 +34,41 @@ fi
 REPOSITORY="${GITHUB_REPOSITORY:-PolicyEngine/policyengine-api}"
 ISSUE_NUMBER=""
 
-# Set ISSUE_NUMBER to the oldest open tracking issue, opening one when none
-# is open. This sets a variable rather than printing, because bash
+# Set ISSUE_NUMBER to the oldest open tracking issue for LATEST, opening one
+# when none is open. This sets a variable rather than printing, because bash
 # turns off set -e inside $(...), and a failed lookup must not open a
 # duplicate issue.
 find_or_open_tracking_issue() {
-  local title="Update the PolicyEngine bundle"
+  local title="Update PolicyEngine bundle to ${LATEST}"
   local issue_number
   local issue_url
 
-  issue_number="$(
+  if ! issue_number="$(
     gh issue list \
       --repo "${REPOSITORY}" \
       --state open \
       --limit 1000 \
       --json number,title \
       --jq "map(select(.title == \"${title}\")) | sort_by(.number) | .[0].number // empty"
-  )"
+  )"; then
+    echo "Could not list the open issues in ${REPOSITORY} to find \"${title}\"." >&2
+    exit 1
+  fi
   if [[ -z "${issue_number}" ]]; then
-    issue_url="$(
+    if ! issue_url="$(
       gh issue create \
         --repo "${REPOSITORY}" \
         --title "${title}" \
-        --body "Tracks the automated PolicyEngine .py bundle updates by .github/workflows/update-policyengine-bundle.yaml. Every open bundle-update pull request names this issue on the first line of its description; the first one to merge closes it, and the next update opens a new one."
-    )"
+        --body "Tracks the automated update of the PolicyEngine .py bundle to ${LATEST} by .github/workflows/update-policyengine-bundle.yaml. The update pull request names this issue on the first line of its description. Merging the pull request closes this issue, and close-bundle-update-issue.yml closes it if the pull request is closed without merging."
+    )"; then
+      echo "Could not open the issue \"${title}\" in ${REPOSITORY}." >&2
+      exit 1
+    fi
     issue_number="${issue_url##*/}"
   fi
 
   if [[ ! "${issue_number}" =~ ^[0-9]+$ ]]; then
-    echo "Could not resolve the bundle-update tracking issue: ${issue_number}" >&2
+    echo "Could not resolve the tracking issue \"${title}\": ${issue_number}" >&2
     exit 1
   fi
   ISSUE_NUMBER="${issue_number}"
@@ -207,6 +215,8 @@ if [[ "$POLICYENGINE_VERSION" != "$LATEST" ]]; then
   exit 1
 fi
 
+find_or_open_tracking_issue
+
 FRAGMENT="changelog.d/update-policyengine-bundle-${LATEST}.changed.md"
 echo "Update the PolicyEngine bundle to ${LATEST}." > "$FRAGMENT"
 
@@ -219,7 +229,6 @@ git add pyproject.toml docker/Dockerfile uv.lock "$FRAGMENT"
 git commit -m "Update PolicyEngine bundle to ${LATEST}"
 git push -u origin "$BRANCH"
 
-find_or_open_tracking_issue
 gh pr create \
   --base master \
   --title "Update PolicyEngine bundle to ${LATEST}" \
