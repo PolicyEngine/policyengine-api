@@ -1,8 +1,8 @@
 """Exercise the isolated v2 Alembic lifecycle against disposable Postgres."""
 
 import itertools
-import os
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -15,41 +15,31 @@ from alembic.migration import MigrationContext
 from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.dialects import postgresql
 
-from policyengine_api.constants import REPO
 from policyengine_api.data.v2.migration_target import (
-    V2_ALEMBIC_DISPOSABLE_TEST,
     V2_ALEMBIC_HEAD_REVISION,
     V2MigrationTargetError,
-    load_v2_alembic_settings,
 )
 from policyengine_api.data.v2.models import V2_METADATA
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+from tests.fixtures.integration.alembic_v2 import (
+    alembic_v2_config,
+    disposable_v2_url,
+    table_columns,
+)
 
 BASELINE_REVISION = "f5ef4347cb2a"
 STAGE_11_PREVIOUS_REVISION = "af34023a728f"
 STAGE_12_PREVIOUS_REVISION = "724b1b11a33e"
 STAGE_12_COMPARISON_PREVIOUS_REVISION = "439303be14fe"
 STAGE_12A_PREVIOUS_REVISION = "91af4fc8d8c1"
+STAGE_12A_REVISION = "fbb7488ebe8a"
+COUNTRIES_PREVIOUS_REVISION = STAGE_12A_REVISION
+COUNTRIES_REVISION = "fb1a3e40d3d6"
+# The catalog format 2 revision, the parent of the area impact coordinate removal.
+CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
+AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
-
-
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    settings = load_v2_alembic_settings(
-        {
-            V2_MIGRATION_DATABASE_URL: database_url,
-            V2_ALEMBIC_DISPOSABLE_TEST: os.environ.get(V2_ALEMBIC_DISPOSABLE_TEST, ""),
-        }
-    )
-    if not settings.disposable_test:
-        pytest.fail("v2 lifecycle tests require disposable-test mode")
-    return settings.url.render_as_string(hide_password=False)
-
-
-def _config() -> Config:
-    return Config(str(REPO / "alembic-v2.ini"))
+AREA_IMPACT_TABLES = ("constituency_impacts", "local_authority_impacts")
+MAP_COORDINATE_COLUMNS = ("x", "y")
 
 
 def _assert_head(engine) -> None:
@@ -98,13 +88,19 @@ def _assert_head(engine) -> None:
         "legacy_user_mappings",
         "legacy_user_policy_mappings",
     } <= set(inspect(engine).get_table_names(schema="public"))
+    for table_name in AREA_IMPACT_TABLES:
+        assert set(MAP_COORDINATE_COLUMNS).isdisjoint(table_columns(engine, table_name))
 
 
-def _columns(engine, table_name: str) -> dict[str, dict]:
-    return {
-        column["name"]: column
-        for column in inspect(engine).get_columns(table_name, schema="public")
-    }
+def _assert_area_impact_coordinates_restored(engine: Engine) -> None:
+    """Check the catalog format 2 revision's map coordinates are required integers."""
+    _assert_revision(engine, CATALOG_FORMAT_2_REVISION)
+    for table_name in AREA_IMPACT_TABLES:
+        columns = table_columns(engine, table_name)
+        for column_name in MAP_COORDINATE_COLUMNS:
+            assert isinstance(columns[column_name]["type"], sa.Integer)
+            assert not columns[column_name]["nullable"]
+            assert columns[column_name]["default"] is None
 
 
 def _assert_pre_stage_12a_association_shape(engine) -> None:
@@ -113,7 +109,7 @@ def _assert_pre_stage_12a_association_shape(engine) -> None:
         ("user_simulation_associations", "simulation"),
         ("user_report_associations", "report"),
     ):
-        columns = _columns(engine, table_name)
+        columns = table_columns(engine, table_name)
         assert {"country", "label"} <= columns.keys()
         assert {
             "country_id",
@@ -129,10 +125,10 @@ def _assert_pre_stage_12a_association_shape(engine) -> None:
         ("user_policies", "policy"),
         ("user_household_associations", "household"),
     ):
-        columns = _columns(engine, table_name)
+        columns = table_columns(engine, table_name)
         assert f"legacy_{reference}_id" not in columns
         assert not columns[f"{reference}_id"]["nullable"]
-    user_columns = _columns(engine, "users")
+    user_columns = table_columns(engine, "users")
     assert "user_type" not in user_columns
     assert not user_columns["primary_country"]["nullable"]
 
@@ -152,7 +148,7 @@ def _assert_stage_12a_association_shape(engine) -> None:
         ("user_simulation_associations", "simulation"),
         ("user_report_associations", "report"),
     ):
-        columns = _columns(engine, table_name)
+        columns = table_columns(engine, table_name)
         assert columns[f"{reference}_id"]["nullable"]
         assert columns[f"legacy_{reference}_id"]["nullable"]
         assert not columns["country_id"]["nullable"]
@@ -175,10 +171,10 @@ def _assert_stage_12a_association_shape(engine) -> None:
     )
     assert report_policy_key["options"]["ondelete"] == "SET NULL"
     for table_name in ("user_simulation_associations", "user_report_associations"):
-        columns = _columns(engine, table_name)
+        columns = table_columns(engine, table_name)
         assert columns["country"]["nullable"]
         assert columns["label"]["nullable"]
-    user_columns = _columns(engine, "users")
+    user_columns = table_columns(engine, "users")
     assert not user_columns["user_type"]["nullable"]
     assert "standard" in user_columns["user_type"]["default"]
     assert user_columns["primary_country"]["nullable"]
@@ -187,7 +183,6 @@ def _assert_stage_12a_association_shape(engine) -> None:
         for constraint in inspect(engine).get_check_constraints("users")
     }
     assert {
-        "ck_users_primary_country",
         "ck_users_user_type",
         "ck_users_standard_primary_country",
     } <= user_checks
@@ -352,9 +347,78 @@ def _assert_base(engine: Engine) -> None:
     )
 
 
+# Every column that names a record's country, with the check it replaced.
+COUNTRY_REFERENCE_COLUMNS = {
+    ("users", "primary_country"): "ck_users_primary_country",
+    ("households", "country_id"): "ck_households_country",
+    ("policies", "country_id"): "ck_policies_country",
+    ("user_household_associations", "country_id"): (
+        "ck_user_household_associations_country"
+    ),
+    ("user_policies", "country_id"): "ck_user_policies_country",
+    ("user_simulation_associations", "country_id"): (
+        "ck_user_simulation_associations_country"
+    ),
+    ("user_report_associations", "country_id"): "ck_user_report_associations_country",
+}
+# The rows the countries revision inserts: the countries the replaced checks
+# allowed, both household and society-wide capable.
+LISTED_COUNTRIES = [("uk", True, True), ("us", True, True)]
+
+
+def _country_foreign_keys(engine, table_name: str) -> list[dict]:
+    return [
+        foreign_key
+        for foreign_key in inspect(engine).get_foreign_keys(table_name)
+        if foreign_key["referred_table"] == "countries"
+    ]
+
+
+def _check_names(engine, table_name: str) -> set[str]:
+    return {
+        constraint["name"]
+        for constraint in inspect(engine).get_check_constraints(table_name)
+    }
+
+
+def _listed_countries(engine) -> list[tuple]:
+    with engine.connect() as connection:
+        return [
+            tuple(row)
+            for row in connection.execute(
+                text(
+                    "SELECT id, household_enabled, society_wide_enabled "
+                    "FROM countries ORDER BY id"
+                )
+            )
+        ]
+
+
+def _assert_countries_shape(engine) -> None:
+    assert _listed_countries(engine) == LISTED_COUNTRIES
+    assert "ck_countries_society_wide_requires_household" in _check_names(
+        engine, "countries"
+    )
+    for (table_name, column_name), check_name in COUNTRY_REFERENCE_COLUMNS.items():
+        country_keys = _country_foreign_keys(engine, table_name)
+        assert len(country_keys) == 1, table_name
+        assert country_keys[0]["name"] == f"fk_{table_name}_{column_name}_countries"
+        assert country_keys[0]["constrained_columns"] == [column_name]
+        assert country_keys[0]["referred_columns"] == ["id"]
+        assert country_keys[0]["options"]["ondelete"] == "RESTRICT"
+        assert check_name not in _check_names(engine, table_name)
+
+
+def _assert_pre_countries_shape(engine) -> None:
+    assert "countries" not in inspect(engine).get_table_names(schema="public")
+    for (table_name, _column_name), check_name in COUNTRY_REFERENCE_COLUMNS.items():
+        assert _country_foreign_keys(engine, table_name) == []
+        assert check_name in _check_names(engine, table_name)
+
+
 def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
 
     try:
@@ -364,6 +428,17 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         }
 
         _upgrade_and_assert_head(config, engine)
+        _assert_countries_shape(engine)
+
+        command.downgrade(config, CATALOG_FORMAT_2_REVISION)
+        _assert_area_impact_coordinates_restored(engine)
+        _upgrade_and_assert_head(config, engine)
+
+        command.downgrade(config, COUNTRIES_PREVIOUS_REVISION)
+        _assert_revision(engine, COUNTRIES_PREVIOUS_REVISION)
+        _assert_pre_countries_shape(engine)
+        _upgrade_and_assert_head(config, engine)
+        _assert_countries_shape(engine)
 
         command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
         _assert_revision(engine, STAGE_12A_PREVIOUS_REVISION)
@@ -396,10 +471,10 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         engine.dispose()
 
 
-# Dormant at the parent revision: its models map these tables, and deleting a
-# user cascades through them, but no parent-revision code inserts into them.
-# They are the only tables Stage 12A may give a new required column.
-PARENT_REVISION_READ_ONLY_TABLES = frozenset(
+# Dormant at the Stage 12A parent revision: its models map these tables, and
+# deleting a user cascades through them, but no parent-revision code inserts
+# into them. They are the only tables Stage 12A may give a new required column.
+STAGE_12A_PARENT_READ_ONLY_TABLES = frozenset(
     {"user_simulation_associations", "user_report_associations"}
 )
 USER_ASSOCIATION_TABLES = (
@@ -409,8 +484,18 @@ USER_ASSOCIATION_TABLES = (
     "user_report_associations",
 )
 COUNTRY_COLUMN_NAMES = frozenset({"country", "country_id", "primary_country"})
-# Nullable references that a parent-revision check constraint requires.
-REFERENCES_REQUIRED_BY_CHECKS = frozenset({("simulations", "household_id")})
+# Nullable references that a parent-revision check constraint requires: a
+# standard user's country, and one of each association's two references.
+REFERENCES_REQUIRED_BY_CHECKS = frozenset(
+    {
+        ("simulations", "household_id"),
+        ("users", "primary_country"),
+        ("user_policies", "policy_id"),
+        ("user_household_associations", "household_id"),
+        ("user_simulation_associations", "simulation_id"),
+        ("user_report_associations", "report_id"),
+    }
+)
 # Required values that a parent-revision check constraint restricts.
 CHECKED_VALUES = {("datasets", "year"): 2026}
 
@@ -547,14 +632,33 @@ def _rewrite_mapped_columns(connection, table: sa.Table, row: dict) -> None:
     assert result.rowcount == 1, table.name
 
 
+@dataclass(frozen=True)
+class PreviousRevisionSchemas:
+    """A previous revision's reflected schema and the one it was upgraded to.
+
+    ``read_only_tables`` are the previous revision's tables that only new code
+    writes, so their test rows are inserted through the upgraded table.
+    """
+
+    parent: sa.MetaData
+    head: sa.MetaData
+    read_only_tables: frozenset[str]
+
+    def insert_table(self, table_name: str) -> sa.Table | None:
+        """Return the upgraded table for a read-only table, otherwise ``None``."""
+        if table_name in self.read_only_tables:
+            return self.head.tables[table_name]
+        return None
+
+
 def _assert_user_deletion_cascades(
     connection,
-    parent: sa.MetaData,
-    head: sa.MetaData,
+    schemas: PreviousRevisionSchemas,
     stored_rows: dict[str, dict],
     sequence: Iterator[int],
 ) -> None:
-    """Delete, through the parent's users table, a user who owns Stage 12A rows."""
+    """Delete, through the parent's users table, a user who owns association rows."""
+    parent, head = schemas.parent, schemas.head
     users = parent.tables["users"]
     owner = _insert_and_read_back(
         connection, users, _row_values(users, stored_rows, sequence)
@@ -562,11 +666,7 @@ def _assert_user_deletion_cascades(
     owner_rows = {**stored_rows, "users": owner}
     for table_name in USER_ASSOCIATION_TABLES:
         table = parent.tables[table_name]
-        head_table = (
-            head.tables[table_name]
-            if table_name in PARENT_REVISION_READ_ONLY_TABLES
-            else None
-        )
+        head_table = schemas.insert_table(table_name)
         _insert_and_read_back(
             connection,
             table,
@@ -596,25 +696,31 @@ def _assert_user_deletion_cascades(
         assert remaining == 0, table_name
 
 
-def test_stage_12a_schema_serves_the_previous_revision() -> None:
-    """Run the previous Public API revision's table usage against head.
+def _assert_revision_serves_previous_revision(
+    previous_revision: str,
+    revision: str,
+    read_only_tables: frozenset[str],
+) -> None:
+    """Run a previous Public API revision's table usage against ``revision``.
 
-    The parent revision's schema is reflected and then used, after upgrading,
+    The parent revision's schema is reflected and then used, after upgrading
+    to ``revision``, the revision it ran beside during that deploy,
     to insert a row into every table it maps (supplying only what it
     requires), read the row back with every mapped column, rewrite those
-    columns, delete it, and delete a user who owns Stage 12A rows so the
-    cascades run. Head may not give any table the parent revision writes a
-    new required column without a server default.
+    columns, delete it, and delete a user who owns association rows so the
+    cascades run. ``revision`` may not give any table the parent revision
+    writes a new required column without a server default; ``read_only_tables``
+    are the parent's tables that only new code writes.
     """
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
 
     try:
-        command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
+        command.downgrade(config, previous_revision)
         parent = sa.MetaData()
         parent.reflect(engine)
-        command.upgrade(config, "head")
+        command.upgrade(config, revision)
         head = sa.MetaData()
         head.reflect(engine)
         parent_tables = [
@@ -634,21 +740,18 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
             for table in parent_tables
             if _new_required_columns(table, head.tables[table.name])
         }
-        assert set(tables_with_new_required_columns) <= (
-            PARENT_REVISION_READ_ONLY_TABLES
-        ), tables_with_new_required_columns
+        assert set(tables_with_new_required_columns) <= read_only_tables, (
+            tables_with_new_required_columns
+        )
 
+        schemas = PreviousRevisionSchemas(parent, head, read_only_tables)
         sequence = itertools.count()
         with engine.connect() as connection:
             transaction = connection.begin()
             try:
                 stored_rows: dict[str, dict] = {}
                 for table in parent_tables:
-                    head_table = (
-                        head.tables[table.name]
-                        if table.name in PARENT_REVISION_READ_ONLY_TABLES
-                        else None
-                    )
+                    head_table = schemas.insert_table(table.name)
                     stored_rows[table.name] = _insert_and_read_back(
                         connection,
                         table,
@@ -660,7 +763,7 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
                     _rewrite_mapped_columns(connection, table, stored_rows[table.name])
 
                 _assert_user_deletion_cascades(
-                    connection, parent, head, stored_rows, sequence
+                    connection, schemas, stored_rows, sequence
                 )
 
                 for table in reversed(parent_tables):
@@ -677,9 +780,71 @@ def test_stage_12a_schema_serves_the_previous_revision() -> None:
         engine.dispose()
 
 
+def test_stage_12a_schema_serves_the_previous_revision() -> None:
+    _assert_revision_serves_previous_revision(
+        STAGE_12A_PREVIOUS_REVISION,
+        STAGE_12A_REVISION,
+        STAGE_12A_PARENT_READ_ONLY_TABLES,
+    )
+
+
+def test_countries_schema_serves_the_previous_revision() -> None:
+    """The release before the countries table keeps working during a deploy."""
+    _assert_revision_serves_previous_revision(
+        COUNTRIES_PREVIOUS_REVISION,
+        COUNTRIES_REVISION,
+        frozenset(),
+    )
+
+
+def test_area_impact_coordinate_removal_changes_nothing_else() -> None:
+    """Check that the coordinate revision drops the map coordinates and nothing else.
+
+    The revision is compared with its parent, the catalog format 2 revision. The
+    previous Public API revision still maps those four columns, but it can't
+    read or write either table: no managed database role holds any privilege
+    on them (``policyengine_api/data/v2/privileges.py``). Every table it can
+    use keeps every column.
+    """
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
+    engine = create_engine(database_url)
+
+    try:
+        command.downgrade(config, CATALOG_FORMAT_2_REVISION)
+        parent = sa.MetaData()
+        parent.reflect(engine)
+        command.upgrade(config, AREA_IMPACT_COORDINATE_REVISION)
+        head = sa.MetaData()
+        head.reflect(engine)
+
+        assert set(head.tables) == set(parent.tables)
+        dropped_columns = sorted(
+            f"{table.name}.{column.name}"
+            for table in parent.tables.values()
+            for column in table.columns
+            if column.name not in head.tables[table.name].columns
+        )
+        added_columns = sorted(
+            f"{table.name}.{column.name}"
+            for table in head.tables.values()
+            for column in table.columns
+            if column.name not in parent.tables[table.name].columns
+        )
+        assert dropped_columns == sorted(
+            f"{table_name}.{column_name}"
+            for table_name in AREA_IMPACT_TABLES
+            for column_name in MAP_COORDINATE_COLUMNS
+        )
+        assert added_columns == []
+    finally:
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
 def test_upgrade_to_head_validates_the_resulting_schema_against_metadata() -> None:
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
 
     try:
@@ -704,8 +869,8 @@ def test_upgrade_to_head_validates_the_resulting_schema_against_metadata() -> No
 
 
 def test_baseline_uses_native_uuid_report_run_idempotency() -> None:
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
 
     def idempotency_column_type():
@@ -784,8 +949,8 @@ def test_baseline_uses_native_uuid_report_run_idempotency() -> None:
 
 
 def test_baseline_region_default_enforces_same_model_dataset() -> None:
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
     first_model_id = uuid4()
     second_model_id = uuid4()
@@ -903,8 +1068,8 @@ def test_baseline_region_default_enforces_same_model_dataset() -> None:
 
 def test_stage_12a_reshape_refuses_retained_dormant_association_rows() -> None:
     """A retained pre-12A report association stops the reshape unchanged."""
-    database_url = _disposable_url()
-    config = _config()
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
     engine = create_engine(database_url)
     user_id = uuid4()
     model_id = uuid4()
@@ -956,4 +1121,177 @@ def test_stage_12a_reshape_refuses_retained_dormant_association_rows() -> None:
                 table = reflected(table_name)
                 connection.execute(sa.delete(table).where(table.c.id == row_id))
         command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_countries_revision_keeps_existing_rows_and_rejects_unlisted_countries() -> (
+    None
+):
+    """Rows saved before the revision survive it, and only listed countries pass."""
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
+    engine = create_engine(database_url)
+    user_id = uuid4()
+
+    def reflected(name: str) -> sa.Table:
+        return sa.Table(name, sa.MetaData(), autoload_with=engine)
+
+    try:
+        command.downgrade(config, COUNTRIES_PREVIOUS_REVISION)
+        with engine.begin() as connection:
+            connection.execute(
+                sa.insert(reflected("users")).values(id=user_id, primary_country="uk")
+            )
+            connection.execute(
+                sa.insert(reflected("user_report_associations")).values(
+                    id=uuid4(),
+                    user_id=user_id,
+                    country_id="uk",
+                    legacy_report_id=7,
+                )
+            )
+
+        command.upgrade(config, "head")
+        command.check(config)
+        _assert_countries_shape(engine)
+
+        with engine.connect() as connection:
+            stored_countries = connection.execute(
+                text(
+                    "SELECT users.primary_country, "
+                    "user_report_associations.country_id FROM users "
+                    "JOIN user_report_associations "
+                    "ON user_report_associations.user_id = users.id "
+                    "WHERE users.id = :user_id"
+                ),
+                {"user_id": user_id},
+            ).one()
+        assert tuple(stored_countries) == ("uk", "uk")
+
+        with engine.connect() as connection, pytest.raises(sa.exc.IntegrityError):
+            connection.execute(
+                sa.insert(reflected("user_report_associations")).values(
+                    id=uuid4(),
+                    user_id=user_id,
+                    country_id="ca",
+                    legacy_report_id=8,
+                )
+            )
+
+        with engine.connect() as connection, pytest.raises(sa.exc.IntegrityError):
+            connection.execute(text("DELETE FROM countries WHERE id = 'uk'"))
+    finally:
+        with engine.begin() as connection:
+            users = reflected("users")
+            connection.execute(sa.delete(users).where(users.c.id == user_id))
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_countries_downgrade_refuses_records_of_an_unlisted_country() -> None:
+    """The restored US-and-UK checks stop a downgrade that would orphan records."""
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
+    engine = create_engine(database_url)
+    user_id = uuid4()
+
+    try:
+        command.upgrade(config, "head")
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO countries "
+                    "(id, household_enabled, society_wide_enabled) "
+                    "VALUES ('be', true, false)"
+                )
+            )
+            connection.execute(
+                text("INSERT INTO users (id, primary_country) VALUES (:user_id, 'be')"),
+                {"user_id": user_id},
+            )
+
+        with pytest.raises(sa.exc.IntegrityError):
+            command.downgrade(config, COUNTRIES_PREVIOUS_REVISION)
+
+        with engine.connect() as connection:
+            context = MigrationContext.configure(connection)
+            assert context.get_current_revision() == V2_ALEMBIC_HEAD_REVISION
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM users WHERE id = :user_id"), {"user_id": user_id}
+            )
+            connection.execute(text("DELETE FROM countries WHERE id = 'be'"))
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_a_household_only_country_row_lets_records_name_that_country() -> None:
+    """Once a household-only country has a row, its records can be stored."""
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
+    engine = create_engine(database_url)
+    user_id = uuid4()
+    household_id = uuid4()
+
+    try:
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            transaction = connection.begin()
+            try:
+                with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
+                    connection.execute(
+                        text(
+                            "INSERT INTO users (id, primary_country) "
+                            "VALUES (:user_id, 'be')"
+                        ),
+                        {"user_id": user_id},
+                    )
+
+                connection.execute(
+                    text(
+                        "INSERT INTO countries "
+                        "(id, household_enabled, society_wide_enabled) "
+                        "VALUES ('be', true, false)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO users (id, primary_country) "
+                        "VALUES (:user_id, 'be')"
+                    ),
+                    {"user_id": user_id},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO households (id, country_id, household_data, "
+                        "canonicalization_version, content_hash) VALUES "
+                        "(:household_id, 'be', '{}'::jsonb, 1, :content_hash)"
+                    ),
+                    {"household_id": household_id, "content_hash": "c" * 64},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO user_household_associations "
+                        "(id, user_id, household_id, country_id) VALUES "
+                        "(:association_id, :user_id, :household_id, 'be')"
+                    ),
+                    {
+                        "association_id": uuid4(),
+                        "user_id": user_id,
+                        "household_id": household_id,
+                    },
+                )
+
+                with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
+                    connection.execute(
+                        text(
+                            "INSERT INTO countries "
+                            "(id, household_enabled, society_wide_enabled) "
+                            "VALUES ('xx', false, true)"
+                        )
+                    )
+            finally:
+                transaction.rollback()
+    finally:
         engine.dispose()

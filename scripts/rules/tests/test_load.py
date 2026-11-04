@@ -123,7 +123,8 @@ class RuleTableTest(unittest.TestCase):
                 "Fix: write [[rule.exception]].",
                 "[ex.layers.malformed] schema: unknown key 'extra' in "
                 "ex.layers.malformed.exception. Fix: remove it or use one of "
-                "['expires', 'path', 'reason'].",
+                "['category', 'expires', 'issue', 'match', 'path', 'reason', "
+                "'removal'].",
                 f"{MALFORMED}.exception.expires must be a date. "
                 "Fix: write it as YYYY-MM-DD.",
                 f"{MALFORMED}.downgrade needs a 'reason'. "

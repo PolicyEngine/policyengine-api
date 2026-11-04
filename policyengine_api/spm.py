@@ -354,7 +354,12 @@ def build_spm_comparison_provenance(
 
 
 class SPMValidationError(ValueError):
-    """An SPM request/configuration error safe for the API's 4xx envelope."""
+    """An SPM request/configuration error safe for the API's 4xx envelope.
+
+    It also carries the simulation service's other typed input errors, such
+    as ``DATASET_YEAR_UNAVAILABLE`` (see ``worker_spm.WORKER_INPUT_ERROR_CODES``),
+    so they are stored and replayed with their code in the same way.
+    """
 
     def __init__(self, code: str, message: str) -> None:
         """Record a stable machine-readable error code and the client-facing message."""
@@ -633,7 +638,7 @@ def _resolve_certified_selection(
     except (AttributeError, ImportError, ValueError, TypeError, OSError) as error:
         # A country package installed without its Simulation raises AttributeError
         # here. The capability probe already reads that as "no canonical model";
-        # letting it escape instead would make /readiness-check raise rather than
+        # letting it escape instead would make /health raise rather than
         # report not-ready, and every US request a 500 rather than a typed 400.
         error_code = "SPM_CONFIGURATION_UNAVAILABLE"
         raise SPMValidationError(error_code, error_message(error)) from error
@@ -732,6 +737,25 @@ def spm_metadata(country_id: str) -> dict:
         "settings_schema": SPMSelection.model_json_schema(),
         "defaults": defaults,
     }
+
+
+def certified_spm_forecast_years() -> tuple[int, ...] | None:
+    """Return the years the bundle's certified US SPM forecast covers.
+
+    The US model refuses an SPM calculation in any other year
+    (``SPM_YEAR_UNAVAILABLE``). Return None in the cases in which
+    ``spm_metadata`` reports SPM as unavailable: the bundle certifies no
+    forecast, or the certified one cannot be loaded. The forecast file is read
+    once per process and shared with ``spm_metadata``.
+    """
+    try:
+        defaults = normalize_spm_selection("us", None)
+    except SPMValidationError:
+        return None
+    if defaults is None:
+        return None
+    forecast = _selected_forecast(defaults["forecast_content_sha256"])
+    return tuple(int(year) for year in forecast.years)
 
 
 def calculation_spm_receipt(simulation: Simulation) -> dict:

@@ -46,7 +46,7 @@ class Country:
             "age": {"entity": "person", "definitionPeriod": "year", "name": "age"}
         },
         "entities": {"person": {"plural": "people", "roles": {}}},
-        "parameters": {"gov.test.amount": {}},
+        "parameters": {"gov.test.amount": {"type": "parameter"}},
     }
 
     def __init__(self):

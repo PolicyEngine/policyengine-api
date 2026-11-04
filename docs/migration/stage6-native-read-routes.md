@@ -71,3 +71,14 @@ ROUTE_IMPL_METADATA=fastapi_native
 Record the tested staging and production revision names, the production
 observation window, and any rollback action in the tracking issue or pull
 request.
+
+## Later removals
+
+`GET /specification` and the `GET /` landing page are removed: only the API
+documentation used them, and `/v2/openapi.json` documents the v2 resources.
+`/liveness-check` and `/readiness-check` are removed too. `/health` takes the
+readiness behaviour: it answers 503 until the startup warmup has finished and
+while the runtime configuration is invalid, and the Cloud Run startup probe and
+the deployment health checks poll it. `ROUTE_IMPL_HEALTH` and
+`ROUTE_IMPL_SPECIFICATION` no longer select a route, but the deployment
+pipeline still requires and verifies them until the Flask fallback is removed.

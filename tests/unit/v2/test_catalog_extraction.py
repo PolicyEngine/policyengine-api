@@ -300,9 +300,61 @@ def test_rejects_incomplete_public_model_catalogs() -> None:
             installed_version=installed_version,
         )
 
+
+def _use_another_default(model: SimpleNamespace, dataset_name: str) -> None:
+    """Make the release default to another dataset, which its national region uses."""
+    manifest = model.release_manifest
+    manifest.default_dataset = dataset_name
+    manifest.default_dataset_uri = f"hf://policyengine/{dataset_name}.h5@fixture"
+    for region in model.region_registry:
+        if region.region_type == "national":
+            region.dataset_path = manifest.default_dataset_uri
+
+
+def test_each_country_uses_the_default_dataset_its_release_names() -> None:
+    """The release's own default is used; the Public API fixes none of its own."""
     models = source_models()
-    models["us"].release_manifest.default_dataset = "unreviewed_us_2025"
-    with pytest.raises(CatalogExtractionError, match="reviewed selection"):
+    _use_another_default(models["us"], "populace_us_2025")
+    _use_another_default(models["uk"], "microcosm_uk_2025_26")
+
+    catalog = extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    )
+
+    for country_id, default_dataset in (
+        ("us", "populace_us_2025"),
+        ("uk", "microcosm_uk_2025_26"),
+    ):
+        country = catalog.country(country_id)
+        dataset_names = {dataset.id: dataset.name for dataset in country.datasets}
+        national = next(
+            region for region in country.regions if region.region_type == "national"
+        )
+        assert dataset_names[national.default_dataset_id] == default_dataset
+        assert default_dataset in set(dataset_names.values())
+        assert not {"populace_us_2024", "microcosm_uk_2024_25"} & set(
+            dataset_names.values()
+        )
+
+
+@pytest.mark.parametrize(
+    ("default_dataset", "message"),
+    [
+        (None, "^us release manifest names no default dataset$"),
+        ("", "^us release manifest names no default dataset$"),
+    ],
+)
+def test_a_missing_release_default_fails(
+    default_dataset: str | None,
+    message: str,
+) -> None:
+    models = source_models()
+    models["us"].release_manifest.default_dataset = default_dataset
+
+    with pytest.raises(CatalogExtractionError, match=message):
         extract_catalog(
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,
@@ -511,6 +563,49 @@ def test_extractor_has_no_direct_core_country_or_v1_metadata_imports() -> None:
         / "v2"
         / "catalog"
         / "extraction.py"
+    )
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    imported_modules = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+    }
+
+    assert not any(
+        module.startswith(
+            (
+                "policyengine_core",
+                "policyengine_us",
+                "policyengine_uk",
+                "policyengine_api.country",
+                "policyengine_api.services.metadata_service",
+            )
+        )
+        for module in imported_modules
+    )
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "extraction_regions.py",
+        "extraction_values.py",
+        "extraction_variables_and_parameters.py",
+    ],
+)
+def test_extractor_modules_have_no_direct_core_country_or_v1_metadata_imports(
+    module_name: str,
+) -> None:
+    source_path = (
+        Path(__file__).parents[3]
+        / "policyengine_api"
+        / "data"
+        / "v2"
+        / "catalog"
+        / module_name
     )
     tree = ast.parse(source_path.read_text(encoding="utf-8"))
     imported_modules = {

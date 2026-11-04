@@ -11,7 +11,6 @@ from policyengine_api.services.household_service import (
 )
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.simulation_service import SimulationService
-from policyengine_api.services.user_service import UserService
 
 ROUTE_ROOT = Path(__file__).parents[3] / "policyengine_api" / "routes"
 
@@ -25,7 +24,7 @@ ROUTE_ROOT = Path(__file__).parents[3] / "policyengine_api" / "routes"
         ),
         (
             PolicyService,
-            ("get_policy", "get_policy_json", "search_policies", "set_policy"),
+            ("get_policy", "get_policy_json", "set_policy"),
         ),
         (
             SimulationService,
@@ -35,7 +34,6 @@ ROUTE_ROOT = Path(__file__).parents[3] / "policyengine_api" / "routes"
                 "update_simulation",
             ),
         ),
-        (UserService, ("get_profile", "create_profile", "update_profile")),
     ],
 )
 def test_core_service_public_methods_do_not_accept_sessions(
@@ -54,7 +52,6 @@ def test_core_service_public_methods_do_not_accept_sessions(
         "household_routes.py",
         "policy_routes.py",
         "simulation_routes.py",
-        "user_profile_routes.py",
     ],
 )
 def test_core_routes_do_not_manage_sessions(module_name):

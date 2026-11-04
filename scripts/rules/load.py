@@ -296,6 +296,53 @@ def _baseline(
     return None
 
 
+_EXCEPTION_KEYS = {"path", "reason", "expires", "match", "category", "removal", "issue"}
+
+
+def _optional_string(
+    collector: _Collector,
+    rule_id: str | None,
+    entry: dict[str, Any],
+    key: str,
+    where: str,
+) -> str | None:
+    if key not in entry:
+        return None
+    return collector.string(rule_id, entry, key, where)
+
+
+def _exception(
+    collector: _Collector, rule_id: str | None, entry: dict[str, Any], where: str
+) -> RuleException:
+    """Parse one ``[[rule.exception]]``: it ends on ``expires``, ``removal`` or never.
+
+    An exception with neither ``removal`` nor ``category`` needs ``expires``.
+    """
+    collector.unknown_keys(rule_id, entry, _EXCEPTION_KEYS, where)
+    removal = _optional_string(collector, rule_id, entry, "removal", where)
+    category = _optional_string(collector, rule_id, entry, "category", where)
+    expires = None
+    if "expires" in entry or (removal is None and category is None):
+        expires = (
+            collector.day(rule_id, entry.get("expires"), f"{where}.expires") or date.max
+        )
+    issue = entry.get("issue")
+    if issue is not None and (not isinstance(issue, int) or isinstance(issue, bool)):
+        collector.add(
+            rule_id, f"{where}.issue must be an issue number", "set issue = <number>"
+        )
+        issue = None
+    return RuleException(
+        collector.string(rule_id, entry, "path", where),
+        collector.string(rule_id, entry, "reason", where),
+        expires,
+        _optional_string(collector, rule_id, entry, "match", where),
+        category,
+        removal,
+        issue,
+    )
+
+
 def _exceptions(
     c: _Collector, rule_id: str | None, raw: dict[str, Any], label: str
 ) -> tuple[RuleException, ...]:
@@ -310,17 +357,7 @@ def _exceptions(
                 "write [[rule.exception]]",
             )
             continue
-        c.unknown_keys(
-            rule_id, entry, {"path", "reason", "expires"}, f"{label}.exception"
-        )
-        expires = c.day(rule_id, entry.get("expires"), f"{label}.exception.expires")
-        exceptions.append(
-            RuleException(
-                c.string(rule_id, entry, "path", f"{label}.exception"),
-                c.string(rule_id, entry, "reason", f"{label}.exception"),
-                expires or date.max,
-            )
-        )
+        exceptions.append(_exception(c, rule_id, entry, f"{label}.exception"))
     return tuple(exceptions)
 
 

@@ -1,0 +1,17 @@
+# Proof fixture for api.quality.file-length (the rejected case).
+#
+# The proof test writes each file below into a temporary directory with the
+# given number of lines, then runs the guard's scan on it. Every file is one
+# line over its limit, so the guard must report every one. The files are
+# described here instead of committed, because a committed file this long
+# would itself break the rule.
+
+[files]
+# Source files: the limit is 800 lines.
+"policyengine_api/services/oversized_service.py" = 801
+"policyengine_api/test_named_helper.py" = 801
+"migrations/v2/env.py" = 801
+# Test code (under tests or fixtures, or a conftest.py): the limit is 1,500.
+"tests/unit/test_oversized_service.py" = 1501
+"rules/fixtures/example/oversized_fixture.py" = 1501
+"conftest.py" = 1501

@@ -1,0 +1,12 @@
+name: Nightly
+on:
+  schedule:
+    - cron: "0 7 * * *"
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Relocks without upgrades and proposes nothing.
+      - name: Lock
+        run: uv lock

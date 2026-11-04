@@ -1,13 +1,17 @@
 """Structural contract tests for the complete reviewed v2 SQLModel schema."""
 
+from typing import Literal
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateTable
+from sqlmodel.sql.sqltypes import AutoString
 
 from policyengine_api.data.v1_models import V1Base
 from policyengine_api.data.v2.models import (
     V2_METADATA,
+    Country,
     DatasetVersion,
     Dynamic,
     Household,
@@ -16,6 +20,7 @@ from policyengine_api.data.v2.models import (
     LegacyPolicyMapping,
     LegacyUserMapping,
     LegacyUserPolicyMapping,
+    ParameterTreeChild,
     ParameterValue,
     Policy,
     Simulation,
@@ -27,6 +32,18 @@ from policyengine_api.data.v2.models import (
     UserReportAssociation,
     UserSimulationAssociation,
     UserType,
+)
+
+# Every column that names the country a record belongs to. Each references the
+# countries table instead of checking a fixed list of country IDs.
+COUNTRY_REFERENCE_COLUMNS = (
+    ("users", "primary_country"),
+    ("households", "country_id"),
+    ("policies", "country_id"),
+    ("user_household_associations", "country_id"),
+    ("user_policies", "country_id"),
+    ("user_simulation_associations", "country_id"),
+    ("user_report_associations", "country_id"),
 )
 
 RUN_OUTPUT_TABLES = frozenset(
@@ -48,6 +65,7 @@ RUN_OUTPUT_TABLES = frozenset(
 
 def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
     expected_modules = {
+        Country: "countries",
         User: "users",
         UserIdentity: "users",
         Policy: "policies",
@@ -354,8 +372,8 @@ def test_standard_users_require_a_supported_primary_country() -> None:
         for constraint in users.constraints
         if isinstance(constraint, sa.CheckConstraint)
     }
+    # The countries table, not a check, lists the countries a user may choose.
     assert checks == {
-        "ck_users_primary_country": "primary_country IN ('us', 'uk')",
         "ck_users_user_type": "user_type IN ('unauthenticated', 'standard')",
         "ck_users_standard_primary_country": (
             "user_type = 'unauthenticated' OR primary_country IS NOT NULL"
@@ -440,6 +458,11 @@ def test_run_outputs_reference_report_runs_not_base_reports() -> None:
         assert foreign_key.ondelete == "CASCADE"
 
 
+def test_uk_area_impacts_store_no_map_coordinates() -> None:
+    for table_name in ("constituency_impacts", "local_authority_impacts"):
+        assert {"x", "y"}.isdisjoint(V2_METADATA.tables[table_name].c.keys())
+
+
 def test_report_rerun_constraints_allow_same_versions_but_deduplicate_requests() -> (
     None
 ):
@@ -474,7 +497,8 @@ def test_named_checks_and_required_indexes_cover_core_invariants() -> None:
     assert {
         "ck_regions_required_filter_values",
         "ck_simulations_type_input",
-        "ck_users_primary_country",
+        "ck_users_standard_primary_country",
+        "ck_countries_society_wide_requires_household",
         "ck_report_runs_terminal_completion",
         "ck_parameter_values_single_owner",
     }.issubset(constraint_names)
@@ -607,10 +631,11 @@ def test_simulation_and_report_associations_have_no_cross_service_keys() -> None
         assert table.c.label.nullable
     assert {
         foreign_key.target_fullname for foreign_key in simulations.foreign_keys
-    } == {"users.id"}
+    } == {"users.id", "countries.id"}
     assert {foreign_key.target_fullname for foreign_key in reports.foreign_keys} == {
         "users.id",
         "user_policies.id",
+        "countries.id",
     }
     user_policy_key = next(iter(reports.c.user_policy_id.foreign_keys))
     assert user_policy_key.ondelete == "SET NULL"
@@ -635,3 +660,276 @@ def test_user_policy_records_v3_reform_fields() -> None:
     assert "current-policy" in str(baseline_check.sqltext)
     postgres_type = policies.c.provenance.type.dialect_impl(postgresql.dialect())
     assert isinstance(postgres_type, postgresql.JSONB)
+
+
+def test_countries_record_household_and_society_wide_capability() -> None:
+    countries = V2_METADATA.tables["countries"]
+
+    assert countries.c.keys() == ["id", "household_enabled", "society_wide_enabled"]
+    assert countries.primary_key.columns.keys() == ["id"]
+    assert countries.primary_key.name == "pk_countries"
+    assert countries.c.id.type.length == 2
+    for flag_name in ("household_enabled", "society_wide_enabled"):
+        assert isinstance(countries.c[flag_name].type, sa.Boolean)
+        assert not countries.c[flag_name].nullable
+        assert countries.c[flag_name].server_default is None
+    checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in countries.constraints
+        if isinstance(constraint, sa.CheckConstraint)
+    }
+    # Society-wide reports need household calculations, so a society-wide
+    # country is always household capable too.
+    assert checks == {
+        "ck_countries_society_wide_requires_household": (
+            "household_enabled OR NOT society_wide_enabled"
+        ),
+    }
+
+
+def test_country_columns_reference_the_countries_table_instead_of_a_fixed_list() -> (
+    None
+):
+    for table_name, column_name in COUNTRY_REFERENCE_COLUMNS:
+        table = V2_METADATA.tables[table_name]
+        country_keys = [
+            foreign_key
+            for foreign_key in table.c[column_name].foreign_keys
+            if foreign_key.column.table.name == "countries"
+        ]
+        assert len(country_keys) == 1, table_name
+        assert country_keys[0].target_fullname == "countries.id"
+        assert country_keys[0].ondelete == "RESTRICT"
+        assert country_keys[0].constraint.name == (
+            f"fk_{table_name}_{column_name}_countries"
+        )
+        fixed_country_checks = [
+            constraint.name
+            for constraint in table.constraints
+            if isinstance(constraint, sa.CheckConstraint)
+            and "'us', 'uk'" in str(constraint.sqltext)
+        ]
+        assert fixed_country_checks == [], table_name
+
+
+def test_v1_copy_mappings_keep_their_us_and_uk_checks() -> None:
+    # These tables pair v1 records with their v2 copies. Each already
+    # references a v2 record of the same country, and they are removed with
+    # dual-write, so they keep their fixed checks.
+    for table_name in (
+        "legacy_household_mappings",
+        "legacy_policy_mappings",
+        "legacy_user_policy_mappings",
+    ):
+        table = V2_METADATA.tables[table_name]
+        assert f"ck_{table_name}_country" in {
+            constraint.name for constraint in table.constraints
+        }
+        assert "countries.id" not in {
+            foreign_key.target_fullname for foreign_key in table.foreign_keys
+        }
+
+
+def test_catalog_format_2_columns_are_nullable_for_earlier_versions() -> None:
+    """Catalog format 2 stores v3's metadata; versions published before it keep null.
+
+    The model version records its catalog format, entities and basic inputs; each
+    variable its input flags, module, parameter-named parts and enum labels; each
+    parameter its economy and household flags.
+    """
+    expected_columns = {
+        "tax_benefit_model_versions": {
+            "catalog_format": sa.Integer,
+            "entities": sa.JSON,
+            "basic_inputs": sa.JSON,
+        },
+        "variables": {
+            "is_input_variable": sa.Boolean,
+            "hidden_input": sa.Boolean,
+            "module_name": AutoString,
+            "adds_parameter_path": AutoString,
+            "subtracts_parameter_path": AutoString,
+            "enum_values": sa.JSON,
+            "unit": AutoString,
+            "definition_period": AutoString,
+        },
+        "parameters": {
+            "economy": sa.Boolean,
+            "household": sa.Boolean,
+        },
+    }
+
+    for table_name, columns in expected_columns.items():
+        table = V2_METADATA.tables[table_name]
+        for column_name, column_type in columns.items():
+            column = table.c[column_name]
+            assert column.nullable, f"{table_name}.{column_name}"
+            assert column.server_default is None, f"{table_name}.{column_name}"
+            assert isinstance(column.type, column_type), f"{table_name}.{column_name}"
+
+    variables = V2_METADATA.tables["variables"]
+    for column_name in (
+        "module_name",
+        "adds_parameter_path",
+        "subtracts_parameter_path",
+    ):
+        assert variables.c[column_name].type.length == 512
+    assert variables.c["unit"].type.length == 128
+    assert variables.c["definition_period"].type.length == 32
+
+
+def test_catalog_format_2_json_columns_have_typed_shapes() -> None:
+    """The entity and enum-value columns name typed shapes the catalog records match.
+
+    Readers of these columns get the keys and value types without re-checking.
+    """
+    from typing import get_type_hints
+
+    from policyengine_api.data.v2.catalog.records import EntityRecord, EnumValueRecord
+    from policyengine_api.data.v2.models import (
+        CatalogEntity,
+        CatalogEnumValue,
+        Variable,
+    )
+
+    assert TaxBenefitModelVersion.model_fields["entities"].annotation == (
+        list[CatalogEntity] | None
+    )
+    assert Variable.model_fields["enum_values"].annotation == (
+        list[CatalogEnumValue] | None
+    )
+    for typed_shape, record in (
+        (CatalogEntity, EntityRecord),
+        (CatalogEnumValue, EnumValueRecord),
+    ):
+        assert get_type_hints(typed_shape) == get_type_hints(record)
+
+
+def test_parameter_tree_children_have_one_row_per_path_in_listing_order() -> None:
+    """Each version's tree rows are unique by path and listed per parent by index.
+
+    The full listing and the listing of what a reform can change each read one
+    unique index (version, parent path, position); a parameter row references
+    its parameter, and both references are removed with their rows.
+    """
+    table = V2_METADATA.tables["parameter_tree_children"]
+
+    assert {column.name for column in table.columns} == {
+        "id",
+        "created_at",
+        "tax_benefit_model_version_id",
+        "parent_path",
+        "path",
+        "position",
+        "label",
+        "child_type",
+        "child_count",
+        "reform_position",
+        "reform_child_count",
+        "parameter_id",
+        "economy",
+        "household",
+    }
+    for column_name in ("parent_path", "path", "label"):
+        assert table.c[column_name].type.length == 512
+        assert not table.c[column_name].nullable
+    for column_name in (
+        "child_count",
+        "reform_position",
+        "reform_child_count",
+        "parameter_id",
+        "economy",
+        "household",
+    ):
+        assert table.c[column_name].nullable
+    unique_constraints = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in table.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert ("tax_benefit_model_version_id", "path") in unique_constraints
+    indexes = {
+        index.name: (tuple(column.name for column in index.columns), index.unique)
+        for index in table.indexes
+    }
+    assert indexes["ix_parameter_tree_children_listing"] == (
+        ("tax_benefit_model_version_id", "parent_path", "position"),
+        True,
+    )
+    assert indexes["ix_parameter_tree_children_reform_listing"] == (
+        ("tax_benefit_model_version_id", "parent_path", "reform_position"),
+        True,
+    )
+    assert indexes["ix_parameter_tree_children_parameter_id"] == (
+        ("parameter_id",),
+        False,
+    )
+    foreign_keys = {
+        foreign_key.parent.name: (foreign_key.column.table.name, foreign_key.ondelete)
+        for foreign_key in table.foreign_keys
+    }
+    assert foreign_keys == {
+        "tax_benefit_model_version_id": ("tax_benefit_model_versions", "CASCADE"),
+        "parameter_id": ("parameters", "CASCADE"),
+    }
+    checks = {
+        constraint.name
+        for constraint in table.constraints
+        if isinstance(constraint, sa.CheckConstraint)
+    }
+    assert checks == {
+        "ck_parameter_tree_children_child_type",
+        "ck_parameter_tree_children_parameter_reference",
+    }
+
+
+def test_parameter_tree_child_type_is_typed_with_its_two_values() -> None:
+    """Reads of a tree row keep the child type's two values as a type."""
+    annotation = ParameterTreeChild.model_fields["child_type"].annotation
+
+    assert annotation == Literal["node", "parameter"]
+    column = V2_METADATA.tables["parameter_tree_children"].c["child_type"]
+    assert isinstance(column.type, AutoString)
+    assert column.type.length == 16
+
+
+def test_parameter_search_files_hold_one_compressed_file_per_version() -> None:
+    """Each catalog version has one search file per format, removed with it.
+
+    The row holds the gzip-compressed JSON, its file format, the SHA-256 of the
+    uncompressed JSON (the response's ETag) and both sizes.
+    """
+    table = V2_METADATA.tables["parameter_search_files"]
+
+    assert {column.name for column in table.columns} == {
+        "id",
+        "created_at",
+        "tax_benefit_model_version_id",
+        "file_format",
+        "compressed_content",
+        "content_sha256",
+        "uncompressed_size",
+        "compressed_size",
+    }
+    for column in table.columns:
+        assert not column.nullable, column.name
+    assert isinstance(table.c["compressed_content"].type, sa.LargeBinary)
+    assert table.c["content_sha256"].type.length == 64
+    unique_constraints = {
+        constraint.name: tuple(column.name for column in constraint.columns)
+        for constraint in table.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert unique_constraints == {
+        "uq_parameter_search_files_model_version_format": (
+            "tax_benefit_model_version_id",
+            "file_format",
+        )
+    }
+    foreign_keys = {
+        foreign_key.parent.name: (foreign_key.column.table.name, foreign_key.ondelete)
+        for foreign_key in table.foreign_keys
+    }
+    assert foreign_keys == {
+        "tax_benefit_model_version_id": ("tax_benefit_model_versions", "CASCADE"),
+    }

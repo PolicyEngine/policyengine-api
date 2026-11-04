@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import math
 from threading import RLock
 from typing import TYPE_CHECKING, Self
 
 from typing_extensions import override
+
+from policyengine_api.runtime_cache.core import PTTL_MISSING_KEY, PTTL_NO_EXPIRY
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -103,6 +106,17 @@ class InMemoryCacheBackend:
                 return False
             self._expires[key] = self._now() + seconds
             return True
+
+    def pttl(self, key: str) -> int:
+        """Emulate PTTL: milliseconds left, -2 for a missing key, -1 for no expiry."""
+        with self._lock:
+            self._purge(key)
+            if key not in self._values and key not in self._sorted_sets:
+                return PTTL_MISSING_KEY
+            expires_at = self._expires.get(key)
+            if expires_at is None:
+                return PTTL_NO_EXPIRY
+            return math.ceil((expires_at - self._now()) * 1000)
 
     def zadd(self, key: str, mapping: dict[str, float]) -> int:
         """Emulate ZADD without flags: upsert scores and count new members only."""
@@ -261,6 +275,11 @@ class DisabledCacheBackend(InMemoryCacheBackend):
     def expire(self, key: str, seconds: int) -> bool:
         """Return False, as Redis does for a key that does not exist."""
         return False
+
+    @override
+    def pttl(self, key: str) -> int:
+        """Return -2, as Redis does for a key that does not exist."""
+        return PTTL_MISSING_KEY
 
     @override
     def eval(

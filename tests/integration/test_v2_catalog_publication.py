@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import gzip
+import hashlib
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from alembic import command
@@ -15,10 +21,13 @@ from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session, select
 
+from policyengine_api.data.v2.catalog import publication as publication_module
+from policyengine_api.data.v2.catalog.extraction import extract_catalog
 from policyengine_api.data.v2.catalog.publication import (
     CatalogPublicationError,
     publish_catalog,
 )
+from policyengine_api.data.v2.catalog.records import EnumValueRecord
 from policyengine_api.data.v2.models import (
     Dataset,
     DatasetVersion,
@@ -29,8 +38,28 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.data.v2.privileges import CATALOG_WRITER_ROLE
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
-from tests.fixtures.v2_catalog import normalized_catalog
+from tests.fixtures.v2_catalog import (
+    POLICYENGINE_VERSION,
+    add_format_2_variable_records,
+    bundle,
+    installed_version,
+    normalized_catalog,
+    source_models,
+)
+from tests.fixtures.v2_catalog_value_shapes import (
+    PARAMETER_CASES,
+    REGION_FILTER_VALUES,
+    value_shape_catalog,
+)
+from tests.integration.catalog_rows import (
+    CATALOG_COLUMNS,
+    assert_catalog_stored_unchanged,
+    stored_catalog_rows,
+    stored_parameter_values,
+    strict_json,
+)
 
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
@@ -340,3 +369,872 @@ def test_new_version_is_additive_and_concurrent_retries_serialize(
         "reports": 0,
         "report_runs": 0,
     }
+
+
+def test_publication_stores_every_value_shape_unchanged(
+    publication_engine: Engine,
+) -> None:
+    catalog = value_shape_catalog()
+
+    publish_catalog(publication_engine, catalog)
+    # Publishing the same version again compares every stored row with the
+    # catalog in both directions and fails on any difference, so this also
+    # checks that the comparison reads each shape back as it was written.
+    publish_catalog(publication_engine, catalog)
+
+    assert_catalog_stored_unchanged(publication_engine, catalog)
+    stored_values = stored_parameter_values(publication_engine)
+    us_model = catalog.country("us").model.name
+    for case in PARAMETER_CASES:
+        assert [
+            value_json
+            for (model_name, parameter_name, _start), (value_json, _end) in sorted(
+                stored_values.items()
+            )
+            if (model_name, parameter_name) == (us_model, case.name)
+        ] == [strict_json(value.stored_value) for value in case.values], case.name
+
+    stored_regions = stored_catalog_rows(publication_engine, "regions")
+    filter_value_index = CATALOG_COLUMNS["regions"].index("filter_value") - 1
+    for (country_id, code), filter_value in REGION_FILTER_VALUES.items():
+        model_name = catalog.country(country_id).model.name
+        stored_columns = json.loads(stored_regions[(model_name, code)])
+        assert stored_columns[filter_value_index] == filter_value, code
+
+
+def _format_2_values(engine: Engine) -> dict[str, object]:
+    """Return the US version's stored catalog format 2 fields."""
+    with engine.connect() as connection:
+        version = connection.execute(
+            text(
+                "SELECT version.catalog_format, version.entities, version.basic_inputs "
+                "FROM tax_benefit_model_versions AS version "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = 'policyengine-us'"
+            )
+        ).one()
+        variable = connection.execute(
+            text(
+                "SELECT is_input_variable, hidden_input, module_name, "
+                "adds_parameter_path, subtracts_parameter_path, enum_values, "
+                "unit, definition_period "
+                "FROM variables WHERE name = 'employment_income' "
+                "AND tax_benefit_model_version_id = ("
+                "SELECT version.id FROM tax_benefit_model_versions AS version "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = 'policyengine-us')"
+            )
+        ).one()
+        parameter = connection.execute(
+            text(
+                "SELECT economy, household FROM parameters "
+                "WHERE name = 'gov.example.rate' "
+                "AND tax_benefit_model_version_id = ("
+                "SELECT version.id FROM tax_benefit_model_versions AS version "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = 'policyengine-us')"
+            )
+        ).one()
+    return {
+        "version": tuple(version),
+        "variable": tuple(variable),
+        "parameter": tuple(parameter),
+    }
+
+
+def _clear_format_2_fields(engine: Engine) -> None:
+    """Make every stored version look as if published before catalog format 2."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE tax_benefit_model_versions SET catalog_format = NULL, "
+                "entities = NULL, basic_inputs = NULL"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE variables SET is_input_variable = NULL, hidden_input = NULL, "
+                "module_name = NULL, adds_parameter_path = NULL, "
+                "subtracts_parameter_path = NULL, enum_values = NULL, "
+                "unit = NULL, definition_period = NULL"
+            )
+        )
+        connection.execute(
+            text("UPDATE parameters SET economy = NULL, household = NULL")
+        )
+
+
+def test_publication_stores_catalog_format_2_fields(
+    publication_engine: Engine,
+) -> None:
+    publish_catalog(publication_engine, normalized_catalog())
+
+    assert _format_2_values(publication_engine) == {
+        "version": (
+            2,
+            [
+                {"key": "person", "plural": "people", "is_person": True},
+                {"key": "household", "plural": "households", "is_person": False},
+            ],
+            ["employment_income"],
+        ),
+        "variable": (
+            True,
+            False,
+            "household.income.employment_income",
+            None,
+            None,
+            None,
+            "currency-USD",
+            "year",
+        ),
+        "parameter": (True, False),
+    }
+
+
+def test_version_stored_before_format_2_keeps_its_fields_empty_on_republish(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+    publish_catalog(publication_engine, catalog)
+    _clear_format_2_fields(publication_engine)
+    before_ids = _identifiers(publication_engine)
+
+    result = publish_catalog(publication_engine, catalog)
+
+    assert result.as_dict()["outcome"] == "ok"
+    assert _identifiers(publication_engine) == before_ids
+    assert _format_2_values(publication_engine) == {
+        "version": (None, None, None),
+        "variable": (None, None, None, None, None, None, None, None),
+        "parameter": (None, None),
+    }
+
+
+def test_version_stored_with_format_2_fails_when_a_format_2_field_changes(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+    publish_catalog(publication_engine, catalog)
+    before_counts = _counts(publication_engine)
+    us = catalog.country("us")
+    changed_parameter = replace(us.parameters[0], household=True)
+    changed = replace(
+        catalog,
+        countries=(
+            replace(us, parameters=(changed_parameter,)),
+            catalog.country("uk"),
+        ),
+    )
+
+    with pytest.raises(CatalogPublicationError, match="differs"):
+        publish_catalog(publication_engine, changed)
+
+    assert _counts(publication_engine) == before_counts
+    assert _format_2_values(publication_engine)["parameter"] == (True, False)
+
+
+def _catalog_with_format_2_variable_records():
+    models = source_models()
+    add_format_2_variable_records(models["us"])
+    return extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    )
+
+
+def _stored_us_variables(engine: Engine) -> dict[str, tuple[object, ...]]:
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT variable.name, variable.enum_values, "
+                "variable.adds_parameter_path, variable.subtracts_parameter_path, "
+                "variable.unit, variable.definition_period "
+                "FROM variables AS variable "
+                "JOIN tax_benefit_model_versions AS version "
+                "ON version.id = variable.tax_benefit_model_version_id "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = 'policyengine-us'"
+            )
+        ).all()
+    return {row[0]: tuple(row[1:]) for row in rows}
+
+
+def _with_changed_us_variable(catalog, name: str, **changes: object):
+    us = catalog.country("us")
+    variables = tuple(
+        replace(variable, **changes) if variable.name == name else variable
+        for variable in us.variables
+    )
+    return replace(
+        catalog,
+        countries=(replace(us, variables=variables), catalog.country("uk")),
+    )
+
+
+def test_enum_labels_parameter_paths_units_and_periods_round_trip_exactly(
+    publication_engine: Engine,
+) -> None:
+    catalog = _catalog_with_format_2_variable_records()
+
+    publish_catalog(publication_engine, catalog)
+    before_ids = _identifiers(publication_engine)
+    stored = _stored_us_variables(publication_engine)
+    republished = publish_catalog(publication_engine, catalog)
+
+    assert stored["filing_status"] == (
+        [{"value": "SINGLE", "label": "Single"}, {"value": "JOINT", "label": 2}],
+        None,
+        None,
+        None,
+        "year",
+    )
+    assert type(stored["filing_status"][0][1]["label"]) is int
+    assert stored["countable_income"] == (
+        None,
+        "gov.example.countable_income",
+        "gov.example.deductions",
+        "currency-USD",
+        "month",
+    )
+    assert republished.as_dict()["outcome"] == "ok"
+    assert _identifiers(publication_engine) == before_ids
+
+
+@pytest.mark.parametrize(
+    ("variable_name", "changes"),
+    [
+        (
+            "filing_status",
+            {
+                "enum_values": (
+                    EnumValueRecord(value="SINGLE", label="Single filer"),
+                    EnumValueRecord(value="JOINT", label=2),
+                )
+            },
+        ),
+        ("countable_income", {"adds_parameter_path": "gov.example.deductions"}),
+        ("countable_income", {"subtracts_parameter_path": None}),
+        ("filing_status", {"unit": "currency-USD"}),
+        ("countable_income", {"definition_period": "year"}),
+    ],
+)
+def test_republication_detects_a_changed_enum_label_parameter_path_unit_or_period(
+    publication_engine: Engine,
+    variable_name: str,
+    changes: dict[str, object],
+) -> None:
+    catalog = _catalog_with_format_2_variable_records()
+    publish_catalog(publication_engine, catalog)
+    stored = _stored_us_variables(publication_engine)
+
+    with pytest.raises(
+        CatalogPublicationError,
+        match=r"^persisted us catalog differs from PolicyEngine.py$",
+    ):
+        publish_catalog(
+            publication_engine,
+            _with_changed_us_variable(catalog, variable_name, **changes),
+        )
+
+    assert _stored_us_variables(publication_engine) == stored
+
+
+def _stored_tree(
+    engine: Engine,
+    model_name: str,
+    version: str,
+    *,
+    parameter_column: str = "parameter.name",
+) -> list[tuple]:
+    """Return a stored version's tree rows; each parameter by name by default."""
+    with engine.connect() as connection:
+        return [
+            tuple(row)
+            for row in connection.execute(
+                text(
+                    "SELECT tree.parent_path, tree.path, tree.position, tree.label, "
+                    "tree.child_type, tree.child_count, tree.reform_position, "
+                    f"tree.reform_child_count, {parameter_column}, tree.economy, "
+                    "tree.household "
+                    "FROM parameter_tree_children AS tree "
+                    "JOIN tax_benefit_model_versions AS version "
+                    "ON version.id = tree.tax_benefit_model_version_id "
+                    "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                    "LEFT JOIN parameters AS parameter "
+                    "ON parameter.id = tree.parameter_id "
+                    "WHERE model.name = :model_name AND version.version = :version "
+                    "ORDER BY tree.parent_path, tree.position"
+                ),
+                {"model_name": model_name, "version": version},
+            )
+        ]
+
+
+def _delete_tree(engine: Engine, version: str) -> None:
+    """Make the stored versions of one .py version look stored before the tree."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "DELETE FROM parameter_tree_children AS tree "
+                "USING tax_benefit_model_versions AS version "
+                "WHERE version.id = tree.tax_benefit_model_version_id "
+                "AND version.version = :version"
+            ),
+            {"version": version},
+        )
+
+
+FIXTURE_TREE = [
+    ("", "gov", 0, "Gov", "node", 1, 0, 1, None, None, None),
+    ("gov", "gov.example", 0, "Example policy", "node", 1, 0, 1, None, None, None),
+    (
+        "gov.example",
+        "gov.example.rate",
+        0,
+        "Example rate",
+        "parameter",
+        None,
+        0,
+        None,
+        "gov.example.rate",
+        True,
+        False,
+    ),
+]
+
+
+def test_publication_writes_each_new_version_parameter_tree(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+
+    evidence = publish_catalog(publication_engine, catalog)
+
+    for country in catalog.countries:
+        assert (
+            _stored_tree(
+                publication_engine,
+                country.model.name,
+                country.model_version.version,
+            )
+            == FIXTURE_TREE
+        )
+    assert evidence.parameter_trees_written == tuple(
+        (country.model.name, country.model_version.version, len(FIXTURE_TREE))
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    )
+
+
+def _stored_tree_with_parameter_ids(
+    engine: Engine, model_name: str, version: str
+) -> list[tuple]:
+    return _stored_tree(
+        engine, model_name, version, parameter_column="tree.parameter_id"
+    )
+
+
+def _with_other_parameter_ids(catalog):
+    """Return the catalog with a new ID for every parameter, and its values."""
+    countries = []
+    for country in catalog.countries:
+        parameters = []
+        for parameter in country.parameters:
+            parameter_id = uuid4()
+            parameters.append(
+                replace(
+                    parameter,
+                    id=parameter_id,
+                    values=tuple(
+                        replace(value, id=uuid4(), parameter_id=parameter_id)
+                        for value in parameter.values
+                    ),
+                )
+            )
+        countries.append(replace(country, parameters=tuple(parameters)))
+    return replace(catalog, countries=tuple(countries))
+
+
+def test_publication_gives_the_installed_stored_version_its_tree(
+    publication_engine: Engine,
+) -> None:
+    """The installed version, stored by a release without the tree, gets one.
+
+    It is built from the installed packages' catalog, the same as a fresh
+    publication's; writing it again changes nothing. The version is first
+    stored with parameter IDs that differ from the catalog's, so the rebuilt
+    tree must reference the stored rows' IDs.
+    """
+    catalog = normalized_catalog()
+    current_version = catalog.country("us").model_version.version
+    publish_catalog(publication_engine, _with_other_parameter_ids(catalog))
+    fresh = {
+        country.model.name: _stored_tree_with_parameter_ids(
+            publication_engine, country.model.name, current_version
+        )
+        for country in catalog.countries
+    }
+    _delete_tree(publication_engine, current_version)
+    before_ids = _identifiers(publication_engine)
+
+    evidence = publish_catalog(publication_engine, catalog)
+    again = publish_catalog(publication_engine, catalog)
+
+    assert evidence.parameter_trees_written == tuple(
+        (country.model.name, current_version, len(FIXTURE_TREE))
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    )
+    assert again.parameter_trees_written == ()
+    for country in catalog.countries:
+        assert (
+            _stored_tree_with_parameter_ids(
+                publication_engine, country.model.name, current_version
+            )
+            == fresh[country.model.name]
+        )
+    assert _identifiers(publication_engine) == before_ids
+    catalog_parameter_ids = {
+        parameter.id
+        for country in catalog.countries
+        for parameter in country.parameters
+    }
+    for rows in fresh.values():
+        assert {row[8] for row in rows if row[8] is not None}.isdisjoint(
+            catalog_parameter_ids
+        )
+
+
+def test_an_installed_version_stored_before_format_2_gets_no_tree(
+    publication_engine: Engine,
+) -> None:
+    """A version stored before catalog format 2 stores no flags, so no tree.
+
+    Its tree would carry the installed catalog's flags, which its own
+    parameter rows do not store; it keeps returning the clear 503 instead, and
+    publication still succeeds.
+    """
+    catalog = normalized_catalog()
+    current_version = catalog.country("us").model_version.version
+    publish_catalog(publication_engine, catalog)
+    _clear_format_2_fields(publication_engine)
+    _delete_tree(publication_engine, current_version)
+
+    evidence = publish_catalog(publication_engine, catalog)
+
+    assert evidence.as_dict()["outcome"] == "ok"
+    assert evidence.parameter_trees_written == ()
+    for country in catalog.countries:
+        assert (
+            _stored_tree(publication_engine, country.model.name, current_version) == []
+        )
+
+
+def test_publication_writes_no_tree_for_another_version_stored_without_one(
+    publication_engine: Engine,
+) -> None:
+    """A stored version that is not the installed one keeps having no tree.
+
+    Writing it would derive rows from what an earlier release stored, which
+    the migration rules leave to a human migration decision.
+    """
+    older = normalized_catalog(policyengine_version="1.0.0")
+    catalog = normalized_catalog()
+    older_version = older.country("us").model_version.version
+    publish_catalog(publication_engine, older)
+    _delete_tree(publication_engine, older_version)
+
+    evidence = publish_catalog(publication_engine, catalog)
+    again = publish_catalog(publication_engine, catalog)
+
+    assert {version for _model, version, _rows in evidence.parameter_trees_written} == {
+        catalog.country("us").model_version.version
+    }
+    assert again.parameter_trees_written == ()
+    for country in catalog.countries:
+        assert _stored_tree(publication_engine, country.model.name, older_version) == []
+
+
+def test_publication_fails_when_a_published_version_is_left_without_a_tree(
+    publication_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        publication_module,
+        "write_parameter_trees",
+        lambda _connection, _countries: (),
+    )
+
+    with pytest.raises(CatalogPublicationError, match="has no parameter tree"):
+        publish_catalog(publication_engine, normalized_catalog())
+
+    assert _counts(publication_engine)["tax_benefit_model_versions"] == 0
+
+
+def test_the_catalog_writer_role_publishes_the_parameter_tree(
+    publication_engine: Engine,
+    managed_v2_roles,
+    v2_engine_as_role,
+) -> None:
+    """Publication as the catalog writer, with only its declared privileges.
+
+    It writes each published version's tree, which needs the role's INSERT
+    grant on the tree table.
+    """
+    writer_engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
+    catalog = normalized_catalog()
+    try:
+        evidence = publish_catalog(writer_engine, catalog)
+    finally:
+        writer_engine.dispose()
+
+    assert evidence.parameter_trees_written == tuple(
+        (country.model.name, country.model_version.version, len(FIXTURE_TREE))
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    )
+    for country in catalog.countries:
+        assert (
+            _stored_tree(
+                publication_engine,
+                country.model.name,
+                country.model_version.version,
+            )
+            == FIXTURE_TREE
+        )
+
+
+def _stored_search_file(engine: Engine, model_name: str, version: str) -> dict:
+    """Return a stored version's search file, checking its hash and sizes."""
+    with engine.connect() as connection:
+        row = connection.execute(
+            text(
+                "SELECT search_file.file_format, search_file.compressed_content, "
+                "search_file.content_sha256, search_file.uncompressed_size, "
+                "search_file.compressed_size "
+                "FROM parameter_search_files AS search_file "
+                "JOIN tax_benefit_model_versions AS version "
+                "ON version.id = search_file.tax_benefit_model_version_id "
+                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
+                "WHERE model.name = :model_name AND version.version = :version"
+            ),
+            {"model_name": model_name, "version": version},
+        ).one()
+    content = gzip.decompress(row.compressed_content)
+    assert row.file_format == 1
+    assert row.content_sha256 == hashlib.sha256(content).hexdigest()
+    assert row.uncompressed_size == len(content)
+    assert row.compressed_size == len(row.compressed_content)
+    return json.loads(content)
+
+
+def _delete_search_files(engine: Engine, version: str) -> None:
+    """Make the stored versions of one .py version look stored before the files."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "DELETE FROM parameter_search_files AS search_file "
+                "USING tax_benefit_model_versions AS version "
+                "WHERE version.id = search_file.tax_benefit_model_version_id "
+                "AND version.version = :version"
+            ),
+            {"version": version},
+        )
+
+
+def _fixture_search_file(country_id: str, version: str) -> dict:
+    return {
+        "format": 1,
+        "country_id": country_id,
+        "policyengine_version": version,
+        "parameters": [
+            {
+                "path": "gov.example.rate",
+                "label": "Example rate",
+                "unit": "/1",
+                "description": "An example rate",
+                "editable": True,
+            }
+        ],
+        "other_parameters": [],
+        "nodes": [{"path": "gov.example", "label": "Example policy"}],
+    }
+
+
+def test_publication_writes_each_new_version_parameter_search_file(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+
+    evidence = publish_catalog(publication_engine, catalog)
+
+    for country in catalog.countries:
+        version = country.model_version.version
+        assert _stored_search_file(
+            publication_engine, country.model.name, version
+        ) == _fixture_search_file(country.country_id, version)
+    assert [
+        (model_name, version)
+        for model_name, version, _uncompressed, _compressed in (
+            evidence.parameter_search_files_written
+        )
+    ] == [
+        (country.model.name, country.model_version.version)
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    ]
+
+
+def test_republication_writes_only_the_installed_version_search_file(
+    publication_engine: Engine,
+) -> None:
+    """A stored version gets its file only when its packages are installed.
+
+    Files are built from the installed packages' catalog, never from rows an
+    earlier release stored, so a version stored before search files existed
+    gets its file when publication runs with its packages installed, and other
+    stored versions are left without one.
+    """
+    older = normalized_catalog(policyengine_version="1.0.0")
+    catalog = normalized_catalog()
+    older_country_version = older.country("us").model_version.version
+    current_country_version = catalog.country("us").model_version.version
+    publish_catalog(publication_engine, older)
+    publish_catalog(publication_engine, catalog)
+    _delete_search_files(publication_engine, older_country_version)
+    _delete_search_files(publication_engine, current_country_version)
+    before_ids = _identifiers(publication_engine)
+    before_counts = _counts(publication_engine)
+
+    evidence = publish_catalog(publication_engine, catalog)
+    again = publish_catalog(publication_engine, catalog)
+
+    assert [
+        (model_name, version)
+        for model_name, version, _uncompressed, _compressed in (
+            evidence.parameter_search_files_written
+        )
+    ] == [
+        (country.model.name, current_country_version)
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    ]
+    assert again.parameter_search_files_written == ()
+    for country in catalog.countries:
+        assert _stored_search_file(
+            publication_engine, country.model.name, current_country_version
+        ) == _fixture_search_file(country.country_id, current_country_version)
+    with publication_engine.connect() as connection:
+        assert (
+            connection.execute(
+                text(
+                    "SELECT count(*) FROM parameter_search_files AS search_file "
+                    "JOIN tax_benefit_model_versions AS version "
+                    "ON version.id = search_file.tax_benefit_model_version_id "
+                    "WHERE version.version = :version"
+                ),
+                {"version": older_country_version},
+            ).scalar_one()
+            == 0
+        )
+    assert _identifiers(publication_engine) == before_ids
+    assert _counts(publication_engine) == before_counts
+
+
+def test_republication_refuses_a_stored_search_file_that_differs(
+    publication_engine: Engine,
+) -> None:
+    catalog = normalized_catalog()
+    publish_catalog(publication_engine, catalog)
+    with publication_engine.begin() as connection:
+        connection.execute(
+            text("UPDATE parameter_search_files SET content_sha256 = repeat('0', 64)")
+        )
+
+    with pytest.raises(
+        CatalogPublicationError,
+        match=r"stored parameter search file .* differs from the installed packages'",
+    ):
+        publish_catalog(publication_engine, catalog)
+
+
+def test_search_file_editability_follows_the_stored_current_law_values(
+    publication_engine: Engine,
+) -> None:
+    models = source_models()
+    add_format_2_variable_records(models["us"])
+    bracket_rate = SimpleNamespace(
+        name="gov.example.bracket[1].rate",
+        label=None,
+        description=None,
+        data_type=float,
+        unit="/1",
+        economy=True,
+        household=True,
+        parameter_values=[
+            SimpleNamespace(
+                value=0.02,
+                start_date=datetime(2015, 1, 1, tzinfo=UTC),
+                end_date=datetime(2020, 7, 7, tzinfo=UTC),
+            ),
+            SimpleNamespace(
+                value=None,
+                start_date=datetime(2020, 7, 8, tzinfo=UTC),
+                end_date=datetime(2021, 3, 30, tzinfo=UTC),
+            ),
+            SimpleNamespace(
+                value=0.02,
+                start_date=datetime(2021, 3, 31, tzinfo=UTC),
+                end_date=None,
+            ),
+        ],
+    )
+    models["us"].parameters.append(bracket_rate)
+    models["us"].parameters_by_name[bracket_rate.name] = bracket_rate
+    catalog = extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    )
+
+    publish_catalog(publication_engine, catalog)
+
+    us = catalog.country("us")
+    search_file = _stored_search_file(
+        publication_engine, us.model.name, us.model_version.version
+    )
+    entries = {entry["path"]: entry for entry in search_file["parameters"]}
+    assert entries["gov.example.bracket[1].rate"] == {
+        "path": "gov.example.bracket[1].rate",
+        "label": None,
+        "unit": "/1",
+        "description": None,
+        "editable": True,
+        "editable_changes": [
+            {"start_date": "2020-07-08", "editable": False},
+            {"start_date": "2021-03-31", "editable": True},
+        ],
+    }
+    # A list of variable names is shown as "Can't be changed here".
+    assert entries["gov.example.countable_income"]["editable"] is False
+    assert entries["gov.example.deductions"]["editable"] is False
+    assert entries["gov.example.rate"]["editable"] is True
+
+
+def test_publication_fails_when_a_published_version_has_no_search_file(
+    publication_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        publication_module,
+        "write_parameter_search_files",
+        lambda _connection, _countries: (),
+    )
+
+    with pytest.raises(CatalogPublicationError, match="has no parameter search file"):
+        publish_catalog(publication_engine, normalized_catalog())
+
+    assert _counts(publication_engine)["tax_benefit_model_versions"] == 0
+
+
+def test_the_catalog_writer_role_publishes_the_search_files(
+    publication_engine: Engine,
+    managed_v2_roles,
+    v2_engine_as_role,
+) -> None:
+    """Publication as the catalog writer writes each version's search file.
+
+    That needs the role's declared INSERT grant on the search files' table.
+    """
+    writer_engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
+    catalog = normalized_catalog()
+    try:
+        evidence = publish_catalog(writer_engine, catalog)
+    finally:
+        writer_engine.dispose()
+
+    assert [
+        (model_name, version)
+        for model_name, version, _uncompressed, _compressed in (
+            evidence.parameter_search_files_written
+        )
+    ] == [
+        (country.model.name, country.model_version.version)
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    ]
+    for country in catalog.countries:
+        version = country.model_version.version
+        assert _stored_search_file(
+            publication_engine, country.model.name, version
+        ) == _fixture_search_file(country.country_id, version)
+
+
+def test_one_publication_gives_the_installed_stored_version_its_tree_and_file(
+    publication_engine: Engine,
+) -> None:
+    """The installed version stored without either gets both in one run."""
+    catalog = normalized_catalog()
+    current_version = catalog.country("us").model_version.version
+    publish_catalog(publication_engine, catalog)
+    _delete_tree(publication_engine, current_version)
+    _delete_search_files(publication_engine, current_version)
+
+    evidence = publish_catalog(publication_engine, catalog)
+
+    model_names = [
+        country.model.name
+        for country in sorted(catalog.countries, key=lambda item: item.model.name)
+    ]
+    assert [model for model, _version, _rows in evidence.parameter_trees_written] == (
+        model_names
+    )
+    assert [
+        model
+        for model, _version, _raw, _size in evidence.parameter_search_files_written
+    ] == model_names
+    for country in catalog.countries:
+        assert (
+            _stored_tree(publication_engine, country.model.name, current_version)
+            == FIXTURE_TREE
+        )
+        assert _stored_search_file(
+            publication_engine, country.model.name, current_version
+        ) == _fixture_search_file(country.country_id, current_version)
+
+
+def _mark_stored_before_catalog_format_2(engine: Engine, version: str) -> None:
+    """Make the stored versions of one .py version look stored before format 2."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE tax_benefit_model_versions SET catalog_format = NULL "
+                "WHERE version = :version"
+            ),
+            {"version": version},
+        )
+
+
+def test_an_installed_version_stored_before_catalog_format_2_gets_no_search_file(
+    publication_engine: Engine,
+) -> None:
+    """A version stored without format 2's flags keeps having no search file.
+
+    Building its file from the installed catalog's flags would contradict the
+    version's own stored parameter rows, so publication writes none for it and
+    does not require one; the route then reports the version without a file.
+    """
+    catalog = normalized_catalog()
+    current_version = catalog.country("us").model_version.version
+    publish_catalog(publication_engine, catalog)
+    _delete_search_files(publication_engine, current_version)
+    _mark_stored_before_catalog_format_2(publication_engine, current_version)
+
+    evidence = publish_catalog(publication_engine, catalog)
+
+    assert evidence.parameter_search_files_written == ()
+    with publication_engine.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT count(*) FROM parameter_search_files")
+            ).scalar_one()
+            == 0
+        )

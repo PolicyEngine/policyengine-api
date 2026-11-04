@@ -69,7 +69,7 @@ from policyengine_api.data.v2.models import V2_METADATA
 import sys
 after = set(pathlib.Path.cwd().iterdir())
 assert before == after
-assert len(V2_METADATA.tables) == 39
+assert len(V2_METADATA.tables) == 42
 assert "policyengine_api.data.v2.catalog.initialization" not in sys.modules
 assert "policyengine_api.data.v2.policy_migration_qualification" not in sys.modules
 assert "policyengine_api.data.v2.household_migration_qualification" not in sys.modules
@@ -121,8 +121,8 @@ from pathlib import Path
 import sys
 from policyengine_api.api import app
 
-response = app.test_client().get('/liveness-check')
-assert response.status_code == 200
+response = app.test_client().get('/an-unknown-path')
+assert response.status_code == 404
 assert "policyengine_api.data.v2.catalog.initialization" not in sys.modules
 assert not Path('policyengine.db').exists()
 assert not list(Path.cwd().glob('*.db'))

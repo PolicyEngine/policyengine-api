@@ -15,7 +15,13 @@ Current skills:
   deployment safeguards, and migration validation.
 - `ci-workflows.md`: one line of code per workflow `run:` block, tested
   workflow scripts, and shellcheck.
+- `dependencies.md`: installing and testing from `uv.lock`, the scheduled
+  relock, and how to register an install that cannot use the lock.
+- `file-length.md`: the line limits for Python files and how to split a file
+  without changing behaviour or import paths.
 - `github-prs.md`: PR workflow and migration PR handoff expectations.
+- `microdata-weights.md`: weights, values, labels and counts in simulation
+  microdata, and the guards that keep weights from being aggregated as values.
 - `migration_contracts.md`: API v2 migration route contracts, route-group
   metadata, generated migration artifacts, and quality guards.
 - `observability.md`: identifier ownership, HTTP and simulation transport,

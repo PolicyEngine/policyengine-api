@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from unittest.mock import patch
-from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
-from flask import Flask, jsonify
 
-from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.catalog_selection import (
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
@@ -19,247 +14,28 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
 )
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes import dependencies as route_dependencies
-from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-from policyengine_api.migration_flags import (
-    RouteImplementation,
-    RouteImplementationSettings,
+from policyengine_api.services.v2.metadata.selected_catalogs import (
+    SelectedCatalogStore,
 )
 from policyengine_api.services.v2.metadata.types import (
-    MetadataCanonicalParameterValue,
-    MetadataDataset,
-    MetadataDatasetOption,
-    MetadataDetailResult,
-    MetadataEconomyOptionsResult,
-    MetadataModel,
-    MetadataModelSelectionResult,
-    MetadataModelVersionDetail,
-    MetadataPageResult,
-    MetadataParameterChild,
-    MetadataParameterSummary,
-    MetadataRegion,
-    MetadataRegionOption,
-    MetadataTimePeriodOption,
-    MetadataVariable,
+    ParameterFilter,
 )
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
 )
-
-
-class ResourceReader:
-    def __init__(
-        self,
-        results: dict[str, object],
-        *,
-        error: Exception | None = None,
-        close_error: Exception | None = None,
-    ):
-        self.results = results
-        self.error = error
-        self.close_error = close_error
-        self.calls: list[tuple[str, tuple, dict]] = []
-        self.closed = False
-
-    def __getattr__(self, name: str):
-        if name not in self.results:
-            raise AttributeError(name)
-
-        def read(*args, **kwargs):
-            self.calls.append((name, args, kwargs))
-            if self.error is not None:
-                raise self.error
-            return self.results[name]
-
-        return read
-
-    def close(self) -> None:
-        self.closed = True
-        if self.close_error is not None:
-            raise self.close_error
-
-
-def _resource_results() -> tuple[dict[str, object], dict[str, object]]:
-    version = "4.20.3"
-    model_id = uuid4()
-    model_version_id = uuid4()
-    variable_id = uuid4()
-    parameter_id = uuid4()
-    parameter_value_id = uuid4()
-    dataset_id = uuid4()
-    region_id = uuid4()
-    model = MetadataModel(
-        id=model_id,
-        name="policyengine-us",
-        description="US model",
-    )
-    model_version = MetadataModelVersionDetail(
-        id=model_version_id,
-        model_id=model_id,
-        version=version,
-        description="PolicyEngine.py catalog",
-        current_law_id=2,
-        metadata_time_periods=[2026],
-    )
-    variable = MetadataVariable(
-        id=variable_id,
-        name="employment_income",
-        label="Employment income",
-        entity="person",
-        description=None,
-        data_type="float",
-        possible_values=None,
-        default_value=0,
-        adds=None,
-        subtracts=None,
-    )
-    parameter = MetadataParameterSummary(
-        id=parameter_id,
-        name="gov.example.rate",
-        label="Rate",
-        description=None,
-        data_type="float",
-        unit="/1",
-    )
-    parameter_value = MetadataCanonicalParameterValue(
-        id=parameter_value_id,
-        parameter_id=parameter_id,
-        value=0.1,
-        start_date=datetime(2025, 1, 1, tzinfo=UTC),
-        end_date=None,
-    )
-    dataset = MetadataDataset(
-        id=dataset_id,
-        name="populace_us_2024",
-        description="National input dataset",
-        year=2024,
-    )
-    region = MetadataRegion(
-        id=region_id,
-        code="us",
-        label="United States",
-        region_type="national",
-        requires_filter=False,
-        filter_field=None,
-        filter_value=None,
-        filter_strategy=None,
-        parent_code=None,
-        state_code=None,
-        state_name=None,
-        default_dataset_id=dataset_id,
-    )
-
-    def page(items: list[object]) -> MetadataPageResult:
-        return MetadataPageResult(
-            policyengine_version=version,
-            items=items,
-            offset=0,
-            limit=100,
-            has_more=False,
-        )
-
-    def detail(item: object) -> MetadataDetailResult:
-        return MetadataDetailResult(policyengine_version=version, item=item)
-
-    return (
-        {
-            "list_models": page([model]),
-            "get_model": detail(model),
-            "get_model_by_country": MetadataModelSelectionResult(
-                policyengine_version=version,
-                model=model,
-                model_version=model_version,
-            ),
-            "list_model_versions": page([model_version]),
-            "get_model_version": detail(model_version),
-            "list_variables": page([variable]),
-            "get_variable": detail(variable),
-            "list_parameters": page([parameter]),
-            "list_parameter_children": page(
-                [
-                    MetadataParameterChild(
-                        path=parameter.name,
-                        label=parameter.label or parameter.name,
-                        type="parameter",
-                        parameter=parameter,
-                    )
-                ]
-            ),
-            "get_parameter": detail(parameter),
-            "list_parameter_values": page([parameter_value]),
-            "get_parameter_value": detail(parameter_value),
-            "list_datasets": page([dataset]),
-            "get_dataset": detail(dataset),
-            "list_regions": page([region]),
-            "get_region_by_code": detail(region),
-            "get_region": detail(region),
-            "get_economy_options": MetadataEconomyOptionsResult(
-                policyengine_version=version,
-                current_law_id=2,
-                region=[
-                    MetadataRegionOption(
-                        name="us",
-                        label="United States",
-                        type="national",
-                    )
-                ],
-                time_period=[MetadataTimePeriodOption(name=2026, label="2026")],
-                datasets=[
-                    MetadataDatasetOption(name="populace_us_2024", label="Microcosm")
-                ],
-            ),
-        },
-        {
-            "model_id": model_id,
-            "model_version_id": model_version_id,
-            "variable_id": variable_id,
-            "parameter_id": parameter_id,
-            "parameter_value_id": parameter_value_id,
-            "dataset_id": dataset_id,
-            "region_id": region_id,
-        },
-    )
-
-
-def _client(factory) -> TestClient:
-    flask_app = Flask(__name__)
-
-    @flask_app.get("/<country_id>/metadata")
-    def v1_metadata(country_id: str):
-        return jsonify(
-            {
-                "status": "ok",
-                "message": None,
-                "result": {"source": "v1", "country_id": country_id},
-            }
-        )
-
-    dependencies = NativeRouteDependencies(
-        readiness_probe=lambda: True,
-        gateway_client_factory=lambda: None,
-        metadata_reader_factory=lambda: None,
-        specification_provider=dict,
-        v2_metadata_reader_factory=factory,
-    )
-    settings = RouteImplementationSettings(
-        health=RouteImplementation.FLASK_FALLBACK,
-        specification=RouteImplementation.FLASK_FALLBACK,
-        metadata=RouteImplementation.FLASK_FALLBACK,
-    )
-    return TestClient(
-        create_asgi_app(
-            flask_app,
-            dependencies=dependencies,
-            route_settings=settings,
-        ),
-        raise_server_exceptions=False,
-    )
+from tests.fixtures.v2_metadata_routes import (
+    ResourceReader,
+    every_resource_path,
+    metadata_route_client,
+    resource_results,
+)
 
 
 def test_each_resource_route_returns_its_typed_result() -> None:
-    results, ids = _resource_results()
+    results, ids = resource_results()
     reader = ResourceReader(results)
-    client = _client(lambda: reader)
+    client = metadata_route_client(lambda: reader)
     requests = [
         ("list_models", "/v2/tax-benefit-models?country_id=us"),
         ("get_model_by_country", "/v2/tax-benefit-models/by-country/us"),
@@ -312,9 +88,9 @@ def test_each_resource_route_returns_its_typed_result() -> None:
 
 
 def test_resource_route_forwards_version_filters_and_pagination() -> None:
-    results, _ids = _resource_results()
+    results, _ids = resource_results()
     reader = ResourceReader(results)
-    response = _client(lambda: reader).get(
+    response = metadata_route_client(lambda: reader).get(
         "/v2/variables",
         params={
             "country_id": "uk",
@@ -337,10 +113,10 @@ def test_resource_route_forwards_version_filters_and_pagination() -> None:
 
 
 def test_region_code_route_decodes_percent_encoded_slash() -> None:
-    results, _ids = _resource_results()
+    results, _ids = resource_results()
     reader = ResourceReader(results)
 
-    response = _client(lambda: reader).get(
+    response = metadata_route_client(lambda: reader).get(
         "/v2/regions/by-code/state%2Fca",
         params={"country_id": "us"},
     )
@@ -364,10 +140,10 @@ def test_request_validation_failures_use_the_error_schema(params: dict) -> None:
 
     def factory():
         calls.append("called")
-        results, _ids = _resource_results()
+        results, _ids = resource_results()
         return ResourceReader(results)
 
-    response = _client(factory).get("/v2/variables", params=params)
+    response = metadata_route_client(factory).get("/v2/variables", params=params)
 
     assert response.status_code == 422
     assert response.json() == {
@@ -394,9 +170,9 @@ def test_query_failures_use_documented_error_statuses(
     error: Exception,
     expected_status: int,
 ) -> None:
-    results, _ids = _resource_results()
+    results, _ids = resource_results()
     reader = ResourceReader(results, error=error)
-    response = _client(lambda: reader).get("/v2/variables?country_id=us")
+    response = metadata_route_client(lambda: reader).get("/v2/variables?country_id=us")
 
     assert response.status_code == expected_status
     assert response.json()["status"] == "error"
@@ -410,10 +186,10 @@ def test_unknown_resources_and_unsupported_methods_use_error_schema() -> None:
 
     def factory():
         calls.append("called")
-        results, _ids = _resource_results()
+        results, _ids = resource_results()
         return ResourceReader(results)
 
-    client = _client(factory)
+    client = metadata_route_client(factory)
     missing_root = client.get("/v2")
     missing = client.get("/v2/not-a-resource")
     removed_combined = client.get("/v2/us/metadata")
@@ -443,12 +219,17 @@ def test_default_reader_uses_the_installed_policyengine_version(
     captured = {}
     reader = object()
 
-    def query_service(candidate_session, *, running_policyengine_version):
+    def query_service(
+        candidate_session, *, running_policyengine_version, selected_catalogs
+    ):
         captured["session"] = candidate_session.session
         captured["version"] = running_policyengine_version
+        captured["selected_catalogs"] = selected_catalogs
         return reader
 
-    monkeypatch.setattr(database, "get_v2_session_factory", lambda: lambda: session)
+    monkeypatch.setattr(
+        database, "get_v2_read_session_factory", lambda: lambda: session
+    )
     monkeypatch.setattr(metadata_services, "V2MetadataService", query_service)
     monkeypatch.setattr(
         route_dependencies.importlib_metadata,
@@ -462,13 +243,18 @@ def test_default_reader_uses_the_installed_policyengine_version(
         route_dependencies._running_policyengine_version.cache_clear()
 
     assert result is reader
-    assert captured == {"session": session, "version": "5.2.0"}
+    assert captured["session"] is session
+    assert captured["version"] == "5.2.0"
+    assert isinstance(captured["selected_catalogs"], SelectedCatalogStore)
+    assert (
+        route_dependencies._process_selected_catalogs() is captured["selected_catalogs"]
+    )
 
 
 def test_default_factory_and_close_failures_preserve_success(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    results, _ids = _resource_results()
+    results, _ids = resource_results()
     reader = ResourceReader(results, close_error=RuntimeError("close failed"))
     monkeypatch.setattr(
         route_dependencies,
@@ -476,7 +262,7 @@ def test_default_factory_and_close_failures_preserve_success(
         lambda: reader,
     )
 
-    response = _client(None).get("/v2/variables?country_id=us")
+    response = metadata_route_client(None).get("/v2/variables?country_id=us")
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
@@ -484,9 +270,9 @@ def test_default_factory_and_close_failures_preserve_success(
 
 
 def test_resource_reads_do_not_change_v1_metadata_routing() -> None:
-    results, _ids = _resource_results()
+    results, _ids = resource_results()
     reader = ResourceReader(results)
-    client = _client(lambda: reader)
+    client = metadata_route_client(lambda: reader)
 
     first = client.get("/v2/variables?country_id=us")
     second = client.get("/v2/variables?country_id=us")
@@ -497,10 +283,10 @@ def test_resource_reads_do_not_change_v1_metadata_routing() -> None:
 
 
 def test_resource_route_logging_records_the_country_query_parameter() -> None:
-    results, _ids = _resource_results()
+    results, _ids = resource_results()
 
     with patch("policyengine_api.migration_logging.logger") as mock_logger:
-        response = _client(lambda: ResourceReader(results)).get(
+        response = metadata_route_client(lambda: ResourceReader(results)).get(
             "/v2/variables?country_id=uk"
         )
 
@@ -512,8 +298,10 @@ def test_resource_route_logging_records_the_country_query_parameter() -> None:
 
 
 def test_openapi_references_explicit_resource_response_schemas() -> None:
-    results, _ids = _resource_results()
-    response = _client(lambda: ResourceReader(results)).get("/v2/openapi.json")
+    results, _ids = resource_results()
+    response = metadata_route_client(lambda: ResourceReader(results)).get(
+        "/v2/openapi.json"
+    )
 
     assert response.status_code == 200
     schema = response.json()
@@ -521,8 +309,12 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/datasets",
         "/v2/datasets/{dataset_id}",
         "/v2/economy-options",
+        "/v2/model-catalog",
+        "/v2/model-catalog/variables",
+        "/v2/model-catalog/parameters",
         "/v2/parameters",
         "/v2/parameters/children",
+        "/v2/parameters/search-file",
         "/v2/parameters/{parameter_id}",
         "/v2/parameter-values",
         "/v2/parameter-values/{value_id}",
@@ -538,6 +330,7 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/variables/{variable_id}",
     }
     native_paths = {
+        "/v2/countries",
         "/v2/households",
         "/v2/households/{household_id}",
         "/v2/policies",
@@ -565,21 +358,455 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
 
     for path in metadata_paths:
         operation = schema["paths"][path]["get"]
-        assert set(operation["responses"]) >= {
-            "200",
-            "400",
-            "404",
-            "405",
-            "422",
-            "500",
-            "503",
-        }
+        error_statuses = ["404", "405", "422", "500", "503"]
+        if path == "/v2/tax-benefit-models/by-country/{country_id}":
+            error_statuses.append("400")
+        assert set(operation["responses"]) >= {"200", *error_statuses}
         success_schema = operation["responses"]["200"]["content"]["application/json"][
             "schema"
         ]
         assert success_schema["$ref"].startswith("#/components/schemas/Metadata")
-        for status in ("400", "404", "405", "422", "500", "503"):
+        for status in error_statuses:
             error_schema = operation["responses"][status]["content"][
                 "application/json"
             ]["schema"]
             assert error_schema["$ref"] == "#/components/schemas/V2ErrorResponse"
+
+
+def test_model_catalog_route_serves_the_small_parts_of_the_selected_version() -> None:
+    results, _ids = resource_results()
+    reader = ResourceReader(results)
+
+    response = metadata_route_client(lambda: reader).get(
+        "/v2/model-catalog", params={"country_id": "US"}
+    )
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["policyengine_version"] == "4.20.3"
+    assert result["catalog_format"] == 2
+    assert result["entities"] == [
+        {"key": "person", "plural": "people", "is_person": True}
+    ]
+    assert result["basic_inputs"] == ["employment_income"]
+    assert [region["code"] for region in result["regions"]] == ["us"]
+    assert result["economy_options"]["datasets"][0]["default"] is True
+    assert reader.calls == [("get_model_catalog", ("us", None), {})]
+    assert reader.closed
+
+
+def test_model_catalog_route_names_an_explicit_version_for_a_day() -> None:
+    results, _ids = resource_results()
+    reader = ResourceReader(results)
+
+    response = metadata_route_client(lambda: reader).get(
+        "/v2/model-catalog",
+        params={"country_id": "uk", "policyengine_version": "4.20.3"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    assert reader.calls == [("get_model_catalog", ("uk", "4.20.3"), {})]
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "",
+        "country_id=ca",
+        "country_id=us&country_id=uk",
+        "country_id=us&limit=10",
+        "country_id=us&policyengine_version=latest",
+    ],
+)
+def test_model_catalog_route_rejects_invalid_queries(query: str) -> None:
+    calls = []
+
+    def factory():
+        calls.append("called")
+        results, _ids = resource_results()
+        return ResourceReader(results)
+
+    response = metadata_route_client(factory).get(f"/v2/model-catalog?{query}")
+
+    assert response.status_code == 422
+    assert response.json()["status"] == "error"
+    assert calls == []
+
+
+def test_model_catalog_route_declares_its_query_in_openapi() -> None:
+    results, _ids = resource_results()
+    schema = (
+        metadata_route_client(lambda: ResourceReader(results))
+        .get("/v2/openapi.json")
+        .json()
+    )
+
+    operation = schema["paths"]["/v2/model-catalog"]["get"]
+    parameters = {parameter["name"]: parameter for parameter in operation["parameters"]}
+    assert set(parameters) == {"country_id", "policyengine_version"}
+    assert parameters["country_id"]["required"] is True
+    assert parameters["policyengine_version"]["required"] is False
+    success = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    assert success == {"$ref": "#/components/schemas/MetadataModelCatalogResponse"}
+
+
+def test_catalog_variables_route_serves_every_variable_and_part_values() -> None:
+    results, _ids = resource_results()
+    reader = ResourceReader(results)
+
+    response = metadata_route_client(lambda: reader).get(
+        "/v2/model-catalog/variables",
+        params={"country_id": "us", "policyengine_version": "4.20.3"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    result = response.json()["result"]
+    assert result["catalog_format"] == 2
+    assert [variable["name"] for variable in result["variables"]] == [
+        "employment_income"
+    ]
+    assert result["variables"][0]["module_name"] is None
+    assert result["part_parameter_values"] == {
+        "gov.example.parts": [
+            {
+                "start_date": "2025-01-01T00:00:00Z",
+                "end_date": None,
+                "value": ["employment_income"],
+            }
+        ]
+    }
+    assert reader.calls == [("get_catalog_variables", ("us", "4.20.3"), {})]
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["", "country_id=us&offset=0", "country_id=us&search=income"],
+)
+def test_catalog_variables_route_rejects_paging_and_unknown_queries(
+    query: str,
+) -> None:
+    results, _ids = resource_results()
+    response = metadata_route_client(lambda: ResourceReader(results)).get(
+        f"/v2/model-catalog/variables?{query}"
+    )
+
+    assert response.status_code == 422
+
+
+def test_catalog_parameters_route_fetches_several_parameters_by_name() -> None:
+    results, _ids = resource_results()
+    reader = ResourceReader(results)
+
+    response = metadata_route_client(lambda: reader).get(
+        "/v2/model-catalog/parameters"
+        "?country_id=us&policyengine_version=4.20.3"
+        "&name=gov.example.rate&name=gov.removed"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    result = response.json()["result"]
+    assert result["parameters"][0]["name"] == "gov.example.rate"
+    assert result["parameters"][0]["values"] == [
+        {"start_date": "2025-01-01T00:00:00Z", "end_date": None, "value": 0.1}
+    ]
+    assert result["node_labels"] == {"gov.example": "Example policy"}
+    assert result["missing_names"] == ["gov.removed"]
+    assert reader.calls == [
+        (
+            "get_catalog_parameters",
+            ("us", "4.20.3"),
+            {"names": ["gov.example.rate", "gov.removed"]},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "country_id=us",
+        "country_id=us&name=",
+        "country_id=us&name=gov.example.rate&offset=0",
+        "country_id=us&" + "&".join(f"name=gov.p{index}" for index in range(101)),
+    ],
+)
+def test_catalog_parameters_route_rejects_invalid_name_lists(query: str) -> None:
+    calls = []
+
+    def factory():
+        calls.append("called")
+        results, _ids = resource_results()
+        return ResourceReader(results)
+
+    response = metadata_route_client(factory).get(
+        f"/v2/model-catalog/parameters?{query}"
+    )
+
+    assert response.status_code == 422
+    assert calls == []
+
+
+def test_catalog_parameters_route_declares_a_repeated_name_in_openapi() -> None:
+    results, _ids = resource_results()
+    schema = (
+        metadata_route_client(lambda: ResourceReader(results))
+        .get("/v2/openapi.json")
+        .json()
+    )
+
+    operation = schema["paths"]["/v2/model-catalog/parameters"]["get"]
+    parameters = {parameter["name"]: parameter for parameter in operation["parameters"]}
+    assert set(parameters) == {"country_id", "policyengine_version", "name"}
+    assert parameters["name"]["required"] is True
+    name_schema = parameters["name"]["schema"]
+    assert name_schema["type"] == "array"
+    assert name_schema["minItems"] == 1
+    assert name_schema["maxItems"] == 100
+
+
+def test_parameter_collection_fetches_several_parameters_by_name() -> None:
+    results, _ids = resource_results()
+    reader = ResourceReader(results)
+    client = metadata_route_client(lambda: reader)
+
+    named = client.get(
+        "/v2/parameters?country_id=US&name=gov.example.rate&name=gov.other.rate"
+    )
+    paged = client.get("/v2/parameters?country_id=us&offset=5&limit=50&search=rate")
+
+    assert named.status_code == 200
+    assert paged.status_code == 200
+    assert reader.calls == [
+        (
+            "list_parameters",
+            ("us", None),
+            {
+                "offset": 0,
+                "limit": 100,
+                "parameter_filter": ParameterFilter(
+                    search=None, names=("gov.example.rate", "gov.other.rate")
+                ),
+            },
+        ),
+        (
+            "list_parameters",
+            ("us", None),
+            {
+                "offset": 5,
+                "limit": 50,
+                "parameter_filter": ParameterFilter(search="rate", names=None),
+            },
+        ),
+    ]
+
+
+def test_parameter_values_fetch_several_parameters_by_name() -> None:
+    results, _ids = resource_results()
+    reader = ResourceReader(results)
+
+    response = metadata_route_client(lambda: reader).get(
+        "/v2/parameter-values?country_id=us&policyengine_version=4.20.3"
+        "&parameter_name=gov.example.rate&parameter_name=gov.other.rate&current=true"
+    )
+
+    assert response.status_code == 200
+    name, args, kwargs = reader.calls[0]
+    assert (name, args) == ("list_parameter_values", ("us", "4.20.3"))
+    assert kwargs["value_filter"].parameter_names == (
+        "gov.example.rate",
+        "gov.other.rate",
+    )
+    assert kwargs["value_filter"].parameter_id is None
+    assert kwargs["value_filter"].current is True
+    assert (kwargs["offset"], kwargs["limit"]) == (0, 100)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v2/parameters?country_id=us&parameter_id=1",
+        "/v2/parameters?country_id=us&limit=5&limit=6",
+        "/v2/parameters?country_id=us&name=",
+        "/v2/parameters?country_id=ca",
+        "/v2/parameters?country_id=us&"
+        + "&".join(f"name=gov.p{index}" for index in range(101)),
+        "/v2/parameter-values?country_id=us&name=gov.example.rate",
+        "/v2/parameter-values?country_id=us&current=true&current=false",
+        "/v2/parameter-values?country_id=us&parameter_id=not-a-uuid",
+    ],
+)
+def test_parameter_collections_reject_unknown_repeated_and_invalid_queries(
+    path: str,
+) -> None:
+    calls = []
+
+    def factory():
+        calls.append("called")
+        results, _ids = resource_results()
+        return ResourceReader(results)
+
+    response = metadata_route_client(factory).get(path)
+
+    assert response.status_code == 422
+    assert calls == []
+
+
+def test_parameter_collections_declare_their_name_filters_in_openapi() -> None:
+    results, _ids = resource_results()
+    schema = (
+        metadata_route_client(lambda: ResourceReader(results))
+        .get("/v2/openapi.json")
+        .json()
+    )
+
+    def query_parameters(path: str) -> dict[str, dict]:
+        return {
+            parameter["name"]: parameter
+            for parameter in schema["paths"][path]["get"]["parameters"]
+        }
+
+    parameters = query_parameters("/v2/parameters")
+    values = query_parameters("/v2/parameter-values")
+    assert set(parameters) == {
+        "country_id",
+        "policyengine_version",
+        "offset",
+        "limit",
+        "search",
+        "name",
+    }
+    assert parameters["name"]["required"] is False
+    assert set(values) == {
+        "country_id",
+        "policyengine_version",
+        "offset",
+        "limit",
+        "parameter_id",
+        "parameter_name",
+        "current",
+    }
+    assert values["parameter_name"]["required"] is False
+
+
+def _query_rejections(path: str) -> list[str]:
+    separator = "&" if "?" in path else "?"
+    rejections = [
+        f"{path}{separator}policyengine_version=not%20a%20version",
+        f"{path}{separator}unexpected=1",
+        f"{path}{separator}policyengine_version=4.20.3&policyengine_version=4.20.3",
+    ]
+    if "country_id=us" in path:
+        rejections.append(path.replace("country_id=us", "country_id=ca"))
+        rejections.append(
+            path.replace("country_id=us&", "").replace("?country_id=us", "")
+        )
+    return rejections
+
+
+def test_every_metadata_route_rejects_invalid_queries_before_reading() -> None:
+    _results, ids = resource_results()
+    calls = []
+
+    def factory():
+        calls.append("called")
+        results, _ids = resource_results()
+        return ResourceReader(results)
+
+    client = metadata_route_client(factory)
+    for path in every_resource_path(ids):
+        for rejected in _query_rejections(path):
+            response = client.get(rejected)
+            assert response.status_code == 422, (rejected, response.text)
+            assert response.json() == {
+                "status": "error",
+                "message": "Invalid API v2 request",
+            }
+    assert calls == []
+
+
+def test_every_metadata_route_declares_the_shared_catalog_query() -> None:
+    results, _ids = resource_results()
+    schema = (
+        metadata_route_client(lambda: ResourceReader(results))
+        .get("/v2/openapi.json")
+        .json()
+    )
+    metadata_paths = [
+        path
+        for path in schema["paths"]
+        if path.startswith(
+            (
+                "/v2/datasets",
+                "/v2/economy-options",
+                "/v2/model-catalog",
+                "/v2/parameter",
+                "/v2/regions",
+                "/v2/tax-benefit-model",
+                "/v2/variables",
+            )
+        )
+    ]
+
+    assert len(metadata_paths) == 22
+    for path in metadata_paths:
+        parameters = {
+            parameter["name"]: parameter
+            for parameter in schema["paths"][path]["get"]["parameters"]
+            if parameter["in"] == "query"
+        }
+        version = parameters["policyengine_version"]
+        assert version["required"] is False, path
+        assert version["schema"]["anyOf"][0]["maxLength"] == 128, path
+        if path != "/v2/tax-benefit-models/by-country/{country_id}":
+            country = parameters["country_id"]
+            assert country["required"] is True, path
+            assert country["schema"]["enum"] == ["us", "uk"], path
+
+
+def test_openapi_declares_each_variables_unit_and_definition_period() -> None:
+    results, _ids = resource_results()
+    schema = (
+        metadata_route_client(lambda: ResourceReader(results))
+        .get("/v2/openapi.json")
+        .json()
+    )
+
+    variable_properties = schema["components"]["schemas"]["MetadataVariable"][
+        "properties"
+    ]
+    for field in ("unit", "definition_period"):
+        assert {"type": "string"} in variable_properties[field]["anyOf"]
+        assert {"type": "null"} in variable_properties[field]["anyOf"]
+
+
+def test_openapi_requires_every_catalog_format_2_field_as_nullable() -> None:
+    # Every response includes these fields (null for versions published before
+    # catalog format 2), so a generated client must not type them as missing.
+    results, _ids = resource_results()
+    schemas = (
+        metadata_route_client(lambda: ResourceReader(results))
+        .get("/v2/openapi.json")
+        .json()["components"]["schemas"]
+    )
+    format_2_fields = {
+        "MetadataVariable": {
+            "is_input_variable",
+            "hidden_input",
+            "module_name",
+            "adds_parameter_path",
+            "subtracts_parameter_path",
+            "enum_values",
+            "unit",
+            "definition_period",
+        },
+        "MetadataParameterSummary": {"economy", "household"},
+        "MetadataCatalogParameter": {"economy", "household"},
+    }
+
+    for schema_name, fields in format_2_fields.items():
+        schema = schemas[schema_name]
+        assert set(schema["properties"]) <= set(schema["required"]), schema_name
+        for field in fields:
+            assert {"type": "null"} in schema["properties"][field]["anyOf"], field

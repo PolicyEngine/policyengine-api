@@ -26,7 +26,11 @@ git clone https://github.com/PolicyEngine/policyengine-api.git
 
 To contribute, clone the repository instead of forking it and then request to be added as a contributor. Create a new branch and get started!
 
-### 2. Activate your virtual environment
+### 2. Install uv
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/). The
+project's dependencies are pinned in `uv.lock`, the same file the Cloud Run
+image installs from.
 
 ### 3. Install dependencies
 
@@ -34,6 +38,14 @@ To contribute, clone the repository instead of forking it and then request to be
 make install
 make setup-env
 ```
+
+`make install` runs `uv sync --frozen --extra dev`, which creates `.venv` with
+exactly the versions in `uv.lock` on Python 3.12, the version the Cloud Run
+image runs. `make test`, `make test-env-vars`, `make debug-test`, `make debug`,
+`make debug-asgi`, `make typecheck-v2` and the towncrier step of
+`make changelog` run through `uv run --frozen --extra dev`, so you don't need
+to activate `.venv` for them. To run another command in that environment,
+prefix it the same way, for example `uv run --frozen --extra dev pytest tests/unit`.
 
 ### 3a. Configure environment variables
 
@@ -208,18 +220,16 @@ This will automatically format the code for you; no need to do anything else.
 
 ### Step 3: Changelogging
 
-Finally, we ask contributors to make it clear for our users what changes have been made by contributing to a changelog. This changelog is formatted in YAML and describes the changes you've made to the code. This should follow the below format:
+Finally, we ask contributors to make it clear for our users what changes have been made by adding a changelog fragment. Every PR adds at least one: a file directly in `changelog.d/`, named `changelog.d/<name>.<type>.md`, that says in a sentence or two what changed.
+
+- `<type>` is `breaking`, `added`, `changed`, `fixed` or `removed`. It sets the version bump: `breaking` raises the major version, `added` and `removed` the minor version, and `changed` and `fixed` the patch version.
+- `<name>` is letters and digits, in groups joined by single dots, hyphens or underscores, such as the issue number.
 
 ```
-- bump: {major, minor, patch}
-  changes:
-    {added, removed, changed, fixed}:
-    - <variable or program>
+echo 'Report when the deployed version went live.' > changelog.d/4083.added.md
 ```
 
-For more info on the syntax, check out the [semantic versioning docs](https://www.semver.org) and [keep a changelog](https://www.keepachangelog.com).
-
-Write your changelog info into the empty file called `changelog_entry.yaml`. When you open your PR, this will automatically be added to the overall changelog.
+The `Check changelog fragment` PR job fails unless your PR adds such a file, and fails on any other file in `changelog.d/`, such as one in a folder (`changelog.d/added/4083.md`) or an empty one. After the PR merges, the release builds the fragments into `CHANGELOG.md` with [Towncrier](https://towncrier.readthedocs.io) and removes them. See [the PR skill](docs/engineering/skills/github-prs.md#changelog-fragments) for the full rule.
 
 ## Opening a Pull Request
 

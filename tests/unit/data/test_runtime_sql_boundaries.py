@@ -28,7 +28,6 @@ def test_ordinary_runtime_modules_no_longer_use_raw_sql_facade():
     relative_paths = (
         "routes/household_routes.py",
         "routes/policy_routes.py",
-        "routes/reform_impact_routes.py",
         "country.py",
         "services/reform_impacts_service.py",
     )
@@ -39,6 +38,15 @@ def test_ordinary_runtime_modules_no_longer_use_raw_sql_facade():
 
 def test_report_orchestration_uses_sessions_and_models_not_raw_sql():
     source = (PACKAGE_ROOT / "services/report_output_service.py").read_text(
+        encoding="utf-8"
+    )
+    assert "SQLAlchemyDAO" not in source
+    assert ".query(" not in source
+    assert "exec_driver_sql" not in source
+
+
+def test_report_run_history_uses_sessions_and_models_not_raw_sql():
+    source = (PACKAGE_ROOT / "services/report_output_runs.py").read_text(
         encoding="utf-8"
     )
     assert "SQLAlchemyDAO" not in source

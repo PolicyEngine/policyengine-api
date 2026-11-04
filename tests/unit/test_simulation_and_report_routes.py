@@ -15,6 +15,7 @@ from policyengine_api.services.report_run_service import (
     ReportRunService,
 )
 from policyengine_api.services.simulation_service import SimulationService
+from tests.fixtures.services.report_output_fixtures import insert_outdated_report_output
 
 simulation_service = SimulationService()
 report_service = ReportOutputService()
@@ -354,3 +355,71 @@ def test_simulation_v1_routes_keep_json_fields_as_strings(orm_session_factory):
         simulation = session.get(Simulation, simulation_id)
         assert simulation.output == output
         assert isinstance(simulation.simulation_spec_json, dict)
+
+
+def test_report_patch_with_outdated_id_completes_the_report_get_serves(
+    orm_session_factory, monkeypatch
+):
+    simulation_ids = [
+        SimulationService(orm_session_factory)
+        .get_or_create_simulation("uk", "uk", "geography", policy_id)
+        .simulation.id
+        for policy_id in (1, 2)
+    ]
+    outdated_id = insert_outdated_report_output(
+        orm_session_factory,
+        monkeypatch,
+        country_id="uk",
+        simulation_1_id=simulation_ids[0],
+        simulation_2_id=simulation_ids[1],
+        year="2027",
+        output={"outdated": True},
+    )
+    client = create_test_client()
+    served = client.get(f"/uk/report/{outdated_id}").get_json()["result"]
+    assert served["status"] == "pending"
+
+    response = client.patch(
+        "/uk/report",
+        json={"id": outdated_id, "status": "complete", "output": {"current": True}},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["result"]["id"] == outdated_id
+    reopened = client.get(f"/uk/report/{outdated_id}").get_json()["result"]
+    assert reopened["id"] == outdated_id
+    assert reopened["status"] == "complete"
+    assert json.loads(reopened["output"]) == {"current": True}
+
+
+def test_report_patch_with_outdated_id_as_a_string_returns_the_integer_id(
+    orm_session_factory, monkeypatch
+):
+    simulation_ids = [
+        SimulationService(orm_session_factory)
+        .get_or_create_simulation("uk", "uk", "geography", policy_id)
+        .simulation.id
+        for policy_id in (1, 2)
+    ]
+    outdated_id = insert_outdated_report_output(
+        orm_session_factory,
+        monkeypatch,
+        country_id="uk",
+        simulation_1_id=simulation_ids[0],
+        simulation_2_id=simulation_ids[1],
+        year="2027",
+        output={"outdated": True},
+    )
+    client = create_test_client()
+
+    response = client.patch(
+        "/uk/report",
+        json={
+            "id": str(outdated_id),
+            "status": "complete",
+            "output": {"current": True},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["result"]["id"] == outdated_id

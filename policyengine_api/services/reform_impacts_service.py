@@ -45,13 +45,6 @@ class ReformImpactsService:
             cache = ReformImpactCache(context.client, context.namespace)
         self._cache = cache
 
-    def get_recent_reform_impacts(
-        self,
-        max_results: int,
-    ) -> list[CachedReformImpact]:
-        """Return up to ``max_results`` cached impacts, most recently started first."""
-        return self._cache.recent(max_results)
-
     def get_all_reform_impacts(
         self,
         identity: ReformImpactIdentity,
@@ -188,6 +181,15 @@ class ReformImpactsService:
             record_ttl_seconds=keep_seconds,
             end_time=self._now(),
         )
+
+    def get_reform_impact_seconds_left(self, impact: CachedReformImpact) -> int | None:
+        """Return the whole seconds until a lookup stops finding this cached impact.
+
+        Rounded up, so a caller that waits this long finds no record and its
+        next request submits a new job. None when the record is missing or the
+        cache cannot be read.
+        """
+        return self._cache.seconds_left(impact)
 
     def set_complete_reform_impact(
         self,

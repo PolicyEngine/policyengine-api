@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -26,6 +27,19 @@ from policyengine_api.services.v2.policies.validators import (
 )
 
 StrictJsonValue = Annotated[JsonValue, BeforeValidator(require_json_value)]
+
+
+class LegacyPolicyTranslationReason(StrEnum):
+    """Why committed v1 content cannot be translated, as copy failure logs name it."""
+
+    MISSING_PARAMETERS = "missing_parameters"
+    INVALID_PARAMETER_VALUES = "invalid_parameter_values"
+    EMPTY_PARAMETER_VALUES = "empty_parameter_values"
+    INVALID_PERIOD = "invalid_period"
+    CONFLICTING_VALUES = "conflicting_values"
+    TOO_MANY_VALUES = "too_many_values"
+
+
 UtcDateTime = Annotated[datetime, AfterValidator(normalize_utc)]
 
 
@@ -164,6 +178,18 @@ class PolicyRead:
 
 
 @dataclass(frozen=True)
+class CheckedPolicyRead(PolicyRead):
+    """A stored policy checked against the running catalog, as routes return it.
+
+    ``missing_parameters`` lists the parameter names the policy sets that the
+    running catalog lacks, sorted; it is None only when the running
+    PolicyEngine.py version has no published catalog for the country.
+    """
+
+    missing_parameters: tuple[str, ...] | None
+
+
+@dataclass(frozen=True)
 class PolicyPage:
     """One page of policies in creation order; ``has_more`` says if more follow."""
 
@@ -174,8 +200,18 @@ class PolicyPage:
 
 
 @dataclass(frozen=True)
+class CheckedPolicyPage:
+    """A page of policies, each checked against the running catalog."""
+
+    items: tuple[CheckedPolicyRead, ...]
+    offset: int
+    limit: int
+    has_more: bool
+
+
+@dataclass(frozen=True)
 class NativePolicyCreation:
     """Complete policy read plus whether this request inserted it."""
 
-    item: PolicyRead
+    item: CheckedPolicyRead
     created: bool

@@ -23,6 +23,9 @@ jobs:
           --health-timeout=5s
           --health-retries=20
     env:
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
       V2_MIGRATION_DATABASE_URL: postgresql+psycopg://postgres:policyengine_v2_test@127.0.0.1:5432/policyengine_v2_alembic_test
       V2_ALEMBIC_DISPOSABLE_TEST: "1"
     steps:
@@ -35,10 +38,10 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
       - name: Install locked dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --extra dev
       - name: Test generated-only v2 migration configuration and lifecycle
         run: bash .github/scripts/test_alembic_v2_lifecycle.sh
       - name: Require database at the v2 head
-        run: uv run alembic -c alembic-v2.ini current --check-heads
+        run: uv run --frozen --extra dev alembic -c alembic-v2.ini current --check-heads
       - name: Require no ungenerated v2 schema or data operations
-        run: uv run alembic -c alembic-v2.ini check
+        run: uv run --frozen --extra dev alembic -c alembic-v2.ini check

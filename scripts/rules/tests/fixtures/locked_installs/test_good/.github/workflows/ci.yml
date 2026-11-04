@@ -1,0 +1,13 @@
+name: CI
+on: pull_request
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run pytest
+        run: uv run --frozen --extra dev python -m pytest tests
+      - name: Run the scripted tests
+        run: bash .github/scripts/run_tests.sh
+      - name: Run make test
+        run: make test

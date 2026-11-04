@@ -103,7 +103,8 @@ def _give_filter_additional_filters(models: dict[str, SimpleNamespace]) -> None:
         (_remove_national_region, "^us national region is absent$"),
         (
             _give_national_region_another_dataset,
-            "^uk national region does not use the reviewed dataset$",
+            "^uk national region does not use the release's default dataset "
+            "microcosm_uk_2024_25$",
         ),
         (
             _give_filter_an_unsupported_value,
@@ -126,7 +127,7 @@ def test_inconsistent_public_models_fail_with_a_specific_message(
         _extract(models)
 
 
-def test_national_region_without_a_dataset_path_uses_the_reviewed_dataset() -> None:
+def test_national_region_without_a_dataset_path_uses_the_release_default() -> None:
     models = source_models()
     models["us"].region_registry[0].dataset_path = None
 

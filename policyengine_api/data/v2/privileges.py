@@ -114,6 +114,11 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "dataset_versions": _access(catalog_writer=READ),
     "datasets": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
     "parameter_nodes": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
+    # Written by catalog publication for each version it publishes, from the
+    # installed packages' catalog; never rewritten.
+    "parameter_search_files": _access(runtime=READ, catalog_writer=READ_INSERT),
+    # Written with each catalog version that publication publishes.
+    "parameter_tree_children": _access(runtime=READ, catalog_writer=READ_INSERT),
     # The Public API also inserts a v2 policy's own parameter values.
     "parameter_values": _access(runtime=READ_INSERT, catalog_writer=READ_INSERT_UPDATE),
     "parameters": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
@@ -132,6 +137,9 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Stage 10 saved-policy mirror.
     "legacy_user_mappings": _access(runtime=READ_WRITE),
     "legacy_user_policy_mappings": _access(runtime=READ_WRITE),
+    # Served countries; the migration that creates the table inserts its rows,
+    # and the Public API reads them.
+    "countries": _access(runtime=READ),
     # Users and their saved work (Stage 12A).
     "user_household_associations": _access(runtime=READ_WRITE),
     "user_identities": _access(runtime=READ_WRITE),

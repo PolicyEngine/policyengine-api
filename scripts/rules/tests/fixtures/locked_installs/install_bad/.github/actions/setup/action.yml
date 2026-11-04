@@ -1,0 +1,12 @@
+name: Set up
+description: A composite action whose steps install packages.
+runs:
+  using: composite
+  steps:
+    - name: Install requests
+      shell: bash
+      run: pip install requests
+    - name: Install more
+      shell: bash
+      run: |
+        uv sync --extra dev

@@ -9,8 +9,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import event
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine, select
+from sqlmodel import Session, select
 
 from policyengine_api.data.v2.catalog.catalog_selection import (
     InvalidPolicyEngineVersionError,
@@ -18,206 +17,52 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogVersionNotFoundError,
     UnsupportedPreviewCountryError,
 )
+from policyengine_api.data.v2.catalog.parameter_search_file import (
+    country_search_file,
+    encode_parameter_search_file,
+)
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Dataset,
     Parameter,
-    ParameterNode,
+    ParameterSearchFile,
     ParameterValue,
     Region,
-    RegionType,
-    TaxBenefitModel,
-    TaxBenefitModelVersion,
     Variable,
 )
 from policyengine_api.services.v2.metadata.database_session import (
     MetadataDatabaseSession,
 )
+from policyengine_api.services.v2.metadata.selected_catalogs import (
+    SelectedCatalogStore,
+)
 from policyengine_api.services.v2.metadata.services import V2MetadataService
-from policyengine_api.services.v2.metadata.types import ParameterValueFilter
+from policyengine_api.services.v2.metadata.types import (
+    CurrentLawValueRow,
+    MetadataEntity,
+    ParameterFilter,
+    ParameterNodeLabelRow,
+    ParameterValueFilter,
+)
 from policyengine_api.services.v2.metadata.validators import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
+    ParameterSearchFileUnavailableError,
 )
 from tests.fixtures.v2_catalog import POLICYENGINE_VERSION, normalized_catalog
+from tests.fixtures.v2_metadata_service_helpers import (
+    add_country_version,
+    catalog_service,
+    recorded_statements,
+    stored_model_version,
+)
 
-
-def _insert_country(
-    session: Session,
-    country,
-    *,
-    include_model: bool,
-    current_law_id: int | None = None,
-    time_periods: list[int] | None = None,
-) -> None:
-    if include_model:
-        session.add(
-            TaxBenefitModel(
-                id=country.model.id,
-                name=country.model.name,
-                description=country.model.description,
-            )
-        )
-    session.add(
-        TaxBenefitModelVersion(
-            id=country.model_version.id,
-            model_id=country.model.id,
-            version=country.model_version.version,
-            description=country.model_version.description,
-            current_law_id=(
-                country.model_version.current_law_id
-                if current_law_id is None
-                else current_law_id
-            ),
-            metadata_time_periods=(
-                list(country.model_version.metadata_time_periods)
-                if time_periods is None
-                else time_periods
-            ),
-        )
-    )
-    session.add_all(
-        Variable(
-            id=record.id,
-            tax_benefit_model_version_id=country.model_version.id,
-            name=record.name,
-            label=record.label,
-            entity=record.entity,
-            description=record.description,
-            data_type=record.data_type,
-            possible_values=record.possible_values,
-            default_value=record.default_value,
-            adds=record.adds,
-            subtracts=record.subtracts,
-        )
-        for record in country.variables
-    )
-    session.add_all(
-        ParameterNode(
-            id=record.id,
-            tax_benefit_model_version_id=country.model_version.id,
-            name=record.name,
-            label=record.label,
-            description=record.description,
-        )
-        for record in country.parameter_nodes
-    )
-    session.add_all(
-        Parameter(
-            id=record.id,
-            tax_benefit_model_version_id=country.model_version.id,
-            name=record.name,
-            label=record.label,
-            description=record.description,
-            data_type=record.data_type,
-            unit=record.unit,
-        )
-        for record in country.parameters
-    )
-    session.add_all(
-        ParameterValue(
-            id=value.id,
-            parameter_id=value.parameter_id,
-            value_json=value.value_json,
-            start_date=value.start_date,
-            end_date=value.end_date,
-        )
-        for parameter in country.parameters
-        for value in parameter.values
-    )
-    session.add_all(
-        Dataset(
-            id=record.id,
-            tax_benefit_model_version_id=country.model_version.id,
-            name=record.name,
-            description=record.description,
-            year=record.year,
-        )
-        for record in country.datasets
-    )
-    session.add_all(
-        Region(
-            id=record.id,
-            tax_benefit_model_version_id=country.model_version.id,
-            default_dataset_id=record.default_dataset_id,
-            code=record.code,
-            label=record.label,
-            region_type=RegionType(record.region_type),
-            requires_filter=record.requires_filter,
-            filter_field=record.filter_field,
-            filter_value=record.filter_value,
-            filter_strategy=record.filter_strategy,
-            parent_code=record.parent_code,
-            state_code=record.state_code,
-            state_name=record.state_name,
-        )
-        for record in country.regions
-    )
-
-
-@pytest.fixture
-def catalog_session() -> Session:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    V2_METADATA.create_all(engine)
-    with Session(engine) as session:
-        for country in normalized_catalog().countries:
-            _insert_country(session, country, include_model=True)
-        session.commit()
-
-    session = Session(engine)
-    try:
-        yield session
-    finally:
-        session.close()
-        engine.dispose()
-
-
-def _add_country_version(
-    session: Session,
-    *,
-    policyengine_version: str,
-    current_law_id: int,
-    time_periods: list[int],
-) -> None:
-    country = normalized_catalog(policyengine_version=policyengine_version).country(
-        "us"
-    )
-    _insert_country(
-        session,
-        country,
-        include_model=False,
-        current_law_id=current_law_id,
-        time_periods=time_periods,
-    )
-    session.commit()
-
-
-def _us_model_version(session: Session) -> TaxBenefitModelVersion:
-    return session.exec(
-        select(TaxBenefitModelVersion)
-        .join(TaxBenefitModel, TaxBenefitModel.id == TaxBenefitModelVersion.model_id)
-        .where(
-            TaxBenefitModel.name == "policyengine-us",
-            TaxBenefitModelVersion.version == POLICYENGINE_VERSION,
-        )
-    ).one()
-
-
-def _service(session: Session) -> V2MetadataService:
-    return V2MetadataService(
-        MetadataDatabaseSession(session),
-        running_policyengine_version=POLICYENGINE_VERSION,
-    )
+pytest_plugins = ("tests.fixtures.v2_metadata_service",)
 
 
 def test_resource_collection_uses_bounded_pagination_without_counting(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = stored_model_version(catalog_session, "policyengine-us")
     catalog_session.add(
         Variable(
             id=uuid4(),
@@ -242,7 +87,7 @@ def test_resource_collection_uses_bounded_pagination_without_counting(
     bind = catalog_session.get_bind()
     event.listen(bind, "before_cursor_execute", record_statement)
     try:
-        result = _service(catalog_session).list_variables("us", limit=1)
+        result = catalog_service(catalog_session).list_variables("us", limit=1)
     finally:
         event.remove(bind, "before_cursor_execute", record_statement)
 
@@ -274,7 +119,7 @@ def test_resource_collection_rejects_out_of_range_pages_before_querying(
     event.listen(bind, "before_cursor_execute", record_statement)
     try:
         with pytest.raises(InvalidMetadataPageError):
-            _service(catalog_session).list_variables(
+            catalog_service(catalog_session).list_variables(
                 "us",
                 offset=offset,
                 limit=limit,
@@ -296,7 +141,7 @@ def test_parameter_collection_does_not_query_or_embed_values(
     bind = catalog_session.get_bind()
     event.listen(bind, "before_cursor_execute", record_statement)
     try:
-        result = _service(catalog_session).list_parameters("us")
+        result = catalog_service(catalog_session).list_parameters("us")
     finally:
         event.remove(bind, "before_cursor_execute", record_statement)
 
@@ -309,7 +154,7 @@ def test_parameter_collection_does_not_query_or_embed_values(
 def test_parameter_values_are_separate_canonical_resources(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = stored_model_version(catalog_session, "policyengine-us")
     parameter = catalog_session.exec(
         select(Parameter).where(
             Parameter.tax_benefit_model_version_id == model_version.id,
@@ -328,11 +173,11 @@ def test_parameter_values_are_separate_canonical_resources(
     )
     catalog_session.commit()
 
-    all_values = _service(catalog_session).list_parameter_values(
+    all_values = catalog_service(catalog_session).list_parameter_values(
         "us",
         value_filter=ParameterValueFilter(parameter_id=parameter.id),
     )
-    current_value = _service(catalog_session).list_parameter_values(
+    current_value = catalog_service(catalog_session).list_parameter_values(
         "us",
         value_filter=ParameterValueFilter(
             parameter_id=parameter.id,
@@ -359,7 +204,7 @@ def test_current_parameter_value_uses_inclusive_effective_dates(
     selected_time: datetime,
     expected_value: float,
 ) -> None:
-    result = _service(catalog_session).list_parameter_values(
+    result = catalog_service(catalog_session).list_parameter_values(
         "us",
         value_filter=ParameterValueFilter(current=True, now=selected_time),
     )
@@ -367,61 +212,14 @@ def test_current_parameter_value_uses_inclusive_effective_dates(
     assert [item.value for item in result.items] == [expected_value]
 
 
-def test_parameter_children_are_loaded_one_level_at_a_time(
-    catalog_session: Session,
-) -> None:
-    model_version = _us_model_version(catalog_session)
-    nested_node = ParameterNode(
-        id=uuid4(),
-        tax_benefit_model_version_id=model_version.id,
-        name="gov.example.nested",
-        label="Nested parameters",
-        description=None,
-    )
-    nested_parameter = Parameter(
-        id=uuid4(),
-        tax_benefit_model_version_id=model_version.id,
-        name="gov.example.nested.amount",
-        label="Nested amount",
-        description=None,
-        data_type="float",
-        unit="currency-USD",
-    )
-    catalog_session.add_all([nested_node, nested_parameter])
-    catalog_session.commit()
-    service = _service(catalog_session)
-
-    root = service.list_parameter_children("us")
-    government = service.list_parameter_children("us", parent_path="gov")
-    example = service.list_parameter_children("us", parent_path="gov.example")
-    nested = service.list_parameter_children(
-        "us",
-        parent_path="gov.example.nested",
-    )
-
-    assert [(item.path, item.type) for item in root.items] == [("gov", "node")]
-    assert [(item.path, item.type) for item in government.items] == [
-        ("gov.example", "node")
-    ]
-    assert [(item.path, item.type) for item in example.items] == [
-        ("gov.example.nested", "node"),
-        ("gov.example.rate", "parameter"),
-    ]
-    assert [(item.path, item.type) for item in nested.items] == [
-        ("gov.example.nested.amount", "parameter")
-    ]
-    assert root.items[0].child_count == 1
-    assert government.items[0].child_count == 2
-    assert example.items[0].child_count == 1
-    assert example.items[1].parameter is not None
-
-
 def test_resource_filters_and_details_remain_inside_selected_catalog(
     catalog_session: Session,
 ) -> None:
-    service = _service(catalog_session)
+    service = catalog_service(catalog_session)
     variables = service.list_variables("us", search="employment")
-    parameters = service.list_parameters("us", search="example rate")
+    parameters = service.list_parameters(
+        "us", parameter_filter=ParameterFilter(search="example rate")
+    )
     states = service.list_regions("us", region_type="state")
     region = service.get_region_by_code("us", "state/ca")
 
@@ -436,7 +234,7 @@ def test_resource_filters_and_details_remain_inside_selected_catalog(
 def test_all_resource_families_support_collection_and_detail_reads(
     catalog_session: Session,
 ) -> None:
-    service = _service(catalog_session)
+    service = catalog_service(catalog_session)
     selection = service.get_model_by_country("us")
     model = service.list_models("us").items[0]
     model_version = service.list_model_versions("us").items[0]
@@ -462,13 +260,13 @@ def test_all_resource_families_support_collection_and_detail_reads(
 def test_each_resource_result_identifies_an_exact_selected_version(
     catalog_session: Session,
 ) -> None:
-    _add_country_version(
+    add_country_version(
         catalog_session,
         policyengine_version="5.0.5",
         current_law_id=22,
         time_periods=[2041, 2040],
     )
-    service = _service(catalog_session)
+    service = catalog_service(catalog_session)
 
     default_variables = service.list_variables("us")
     selected_variables = service.list_variables("us", "5.0.5")
@@ -484,7 +282,7 @@ def test_each_resource_result_identifies_an_exact_selected_version(
 def test_version_selection_rejects_invalid_absent_and_unsupported_requests(
     catalog_session: Session,
 ) -> None:
-    service = _service(catalog_session)
+    service = catalog_service(catalog_session)
 
     for invalid in ("", f" {POLICYENGINE_VERSION}", "not a version", "0.0.0"):
         with pytest.raises(InvalidPolicyEngineVersionError):
@@ -503,7 +301,7 @@ def test_version_selection_rejects_invalid_absent_and_unsupported_requests(
 def test_dataset_collection_excludes_outputs_and_storage_references(
     catalog_session: Session,
 ) -> None:
-    model_version = _us_model_version(catalog_session)
+    model_version = stored_model_version(catalog_session, "policyengine-us")
     output_id = uuid4()
     catalog_session.add(
         Dataset(
@@ -518,7 +316,7 @@ def test_dataset_collection_excludes_outputs_and_storage_references(
     )
     catalog_session.commit()
 
-    service = _service(catalog_session)
+    service = catalog_service(catalog_session)
     result = service.list_datasets("us")
 
     assert "simulation-output" not in {dataset.name for dataset in result.items}
@@ -537,7 +335,7 @@ def test_economy_options_read_only_regions_and_the_national_dataset(
     bind = catalog_session.get_bind()
     event.listen(bind, "before_cursor_execute", record_statement)
     try:
-        result = _service(catalog_session).get_economy_options("us")
+        result = catalog_service(catalog_session).get_economy_options("us")
     finally:
         event.remove(bind, "before_cursor_execute", record_statement)
 
@@ -557,7 +355,200 @@ def test_economy_options_require_a_national_region_and_dataset(
     catalog_session.commit()
 
     with pytest.raises(MetadataCatalogUnavailableError, match="national v2 region"):
-        _service(catalog_session).get_economy_options("us")
+        catalog_service(catalog_session).get_economy_options("us")
+
+
+def test_model_catalog_holds_only_the_small_parts_of_a_catalog_version(
+    catalog_session: Session,
+) -> None:
+    result, statements = recorded_statements(
+        catalog_session,
+        lambda: catalog_service(catalog_session).get_model_catalog("us"),
+    )
+    us_catalog = normalized_catalog().country("us")
+
+    assert result.policyengine_version == POLICYENGINE_VERSION
+    assert result.catalog_format == 2
+    assert result.model.name == "policyengine-us"
+    assert (
+        result.model_version.current_law_id == us_catalog.model_version.current_law_id
+    )
+    assert result.entities == [
+        MetadataEntity(key="person", plural="people", is_person=True),
+        MetadataEntity(key="household", plural="households", is_person=False),
+    ]
+    assert result.basic_inputs == ["employment_income"]
+    assert [region.code for region in result.regions] == sorted(
+        region.code for region in us_catalog.regions
+    )
+    assert [dataset.name for dataset in result.datasets] == sorted(
+        dataset.name for dataset in us_catalog.datasets
+    )
+    assert [option.name for option in result.economy_options.region] == [
+        region.code for region in result.regions
+    ]
+    assert [option.name for option in result.economy_options.time_period] == list(
+        us_catalog.model_version.metadata_time_periods
+    )
+    assert [option.label for option in result.economy_options.datasets] == ["Microcosm"]
+    assert len(statements) == 3
+    for table in ("variables", "parameters", "parameter_values", "parameter_nodes"):
+        assert all(f"from {table}" not in statement for statement in statements)
+
+
+def test_model_catalog_without_regions_offers_no_economy_calculation(
+    catalog_session: Session,
+) -> None:
+    # A household-only country publishes no regions or datasets; its catalog
+    # still serves entities and basic inputs, with empty economy choices.
+    model_version = stored_model_version(catalog_session, "policyengine-us")
+    for region in catalog_session.exec(
+        select(Region).where(Region.tax_benefit_model_version_id == model_version.id)
+    ).all():
+        catalog_session.delete(region)
+    catalog_session.flush()
+    for dataset in catalog_session.exec(
+        select(Dataset).where(Dataset.tax_benefit_model_version_id == model_version.id)
+    ).all():
+        catalog_session.delete(dataset)
+    catalog_session.commit()
+
+    result = catalog_service(catalog_session).get_model_catalog("us")
+
+    assert result.regions == []
+    assert result.datasets == []
+    assert result.economy_options.region == []
+    assert result.economy_options.time_period == []
+    assert result.economy_options.datasets == []
+    assert result.basic_inputs == ["employment_income"]
+
+
+def test_model_catalog_published_before_format_2_has_empty_new_fields(
+    catalog_session: Session,
+) -> None:
+    model_version = stored_model_version(catalog_session, "policyengine-us")
+    model_version.catalog_format = None
+    model_version.entities = None
+    model_version.basic_inputs = None
+    catalog_session.add(model_version)
+    catalog_session.commit()
+
+    result = catalog_service(catalog_session).get_model_catalog("us")
+
+    assert result.catalog_format is None
+    assert result.entities == []
+    assert result.basic_inputs == []
+
+
+def test_model_catalog_with_regions_requires_the_national_region(
+    catalog_session: Session,
+) -> None:
+    national_region = catalog_session.exec(
+        select(Region).where(Region.code == "us")
+    ).one()
+    catalog_session.delete(national_region)
+    catalog_session.commit()
+
+    with pytest.raises(MetadataCatalogUnavailableError, match="national v2 region"):
+        catalog_service(catalog_session).get_model_catalog("us")
+
+
+def test_a_kept_catalog_selection_saves_its_query_on_later_reads(
+    catalog_session: Session,
+) -> None:
+    store = SelectedCatalogStore()
+
+    first, first_statements = recorded_statements(
+        catalog_session,
+        lambda: catalog_service(
+            catalog_session, selected_catalogs=store
+        ).list_parameters("us"),
+    )
+    second, second_statements = recorded_statements(
+        catalog_session,
+        lambda: catalog_service(
+            catalog_session, selected_catalogs=store
+        ).list_parameters("us"),
+    )
+
+    assert second == first
+    assert len(first_statements) == 2
+    assert len(second_statements) == 1
+    assert "tax_benefit_model_versions" not in second_statements[0]
+
+
+def test_failed_catalog_selections_are_not_kept(catalog_session: Session) -> None:
+    store = SelectedCatalogStore()
+    service = catalog_service(catalog_session, selected_catalogs=store)
+
+    for _attempt in range(2):
+        with pytest.raises(MetadataCatalogVersionNotFoundError):
+            service.list_parameters("us", "9.9.9")
+        with pytest.raises(UnsupportedPreviewCountryError):
+            service.list_parameters("ca")
+        with pytest.raises(InvalidPolicyEngineVersionError):
+            service.list_parameters("us", "not a version")
+
+    add_country_version(
+        catalog_session,
+        policyengine_version="9.9.9",
+        current_law_id=7,
+        time_periods=[2027],
+    )
+    assert service.list_parameters("us", "9.9.9").policyengine_version == "9.9.9"
+
+
+def test_each_country_and_version_keeps_its_own_selection(
+    catalog_session: Session,
+) -> None:
+    store = SelectedCatalogStore()
+    add_country_version(
+        catalog_session,
+        policyengine_version="9.9.9",
+        current_law_id=7,
+        time_periods=[2027],
+    )
+    service = catalog_service(catalog_session, selected_catalogs=store)
+
+    running_us = service.get_model_by_country("us")
+    named_us = service.get_model_by_country("us", "9.9.9")
+    running_uk = service.get_model_by_country("uk")
+
+    assert (running_us.policyengine_version, named_us.policyengine_version) == (
+        POLICYENGINE_VERSION,
+        "9.9.9",
+    )
+    assert named_us.model_version.current_law_id == 7
+    assert running_uk.model.name == "policyengine-uk"
+    assert service.get_model_by_country("us", "9.9.9") == named_us
+
+
+def test_value_and_node_label_reads_return_typed_rows(
+    catalog_session: Session,
+) -> None:
+    from policyengine_api.services.v2.metadata.database_connectors import (
+        reads_parameter_nodes,
+        reads_parameters,
+    )
+
+    model_version = stored_model_version(catalog_session, "policyengine-us")
+    values = reads_parameters.read_current_law_values_by_parameter_name(
+        catalog_session,
+        model_version_id=model_version.id,
+        parameter_names={"gov.example.rate"},
+    )
+    labels = reads_parameter_nodes.read_parameter_node_labels(
+        catalog_session,
+        model_version_id=model_version.id,
+        node_names={"gov.example", "gov.absent"},
+    )
+
+    assert [type(row) for row in values] == [CurrentLawValueRow, CurrentLawValueRow]
+    assert [(row.name, row.value_json) for row in values] == [
+        ("gov.example.rate", 0.1),
+        ("gov.example.rate", 0.2),
+    ]
+    assert labels == [ParameterNodeLabelRow(name="gov.example", label="Example policy")]
 
 
 def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
@@ -569,6 +560,7 @@ def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
         project_package / "data" / "v2" / "catalog" / "catalog_selection.py",
         connector_directory / "reads.py",
         connector_directory / "reads_datasets.py",
+        connector_directory / "reads_parameter_nodes.py",
         connector_directory / "reads_parameter_tree.py",
         connector_directory / "reads_parameters.py",
         connector_directory / "reads_regions.py",
@@ -624,8 +616,74 @@ def test_resource_entrypoints_are_defined_in_the_service_module() -> None:
         "get_region",
         "get_region_by_code",
         "get_economy_options",
+        "get_model_catalog",
+        "get_catalog_variables",
+        "get_catalog_parameters",
     }
 
     for method_name in method_names:
         method = getattr(V2MetadataService, method_name)
         assert method.__module__.endswith(".services")
+
+
+def test_the_selected_version_search_file_is_returned_as_stored(
+    catalog_session: Session,
+) -> None:
+    model_version = stored_model_version(catalog_session, "policyengine-us")
+    encoded = encode_parameter_search_file(
+        country_search_file(normalized_catalog().country("us"))
+    )
+    catalog_session.add(
+        ParameterSearchFile(
+            tax_benefit_model_version_id=model_version.id,
+            file_format=1,
+            compressed_content=encoded.compressed_content,
+            content_sha256=encoded.content_sha256,
+            uncompressed_size=encoded.uncompressed_size,
+            compressed_size=encoded.compressed_size,
+        )
+    )
+    catalog_session.commit()
+
+    search_file = catalog_service(catalog_session).get_parameter_search_file("us")
+    content_sha256 = catalog_service(catalog_session).get_parameter_search_file_hash(
+        "us"
+    )
+
+    assert content_sha256 == encoded.content_sha256
+    assert search_file.policyengine_version == POLICYENGINE_VERSION
+    assert search_file.file_format == 1
+    assert search_file.compressed_content == encoded.compressed_content
+    assert search_file.content_sha256 == encoded.content_sha256
+    assert search_file.uncompressed_size == encoded.uncompressed_size
+    assert search_file.compressed_size == encoded.compressed_size
+
+
+def test_a_version_without_a_search_file_of_the_current_format_is_unavailable(
+    catalog_session: Session,
+) -> None:
+    model_version = stored_model_version(catalog_session, "policyengine-us")
+    catalog_session.add(
+        ParameterSearchFile(
+            tax_benefit_model_version_id=model_version.id,
+            file_format=99,
+            compressed_content=b"later format",
+            content_sha256="0" * 64,
+            uncompressed_size=12,
+            compressed_size=12,
+        )
+    )
+    catalog_session.commit()
+
+    with pytest.raises(ParameterSearchFileUnavailableError) as raised:
+        catalog_service(catalog_session).get_parameter_search_file("us")
+    with pytest.raises(ParameterSearchFileUnavailableError) as raised_for_hash:
+        catalog_service(catalog_session).get_parameter_search_file_hash("us")
+
+    assert str(raised_for_hash.value) == str(raised.value)
+
+    assert str(raised.value) == (
+        f"catalog version {POLICYENGINE_VERSION} has no parameter search file: "
+        "only catalog format 2 versions that catalog publication has published, "
+        "or run with installed, since search files were added have one"
+    )

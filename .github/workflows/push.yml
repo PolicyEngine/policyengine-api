@@ -14,10 +14,49 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check-release-commit:
+    # Whether this release run may skip the checks its merge run passed: the
+    # release commit changes only release files, and the merge commit's Push
+    # run passed every check (.github/release_commit.py). It runs on every
+    # push, so the checks that need it never need a skipped job; on a merge
+    # commit its steps do nothing, and the checks run.
+    name: Check the release commit
+    runs-on: ubuntu-latest
+    if: github.repository == 'PolicyEngine/policyengine-api'
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      merge_run_checks_passed: ${{ steps.release_commit.outputs.merge_run_checks_passed }}
+      merge_run_url: ${{ steps.release_commit.outputs.merge_run_url }}
+    steps:
+      - name: Checkout the release commit and its parent
+        if: github.event.head_commit.message == 'Update PolicyEngine API'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Setup Python
+        if: github.event.head_commit.message == 'Update PolicyEngine API'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Decide whether this run may skip the merge run's checks
+        id: release_commit
+        if: github.event.head_commit.message == 'Update PolicyEngine API'
+        run: bash .github/scripts/check_release_commit.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    if: github.repository == 'PolicyEngine/policyengine-api'
+    needs: check-release-commit
+    # Skipped on a release run whose merge run passed it on the same code.
+    # !cancelled() runs it when the release commit check fails.
+    if: |
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
+      && (needs.check-release-commit.outputs.merge_run_checks_passed != 'true')
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -35,7 +74,13 @@ jobs:
   quality-guards:
     name: Quality guards
     runs-on: ubuntu-latest
-    if: github.repository == 'PolicyEngine/policyengine-api'
+    needs: check-release-commit
+    # Skipped on a release run whose merge run passed it on the same code.
+    # !cancelled() runs it when the release commit check fails.
+    if: |
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
+      && (needs.check-release-commit.outputs.merge_run_checks_passed != 'true')
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -50,17 +95,35 @@ jobs:
 
   alembic-v1-check:
     name: Alembic v1 qualification
-    if: github.repository == 'PolicyEngine/policyengine-api'
+    needs: check-release-commit
+    # Skipped on a release run whose merge run passed it on the same code.
+    # !cancelled() runs it when the release commit check fails.
+    if: |
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
+      && (needs.check-release-commit.outputs.merge_run_checks_passed != 'true')
     uses: ./.github/workflows/alembic-v1-check.yml
 
   alembic-v2-check:
     name: Alembic v2 qualification
-    if: github.repository == 'PolicyEngine/policyengine-api'
+    needs: check-release-commit
+    # Skipped on a release run whose merge run passed it on the same code.
+    # !cancelled() runs it when the release commit check fails.
+    if: |
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
+      && (needs.check-release-commit.outputs.merge_run_checks_passed != 'true')
     uses: ./.github/workflows/alembic-v2-check.yml
 
   v2-integration-check:
     name: Cross-database integration tests
-    if: github.repository == 'PolicyEngine/policyengine-api'
+    needs: check-release-commit
+    # Skipped on a release run whose merge run passed it on the same code.
+    # !cancelled() runs it when the release commit check fails.
+    if: |
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
+      && (needs.check-release-commit.outputs.merge_run_checks_passed != 'true')
     uses: ./.github/workflows/v2-integration-check.yml
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -73,16 +136,19 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: staging
     env:
+      DEPLOYMENT_ENVIRONMENT: staging
       SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+      - name: Check the simulation service belongs to staging
+        run: bash .github/scripts/check_simulation_entrypoint_environment.sh
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Set up uv for installed bundle validation
         uses: astral-sh/setup-uv@v6
-      - name: Check simulation API supports PolicyEngine bundle
+      - name: Check the PolicyEngine bundle is the simulation API's latest
         run: bash .github/check-policyengine-bundle-supported.sh
 
   versioning:
@@ -96,6 +162,10 @@ jobs:
       (github.repository == 'PolicyEngine/policyengine-api')
       && !(github.event.head_commit.message == 'Update PolicyEngine API')
     runs-on: ubuntu-latest
+    env:
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -115,8 +185,6 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.13.4"
-      - name: Install changelog tool
-        run: pip install towncrier
       - name: Bump project version
         run: python .github/bump_version.py
       - name: Refresh uv lock
@@ -138,13 +206,21 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - ensure-staging-model-version-aligns-with-sim-api
+      - check-release-commit
       - lint
       - alembic-v1-check
       - alembic-v2-check
       - v2-integration-check
+    # The checks may be skipped, so this job runs whatever they ended, and its
+    # first step after checkout requires that the merge run passed them on the
+    # same code or that this run did. Every release job after it states which
+    # jobs it needs to have passed: GitHub would otherwise skip it, because a
+    # job it needs needed a skipped one.
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.ensure-staging-model-version-aligns-with-sim-api.result == 'success'
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -152,8 +228,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Require the merge run's checks or this run's
+        run: python .github/release_commit.py require-checks
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
       - name: Publish Git Tag
-        run: ".github/publish-git-tag.sh"
+        run: bash .github/scripts/publish_git_tag.sh
 
   migrate-v1-staging-cloud-sql:
     name: Upgrade staging v1 Cloud SQL schema
@@ -161,8 +241,11 @@ jobs:
       - ensure-staging-model-version-aligns-with-sim-api
       - publish-git-tag
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.ensure-staging-model-version-aligns-with-sim-api.result == 'success'
+      && needs.publish-git-tag.result == 'success'
     uses: ./.github/workflows/migrate-v1-cloud-sql.yml
     with:
       deployment_environment: staging
@@ -170,17 +253,124 @@ jobs:
     secrets: inherit
 
   seed-v2-staging-database:
+    # Runs beside migrate-v1-staging-cloud-sql: the seeding job connects only to
+    # the v2 database and the v1 upgrade only to Cloud SQL, so neither needs the
+    # other. The staging deploy needs both.
     name: Seed staging v2 database
     needs:
       - publish-git-tag
-      - migrate-v1-staging-cloud-sql
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.publish-git-tag.result == 'success'
     uses: ./.github/workflows/seed-v2-database.yml
     with:
       deployment_environment: staging
     secrets: inherit
+
+  release-tests:
+    # The release test suite (make test) on the release commit: the only run
+    # of it on the merged code, because pull requests need not be up to date
+    # with master to merge. It starts with the run, beside the checks and the
+    # staging database jobs, and the staging deploy needs it, so the tests pass
+    # before GCP authentication, image publication or candidate deployment.
+    # It keeps the staging environment and the variables the tests read when
+    # they ran inside the staging deploy job. The suite runs in six shards, one
+    # runner each, split by file (scripts/release_test_shards.py), and
+    # check-release-test-shards checks that each test ran in exactly one.
+    name: Run release tests (shard ${{ matrix.shard_index }} of 6)
+    runs-on: ubuntu-latest
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: staging
+    env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
+      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
+      POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: ${{ vars.POLICYENGINE_DB_INSTANCE_CONNECTION_NAME }}
+      PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET: ${{ vars.PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET }}
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
+    permissions:
+      contents: read
+    strategy:
+      # Every shard runs to the end, so one release run shows every failure.
+      fail-fast: false
+      matrix:
+        shard_index: [1, 2, 3, 4, 5, 6]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Update package lists
+        run: sudo apt-get update
+      - name: Install release test dependencies
+        run: sudo apt-get install -y redis-server
+      - name: Start release test Redis
+        run: sudo systemctl start redis-server
+      - name: Install locked application dependencies
+        run: make install
+      - name: Run release tests
+        run: bash .github/scripts/run_release_tests.sh
+        env:
+          RELEASE_TEST_SHARD_INDEX: ${{ matrix.shard_index }}
+          RELEASE_TEST_SHARD_COUNT: "6"
+          RELEASE_TEST_SHARD_REPORT_DIRECTORY: ${{ runner.temp }}/release-test-shard
+          RUNTIME_CACHE_MODE: local
+          RUNTIME_CACHE_URL: redis://127.0.0.1:6379/0
+          RUNTIME_CACHE_ENVIRONMENT: test
+          RUNTIME_CACHE_SERVICE: api
+          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
+          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Compatibility name required by PolicyEngine Core.
+          HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}
+          GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
+          GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
+          GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
+          GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
+      - name: Upload the tests this shard collected and ran
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-test-shard-${{ matrix.shard_index }}
+          path: ${{ runner.temp }}/release-test-shard
+          if-no-files-found: error
+          retention-days: 7
+
+  check-release-test-shards:
+    # Fails unless every shard collected the same tests and each test ran in
+    # exactly one shard (scripts/release_test_shards.py check-coverage).
+    name: Check that every release test ran in exactly one shard
+    runs-on: ubuntu-latest
+    needs: release-tests
+    if: |
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.release-tests.result == 'success'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download every shard's report
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-test-shard-*
+          path: ${{ runner.temp }}/release-test-shards
+      - name: Check that every release test ran in exactly one shard
+        run: python -m scripts.release_test_shards check-coverage --shard-count 6 "${{ runner.temp }}/release-test-shards"
 
   deploy-cloud-run-staging:
     name: Deploy and test staging Cloud Run candidate
@@ -190,9 +380,18 @@ jobs:
       - publish-git-tag
       - migrate-v1-staging-cloud-sql
       - seed-v2-staging-database
+      - release-tests
+      - check-release-test-shards
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.ensure-staging-model-version-aligns-with-sim-api.result == 'success'
+      && needs.publish-git-tag.result == 'success'
+      && needs.migrate-v1-staging-cloud-sql.result == 'success'
+      && needs.seed-v2-staging-database.result == 'success'
+      && needs.release-tests.result == 'success'
+      && needs.check-release-test-shards.result == 'success'
     environment: staging
     env:
       DEPLOYMENT_ENVIRONMENT: staging
@@ -229,6 +428,9 @@ jobs:
       CLOUD_RUN_MIN_INSTANCES: "0"
       CLOUD_RUN_SERVICE_MIN_INSTANCES: "0"
       CLOUD_RUN_MAX_INSTANCES: "1"
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
     permissions:
       contents: read
       id-token: write
@@ -246,30 +448,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Update package lists
-        run: sudo apt-get update
-      - name: Install release test dependencies
-        run: sudo apt-get install -y redis-server
-      - name: Start release test Redis
-        run: sudo systemctl start redis-server
-      - name: Install application dependencies
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      # The staging integration tests below run from uv.lock.
+      - name: Install locked application dependencies
         run: make install
-      - name: Run release tests
-        run: bash .github/scripts/run_release_tests.sh
-        env:
-          RUNTIME_CACHE_MODE: local
-          RUNTIME_CACHE_URL: redis://127.0.0.1:6379/0
-          RUNTIME_CACHE_ENVIRONMENT: test
-          RUNTIME_CACHE_SERVICE: api
-          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
-          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # Compatibility name required by PolicyEngine Core.
-          HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}
-          GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
-          GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
-          GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
-          GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
       - name: GCP authentication
         uses: "google-github-actions/auth@v2"
         with:
@@ -301,6 +484,7 @@ jobs:
       - name: Deploy tagged Cloud Run staging candidate
         run: bash .github/scripts/deploy_cloud_run_candidate.sh
         env:
+          PREVIOUS_CLOUD_RUN_REVISION: ${{ steps.previous.outputs.revision }}
           CLOUD_RUN_IMAGE_TAG: ${{ steps.cloud_run.outputs.image_tag }}
           CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
           CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: policyengine-api-cr-staging@policyengine-api.iam.gserviceaccount.com
@@ -320,9 +504,9 @@ jobs:
         env:
           CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
       - name: Wait for Cloud Run staging health
-        run: bash .github/scripts/health_check.sh "${{ steps.candidate.outputs.url }}/readiness-check"
+        run: bash .github/scripts/health_check.sh "${{ steps.candidate.outputs.url }}/health"
       - name: Run staging integration tests
-        run: python -m pytest tests/integration/test_cloud_run_candidate.py tests/integration/test_live_v2_metadata.py tests/integration/test_live_v2_policies.py -v
+        run: uv run --frozen --extra dev python -m pytest tests/integration/test_cloud_run_candidate.py tests/integration/test_live_v2_metadata.py tests/integration/test_live_v2_policies.py -v
         env:
           API_BASE_URL: ${{ steps.candidate.outputs.url }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ steps.cloud_run.outputs.revision_tag }}
@@ -342,8 +526,14 @@ jobs:
     timeout-minutes: 20
     needs: deploy-cloud-run-staging
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.deploy-cloud-run-staging.result == 'success'
+    env:
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -351,11 +541,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install live test dependencies
-        run: pip install pytest pytest-xdist httpx
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Install locked live test dependencies
+        run: make install
       - name: Wait for Cloud Run staging candidate health before live tests
-        run: bash .github/scripts/health_check.sh "${{ needs.deploy-cloud-run-staging.outputs.url }}/readiness-check"
-      - name: Run live staging tests in two pytest workers
+        run: bash .github/scripts/health_check.sh "${{ needs.deploy-cloud-run-staging.outputs.url }}/health"
+      - name: Run live staging tests, one pytest worker per test
         run: bash .github/scripts/run_live_staging_tests.sh
         env:
           API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}
@@ -368,8 +560,11 @@ jobs:
       - deploy-cloud-run-staging
       - parallel-live-simulation-tests-staging-cloud-run
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.deploy-cloud-run-staging.result == 'success'
+      && needs.parallel-live-simulation-tests-staging-cloud-run.result == 'success'
     environment: staging
     env:
       CLOUD_RUN_SERVICE: policyengine-api-staging
@@ -418,10 +613,10 @@ jobs:
         id: stable_health
         if: ${{ steps.promote.outcome == 'success' }}
         continue-on-error: true
-        run: bash .github/scripts/health_check.sh "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}/readiness-check"
+        run: bash .github/scripts/health_check.sh "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}/health"
       - name: Restore previous Cloud Run staging revision
         if: ${{ steps.promote.outcome == 'failure' || steps.stable_health.outcome == 'failure' }}
-        run: bash .github/scripts/restore_cloud_run_revision.sh "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}/readiness-check"
+        run: bash .github/scripts/restore_cloud_run_revision.sh "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}/health"
         env:
           CLOUD_RUN_TARGET_REVISION: ${{ needs.deploy-cloud-run-staging.outputs.previous_revision }}
           CLOUD_RUN_EXPECTED_CURRENT_REVISION: ${{ needs.deploy-cloud-run-staging.outputs.revision }}
@@ -434,28 +629,35 @@ jobs:
     runs-on: ubuntu-latest
     needs: promote-cloud-run-staging
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.promote-cloud-run-staging.result == 'success'
     environment: production
     env:
+      DEPLOYMENT_ENVIRONMENT: production
       SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+      - name: Check the simulation service belongs to production
+        run: bash .github/scripts/check_simulation_entrypoint_environment.sh
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Set up uv for installed bundle validation
         uses: astral-sh/setup-uv@v6
-      - name: Check simulation API supports PolicyEngine bundle
+      - name: Check the PolicyEngine bundle is the simulation API's latest
         run: bash .github/check-policyengine-bundle-supported.sh
 
   migrate-v1-production-cloud-sql:
     name: Upgrade production v1 Cloud SQL schema
     needs: ensure-production-model-version-aligns-with-sim-api
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.ensure-production-model-version-aligns-with-sim-api.result == 'success'
     uses: ./.github/workflows/migrate-v1-cloud-sql.yml
     with:
       deployment_environment: production
@@ -463,13 +665,16 @@ jobs:
     secrets: inherit
 
   seed-v2-production-database:
+    # Runs beside migrate-v1-production-cloud-sql, as in staging. The
+    # production deploy needs both.
     name: Seed production v2 database
     needs:
       - ensure-production-model-version-aligns-with-sim-api
-      - migrate-v1-production-cloud-sql
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.ensure-production-model-version-aligns-with-sim-api.result == 'success'
     uses: ./.github/workflows/seed-v2-database.yml
     with:
       deployment_environment: production
@@ -478,10 +683,15 @@ jobs:
   deploy-cloud-run-candidate:
     name: Deploy production Cloud Run candidate
     runs-on: ubuntu-latest
-    needs: seed-v2-production-database
+    needs:
+      - migrate-v1-production-cloud-sql
+      - seed-v2-production-database
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.migrate-v1-production-cloud-sql.result == 'success'
+      && needs.seed-v2-production-database.result == 'success'
     environment: production
     env:
       DEPLOYMENT_ENVIRONMENT: production
@@ -524,12 +734,21 @@ jobs:
       # daytime peak, so full traffic needs the extra headroom.
       CLOUD_RUN_SERVICE_MIN_INSTANCES: "2"
       CLOUD_RUN_MAX_INSTANCES: "8"
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
     permissions:
       contents: read
       id-token: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
       - name: GCP authentication
         uses: "google-github-actions/auth@v2"
         with:
@@ -555,6 +774,7 @@ jobs:
       - name: Deploy tagged Cloud Run candidate
         run: bash .github/scripts/deploy_cloud_run_candidate.sh
         env:
+          PREVIOUS_CLOUD_RUN_REVISION: ${{ steps.previous.outputs.revision }}
           CLOUD_RUN_IMAGE_TAG: ${{ steps.cloud_run.outputs.image_tag }}
           CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
           CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
@@ -574,11 +794,11 @@ jobs:
         env:
           CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
       - name: Wait for Cloud Run candidate health
-        run: bash .github/scripts/health_check.sh "${{ steps.candidate.outputs.url }}/readiness-check"
-      - name: Install Cloud Run smoke test dependencies
-        run: pip install pytest httpx
+        run: bash .github/scripts/health_check.sh "${{ steps.candidate.outputs.url }}/health"
+      - name: Install locked Cloud Run smoke test dependencies
+        run: make install
       - name: Run Cloud Run candidate smoke tests
-        run: python -m pytest tests/integration/test_cloud_run_candidate.py tests/integration/test_live_v2_metadata.py -v
+        run: uv run --frozen --extra dev python -m pytest tests/integration/test_cloud_run_candidate.py tests/integration/test_live_v2_metadata.py -v
         env:
           API_BASE_URL: ${{ steps.candidate.outputs.url }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ steps.cloud_run.outputs.revision_tag }}
@@ -599,10 +819,10 @@ jobs:
         id: stable_health
         if: ${{ steps.promote.outcome == 'success' }}
         continue-on-error: true
-        run: bash .github/scripts/health_check.sh "${{ steps.previous.outputs.stable_url }}/readiness-check"
+        run: bash .github/scripts/health_check.sh "${{ steps.previous.outputs.stable_url }}/health"
       - name: Restore previous Cloud Run production revision
         if: ${{ steps.promote.outcome == 'failure' || steps.stable_health.outcome == 'failure' }}
-        run: bash .github/scripts/restore_cloud_run_revision.sh "${{ steps.previous.outputs.stable_url }}/readiness-check"
+        run: bash .github/scripts/restore_cloud_run_revision.sh "${{ steps.previous.outputs.stable_url }}/health"
         env:
           CLOUD_RUN_TARGET_REVISION: ${{ steps.previous.outputs.revision }}
           CLOUD_RUN_EXPECTED_CURRENT_REVISION: ${{ steps.candidate.outputs.revision }}
@@ -615,8 +835,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: deploy-cloud-run-candidate
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.deploy-cloud-run-candidate.result == 'success'
     environment: production
     permissions:
       contents: read
@@ -642,8 +864,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: deploy-cloud-run-candidate
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      !cancelled()
+      && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+      && needs.deploy-cloud-run-candidate.result == 'success'
     permissions:
       contents: read
       packages: write

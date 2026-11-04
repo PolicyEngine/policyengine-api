@@ -1,0 +1,220 @@
+"""Error records, the one record chosen per failure, and their fingerprints."""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+from dataclasses import dataclass, fields
+from typing import TYPE_CHECKING
+
+from telemetry_error_issues.normalization import (
+    MISSING,
+    environment_class,
+    fingerprint_frames,
+    service_family,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+    from datetime import datetime
+
+REQUEST_COMPLETED_EVENT = "request.completed"
+# Changing how fingerprints are computed changes every fingerprint. The job
+# matches an issue by the fingerprint in its state comment only when the state
+# names the current algorithm, and otherwise by the fingerprint in its title,
+# which it never changes. A change to the algorithm must say how existing
+# issues are carried over.
+#
+# Algorithm 2 keys an exception's stack frames by function name, where
+# algorithm 1 used module path and function name. The algorithm number is
+# hashed into every fingerprint, so every group's fingerprint changed. Issues
+# opened under algorithm 1 were not carried over: their titles hold algorithm 1
+# fingerprints, so the job no longer updates or reopens them, and a group that
+# still fails opens a new issue.
+FINGERPRINT_ALGORITHM = 2
+FINGERPRINT_LENGTH = 16
+MIN_FINGERPRINT_KEY_LENGTH = 32
+# Exception classes that only copy another exception of the same failure. When
+# a simulation worker or coordinator fails, the simulation service logs the
+# original exception, then ``record_failure_cause`` records a redacted copy
+# that carries the original's traceback: a handled ``exception.recorded``
+# event. A worker's copy often has the original's frames and timestamp. The
+# copy sets no event name or attribute of its own, so only its class tells it
+# apart from other handled exceptions.
+RECORDED_CAUSE_COPY_TYPES = frozenset({"Stage12FailureCause"})
+
+
+@dataclass(frozen=True)
+class ErrorRecord:
+    """One ERROR record from the central log bucket, as the query returns it.
+
+    The query returns identifiers only as SHA-256 hashes, stacks only as frame
+    headers, and messages only as their first few words.
+    """
+
+    timestamp: datetime
+    service_name: str
+    environment_name: str | None
+    event_name: str | None
+    error_type: str | None
+    error_handled: bool | None
+    frames: tuple[str, ...]
+    stack_truncated: bool
+    message_template: str | None
+    attribute_error_type: str | None
+    failure_category: str | None
+    route: str | None
+    status_code: int | None
+    operation_name: str | None
+    request_key: str | None
+    observability_key: str | None
+    trace_key: str | None
+
+    @property
+    def family(self) -> str:
+        """Return the service family that produced the record."""
+        return service_family(self.service_name)
+
+    @property
+    def environment(self) -> str:
+        """Return production, staging or other."""
+        return environment_class(self.environment_name)
+
+    @property
+    def kind(self) -> str:
+        """Return exception, message or failed_request.
+
+        A record with an exception type is an exception, even a
+        ``request.completed`` record. Any other ``request.completed`` record is
+        a request that failed without a recorded exception.
+        """
+        if self.error_type:
+            return "exception"
+        if self.event_name == REQUEST_COMPLETED_EVENT:
+            return "failed_request"
+        return "message"
+
+
+def _primary_preference(record: ErrorRecord) -> tuple[int, int, datetime]:
+    """Sort key: exceptions, recorded-cause copies, messages, request completions.
+
+    A recorded-cause copy (see ``RECORDED_CAUSE_COPY_TYPES``) ranks after the
+    exception it copies, so the original's class decides the failure's group
+    whatever their timestamps; a failure with only the copy still uses it.
+    Among exceptions, an unhandled one (the cause of an error response) comes
+    first; otherwise the earliest record does.
+    """
+    if record.event_name == REQUEST_COMPLETED_EVENT:
+        source_rank = 3
+    elif record.error_type in RECORDED_CAUSE_COPY_TYPES:
+        source_rank = 1
+    elif record.error_type:
+        source_rank = 0
+    else:
+        source_rank = 2
+    handled_rank = 0 if record.error_handled is False else 1
+    return source_rank, handled_rank, record.timestamp
+
+
+def _field_values(record: ErrorRecord) -> tuple[tuple[bool, object], ...]:
+    """Return every field of the record, each as whether it is set and its value.
+
+    Missing values sort first and are never compared with set ones, so any two
+    records compare, and only equal records tie.
+    """
+    values = (getattr(record, field.name) for field in fields(record))
+    return tuple((value is not None, value) for value in values)
+
+
+def _tie_breaker(record: ErrorRecord) -> tuple[object, ...]:
+    """Order records by their values alone, never by the order they arrived in.
+
+    The values that decide the record's error group come first, so a tie goes
+    to the group whose values sort first, and the choice doesn't change when
+    only the line numbers in the stack do.
+    """
+    return fingerprint_parts(record), _field_values(record)
+
+
+def primary_records(records: Iterable[ErrorRecord]) -> list[ErrorRecord]:
+    """Return one record per failure, in time order.
+
+    Records of one service that share a request ID, or a trace when there is no
+    request ID, describe one failure. A record with neither is its own failure.
+    Records that tie on preference, or on time, are ordered by their values, so
+    the result doesn't depend on the order of ``records``.
+    """
+    failures: dict[tuple[str, str], list[ErrorRecord]] = {}
+    standalone: list[ErrorRecord] = []
+    for record in records:
+        correlation = record.request_key or record.trace_key
+        if correlation is None:
+            standalone.append(record)
+        else:
+            failures.setdefault((record.family, correlation), []).append(record)
+    chosen = [
+        min(
+            group,
+            key=lambda record: (_primary_preference(record), _tie_breaker(record)),
+        )
+        for group in failures.values()
+    ]
+    return sorted(
+        [*chosen, *standalone],
+        key=lambda record: (record.timestamp, _tie_breaker(record)),
+    )
+
+
+def fingerprint_parts(record: ErrorRecord) -> tuple[str, ...]:
+    """Return the kind and the values that identify the record's error group.
+
+    An exception's route is left out, so one shared failure doesn't open an
+    issue for every route that reaches it. Its stack frames are keyed by
+    function name, not module path (see ``fingerprint_frames``).
+    """
+    kind = record.kind
+    if kind == "exception":
+        return (
+            kind,
+            record.family,
+            record.error_type or MISSING,
+            *fingerprint_frames(record.frames),
+        )
+    if kind == "message":
+        return (
+            kind,
+            record.family,
+            record.route or record.operation_name or MISSING,
+            record.message_template or MISSING,
+            record.attribute_error_type or MISSING,
+            record.failure_category or MISSING,
+        )
+    status = MISSING if record.status_code is None else str(record.status_code)
+    return (kind, record.family, record.route or MISSING, status)
+
+
+def fingerprint_key(secret: str) -> bytes:
+    """Return the HMAC key, rejecting a secret too short to be random."""
+    if len(secret) < MIN_FINGERPRINT_KEY_LENGTH:
+        msg = (
+            "the fingerprint key must be at least "
+            f"{MIN_FINGERPRINT_KEY_LENGTH} characters"
+        )
+        raise ValueError(msg)
+    return secret.encode()
+
+
+def fingerprint(record: ErrorRecord, key: bytes) -> str:
+    """Return the record's error group as 16 hex characters of HMAC-SHA256.
+
+    The key keeps anyone from confirming a guessed message or stack frame by
+    hashing it and comparing the result with a public fingerprint.
+    """
+    payload = json.dumps(
+        [FINGERPRINT_ALGORITHM, *fingerprint_parts(record)],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    digest = hmac.new(key, payload.encode(), hashlib.sha256).hexdigest()
+    return digest[:FINGERPRINT_LENGTH]

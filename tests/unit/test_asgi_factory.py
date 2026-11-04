@@ -1,5 +1,4 @@
 import importlib
-import json
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -59,19 +58,15 @@ def create_test_wsgi_app() -> Flask:
         )
         return response
 
-    @app.get("/readiness-check")
-    def readiness_check():
-        return Response("OK", status=200, mimetype="text/plain")
-
-    @app.get("/liveness-check")
-    def liveness_check():
-        return Response("OK", status=200, mimetype="text/plain")
-
-    @app.get("/specification")
-    def specification():
-        return jsonify({"openapi": "3.0.0", "info": {"title": "fallback"}})
-
     return app
+
+
+@pytest.fixture(autouse=True)
+def default_readiness_probe_reports_ready(monkeypatch):
+    """Report ready from the default probe, which needs deployed configuration."""
+    monkeypatch.setattr(
+        "policyengine_api.fastapi_routes.dependencies.is_ready", lambda: True
+    )
 
 
 class _HealthySimulationGateway:
@@ -92,20 +87,11 @@ def _stage6_settings(
     )
 
 
-def _stage6_dependencies(
-    *,
-    ready: bool = True,
-    specification: dict | None = None,
-):
-    document = specification or {
-        "openapi": "3.1.0",
-        "info": {"title": "native specification"},
-    }
+def _stage6_dependencies(*, ready: bool = True):
     return asgi_factory.NativeRouteDependencies(
         readiness_probe=lambda: ready,
         gateway_client_factory=_HealthySimulationGateway,
         metadata_reader_factory=lambda: None,
-        specification_provider=lambda: document,
     )
 
 
@@ -126,27 +112,7 @@ def test_asgi_app_rejects_an_invalid_stage6_route_selector(monkeypatch):
         create_asgi_app(create_test_wsgi_app())
 
 
-def test_native_liveness_and_ready_readiness_preserve_legacy_contract():
-    client = TestClient(
-        create_asgi_app(
-            create_test_wsgi_app(),
-            route_settings=_stage6_settings(health=RouteImplementation.FASTAPI_NATIVE),
-            dependencies=_stage6_dependencies(ready=True),
-        )
-    )
-
-    liveness = client.get("/liveness-check")
-    readiness = client.get("/readiness-check")
-
-    assert liveness.status_code == 200
-    assert liveness.content == b"OK"
-    assert liveness.headers["content-type"].startswith("text/plain")
-    assert readiness.status_code == 200
-    assert readiness.content == b"OK"
-    assert readiness.headers["content-type"].startswith("text/plain")
-
-
-def test_native_readiness_is_gated_while_liveness_remains_healthy():
+def test_health_returns_503_until_the_readiness_probe_passes():
     client = TestClient(
         create_asgi_app(
             create_test_wsgi_app(),
@@ -155,73 +121,82 @@ def test_native_readiness_is_gated_while_liveness_remains_healthy():
         )
     )
 
-    liveness = client.get("/liveness-check")
-    readiness = client.get("/readiness-check")
+    response = client.get("/health")
 
-    assert liveness.status_code == 200
-    assert liveness.content == b"OK"
-    assert readiness.status_code == 503
-    assert readiness.content == b"NOT READY"
+    assert response.status_code == 503
+    assert response.json() == {"status": "not_ready"}
+    assert response.headers["content-type"].startswith("application/json")
 
 
-def test_health_fallback_ignores_native_readiness_dependency():
+@pytest.mark.parametrize(("ready", "expected_status"), [(True, 200), (False, 503)])
+def test_health_answers_head_requests_like_get(ready, expected_status):
+    """Uptime monitors and `curl -I` send HEAD; the removed checks answered it."""
     client = TestClient(
         create_asgi_app(
             create_test_wsgi_app(),
             route_settings=_stage6_settings(),
-            dependencies=_stage6_dependencies(ready=False),
+            dependencies=_stage6_dependencies(ready=ready),
         )
     )
 
-    assert client.get("/liveness-check").content == b"OK"
-    readiness = client.get("/readiness-check")
-    assert readiness.status_code == 200
-    assert readiness.content == b"OK"
+    response = client.head("/health")
+
+    assert response.status_code == expected_status
+    assert response.content == b""
 
 
-def test_native_specification_returns_the_shared_document():
-    document = {
-        "openapi": "3.0.0",
-        "info": {"title": "PolicyEngine API", "version": "test-version"},
-        "paths": {"/us/metadata": {"get": {"summary": "Metadata"}}},
-    }
+def test_default_health_probe_reports_warmup_and_configuration_readiness(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "policyengine_api.fastapi_routes.dependencies.is_ready", lambda: False
+    )
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    assert client.get("/health").status_code == 503
+
+
+@pytest.mark.parametrize(
+    "health_implementation",
+    [
+        RouteImplementation.FLASK_FALLBACK,
+        RouteImplementation.FASTAPI_NATIVE,
+    ],
+)
+def test_liveness_and_readiness_checks_are_removed(health_implementation):
     client = TestClient(
         create_asgi_app(
             create_test_wsgi_app(),
-            route_settings=_stage6_settings(
-                specification=RouteImplementation.FASTAPI_NATIVE
-            ),
-            dependencies=_stage6_dependencies(specification=document),
+            route_settings=_stage6_settings(health=health_implementation),
+            dependencies=_stage6_dependencies(ready=True),
         )
     )
 
-    response = client.get("/specification")
-
-    assert response.status_code == 200
-    assert response.json() == document
-    assert response.headers["content-type"].startswith("application/json")
+    assert client.get("/liveness-check").status_code == 404
+    assert client.get("/readiness-check").status_code == 404
 
 
-def test_specification_falls_through_to_flask_independently():
+@pytest.mark.parametrize(
+    "specification_implementation",
+    [
+        RouteImplementation.FLASK_FALLBACK,
+        RouteImplementation.FASTAPI_NATIVE,
+    ],
+)
+def test_legacy_specification_and_home_routes_are_not_served(
+    specification_implementation,
+):
     client = TestClient(
         create_asgi_app(
             create_test_wsgi_app(),
-            route_settings=_stage6_settings(
-                health=RouteImplementation.FASTAPI_NATIVE,
-                specification=RouteImplementation.FLASK_FALLBACK,
-            ),
-            dependencies=_stage6_dependencies(ready=False),
+            route_settings=_stage6_settings(specification=specification_implementation),
+            dependencies=_stage6_dependencies(),
         )
     )
 
-    readiness = client.get("/readiness-check")
-    specification = client.get("/specification")
-
-    assert readiness.status_code == 503
-    assert specification.json() == {
-        "openapi": "3.0.0",
-        "info": {"title": "fallback"},
-    }
+    assert client.get("/specification").status_code == 404
+    assert client.get("/").status_code == 404
+    assert client.get("/v2/openapi.json").status_code == 200
 
 
 @pytest.mark.parametrize(
@@ -246,7 +221,7 @@ def test_preexisting_core_health_route_remains_native(health_implementation):
     assert response.json() == {"status": "healthy"}
 
 
-def test_native_readiness_uses_shared_asgi_middleware():
+def test_health_uses_shared_asgi_middleware():
     client = TestClient(
         create_asgi_app(
             create_test_wsgi_app(),
@@ -256,7 +231,7 @@ def test_native_readiness_uses_shared_asgi_middleware():
     )
 
     response = client.get(
-        "/readiness-check",
+        "/health",
         headers={
             REQUEST_ID_HEADER: "stage6-request",
             "Origin": "https://app.policyengine.org",
@@ -526,7 +501,7 @@ def test_lifespan_closes_runtime_resources_on_shutdown():
             shutdown_callback=close_runtime_resources,
         )
     ) as client:
-        assert client.get("/liveness-check").status_code == 200
+        assert client.get("/health").status_code == 200
         close_runtime_resources.assert_not_called()
     close_runtime_resources.assert_called_once_with()
 
@@ -566,6 +541,41 @@ def test_large_flask_fallback_response_supports_http_gzip():
     assert response.status_code == 200
     assert response.headers["content-encoding"] == "gzip"
     assert "Accept-Encoding" in response.headers["vary"]
+    assert response.text == "x" * 2_000
+
+
+@pytest.mark.parametrize(
+    "accept_encoding",
+    ["gzip;q=0", "br, gzip;q=0.0", "identity", "*;q=0", "gzipped"],
+)
+def test_large_responses_are_not_gzipped_for_a_client_that_refuses_gzip(
+    accept_encoding: str,
+):
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.get(
+        "/large-fallback",
+        headers={"Accept-Encoding": accept_encoding},
+    )
+
+    assert response.status_code == 200
+    assert "content-encoding" not in response.headers
+    assert response.text == "x" * 2_000
+
+
+@pytest.mark.parametrize("accept_encoding", ["gzip;q=0.5", "br, *", "GZIP"])
+def test_large_responses_are_gzipped_for_a_client_that_accepts_gzip(
+    accept_encoding: str,
+):
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.get(
+        "/large-fallback",
+        headers={"Accept-Encoding": accept_encoding},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-encoding"] == "gzip"
     assert response.text == "x" * 2_000
 
 
@@ -778,7 +788,7 @@ def test_cors_headers_are_present_on_unhandled_native_errors():
         raise_server_exceptions=False,
     )
     response = client.get(
-        "/readiness-check",
+        "/health",
         headers={
             "Origin": "https://app.policyengine.org",
             REQUEST_ID_HEADER: "failed-request-id",
@@ -827,23 +837,3 @@ def test_public_simulation_gateway_health_probe_reports_failure():
         response = client.get("/simulation-gateway-check")
 
     assert response.status_code == 503
-
-
-def test_existing_health_and_specification_paths_fall_back_to_flask():
-    client = TestClient(create_asgi_app(create_test_wsgi_app()))
-
-    readiness = client.get("/readiness-check")
-    liveness = client.get("/liveness-check")
-    specification = client.get("/specification")
-
-    assert readiness.status_code == 200
-    assert readiness.content == b"OK"
-    assert readiness.headers["content-type"].startswith("text/plain")
-    assert liveness.status_code == 200
-    assert liveness.content == b"OK"
-    assert liveness.headers["content-type"].startswith("text/plain")
-    assert specification.status_code == 200
-    assert json.loads(specification.content) == {
-        "openapi": "3.0.0",
-        "info": {"title": "fallback"},
-    }

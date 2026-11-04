@@ -20,6 +20,7 @@ from policyengine_api.services.household_mirroring import (
     process_household_event_after_commit,
 )
 from policyengine_api.services.household_service import HouseholdService
+from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -149,7 +150,7 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         choices=("staging", "production"),
     )
-    parser.add_argument("--country-id", required=True, choices=("us", "uk"))
+    parser.add_argument("--country-id", required=True, choices=SUPPORTED_COUNTRY_IDS)
     parser.add_argument("--legacy-household-id", required=True, type=int)
     return parser
 

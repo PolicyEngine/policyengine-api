@@ -77,26 +77,6 @@ def test_set_reform_impact_fails_closed_when_execution_pointer_is_not_stored():
         )
 
 
-def test_get_recent_reform_impacts_orders_and_limits_results(service):
-    older = _create_impact(
-        service,
-        execution_id="older-job",
-        options_hash="older",
-        day=1,
-    )
-    newer = _create_impact(
-        service,
-        execution_id="newer-job",
-        options_hash="newer",
-        day=2,
-    )
-
-    assert [
-        impact.reform_impact_id for impact in service.get_recent_reform_impacts(1)
-    ] == [newer.reform_impact_id]
-    assert older.reform_impact_id != newer.reform_impact_id
-
-
 def test_reform_impact_start_claim_is_exclusive_and_releasable(service):
     arguments = {
         "identity": ReformImpactIdentity(
@@ -190,7 +170,7 @@ def test_reform_impact_service_deletes_only_matching_computing_rows(
 
     service.delete_reform_impact(SCOPE, "delete-hash")
 
-    remaining = service.get_recent_reform_impacts(10)
+    remaining = service._cache.recent(10)
     assert all(impact.execution_id != "delete-job" for impact in remaining)
     assert any(
         impact.reform_impact_id == retained.reform_impact_id for impact in remaining
@@ -228,6 +208,21 @@ def test_a_briefly_kept_error_expires_and_leaves_other_records() -> None:
     assert [(impact.execution_id, impact.status) for impact in after_expiry] == [
         ("next-job", "computing")
     ]
+
+
+def test_a_failed_records_seconds_left_count_down_to_its_expiry() -> None:
+    backend = InMemoryCacheBackend()
+    service = ReformImpactsService(
+        ReformImpactCache(backend, CacheNamespace("test", "api"))
+    )
+    _create_impact(service, execution_id="failed-job", options_hash="hash", day=1)
+    stored_failure = service.set_error_reform_impact(
+        "failed-job", message="out of memory", keep_seconds=120
+    )
+
+    backend.advance(30)
+
+    assert service.get_reform_impact_seconds_left(stored_failure) == 90
 
 
 def test_impact_cached_under_previous_economy_schema_version_is_not_matched(

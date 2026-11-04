@@ -1,0 +1,18 @@
+name: CI
+on: pull_request
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # A real past mistake: the operational workflows installed with pip.
+      - name: Install with pip
+        run: pip install -e ".[dev]"
+      - name: Sync without the lock flag
+        run: uv sync --extra dev
+      - name: Run without the lock flag
+        run: uv run python app.py
+      - name: Run an unpinned tool
+        run: uvx ruff check .
+      - name: Set up
+        run: bash .github/scripts/setup.sh

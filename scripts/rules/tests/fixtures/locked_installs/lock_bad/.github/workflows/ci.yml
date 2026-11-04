@@ -1,0 +1,12 @@
+name: CI
+on:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # A real past state: no pull request job checked uv.lock against
+      # pyproject.toml, and libs/helper has no uv.lock.
+      - name: Run the tests
+        run: uv run --frozen pytest

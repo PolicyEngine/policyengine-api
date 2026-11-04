@@ -1,12 +1,18 @@
+import json
+from collections import Counter
 from datetime import date, datetime
+from importlib.metadata import distribution
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 import pytest
-from policyengine.countries.uk.regions import build_uk_region_registry
-from policyengine.data.uk_geography_assets import packaged_uk_area_list_path
+from policyengine.countries.uk.regions import (
+    area_regions_routed_to_local_release,
+    build_uk_region_registry,
+    uk_region_registry,
+)
 from policyengine_core.enums import EnumArray
 from policyengine_core.model_api import Enum
 
@@ -16,6 +22,25 @@ from policyengine_api.country import (
     _serialize_axis_result,
     get_requested_computations,
 )
+from policyengine_api.data import uk_regions as public_api_uk_regions
+from policyengine_api.services.economic_impact_request import EconomicImpactRequest
+from policyengine_api.services.economy_service import EconomyService
+from policyengine_api.services.policy_parameter_service import PolicyParameterService
+
+RECORDED_UK_REGION_OPTIONS_PATH = (
+    Path(__file__).parents[1] / "data" / "uk_economy_region_options.json"
+)
+UK_AREA_TYPES = ("constituency", "local_authority")
+
+
+class _InstalledWheelStandIn:
+    """Stands in for an installed wheel whose files are under ``root``."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+
+    def locate_file(self, path: str) -> Path:
+        return self.root / path
 
 
 class ExampleEnum(Enum):
@@ -69,6 +94,48 @@ class TestHouseholdCalculation:
         )
 
         assert result.household["people"]["you"]["age"]["2025"] == 40
+
+    @pytest.mark.parametrize(
+        ("value_type", "calculated", "expected"),
+        [
+            (Enum, EnumArray(np.array([1]), ExampleEnum), "SECOND"),
+            (str, np.array(["second"]), "second"),
+        ],
+        ids=["enum", "str"],
+    )
+    def test__calculate_returns_enum_names_and_plain_strings_without_axes(
+        self,
+        monkeypatch,
+        value_type,
+        calculated,
+        expected,
+    ):
+        variable = SimpleNamespace(value_type=value_type)
+        simulation = SimpleNamespace(
+            calculate=lambda _variable_name, _period: calculated,
+            get_population=lambda _entity_plural: SimpleNamespace(
+                get_index=lambda _entity_id: 0
+            ),
+        )
+        system = SimpleNamespace(
+            variables={"example_category": variable},
+            get_variable=lambda _variable_name: variable,
+        )
+        country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+        monkeypatch.setattr(
+            country,
+            "_create_simulation",
+            lambda _household, _reform, **_kwargs: (simulation, system),
+        )
+
+        result = country.calculate(
+            {"people": {"you": {"example_category": {"2025": None}}}},
+            None,
+        )
+
+        value = result.household["people"]["you"]["example_category"]["2025"]
+        assert value == expected
+        assert type(value) is str
 
 
 class TestAxisResults:
@@ -197,8 +264,48 @@ class TestAxisResults:
         )
 
 
+UK_DATASET_DATA_YEAR = 2024
+
+
+def uk_model_projected_years(data_year):
+    """Return the years policyengine-uk's own projection gives a dataset.
+
+    Projects a three-household dataset of ``data_year`` with the installed
+    model, as the simulation service's model projects the UK dataset.
+    """
+    from policyengine_uk.data.dataset_schema import UKSingleYearDataset
+    from policyengine_uk.data.economic_assumptions import extend_single_year_dataset
+    from policyengine_uk.system import system
+
+    household_ids = np.arange(1, 4)
+    dataset = UKSingleYearDataset(
+        person=pd.DataFrame(
+            {
+                "person_id": household_ids,
+                "person_benunit_id": household_ids,
+                "person_household_id": household_ids,
+                "age": [45, 30, 70],
+            }
+        ),
+        benunit=pd.DataFrame({"benunit_id": household_ids}),
+        household=pd.DataFrame(
+            {
+                "household_id": household_ids,
+                "household_weight": [2.0, 3.0, 5.0],
+                "region": "LONDON",
+                "tenure_type": "OWNED_OUTRIGHT",
+                "rent": 0.0,
+                "council_tax": 0.0,
+            }
+        ),
+        fiscal_year=data_year,
+    )
+    projected = extend_single_year_dataset(dataset, system.parameters)
+    return sorted(int(year) for year in projected.years)
+
+
 class TestUKCountryMetadata:
-    """Tests for UK country metadata, specifically local authority loading."""
+    """Tests for UK country metadata, specifically its region options."""
 
     @pytest.fixture
     def uk_country(self):
@@ -207,6 +314,24 @@ class TestUKCountryMetadata:
     @pytest.fixture
     def uk_regions(self, uk_country):
         return uk_country.metadata["economy_options"]["region"]
+
+    def test__uk_years_run_to_the_models_last_projected_year(self, uk_country):
+        """The UK years end where the installed policyengine-uk projects its data.
+
+        The simulation service refuses a later year (DATASET_YEAR_UNAVAILABLE),
+        and the app offers no year after the last one listed here.
+        """
+        years = [
+            period["name"]
+            for period in uk_country.metadata["economy_options"]["time_period"]
+        ]
+        projected_years = uk_model_projected_years(UK_DATASET_DATA_YEAR)
+
+        assert years == projected_years
+        assert [
+            period["label"]
+            for period in uk_country.metadata["economy_options"]["time_period"]
+        ] == [str(year) for year in projected_years]
 
     def test__uk_metadata_contains_local_authorities(self, uk_regions):
         """Verify that local authorities are included in UK region options."""
@@ -230,30 +355,94 @@ class TestUKCountryMetadata:
             "type": "local_authority",
         } in uk_regions
 
-    def test__every_local_authority_resolves_in_the_policyengine_registry(
-        self, uk_regions
-    ):
-        """Each offered name matches a .py registry label, ignoring case.
+    def test__area_regions_equal_the_policyengine_registry(self, uk_regions):
+        """The constituency and local-authority options are .py's registry areas.
 
-        The simulation API resolves ``local_authority/{name}`` to the registry
-        code whose label matches the name, ignoring case.
+        Each option's name is ``<type>/<label>`` and its label is the registry
+        label, with each type's areas sorted by label. The simulation API
+        resolves ``<type>/<label>`` to the registry code with that label.
         """
         registry = build_uk_region_registry(
-            include_constituencies=False, include_local_authorities=True
+            include_constituencies=True, include_local_authorities=True
         )
-        registry_labels = {
-            region.label.casefold(): region.code
-            for region in registry.get_by_type("local_authority")
-        }
-        offered = [
-            region["label"]
-            for region in uk_regions
-            if region.get("type") == "local_authority"
+        registry_areas = [
+            {"name": f"{area_type}/{label}", "label": label, "type": area_type}
+            for area_type in UK_AREA_TYPES
+            for label in sorted(
+                region.label for region in registry.get_by_type(area_type)
+            )
         ]
-        assert [
-            label for label in offered if label.casefold() not in registry_labels
-        ] == []
-        assert registry_labels["ards and north down"] == "local_authority/N09000011"
+
+        offered_areas = [
+            region for region in uk_regions if region["type"] in UK_AREA_TYPES
+        ]
+
+        assert len(offered_areas) == 650 + 361
+        assert offered_areas == registry_areas
+
+    def test__area_regions_follow_the_installed_policyengine_area_lists(
+        self, uk_country, monkeypatch, tmp_path, request
+    ):
+        """The area options come from the area lists in the installed .py wheel.
+
+        A stand-in wheel lists two areas of each type, out of name order. The
+        options offer exactly those areas, sorted by name.
+        """
+        area_list_directory = tmp_path / "policyengine" / "data" / "uk_geography"
+        area_list_directory.mkdir(parents=True)
+        (area_list_directory / "constituencies_2024.csv").write_text(
+            "code,name,x,y\n"
+            "E14999998,Zeta Test Constituency,1,2\n"
+            "E14999999,Alpha Test Constituency,3,4\n",
+            encoding="utf-8",
+        )
+        (area_list_directory / "local_authorities_2023.csv").write_text(
+            "code,name,x,y\n"
+            "E06999998,Zeta Test Authority,1,2\n"
+            'E06999999,"Alpha Test Authority, City of",3,4\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            "policyengine_api.data.uk_regions.distribution",
+            lambda name: (
+                _InstalledWheelStandIn(tmp_path)
+                if name == "policyengine"
+                else distribution(name)
+            ),
+        )
+        # uk_areas reads each list once per process: forget what other tests
+        # read, and forget the stand-in's lists once this test ends.
+        public_api_uk_regions.uk_areas.cache_clear()
+        request.addfinalizer(public_api_uk_regions.uk_areas.cache_clear)
+
+        area_options = [
+            region
+            for region in uk_country.build_microsimulation_options()["region"]
+            if region["type"] in UK_AREA_TYPES
+        ]
+
+        assert area_options == [
+            {
+                "name": "constituency/Alpha Test Constituency",
+                "label": "Alpha Test Constituency",
+                "type": "constituency",
+            },
+            {
+                "name": "constituency/Zeta Test Constituency",
+                "label": "Zeta Test Constituency",
+                "type": "constituency",
+            },
+            {
+                "name": "local_authority/Alpha Test Authority, City of",
+                "label": "Alpha Test Authority, City of",
+                "type": "local_authority",
+            },
+            {
+                "name": "local_authority/Zeta Test Authority",
+                "label": "Zeta Test Authority",
+                "type": "local_authority",
+            },
+        ]
 
     def test__local_authority_regions_have_correct_name_format(self, uk_regions):
         """Verify local authority region names have the correct prefix."""
@@ -297,6 +486,57 @@ class TestUKCountryMetadata:
         ]
         assert len(constituency_regions) == 650
 
+    def test__economy_requests_accept_every_offered_region(self, uk_regions):
+        """An economy request may use any region the UK metadata offers.
+
+        Each offered name passes the economy service's check against .py's UK
+        region registry, which applies the simulation service's normalisation.
+        """
+        service = EconomyService()
+        refused_regions = []
+        for offered_region in uk_regions:
+            request = EconomicImpactRequest(
+                country_id="uk",
+                policy_id=1,
+                baseline_policy_id=1,
+                region=offered_region["name"],
+                dataset="default",
+                options={},
+                api_version="test",
+            )
+            try:
+                service._validate_uk_region(request)
+            except ValueError:
+                refused_regions.append(offered_region["name"])
+
+        assert len(uk_regions) == 1016
+        assert refused_regions == []
+
+    def test__the_region_check_follows_the_same_release_kind_as_policyengine(self):
+        """Area regions resolve exactly when .py's default registry lists them.
+
+        Both read regional_release_kind from the installed bundle manifest.
+        """
+        registry_lists_areas = all(
+            uk_region_registry.get_by_type(region_type)
+            for region_type in ("constituency", "local_authority")
+        )
+
+        assert public_api_uk_regions.area_regions_resolve() == (
+            area_regions_routed_to_local_release()
+        )
+        assert public_api_uk_regions.area_regions_resolve() == registry_lists_areas
+
+    def test__the_region_check_accepts_the_policyengine_countries(self):
+        """The countries the check accepts are .py's registry countries."""
+        registry = build_uk_region_registry(
+            include_constituencies=False, include_local_authorities=False
+        )
+
+        assert public_api_uk_regions.uk_country_codes() == tuple(
+            country.code for country in registry.get_by_type("country")
+        )
+
     def test__uk_has_all_region_types(self, uk_regions):
         """Verify all expected region types are present."""
         types = {r.get("type") for r in uk_regions}
@@ -307,118 +547,27 @@ class TestUKCountryMetadata:
 
     def test__uk_metadata_is_json_serializable(self, uk_country):
         """Verify metadata does not leak filesystem paths or other non-JSON values."""
-        import json
-
         json.dumps(uk_country.metadata)
 
+    def test__region_options_equal_the_recorded_list(self, uk_regions):
+        """The region options equal the recorded list, entry by entry, in order.
 
-class TestLocalAuthoritiesDataFile:
-    """Tests for the local authorities CSV data file."""
-
-    @pytest.fixture
-    def local_authorities_df(self):
-        path = (
-            Path(__file__).parents[2]
-            / "policyengine_api"
-            / "data"
-            / "local_authorities_2021.csv"
+        The recording holds the national entry, the four countries, the 650
+        constituencies and the 361 local authorities, each with its name,
+        label and type. A change to the packaged area lists, or to how they
+        are read, must leave the offered regions as recorded.
+        """
+        recorded_regions = json.loads(
+            RECORDED_UK_REGION_OPTIONS_PATH.read_text(encoding="utf-8")
         )
-        return pd.read_csv(path)
 
-    def test__file_has_correct_columns(self, local_authorities_df):
-        """Verify the CSV has the expected columns."""
-        expected_columns = {"code", "name", "x", "y"}
-        assert expected_columns == set(local_authorities_df.columns)
-
-    def test__file_has_361_local_authorities(self, local_authorities_df):
-        """Verify the correct number of local authorities in file."""
-        assert len(local_authorities_df) == 361
-
-    def test__file_matches_the_installed_policyengine_list(self, local_authorities_df):
-        """Codes, names and hex positions equal .py's packaged 2023 list.
-
-        .py's list is read from the installed package, so a .py update that
-        changes the area frame makes this test fail until the file follows.
-        """
-        policyengine_list = pd.read_csv(packaged_uk_area_list_path("local_authority"))
-
-        def by_code(frame: pd.DataFrame) -> dict[str, tuple[str, float, float]]:
-            return {
-                row.code: (row.name, float(row.x), float(row.y))
-                for row in frame.itertuples(index=False)
-            }
-
-        assert by_code(local_authorities_df) == by_code(policyengine_list)
-
-    def test__april_2023_unitaries_leave_the_origin_placeholder(
-        self, local_authorities_df
-    ):
-        """The four unitaries created in April 2023 have their own hex positions.
-
-        They used to share the (0, 0) placeholder. Another authority may still
-        sit at (0, 0) when .py's list puts it there; the comparison with .py's
-        list above covers every position.
-        """
-        april_2023_unitaries = local_authorities_df[
-            local_authorities_df["code"].isin(
-                ["E06000063", "E06000064", "E06000065", "E06000066"]
-            )
-        ]
-        assert len(april_2023_unitaries) == 4
-        assert not (
-            (april_2023_unitaries["x"] == 0) & (april_2023_unitaries["y"] == 0)
-        ).any()
-
-    def test__all_codes_are_valid_ons_codes(self, local_authorities_df):
-        """Verify all codes follow ONS local authority code patterns."""
-        for code in local_authorities_df["code"]:
-            # ONS codes start with E (England), S (Scotland), W (Wales), or N
-            # (Northern Ireland)
-            assert code[0] in ["E", "S", "W", "N"]
-
-    def test__all_names_are_non_empty(self, local_authorities_df):
-        """Verify all local authority names are non-empty."""
-        for name in local_authorities_df["name"]:
-            assert len(str(name)) > 0
-
-    def test__coordinates_are_numeric(self, local_authorities_df):
-        """Verify x and y coordinates are numeric."""
-        assert local_authorities_df["x"].dtype in ["float64", "int64"]
-        assert local_authorities_df["y"].dtype in ["float64", "int64"]
-
-    def test__english_local_authorities_have_e_prefix(self, local_authorities_df):
-        """Verify English local authorities have E prefix codes."""
-        english_las = local_authorities_df[
-            local_authorities_df["code"].str.startswith("E")
-        ]
-        # England has 296 local authorities (majority of the 361 total)
-        assert len(english_las) == 296
-
-    def test__scottish_local_authorities_have_s_prefix(self, local_authorities_df):
-        """Verify Scottish local authorities have S prefix codes."""
-        scottish_las = local_authorities_df[
-            local_authorities_df["code"].str.startswith("S")
-        ]
-        # Scotland has 32 council areas
-        assert len(scottish_las) == 32
-
-    def test__welsh_local_authorities_have_w_prefix(self, local_authorities_df):
-        """Verify Welsh local authorities have W prefix codes."""
-        welsh_las = local_authorities_df[
-            local_authorities_df["code"].str.startswith("W")
-        ]
-        # Wales has 22 principal areas
-        assert len(welsh_las) == 22
-
-    def test__northern_irish_local_authorities_have_n_prefix(
-        self, local_authorities_df
-    ):
-        """Verify all 11 Northern Ireland districts have N prefix codes."""
-        northern_irish_las = local_authorities_df[
-            local_authorities_df["code"].str.startswith("N")
-        ]
-        assert len(northern_irish_las) == 11
-        assert "N09000011" in set(northern_irish_las["code"])
+        assert Counter(region["type"] for region in recorded_regions) == {
+            "national": 1,
+            "country": 4,
+            "constituency": 650,
+            "local_authority": 361,
+        }
+        assert uk_regions == recorded_regions
 
 
 class TestSimulationCompatibility:
@@ -463,3 +612,26 @@ class TestSimulationCompatibility:
         assert simulation.tax_benefit_system == "modern-system"
         assert simulation.reform is None
         assert simulation.situation == {"households": {"household": {}}}
+
+
+def test_loaded_model_parameter_names_are_its_leaf_parameters() -> None:
+    names = COUNTRIES["us"].parameter_names
+
+    assert "gov.dol.minimum_wage" in names
+    assert "gov.irs.credits.ctc.amount.base[0].amount" in names
+    # A node holds parameters but is not one a policy can set.
+    assert "gov.irs.credits.ctc.amount" not in names
+    # Renamed to SURVIVING_SPOUSE in a later policyengine-us release.
+    assert "gov.irs.income.bracket.thresholds.1.WIDOW" not in names
+
+
+def test_policy_parameter_service_checks_against_the_loaded_model() -> None:
+    missing = PolicyParameterService().missing_parameters(
+        "us",
+        {
+            "gov.dol.minimum_wage": {"2026-01-01.2100-12-31": 9},
+            "gov.irs.income.bracket.thresholds.1.WIDOW": {"2026": 0},
+        },
+    )
+
+    assert missing == ["gov.irs.income.bracket.thresholds.1.WIDOW"]

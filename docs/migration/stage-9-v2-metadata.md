@@ -27,6 +27,127 @@ package-derived `DatasetVersion` rows or simulation/report output datasets and
 does not modify `Simulation`, `Report`, or `ReportRun` rows or their dataset
 references.
 
+## Loading a catalog version on demand
+
+`GET /v2/model-catalog?country_id=<us|uk>[&policyengine_version=<version>]`
+returns only the small parts of one catalog version: the model and model
+version (with the current-law policy id and the years offered), the entities
+(`key`, `plural`, `is_person`), the basic inputs, every region and logical
+input dataset, and the economy choices. A catalog without regions, such as a
+household-only country's, has empty region, dataset and economy-choice lists
+rather than an error. A version published before catalog format 2 has a null
+`catalog_format` and empty entities and basic inputs. The result names the
+selected PolicyEngine.py version, so a client that starts without a version
+learns the running one and requests every other part for that exact version.
+The query uses the shared `CatalogQuery` model: unknown and repeated
+parameters are rejected.
+
+`GET /v2/model-catalog/variables` (same query) returns every variable of the
+version in name order, in one response, with the catalog format 2 fields:
+`is_input_variable`, `hidden_input`, `module_name`, `adds_parameter_path`,
+`subtracts_parameter_path`, `enum_values` (each value's name and its label,
+in the type the country package declares), `unit` (for example
+`currency-USD`) and `definition_period` (`year`, `month` or `eternity`), which
+the household builder and breakdown read (currency formatting, per-period
+labels and household validation). Where a variable's `adds` or `subtracts` list
+comes from a parameter, `part_parameter_values` maps that
+parameter's path to its current-law values in start-date order
+(`start_date`, `end_date`, `value`), so a client picks the list for the year
+it shows instead of the list resolved on 2025-01-01; a path whose parameter
+the version lacks maps to an empty list. `GET /v2/variables` pages carry the
+same variable fields.
+
+`GET /v2/model-catalog/parameters` takes the same query plus one or more
+`name` keys (at most 100, each an exact parameter path) and returns those
+parameters in name order, each with its `economy` and `household` flags and its
+current-law values in start-date order, in one response: a client showing or
+editing a reform loads all of its parameters at once. `node_labels` maps each
+ancestor of a returned parameter that the version stores as a parameter node
+to its stored label (null when it has none), for breadcrumbs; a bracket index
+such as `rates[0]` counts as a child of its schedule `rates`. `missing_names`
+lists requested names the version has no parameter for, so a reform saved
+against an older version still opens. `GET /v2/parameters` pages and details
+carry the same `economy` and `household` flags.
+
+`GET /v2/parameters` also accepts repeated `name` keys (at most 100) to page
+only those exact parameters, and `GET /v2/parameter-values` repeated
+`parameter_name` keys to page only those parameters' values.
+
+Every v2 metadata route reads its query through the shared query models in
+`policyengine_api.query_parameters` (`CatalogQuery`, `CatalogPageQuery` and the
+resource-specific models built on them): unknown parameters, repeated scalar
+parameters, a missing or unsupported `country_id`, a malformed
+`policyengine_version` and out-of-range `offset` or `limit` values are
+rejected with HTTP 422 before any read. Before, the routes other than the
+`/v2/model-catalog` ones ignored unknown parameters, and an unsupported country
+or malformed version returned HTTP 400 from the read. A country given in the
+path (`/v2/tax-benefit-models/by-country/{country_id}`) that is not supported
+still returns HTTP 400.
+
+## Database round trips per request
+
+Metadata reads use sessions in autocommit mode on the shared v2 pool
+(`get_v2_read_session_factory`), which only the metadata reader opens: each
+read is one statement on rows a published catalog version never changes, so no
+transaction is needed, and the database receives no `BEGIN` before the reads
+and no `ROLLBACK` when the session closes. The sessions refuse to flush added
+or changed rows (`ReadOnlySessionError`); a statement passed directly to
+`execute` is not checked, so the metadata connectors keep to `SELECT`. Each process also keeps every catalog version a request has
+selected (`SelectedCatalogStore`), since a published version never changes, so
+later requests for the same country and version skip the selection query;
+failed selections are not kept. Measured with statement logging in a local
+database, a page of 500 parameters or one parameter's values took five
+statements per request before (the pool's liveness check, `BEGIN`, the catalog
+selection, the read and `ROLLBACK`) and two after, once the process has
+selected that version (the liveness check and the read). A route that makes
+several reads, such as `/v2/model-catalog` (regions and datasets), sends one
+statement per read after the liveness check. The pool's liveness check
+(`pool_pre_ping`) is unchanged.
+
+## Response caching
+
+Every successful metadata response carries a strong `ETag`, a hash of its
+exact body, and `Cache-Control: public`. A request that names its catalog with
+`policyengine_version` may be reused for a day (`max-age=86400`): a published
+catalog version never changes, so such a response changes only with the
+route's response format or with the day it is read on, and the `ETag` lets a
+client revalidate after the day. A request without it selects the running
+version, which changes on deploy, and may be reused for five minutes
+(`max-age=300`). A response that depends on the request's UTC day, which is
+`GET /v2/parameter-values?current=true` (the values in effect today), takes
+the request's instant once: the read selects that day's values, and the
+response may be reused only until the UTC midnight after that instant,
+whichever lifetime would otherwise apply (`max-age=0` if its headers are
+written after that midnight). A request whose `If-None-Match` names the current `ETag` (strong or
+weak form, alone or in a list) gets HTTP 304 with no body. Error responses
+carry neither header. Every cacheable response, and every 304, carries
+`Vary: Origin, Accept-Encoding`, each value once: the API reflects every
+origin in `Access-Control-Allow-Origin` and a request without `Origin` gets no
+such header, so a shared cache must keep responses apart by `Origin`, and gzip
+compresses bodies for clients that accept it. A 304 carries the same `Vary` as
+its 200. The CORS and gzip middleware append to `Vary` without checking for
+values already present, so the application's outermost middleware
+(`UniqueVaryMiddleware`) lists each value once. `ETag` is
+listed in `Access-Control-Expose-Headers`, so
+browser scripts on other origins can read it (`Cache-Control` is readable
+without that).
+
+Each API process also keeps the serialized bodies of `/v2/model-catalog` and
+`/v2/model-catalog/variables` once built, each with its `ETag` computed once,
+for up to eight route, country and version combinations (least recently used
+dropped first; the 6.10.0 US variables body is 4,190,824 bytes uncompressed,
+so eight entries hold about 12 MB for both countries' two routes at two
+versions). A response is kept under the exact version it was read from,
+so a request without `policyengine_version` (the process's running version,
+which never changes while it runs) and one naming that version share it. Only
+the first successful request per process reads the database. Requests that
+arrive while that read is in progress wait for it and all receive its outcome,
+the kept response or a copy of its error response, so one failing read is not
+repeated by each of them; a failed read is not kept, so the first request after
+it reads again. Measured locally against the full 6.10.0 US catalog, the
+variables route takes about 160 ms when read and about 25 ms when kept, most of
+it compression.
+
 ## Configuration and credential boundaries
 
 Select the target with `V2_SUPABASE_PROJECT_REF` and
@@ -93,6 +214,36 @@ metadata time-period options are stored on the model-version snapshot.
 PolicyEngine Core and country-package versions are derived diagnostic evidence
 and are not separately persisted.
 
+Catalog format 2 adds the metadata the app's v3 workspace reads, taken only
+from PolicyEngine.py's public records, which carry it from the release that
+publishes entities, basic inputs and these flags:
+
+| Record | Fields |
+| --- | --- |
+| Model version | `catalog_format` (2), `entities` (`key`, `plural`, `is_person`, in the package's order), `basic_inputs` (the household builder's default fields) |
+| Variable | `is_input_variable`, `hidden_input`, `module_name`, `adds_parameter_path` and `subtracts_parameter_path` (the parameter whose dated value lists the variables summed; `adds` and `subtracts` keep the list PolicyEngine.py resolved), `enum_values` (`value` and declared `label`, in order), `unit` (for example `currency-USD`) and `definition_period` (`year`, `month` or `eternity`), which the household builder and breakdown read |
+| Parameter | `economy`, `household` |
+
+Bracket schedules are parameter nodes with their stored label, or none when the
+package stores none. An empty basic-input list is stored as empty. Extraction
+stops before reading any record if the installed PolicyEngine.py does not
+publish these fields, and names each missing field: 6.7.5 and 6.11.1
+publish only the variables' unit and definition period. It also stops if the
+model has other than one person entity, names a basic input or a parameter path
+that is not published, gives enum labels that do not match the variable's
+possible values or are not JSON scalars, or gives a flag that is not a boolean.
+An opt-in test, `tests/integration/test_v2_catalog_metadata_parity.py`,
+compares every format 2 field for the US and the UK with what
+`/{country}/metadata` builds. CI does not run it, because it extracts every
+variable and parameter of the installed models, with their values, and builds
+each country's v1 metadata; set `RUN_V2_CATALOG_METADATA_PARITY=1` to run it.
+
+Publication never rewrites a stored version. A version published before
+format 2 has a null `catalog_format` and null format 2 fields, and later
+publications of the same PolicyEngine.py version compare it without those
+fields. The first PolicyEngine.py version published after format 2 deploys
+carries them.
+
 Parameter extraction requires the PolicyEngine.py public history contract from
 5.0.4 and later: values are ordered from oldest to newest, bounded `end_date`
 values are inclusive and fall one day before the following `start_date`, and
@@ -101,20 +252,130 @@ does not reorder, deduplicate, or repair package output. A value superseded on
 the immediately following day therefore has equal start and end dates and is a
 valid one-day interval.
 
-The US national region uses `populace_us_2024`. A US state,
+Each country's default dataset is the one the installed PolicyEngine.py
+release names in its manifest (`default_dataset`); the Public API sets none of
+its own. Publication stops if the manifest names no default, or if the release
+gives the national region another dataset. The US national region uses the
+release's default (`populace_us_2024` in 6.11.1). A US state,
 congressional-district, or place region uses its PolicyEngine.py regional
 alternative when one is available. Until a later reviewed change removes the
-fallback, a subnational region without such an alternative uses
-`populace_us_2024`. The command emits one summary warning containing only the
-affected region types and counts. The UK national and country regions use
-`microcosm_uk_2024_25`, the default certified by PolicyEngine.py 6.10.0; a
-country filters that national file. UK constituency and local-authority
-regions use the dataset PolicyEngine.py routes them to,
-`microcosm_uk_2024_25_dense`, because the national file has no area codes.
+fallback, a subnational region without such an alternative uses the default.
+The command emits one summary warning containing only the affected region
+types and counts. The UK national and country regions use the release's
+default (`microcosm_uk_2024_25` in 6.11.1); a country filters that national
+file. UK constituency and local-authority regions use the dataset
+PolicyEngine.py routes them to, `microcosm_uk_2024_25_dense`, because the
+national file has no area codes.
 
 Review the fallback summary on every new PolicyEngine.py release. A changed
-count may identify an upstream catalog change that needs a reviewed dataset
-selection even when publication otherwise succeeds.
+count may identify an upstream change to the release's datasets even when
+publication otherwise succeeds.
+
+### Parameter tree
+
+Publication also writes parameter trees into `parameter_tree_children`, which
+`/v2/parameters/children` reads one level at a time. A tree is built from a
+catalog version's parameter and node records: every node and parameter is one
+row under its parent's path, a `[` starts a child as a `.` does (so a bracket schedule is one node
+whose children are its brackets, labelled "Bracket 1", "Bracket 2" and so on),
+and labels take the form the app's newer interface shows in every view: the
+stored label with underscores as spaces and its first letter upper-cased, or,
+without one, the last part of the name in that form (so an unlabelled schedule
+`...rates.uk` is "Uk"). A label PolicyEngine.py made for a parameter without
+one also gets the last part of the name, as v3 shows it today: a bracket field
+labelled from its schedule ("Income Tax main rates (bracket 1 rate)" is
+"Rate") and a breakdown parameter labelled from its breakdown parent
+("Standard deduction (Single)" is "SINGLE"). A breakdown label is recognised
+when it is an ancestor's stored label followed by one value per level below
+it, each the key, a label the catalog's enum variables give the key, or a
+dimension label followed by the key. A label the package writes in one of
+those forms is shortened too, such as the UK's "Maximum LHA (category A)",
+shown as "A". The catalog's other reads keep the label. Each row also records its position among all its
+siblings and, if a reform can change it, among the siblings a reform can
+change: a parameter under `gov` whose economy or household flag is set and whose path names
+neither `taxsim`, `gov.abolitions` nor `pycache`, and every node above such a
+parameter. These are the rules of the tree the app's newer interface builds
+from v1 metadata. Trees are written only for versions with catalog format 2,
+so every parameter in a tree has both flags.
+
+In the same transaction, the command writes the tree of each version in the
+catalog it publishes, which comes from the installed packages, when that
+version has none: the versions it publishes now, and the installed version when
+an earlier release stored it with catalog format 2 but without a tree. An
+installed version stored before catalog format 2 gets none, since its parameter
+rows store no flags. The rows are built from the
+catalog's own parameter and node records; only the stored parameters' IDs are
+read, by name, so the rows reference them, after publication has checked that
+the stored rows match the catalog. This is a row-only, idempotent insert of
+package-derived rows, which the deployment-seeder passage of the Alembic skill
+allows. The evidence's `parameter_trees_written` lists each version written,
+with its model, version and row count, and publication fails if a version in
+the catalog with catalog format 2 is still without a tree when it finishes.
+
+Other stored versions get no tree. Writing one for them would derive rows from
+what earlier releases stored, a data migration that the Alembic skill's rules
+leave to a human migration decision, so it is not done; such a version gets a
+tree only if a person decides on that migration.
+
+`/v2/parameters/children` lists one level with one indexed read:
+`parent_path` names the node ("" for the top level), and
+`reform_changeable=true` keeps only the children a reform can change, sorted
+by label, with child counts that count only those. Without it, children are
+in path order, with a schedule's brackets in bracket order. A node carries
+its child count, a parameter its summary. An unknown parent path has no
+children. The route reads its query through the shared strict query models,
+so unknown or repeated parameters, an unsupported country and a malformed
+`policyengine_version` return 422 (the last two returned 400 before). A
+catalog version without a tree returns 503 with a message that names the
+version.
+
+### Parameter search file
+
+Publication also writes the parameter search file of each catalog version it
+publishes into `parameter_search_files`: one gzip-compressed JSON file per
+version and file format, with the SHA-256 of the uncompressed JSON. The file
+holds what the app's newer interface's parameter search reads:
+
+- every parameter a reform can change (the parameter tree's rule) with its
+  path, stored label, unit, description, and whether a draft can edit its
+  current-law value: a number, a yes/no value or an infinite threshold. Where
+  that changes over time (a bracket that stops applying has a null value from
+  that date), `editable` describes the earliest value and `editable_changes`
+  lists the dates from which it changes, so the file does not depend on the
+  day it was built;
+- the path and stored label of every other parameter under `gov`, which the
+  search's concept clusters, acronym aliases and member labels read;
+- the path and stored label of `gov` and every node under it that has a stored
+  label, for breadcrumbs, schedule names and concept clusters.
+
+Labels are stored labels, or null: the search treats a label that only
+restates its path's last key as a placeholder, so its reader applies v1's
+fallback (the key with underscores as spaces, "bracket N" for a bracket).
+
+The file is built from the installed packages' catalog, never from rows an
+earlier release stored, so publication writes one only for the versions it
+publishes: each new version, and the installed version when an earlier
+release stored it before search files existed. A version that is neither has
+no file until a person decides otherwise. An installed version stored before
+catalog format 2 (`catalog_format` null) gets none either: it has no stored
+economy or household flags, so a file built from the installed catalog's
+flags would contradict its own parameter rows. Writing only inserts; a stored file
+of the same format must equal the one built from the installed packages, and
+publication fails if it differs or if a version it publishes is left without a
+file. A later file format adds a row for the version instead of changing the
+stored one. The evidence's `parameter_search_files_written` lists each file
+written with its model, version and uncompressed and compressed sizes in bytes.
+
+`/v2/parameters/search-file` (query `country_id` and optional
+`policyengine_version`) serves the selected version's file of the current
+format. A client that accepts gzip receives the stored bytes with
+`Content-Encoding: gzip`; any other client receives the uncompressed JSON. The
+body is the file itself, not the `status`/`result` envelope. Each
+representation has its own strong `ETag`, made from the SHA-256 of the
+uncompressed JSON (`"<sha256>"`, or `"<sha256>-gzip"` for the gzip one). The
+cache lifetime, `Vary` and the 304 for a matching `If-None-Match` are those of
+every metadata route. A version without a file of the current format returns
+503.
 
 ## Validation evidence and retry
 
@@ -124,6 +385,10 @@ Successful JSON evidence contains:
 - the dependency versions derived from its packaged manifest;
 - catalog entity counts;
 - US fallback counts;
+- the model, version and row count of each catalog version whose parameter
+  tree was written;
+- the model, version and uncompressed and compressed sizes of each parameter
+  search file written;
 - elapsed publication time; and
 - a success outcome.
 
@@ -158,17 +423,13 @@ regions. Publication took 24.120 seconds and added 7,968,103 bytes of measured
 peak publisher memory. The US fallback summary reported 436 congressional
 districts, 333 places, and 51 states.
 
-Re-run the production-scale test only against disposable Postgres:
-
-```bash
-RUN_V2_CATALOG_PUBLICATION_QUALIFICATION=1 \
-V2_ALEMBIC_DISPOSABLE_TEST=1 \
-V2_MIGRATION_DATABASE_URL="<disposable-postgres-url>" \
-uv run pytest -q tests/integration/test_v2_catalog_publication_qualification.py
-```
-
-Do not point this qualification command at a persistent staging or production
-target.
+The production-scale test that measured this,
+`tests/integration/test_v2_catalog_publication_qualification.py`, was removed
+with PolicyEngine/policyengine-api#4149: CI no longer loads the complete
+catalog. Each release publishes and validates it against staging, then
+production (`seed-v2-database.yml`), and the cross-database integration tests
+publish selected parameter folders of the installed models and a catalog of
+edge-case values (`docs/engineering/skills/testing.md`).
 
 ## Preview verification
 
@@ -190,12 +451,23 @@ A successful response has HTTP 200, `status: "ok"`, `message: null`, and a
 typed `result`. Collection results contain `policyengine_version`, `items`,
 `offset`, `limit`, and `has_more`; detail results contain
 `policyengine_version` and `item`. A malformed or noncanonical explicit
-version returns a typed HTTP 400 error. A valid explicit version that has not
+version returns a typed HTTP 422 error. A valid explicit version that has not
 been published for the country returns a typed HTTP 404 error. An absent
 catalog for the candidate's installed default version returns a typed HTTP 503
 service error. None of these outcomes reads or repairs v1. Unsupported
 countries and methods
 return typed client errors.
+
+The same test loads each country's catalog in parts as a client starting
+cold would: `GET /v2/model-catalog` for the running version, then
+`/v2/model-catalog/variables` for that exact version twice (the second request
+may be served by another instance, so its time is not necessarily a kept
+response's) and once more with `If-None-Match`, which must return 304, then a
+page of 500 parameters, one parameter's values (the two routes measured at
+0.8–2.6 s and 0.5–0.65 s in production on 2026-10-21) and that parameter by
+name. It appends each request's time and body size to the GitHub job summary,
+even when an assertion fails, so every staging and production release records
+these route times against its own catalog.
 
 Request `GET /v2/openapi.json` and confirm that the public document contains
 every documented resource path and explicit component schema references for

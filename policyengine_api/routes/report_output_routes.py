@@ -139,6 +139,9 @@ def create_report_output(country_id: str) -> Response:
 def get_report_output(country_id: str, report_id: int) -> Response:
     """Get a report output record by ID.
 
+    An ID stored under an outdated cache version serves the current report for
+    the same simulations and year, under the requested ID.
+
     The response result may include requested_at, started_at, and finished_at
     values projected from the selected report_output_runs row. Those fields are
     base report execution metadata, not user-specific user-report association
@@ -172,6 +175,9 @@ def get_report_output(country_id: str, report_id: int) -> Response:
 @validate_country
 def update_report_output(country_id: str) -> Response:
     """Update a report output record with results or error.
+
+    An ID stored under an outdated cache version updates the current report that
+    GET serves for that ID, and the response keeps the requested ID.
 
     Args:
         country_id (str): The country ID.

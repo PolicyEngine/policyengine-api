@@ -57,7 +57,7 @@ gap is visible, rather than leaving it out.
 | `[[rule.ci]]` | `workflow`, `job`, and an `invocation` string that must appear in that job's `run:` text (or its reusable-workflow `uses:`). |
 | `[rule.proof]` | Optional; see "Proof". |
 | `[rule.baseline]` | Only for `ratcheted` rules: `file` listing tolerated violations, and their `count`. |
-| `[[rule.exception]]` | Temporary carve-out: `path`, `reason`, `expires`. |
+| `[[rule.exception]]` | Carve-out: `path`, `reason`, and `expires`; or, for rules whose guard reads them, `match` (one site), `removal`, `issue` and `category` ([dependencies.md](dependencies.md#exceptions)). |
 | `[rule.downgrade]` | Required `reason` when a rule moves from enforced/ratcheted to advisory/doc-only. |
 
 `blocking` is derived, never declared: a rule blocks merges when its status is

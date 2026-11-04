@@ -1,0 +1,15 @@
+name: CI
+on: pull_request
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install from the lock
+        run: uv sync --frozen --extra dev
+      - name: Run from the lock
+        run: uv run --frozen python app.py
+      - name: Install a pinned tool
+        run: pip install "shellcheck-py==0.11.0.1"
+      - name: Set up
+        run: bash .github/scripts/setup.sh

@@ -168,9 +168,12 @@ gh workflow run process-v1-household-mirror-event.yml \
 ```
 
 The workflow starts an environment-specific Cloud SQL Auth Proxy and the
-command connects through it as `policyengine_schema_migrator`. The
-corresponding local command is intended only for an already authenticated
-operator with the same explicit settings and an active staging-only proxy:
+command connects through it as `policyengine_schema_migrator`. The workflow
+installs the runtime dependencies from `uv.lock` (`uv sync --frozen`), and the
+script runs the command through `uv run --frozen`, so a local run needs uv and
+uses the same locked versions. The corresponding local command is intended only
+for an already authenticated operator with the same explicit settings and an
+active staging-only proxy:
 
 ```bash
 bash .github/scripts/run_household_mirror_event_operator.sh \
@@ -256,3 +259,11 @@ Apply the reviewed schema revisions and application image only to independently
 verified production targets. Enable native v2 use and v1 create copying as
 separate operational decisions and retain the preceding application revision
 for immediate rollback.
+
+## Removal of Canada, Nigeria and Israel
+
+The Public API no longer serves Canada, Nigeria and Israel, and their country
+packages are no longer installed. Their v1 household requests are rejected as
+unknown countries before any write, so the Cloud SQL-only path described
+above for those countries no longer runs. Existing Cloud SQL rows for them
+are kept.

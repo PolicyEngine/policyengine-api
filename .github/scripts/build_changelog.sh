@@ -16,4 +16,6 @@ print(match.group(1))
 PY
 )"
 
-towncrier build --yes --version "${version}"
+# towncrier comes from the dev extra in uv.lock, which uv lock has just
+# refreshed with the new project version.
+uv run --frozen --extra dev towncrier build --yes --version "${version}"

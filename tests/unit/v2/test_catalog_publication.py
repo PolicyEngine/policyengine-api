@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
@@ -18,6 +20,12 @@ from policyengine_api.data.v2.catalog import (
     publication,
     publication_reconciliation,
     publication_staging,
+)
+from policyengine_api.data.v2.catalog.publication_parameter_tree import (
+    catalog_parameter_tree,
+)
+from policyengine_api.data.v2.catalog.publication_types import (
+    CatalogPublicationError,
 )
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
 from policyengine_api.data.v2.models import (
@@ -213,12 +221,32 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
     assert all("VALUES" not in statement for statement in compiled_inserts)
 
     catalog = normalized_catalog()
-    comparisons = publication_reconciliation._comparison_pairs(catalog.country("us"))
-    assert all(
-        isinstance(statement, sa.sql.Select) and not isinstance(statement, TextClause)
-        for pair in comparisons
-        for statement in pair
+    format_1_comparisons, format_2_comparisons = (
+        publication_reconciliation._comparison_pairs(
+            catalog.country("us"), with_format_2=with_format_2
+        )
+        for with_format_2 in (False, True)
     )
+    for comparisons in (format_1_comparisons, format_2_comparisons):
+        assert all(
+            isinstance(statement, sa.sql.Select)
+            and not isinstance(statement, TextClause)
+            for pair in comparisons
+            for statement in pair
+        )
+        assert all(
+            len(staged.selected_columns) == len(stored.selected_columns)
+            for staged, stored in comparisons
+        )
+    # Format 2 compares model versions, variables and parameters on more fields;
+    # the pairs are model versions, variables, parameter nodes, parameters,
+    # parameter values, datasets and regions.
+    assert [
+        len(format_2[0].selected_columns) - len(format_1[0].selected_columns)
+        for format_1, format_2 in zip(
+            format_1_comparisons, format_2_comparisons, strict=True
+        )
+    ] == [3, 8, 0, 2, 0, 0, 0]
 
     class Result:
         def scalar_one(self):
@@ -251,6 +279,8 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         entity_counts={"parameters": 12},
         fallback_summaries=(("us", "state", 3),),
         elapsed_seconds=2.3456,
+        parameter_trees_written=(("policyengine-uk", "6.7.5", 2_430),),
+        parameter_search_files_written=(("policyengine-uk", "6.7.5", 412_000, 61_000),),
     ).as_dict()
 
     assert evidence == {
@@ -260,6 +290,21 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         "entity_counts": {"parameters": 12},
         "fallback_summaries": [
             {"country_id": "us", "region_type": "state", "count": 3}
+        ],
+        "parameter_trees_written": [
+            {
+                "model": "policyengine-uk",
+                "version": "6.7.5",
+                "rows": 2_430,
+            }
+        ],
+        "parameter_search_files_written": [
+            {
+                "model": "policyengine-uk",
+                "version": "6.7.5",
+                "uncompressed_bytes": 412_000,
+                "compressed_bytes": 61_000,
+            }
         ],
         "elapsed_seconds": 2.346,
     }
@@ -293,3 +338,31 @@ def test_fallback_summary_emits_one_non_secret_warning() -> None:
     rendered_message = message_template % (logged_summaries,)
     assert "regional dataset fallback summary" in rendered_message
     assert "postgresql://" not in rendered_message
+
+
+def test_a_catalog_tree_needs_a_stored_row_for_every_parameter() -> None:
+    """Each tree parameter references the stored parameter of the same name.
+
+    The stored IDs differ from the catalog's, so the tree must take them from
+    the stored rows, not from the catalog records.
+    """
+    country = normalized_catalog().country("us")
+    stored_ids = {parameter.name: uuid4() for parameter in country.parameters}
+
+    rows = catalog_parameter_tree(country, stored_ids)
+    leaves = [row for row in rows if row.child_type == "parameter"]
+
+    assert [(row.path, row.parameter_id) for row in leaves] == [
+        (parameter.name, stored_ids[parameter.name]) for parameter in country.parameters
+    ]
+    assert {row.parameter_id for row in leaves}.isdisjoint(
+        parameter.id for parameter in country.parameters
+    )
+    with pytest.raises(
+        CatalogPublicationError,
+        match=re.escape(
+            f"the stored us catalog version {country.model_version.version} "
+            "lacks the parameter gov.example.rate"
+        ),
+    ):
+        catalog_parameter_tree(country, {})

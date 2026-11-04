@@ -28,6 +28,10 @@ on:
 jobs:
   migrate:
     name: Upgrade and verify v1 Cloud SQL
+    # push.yml calls this from a release job that may follow skipped
+    # checks. GitHub would skip this job too unless its if: calls a status
+    # function; the calling job has already checked what it needs.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: ${{ inputs.github_environment }}
@@ -42,6 +46,9 @@ jobs:
       POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET: ${{ vars.POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET }}
       PRODUCTION_POLICYENGINE_DB_READONLY_PASSWORD_SECRET: ${{ vars.PRODUCTION_POLICYENGINE_DB_READONLY_PASSWORD_SECRET }}
       PRODUCTION_POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET: ${{ vars.PRODUCTION_POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET }}
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -49,6 +56,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # The same uv version as the Cloud Run image and the release job.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.4"
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
@@ -56,8 +68,10 @@ jobs:
           service_account: ${{ vars.GCP_DB_MIGRATION_SERVICE_ACCOUNT }}
       - name: Set up GCloud
         uses: google-github-actions/setup-gcloud@v2
-      - name: Install dependencies
-        run: make install
+      # The runtime dependencies only, as the Cloud Run image installs them;
+      # the migration script runs them through uv run --frozen.
+      - name: Install locked dependencies
+        run: uv sync --frozen
       - name: Start Cloud SQL Auth Proxy
         run: bash .github/scripts/start_cloud_sql_proxy.sh
       - name: Upgrade and verify v1 database

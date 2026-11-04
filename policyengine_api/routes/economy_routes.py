@@ -20,6 +20,7 @@ from policyengine_api.services.economy_service import (
     EconomicImpactResult,
     EconomyService,
 )
+from policyengine_api.services.policy_service import PolicyNotFoundError
 from policyengine_api.spm import (
     SPMValidationError,
     readable_validation_error,
@@ -68,6 +69,17 @@ def _bad_request_response(error: str | ValueError) -> Response:
     return _make_error_response(error, 400, result=None, **fields)
 
 
+def _policy_not_found_response(error: PolicyNotFoundError) -> Response:
+    """Return 404 naming each policy that the request's country does not have."""
+    policy_ids = " and ".join(f"#{policy_id}" for policy_id in error.policy_ids)
+    noun = "Policy" if len(error.policy_ids) == 1 else "Policies"
+    return _make_error_response(
+        f"{noun} {policy_ids} not found.",
+        HTTPStatus.NOT_FOUND,
+        result=None,
+    )
+
+
 @economy_bp.route(
     "/<country_id>/economy/<int:policy_id>/over/<int:baseline_policy_id>",
     methods=["GET"],
@@ -80,8 +92,14 @@ def get_economic_impact(
 
     A policy ID of 0 means current law. The result stays ``computing`` until the
     simulation finishes, and while computing the body also carries the stage
-    fields the Simulation Entrypoint reports. Invalid query parameters give 400
-    and a failed calculation gives 502.
+    fields the Simulation Entrypoint reports. Invalid query parameters give 400,
+    a policy ID the country does not have gives 404 and a failed calculation
+    gives 502. A 502 body's ``retry_after_seconds`` is how long the Public API
+    keeps returning the stored failure before a request starts a new run, or
+    null when no failure is stored, the next request would answer from a
+    newer job, or the failure's lifetime cannot be read. It is the longest
+    wait: a deploy that changes the versions or worker app a request resolves
+    to lets a request start a new run sooner.
     """
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
@@ -108,14 +126,17 @@ def get_economic_impact(
         )
     except ValueError as error:
         return _bad_request_response(error)
+    except PolicyNotFoundError as error:
+        return _policy_not_found_response(error)
 
-    result_dict: dict[str, str | dict | None] = economic_impact_result.to_dict()
+    result_dict: dict[str, str | dict | int | None] = economic_impact_result.to_dict()
 
     if result_dict["status"] == "error":
         return _make_error_response(
             result_dict["message"],
             HTTPStatus.BAD_GATEWAY,
             result=None,
+            retry_after_seconds=result_dict.get("retry_after_seconds"),
         )
 
     body = {
@@ -145,8 +166,9 @@ def get_budget_window_economic_impact(
 
     The body lists completed, computing and queued years, and the
     ``X-PolicyEngine-Budget-Window-Cache`` header reports the cache outcome when
-    known. Invalid query parameters give 400; a failed calculation is reported
-    in the body with status 200.
+    known. Invalid query parameters give 400 and a policy ID the country does
+    not have gives 404; a failed calculation is reported in the body with
+    status 200.
     """
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
@@ -174,6 +196,8 @@ def get_budget_window_economic_impact(
         )
     except ValueError as error:
         return _bad_request_response(error)
+    except PolicyNotFoundError as error:
+        return _policy_not_found_response(error)
 
     result_dict = economic_impact_result.to_dict()
 

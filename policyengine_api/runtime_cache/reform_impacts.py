@@ -1,15 +1,19 @@
 """Recoverable reform-impact caching and submission coordination."""
 
 import hashlib
+import math
 import re
 import time
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
+from redis.exceptions import RedisError
+
 from policyengine_api.observability.identifiers import normalize_observability_id
 from policyengine_api.runtime_cache.claims import ExpiringClaimStore
 from policyengine_api.runtime_cache.core import (
+    PTTL_NO_EXPIRY,
     CacheBackend,
     CacheCoordinationError,
     CacheNamespace,
@@ -426,6 +430,35 @@ class ReformImpactCache:
                 schema_version=REFORM_IMPACT_SCHEMA_VERSION,
             )
         )
+
+    def seconds_left(self, impact: CachedReformImpact) -> int | None:
+        """Return the whole seconds, rounded up, until lookups stop finding the impact.
+
+        A lookup finds a record only through its scope index, so this is the
+        earlier of the record's expiry and the index's, read from the cache's
+        own expiry whatever lifetime each was written with; 0 once the index
+        has expired. Return None when the impact has no worker handle, its
+        record is missing or never expires, or the cache cannot be read.
+        """
+        if not impact.execution_id:
+            return None
+        try:
+            record_milliseconds = self.client.pttl(
+                self._record_key(impact.execution_id)
+            )
+            index_milliseconds = self.client.pttl(self._scope_index(impact))
+        except (RedisError, OSError):
+            return None
+        if not isinstance(record_milliseconds, int) or record_milliseconds < 0:
+            return None
+        if (
+            not isinstance(index_milliseconds, int)
+            or index_milliseconds == PTTL_NO_EXPIRY
+        ):
+            return math.ceil(record_milliseconds / 1000)
+        if index_milliseconds < 0:
+            return 0
+        return math.ceil(min(record_milliseconds, index_milliseconds) / 1000)
 
     def _from_index(self, index: str, limit: int) -> list[CachedReformImpact]:
         try:

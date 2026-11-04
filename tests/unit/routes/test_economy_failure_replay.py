@@ -8,16 +8,18 @@ from flask import Flask
 
 from policyengine_api import worker_spm
 from policyengine_api.routes import economy_routes
+from policyengine_api.runtime_cache import reform_impacts
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
-from policyengine_api.services import economy_service as economy_module
 from policyengine_api.services.economic_impact_request import EconomicImpactRequest
+from policyengine_api.services.economy_impact_types import US_STATE_RETRY_NOTE
 from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactExecution,
     ReformImpactsService,
 )
+from tests.fixtures.services.economy_service import ECONOMY_SERVICE_LOGGER_MODULES
 
 SELECTION = {
     "forecast_content_sha256": "a" * 64,
@@ -30,14 +32,25 @@ SELECTION = {
 EXECUTION_ID = "failed-worker-job"
 WORKER_ERROR = "Worker exhausted available memory"
 STORED_ERROR = f"Simulation entrypoint execution failed: {WORKER_ERROR}"
+# The usual 30-day record lifetime less a fixed jitter, so answers are exact.
+FAILED_RECORD_SECONDS = reform_impacts.REFORM_IMPACT_TTL_SECONDS - 7
 
 
 @pytest.fixture(params=[SELECTION, None], ids=["canonical", "legacy"])
 def failed_job_harness(request, monkeypatch):
+    return _failed_job_harness(monkeypatch, selection=request.param, region="us")
+
+
+@pytest.fixture
+def failed_state_job_harness(monkeypatch):
+    return _failed_job_harness(monkeypatch, selection=None, region="state/ca")
+
+
+def _failed_job_harness(monkeypatch, *, selection, region):
     # Isolate bundle certification from this real route/service/cache replay test.
     # The fake worker reports an ordinary execution failure, with no SPM output.
-    selection = request.param
     monkeypatch.setattr(worker_spm, "normalize_spm_selection", lambda *_: selection)
+    monkeypatch.setattr(reform_impacts, "jittered_ttl", lambda ttl: ttl - 7)
     gateway = Mock()
     gateway.get_spm_capability.return_value = {
         "contract_version": "canonical-spm-v1",
@@ -56,7 +69,11 @@ def failed_job_harness(request, monkeypatch):
         InMemoryCacheBackend(), CacheNamespace("test", "failed-job-replay")
     )
     impacts = ReformImpactsService(cache)
+    # Both policies exist, so a request after the failure expires can submit again.
+    policies = Mock()
+    policies.get_policy_json.return_value = {}
     service = EconomyService(
+        policy_service_=policies,
         reform_impacts_service_=impacts,
         simulation_entrypoint_=gateway,
     )
@@ -65,7 +82,7 @@ def failed_job_harness(request, monkeypatch):
             country_id="us",
             policy_id=1,
             baseline_policy_id=2,
-            region="us",
+            region=region,
             dataset="default",
             options={},
             api_version="1.0.0",
@@ -82,7 +99,8 @@ def failed_job_harness(request, monkeypatch):
     )
     monkeypatch.setattr(economy_routes, "economy_service", service)
     logger = Mock()
-    monkeypatch.setattr(economy_module, "logger", logger)
+    for module_name in ECONOMY_SERVICE_LOGGER_MODULES:
+        monkeypatch.setattr(f"{module_name}.logger", logger)
     app = Flask(__name__)
     app.config["TESTING"] = True
     app.register_blueprint(economy_routes.economy_bp)
@@ -98,7 +116,12 @@ def test_repeated_failed_polls_replay_failure_without_success_receipts(
     first = client.get(url)
     # An untyped upstream failure is the simulation service's, not the caller's.
     assert first.status_code == 502
-    assert first.json == {"status": "error", "message": STORED_ERROR, "result": None}
+    assert first.json == {
+        "status": "error",
+        "message": STORED_ERROR,
+        "result": None,
+        "retry_after_seconds": FAILED_RECORD_SECONDS,
+    }
     assert cache.get_by_execution_id(EXECUTION_ID).message == STORED_ERROR
 
     for _ in range(2):
@@ -131,3 +154,32 @@ def test_successful_cached_job_still_requires_canonical_receipts(failed_job_harn
     assert response.json["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
     gateway.get_execution_by_id.assert_not_called()
     gateway.run.assert_not_called()
+
+
+def test_a_failed_state_run_answers_with_the_seconds_until_a_new_run(
+    failed_state_job_harness,
+):
+    client, cache, gateway, _, _ = failed_state_job_harness
+    gateway.get_execution_id.return_value = "next-state-job"
+    url = "/us/economy/1/over/2?region=state/ca&time_period=2026&version=1.0.0"
+
+    first = client.get(url)
+    cache.client.advance(30.5)
+    replayed = client.get(url)
+    cache.client.advance(replayed.json["retry_after_seconds"])
+    after_the_wait = client.get(url)
+
+    assert first.status_code == 502
+    assert first.json == {
+        "status": "error",
+        "message": f"{STORED_ERROR}. {US_STATE_RETRY_NOTE}",
+        "result": None,
+        "retry_after_seconds": 120,
+    }
+    # The replay counts down from the stored record's own expiry, rounded up.
+    assert replayed.status_code == 502
+    assert replayed.json == {**first.json, "retry_after_seconds": 90}
+    # Once those seconds have passed, the next request submits a new run.
+    assert after_the_wait.status_code == 200
+    assert after_the_wait.json["status"] == "computing"
+    gateway.run.assert_called_once()

@@ -437,7 +437,7 @@ def _validate_expiry(rule: Rule, root: Path, today: date) -> list[Violation]:
             )
         )
     for exception in rule.exceptions:
-        if exception.expires < today:
+        if exception.expires is not None and exception.expires < today:
             violations.append(
                 Violation(
                     rule.id,

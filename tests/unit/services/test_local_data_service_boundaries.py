@@ -30,7 +30,6 @@ def test_local_data_services_do_not_issue_queries_directly(module_name):
         (
             ReformImpactsService,
             (
-                "get_recent_reform_impacts",
                 "get_all_reform_impacts",
                 "get_all_reform_impacts_by_options_hash_prefix",
                 "set_reform_impact",
@@ -51,14 +50,34 @@ def test_local_service_public_methods_do_not_accept_persistence(
         assert "session_factory" not in parameters
 
 
-def test_reform_impact_route_does_not_manage_sessions():
-    source = (SERVICE_ROOT.parent / "routes" / "reform_impact_routes.py").read_text(
-        encoding="utf-8"
-    )
-    assert "get_v1_session_factory" not in source
-    assert "sqlalchemy" not in source
+def test_flask_routes_do_not_manage_sessions():
+    route_modules = sorted((SERVICE_ROOT.parent / "routes").glob("*.py"))
+
+    assert route_modules
+    for route_module in route_modules:
+        source = route_module.read_text(encoding="utf-8")
+        assert "get_v1_session_factory" not in source, route_module.name
+        assert "sqlalchemy" not in source, route_module.name
 
 
 def test_economy_service_delegates_persistence_without_opening_sessions():
     source = (SERVICE_ROOT / "economy_service.py").read_text(encoding="utf-8")
+    assert "get_v1_session_factory" not in source
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "economy_budget_window_results.py",
+        "economy_budget_window_submission.py",
+        "economy_impact_execution.py",
+        "economy_impact_types.py",
+        "economy_simulation_requests.py",
+        "economy_stored_impacts.py",
+    ],
+)
+def test_economy_service_modules_delegate_persistence_without_opening_sessions(
+    module_name,
+):
+    source = (SERVICE_ROOT / module_name).read_text(encoding="utf-8")
     assert "get_v1_session_factory" not in source

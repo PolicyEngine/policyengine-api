@@ -1,0 +1,16 @@
+# Proof fixture for api.quality.file-length (the accepted case).
+#
+# The proof test writes each file below into a temporary directory with the
+# given number of lines, then runs the guard's scan on it with the rule's
+# registered exceptions. Every file is at its limit, or is an Alembic revision
+# the rule excludes, so the guard must report none.
+
+[files]
+# Source files: the limit is 800 lines.
+"policyengine_api/services/service_at_limit.py" = 800
+# Test code (under tests or fixtures, or a conftest.py): the limit is 1,500.
+"tests/unit/test_service_at_limit.py" = 1500
+"rules/fixtures/example/fixture_at_limit.py" = 1500
+"conftest.py" = 1500
+# Applied Alembic revisions are excluded, whatever their length.
+"migrations/v2/versions/0001_applied_revision.py" = 2000

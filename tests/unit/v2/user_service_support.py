@@ -31,6 +31,7 @@ from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.legacy_refs.validators import (
     require_legacy_references,
 )
+from tests.fixtures.v2_countries import add_listed_countries
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterator, Mapping
@@ -129,6 +130,8 @@ def v2_store() -> Iterator[V2Store]:
 
     V2_METADATA.create_all(engine)
     sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
+    with sessions() as session:
+        add_listed_countries(session)
     with sessions.begin() as session:
         model = TaxBenefitModel(name="policyengine-us")
         version = TaxBenefitModelVersion(

@@ -24,6 +24,13 @@ DATABASE_POOL_RECYCLE_SECONDS = 1800
 DATABASE_POOL_SIZE = 5
 DATABASE_POOL_MAX_OVERFLOW = 2
 DATABASE_POOL_TIMEOUT_SECONDS = 30
+# MySQL's CLIENT_FOUND_ROWS capability flag (pymysql.constants.CLIENT.FOUND_ROWS).
+# With it, an UPDATE reports the rows it matched rather than the rows whose
+# values changed, which SQLAlchemy's MySQL dialects rely on to check UPDATE row
+# counts. SQLAlchemy sets it only on connections it opens from a URL, not on
+# those a creator= function opens. The value is written out because application
+# code may not import database drivers (rule api.data.sqlalchemy-and-alembic-only).
+MYSQL_CLIENT_FOUND_ROWS_FLAG = 2
 
 
 @dataclass
@@ -76,6 +83,7 @@ def _build_remote_engine() -> Engine:
             db=config["db_name"],
             user=config["db_user"],
             password=password,
+            client_flag=MYSQL_CLIENT_FOUND_ROWS_FLAG,
         )
 
     engine = create_engine(
