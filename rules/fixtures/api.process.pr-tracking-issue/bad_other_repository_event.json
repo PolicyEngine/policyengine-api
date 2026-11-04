@@ -1,0 +1,13 @@
+{
+  "action": "opened",
+  "number": 4174,
+  "pull_request": {
+    "number": 4174,
+    "state": "open",
+    "title": "Check that every PR description starts with Fixes #N for an open issue",
+    "body": "Fixes PolicyEngine/policyengine-sim-api#862\n\n## Summary\n\n- Port the simulation API's PR description check.\n"
+  },
+  "repository": {
+    "full_name": "PolicyEngine/policyengine-api"
+  }
+}

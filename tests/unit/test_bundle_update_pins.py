@@ -31,6 +31,7 @@ def update_checkout(tmp_path):
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 
 name = Path(sys.argv[0]).name
@@ -38,12 +39,44 @@ args = sys.argv[1:]
 with open(os.environ["BUNDLE_TEST_CALLS"], "a") as stream:
     stream.write(json.dumps([name, *args]) + "\\n")
 if name == "git" and args[:1] == ["ls-remote"]:
-    sys.exit(2)
+    sys.exit(0 if os.environ.get("BUNDLE_TEST_REMOTE_BRANCH") else 2)
+if name == "git" and args[:1] == ["push"]:
+    sys.exit(1 if os.environ.get("BUNDLE_TEST_PUSH_FAIL") else 0)
+if name == "gh" and args[:2] == ["pr", "create"]:
+    sys.exit(1 if os.environ.get("BUNDLE_TEST_PR_CREATE_FAIL") else 0)
+if name == "gh" and args[:2] == ["pr", "view"] and "state,body" in args:
+    # The lookup after a failed gh pr create: apply its --jq expression to
+    # the pull request GitHub has for the branch, if any.
+    if not os.environ.get("BUNDLE_TEST_PR_AFTER_CREATE"):
+        sys.exit(1)
+    filtered = subprocess.run(
+        ["jq", "-r", args[args.index("--jq") + 1]],
+        input=os.environ["BUNDLE_TEST_PR_AFTER_CREATE"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    sys.stdout.write(filtered.stdout)
+    sys.exit(0)
 if name == "gh" and args[:2] == ["pr", "view"]:
     if os.environ.get("BUNDLE_TEST_OPEN_PR"):
         print(os.environ["BUNDLE_TEST_OPEN_PR"])
         sys.exit(0)
     sys.exit(1)
+if name == "gh" and args[:2] == ["issue", "list"]:
+    if os.environ.get("BUNDLE_TEST_ISSUE_LIST_FAIL"):
+        sys.exit(1)
+    # Apply the script's --jq expression to the open issues, as gh does.
+    filtered = subprocess.run(
+        ["jq", "-r", args[args.index("--jq") + 1]],
+        input=os.environ.get("BUNDLE_TEST_OPEN_ISSUES", "[]"),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    sys.stdout.write(filtered.stdout)
+if name == "gh" and args[:2] == ["issue", "create"]:
+    print("https://github.com/PolicyEngine/policyengine-api/issues/4321")
 if name == "uv" and args[:2] == ["lock", "--upgrade-package"]:
     if os.environ.get("BUNDLE_TEST_LOCK_FAIL"):
         sys.exit(1)
@@ -66,11 +99,16 @@ if name == "uv" and args[:1] == ["run"]:
 
 def run_update(root, *arguments, **environment):
     log = root / "calls.jsonl"
+    # The runner's GITHUB_REPOSITORY would choose the tracking issue's
+    # repository; tests that need one pass it.
+    inherited = {
+        name: value for name, value in os.environ.items() if name != "GITHUB_REPOSITORY"
+    }
     result = subprocess.run(
         ["bash", str(SCRIPT), *arguments],
         cwd=root,
         env={
-            **os.environ,
+            **inherited,
             "PATH": f"{root / 'bin'}{os.pathsep}{os.environ['PATH']}",
             "LATEST_OVERRIDE": TARGET_VERSION,
             "BUNDLE_TEST_CALLS": str(log),
@@ -197,3 +235,189 @@ def test_existing_pull_request_is_found_by_exact_branch(update_checkout):
         'select(.state == "OPEN") | .number',
     ] in calls
     assert not any(call[:1] == ["uv"] for call in calls)
+
+
+# --- The tracking issue (rule api.process.pr-tracking-issue) ---------------
+
+# Each version's pull request names an issue of its own: merging closes it
+# through the Fixes line, and close-bundle-update-issue.yml closes it when the
+# pull request is closed without merging. No open pull request names an issue
+# that another pull request's merge closed.
+ISSUE_TITLE = f"Update PolicyEngine bundle to {TARGET_VERSION}"
+
+
+def _calls_to(calls, *command):
+    return [call for call in calls if call[:3] == ["gh", *command]]
+
+
+def _pull_request_description(calls):
+    """Return the description of the one pull request the script opened."""
+    (pull_request,) = _calls_to(calls, "pr", "create")
+    return pull_request[pull_request.index("--body") + 1]
+
+
+def _open_issues(*issues):
+    """Environment for the fake gh to list ``issues`` as (number, title) pairs."""
+    return {
+        "BUNDLE_TEST_OPEN_ISSUES": json.dumps(
+            [{"number": number, "title": title} for number, title in issues]
+        )
+    }
+
+
+def test_a_new_pull_request_names_a_new_tracking_issue_first(update_checkout):
+    result, calls = run_update(update_checkout)
+
+    assert result.returncode == 0, result.stderr
+    (issue_lookup,) = _calls_to(calls, "issue", "list")
+    assert issue_lookup[issue_lookup.index("--repo") + 1] == (
+        "PolicyEngine/policyengine-api"
+    )
+    assert issue_lookup[issue_lookup.index("--state") + 1] == "open"
+    (issue,) = _calls_to(calls, "issue", "create")
+    assert issue[issue.index("--repo") + 1] == "PolicyEngine/policyengine-api"
+    assert issue[issue.index("--title") + 1] == ISSUE_TITLE
+    description = _pull_request_description(calls)
+    assert description.split("\n")[:3] == ["Fixes #4321", "", "## Summary"]
+
+
+def test_the_tracking_issue_is_resolved_after_the_lock_and_before_the_push(
+    update_checkout,
+):
+    """A failed lock opens no issue, and a failed lookup pushes no branch."""
+    result, calls = run_update(update_checkout)
+
+    assert result.returncode == 0, result.stderr
+    order = [
+        calls.index(["uv", "lock", "--check"]),
+        calls.index(_calls_to(calls, "issue", "list")[0]),
+        calls.index(_calls_to(calls, "issue", "create")[0]),
+        next(index for index, call in enumerate(calls) if call[:2] == ["git", "push"]),
+        calls.index(_calls_to(calls, "pr", "create")[0]),
+    ]
+    assert order == sorted(order)
+
+
+def test_a_new_pull_request_reuses_the_oldest_open_tracking_issue(update_checkout):
+    result, calls = run_update(
+        update_checkout,
+        **_open_issues(
+            (4310, ISSUE_TITLE),
+            (4300, ISSUE_TITLE),
+            (4100, "Relock dependencies"),
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert _calls_to(calls, "issue", "create") == []
+    assert _pull_request_description(calls).startswith("Fixes #4300\n\n## Summary")
+
+
+def test_issues_with_other_titles_are_not_reused(update_checkout):
+    result, calls = run_update(
+        update_checkout,
+        **_open_issues(
+            (4200, "Update PolicyEngine bundle to 4.0.9"),
+            (4150, "Update the PolicyEngine bundle"),
+            (4100, "Relock dependencies"),
+            (4000, f"{ISSUE_TITLE} later"),
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    (issue,) = _calls_to(calls, "issue", "create")
+    assert issue[issue.index("--title") + 1] == ISSUE_TITLE
+    assert _pull_request_description(calls).startswith("Fixes #4321\n\n## Summary")
+
+
+def test_the_tracking_issue_is_in_the_repository_the_workflow_runs_in(
+    update_checkout,
+):
+    result, calls = run_update(
+        update_checkout, GITHUB_REPOSITORY="PolicyEngine/policyengine-api-copy"
+    )
+
+    assert result.returncode == 0, result.stderr
+    for command in (("issue", "list"), ("issue", "create")):
+        (call,) = _calls_to(calls, *command)
+        assert call[call.index("--repo") + 1] == "PolicyEngine/policyengine-api-copy"
+
+
+def test_a_pull_request_for_an_existing_branch_names_its_tracking_issue_first(
+    update_checkout,
+):
+    result, calls = run_update(update_checkout, BUNDLE_TEST_REMOTE_BRANCH="1")
+
+    assert result.returncode == 0, result.stderr
+    assert "already exists without an open PR" in result.stdout
+    assert not any(call[:2] == ["git", "commit"] for call in calls)
+    assert _pull_request_description(calls).startswith("Fixes #4321\n\n## Summary")
+
+
+def test_a_failed_issue_lookup_pushes_nothing_and_opens_nothing(update_checkout):
+    result, calls = run_update(update_checkout, BUNDLE_TEST_ISSUE_LIST_FAIL="1")
+
+    assert result.returncode != 0
+    assert "Could not list the open issues in PolicyEngine/policyengine-api" in (
+        result.stderr
+    )
+    assert not any(call[:2] in (["git", "commit"], ["git", "push"]) for call in calls)
+    assert _calls_to(calls, "issue", "create") == []
+    assert _calls_to(calls, "pr", "create") == []
+
+
+# --- An issue no pull request will name -------------------------------------
+
+
+def test_a_rejected_push_closes_the_issue_this_run_opened(update_checkout):
+    """A concurrent run for the same version pushed first; its PR has an issue."""
+    result, calls = run_update(update_checkout, BUNDLE_TEST_PUSH_FAIL="1")
+
+    assert result.returncode != 0
+    assert _calls_to(calls, "pr", "create") == []
+    (close,) = _calls_to(calls, "issue", "close")
+    assert close[3] == "4321"
+    assert close[close.index("--repo") + 1] == "PolicyEngine/policyengine-api"
+    assert close[close.index("--reason") + 1] == "not planned"
+
+
+def test_a_rejected_push_leaves_a_reused_issue_open(update_checkout):
+    result, calls = run_update(
+        update_checkout,
+        BUNDLE_TEST_PUSH_FAIL="1",
+        **_open_issues((4300, ISSUE_TITLE)),
+    )
+
+    assert result.returncode != 0
+    assert _calls_to(calls, "issue", "close") == []
+
+
+@pytest.mark.parametrize("remote_branch", ["", "1"])
+def test_a_failed_pull_request_closes_the_issue_this_run_opened(
+    update_checkout, remote_branch
+):
+    result, calls = run_update(
+        update_checkout,
+        BUNDLE_TEST_PR_CREATE_FAIL="1",
+        BUNDLE_TEST_REMOTE_BRANCH=remote_branch,
+    )
+
+    assert result.returncode != 0
+    (close,) = _calls_to(calls, "issue", "close")
+    assert close[3] == "4321"
+
+
+def test_a_failed_pull_request_keeps_an_issue_an_open_pull_request_names(
+    update_checkout,
+):
+    """The pull request exists although gh pr create reported a failure."""
+    result, calls = run_update(
+        update_checkout,
+        BUNDLE_TEST_PR_CREATE_FAIL="1",
+        BUNDLE_TEST_PR_AFTER_CREATE=json.dumps(
+            {"state": "OPEN", "body": "Fixes #4321\n\n## Summary\n"}
+        ),
+    )
+
+    assert result.returncode != 0
+    assert _calls_to(calls, "issue", "close") == []
