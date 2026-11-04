@@ -195,9 +195,15 @@ Import Linter checks these directions in CI with the contracts in
   or through other modules, except through the table models (rule
   `api.v2.pure-modules-no-database`).
 
-Import Linter reads import statements. It does not see a name that a module
-re-exports from another, and a tolerated exception covers every import
-between its two modules.
+The table models' own imports of SQLAlchemy and SQLModel are allowed, one
+model module at a time, so a new module in `policyengine_api/data/v2/models/`
+needs its two imports added to the rule. Import Linter reads import
+statements. It does not see a name that a module re-exports from another, and
+a tolerated exception covers every import between its two modules and every
+chain through them: today `identity.types -> sqlmodel` also covers
+`identity.transformations`, `user_accounts.types`,
+`user_accounts.transformations` and `user_accounts.validators`, which reach
+SQLModel only through it.
 
 Catalog version validation, its error types and `SelectedCatalog` live in
 `policyengine_api/data/v2/catalog/catalog_selection_validation.py`, which

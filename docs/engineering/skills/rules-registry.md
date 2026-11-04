@@ -73,7 +73,7 @@ gap is visible, rather than leaving it out.
 | `mypy` | `paths` | Each path is in `[tool.mypy].files` |
 | `workflow-job` | optional `step` | The CI job exists (the job itself is the check) |
 | `pyright` | `config` | The config file exists |
-| `import-linter` | `config`, `contract`, optional `allowed_ignore_imports` | The contract with that `id` exists, and its `ignore_imports` equals the rule's baseline entries plus `allowed_ignore_imports`, with `unmatched_ignore_imports_alerting = "error"` (see "Baselines") |
+| `import-linter` | `config`, `contract`, `contract_sha256`, optional `allowed_ignore_imports` | The contract with that `id` exists; its definition hashes to `contract_sha256`; and its `ignore_imports` equals the rule's baseline entries plus `allowed_ignore_imports`, with no wildcards and with `unmatched_ignore_imports_alerting = "error"` (see "Baselines") |
 | `docs-guard` | `doc`, `marker` | The doc exists |
 | `llm-review` | `prompt`, `model` | The prompt exists; judgment tier only |
 | `none` | | Nothing; only for `doc-only` and `advisory` rules |
@@ -133,10 +133,19 @@ fail the guard yet.
   `ignore_imports` and those two lists differ, and
   `unmatched_ignore_imports_alerting = "error"` makes Import Linter fail on an
   entry that no longer matches, so fixing an import forces the entry out.
-  Baseline entries name one importer and one imported module, without
-  wildcards, so the count is the number of tolerated imports. CI runs
+  No entry may use a wildcard, so each names one importer and one imported
+  module and a new module never falls under an old exception. CI runs
   `lint-imports --config pyproject.toml`, so a `setup.cfg` or `.importlinter`
   file can't take the contracts' place.
+- An Import Linter rule also pins the rest of its contract: the SHA-256 of the
+  top-level `[tool.importlinter]` settings and every contract field except
+  `ignore_imports` (`scripts/rules/import_linter.py`, `contract_fingerprint`)
+  must equal `enforcer.contract_sha256`. Narrowing a contract's modules, or a
+  setting such as `exclude_type_checking_imports`, therefore needs a registry
+  change too; the guard's message gives the new value.
+- Ignoring an import removes it from the graph the contract checks, so the
+  exception also covers every chain from another module that passes through
+  it. Each such chain goes away when the tolerated import is fixed.
 - Moving a rule from enforced/ratcheted to advisory/doc-only needs an explicit
   `[rule.downgrade] reason`.
 

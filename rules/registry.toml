@@ -250,6 +250,7 @@ autofix = false
 kind = "import-linter"
 config = "pyproject.toml"
 contract = "api-v2-connectors-independent"
+contract_sha256 = "d017f01de9eb410073e52e756aa4d745d3a4e5de4180301e7e7726ad0837b21d"
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
@@ -278,6 +279,7 @@ autofix = false
 kind = "import-linter"
 config = "pyproject.toml"
 contract = "api-v2-layers"
+contract_sha256 = "d91c05303198345699ff66356881f18d5bb3ea5bbf44cd9a86346ee7ff5f17b7"
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
@@ -303,10 +305,33 @@ autofix = false
 kind = "import-linter"
 config = "pyproject.toml"
 contract = "api-v2-pure-modules-no-database"
+contract_sha256 = "9aa2876ea842b97b61c6b54ced45d9bd2c62a7b412971720e9fd71ad8dfb106b"
 allowed_ignore_imports = [
   "policyengine_api.data.v2.models -> sqlmodel",
-  "policyengine_api.data.v2.models.* -> sqlalchemy",
-  "policyengine_api.data.v2.models.* -> sqlmodel",
+  "policyengine_api.data.v2.models.associations -> sqlalchemy",
+  "policyengine_api.data.v2.models.associations -> sqlmodel",
+  "policyengine_api.data.v2.models.base -> sqlalchemy",
+  "policyengine_api.data.v2.models.base -> sqlmodel",
+  "policyengine_api.data.v2.models.comparison_runs -> sqlalchemy",
+  "policyengine_api.data.v2.models.comparison_runs -> sqlmodel",
+  "policyengine_api.data.v2.models.countries -> sqlalchemy",
+  "policyengine_api.data.v2.models.countries -> sqlmodel",
+  "policyengine_api.data.v2.models.household_mappings -> sqlalchemy",
+  "policyengine_api.data.v2.models.household_mappings -> sqlmodel",
+  "policyengine_api.data.v2.models.households -> sqlalchemy",
+  "policyengine_api.data.v2.models.households -> sqlmodel",
+  "policyengine_api.data.v2.models.metadata -> sqlalchemy",
+  "policyengine_api.data.v2.models.metadata -> sqlmodel",
+  "policyengine_api.data.v2.models.policies -> sqlalchemy",
+  "policyengine_api.data.v2.models.policies -> sqlmodel",
+  "policyengine_api.data.v2.models.policy_mappings -> sqlalchemy",
+  "policyengine_api.data.v2.models.policy_mappings -> sqlmodel",
+  "policyengine_api.data.v2.models.reports -> sqlalchemy",
+  "policyengine_api.data.v2.models.reports -> sqlmodel",
+  "policyengine_api.data.v2.models.simulations -> sqlalchemy",
+  "policyengine_api.data.v2.models.simulations -> sqlmodel",
+  "policyengine_api.data.v2.models.users -> sqlalchemy",
+  "policyengine_api.data.v2.models.users -> sqlmodel",
 ]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
@@ -336,6 +361,7 @@ autofix = false
 kind = "import-linter"
 config = "pyproject.toml"
 contract = "api-v2-routes-no-database-access"
+contract_sha256 = "c3267ae523a120aa28c3b57c8e6477e20d5f2c8957f9b874c07fba2ac5700e34"
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
@@ -361,6 +387,7 @@ autofix = false
 kind = "import-linter"
 config = "pyproject.toml"
 contract = "api-v2-types-transformations-no-validators"
+contract_sha256 = "bd0f3ad55155cd5198a68c41798c58d64916b60eff40b27600d503c3e2c644cf"
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"

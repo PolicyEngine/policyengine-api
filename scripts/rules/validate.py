@@ -22,7 +22,7 @@ KIND_FIELDS: dict[Kind, tuple[dict[str, type], dict[str, type]]] = {
     Kind.MYPY: ({"paths": list}, {"config": str}),
     Kind.PYRIGHT: ({"config": str}, {"project": str}),
     Kind.IMPORT_LINTER: (
-        {"config": str, "contract": str},
+        {"config": str, "contract": str, "contract_sha256": str},
         {"allowed_ignore_imports": list},
     ),
     Kind.WORKFLOW_JOB: ({}, {"step": str}),

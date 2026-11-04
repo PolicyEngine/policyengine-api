@@ -223,10 +223,33 @@ forbidden_modules = [
 ]
 ignore_imports = [
     # Allowed by design: validators and transformations may use loaded table
-    # rows, and the table models are SQLModel classes.
+    # rows, and the table models are SQLModel classes. Each model module is
+    # listed, so a new module in the models package needs a registry change.
     "policyengine_api.data.v2.models -> sqlmodel",
-    "policyengine_api.data.v2.models.* -> sqlalchemy",
-    "policyengine_api.data.v2.models.* -> sqlmodel",
+    "policyengine_api.data.v2.models.associations -> sqlalchemy",
+    "policyengine_api.data.v2.models.associations -> sqlmodel",
+    "policyengine_api.data.v2.models.base -> sqlalchemy",
+    "policyengine_api.data.v2.models.base -> sqlmodel",
+    "policyengine_api.data.v2.models.comparison_runs -> sqlalchemy",
+    "policyengine_api.data.v2.models.comparison_runs -> sqlmodel",
+    "policyengine_api.data.v2.models.countries -> sqlalchemy",
+    "policyengine_api.data.v2.models.countries -> sqlmodel",
+    "policyengine_api.data.v2.models.household_mappings -> sqlalchemy",
+    "policyengine_api.data.v2.models.household_mappings -> sqlmodel",
+    "policyengine_api.data.v2.models.households -> sqlalchemy",
+    "policyengine_api.data.v2.models.households -> sqlmodel",
+    "policyengine_api.data.v2.models.metadata -> sqlalchemy",
+    "policyengine_api.data.v2.models.metadata -> sqlmodel",
+    "policyengine_api.data.v2.models.policies -> sqlalchemy",
+    "policyengine_api.data.v2.models.policies -> sqlmodel",
+    "policyengine_api.data.v2.models.policy_mappings -> sqlalchemy",
+    "policyengine_api.data.v2.models.policy_mappings -> sqlmodel",
+    "policyengine_api.data.v2.models.reports -> sqlalchemy",
+    "policyengine_api.data.v2.models.reports -> sqlmodel",
+    "policyengine_api.data.v2.models.simulations -> sqlalchemy",
+    "policyengine_api.data.v2.models.simulations -> sqlmodel",
+    "policyengine_api.data.v2.models.users -> sqlalchemy",
+    "policyengine_api.data.v2.models.users -> sqlmodel",
     # Tolerated: rules/baselines/import-linter-api-v2-pure-modules-no-database.txt
     "policyengine_api.services.v2.identity.types -> sqlmodel",
 ]

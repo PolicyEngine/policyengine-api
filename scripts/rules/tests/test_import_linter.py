@@ -180,6 +180,7 @@ class TestImportLinterEnforcer(unittest.TestCase):
             "pkg-pure",
             baseline=Baseline(BASELINE_FILE, 1),
             allowed=["pkg.models -> sqlalchemy"],
+            sha256=fingerprint(self.repo.read("pyproject.toml"), "pkg-pure"),
         )
 
         self.assertEqual(

@@ -2,16 +2,21 @@
 
 An Import Linter contract tolerates existing violations through its
 ``ignore_imports``. The rule that registers the contract lists the same
-entries in its baseline file under ``rules/baselines/`` (code-owned, and the
-rules guard lets it only shrink), plus any imports the rule allows by design
-in ``enforcer.allowed_ignore_imports``. This module fails the guard when the
-two disagree, so an exception can't be added in ``pyproject.toml`` alone.
+entries in its baseline file under ``rules/baselines/`` (code-owned; the rules
+guard stops its count growing), plus any imports the rule allows by design in
+``enforcer.allowed_ignore_imports``. The rule also pins the rest of the
+contract, and the top-level ``[tool.importlinter]`` settings, with
+``enforcer.contract_sha256``. This module fails the guard when the registry
+and ``pyproject.toml`` disagree, so neither an exception nor a narrower
+contract can be made in ``pyproject.toml`` alone.
 
 Standard library only, like the rest of the rules tool.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import tomllib
 from typing import TYPE_CHECKING, Any
 
@@ -22,19 +27,55 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+class ConfigNotTomlError(ValueError):
+    """The named Import Linter config is not a TOML file."""
+
+
 def _violation(rule: Rule, message: str, fix: str) -> Violation:
     return Violation(rule.id, "enforcer", message, fix)
 
 
-def contracts(config: Path) -> list[dict[str, Any]]:
-    """Return the ``[[tool.importlinter.contracts]]`` tables of a TOML config."""
+def _settings(config: Path) -> dict[str, Any]:
+    """Return ``[tool.importlinter]`` from a TOML config, or ``{}`` if absent."""
     if not config.is_file():
-        return []
-    settings = tomllib.loads(config.read_text()).get("tool", {}).get("importlinter")
-    if not isinstance(settings, dict):
-        return []
+        return {}
+    try:
+        document = tomllib.loads(config.read_text())
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigNotTomlError(config.name) from error
+    settings = document.get("tool", {}).get("importlinter")
+    return settings if isinstance(settings, dict) else {}
+
+
+def _contract_tables(settings: dict[str, Any]) -> list[dict[str, Any]]:
     tables = settings.get("contracts", [])
     return [table for table in tables if isinstance(table, dict)]
+
+
+def contracts(config: Path) -> list[dict[str, Any]]:
+    """Return the ``[[tool.importlinter.contracts]]`` tables of a TOML config."""
+    try:
+        return _contract_tables(_settings(config))
+    except ConfigNotTomlError:
+        return []
+
+
+def contract_fingerprint(settings: dict[str, Any], contract: dict[str, Any]) -> str:
+    """Return the SHA-256 that a rule's ``enforcer.contract_sha256`` must equal.
+
+    It covers the top-level settings and every contract field except
+    ``ignore_imports``, which the baseline and ``allowed_ignore_imports`` pin.
+    """
+    definition = {
+        "settings": {
+            key: value for key, value in settings.items() if key != "contracts"
+        },
+        "contract": {
+            key: value for key, value in contract.items() if key != "ignore_imports"
+        },
+    }
+    canonical = json.dumps(definition, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 def _baseline_entries(rule: Rule, root: Path) -> list[str]:
@@ -50,57 +91,21 @@ def _baseline_entries(rule: Rule, root: Path) -> list[str]:
     ]
 
 
-def resolve_import_linter(rule: Rule, root: Path) -> list[Violation]:
-    """Check the rule's contract exists and its exceptions match the registry."""
-    config_name = rule.enforcer.get("config")
-    contract_id = rule.enforcer.get("contract")
-    if not config_name or not contract_id:
-        return []
-    config = root / config_name
-    if not config.exists():
-        return [
-            _violation(
-                rule,
-                f"config file {config_name} does not exist",
-                "create it or fix enforcer.config",
-            )
-        ]
-    allowed = rule.enforcer.get("allowed_ignore_imports", [])
-    if not isinstance(allowed, list) or not all(
-        isinstance(entry, str) for entry in allowed
-    ):
-        return [
-            _violation(
-                rule,
-                "enforcer.allowed_ignore_imports must be a list of imports written "
-                "as Import Linter writes them, such as 'pkg.models -> sqlalchemy'",
-                "make it a list of strings",
-            )
-        ]
-    contract = next(
-        (item for item in contracts(config) if item.get("id") == contract_id), None
-    )
-    if contract is None:
-        return [
-            _violation(
-                rule,
-                f"{config_name} has no Import Linter contract with id '{contract_id}'",
-                "add the contract to [tool.importlinter] or fix enforcer.contract",
-            )
-        ]
-
+def _exception_violations(
+    rule: Rule, root: Path, contract_id: str, contract: dict[str, Any]
+) -> list[Violation]:
+    """Compare the contract's ignore_imports with the rule's baseline and allowances."""
     ignored = [str(entry).strip() for entry in contract.get("ignore_imports", [])]
-    tolerated = _baseline_entries(rule, root)
-    expected = set(tolerated) | set(allowed)
+    allowed = rule.enforcer.get("allowed_ignore_imports", [])
+    expected = set(_baseline_entries(rule, root)) | set(allowed)
     violations = [
         _violation(
             rule,
-            f"the rule's baseline lists a wildcard exception, {entry}, which would "
-            "also ignore new violations and keep matching after some are fixed",
-            "list each tolerated import by its full module names; only "
-            "enforcer.allowed_ignore_imports may use wildcards",
+            f"contract '{contract_id}' ignores {entry}, a wildcard that would also "
+            "ignore imports added later",
+            "list each import by its full module names",
         )
-        for entry in tolerated
+        for entry in ignored
         if "*" in entry
     ]
     unlisted = [entry for entry in ignored if entry not in expected]
@@ -140,11 +145,85 @@ def resolve_import_linter(rule: Rule, root: Path) -> list[Violation]:
     return violations
 
 
+def resolve_import_linter(rule: Rule, root: Path) -> list[Violation]:
+    """Check the rule's contract exists, is the one it pins, and has its exceptions."""
+    config_name = rule.enforcer.get("config")
+    contract_id = rule.enforcer.get("contract")
+    if not config_name or not contract_id:
+        return []
+    config = root / config_name
+    if not config.exists():
+        return [
+            _violation(
+                rule,
+                f"config file {config_name} does not exist",
+                "create it or fix enforcer.config",
+            )
+        ]
+    allowed = rule.enforcer.get("allowed_ignore_imports", [])
+    if not isinstance(allowed, list) or not all(
+        isinstance(entry, str) for entry in allowed
+    ):
+        return [
+            _violation(
+                rule,
+                "enforcer.allowed_ignore_imports must be a list of imports written "
+                "as Import Linter writes them, such as 'pkg.models -> sqlalchemy'",
+                "make it a list of strings",
+            )
+        ]
+    try:
+        settings = _settings(config)
+    except ConfigNotTomlError:
+        return [
+            _violation(
+                rule,
+                f"{config_name} is not a TOML file, so the rules guard can't read "
+                "its contracts",
+                "keep the Import Linter contracts in [tool.importlinter] in "
+                "pyproject.toml",
+            )
+        ]
+    contract = next(
+        (
+            table
+            for table in _contract_tables(settings)
+            if table.get("id") == contract_id
+        ),
+        None,
+    )
+    if contract is None:
+        return [
+            _violation(
+                rule,
+                f"{config_name} has no Import Linter contract with id '{contract_id}'",
+                "add the contract to [tool.importlinter] or fix enforcer.contract",
+            )
+        ]
+
+    violations = []
+    pinned = rule.enforcer.get("contract_sha256") or ""
+    actual = contract_fingerprint(settings, contract)
+    if pinned != actual:
+        violations.append(
+            _violation(
+                rule,
+                f"contract '{contract_id}' is not the definition the rule pins "
+                f"(enforcer.contract_sha256 is {pinned or 'empty'}, the contract's "
+                f"is {actual})",
+                "if the change is intended, set enforcer.contract_sha256 = "
+                f'"{actual}" in rules/registry.toml',
+            )
+        )
+    violations += _exception_violations(rule, root, contract_id, contract)
+    return violations
+
+
 def unregistered_contracts(rules: Sequence[Rule], root: Path) -> list[Violation]:
     """Return a hidden-rule violation for each contract in pyproject.toml no rule names.
 
     Import Linter also reads other files, but this repository keeps its
-    contracts in pyproject.toml.
+    contracts in pyproject.toml, and CI passes it with --config.
     """
     registered = {
         rule.enforcer.get("contract")
