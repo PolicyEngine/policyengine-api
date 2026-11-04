@@ -1,0 +1,240 @@
+"""Tests for the suppressions guard: every noqa and type: ignore is explained."""
+
+from __future__ import annotations
+
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+
+from scripts.rules.suppressions import (
+    REPO_ROOT,
+    RULE_ID,
+    Suppression,
+    comment_problems,
+    compare,
+    run_check,
+    unexplained_suppressions,
+)
+
+FIXTURES = REPO_ROOT / "rules" / "fixtures" / RULE_ID
+BASELINE_FILE = "rules/baselines/suppressions.txt"
+NO_CODE = ("a code",)
+NO_REASON = ("a reason",)
+NEITHER = ("a code", "a reason")
+
+
+def _suppression(path: str, line: int, source_line: str) -> Suppression:
+    comment = source_line[source_line.index("#") :]
+    return Suppression(path, line, comment, source_line, comment_problems(comment))
+
+
+def _registry_with_rule(baseline_block: str) -> str:
+    """Return a registry holding only the suppressions rule, with ``baseline_block``."""
+    return textwrap.dedent(
+        f"""
+        schema_version = 1
+        repo = "example"
+
+        [[category]]
+        id = "quality"
+        title = "Quality"
+
+        [[rule]]
+        id = "{RULE_ID}"
+        category = "quality"
+        statement = "Suppressions are explained."
+        rationale = "docs/guide.md"
+        scope = ["**/*.py"]
+        tier = "mechanical"
+        status = "ratcheted"
+        autofix = false
+        [rule.enforcer]
+        kind = "quality-guard"
+        name = "suppressions"
+        [[rule.ci]]
+        workflow = ".github/workflows/pr.yml"
+        job = "quality-guards"
+        invocation = "run_quality_guards.py"
+        {baseline_block}
+        """
+    )
+
+
+class TestSuppressionsProof(unittest.TestCase):
+    """Proof: the rejected fixture's suppressions fail, the accepted ones pass."""
+
+    def test_rule_proof_suppressions_explained(self) -> None:
+        rejected = unexplained_suppressions(
+            "rejected.py", (FIXTURES / "rejected_module.txt").read_text()
+        )
+        self.assertEqual(
+            [(found.line, found.missing) for found in rejected],
+            [
+                (6, NO_REASON),
+                (7, NEITHER),
+                (8, NEITHER),
+                (9, NO_REASON),
+                (10, NO_REASON),
+                (11, NEITHER),
+                (12, NO_REASON),
+                (13, NO_CODE),
+            ],
+        )
+        accepted = unexplained_suppressions(
+            "accepted.py", (FIXTURES / "accepted_module.txt").read_text()
+        )
+        self.assertEqual(accepted, [])
+
+
+class TestCommentProblems(unittest.TestCase):
+    """What a comment lacks, if it is a suppression."""
+
+    def test_each_comment_form(self) -> None:
+        cases = {
+            "# noqa": NEITHER,
+            "# NOQA": NEITHER,
+            "# noqa: E501": NO_REASON,
+            "# noqa:E501,W291": NO_REASON,
+            "# noqa: E501 the URL is long": NO_REASON,
+            "# noqa: E501  # the URL is long": (),
+            "# noqa:E501, W291  # generated": (),
+            "# ruff: noqa": NEITHER,
+            "# ruff: noqa: E402": NO_REASON,
+            "# ruff: noqa: E402  # path setup first": (),
+            "# flake8: noqa": NEITHER,
+            "# type: ignore": NEITHER,
+            "# type: ignore[]": NEITHER,
+            "# type: ignore[arg-type]": NO_REASON,
+            "# type:ignore[arg-type, misc]  # the stub is wrong": (),
+            "# type: ignore[arg-type]  # noqa: E501": NO_REASON,
+            "# type: ignore[arg-type]  # noqa: E501  # a long stub name": (),
+            "# a reason first  # noqa: E501": (),
+            "# the word noqa in prose": (),
+            "# type annotations are ignored here": (),
+            "# see #4182": (),
+        }
+        for comment, missing in cases.items():
+            with self.subTest(comment=comment):
+                self.assertEqual(comment_problems(comment), missing)
+
+    def test_strings_are_not_comments(self) -> None:
+        source = 'TEXT = "# noqa"\nOTHER = """\n# type: ignore\n"""\n'
+        self.assertEqual(unexplained_suppressions("module.py", source), [])
+
+    def test_the_entry_is_the_path_and_the_source_line(self) -> None:
+        (found,) = unexplained_suppressions(
+            "pkg/module.py", "import os\n    import sys  # noqa: F401\n"
+        )
+        self.assertEqual(found.line, 2)
+        self.assertEqual(found.entry, "pkg/module.py :: import sys  # noqa: F401")
+
+    def test_an_untokenizable_module_is_reported(self) -> None:
+        with self.assertRaises(SyntaxError):
+            unexplained_suppressions("module.py", 'TEXT = """never closed\n')
+
+
+class TestBaseline(unittest.TestCase):
+    """The baseline tolerates listed suppressions and may only shrink."""
+
+    def test_unlisted_suppression_fails(self) -> None:
+        found = [
+            _suppression("pkg/a.py", 3, "import os  # noqa: F401"),
+            _suppression("pkg/b.py", 9, "x = f()  # type: ignore[misc]"),
+        ]
+        violations = compare(
+            found, ["pkg/a.py :: import os  # noqa: F401"], BASELINE_FILE
+        )
+        self.assertEqual(
+            [str(violation) for violation in violations],
+            [
+                f"[{RULE_ID}] suppressions: pkg/b.py:9: `# type: ignore[misc]` "
+                "gives no reason. Fix: name what it suppresses and say why, as "
+                "`# noqa: CODE  # reason` or `# type: ignore[code]  # reason`, "
+                "once a code change or a setting can't remove the finding "
+                "(api.process.agents-suppress-as-last-resort; "
+                "docs/engineering/skills/rules-registry.md#inline-suppressions)."
+            ],
+        )
+
+    def test_a_suppression_with_neither_names_both(self) -> None:
+        (violation,) = compare(
+            [_suppression("pkg/a.py", 1, "import os  # noqa")], [], BASELINE_FILE
+        )
+        self.assertEqual(
+            violation.message, "pkg/a.py:1: `# noqa` names no code and gives no reason"
+        )
+
+    def test_each_listed_occurrence_tolerates_one_suppression(self) -> None:
+        line = "from x import (  # noqa: E402"
+        found = [
+            _suppression("pkg/a.py", 3, line),
+            _suppression("pkg/a.py", 9, line),
+        ]
+        entry = f"pkg/a.py :: {line}"
+        self.assertEqual(compare(found, [entry, entry], BASELINE_FILE), [])
+        self.assertEqual(
+            [violation.message for violation in compare(found, [entry], BASELINE_FILE)],
+            ["pkg/a.py:9: `# noqa: E402` gives no reason"],
+        )
+
+    def test_listed_entry_no_longer_found_fails(self) -> None:
+        violations = compare([], ["pkg/a.py :: import os  # noqa: F401"], BASELINE_FILE)
+        self.assertEqual(
+            [str(violation) for violation in violations],
+            [
+                f"[{RULE_ID}] suppressions: baseline entry no longer applies: "
+                "pkg/a.py :: import os  # noqa: F401. Fix: remove it from "
+                f"{BASELINE_FILE} and lower the rule's baseline count."
+            ],
+        )
+
+
+class TestRunCheck(unittest.TestCase):
+    """The guard scans every Python file under the root against the baseline."""
+
+    def test_scans_files_and_reads_the_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "rules" / "baselines").mkdir(parents=True)
+            (root / "rules" / "baselines" / "suppressions.txt").write_text(
+                "# Tolerated.\npkg/old.py :: import os  # noqa: F401\n"
+            )
+            (root / "rules" / "registry.toml").write_text(
+                _registry_with_rule(
+                    f'[rule.baseline]\nfile = "{BASELINE_FILE}"\ncount = 1\n'
+                )
+            )
+            (root / "pkg").mkdir()
+            (root / "pkg" / "old.py").write_text("import os  # noqa: F401\n")
+            (root / "pkg" / "new.py").write_text("import sys  # noqa: F401\n")
+            (root / "pkg" / "broken.py").write_text('TEXT = """never closed\n')
+            messages = [violation.message for violation in run_check(root)]
+        self.assertEqual(
+            messages,
+            [
+                "pkg/broken.py doesn't tokenize, so its suppressions can't be checked",
+                "pkg/new.py:1: `# noqa: F401` gives no reason",
+            ],
+        )
+
+    def test_missing_rule_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "rules").mkdir()
+            (root / "rules" / "registry.toml").write_text(
+                'schema_version = 1\nrepo = "example"\n'
+            )
+            messages = [violation.message for violation in run_check(root)]
+        self.assertEqual(messages, [f"rules/registry.toml has no rule {RULE_ID}"])
+
+
+class TestRepository(unittest.TestCase):
+    """The repository has no unexplained suppression outside the baseline."""
+
+    def test_repository_has_no_violations(self) -> None:
+        self.assertEqual([str(violation) for violation in run_check(REPO_ROOT)], [])
+
+
+if __name__ == "__main__":
+    unittest.main()
