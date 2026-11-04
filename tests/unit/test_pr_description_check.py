@@ -371,7 +371,9 @@ def test_a_missing_issue_fails(fake_gh, tmp_path, gh_error):
 
 def test_an_issue_moved_to_another_repository_fails(fake_gh, tmp_path):
     # gh api follows GitHub's redirect for an issue transferred to another
-    # repository and prints the moved issue, here #115 in policyengine.py.
+    # repository and prints the moved issue, as it does for
+    # PolicyEngine/policyengine-sim-api#154, now PolicyEngine/policyengine.py#115.
+    # The fake gh gives that answer for #154 here.
     moved_issue = _issue(115, state="open", repository="PolicyEngine/policyengine.py")
 
     result = _run_check(fake_gh, tmp_path, "Fixes #154\n", **_gh_answers(moved_issue))
