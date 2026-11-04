@@ -14,6 +14,7 @@ from scripts.rules.v2_layers import (
     PURE_RULE,
     ROUTES_RULE,
     SERVICES_RULE,
+    SESSION_RULE,
     assign_layer,
     run_check,
     scan,
@@ -71,6 +72,9 @@ class TestV2LayersProof(unittest.TestCase):
 
     def test_rule_proof_pure_modules_no_session_calls(self) -> None:
         _assert_proof(self, PURE_RULE)
+
+    def test_rule_proof_session_modules_no_data_access(self) -> None:
+        _assert_proof(self, SESSION_RULE)
 
 
 class TestLayerAssignment(unittest.TestCase):
@@ -477,6 +481,64 @@ class TestSecondReview(unittest.TestCase):
         self.assertEqual(
             _findings({SERVICE: source}, SERVICES_RULE),
             {f"{SERVICE} calls Policy.__table__.insert"},
+        )
+
+
+class TestThirdReview(unittest.TestCase):
+    """Cases from the third review round."""
+
+    def test_injected_session_factories_and_containers_open_sessions(self) -> None:
+        connector_source = """
+            def create(session_factory, database_session, row):
+                with session_factory.begin() as session:
+                    session.add(row)
+                with database_session.transaction() as session:
+                    session.add(row)
+
+
+            class Writer:
+                def write(self, row):
+                    with self._session_factory() as session:
+                        session.add(row)
+        """
+        route_source = """
+            def route(session_factory, row):
+                with session_factory.begin() as db:
+                    return db
+        """
+
+        self.assertEqual(
+            _findings({CONNECTOR: connector_source}, CONNECTORS_RULE),
+            {
+                f"{CONNECTOR} calls _session_factory",
+                f"{CONNECTOR} calls database_session.transaction",
+                f"{CONNECTOR} calls session_factory.begin",
+            },
+        )
+        self.assertEqual(
+            _findings({ROUTE: route_source}, ROUTES_RULE),
+            {f"{ROUTE} calls session_factory.begin"},
+        )
+
+    def test_request_session_data_is_recognised_by_its_owner(self) -> None:
+        route_source = """
+            def route(req, websocket, request_context, row):
+                req.session.get("user")
+                websocket.session.get("user")
+                request_context.session.add(row)
+        """
+        service_source = """
+            def run(request_session, statement):
+                return request_session.exec(statement)
+        """
+
+        self.assertEqual(
+            _findings({ROUTE: route_source}, ROUTES_RULE),
+            {f"{ROUTE} calls session.add"},
+        )
+        self.assertEqual(
+            _findings({SERVICE: service_source}, SERVICES_RULE),
+            {f"{SERVICE} calls request_session.exec"},
         )
 
 
