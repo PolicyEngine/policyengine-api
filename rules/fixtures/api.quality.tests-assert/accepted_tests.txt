@@ -55,12 +55,15 @@ def test_raises_assertion_error():
         raise AssertionError(msg)
 
 
+def run_with(callback):
+    return callback
+
+
 def test_a_stand_in_raises_assertion_error():
     def unexpected_call():
         raise AssertionError
 
-    compute()
-    del unexpected_call
+    run_with(unexpected_call)
 
 
 def test_calls_a_helper_that_checks():
