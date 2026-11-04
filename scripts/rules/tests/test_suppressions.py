@@ -118,6 +118,56 @@ class TestCommentProblems(unittest.TestCase):
             with self.subTest(comment=comment):
                 self.assertEqual(comment_problems(comment), missing)
 
+    def test_spacing_and_case_match_ruff_and_mypy(self) -> None:
+        cases = {
+            # mypy reads the codes after a space or tab before the bracket.
+            "# type: ignore [assignment]  # the stub is wrong": (),
+            "# type:\tignore\t[assignment]  # the stub is wrong": (),
+            "# type: ignore [assignment]": NO_REASON,
+            # ruff reads only the word noqa case-insensitively.
+            "# ruff: NOQA: F401": NO_REASON,
+            "# Ruff: noqa: F401": (),
+            "# FLAKE8: NOQA": (),
+            # mypy and Python read type: ignore in lowercase only.
+            "# TYPE: IGNORE": (),
+        }
+        for comment, missing in cases.items():
+            with self.subTest(comment=comment):
+                self.assertEqual(comment_problems(comment), missing)
+
+    def test_other_tools_directives_are_not_reasons(self) -> None:
+        for comment in (
+            "# noqa: E501  # fmt: skip",
+            "# noqa: E501  # pragma: no cover",
+            "# type: ignore[misc]  # pyright: ignore",
+            "# noqa: S101  # nosec",
+            "# noqa: I001  # isort: skip",
+            "# type: ignore[misc]  # mypy: disable-error-code=misc",
+        ):
+            with self.subTest(comment=comment):
+                self.assertEqual(comment_problems(comment), NO_REASON)
+        self.assertEqual(comment_problems("# noqa: E501  # fmt: skip  # generated"), ())
+
+    def test_entries_use_the_lines_tokenize_counts(self) -> None:
+        source = (
+            "a = 1\n\x0c\nimport os  # noqa: F401\n"
+            's = "\u2028"\nimport sys  # noqa: F401\n'
+        )
+        found = unexplained_suppressions("pkg/m.py", source)
+        self.assertEqual(
+            [(suppression.line, suppression.entry) for suppression in found],
+            [
+                (3, "pkg/m.py :: import os  # noqa: F401"),
+                (5, "pkg/m.py :: import sys  # noqa: F401"),
+            ],
+        )
+
+    def test_a_byte_order_mark_is_not_part_of_the_entry(self) -> None:
+        (found,) = unexplained_suppressions(
+            "pkg/m.py", "\ufeffimport os  # noqa: F401\n"
+        )
+        self.assertEqual(found.entry, "pkg/m.py :: import os  # noqa: F401")
+
     def test_strings_are_not_comments(self) -> None:
         source = 'TEXT = "# noqa"\nOTHER = """\n# type: ignore\n"""\n'
         self.assertEqual(unexplained_suppressions("module.py", source), [])
