@@ -255,6 +255,10 @@ class TestEconomyService:
             execution = ModalSimulationExecution(
                 job_id=MOCK_EXECUTION_ID, status="failed", error="out of memory"
             )
+            stored_failure = create_mock_reform_impact(status="error")
+            mock_reform_impacts_service.set_error_reform_impact.return_value = (
+                stored_failure
+            )
             mock_reform_impacts_service.get_reform_impact_seconds_left.return_value = (
                 120
             )
@@ -284,7 +288,7 @@ class TestEconomyService:
                 keep_seconds=120,
             )
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
-                MOCK_EXECUTION_ID
+                stored_failure
             )
 
         @pytest.mark.usefixtures("mock_logger")
@@ -306,6 +310,10 @@ class TestEconomyService:
             execution = ModalSimulationExecution(
                 job_id=MOCK_EXECUTION_ID, status="failed", error="out of memory"
             )
+            stored_failure = create_mock_reform_impact(status="error")
+            mock_reform_impacts_service.set_error_reform_impact.return_value = (
+                stored_failure
+            )
             mock_reform_impacts_service.get_reform_impact_seconds_left.return_value = (
                 2_591_000
             )
@@ -326,8 +334,35 @@ class TestEconomyService:
                 message=expected_message,
             )
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
-                MOCK_EXECUTION_ID
+                stored_failure
             )
+
+        @pytest.mark.usefixtures("mock_logger")
+        @pytest.mark.parametrize("region", ["state/ca", MOCK_REGION])
+        def test__given_the_error_is_not_stored__answers_without_seconds(
+            self,
+            economy_service,
+            setup_options,
+            mock_reform_impacts_service,
+            region,
+        ):
+            # Given: the cache refuses the error write, so no failure is stored.
+            region_setup_options = setup_options.model_copy(update={"region": region})
+            reform_impact = create_mock_reform_impact(status="computing")
+            execution = ModalSimulationExecution(
+                job_id=MOCK_EXECUTION_ID, status="failed", error="out of memory"
+            )
+            mock_reform_impacts_service.set_error_reform_impact.return_value = None
+
+            # When
+            result = economy_service._handle_execution_state(
+                region_setup_options, "failed", reform_impact, execution
+            )
+
+            # Then
+            assert result.status == ImpactStatus.ERROR
+            assert result.retry_after_seconds is None
+            mock_reform_impacts_service.get_reform_impact_seconds_left.assert_not_called()
 
         @pytest.mark.usefixtures("mock_logger")
         def test__given_modal_running_state__then_returns_computing_result(
@@ -434,26 +469,5 @@ class TestEconomyService:
                 retry_after_seconds=75,
             )
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
-                MOCK_EXECUTION_ID
+                stored_failure
             )
-
-        @pytest.mark.usefixtures("mock_logger")
-        def test__given_stored_failure_without_a_worker_handle__answers_with_none(
-            self,
-            economy_service,
-            mock_reform_impacts_service,
-        ):
-            # Given: a record whose worker handle was cleared cannot be looked up.
-            stored_failure = create_mock_reform_impact(
-                status="error", message="Simulation entrypoint execution failed"
-            )
-            stored_failure.execution_id = None
-
-            # When
-            result = economy_service._handle_failed_impact(stored_failure)
-
-            # Then
-            assert result == EconomicImpactResult.error(
-                "Simulation entrypoint execution failed", retry_after_seconds=None
-            )
-            mock_reform_impacts_service.get_reform_impact_seconds_left.assert_not_called()

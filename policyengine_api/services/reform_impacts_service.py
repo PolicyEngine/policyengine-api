@@ -182,14 +182,14 @@ class ReformImpactsService:
             end_time=self._now(),
         )
 
-    def get_reform_impact_seconds_left(self, execution_id: str) -> int | None:
-        """Return the whole seconds until this execution's cached impact expires.
+    def get_reform_impact_seconds_left(self, impact: CachedReformImpact) -> int | None:
+        """Return the whole seconds until a lookup stops finding this cached impact.
 
         Rounded up, so a caller that waits this long finds no record and its
         next request submits a new job. None when the record is missing or the
         cache cannot be read.
         """
-        return self._cache.record_seconds_left(execution_id)
+        return self._cache.seconds_left(impact)
 
     def set_complete_reform_impact(
         self,

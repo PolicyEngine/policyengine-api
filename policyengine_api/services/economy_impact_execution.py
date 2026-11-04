@@ -99,7 +99,7 @@ class ImpactExecutionMixin:
                     retry_note=retry_note,
                 )
 
-            self._set_reform_impact_error(
+            stored_failure = self._set_reform_impact_error(
                 setup_options=setup_options,
                 message=error_message,
                 execution_id=reform_impact.execution_id,
@@ -108,9 +108,7 @@ class ImpactExecutionMixin:
                 {"message": error_message},
                 severity="ERROR",
             )
-            return self._stored_failure_result(
-                error_message, reform_impact.execution_id
-            )
+            return self._stored_failure_result(error_message, stored_failure)
 
         if execution_state in EXECUTION_STATUSES_PENDING:
             logger.log_struct(
@@ -186,14 +184,15 @@ class ImpactExecutionMixin:
         jobs, and typed SPM failures, are stored as before.
         """
         message = f"{reason}. {retry_note}"
+        stored_failure = None
         if reform_impact.execution_id:
-            self._set_reform_impact_error(
+            stored_failure = self._set_reform_impact_error(
                 setup_options=setup_options,
                 message=message,
                 execution_id=reform_impact.execution_id,
                 keep_seconds=RETRYABLE_FAILURE_SECONDS,
             )
-        return self._stored_failure_result(message, reform_impact.execution_id)
+        return self._stored_failure_result(message, stored_failure)
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_COMPLETED)
@@ -275,7 +274,7 @@ class ImpactExecutionMixin:
         # the seconds until its record expires and a new job can start.
         return self._stored_failure_result(
             most_recent_impact.message or "Simulation entrypoint execution failed",
-            most_recent_impact.execution_id,
+            most_recent_impact,
         )
 
     @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_POLL_ACTIVE))

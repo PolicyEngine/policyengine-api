@@ -1,10 +1,13 @@
 """Reform-impact cache tests."""
 
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from policyengine_api.runtime_cache.core import (
+    PTTL_NO_EXPIRY,
     CacheCoordinationError,
     CacheNamespace,
     encode_envelope,
@@ -295,17 +298,18 @@ def test_failed_terminal_error_write_keeps_existing_worker_handle(monkeypatch):
     assert unchanged.execution_id == "job"
 
 
-def test_record_seconds_left_rounds_the_record_lifetime_up() -> None:
+def test_seconds_left_rounds_the_record_lifetime_up() -> None:
     backend = InMemoryCacheBackend()
     cache = ReformImpactCache(backend, _namespace())
-    assert cache.set(_impact("failed-job", "hash", 1), record_ttl_seconds=120)
+    failed = _impact("failed-job", "hash", 1)
+    assert cache.set(failed, record_ttl_seconds=120)
 
     backend.advance(0.4)
-    just_after_write = cache.record_seconds_left("failed-job")
+    just_after_write = cache.seconds_left(failed)
     backend.advance(119.5)
-    in_last_second = cache.record_seconds_left("failed-job")
+    in_last_second = cache.seconds_left(failed)
     backend.advance(1)
-    after_expiry = cache.record_seconds_left("failed-job")
+    after_expiry = cache.seconds_left(failed)
 
     # Rounded up, so a client that waits this long never asks before expiry.
     assert just_after_write == 120
@@ -313,19 +317,45 @@ def test_record_seconds_left_rounds_the_record_lifetime_up() -> None:
     assert after_expiry is None
 
 
-def test_record_seconds_left_is_none_without_a_record_or_a_reachable_cache(
-    monkeypatch,
-) -> None:
+def test_seconds_left_ends_when_the_scope_index_expires_first(monkeypatch) -> None:
+    import policyengine_api.runtime_cache.reform_impacts as module
+
+    lifetimes = iter([1000, 500])
+    monkeypatch.setattr(module, "jittered_ttl", lambda _ttl: next(lifetimes))
     backend = InMemoryCacheBackend()
     cache = ReformImpactCache(backend, _namespace())
-    assert cache.set(_impact("stored-job", "hash", 1))
+    stored_failure = _impact("failed-job", "hash", 1)
+    assert cache.set(stored_failure)
+    backend.advance(100)
+    # A later job for the same scope gives the shared index a shorter lifetime.
+    assert cache.set(_impact("later-job", "other-hash", 2))
+
+    while_indexed = cache.seconds_left(stored_failure)
+    backend.advance(550)
+    after_index_expiry = cache.seconds_left(stored_failure)
+
+    # A lookup finds the record only through the index, so its end comes first.
+    assert while_indexed == 500
+    assert after_index_expiry == 0
+
+
+def test_seconds_left_is_none_without_a_readable_expiring_record(monkeypatch) -> None:
+    backend = InMemoryCacheBackend()
+    cache = ReformImpactCache(backend, _namespace())
+    stored = _impact("stored-job", "hash", 1)
+    assert cache.set(stored)
 
     def unreachable_cache(_key: str) -> int:
-        raise ConnectionError
+        raise RedisConnectionError
 
-    missing = cache.record_seconds_left("missing-job")
+    missing = cache.seconds_left(_impact("missing-job", "hash", 1))
+    without_handle = cache.seconds_left(replace(stored, execution_id=None))
+    monkeypatch.setattr(backend, "pttl", lambda _key: PTTL_NO_EXPIRY)
+    never_expiring = cache.seconds_left(stored)
     monkeypatch.setattr(backend, "pttl", unreachable_cache)
-    unreachable = cache.record_seconds_left("stored-job")
+    unreachable = cache.seconds_left(stored)
 
     assert missing is None
+    assert without_handle is None
+    assert never_expiring is None
     assert unreachable is None

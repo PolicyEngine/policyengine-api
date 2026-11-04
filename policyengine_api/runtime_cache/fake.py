@@ -8,15 +8,14 @@ from typing import TYPE_CHECKING, Self
 
 from typing_extensions import override
 
+from policyengine_api.runtime_cache.core import PTTL_MISSING_KEY, PTTL_NO_EXPIRY
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 # The claim store's compare-and-delete script takes one key and one argument:
 # the token the key must still hold.
 COMPARE_AND_DELETE_ARGUMENT_COUNT = 2
-# PTTL's replies for a key that does not exist and for one that never expires.
-PTTL_MISSING_KEY = -2
-PTTL_NO_EXPIRY = -1
 
 
 class InMemoryCacheBackend:

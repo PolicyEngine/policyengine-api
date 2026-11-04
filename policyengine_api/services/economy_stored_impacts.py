@@ -352,17 +352,17 @@ class StoredImpactMixin:
             raise
 
     def _stored_failure_result(
-        self, message: str, execution_id: str | None
+        self, message: str, stored_failure: CachedReformImpact | None
     ) -> EconomicImpactResult:
-        """Return a stored failure with the seconds until its record expires.
+        """Return a failure with the seconds the Public API keeps returning it.
 
-        Read from the record after it is written, so a fresh failure and a
-        replayed one both say how long API v1 will keep returning it. None
-        when there is no record to read.
+        Read from the stored failure after it is written, or as it is
+        replayed, so a fresh failure and a replayed one both say how long a
+        lookup still finds it. None when no failure was stored.
         """
         retry_after_seconds = (
-            self._reform_impacts.get_reform_impact_seconds_left(execution_id)
-            if execution_id
+            self._reform_impacts.get_reform_impact_seconds_left(stored_failure)
+            if stored_failure is not None
             else None
         )
         return EconomicImpactResult.error(
@@ -379,11 +379,12 @@ class StoredImpactMixin:
         execution_id: str,
         error_code: str | None = None,
         keep_seconds: int | None = None,
-    ) -> None:
+    ) -> CachedReformImpact | None:
         """Record the impact as "error" with its message; log and re-raise errors.
 
         ``keep_seconds`` keeps the error for that long instead of the usual
-        30 days.
+        30 days. Return the stored failure, or None when the cache did not
+        store it.
         """
         # Optional fields are passed only when set, as before keep_seconds existed.
         optional_fields: dict[str, Any] = {}
@@ -392,7 +393,7 @@ class StoredImpactMixin:
         if keep_seconds is not None:
             optional_fields["keep_seconds"] = keep_seconds
         try:
-            self._reform_impacts.set_error_reform_impact(
+            return self._reform_impacts.set_error_reform_impact(
                 execution_id=execution_id,
                 message=message,
                 **optional_fields,

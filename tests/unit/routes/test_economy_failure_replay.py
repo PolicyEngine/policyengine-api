@@ -69,7 +69,11 @@ def _failed_job_harness(monkeypatch, *, selection, region):
         InMemoryCacheBackend(), CacheNamespace("test", "failed-job-replay")
     )
     impacts = ReformImpactsService(cache)
+    # Both policies exist, so a request after the failure expires can submit again.
+    policies = Mock()
+    policies.get_policy_json.return_value = {}
     service = EconomyService(
+        policy_service_=policies,
         reform_impacts_service_=impacts,
         simulation_entrypoint_=gateway,
     )
@@ -155,12 +159,15 @@ def test_successful_cached_job_still_requires_canonical_receipts(failed_job_harn
 def test_a_failed_state_run_answers_with_the_seconds_until_a_new_run(
     failed_state_job_harness,
 ):
-    client, cache, _, _, _ = failed_state_job_harness
+    client, cache, gateway, _, _ = failed_state_job_harness
+    gateway.get_execution_id.return_value = "next-state-job"
     url = "/us/economy/1/over/2?region=state/ca&time_period=2026&version=1.0.0"
 
     first = client.get(url)
     cache.client.advance(30.5)
     replayed = client.get(url)
+    cache.client.advance(replayed.json["retry_after_seconds"])
+    after_the_wait = client.get(url)
 
     assert first.status_code == 502
     assert first.json == {
@@ -172,3 +179,7 @@ def test_a_failed_state_run_answers_with_the_seconds_until_a_new_run(
     # The replay counts down from the stored record's own expiry, rounded up.
     assert replayed.status_code == 502
     assert replayed.json == {**first.json, "retry_after_seconds": 90}
+    # Once those seconds have passed, the next request submits a new run.
+    assert after_the_wait.status_code == 200
+    assert after_the_wait.json["status"] == "computing"
+    gateway.run.assert_called_once()
