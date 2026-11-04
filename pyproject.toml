@@ -186,8 +186,10 @@ show_error_codes = true
 #
 # A contract's ignore_imports must equal its rule's baseline file under
 # rules/baselines/ plus the rule's enforcer.allowed_ignore_imports; the rules
-# guard fails otherwise. unmatched_ignore_imports_alerting = "error" makes an
-# exception that no longer matches fail, so the lists only shrink.
+# guard fails otherwise, and baseline entries may not use wildcards.
+# unmatched_ignore_imports_alerting = "error" makes an exception that no longer
+# matches fail, so the lists only shrink. An exception covers every import
+# between its two modules, not one import statement.
 [tool.importlinter]
 root_package = "policyengine_api"
 include_external_packages = true
@@ -240,7 +242,10 @@ forbidden_modules = [
     "policyengine_api.services.v2.*.database_session",
     "policyengine_api.data.v2.database",
 ]
-# Direct imports only: routes reach connectors through the services they call.
+# Direct imports only. Route modules reach connectors and session modules
+# through fastapi_routes/dependencies.py, which builds each service with its
+# session, and through the services they call. What routes call is the
+# concern of rule api.v2.routes-no-sessions-or-sql.
 allow_indirect_imports = true
 unmatched_ignore_imports_alerting = "error"
 
@@ -253,7 +258,6 @@ source_modules = [
     "policyengine_api.services.v2.*.transformations",
 ]
 forbidden_modules = ["policyengine_api.services.v2.*.validators"]
-allow_indirect_imports = true
 ignore_imports = [
     # Tolerated: rules/baselines/import-linter-api-v2-types-transformations-no-validators.txt
     "policyengine_api.services.v2.households.transformations -> policyengine_api.services.v2.households.validators",

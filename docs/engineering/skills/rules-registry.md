@@ -133,6 +133,10 @@ fail the guard yet.
   `ignore_imports` and those two lists differ, and
   `unmatched_ignore_imports_alerting = "error"` makes Import Linter fail on an
   entry that no longer matches, so fixing an import forces the entry out.
+  Baseline entries name one importer and one imported module, without
+  wildcards, so the count is the number of tolerated imports. CI runs
+  `lint-imports --config pyproject.toml`, so a `setup.cfg` or `.importlinter`
+  file can't take the contracts' place.
 - Moving a rule from enforced/ratcheted to advisory/doc-only needs an explicit
   `[rule.downgrade] reason`.
 

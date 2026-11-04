@@ -16,8 +16,6 @@ import sys
 import tomllib
 from pathlib import Path
 
-import pytest
-
 PROJECT_ROOT = Path(__file__).parents[3]
 FIXTURES = PROJECT_ROOT / "rules" / "fixtures"
 FIXTURE_PACKAGE = "fixture_api"
@@ -158,22 +156,69 @@ def test_rule_proof_connectors_no_cross_calls(tmp_path: Path) -> None:
     _assert_proof("api.v2.connectors-no-cross-calls", tmp_path)
 
 
-@pytest.mark.parametrize(
-    "rule_id",
-    [
-        "api.v2.import-layers",
-        "api.v2.pure-modules-no-database",
+def test_imports_made_only_under_type_checking_count(tmp_path: Path) -> None:
+    """Decided 2026-11-04: moving an import under TYPE_CHECKING can't pass."""
+    report = _lint_fixture(
         "api.v2.routes-import-no-database-access",
-        "api.v2.types-transformations-no-validators",
-        "api.v2.connectors-no-cross-calls",
-    ],
-)
-def test_every_contract_counts_type_checking_imports(rule_id: str) -> None:
-    """Imports made only under TYPE_CHECKING count (decided 2026-11-04)."""
+        "type_checking_package.toml",
+        tmp_path,
+    )
+
+    assert "Contracts: 0 kept, 1 broken." in report, report
+
+
+def _module_pattern(expression: str) -> re.Pattern[str]:
+    """Translate an Import Linter module expression into a regular expression.
+
+    ``*`` stands for one module name and ``**`` for one or more.
+    """
+    parts = []
+    for name in expression.split("."):
+        if name == "**":
+            parts.append(r"[^.]+(?:\.[^.]+)*")
+        elif name == "*":
+            parts.append(r"[^.]+")
+        else:
+            parts.append(re.escape(name))
+    return re.compile(r"\.".join(parts))
+
+
+def _contract_module_expressions(contract: dict) -> list[str]:
+    fields = ("layers", "source_modules", "forbidden_modules", "modules")
+    return [
+        expression
+        for field in fields
+        for expression in contract.get(field, [])
+        if expression.startswith("policyengine_api.")
+    ]
+
+
+def test_every_contract_module_expression_matches_a_module() -> None:
+    """A renamed or moved module would otherwise make a contract check nothing."""
+    import grimp
+
+    graph = grimp.build_graph("policyengine_api", cache_dir=None)
     settings = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text())["tool"][
         "importlinter"
     ]
-    contract_id = _registry_rule(rule_id)["enforcer"]["contract"]
 
-    assert settings.get("exclude_type_checking_imports", False) is False
-    assert any(contract["id"] == contract_id for contract in settings["contracts"])
+    unmatched = [
+        f"{contract['id']}: {expression}"
+        for contract in settings["contracts"]
+        for expression in _contract_module_expressions(contract)
+        if not any(
+            _module_pattern(expression).fullmatch(module) for module in graph.modules
+        )
+    ]
+
+    assert unmatched == []
+
+
+def test_the_module_expression_translation_follows_import_linter() -> None:
+    one_name = _module_pattern("policyengine_api.services.v2.*.types")
+    any_depth = _module_pattern("policyengine_api.**.types")
+
+    assert one_name.fullmatch("policyengine_api.services.v2.policies.types")
+    assert not one_name.fullmatch("policyengine_api.services.v2.types")
+    assert not one_name.fullmatch("policyengine_api.services.v2.a.b.types")
+    assert any_depth.fullmatch("policyengine_api.services.v2.a.b.types")

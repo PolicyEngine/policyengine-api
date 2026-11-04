@@ -90,8 +90,19 @@ def resolve_import_linter(rule: Rule, root: Path) -> list[Violation]:
         ]
 
     ignored = [str(entry).strip() for entry in contract.get("ignore_imports", [])]
-    expected = set(_baseline_entries(rule, root)) | set(allowed)
-    violations = []
+    tolerated = _baseline_entries(rule, root)
+    expected = set(tolerated) | set(allowed)
+    violations = [
+        _violation(
+            rule,
+            f"the rule's baseline lists a wildcard exception, {entry}, which would "
+            "also ignore new violations and keep matching after some are fixed",
+            "list each tolerated import by its full module names; only "
+            "enforcer.allowed_ignore_imports may use wildcards",
+        )
+        for entry in tolerated
+        if "*" in entry
+    ]
     unlisted = [entry for entry in ignored if entry not in expected]
     if unlisted:
         violations.append(

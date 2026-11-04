@@ -351,7 +351,7 @@ invocation = "make test"
 [[rule]]
 id = "api.v2.types-transformations-no-validators"
 category = "v2-layers"
-statement = "v2 types and transformations modules never import a validators module; validators import types, not the reverse."
+statement = "v2 types and transformations modules never import a validators module, directly or through other modules; validators import types, not the reverse."
 rationale = "docs/engineering/skills/v2-code-organization.md#typespy"
 scope = ["policyengine_api/services/v2/*/types.py", "policyengine_api/services/v2/*/transformations.py"]
 tier = "mechanical"
