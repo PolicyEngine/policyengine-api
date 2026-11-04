@@ -1,18 +1,24 @@
-"""PolicyEngine.py catalog version selection for v2 resource reads."""
+"""Version validation, error types and the result type for v2 catalog selection.
+
+This module imports no SQLAlchemy, SQLModel or database module, so v2
+validators, transformations, types and routes can use it. The one database
+read, ``select_catalog``, is in ``catalog_selection_reads``.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from packaging.version import InvalidVersion, Version
-from sqlalchemy.exc import SQLAlchemyError
-from sqlmodel import Session, select
 
-from policyengine_api.data.v2.models import (
-    TaxBenefitModel,
-    TaxBenefitModelVersion,
-)
 from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
+
+if TYPE_CHECKING:
+    from policyengine_api.data.v2.models import (
+        TaxBenefitModel,
+        TaxBenefitModelVersion,
+    )
 
 SUPPORTED_V2_COUNTRY_IDS = frozenset(SUPPORTED_COUNTRY_IDS)
 MAXIMUM_POLICYENGINE_VERSION_LENGTH = 128
@@ -72,55 +78,3 @@ def validate_policyengine_version(value: str) -> str:
         msg = "policyengine_version must be a canonical non-placeholder version"
         raise InvalidPolicyEngineVersionError(msg)
     return value
-
-
-def select_catalog(
-    session: Session,
-    *,
-    country_id: str,
-    running_policyengine_version: str,
-    policyengine_version: str | None = None,
-) -> SelectedCatalog:
-    """Select one country catalog using the requested or running package version."""
-    if country_id not in SUPPORTED_V2_COUNTRY_IDS:
-        raise UnsupportedPreviewCountryError(country_id)
-    explicit_version = policyengine_version is not None
-    selected_version = (
-        validate_policyengine_version(policyengine_version)
-        if explicit_version
-        else running_policyengine_version
-    )
-    try:
-        row = session.exec(
-            select(TaxBenefitModel, TaxBenefitModelVersion)
-            .join(
-                TaxBenefitModelVersion,
-                TaxBenefitModelVersion.model_id == TaxBenefitModel.id,
-            )
-            .where(
-                TaxBenefitModel.name == f"policyengine-{country_id}",
-                TaxBenefitModelVersion.version == selected_version,
-            )
-        ).one_or_none()
-    except SQLAlchemyError as error:
-        msg = "the v2 metadata catalog cannot be queried"
-        raise MetadataCatalogUnavailableError(msg) from error
-
-    if row is None:
-        if explicit_version:
-            msg = (
-                f"PolicyEngine.py {selected_version} is not published for {country_id}"
-            )
-            raise MetadataCatalogVersionNotFoundError(msg)
-        msg = (
-            f"the running PolicyEngine.py {selected_version} catalog "
-            f"is absent for {country_id}"
-        )
-        raise MetadataCatalogNotPublishedError(msg)
-    model, model_version = row
-    return SelectedCatalog(
-        country_id=country_id,
-        policyengine_version=selected_version,
-        model=model,
-        model_version=model_version,
-    )

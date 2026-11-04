@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeVar
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
 )
 
 if TYPE_CHECKING:
-    from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
+    from policyengine_api.data.v2.catalog.catalog_selection_validation import (
+        SelectedCatalog,
+    )
     from policyengine_api.data.v2.models import Dataset, Region
 
 

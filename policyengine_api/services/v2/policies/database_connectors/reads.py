@@ -7,10 +7,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Session, col, select
 
 from policyengine_api.constants import POLICYENGINE_VERSION
-from policyengine_api.data.v2.catalog.catalog_selection import (
-    SelectedCatalog,
-    select_catalog,
-)
+from policyengine_api.data.v2.catalog.catalog_selection_reads import select_catalog
 from policyengine_api.data.v2.models import (
     LegacyPolicyMapping,
     Parameter,
@@ -21,6 +18,10 @@ from policyengine_api.data.v2.models import (
 
 if TYPE_CHECKING:
     from uuid import UUID
+
+    from policyengine_api.data.v2.catalog.catalog_selection_validation import (
+        SelectedCatalog,
+    )
 
 # Parameter names bound in one statement; far below PostgreSQL's 65,535 limit.
 PARAMETER_NAME_BATCH_SIZE = 1_000

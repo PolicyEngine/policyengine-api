@@ -7,7 +7,7 @@ from flask import Blueprint, Response, request
 from werkzeug.exceptions import BadRequest, NotFound
 
 from policyengine_api.data.v1_models import Policy
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     SUPPORTED_V2_COUNTRY_IDS,
 )
 from policyengine_api.gcp_logging import logger
