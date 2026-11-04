@@ -183,7 +183,10 @@ class V2UserPolicyResourceService(Protocol):
     ) -> UserPolicyRead:
         """Update the supplied fields of the caller's association and return it.
 
-        A new ``legacy_policy_id`` repoints it to another v1 policy.
+        The association keeps its id, owner and creation time. A new
+        ``legacy_policy_id`` repoints it to another v1 policy; a new ``policy_id``
+        repoints it to a v2 policy in the same country and, sent without
+        ``legacy_policy_id``, clears the v1 reference.
         """
         ...
 
@@ -242,7 +245,10 @@ class V2UserHouseholdResourceService(Protocol):
     ) -> UserHouseholdRead:
         """Update the supplied fields of the caller's association and return it.
 
-        A new ``legacy_household_id`` repoints it to another v1 household.
+        The association keeps its id, owner and creation time. A new
+        ``legacy_household_id`` repoints it to another v1 household; a new
+        ``household_id`` repoints it to a v2 household in the same country and,
+        sent without ``legacy_household_id``, clears the v1 reference.
         """
         ...
 
