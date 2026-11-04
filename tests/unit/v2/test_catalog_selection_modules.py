@@ -27,7 +27,12 @@ TABLE_MODELS_PACKAGE = "policyengine_api.data.v2.models"
 # Never loaded when the validation module is imported.
 RUNTIME_DATABASE_PACKAGES = (*DATABASE_PACKAGES, TABLE_MODELS_PACKAGE)
 FORMER_MODULE = "policyengine_api.data.v2.catalog.catalog_selection"
-FORMER_MODULE_NAME = re.compile(r"\bcatalog_selection\b")
+# A reference to the former module: a dotted module path, the file name, or
+# an import of the module by name. The bare word may still be used.
+FORMER_MODULE_NAME = re.compile(
+    r"\.catalog_selection(?!\w)|\bcatalog_selection\.py\b"
+    r"|\bimport\s+catalog_selection(?!\w)"
+)
 # Release notes may name the former module: they describe past releases.
 RELEASE_NOTES = ("CHANGELOG.md", "changelog.d/")
 LOADED_MODULES_SCRIPT = """

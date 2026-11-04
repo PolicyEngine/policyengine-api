@@ -67,6 +67,7 @@ guard_test_globs = [
 ]
 extra_guard_tests = [
   "tests/unit/v2/test_catalog_selection_modules.py::test_importing_the_validation_module_loads_no_database_code",
+  "tests/unit/v2/test_catalog_selection_modules.py::test_the_reads_module_holds_the_catalog_query",
   "tests/unit/v2/test_catalog_selection_modules.py::test_the_validation_module_imports_no_database_code",
   "tests/unit/v2/test_catalog_extraction.py::test_extractor_has_no_direct_core_country_or_v1_metadata_imports",
   "tests/unit/v2/test_catalog_extraction.py::test_extractor_modules_have_no_direct_core_country_or_v1_metadata_imports",
@@ -543,6 +544,7 @@ kind = "pytest"
 nodes = [
   "tests/unit/v2/test_catalog_selection_modules.py::test_the_validation_module_imports_no_database_code",
   "tests/unit/v2/test_catalog_selection_modules.py::test_importing_the_validation_module_loads_no_database_code",
+  "tests/unit/v2/test_catalog_selection_modules.py::test_the_reads_module_holds_the_catalog_query",
 ]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
