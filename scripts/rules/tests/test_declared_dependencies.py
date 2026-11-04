@@ -18,10 +18,13 @@ from scripts.rules.declared_dependencies import (
     Finding,
     compare,
     deptry_findings,
+    ignored_file_violations,
+    inline_ignore_violations,
     run_check,
     settings_violations,
 )
 from scripts.rules.model import RuleException
+from scripts.rules.resolve import workflow_jobs
 
 FIXTURES = REPO_ROOT / "rules" / "fixtures" / RULE_ID
 BASELINE_FILE = "rules/baselines/deptry.txt"
@@ -29,7 +32,7 @@ REQUIRED_TABLE = textwrap.dedent(
     """
     [tool.deptry]
     known_first_party = ["policyengine_api"]
-    pep621_dev_dependency_groups = ["dev"]
+    optional_dependencies_dev_groups = ["dev"]
     """
 )
 
@@ -59,6 +62,31 @@ def _root_with_start_script(directory: str, text: str) -> Path:
     return root
 
 
+def _write(root: Path, relative_path: str, text: str) -> None:
+    file = root / relative_path
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text(text)
+
+
+def _git(root: Path, *arguments: str) -> None:
+    subprocess.run(["git", *arguments], cwd=root, check=True, capture_output=True)
+
+
+def _job_text(workflow_text: str, job_id: str) -> str:
+    """Return the lines of ``job_id``'s block in a workflow, up to the next job."""
+    lines = workflow_text.splitlines()
+    start = lines.index(f"  {job_id}:")
+    end = next(
+        (
+            index
+            for index in range(start + 1, len(lines))
+            if lines[index].startswith("  ") and not lines[index].startswith("   ")
+        ),
+        len(lines),
+    )
+    return "\n".join(lines[start:end])
+
+
 class TestDeclaredDependenciesProof(unittest.TestCase):
     """Proof: deptry's findings in the rejected fixture fail, the accepted pass."""
 
@@ -68,13 +96,15 @@ class TestDeclaredDependenciesProof(unittest.TestCase):
             _entries(rejected),
             {
                 "DEP001 module_that_is_not_installed",
+                "DEP002 asyncio",
                 "DEP002 flask",
                 "DEP003 starlette",
                 "DEP004 pytest",
+                "DEP005 asyncio",
             },
         )
         violations = compare(FIXTURES / "rejected", rejected, set(), BASELINE_FILE, ())
-        self.assertEqual(len(violations), 4)
+        self.assertEqual(len(violations), 6)
         self.assertEqual({violation.rule_id for violation in violations}, {RULE_ID})
         self.assertEqual(deptry_findings(FIXTURES / "accepted"), [])
 
@@ -221,7 +251,62 @@ class TestNotImportedExceptions(unittest.TestCase):
             [
                 "gunicorn is declared in pyproject.toml, but policyengine_api "
                 "never imports it",
-                "exception for gcp/cloud_run/start.sh: the file doesn't name gunicorn",
+                "exception for gcp/cloud_run/start.sh: no line of code in the file "
+                "names gunicorn",
+            ],
+        )
+
+    def test_a_comment_naming_the_package_does_not_count(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = _root_with_start_script(
+                directory,
+                "# gunicorn used to run the app\n  # gunicorn\nexec hypercorn\n",
+            )
+            violations = compare(
+                root,
+                [_finding("DEP002", "gunicorn")],
+                set(),
+                BASELINE_FILE,
+                (_start_script_exception("gunicorn"),),
+            )
+        self.assertEqual(
+            [violation.message for violation in violations][1:],
+            [
+                "exception for gcp/cloud_run/start.sh: no line of code in the file "
+                "names gunicorn"
+            ],
+        )
+
+    def test_exception_cannot_name_the_files_that_declare_every_package(self) -> None:
+        exceptions = tuple(
+            RuleException(
+                path=path, reason="Lists it.", match="openai", category=NOT_IMPORTED
+            )
+            for path in ("pyproject.toml", "uv.lock")
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root, "pyproject.toml", 'dependencies = ["openai"]\n')
+            _write(root, "uv.lock", 'name = "openai"\n')
+            messages = [
+                violation.message
+                for violation in compare(
+                    root,
+                    [_finding("DEP002", "openai")],
+                    set(),
+                    BASELINE_FILE,
+                    exceptions,
+                )
+            ]
+        self.assertEqual(
+            messages,
+            [
+                "openai is declared in pyproject.toml, but policyengine_api never "
+                "imports it",
+                "exception for pyproject.toml names a file that lists every declared "
+                "package, so it can't show that the application loads one",
+                "exception for uv.lock names a file that lists every declared "
+                "package, so it can't show that the application loads one",
             ],
         )
 
@@ -282,7 +367,7 @@ class TestSettings(unittest.TestCase):
             REQUIRED_SETTINGS,
             {
                 "known_first_party": ["policyengine_api"],
-                "pep621_dev_dependency_groups": ["dev"],
+                "optional_dependencies_dev_groups": ["dev"],
             },
         )
 
@@ -298,7 +383,7 @@ class TestSettings(unittest.TestCase):
     def test_a_changed_setting_fails(self) -> None:
         messages = self._violations_for(
             "[tool.deptry]\nknown_first_party = ['policyengine_api', 'scripts']\n"
-            "pep621_dev_dependency_groups = ['dev']\n"
+            "optional_dependencies_dev_groups = ['dev']\n"
         )
         self.assertEqual(
             messages,
@@ -314,8 +399,143 @@ class TestSettings(unittest.TestCase):
             [
                 "pyproject.toml's [tool.deptry] doesn't set known_first_party",
                 "pyproject.toml's [tool.deptry] doesn't set "
-                "pep621_dev_dependency_groups",
+                "optional_dependencies_dev_groups",
             ],
+        )
+
+    def test_the_deprecated_name_for_the_dev_groups_fails(self) -> None:
+        messages = self._violations_for(
+            "[tool.deptry]\nknown_first_party = ['policyengine_api']\n"
+            "pep621_dev_dependency_groups = ['dev']\n"
+        )
+        self.assertEqual(
+            messages,
+            [
+                "pyproject.toml's [tool.deptry] doesn't set "
+                "optional_dependencies_dev_groups",
+                "pyproject.toml's [tool.deptry] sets pep621_dev_dependency_groups",
+            ],
+        )
+
+    def test_an_extra_that_is_not_a_dev_group_fails(self) -> None:
+        messages = self._violations_for(
+            "[project.optional-dependencies]\ndev = ['pytest']\n"
+            "server = ['starlette']\n" + REQUIRED_TABLE
+        )
+        self.assertEqual(
+            messages,
+            [
+                "pyproject.toml's [project.optional-dependencies] has the group "
+                "server, which deptry counts as runtime dependencies"
+            ],
+        )
+
+
+class TestIgnoreComments(unittest.TestCase):
+    """An inline deptry ignore comment in the package fails."""
+
+    def test_each_inline_ignore_comment_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(
+                root,
+                "policyengine_api/module.py",
+                "import yaml  # deptry: ignore\n"
+                "import numpy  #deptry:ignore[DEP003]\n"
+                "import flask\n",
+            )
+            _write(
+                root, "policyengine_api/notebook.ipynb", '"import x  # deptry: ignore"'
+            )
+            _write(root, "scripts/tool.py", "import yaml  # deptry: ignore\n")
+            messages = [
+                violation.message for violation in inline_ignore_violations(root)
+            ]
+        self.assertEqual(
+            messages,
+            [
+                "policyengine_api/module.py:1 has a deptry ignore comment",
+                "policyengine_api/module.py:2 has a deptry ignore comment",
+                "policyengine_api/notebook.ipynb:1 has a deptry ignore comment",
+            ],
+        )
+
+    def test_the_package_has_no_inline_ignore_comment(self) -> None:
+        self.assertEqual(inline_ignore_violations(REPO_ROOT), [])
+
+
+class TestIgnoredFiles(unittest.TestCase):
+    """deptry skips files that ignore rules list, so the package has none."""
+
+    def test_a_tracked_file_an_ignore_rule_matches_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _git(root, "init", "--quiet")
+            _write(root, "policyengine_api/hidden.py", "import yaml\n")
+            _write(root, "policyengine_api/module.py", "import flask\n")
+            _git(root, "add", "policyengine_api")
+            _write(root, ".gitignore", "policyengine_api/hidden.py\n")
+            messages = [
+                violation.message for violation in ignored_file_violations(root)
+            ]
+        self.assertEqual(
+            messages,
+            [
+                "policyengine_api/hidden.py is tracked, but a git ignore rule "
+                "matches it, so deptry doesn't scan it"
+            ],
+        )
+
+    def test_an_ignore_file_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root, ".ignore", "policyengine_api/hidden.py\n")
+            _write(root, "policyengine_api/sub/.ignore", "*.py\n")
+            _write(root, "scripts/.ignore", "*.py\n")
+            messages = [
+                violation.message for violation in ignored_file_violations(root)
+            ]
+        self.assertEqual(
+            messages,
+            [
+                ".ignore is an ignore file, so deptry doesn't scan the files it lists",
+                "policyengine_api/sub/.ignore is an ignore file, so deptry doesn't "
+                "scan the files it lists",
+            ],
+        )
+
+    def test_the_repository_has_no_ignored_package_file(self) -> None:
+        self.assertEqual(ignored_file_violations(REPO_ROOT), [])
+
+
+class TestWorkflows(unittest.TestCase):
+    """Every CI job that runs the guards can run deptry in the uv.lock environment."""
+
+    def test_every_job_running_the_guards_has_uv_on_python_3_12(self) -> None:
+        guard_jobs = []
+        for workflow in sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml")):
+            workflow_text = workflow.read_text()
+            header = workflow_text.split("\njobs:", 1)[0]
+            for job in workflow_jobs(workflow)[0].values():
+                if "run_quality_guards.py" not in job.run_text:
+                    continue
+                guard_jobs.append(f"{workflow.name}:{job.id}")
+                with self.subTest(job=f"{workflow.name}:{job.id}"):
+                    self.assertTrue(
+                        any(
+                            uses.startswith("astral-sh/setup-uv@")
+                            for uses in job.step_uses
+                        )
+                    )
+                    self.assertIn(
+                        'UV_PYTHON: "3.12"', _job_text(workflow_text, job.id) + header
+                    )
+                    self.assertTrue(
+                        "uv sync --frozen --extra dev" in job.run_text
+                        or "uv run --frozen --extra dev" in job.run_text
+                    )
+        self.assertEqual(
+            guard_jobs, ["pr.yml:quality-guards", "push.yml:quality-guards"]
         )
 
 

@@ -17,4 +17,4 @@ dev = ["pytest"]
 # The settings the rule requires (scripts/rules/declared_dependencies.py).
 [tool.deptry]
 known_first_party = ["policyengine_api"]
-pep621_dev_dependency_groups = ["dev"]
+optional_dependencies_dev_groups = ["dev"]
