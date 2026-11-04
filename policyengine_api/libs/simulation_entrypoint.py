@@ -18,6 +18,10 @@ from policyengine_api.libs.gateway_auth import (
     _require_all_or_none_gateway_auth_env,
     gateway_auth_required,
 )
+from policyengine_api.libs.simulation_entrypoint_transport import (
+    SimulationEntrypointConnectionError,
+    SimulationEntrypointTransport,
+)
 from policyengine_api.migration_flags import get_sim_entrypoint
 from policyengine_api.observability import get_runtime
 from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
@@ -215,11 +219,18 @@ class SimulationEntrypointClient:
     polling for their status/results via HTTP endpoints.
     """
 
-    def __init__(self, entrypoint: str | None = None) -> None:
+    def __init__(
+        self,
+        entrypoint: str | None = None,
+        *,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         """Connect to ``entrypoint`` (default: the configured one) with gateway auth.
 
-        Raise GatewayAuthError if auth is partly configured, or is required here
-        but not configured.
+        Requests go through ``transport``, by default a
+        SimulationEntrypointTransport, which retries a GET once after a broken
+        connection and records every attempt. Raise GatewayAuthError if auth is
+        partly configured, or is required here but not configured.
         """
         self.entrypoint = entrypoint or get_sim_entrypoint()
         self.base_url = resolve_simulation_entrypoint_url(self.entrypoint)
@@ -250,8 +261,23 @@ class SimulationEntrypointClient:
             timeout=30.0,
             auth=auth,
             event_hooks={"request": [_attach_current_request_id]},
+            transport=transport or SimulationEntrypointTransport(),
         )
         instrument_httpx(self.client, get_runtime())
+
+    def _get(self, path: str) -> httpx.Response:
+        """Send a read-only GET for ``path`` on the selected entrypoint.
+
+        The transport has already retried a broken connection once. Raise
+        SimulationEntrypointConnectionError if the request still got no
+        response, for any transport failure, including timeouts.
+        """
+        try:
+            return self.client.get(f"{self.base_url}{path}")
+        except httpx.TransportError as error:
+            raise SimulationEntrypointConnectionError(
+                method="GET", path=path
+            ) from error
 
     def _normalize_submission_payload(self, payload: dict) -> dict:
         if "data" in payload or "data_version" in payload:
@@ -425,10 +451,11 @@ class SimulationEntrypointClient:
         The bundle is the one the worker's ``/versions`` routes resolve for
         ``policyengine_version`` or else ``country``/``version``; None means that
         bundle publishes no capability. Raise SPMValidationError if the routes
-        are unreachable or ambiguous.
+        answer with an error status or are malformed or ambiguous, and
+        SimulationEntrypointConnectionError if the request gets no response.
         """
         try:
-            response = self.client.get(f"{self.base_url}/versions")
+            response = self._get("/versions")
             response.raise_for_status()
             versions = response.json()
             bundle_version = _worker_bundle_version(
@@ -456,9 +483,12 @@ class SimulationEntrypointClient:
         version: str | None = None,
         policyengine_version: str | None = None,
     ) -> tuple[str, str]:
-        """Resolve the current gateway app name for a country/model version."""
+        """Resolve the current gateway app name for a country/model version.
+
+        Raise SimulationEntrypointConnectionError if the request gets no response.
+        """
         if policyengine_version is not None:
-            response = self.client.get(f"{self.base_url}/versions/policyengine")
+            response = self._get("/versions/policyengine")
             raise_worker_spm_error(response)
             response.raise_for_status()
             policyengine_version_map = response.json()
@@ -470,7 +500,7 @@ class SimulationEntrypointClient:
                 msg = f"Unknown policyengine version {policyengine_version}"
                 raise ValueError(msg) from exc
 
-        response = self.client.get(f"{self.base_url}/versions/{country}")
+        response = self._get(f"/versions/{country}")
         response.raise_for_status()
         version_map = response.json()
 
@@ -510,9 +540,14 @@ class SimulationEntrypointClient:
         ModalSimulationExecution
             Execution object with current status and result if complete.
 
+        Raises
+        ------
+        SimulationEntrypointConnectionError
+            If the request gets no response.
+
         """
         try:
-            response = self.client.get(f"{self.base_url}/jobs/{job_id}")
+            response = self._get(f"/jobs/{job_id}")
             raise_worker_spm_error(response)
             if response.status_code not in (200, 202, 500):
                 response.raise_for_status()
@@ -541,7 +576,7 @@ class SimulationEntrypointClient:
             )
             raise
 
-        except httpx.RequestError as e:
+        except (httpx.RequestError, SimulationEntrypointConnectionError) as e:
             logger.log_struct(
                 {
                     "message": (
@@ -556,11 +591,12 @@ class SimulationEntrypointClient:
     def get_budget_window_batch_by_id(
         self, batch_job_id: str
     ) -> ModalBudgetWindowBatchExecution:
-        """Poll the selected Simulation entrypoint for a budget-window batch."""
+        """Poll the selected Simulation entrypoint for a budget-window batch.
+
+        Raise SimulationEntrypointConnectionError if the request gets no response.
+        """
         try:
-            response = self.client.get(
-                f"{self.base_url}/budget-window-jobs/{batch_job_id}"
-            )
+            response = self._get(f"/budget-window-jobs/{batch_job_id}")
             raise_worker_spm_error(response)
             if response.status_code not in (200, 202, 500):
                 response.raise_for_status()
@@ -591,7 +627,7 @@ class SimulationEntrypointClient:
             )
             raise
 
-        except httpx.RequestError as e:
+        except (httpx.RequestError, SimulationEntrypointConnectionError) as e:
             logger.log_struct(
                 {
                     "message": (

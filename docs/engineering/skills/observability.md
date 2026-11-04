@@ -64,6 +64,35 @@ execution result data class. The simulation API carries it through HTTP headers,
 persists it beside functional job state, and transports captured trace context
 to Modal as a separate function argument.
 
+The client's transport (`policyengine_api/libs/simulation_entrypoint_transport.py`)
+sends a GET once more, on a new connection, after `httpx.ReadError`,
+`httpx.WriteError` or `httpx.RemoteProtocolError`. It never retries a POST,
+which may already have submitted a job, a timeout or an HTTP error status. A
+GET that gets no response, after that retry where it applies, raises
+`SimulationEntrypointConnectionError`, which the economy routes answer with
+502.
+
+Each request the client sends, a retry included, is one
+`simulation_entrypoint.request` event through the observability runtime
+(`policyengine_api/libs/simulation_request_diagnostics.py`). Its attributes
+say whether the request opened a new connection or reused one, the connection's
+age, idle time, file descriptor and local port, and, from httpcore's trace
+events, when each step happened (`timing.<step>_ms`). A failed attempt also
+records the socket's state when the read or write failed (`SO_ERROR`, file
+descriptor, local port), the `OSError` in the exception chain, the time from
+sending the request to the failure, and whether a retry follows.
+
+The v1 Cloud SQL pool records `database_pool.connect`,
+`database_pool.invalidate` and `database_pool.soft_invalidate` events with the
+database socket's file descriptor and local port
+(`policyengine_api/data/orm_pool_events.py`), and sends the Cloud SQL
+connector's certificate refresh messages to the logs at INFO. A file
+descriptor number is reused as soon as its socket closes, so a database socket
+with an HTTP connection's number shows interference only while that HTTP
+connection is still open. A failed attempt whose `failure.socket_local_port`
+differs from its `connection.local_port` had its file descriptor reassigned to
+another socket.
+
 ## Runtime stages
 
 All API v1 span names for supported calculation configurations are defined in
