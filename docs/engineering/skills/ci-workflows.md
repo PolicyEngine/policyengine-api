@@ -64,7 +64,10 @@ each job it needs, and each job of a reusable workflow a release job calls has
 
 Only `publish-git-tag` needs the checks that may be skipped; its
 `release_commit.py require-checks` step decides whether their results let the
-release continue. `tests/unit/test_release_run_checks.py` checks all of this.
+release continue. Its last step, `.github/scripts/publish_git_tag.sh`, tags the
+release commit with the `[project]` version in `pyproject.toml` and pushes that
+tag. It passes when the tag already names the release commit, so a rerun works,
+and fails when the version is missing or the tag names another commit. `tests/unit/test_release_run_checks.py` checks all of this.
 A release job that left the status check to GitHub would be skipped whenever
 the checks were, and the run would still finish green.
 
