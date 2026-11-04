@@ -1,0 +1,18 @@
+# Proof fixture for rule api.v2.files-assigned-to-layers. The guard must reject
+# it: simulation_client.py matches no layer's file name and no manifest entry
+# names it (the case of an open pull request that adds a v2 resource).
+# scripts/rules/tests/test_v2_layers.py writes each file into a temporary
+# directory and runs the v2-layers guard's scan on it, with no manifest.
+
+expected_findings = [
+    "policyengine_api/services/v2/household_calculations/simulation_client.py matches no v2 layer",
+]
+
+[files]
+"policyengine_api/services/v2/household_calculations/__init__.py" = ""
+"policyengine_api/services/v2/household_calculations/services.py" = """
+from policyengine_api.services.v2.household_calculations.simulation_client import submit
+"""
+"policyengine_api/services/v2/household_calculations/simulation_client.py" = """
+import httpx
+"""
