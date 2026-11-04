@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections import Counter
 from typing import TYPE_CHECKING
 
 from scripts.rules.load import REGISTRY_PATH, load_text
@@ -95,8 +96,8 @@ def check_baselines(
     return violations, notes
 
 
-def _entries_at(root: Path, ref: str, path: str) -> set[str] | None:
-    """Return a baseline file's entries as they are on ``ref``, or None if absent."""
+def _entries_at(root: Path, ref: str, path: str) -> Counter[str] | None:
+    """Return a baseline file's entries, counted, as on ``ref``; None if absent."""
     shown = subprocess.run(
         ["git", "show", f"{ref}:{path}"],
         cwd=root,
@@ -106,7 +107,7 @@ def _entries_at(root: Path, ref: str, path: str) -> set[str] | None:
     )
     if shown.returncode != 0:
         return None
-    return set(baseline_entry_lines(shown.stdout))
+    return Counter(baseline_entry_lines(shown.stdout))
 
 
 def check_baseline_entries(
@@ -115,7 +116,9 @@ def check_baseline_entries(
     """Report baseline entries that the base branch's copy of the file lacks.
 
     A baseline may only shrink, so an entry can't be swapped for a new one at
-    the same count. A rule or baseline file that is new on this branch has
+    the same count. Entries are counted, because a baseline may list an entry
+    once per tolerated occurrence: listing it more often than the base branch
+    does fails too. A rule or baseline file that is new on this branch has
     nothing to compare against.
     """
     violations = []
@@ -127,9 +130,14 @@ def check_baseline_entries(
         current_file = root / new.baseline.file
         if before is None or not current_file.is_file():
             continue
-        added = sorted(
-            set(baseline_entry_lines(current_file.read_text(encoding="utf-8"))) - before
-        )
+        after = Counter(baseline_entry_lines(current_file.read_text(encoding="utf-8")))
+        added = [
+            entry
+            if before[entry] == 0
+            else f"{entry} ({after[entry]} times, the base branch {before[entry]})"
+            for entry in sorted(after)
+            if after[entry] > before[entry]
+        ]
         if added:
             violations.append(
                 Violation(
