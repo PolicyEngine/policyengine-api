@@ -161,6 +161,30 @@ class TestImportLinterEnforcer(unittest.TestCase):
             ],
         )
 
+    def test_a_tolerated_exception_must_name_one_import(self) -> None:
+        self.repo.edit(
+            "pyproject.toml",
+            '"pkg.pure.legacy -> sqlalchemy",',
+            '"pkg.pure.* -> sqlalchemy",',
+        )
+        self.repo.write(BASELINE_FILE, "pkg.pure.* -> sqlalchemy\n")
+        rule = import_linter_rule(
+            "pkg-pure",
+            baseline=Baseline(BASELINE_FILE, 1),
+            allowed=["pkg.models -> sqlalchemy"],
+        )
+
+        self.assertEqual(
+            self.messages(rule),
+            [
+                "[ex.r] enforcer: the rule's baseline lists a wildcard exception, "
+                "pkg.pure.* -> sqlalchemy, which would also ignore new violations "
+                "and keep matching after some are fixed. Fix: list each tolerated "
+                "import by its full module names; only "
+                "enforcer.allowed_ignore_imports may use wildcards."
+            ],
+        )
+
     def test_allowed_ignore_imports_must_be_a_list_of_strings(self) -> None:
         rule = import_linter_rule(
             "pkg-pure",

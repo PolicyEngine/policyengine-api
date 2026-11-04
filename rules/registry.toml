@@ -253,7 +253,7 @@ contract = "api-v2-connectors-independent"
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
-invocation = "lint-imports"
+invocation = "lint-imports --config pyproject.toml"
 [rule.proof]
 bad_fixture = "rules/fixtures/api.v2.connectors-no-cross-calls/bad_package.toml"
 good_fixture = "rules/fixtures/api.v2.connectors-no-cross-calls/good_package.toml"
@@ -281,7 +281,7 @@ contract = "api-v2-layers"
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
-invocation = "lint-imports"
+invocation = "lint-imports --config pyproject.toml"
 [rule.proof]
 bad_fixture = "rules/fixtures/api.v2.import-layers/bad_package.toml"
 good_fixture = "rules/fixtures/api.v2.import-layers/good_package.toml"
@@ -311,7 +311,7 @@ allowed_ignore_imports = [
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
-invocation = "lint-imports"
+invocation = "lint-imports --config pyproject.toml"
 [rule.proof]
 bad_fixture = "rules/fixtures/api.v2.pure-modules-no-database/bad_package.toml"
 good_fixture = "rules/fixtures/api.v2.pure-modules-no-database/good_package.toml"
@@ -339,7 +339,7 @@ contract = "api-v2-routes-no-database-access"
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
-invocation = "lint-imports"
+invocation = "lint-imports --config pyproject.toml"
 [rule.proof]
 bad_fixture = "rules/fixtures/api.v2.routes-import-no-database-access/bad_package.toml"
 good_fixture = "rules/fixtures/api.v2.routes-import-no-database-access/good_package.toml"
@@ -364,7 +364,7 @@ contract = "api-v2-types-transformations-no-validators"
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
-invocation = "lint-imports"
+invocation = "lint-imports --config pyproject.toml"
 [rule.proof]
 bad_fixture = "rules/fixtures/api.v2.types-transformations-no-validators/bad_package.toml"
 good_fixture = "rules/fixtures/api.v2.types-transformations-no-validators/good_package.toml"

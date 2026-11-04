@@ -1,9 +1,13 @@
 # Proof fixture for rule api.v2.types-transformations-no-validators. The
-# contract must reject it: a types module imports its validators module, as the
-# households and policies types modules do today.
+# contract must reject it: a types module reaches its validators module through
+# a helper module. A direct import, as the households and policies types modules
+# make today, is rejected too.
 
 [modules]
 "fixture_api/services/v2/policies/types.py" = """
+from fixture_api.services.v2.policies.json_values import StrictJsonValue
+"""
+"fixture_api/services/v2/policies/json_values.py" = """
 from fixture_api.services.v2.policies.validators import require_json_value
 """
 "fixture_api/services/v2/policies/validators.py" = """
