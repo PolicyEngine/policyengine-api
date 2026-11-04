@@ -143,6 +143,7 @@ def test_a_description_without_a_fixes_line_is_rejected(check_module):
 
     assert 'The first line is "## Summary"' in message
     assert "first line is exactly Fixes #ISSUE_NUMBER" in message
+    assert "docs/engineering/skills/github-prs.md#tracking-issues" in message
     assert "api.process.pr-tracking-issue" in message
 
 

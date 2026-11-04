@@ -226,10 +226,18 @@ def workflow() -> dict:
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
 
-def test_the_workflow_runs_when_a_pull_request_closes(workflow):
+def test_the_workflow_runs_when_a_pull_request_closes_even_with_conflicts(
+    workflow,
+):
+    """pull_request workflows don't run while a pull request has a conflict.
+
+    A superseded bundle update usually conflicts with master, because the
+    newer one that merged changed the same pins, so the workflow listens for
+    pull_request_target, which GitHub runs anyway, from the default branch.
+    """
     # PyYAML reads the key "on" as True.
     assert workflow.get("on", workflow.get(True)) == {
-        "pull_request": {"types": ["closed"]}
+        "pull_request_target": {"types": ["closed"]}
     }
 
 
@@ -246,7 +254,12 @@ def test_the_job_runs_only_for_unmerged_bundle_updates_from_this_repository(
 
 
 def test_the_job_token_can_write_issues_and_only_read_the_rest(workflow):
-    assert workflow["permissions"] == {"contents": "read", "issues": "write"}
+    # gh issue close looks the number up as an issue or a pull request.
+    assert workflow["permissions"] == {
+        "contents": "read",
+        "issues": "write",
+        "pull-requests": "read",
+    }
     assert "permissions" not in workflow["jobs"][JOB]
 
 
@@ -258,6 +271,10 @@ def test_the_job_runs_the_tested_script_with_the_job_token(workflow):
     script_steps = [step for step in steps if SCRIPT.name in step.get("run", "")]
 
     assert checkout["with"]["sparse-checkout"] == f".github/scripts/{SCRIPT.name}"
+    # pull_request_target checks out the default branch unless told otherwise;
+    # the job must never run the pull request's code with a token that writes.
+    assert "ref" not in checkout["with"]
+    assert "repository" not in checkout["with"]
     assert len(script_steps) == 1
     assert script_steps[0]["run"] == f"bash .github/scripts/{SCRIPT.name}"
     assert script_steps[0]["env"] == {"GH_TOKEN": "${{ github.token }}"}

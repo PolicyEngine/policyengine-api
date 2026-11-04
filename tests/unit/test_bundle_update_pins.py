@@ -40,6 +40,24 @@ with open(os.environ["BUNDLE_TEST_CALLS"], "a") as stream:
     stream.write(json.dumps([name, *args]) + "\\n")
 if name == "git" and args[:1] == ["ls-remote"]:
     sys.exit(0 if os.environ.get("BUNDLE_TEST_REMOTE_BRANCH") else 2)
+if name == "git" and args[:1] == ["push"]:
+    sys.exit(1 if os.environ.get("BUNDLE_TEST_PUSH_FAIL") else 0)
+if name == "gh" and args[:2] == ["pr", "create"]:
+    sys.exit(1 if os.environ.get("BUNDLE_TEST_PR_CREATE_FAIL") else 0)
+if name == "gh" and args[:2] == ["pr", "view"] and "state,body" in args:
+    # The lookup after a failed gh pr create: apply its --jq expression to
+    # the pull request GitHub has for the branch, if any.
+    if not os.environ.get("BUNDLE_TEST_PR_AFTER_CREATE"):
+        sys.exit(1)
+    filtered = subprocess.run(
+        ["jq", "-r", args[args.index("--jq") + 1]],
+        input=os.environ["BUNDLE_TEST_PR_AFTER_CREATE"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    sys.stdout.write(filtered.stdout)
+    sys.exit(0)
 if name == "gh" and args[:2] == ["pr", "view"]:
     if os.environ.get("BUNDLE_TEST_OPEN_PR"):
         print(os.environ["BUNDLE_TEST_OPEN_PR"])
@@ -346,3 +364,60 @@ def test_a_failed_issue_lookup_pushes_nothing_and_opens_nothing(update_checkout)
     assert not any(call[:2] in (["git", "commit"], ["git", "push"]) for call in calls)
     assert _calls_to(calls, "issue", "create") == []
     assert _calls_to(calls, "pr", "create") == []
+
+
+# --- An issue no pull request will name -------------------------------------
+
+
+def test_a_rejected_push_closes_the_issue_this_run_opened(update_checkout):
+    """A concurrent run for the same version pushed first; its PR has an issue."""
+    result, calls = run_update(update_checkout, BUNDLE_TEST_PUSH_FAIL="1")
+
+    assert result.returncode != 0
+    assert _calls_to(calls, "pr", "create") == []
+    (close,) = _calls_to(calls, "issue", "close")
+    assert close[3] == "4321"
+    assert close[close.index("--repo") + 1] == "PolicyEngine/policyengine-api"
+    assert close[close.index("--reason") + 1] == "not planned"
+
+
+def test_a_rejected_push_leaves_a_reused_issue_open(update_checkout):
+    result, calls = run_update(
+        update_checkout,
+        BUNDLE_TEST_PUSH_FAIL="1",
+        **_open_issues((4300, ISSUE_TITLE)),
+    )
+
+    assert result.returncode != 0
+    assert _calls_to(calls, "issue", "close") == []
+
+
+@pytest.mark.parametrize("remote_branch", ["", "1"])
+def test_a_failed_pull_request_closes_the_issue_this_run_opened(
+    update_checkout, remote_branch
+):
+    result, calls = run_update(
+        update_checkout,
+        BUNDLE_TEST_PR_CREATE_FAIL="1",
+        BUNDLE_TEST_REMOTE_BRANCH=remote_branch,
+    )
+
+    assert result.returncode != 0
+    (close,) = _calls_to(calls, "issue", "close")
+    assert close[3] == "4321"
+
+
+def test_a_failed_pull_request_keeps_an_issue_an_open_pull_request_names(
+    update_checkout,
+):
+    """The pull request exists although gh pr create reported a failure."""
+    result, calls = run_update(
+        update_checkout,
+        BUNDLE_TEST_PR_CREATE_FAIL="1",
+        BUNDLE_TEST_PR_AFTER_CREATE=json.dumps(
+            {"state": "OPEN", "body": "Fixes #4321\n\n## Summary\n"}
+        ),
+    )
+
+    assert result.returncode != 0
+    assert _calls_to(calls, "issue", "close") == []
