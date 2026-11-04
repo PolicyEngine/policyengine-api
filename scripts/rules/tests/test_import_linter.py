@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import textwrap
+import tomllib
 import unittest
 
 from scripts.rules.model import Baseline, Enforcer, Kind, Rule, Status, Tier
@@ -36,15 +39,43 @@ CONFIG = textwrap.dedent(
 )
 
 
+def fingerprint(config: str, contract_id: str) -> str:
+    """Return the SHA-256 of a contract's definition, as the rules guard does.
+
+    It covers the top-level [tool.importlinter] settings and every field of the
+    contract except ignore_imports, serialised as JSON with sorted keys.
+    """
+    settings = tomllib.loads(config)["tool"]["importlinter"]
+    contract = next(
+        table for table in settings["contracts"] if table["id"] == contract_id
+    )
+    definition = {
+        "settings": {
+            key: value for key, value in settings.items() if key != "contracts"
+        },
+        "contract": {
+            key: value for key, value in contract.items() if key != "ignore_imports"
+        },
+    }
+    canonical = json.dumps(definition, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 def import_linter_rule(
     contract: str,
     *,
     baseline: Baseline | None = None,
     allowed: object = None,
+    sha256: str | None = None,
+    config: str = "pyproject.toml",
 ) -> Rule:
-    fields: dict[str, object] = {"config": "pyproject.toml", "contract": contract}
+    fields: dict[str, object] = {"config": config, "contract": contract}
     if allowed is not None:
         fields["allowed_ignore_imports"] = allowed
+    if sha256 is None and contract != "pkg-missing" and config == "pyproject.toml":
+        sha256 = fingerprint(CONFIG, contract)
+    if sha256 is not None:
+        fields["contract_sha256"] = sha256
     return Rule(
         id="ex.r",
         category="checks",
@@ -177,11 +208,95 @@ class TestImportLinterEnforcer(unittest.TestCase):
         self.assertEqual(
             self.messages(rule),
             [
-                "[ex.r] enforcer: the rule's baseline lists a wildcard exception, "
-                "pkg.pure.* -> sqlalchemy, which would also ignore new violations "
-                "and keep matching after some are fixed. Fix: list each tolerated "
-                "import by its full module names; only "
-                "enforcer.allowed_ignore_imports may use wildcards."
+                "[ex.r] enforcer: contract 'pkg-pure' ignores "
+                "pkg.pure.* -> sqlalchemy, a wildcard that would also ignore "
+                "imports added later. Fix: list each import by its full module "
+                "names."
+            ],
+        )
+
+    def test_an_allowed_import_must_not_use_a_wildcard(self) -> None:
+        self.repo.edit(
+            "pyproject.toml",
+            '"pkg.models -> sqlalchemy",',
+            '"pkg.models.* -> sqlalchemy",',
+        )
+        rule = import_linter_rule(
+            "pkg-pure",
+            baseline=Baseline(BASELINE_FILE, 1),
+            allowed=["pkg.models.* -> sqlalchemy"],
+            sha256=fingerprint(CONFIG, "pkg-pure"),
+        )
+
+        self.assertEqual(
+            self.messages(rule),
+            [
+                "[ex.r] enforcer: contract 'pkg-pure' ignores "
+                "pkg.models.* -> sqlalchemy, a wildcard that would also ignore "
+                "imports added later. Fix: list each import by its full module "
+                "names."
+            ],
+        )
+
+    def test_a_changed_contract_fails_until_the_rule_pins_it_again(self) -> None:
+        self.repo.edit(
+            "pyproject.toml",
+            'source_modules = ["pkg.pure"]',
+            'source_modules = ["pkg.pure.validators"]',
+        )
+        changed = fingerprint(self.repo.read("pyproject.toml"), "pkg-pure")
+        rule = import_linter_rule(
+            "pkg-pure",
+            baseline=Baseline(BASELINE_FILE, 1),
+            allowed=["pkg.models -> sqlalchemy"],
+        )
+
+        self.assertEqual(
+            self.messages(rule),
+            [
+                "[ex.r] enforcer: contract 'pkg-pure' is not the definition the "
+                "rule pins (enforcer.contract_sha256 is "
+                f"{fingerprint(CONFIG, 'pkg-pure')}, the contract's is {changed}). "
+                "Fix: if the change is intended, set enforcer.contract_sha256 = "
+                f'"{changed}" in rules/registry.toml.'
+            ],
+        )
+
+    def test_a_changed_top_level_setting_changes_every_contract(self) -> None:
+        self.repo.edit(
+            "pyproject.toml",
+            'root_package = "pkg"\n',
+            'root_package = "pkg"\nexclude_type_checking_imports = true\n',
+        )
+
+        messages = self.messages(import_linter_rule("pkg-layers"))
+
+        self.assertEqual(len(messages), 1)
+        self.assertIn("is not the definition the rule pins", messages[0])
+
+    def test_a_rule_must_pin_its_contract(self) -> None:
+        rule = import_linter_rule("pkg-layers", sha256="")
+
+        self.assertEqual(
+            self.messages(rule),
+            [
+                "[ex.r] enforcer: contract 'pkg-layers' is not the definition the "
+                "rule pins (enforcer.contract_sha256 is empty, the contract's is "
+                f"{fingerprint(CONFIG, 'pkg-layers')}). Fix: if the change is "
+                "intended, set enforcer.contract_sha256 = "
+                f'"{fingerprint(CONFIG, "pkg-layers")}" in rules/registry.toml.'
+            ],
+        )
+
+    def test_a_config_that_is_not_toml_is_reported(self) -> None:
+        self.repo.write("setup.cfg", "[importlinter]\nroot_package = pkg\n")
+
+        self.assertEqual(
+            self.messages(import_linter_rule("pkg-layers", config="setup.cfg")),
+            [
+                "[ex.r] enforcer: setup.cfg is not a TOML file, so the rules "
+                "guard can't read its contracts. Fix: keep the Import Linter "
+                "contracts in [tool.importlinter] in pyproject.toml."
             ],
         )
 
