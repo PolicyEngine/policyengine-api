@@ -1,3 +1,10 @@
+## [5.25.0] - 2026-11-04
+
+### Added
+
+- Check that every pull request description starts with `Fixes #N` for an open issue in this repository, and start automated PolicyEngine bundle-update pull requests with that line.
+
+
 ## [5.24.0] - 2026-11-04
 
 ### Added
