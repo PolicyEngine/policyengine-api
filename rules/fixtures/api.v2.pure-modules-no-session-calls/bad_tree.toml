@@ -1,0 +1,33 @@
+# Proof fixture for rule api.v2.pure-modules-no-session-calls. The guard must
+# reject it: a validator loads a row through the session it was handed, a
+# process-state module runs a query, and a package __init__ commits.
+# scripts/rules/tests/test_v2_layers.py writes each file into a temporary
+# directory and runs the v2-layers guard's scan on it, with no manifest.
+
+expected_findings = [
+    "policyengine_api/services/v2/policies/__init__.py calls session.commit",
+    "policyengine_api/services/v2/policies/types.py calls session.exec",
+    "policyengine_api/services/v2/policies/types.py calls sqlmodel.select",
+    "policyengine_api/services/v2/policies/validators.py calls session.get",
+]
+
+[files]
+"policyengine_api/services/v2/policies/validators.py" = """
+from policyengine_api.data.v2.models import Policy
+
+
+def validate_policy_exists(session, policy_id):
+    if session.get(Policy, policy_id) is None:
+        raise LookupError(policy_id)
+"""
+"policyengine_api/services/v2/policies/types.py" = """
+from sqlmodel import select
+
+
+def latest(session, model):
+    return session.exec(select(model)).first()
+"""
+"policyengine_api/services/v2/policies/__init__.py" = """
+def flush_everything(session):
+    session.commit()
+"""

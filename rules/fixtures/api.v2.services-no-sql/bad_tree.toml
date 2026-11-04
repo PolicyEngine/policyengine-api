@@ -1,11 +1,12 @@
 # Proof fixture for rule api.v2.services-no-sql. The guard must reject it: the
-# service builds a select, runs it with Session.exec and defines an HTTP
-# response with FastAPI.
+# service imports and builds a select, runs it with Session.exec and defines
+# an HTTP response with FastAPI.
 
 expected_findings = [
     "policyengine_api/services/v2/policies/services.py calls _session.exec",
     "policyengine_api/services/v2/policies/services.py calls sqlmodel.select",
     "policyengine_api/services/v2/policies/services.py imports fastapi.responses",
+    "policyengine_api/services/v2/policies/services.py imports sqlmodel.select",
 ]
 
 [files]

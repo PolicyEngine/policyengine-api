@@ -11,6 +11,7 @@ from pathlib import Path
 from scripts.rules.v2_layers import (
     CONNECTORS_RULE,
     FILES_RULE,
+    PURE_RULE,
     ROUTES_RULE,
     SERVICES_RULE,
     assign_layer,
@@ -67,6 +68,9 @@ class TestV2LayersProof(unittest.TestCase):
 
     def test_rule_proof_connectors_never_commit(self) -> None:
         _assert_proof(self, CONNECTORS_RULE)
+
+    def test_rule_proof_pure_modules_no_session_calls(self) -> None:
+        _assert_proof(self, PURE_RULE)
 
 
 class TestLayerAssignment(unittest.TestCase):
@@ -202,6 +206,126 @@ class TestCallChecks(unittest.TestCase):
         )
 
 
+class TestEveryLayerIsChecked(unittest.TestCase):
+    """Only connectors and session modules may touch a session (review findings)."""
+
+    SESSION_WORK = """
+        from sqlmodel import select
+
+
+        def work(session, row):
+            session.add(row)
+            session.commit()
+            return session.exec(select(row))
+    """
+
+    def test_validators_transformations_types_and_process_state_touch_no_session(
+        self,
+    ) -> None:
+        for path in (
+            "policyengine_api/services/v2/policies/validators.py",
+            "policyengine_api/services/v2/policies/transformations.py",
+            "policyengine_api/services/v2/policies/types.py",
+            "policyengine_api/services/v2/policies/__init__.py",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    _findings({path: self.SESSION_WORK}, PURE_RULE),
+                    {
+                        f"{path} calls session.add",
+                        f"{path} calls session.commit",
+                        f"{path} calls session.exec",
+                        f"{path} calls sqlmodel.select",
+                    },
+                )
+
+    def test_a_connector_package_init_is_a_connector(self) -> None:
+        path = "policyengine_api/services/v2/policies/database_connectors/__init__.py"
+
+        self.assertEqual(
+            _findings({path: self.SESSION_WORK}, CONNECTORS_RULE),
+            {f"{path} calls session.commit"},
+        )
+
+    def test_the_repository_session_factories_count(self) -> None:
+        route_source = """
+            from policyengine_api.data.orm import get_v1_session_factory
+            from policyengine_api.data.v2.database import build_v2_session_factory
+
+
+            def route(database_session):
+                with database_session.transaction() as session:
+                    get_v1_session_factory()
+                    build_v2_session_factory()
+        """
+        connector_source = """
+            from policyengine_api.data.orm import get_v1_engine
+
+
+            def read():
+                return get_v1_engine()
+        """
+
+        self.assertEqual(
+            _findings({ROUTE: route_source}, ROUTES_RULE),
+            {
+                f"{ROUTE} calls build_v2_session_factory",
+                f"{ROUTE} calls database_session.transaction",
+                f"{ROUTE} calls get_v1_session_factory",
+                f"{ROUTE} imports policyengine_api.data.orm",
+                f"{ROUTE} imports policyengine_api.data.v2.database",
+            },
+        )
+        self.assertEqual(
+            _findings({CONNECTOR: connector_source}, CONNECTORS_RULE),
+            {
+                f"{CONNECTOR} calls get_v1_engine",
+                f"{CONNECTOR} imports policyengine_api.data.orm",
+            },
+        )
+
+    def test_services_import_only_the_session_type_and_errors_from_sql_packages(
+        self,
+    ) -> None:
+        source = """
+            from typing import TYPE_CHECKING
+
+            from sqlalchemy import and_, func, or_
+            from sqlalchemy.exc import IntegrityError
+            from sqlmodel import col
+
+            if TYPE_CHECKING:
+                from sqlmodel import Session
+
+
+            def build(Policy, ids):
+                Policy.__table__.select()
+                return and_(col(Policy.id).in_(ids), or_(func.lower(Policy.name)))
+        """
+
+        self.assertEqual(
+            _findings({SERVICE: source}, SERVICES_RULE),
+            {
+                f"{SERVICE} calls Policy.__table__.select",
+                f"{SERVICE} imports sqlalchemy.and_",
+                f"{SERVICE} imports sqlalchemy.func",
+                f"{SERVICE} imports sqlalchemy.or_",
+                f"{SERVICE} imports sqlmodel.col",
+            },
+        )
+
+    def test_names_that_only_contain_session_are_not_sessions(self) -> None:
+        source = """
+            @sessions_router.get("/sessions")
+            def route(request, session_ids: set):
+                session_ids.add(1)
+                request.session.get("user")
+                return self._sessions_by_country.get("us")
+        """
+
+        self.assertEqual(_findings({ROUTE: source}, ROUTES_RULE), set())
+
+
 class TestBaselineAndManifest(unittest.TestCase):
     """run_check compares findings with the rule's baseline and checks the manifest."""
 
@@ -277,6 +401,91 @@ class TestBaselineAndManifest(unittest.TestCase):
             ],
         )
 
+    def test_each_occurrence_needs_its_own_baseline_entry(self) -> None:
+        _write_files(
+            {
+                ROUTE: (
+                    "from sqlalchemy.exc import SQLAlchemyError\n"
+                    "def later():\n"
+                    "    from sqlalchemy.exc import IntegrityError\n"
+                ),
+                "rules/registry.toml": self._registry(1),
+                BASELINE_FILE: f"{ROUTE} imports sqlalchemy.exc\n",
+            },
+            self.root,
+        )
+
+        self.assertEqual(
+            self._messages(),
+            [
+                f"[{ROUTES_RULE}] v2-layers: {ROUTE} imports sqlalchemy.exc (2 "
+                "occurrences, the baseline tolerates 1). Fix: v2 route modules call "
+                "one service method and map its typed failures to HTTP; move session "
+                "and SQL work into the service and its connectors "
+                "(docs/engineering/skills/v2-code-organization.md)."
+            ],
+        )
+
+    def test_a_duplicated_baseline_entry_is_stale(self) -> None:
+        _write_files(
+            {
+                ROUTE: "from sqlalchemy.exc import SQLAlchemyError\n",
+                "rules/registry.toml": self._registry(2),
+                BASELINE_FILE: (
+                    f"{ROUTE} imports sqlalchemy.exc\n{ROUTE} imports sqlalchemy.exc\n"
+                ),
+            },
+            self.root,
+        )
+
+        self.assertEqual(
+            self._messages(),
+            [
+                f"[{ROUTES_RULE}] v2-layers: baseline entry no longer applies: "
+                f"{ROUTE} imports sqlalchemy.exc (1 occurrence, the baseline lists "
+                f"2). Fix: remove it from {BASELINE_FILE} and lower the rule's "
+                "baseline count."
+            ],
+        )
+
+    def test_the_manifest_gives_only_layers_of_the_file_s_directory(self) -> None:
+        client = "policyengine_api/services/v2/household_calculations/client.py"
+        support = "policyengine_api/fastapi_routes/v2/metadata/response_cache.py"
+        _write_files(
+            {
+                client: "",
+                support: "",
+                "rules/registry.toml": self._registry(None),
+                "rules/v2-layer-manifest.toml": textwrap.dedent(
+                    f"""
+                    [files."{client}"]
+                    layer = "package"
+                    reason = "Not a package."
+
+                    [files."{support}"]
+                    layer = "http-support"
+                    reason = ""
+                    """
+                ),
+            },
+            self.root,
+        )
+
+        self.assertEqual(
+            sorted(self._messages()),
+            sorted(
+                [
+                    f"[{FILES_RULE}] v2-layers: rules/v2-layer-manifest.toml gives "
+                    f"{client} the layer 'package', which a file under "
+                    "policyengine_api/services/v2 can't have from the manifest. Fix: "
+                    "use one of process-state, service, transformation, types, "
+                    "validator.",
+                    f"[{FILES_RULE}] v2-layers: rules/v2-layer-manifest.toml gives "
+                    f"{support} no reason. Fix: say why the file has that layer.",
+                ]
+            ),
+        )
+
     def test_a_baseline_entry_that_no_longer_applies_fails(self) -> None:
         _write_files({ROUTE: "def route():\n    return 1\n"}, self.root)
         _write_files(
@@ -348,9 +557,9 @@ class TestBaselineAndManifest(unittest.TestCase):
             sorted(
                 [
                     f"[{FILES_RULE}] v2-layers: rules/v2-layer-manifest.toml gives "
-                    f"{cache} the unknown layer 'cache'. Fix: use one of "
-                    "connector, http-model, http-support, package, process-state, "
-                    "route, service, session, transformation, types, validator.",
+                    f"{cache} the layer 'cache', which a file under "
+                    "policyengine_api/fastapi_routes/v2 can't have from the "
+                    "manifest. Fix: use one of http-model, http-support, route.",
                     f"[{FILES_RULE}] v2-layers: rules/v2-layer-manifest.toml lists "
                     f"{ROUTE}, which its name already assigns to a layer. Fix: "
                     "remove the entry.",
