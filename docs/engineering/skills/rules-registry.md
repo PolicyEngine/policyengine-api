@@ -218,8 +218,8 @@ description, with the reason a code change or setting wasn't used.
 
 ### The form of a suppression
 
-`api.quality.suppressions-explained`: every inline suppression names what it
-suppresses and says why. The `suppressions` quality guard
+`api.quality.suppressions-explained`: every `noqa` and `type: ignore` comment
+names what it suppresses and says why. The `suppressions` quality guard
 (`scripts/rules/suppressions.py`) reads every tracked Python file with
 `tokenize`, so only real comments count, and fails on a suppression that lacks
 either:
@@ -227,10 +227,13 @@ either:
 - **a code**: `# noqa` and its file-level forms `# ruff: noqa` and
   `# flake8: noqa` list ruff codes (`# noqa: E402`), and `# type: ignore`
   lists mypy error codes (`# type: ignore[arg-type]`);
-- **a reason**: another `#` part of the same comment that isn't a
-  suppression: `# noqa: E402  # the path setup must run first` or
-  `# type: ignore[arg-type]  # the stub's annotation is too narrow`. Text
-  after the codes in the same part (`# noqa: E402 path setup`) doesn't count.
+- **a reason**: another `#` part of the same comment that is neither a
+  suppression nor another tool's directive (`fmt: skip`, `pragma: no cover`,
+  `pyright: ignore`, `nosec`): `# noqa: E402  # the path setup must run
+  first` or `# type: ignore[arg-type]  # the stub's annotation is too narrow`.
+  Text after the codes in the same part (`# noqa: E402 path setup`) doesn't
+  count. Put the reason after `type: ignore`: mypy reads `type: ignore` only
+  at the start of a comment.
 
 The rule is ratcheted. `rules/baselines/suppressions.txt` lists today's
 unexplained suppressions as `<path> :: <source line>`, one line per
@@ -240,9 +243,13 @@ and lower the rule's baseline `count`. Editing a listed line also makes it
 fail, because its entry no longer matches: add the reason in the same change.
 
 Ruff's PGH003 and PGH004, selected with every other ruff rule, already reject
-a `type: ignore` or `noqa` without a code. This rule adds the reason, and
-covers file-level `noqa` too. Whether the suppression should exist at all is
-still the judgment rule `api.process.agents-suppress-as-last-resort` above.
+a `type: ignore` or a line-level or file-level `noqa` without a code. PGH003
+accepts `# type: ignore[]`, which mypy treats as ignoring every error on the
+line; this rule rejects it. What the rule adds is the reason. Other tools'
+comments that switch a check off, such as `# mypy: ignore-errors` or
+`# isort: skip_file`, are not checked. Whether the suppression should exist at
+all is still the judgment rule `api.process.agents-suppress-as-last-resort`
+above.
 
 ## Hidden rules
 

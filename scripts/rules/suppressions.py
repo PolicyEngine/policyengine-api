@@ -1,13 +1,17 @@
 """The suppressions quality guard: every noqa and type: ignore is explained.
 
-An inline suppression switches a checker off for one line, or for a whole file,
-so it must say what it switches off and why:
+A ``noqa`` or ``type: ignore`` comment switches ruff or mypy off for one line,
+or for a whole file, so it must say what it switches off and why:
 
 - a ``noqa`` comment, line-level or file-level (``# ruff: noqa``,
   ``# flake8: noqa``), lists its ruff codes;
 - a ``type: ignore`` comment lists its mypy error codes in brackets;
-- the comment also holds a reason, a ``#`` part that isn't a suppression:
+- the comment also holds a reason, a ``#`` part that is neither a suppression
+  nor another tool's directive (``fmt: skip``, ``pragma: no cover``):
   ``# noqa: CODE  # reason`` or ``# type: ignore[code]  # reason``.
+
+Other tools' comments that switch a check off (``# mypy: ignore-errors``,
+``# isort: skip_file``) are not checked.
 
 Only real comments count: the guard reads each tracked Python file with
 ``tokenize``, so a string that looks like a suppression isn't one.
@@ -48,11 +52,18 @@ SEPARATOR = " :: "
 CODE = "a code"
 REASON = "a reason"
 # One part of a comment (the text between two #) that is a suppression. ruff
-# reads noqa and its file-level forms case-insensitively.
-_NOQA = re.compile(r"(?:(?:ruff|flake8)\s*:\s*)?noqa\b(?P<rest>.*)", re.IGNORECASE)
+# reads the word noqa case-insensitively, but its ruff: and flake8: prefixes
+# only in lowercase; mypy reads type: ignore only in lowercase, and allows
+# spaces before the bracketed codes.
+_NOQA = re.compile(r"(?:(?:ruff|flake8)\s*:\s*)?(?i:noqa)\b(?P<rest>.*)")
 _NOQA_CODES = re.compile(r"\s*:\s*[A-Z]+[0-9]+", re.IGNORECASE)
-_TYPE_IGNORE = re.compile(r"type\s*:\s*ignore\b(?P<rest>.*)", re.IGNORECASE)
-_TYPE_IGNORE_CODES = re.compile(r"\[\s*[^\]\s][^\]]*\]")
+_TYPE_IGNORE = re.compile(r"type\s*:\s*ignore\b(?P<rest>.*)")
+_TYPE_IGNORE_CODES = re.compile(r"\s*\[\s*[^\]\s][^\]]*\]")
+# Another tool's directive in a part of the comment is not a reason.
+_OTHER_DIRECTIVE = re.compile(
+    r"(?:fmt|pragma|pyright|mypy|isort|pylint|ruff|flake8|type)\s*:|nosec\b",
+    re.IGNORECASE,
+)
 FIX = (
     "name what it suppresses and say why, as `# noqa: CODE  # reason` or "
     "`# type: ignore[code]  # reason`, once a code change or a setting can't "
@@ -92,17 +103,24 @@ def comment_problems(comment: str) -> tuple[str, ...]:
     """Return what a comment's suppressions lack: ``a code``, ``a reason``, both.
 
     A comment without a suppression lacks nothing. The comment is split at each
-    ``#``; a part that isn't a suppression and has text is the reason.
+    ``#``; a part that is neither a suppression nor another tool's directive
+    (such as ``fmt: skip`` or ``pragma: no cover``) and has text is the reason.
     """
-    parts = [part.strip() for part in comment.split("#")]
-    has_code = [_suppression_has_code(part) for part in parts if part]
-    suppressions = [named for named in has_code if named is not None]
+    parts = [part.strip() for part in comment.split("#") if part.strip()]
+    suppressions = []
+    has_reason = False
+    for part in parts:
+        named = _suppression_has_code(part)
+        if named is not None:
+            suppressions.append(named)
+        elif not _OTHER_DIRECTIVE.match(part):
+            has_reason = True
     if not suppressions:
         return ()
     missing = []
     if not all(suppressions):
         missing.append(CODE)
-    if len(suppressions) == len(has_code):
+    if not has_reason:
         missing.append(REASON)
     return tuple(missing)
 
@@ -112,7 +130,10 @@ def unexplained_suppressions(path: str, text: str) -> list[Suppression]:
 
     Raise SyntaxError when ``text`` doesn't tokenize.
     """
-    lines = text.splitlines()
+    # tokenize numbers lines at \n, \r\n and \r only; str.splitlines() would
+    # also split at form feeds and other separators and misnumber them.
+    text = text.removeprefix("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
+    lines = text.split("\n")
     found = []
     try:
         tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))

@@ -1353,7 +1353,7 @@ reason = "Alembic revisions stay exactly as Alembic generated them, and an appli
 [[rule]]
 id = "api.quality.suppressions-explained"
 category = "quality"
-statement = "Every inline suppression names what it suppresses and says why: a noqa comment, line-level or file-level (ruff: noqa, flake8: noqa), lists its ruff codes, a type: ignore comment lists its mypy error codes in brackets, and each is followed by a reason, as # noqa: CODE  # reason or # type: ignore[code]  # reason; apart from the suppressions rules/baselines/suppressions.txt lists."
+statement = "Every noqa and type: ignore comment names what it suppresses and says why: a noqa comment, line-level or file-level (ruff: noqa, flake8: noqa), lists its ruff codes, a type: ignore comment lists its mypy error codes in brackets, and each is followed by a reason, as # noqa: CODE  # reason or # type: ignore[code]  # reason; apart from the suppressions rules/baselines/suppressions.txt lists."
 rationale = "docs/engineering/skills/rules-registry.md#inline-suppressions"
 scope = ["**/*.py"]
 tier = "mechanical"
