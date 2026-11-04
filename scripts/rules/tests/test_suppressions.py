@@ -206,6 +206,52 @@ class TestCommentProblems(unittest.TestCase):
             with self.subTest(comment=comment):
                 self.assertEqual(comment_problems(comment), NO_REASON)
 
+    def test_a_reason_may_start_like_a_directive(self) -> None:
+        for comment in (
+            "# noqa: E501  # fmt: on purpose, the columns line up",
+            "# noqa: E501  # fmt: skip would not help, the URL is one token",
+            "# noqa: E501  # pyright: strict mode is off for this module",
+            "# noqa: E501  # isort: off would hide the side effect",
+            "# noqa: E501  # pylint: disable would not matter here",
+        ):
+            with self.subTest(comment=comment):
+                self.assertEqual(comment_problems(comment), ())
+
+    def test_directives_with_other_spacing_are_not_reasons(self) -> None:
+        for comment in (
+            "# noqa: E501  # pragma: nocover",
+            "# noqa: E501  # PRAGMA NO COVER",
+            "# noqa: E501  # ruff : enable[E501]",
+            "# noqa: E501  # pylint: disable=line-too-long, invalid-name",
+        ):
+            with self.subTest(comment=comment):
+                self.assertEqual(comment_problems(comment), NO_REASON)
+
+    def test_a_type_comment_is_not_a_reason(self) -> None:
+        self.assertEqual(comment_problems("# type: list[int]  # noqa: F841"), NO_REASON)
+        self.assertEqual(
+            comment_problems("# type: list[int]  # noqa: F841  # unused on purpose"),
+            (),
+        )
+
+    def test_only_a_type_ignore_mypy_honours_counts(self) -> None:
+        # mypy reads type: ignore only with no space before the colon, and only
+        # at the start of a comment.
+        self.assertEqual(comment_problems("# type : ignore"), ())
+        self.assertEqual(comment_problems("# a reason  # type: ignore"), ())
+        self.assertEqual(comment_problems("# type:ignore[misc]"), NO_REASON)
+
+    def test_ruffs_trailing_ignore_needs_a_code_and_a_reason(self) -> None:
+        cases = {
+            "# ruff: ignore[E501]": NO_REASON,
+            "# ruff: ignore[E501]  # a generated URL": (),
+            "# ruff: ignore": NEITHER,
+            "# noqa: E501  # ruff: ignore[E501]": NO_REASON,
+        }
+        for comment, missing in cases.items():
+            with self.subTest(comment=comment):
+                self.assertEqual(comment_problems(comment), missing)
+
     def test_entries_use_the_lines_tokenize_counts(self) -> None:
         source = (
             "a = 1\n\x0c\nimport os  # noqa: F401\n"
