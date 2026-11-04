@@ -210,15 +210,15 @@ id = "api-v2-pure-modules-no-database"
 name = "v2 validators, transformations and types reach no SQLAlchemy, SQLModel, connector, session or v2 database module except through the table models (rule api.v2.pure-modules-no-database)"
 type = "forbidden"
 source_modules = [
-    "policyengine_api.services.v2.*.validators",
-    "policyengine_api.services.v2.*.transformations",
-    "policyengine_api.services.v2.*.types",
+    "policyengine_api.services.v2.**.validators",
+    "policyengine_api.services.v2.**.transformations",
+    "policyengine_api.services.v2.**.types",
 ]
 forbidden_modules = [
     "sqlalchemy",
     "sqlmodel",
-    "policyengine_api.services.v2.*.database_connectors",
-    "policyengine_api.services.v2.*.database_session",
+    "policyengine_api.services.v2.**.database_connectors",
+    "policyengine_api.services.v2.**.database_session",
     "policyengine_api.data.v2.database",
 ]
 ignore_imports = [
@@ -261,8 +261,8 @@ name = "v2 route modules import no connector, database_session or v2 database mo
 type = "forbidden"
 source_modules = ["policyengine_api.fastapi_routes.v2"]
 forbidden_modules = [
-    "policyengine_api.services.v2.*.database_connectors",
-    "policyengine_api.services.v2.*.database_session",
+    "policyengine_api.services.v2.**.database_connectors",
+    "policyengine_api.services.v2.**.database_session",
     "policyengine_api.data.v2.database",
 ]
 # Direct imports only. Route modules reach connectors and session modules
@@ -277,10 +277,10 @@ id = "api-v2-types-transformations-no-validators"
 name = "v2 types and transformations import no validators module (rule api.v2.types-transformations-no-validators)"
 type = "forbidden"
 source_modules = [
-    "policyengine_api.services.v2.*.types",
-    "policyengine_api.services.v2.*.transformations",
+    "policyengine_api.services.v2.**.types",
+    "policyengine_api.services.v2.**.transformations",
 ]
-forbidden_modules = ["policyengine_api.services.v2.*.validators"]
+forbidden_modules = ["policyengine_api.services.v2.**.validators"]
 ignore_imports = [
     # Tolerated: rules/baselines/import-linter-api-v2-types-transformations-no-validators.txt
     "policyengine_api.services.v2.households.transformations -> policyengine_api.services.v2.households.validators",
@@ -294,7 +294,7 @@ unmatched_ignore_imports_alerting = "error"
 id = "api-v2-connectors-independent"
 name = "v2 connector modules import no other connector module (rule api.v2.connectors-no-cross-calls)"
 type = "independence"
-modules = ["policyengine_api.services.v2.*.database_connectors.*"]
+modules = ["policyengine_api.services.v2.**.database_connectors.**"]
 ignore_imports = [
     # Tolerated: rules/baselines/import-linter-api-v2-connectors-independent.txt
     "policyengine_api.services.v2.metadata.database_connectors.reads_datasets -> policyengine_api.services.v2.metadata.database_connectors.reads",

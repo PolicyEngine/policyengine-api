@@ -134,9 +134,14 @@ fail the guard yet.
   `unmatched_ignore_imports_alerting = "error"` makes Import Linter fail on an
   entry that no longer matches, so fixing an import forces the entry out.
   No entry may use a wildcard, so each names one importer and one imported
-  module and a new module never falls under an old exception. CI runs
-  `lint-imports --config pyproject.toml`, so a `setup.cfg` or `.importlinter`
-  file can't take the contracts' place.
+  module, and a new module's own imports never match an old entry (it can
+  still reach a forbidden module through a tolerated import; see below). CI
+  runs exactly `lint-imports --config pyproject.toml`, which the guard checks,
+  so a `setup.cfg` or `.importlinter` file can't take the contracts' place and
+  `--contract` or `|| true` can't skip them.
+- `enforcer.allowed_ignore_imports` has no count limit. Moving a tolerated
+  import from the baseline into it lowers the baseline's count without fixing
+  anything, so code-owner review of `rules/registry.toml` is the check on it.
 - An Import Linter rule also pins the rest of its contract: the SHA-256 of the
   top-level `[tool.importlinter]` settings and every contract field except
   `ignore_imports` (`scripts/rules/import_linter.py`, `contract_fingerprint`)
@@ -145,7 +150,11 @@ fail the guard yet.
   change too; the guard's message gives the new value.
 - Ignoring an import removes it from the graph the contract checks, so the
   exception also covers every chain from another module that passes through
-  it. Each such chain goes away when the tolerated import is fixed.
+  it, including from modules added later. Each such chain goes away when the
+  tolerated import is fixed.
+- Each rule's proof fixture breaks the contract once per source and forbidden
+  module pattern, and lists those violations in `expected_violations`; the
+  proof requires Import Linter to report exactly them.
 - Moving a rule from enforced/ratcheted to advisory/doc-only needs an explicit
   `[rule.downgrade] reason`.
 

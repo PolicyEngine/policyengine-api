@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import tomllib
 from typing import TYPE_CHECKING, Any
 
 from scripts.rules.model import Kind, Rule, Violation
+from scripts.rules.workflows import parse_jobs
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -150,7 +152,14 @@ def resolve_import_linter(rule: Rule, root: Path) -> list[Violation]:
     config_name = rule.enforcer.get("config")
     contract_id = rule.enforcer.get("contract")
     if not config_name or not contract_id:
-        return []
+        return [
+            _violation(
+                rule,
+                "enforcer.config and enforcer.contract must name the config file "
+                "and the contract's id",
+                'set both, for example config = "pyproject.toml"',
+            )
+        ]
     config = root / config_name
     if not config.exists():
         return [
@@ -216,6 +225,38 @@ def resolve_import_linter(rule: Rule, root: Path) -> list[Violation]:
             )
         )
     violations += _exception_violations(rule, root, contract_id, contract)
+    violations += _ci_command_violations(rule, root, config_name)
+    return violations
+
+
+def _ci_command_violations(rule: Rule, root: Path, config_name: str) -> list[Violation]:
+    """Require each CI job to run every contract, with failures failing the job.
+
+    The registry's invocation check only looks for a substring, which an
+    added ``--contract`` or ``|| true`` would still contain.
+    """
+    exact = re.compile(
+        rf"^(?:uv run .*\s)?lint-imports --config {re.escape(config_name)}$"
+    )
+    violations = []
+    for reference in rule.ci:
+        workflow = root / reference.workflow
+        if not workflow.is_file():
+            continue
+        job = parse_jobs(workflow.read_text())[0].get(reference.job)
+        if job is None:
+            continue
+        violations.extend(
+            _violation(
+                rule,
+                f"job '{reference.job}' in {reference.workflow} runs Import Linter "
+                f"as '{command}', which may skip contracts or ignore failures",
+                f"run exactly 'lint-imports --config {config_name}', optionally "
+                "after 'uv run ...'",
+            )
+            for command in (line.strip() for line in job.run_text.splitlines())
+            if "lint-imports" in command and not exact.match(command)
+        )
     return violations
 
 

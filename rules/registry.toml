@@ -250,7 +250,7 @@ autofix = false
 kind = "import-linter"
 config = "pyproject.toml"
 contract = "api-v2-connectors-independent"
-contract_sha256 = "d017f01de9eb410073e52e756aa4d745d3a4e5de4180301e7e7726ad0837b21d"
+contract_sha256 = "6da44212adfe1bc6110ebb9651d282269f353639ae8f644b575c25ace4749de9"
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
@@ -305,7 +305,7 @@ autofix = false
 kind = "import-linter"
 config = "pyproject.toml"
 contract = "api-v2-pure-modules-no-database"
-contract_sha256 = "9aa2876ea842b97b61c6b54ced45d9bd2c62a7b412971720e9fd71ad8dfb106b"
+contract_sha256 = "b5317b97f5680dc5f38b16fe33bd4dc29715a8fb97f52f9da56585069994565d"
 allowed_ignore_imports = [
   "policyengine_api.data.v2.models -> sqlmodel",
   "policyengine_api.data.v2.models.associations -> sqlalchemy",
@@ -361,7 +361,7 @@ autofix = false
 kind = "import-linter"
 config = "pyproject.toml"
 contract = "api-v2-routes-no-database-access"
-contract_sha256 = "c3267ae523a120aa28c3b57c8e6477e20d5f2c8957f9b874c07fba2ac5700e34"
+contract_sha256 = "03fe42ee3a3fa858932ff92cc6d1df4bf60db0d75dd99344e52c2167391c074b"
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
@@ -387,7 +387,7 @@ autofix = false
 kind = "import-linter"
 config = "pyproject.toml"
 contract = "api-v2-types-transformations-no-validators"
-contract_sha256 = "bd0f3ad55155cd5198a68c41798c58d64916b60eff40b27600d503c3e2c644cf"
+contract_sha256 = "22a4a86fefa71f6097c03ab55eb513a9df045676414b410216ddcd7295e8f711"
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
