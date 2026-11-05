@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
@@ -104,6 +105,26 @@ class TestLockCommittedProof(unittest.TestCase):
             ],
         )
         self.assertEqual(lock_violations(FIXTURES / "lock_good"), [])
+
+    def test_a_lock_check_in_a_recursive_make_target_counts(self) -> None:
+        # The job runs make quality, which runs make quality-check as a
+        # recipe calls make: $(MAKE).
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "pyproject.toml").write_text('[project]\nname = "example"\n')
+            (root / "uv.lock").write_text("version = 1\n")
+            (root / "Makefile").write_text(
+                "quality:\n\t$(MAKE) quality-check\n\n"
+                "quality-check:\n\tuv lock --check\n"
+            )
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "pr.yml").write_text(
+                "on: pull_request\njobs:\n  quality:\n    steps:\n"
+                "      - run: make quality\n"
+            )
+
+            self.assertEqual(lock_violations(root), [])
 
 
 class TestScheduledRelockProof(unittest.TestCase):

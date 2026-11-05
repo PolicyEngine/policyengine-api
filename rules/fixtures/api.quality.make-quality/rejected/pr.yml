@@ -1,0 +1,18 @@
+# Proof fixture for api.quality.make-quality (rejected), read with
+# rejected/Makefile: a typecheck job runs mypy itself, beside make quality.
+jobs:
+  ci-complete:
+    needs:
+      - test
+      - typecheck
+      - quality-guards
+  test:
+    steps:
+      - run: make test
+  typecheck:
+    steps:
+      - run: uv run --frozen --extra dev mypy
+  quality-guards:
+    steps:
+      - run: make quality
+      - run: git diff --exit-code
