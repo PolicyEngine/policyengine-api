@@ -34,9 +34,9 @@ coverage:
         threshold: 0.5%
     patch:
       default:
-        target: auto
-        # Reported but not blocking until the minimum for changed lines is
-        # decided and enforced.
+        # pr.yml's diff-coverage job enforces this minimum for the changed
+        # lines (api.quality.diff-coverage); Codecov only shows it.
+        target: 80%
         informational: true
 
 flag_management:

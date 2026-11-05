@@ -89,6 +89,30 @@ otherwise.
 The project status allows a 0.5% drop. The patch status reports coverage of
 the changed lines without blocking a merge.
 
+### Changed lines
+
+`api.quality.diff-coverage`: at least 80% of the lines a pull request changes
+in `policyengine_api/` run in the unit or integration tests. The
+`diff-coverage` job in `pr.yml` runs after the `Test` shards and the
+integration tests. It downloads every shard's `coverage.xml` and the
+integration tests' `coverage-v2.xml`, and runs `diff-cover --fail-under=80`
+against the pull request's base commit. A line counts as covered if any
+report covers it. `CI complete` needs the job, so a pull request below the
+minimum can't merge. The job's log lists each changed file's uncovered lines.
+
+Only measured files count, so a pull request that changes no code under
+`policyengine_api/` passes. Codecov's patch status shows the same 80% target
+but doesn't block a merge.
+
+To check before pushing, after `make test` has written `coverage.xml`:
+
+```bash
+uv run --frozen --extra dev diff-cover coverage.xml --compare-branch=origin/master --fail-under=80
+```
+
+That leaves out the integration tests, which need the databases
+`v2-integration-check.yml` starts, so CI's figure can be higher.
+
 ## Tests That Run a Country Model
 
 A new unit test stands in for the country model: a calculation with the

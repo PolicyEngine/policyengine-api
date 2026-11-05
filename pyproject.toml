@@ -67,6 +67,9 @@ dependencies = [
 dev = [
     "build",
     "coverage",
+    # pr.yml's diff-coverage job runs it (api.quality.diff-coverage). 11.0 is
+    # newer than two weeks; moving to it is its own change.
+    "diff-cover>=10.6,<11",
     "mypy>=1.15,<2",
     "pytest",
     "pytest-snapshot",
