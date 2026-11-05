@@ -1,7 +1,8 @@
 # Proof fixture for rule api.v2.files-assigned-to-layers. The guard must reject
 # it:
-# - simulation_client.py's name gives it no layer, and no [[rule.exception]]
-#   names it (the case of an open pull request that adds a v2 resource);
+# - simulation_client.py and reports/helpers.py have names that give no layer,
+#   and no [[rule.exception]] names them (simulation_client.py is the case of
+#   an open pull request that adds a v2 resource);
 # - the two files listed in ``exceptions`` stand for files a
 #   [[rule.exception]] names. They get no layer, but the pure-module checks
 #   under services/v2 and the route checks under fastapi_routes/v2.
@@ -17,6 +18,7 @@ expected_findings = [
     "api.v2.routes-no-sessions-or-sql: policyengine_api/fastapi_routes/v2/reports/legacy_helpers.py calls session.add",
     "api.v2.pure-modules-no-session-calls: policyengine_api/services/v2/household_calculations/legacy_client.py calls session.get",
     "api.v2.files-assigned-to-layers: policyengine_api/services/v2/household_calculations/simulation_client.py matches no v2 layer",
+    "api.v2.files-assigned-to-layers: policyengine_api/fastapi_routes/v2/reports/helpers.py matches no v2 layer",
 ]
 
 [files]
@@ -34,4 +36,8 @@ def load(session, household_id):
 "policyengine_api/fastapi_routes/v2/reports/legacy_helpers.py" = """
 def keep(session, row):
     session.add(row)
+"""
+"policyengine_api/fastapi_routes/v2/reports/helpers.py" = """
+def format_title(report):
+    return report.title.strip()
 """
