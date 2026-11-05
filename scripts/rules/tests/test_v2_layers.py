@@ -732,7 +732,7 @@ class TestBaselineAndExceptions(unittest.TestCase):
                 "database_connectors/<creates|reads|updates|deletes>[_name].py), "
                 "or, if it can't be renamed, add a [[rule.exception]] for "
                 "api.v2.files-assigned-to-layers to rules/registry.toml with its "
-                "path, a reason and an expires date or removal condition."
+                "path, a reason and an expires date."
             ],
         )
 
@@ -750,7 +750,7 @@ class TestBaselineAndExceptions(unittest.TestCase):
                 "<name>_models.py or <name>_support.py), or, if it can't be "
                 "renamed, add a [[rule.exception]] for "
                 "api.v2.files-assigned-to-layers to rules/registry.toml with its "
-                "path, a reason and an expires date or removal condition."
+                "path, a reason and an expires date."
             ],
         )
 
