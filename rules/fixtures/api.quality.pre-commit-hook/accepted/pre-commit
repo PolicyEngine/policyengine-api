@@ -1,0 +1,7 @@
+#!/bin/sh
+# Proof fixture for api.quality.pre-commit-hook (accepted): the least a hook
+# must do. It runs make quality, fails when make quality fails, and fails when
+# make quality changed a file, whose fix still needs staging.
+before=$(git diff)
+make quality || exit 1
+[ "$(git diff)" = "$before" ] || exit 1
