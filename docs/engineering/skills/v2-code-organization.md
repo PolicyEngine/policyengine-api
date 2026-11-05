@@ -25,7 +25,10 @@ A file with another name fails the guard (rule
 `api.v2.files-assigned-to-layers`): rename it. A file that can't be renamed
 needs a `[[rule.exception]]` for that rule in `rules/registry.toml`, with its
 `path`, a `reason` and an `expires` date, by which the file should be renamed.
-An exception chooses no layer: the file gets the route checks under
+It covers the whole file, so it sets no `match`, `category` or `removal`, and a
+module in a `database_connectors` package can't be excepted: rule
+`api.v2.crud-checks-cover-every-resource` needs its operation name. An
+exception chooses no layer: the file gets the route checks under
 `fastapi_routes/v2`, and the validator, transformation and types checks
 (rule `api.v2.pure-modules-no-session-calls`) under `services/v2`. The guard
 fails on an exception for a file that no longer exists or whose name already
