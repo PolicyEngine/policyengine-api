@@ -42,7 +42,9 @@ if TYPE_CHECKING:
     from sqlalchemy import Connection, Engine
 
 SIMULATION_RUNS_PREVIOUS_REVISION = "c614b6bcccfc"
-NEW_TABLES = frozenset({"simulation_runs", "report_run_comparisons"})
+NEW_TABLES = frozenset(
+    {"simulation_runs", "labor_supply_responses", "labor_supply_decile_responses"}
+)
 CHANGED_TABLES = frozenset(
     {
         "budget_summary",
@@ -97,6 +99,19 @@ PUBLIC_API_FOREIGN_KEYS = {
         "RESTRICT",
     ),
 }
+LABOR_SUPPLY_RESPONSE_COLUMNS = (
+    "income_effect_earnings_change",
+    "substitution_effect_earnings_change",
+    "total_earnings_change",
+    "revenue_change",
+    "relative_income_effect",
+    "relative_substitution_effect",
+    "baseline_weekly_hours",
+    "reform_weekly_hours",
+    "weekly_hours_change",
+    "weekly_hours_income_effect",
+    "weekly_hours_substitution_effect",
+)
 SHA256_HEX = "a" * 64
 COMPLETED_AT = "2026-11-04T00:00:00Z"
 
@@ -515,16 +530,6 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
         )
     insert_row(
         connection,
-        "report_run_comparisons",
-        id=uuid4(),
-        labor_supply_result="{}",
-        data_version="1.0.0",
-        **comparison_runs,
-    )
-    with refused(connection):
-        insert_row(connection, "report_run_comparisons", id=uuid4(), **comparison_runs)
-    insert_row(
-        connection,
         "program_statistics",
         id=uuid4(),
         program_name="income_tax",
@@ -562,6 +567,89 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
             disclosure_tier="withheld",
             **constituency,
         )
+
+
+def test_a_report_runs_labor_supply_and_cliff_impact_are_typed(
+    connection: Connection, public_api_rows: PublicApiRows
+) -> None:
+    simulation_id = _insert_simulation(connection, public_api_rows)
+    report_run_id = _insert_report_run(
+        connection,
+        public_api_rows,
+        _insert_simulation_run(connection, simulation_id),
+        _insert_simulation_run(connection, simulation_id),
+    )
+    response = dict.fromkeys(LABOR_SUPPLY_RESPONSE_COLUMNS, 1.0)
+
+    insert_row(
+        connection,
+        "labor_supply_responses",
+        id=uuid4(),
+        report_run_id=report_run_id,
+        **response,
+    )
+    with refused(connection):
+        insert_row(
+            connection,
+            "labor_supply_responses",
+            id=uuid4(),
+            report_run_id=report_run_id,
+            **response,
+        )
+    # .py reports a relative response only for deciles above zero.
+    insert_row(
+        connection,
+        "labor_supply_decile_responses",
+        id=uuid4(),
+        report_run_id=report_run_id,
+        decile=0,
+        average_income_effect=-1.0,
+        average_substitution_effect=2.0,
+    )
+    insert_row(
+        connection,
+        "labor_supply_decile_responses",
+        id=uuid4(),
+        report_run_id=report_run_id,
+        decile=1,
+        average_income_effect=-1.0,
+        average_substitution_effect=2.0,
+        relative_income_effect=-0.01,
+        relative_substitution_effect=0.02,
+    )
+    with refused(connection):
+        insert_row(
+            connection,
+            "labor_supply_decile_responses",
+            id=uuid4(),
+            report_run_id=report_run_id,
+            decile=1,
+        )
+    with refused(connection, match="ck_report_runs_cliff_impact_complete"):
+        connection.execute(
+            text("UPDATE report_runs SET baseline_cliff_gap = 1.0 WHERE id = :id"),
+            {"id": report_run_id},
+        )
+    connection.execute(
+        text(
+            "UPDATE report_runs SET baseline_cliff_gap = 1.0, "
+            "baseline_cliff_share = 0.1, reform_cliff_gap = 2.0, "
+            "reform_cliff_share = 0.2, data_version = '1.0.0', "
+            "spm_provenance = CAST(:receipt AS jsonb) WHERE id = :id"
+        ),
+        {"id": report_run_id, "receipt": '{"source": "census"}'},
+    )
+    receipt_type = connection.execute(
+        text("SELECT jsonb_typeof(spm_provenance) FROM report_runs WHERE id = :id"),
+        {"id": report_run_id},
+    ).scalar_one()
+    assert receipt_type == "object"
+
+    connection.execute(
+        text("DELETE FROM report_runs WHERE id = :id"), {"id": report_run_id}
+    )
+    for table in ("labor_supply_responses", "labor_supply_decile_responses"):
+        assert _count(connection, table, "report_run_id", report_run_id) == 0
 
 
 def test_household_jobs_take_a_valid_year_and_record_when_they_end(

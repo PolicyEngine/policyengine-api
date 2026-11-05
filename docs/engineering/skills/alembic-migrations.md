@@ -511,10 +511,15 @@ model changes:
 - A report run compares one pair of simulation runs: `report_runs` names its
   `baseline_simulation_run_id` (required) and `reform_simulation_run_id`
   (empty for a household report with only a baseline), each a foreign key to
-  `simulation_runs` with `RESTRICT`. The new `report_run_comparisons` keeps
-  the parts of an economy comparison that have no result table
-  (`labor_supply_result`, `cliff_impact_result`, `spm_provenance`,
-  `data_version`).
+  `simulation_runs` with `RESTRICT`. The parts of an economy comparison that
+  had no result table are typed: `report_runs` gains the baseline's and
+  reform's cliff gap and share (four nullable numbers, checked to be set
+  together), the SPM receipt (`spm_provenance`, `jsonb`) and the data release
+  (`data_version`). The new `labor_supply_responses` holds one row per report
+  run (the earnings changes from the income and substitution effects and their
+  total, the revenue change, the two relative responses, and baseline, reform
+  and changed weekly hours split into the two effects), and the new
+  `labor_supply_decile_responses` one row per report run and income decile.
 - `poverty` and `inequality` belong to a simulation run (`simulation_run_id`);
   the other result tables belong to a report run and name the two simulation
   runs they compare (`baseline_simulation_run_id`, `reform_simulation_run_id`);

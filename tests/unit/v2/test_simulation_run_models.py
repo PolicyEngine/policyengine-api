@@ -12,12 +12,39 @@ from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v2.models import (
     V2_METADATA,
+    LaborSupplyDecileResponse,
+    LaborSupplyResponse,
     ReportRun,
-    ReportRunComparison,
     SimulationRun,
 )
 
 RUN_STATUSES = ["pending", "running", "succeeded", "failed"]
+# The baseline's and reform's cliff gap and share, stored together or not at all.
+CLIFF_IMPACT_COLUMNS = (
+    "baseline_cliff_gap",
+    "baseline_cliff_share",
+    "reform_cliff_gap",
+    "reform_cliff_share",
+)
+LABOR_SUPPLY_RESPONSE_COLUMNS = (
+    "income_effect_earnings_change",
+    "substitution_effect_earnings_change",
+    "total_earnings_change",
+    "revenue_change",
+    "relative_income_effect",
+    "relative_substitution_effect",
+    "baseline_weekly_hours",
+    "reform_weekly_hours",
+    "weekly_hours_change",
+    "weekly_hours_income_effect",
+    "weekly_hours_substitution_effect",
+)
+LABOR_SUPPLY_DECILE_COLUMNS = (
+    "average_income_effect",
+    "average_substitution_effect",
+    "relative_income_effect",
+    "relative_substitution_effect",
+)
 PER_SIMULATION_RESULT_TABLES = ("inequality", "poverty")
 COMPARISON_RESULT_TABLES = (
     "budget_summary",
@@ -36,7 +63,8 @@ SIMULATION_SIDE_TABLES = frozenset(
         "simulation_runs",
         "reports",
         "report_runs",
-        "report_run_comparisons",
+        "labor_supply_responses",
+        "labor_supply_decile_responses",
         "household_jobs",
         "aggregates",
         "change_aggregates",
@@ -212,44 +240,77 @@ def test_report_runs_record_their_modal_call() -> None:
 
     assert report_runs.c.modal_call_id.nullable
     assert report_runs.c.modal_call_id.type.length == 255
-    # A budget-window run compares one pair per year, so the parts of a
-    # comparison without a result table belong to its comparison row.
-    assert {
-        "labor_supply_result",
-        "cliff_impact_result",
-        "spm_provenance",
-        "data_version",
-    }.isdisjoint(report_runs.c.keys())
+    assert "report_run_comparisons" not in V2_METADATA.tables
 
 
-def test_each_comparison_keeps_the_parts_without_a_result_table() -> None:
-    comparisons = V2_METADATA.tables["report_run_comparisons"]
+def test_report_runs_record_cliff_impact_spm_receipt_and_data_version() -> None:
+    """The comparison parts with no result table are typed, except the receipt."""
+    report_runs = V2_METADATA.tables["report_runs"]
 
-    for column_name in ("labor_supply_result", "cliff_impact_result", "spm_provenance"):
-        assert comparisons.c[column_name].nullable
-        assert isinstance(comparisons.c[column_name].type, sa.JSON)
-    assert comparisons.c.data_version.nullable
-    assert comparisons.c.data_version.type.length == 128
-    report_run_key = _foreign_key(comparisons, "report_run_id")
+    for column_name in CLIFF_IMPACT_COLUMNS:
+        assert report_runs.c[column_name].nullable, column_name
+        assert isinstance(report_runs.c[column_name].type, sa.Float), column_name
+    assert "ck_report_runs_cliff_impact_complete" in _check_names(report_runs)
+    assert report_runs.c.spm_provenance.nullable
+    spm_type = report_runs.c.spm_provenance.type
+    assert isinstance(spm_type.dialect_impl(postgresql.dialect()), postgresql.JSONB)
+    assert report_runs.c.data_version.nullable
+    assert report_runs.c.data_version.type.length == 128
+    assert {"labor_supply_result", "cliff_impact_result"}.isdisjoint(
+        report_runs.c.keys()
+    )
+
+
+def test_labor_supply_responses_have_one_typed_row_per_report_run() -> None:
+    responses = V2_METADATA.tables["labor_supply_responses"]
+
+    assert set(responses.c.keys()) == {
+        "id",
+        "created_at",
+        "report_run_id",
+        *LABOR_SUPPLY_RESPONSE_COLUMNS,
+    }
+    for column_name in LABOR_SUPPLY_RESPONSE_COLUMNS:
+        assert not responses.c[column_name].nullable, column_name
+        assert isinstance(responses.c[column_name].type, sa.Float), column_name
+    report_run_key = _foreign_key(responses, "report_run_id")
     assert report_run_key.target_fullname == "report_runs.id"
     assert report_run_key.ondelete == "CASCADE"
-    for column_name in ("baseline_simulation_run_id", "reform_simulation_run_id"):
-        assert not comparisons.c[column_name].nullable
-        run_key = _foreign_key(comparisons, column_name)
-        assert run_key.target_fullname == "simulation_runs.id"
-        assert run_key.ondelete == "RESTRICT"
-    assert _unique_column_sets(comparisons) == {
-        ("report_run_id", "baseline_simulation_run_id", "reform_simulation_run_id")
+    assert _unique_column_sets(responses) == {("report_run_id",)}
+
+
+def test_labor_supply_decile_responses_have_one_row_per_decile() -> None:
+    deciles = V2_METADATA.tables["labor_supply_decile_responses"]
+
+    assert set(deciles.c.keys()) == {
+        "id",
+        "created_at",
+        "report_run_id",
+        "decile",
+        *LABOR_SUPPLY_DECILE_COLUMNS,
     }
-    assert ReportRunComparison.__module__.endswith(".reports")
+    assert not deciles.c.decile.nullable
+    # .py reports a relative response only for deciles above zero.
+    for column_name in LABOR_SUPPLY_DECILE_COLUMNS:
+        assert deciles.c[column_name].nullable, column_name
+        assert isinstance(deciles.c[column_name].type, sa.Float), column_name
+    report_run_key = _foreign_key(deciles, "report_run_id")
+    assert report_run_key.target_fullname == "report_runs.id"
+    assert report_run_key.ondelete == "CASCADE"
+    assert _unique_column_sets(deciles) == {("report_run_id", "decile")}
 
 
-def test_report_run_relationships_name_comparison_rows() -> None:
+def test_report_run_relationships_name_labor_supply_rows() -> None:
     relationships = sa.inspect(ReportRun).relationships
 
-    assert relationships["comparisons"].mapper.class_ is ReportRunComparison
-    assert "simulation_run_members" not in relationships
-    assert "report_run_memberships" not in sa.inspect(SimulationRun).relationships
+    assert relationships["labor_supply_responses"].mapper.class_ is (
+        LaborSupplyResponse
+    )
+    assert relationships["labor_supply_decile_responses"].mapper.class_ is (
+        LaborSupplyDecileResponse
+    )
+    assert "comparisons" not in relationships
+    assert LaborSupplyResponse.__module__.endswith(".reports")
 
 
 def test_uk_area_impacts_record_disclosure_control() -> None:

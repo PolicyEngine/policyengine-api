@@ -47,7 +47,8 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "legacy_user_policy_mappings",
         "parameter_search_files",
         "parameter_tree_children",
-        "report_run_comparisons",
+        "labor_supply_decile_responses",
+        "labor_supply_responses",
         "simulation_runs",
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
@@ -1047,7 +1048,11 @@ def test_simulation_runs_revision_is_generated_with_one_documented_correction() 
     assert 'name="v2_simulation_status",\n                create_type=False,' in (
         upgrade
     )
-    for table_name in ("simulation_runs", "report_run_comparisons"):
+    for table_name in (
+        "simulation_runs",
+        "labor_supply_responses",
+        "labor_supply_decile_responses",
+    ):
         assert f'op.create_table(\n        "{table_name}"' in upgrade
         assert f'op.drop_table("{table_name}")' in downgrade
     assert upgrade.count("op.drop_table(") == 0

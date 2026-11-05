@@ -158,12 +158,10 @@ def test_the_simulation_service_creates_rows_but_writes_no_status_or_result(
     _refused(connection, "DELETE FROM simulations WHERE id = :id", id=ids["simulation"])
     _refused(
         connection,
-        "INSERT INTO report_run_comparisons "
-        "(id, report_run_id, baseline_simulation_run_id, reform_simulation_run_id) "
-        "VALUES (:id, :report_run_id, :run_id, :run_id)",
+        "INSERT INTO labor_supply_decile_responses (id, report_run_id, decile) "
+        "VALUES (:id, :report_run_id, 1)",
         id=uuid4(),
         report_run_id=ids["report_run"],
-        run_id=ids["run"],
     )
     _refused(connection, "UPDATE policies SET content_hash = content_hash")
 
@@ -192,17 +190,20 @@ def test_modal_workers_write_their_run_status_and_results_only(
         rate=0.1,
     )
     connection.execute(
-        text("UPDATE report_runs SET status = 'running' WHERE id = :id"),
+        text(
+            "UPDATE report_runs SET status = 'running', baseline_cliff_gap = 1.0, "
+            "baseline_cliff_share = 0.1, reform_cliff_gap = 2.0, "
+            "reform_cliff_share = 0.2 WHERE id = :id"
+        ),
         {"id": ids["report_run"]},
     )
     insert_row(
         connection,
-        "report_run_comparisons",
+        "labor_supply_decile_responses",
         id=uuid4(),
         report_run_id=ids["report_run"],
-        baseline_simulation_run_id=ids["run"],
-        reform_simulation_run_id=ids["run"],
-        cliff_impact_result="{}",
+        decile=1,
+        average_income_effect=-1.0,
     )
     finished_job = connection.execute(
         text(

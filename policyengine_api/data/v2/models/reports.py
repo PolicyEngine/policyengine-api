@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from sqlmodel import Field, Relationship
 
 from policyengine_api.data.v2.models.base import (
@@ -164,8 +165,10 @@ class ReportRun(TimestampedModel, table=True):
 
     It compares ``baseline_simulation_run_id`` with
     ``reform_simulation_run_id``; a household report with only a baseline has
-    no reform run. Its ``comparisons`` hold the parts of an economy comparison
-    that have no result table.
+    no reform run. An economy comparison's cliff impact is the baseline's and
+    reform's cliff gap and share, stored together or not at all;
+    ``spm_provenance`` is the SPM receipt and ``data_version`` the data release
+    it used. Its labour supply response has its own two tables.
     """
 
     __tablename__ = "report_runs"
@@ -178,6 +181,12 @@ class ReportRun(TimestampedModel, table=True):
         sa.CheckConstraint(
             "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL",
             name="ck_report_runs_terminal_completion",
+        ),
+        sa.CheckConstraint(
+            "(baseline_cliff_gap IS NULL) = (baseline_cliff_share IS NULL) "
+            "AND (baseline_cliff_gap IS NULL) = (reform_cliff_gap IS NULL) "
+            "AND (baseline_cliff_gap IS NULL) = (reform_cliff_share IS NULL)",
+            name="ck_report_runs_cliff_impact_complete",
         ),
         sa.Index(
             "ix_report_runs_current_output",
@@ -228,9 +237,22 @@ class ReportRun(TimestampedModel, table=True):
     )
     error_message: str | None = None
     markdown: str | None = Field(default=None, sa_type=sa.Text)
+    baseline_cliff_gap: float | None = None
+    baseline_cliff_share: float | None = None
+    reform_cliff_gap: float | None = None
+    reform_cliff_share: float | None = None
+    spm_provenance: dict[str, Any] | None = Field(
+        default=None,
+        sa_type=sa.JSON().with_variant(postgresql.JSONB(), "postgresql"),
+    )
+    data_version: str | None = Field(default=None, max_length=128)
 
     report: Report = Relationship(back_populates="runs")
-    comparisons: list["ReportRunComparison"] = Relationship(
+    labor_supply_responses: list["LaborSupplyResponse"] = Relationship(
+        back_populates="report_run",
+        cascade_delete=True,
+    )
+    labor_supply_decile_responses: list["LaborSupplyDecileResponse"] = Relationship(
         back_populates="report_run",
         cascade_delete=True,
     )
@@ -271,22 +293,56 @@ class ReportRun(TimestampedModel, table=True):
     )
 
 
-class ReportRunComparison(IdentifiedModel, table=True):
-    """The parts of one compared pair of a report run that have no result table.
+class LaborSupplyResponse(IdentifiedModel, table=True):
+    """The labour supply response to the reform in one report run.
 
-    A report run compares one baseline and one reform simulation run, or one
-    pair per year for a budget window. Each pair's labour supply response,
-    cliff impact, SPM receipts and data release are one row here, as the
-    simulation API's economy output gives them.
+    One row per report run. The earnings changes come from the income and
+    substitution effects (.py's ``income_lsr`` and ``substitution_lsr``) and
+    total ``total_earnings_change``; ``relative_income_effect`` and
+    ``relative_substitution_effect`` are relative to baseline earnings. The
+    weekly hours are the total hours worked under the baseline and the reform,
+    and their change split into the two effects.
     """
 
-    __tablename__ = "report_run_comparisons"
+    __tablename__ = "labor_supply_responses"
+    __table_args__ = (
+        sa.UniqueConstraint("report_run_id", name="uq_labor_supply_responses_run"),
+    )
+
+    report_run_id: UUID = Field(
+        foreign_key="report_runs.id",
+        ondelete="CASCADE",
+    )
+    income_effect_earnings_change: float
+    substitution_effect_earnings_change: float
+    total_earnings_change: float
+    revenue_change: float
+    relative_income_effect: float
+    relative_substitution_effect: float
+    baseline_weekly_hours: float
+    reform_weekly_hours: float
+    weekly_hours_change: float
+    weekly_hours_income_effect: float
+    weekly_hours_substitution_effect: float
+
+    report_run: ReportRun = Relationship(back_populates="labor_supply_responses")
+
+
+class LaborSupplyDecileResponse(IdentifiedModel, table=True):
+    """The labour supply response in one income decile of one report run.
+
+    One row per report run and decile, as .py numbers them. The average effects
+    are per household; the relative effects are relative to the decile's
+    baseline earnings, which .py reports only for deciles above zero, so they
+    may be null.
+    """
+
+    __tablename__ = "labor_supply_decile_responses"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
-            "baseline_simulation_run_id",
-            "reform_simulation_run_id",
-            name="uq_report_run_comparisons_run_pair",
+            "decile",
+            name="uq_labor_supply_decile_responses_run_decile",
         ),
     )
 
@@ -294,20 +350,13 @@ class ReportRunComparison(IdentifiedModel, table=True):
         foreign_key="report_runs.id",
         ondelete="CASCADE",
     )
-    baseline_simulation_run_id: UUID = Field(
-        foreign_key="simulation_runs.id",
-        ondelete="RESTRICT",
-    )
-    reform_simulation_run_id: UUID = Field(
-        foreign_key="simulation_runs.id",
-        ondelete="RESTRICT",
-    )
-    labor_supply_result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
-    cliff_impact_result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
-    spm_provenance: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
-    data_version: str | None = Field(default=None, max_length=128)
+    decile: int
+    average_income_effect: float | None = None
+    average_substitution_effect: float | None = None
+    relative_income_effect: float | None = None
+    relative_substitution_effect: float | None = None
 
-    report_run: ReportRun = Relationship(back_populates="comparisons")
+    report_run: ReportRun = Relationship(back_populates="labor_supply_decile_responses")
 
 
 class AggregateOutput(IdentifiedModel, table=True):

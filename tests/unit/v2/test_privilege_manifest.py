@@ -66,7 +66,8 @@ RUN_INPUT_TABLES = frozenset(
 )
 RESULT_TABLES = frozenset(
     {
-        "report_run_comparisons",
+        "labor_supply_responses",
+        "labor_supply_decile_responses",
         "budget_summary",
         "congressional_district_impacts",
         "constituency_impacts",
