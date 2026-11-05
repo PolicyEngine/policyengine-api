@@ -8,6 +8,7 @@ import tomllib
 import unittest
 from pathlib import Path
 
+from scripts.rules.load import load_registry
 from scripts.rules.v2_layers import (
     CONNECTORS_RULE,
     FILES_RULE,
@@ -45,14 +46,15 @@ def _findings(files: dict[str, str], rule_id: str) -> set[str]:
 
 
 def _all_findings(files: dict[str, str], exceptions: tuple[str, ...]) -> set[str]:
+    """Return every finding as ``<rule id>: <path> <detail>``."""
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         _write_files(files, root)
-        return {str(finding) for finding in scan(root, exceptions)}
+        return {f"{finding.rule_id}: {finding}" for finding in scan(root, exceptions)}
 
 
 def _assert_proof(test: unittest.TestCase, rule_id: str) -> None:
-    """Each tree gives exactly its expected findings, of any rule.
+    """Each tree gives exactly its expected findings, each under its rule.
 
     A tree's ``exceptions`` list the files a ``[[rule.exception]]`` for
     api.v2.files-assigned-to-layers would name.
@@ -617,6 +619,8 @@ class TestBaselineAndExceptions(unittest.TestCase):
         return header + "".join(rules)
 
     def _messages(self) -> list[str]:
+        _, problems = load_registry(self.root)
+        self.assertEqual([str(problem) for problem in problems], [])
         return [str(violation) for violation in run_check(self.root)]
 
     def test_a_finding_the_baseline_lists_passes(self) -> None:
@@ -723,12 +727,29 @@ class TestBaselineAndExceptions(unittest.TestCase):
                 f"[{FILES_RULE}] v2-layers: {unassigned} matches no v2 layer. Fix: "
                 "name it after its layer (services.py, validators.py, "
                 "transformations.py, types.py, process_state.py, "
-                "database_session.py, "
-                "database_connectors/<creates|reads|updates|deletes>[_name].py, "
-                "routes.py, <name>_routes.py, <name>_models.py or "
-                "<name>_support.py), or, if it can't be renamed, add a "
-                "[[rule.exception]] for api.v2.files-assigned-to-layers to "
-                "rules/registry.toml with its path and a reason."
+                "database_session.py or "
+                "database_connectors/<creates|reads|updates|deletes>[_name].py), "
+                "or, if it can't be renamed, add a [[rule.exception]] for "
+                "api.v2.files-assigned-to-layers to rules/registry.toml with its "
+                "path, a reason and an expires date or removal condition."
+            ],
+        )
+
+    def test_an_unassigned_route_file_is_told_the_route_names(self) -> None:
+        unassigned = "policyengine_api/fastapi_routes/v2/metadata/helpers.py"
+        _write_files(
+            {unassigned: "", "rules/registry.toml": self._registry(None)}, self.root
+        )
+
+        self.assertEqual(
+            self._messages(),
+            [
+                f"[{FILES_RULE}] v2-layers: {unassigned} matches no v2 layer. Fix: "
+                "name it after its layer (routes.py, <name>_routes.py, "
+                "<name>_models.py or <name>_support.py), or, if it can't be "
+                "renamed, add a [[rule.exception]] for "
+                "api.v2.files-assigned-to-layers to rules/registry.toml with its "
+                "path, a reason and an expires date or removal condition."
             ],
         )
 
