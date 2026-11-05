@@ -15,7 +15,9 @@ from werkzeug.exceptions import BadRequest, NotFound
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import Household
-from policyengine_api.data.v2.catalog.catalog_selection import SUPPORTED_V2_COUNTRY_IDS
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
+    SUPPORTED_V2_COUNTRY_IDS,
+)
 from policyengine_api.extensions import cache
 from policyengine_api.gcp_logging import logger
 from policyengine_api.migration_flags import (

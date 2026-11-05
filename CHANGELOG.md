@@ -1,3 +1,14 @@
+## [5.26.0] - 2026-11-04
+
+### Added
+
+- PATCH /v2/user-policies/{id} accepts policy_id and PATCH /v2/user-households/{id} accepts household_id, so a saved policy or household can point at another v2 record in its country while keeping its ID, name and creation time. Supplied alone, the v2 reference clears the v1 reference (legacy_policy_id or legacy_household_id); supplied with it, both are stored, and the v2 reference must be the v2 copy of that v1 record when one exists. Unknown, other-country and conflicting records are refused as on creation, and saved policies maintained by the v1 saved-policy mirror still return 409.
+
+### Changed
+
+- Split the v2 catalog version selection into `catalog_selection_validation`, which loads no database code, and `catalog_selection_reads`, which holds the one catalog query, and stop the `policyengine_api.data.v2.catalog` package importing its extraction module when it loads. Importing a v2 validators, transformations or types module no longer loads SQLAlchemy unless that module imports the table models itself.
+
+
 ## [5.25.0] - 2026-11-04
 
 ### Added

@@ -1,0 +1,19 @@
+# Proof fixture for rule api.v2.connectors-no-cross-calls. The contract must
+# accept it: the connectors import only SQLModel and the table models, and the
+# service calls each one.
+
+[modules]
+"fixture_api/services/v2/metadata/database_connectors/reads.py" = """
+from sqlmodel import Session, select
+from fixture_api.data.v2.models import Dataset
+"""
+"fixture_api/services/v2/metadata/database_connectors/reads_variables.py" = """
+from sqlmodel import Session, select
+from fixture_api.data.v2.models import Variable
+"""
+"fixture_api/services/v2/metadata/services.py" = """
+from fixture_api.services.v2.metadata.database_connectors import reads, reads_variables
+"""
+"fixture_api/data/v2/models.py" = """
+import sqlmodel
+"""

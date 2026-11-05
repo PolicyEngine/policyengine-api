@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from sqlmodel import Session, create_engine
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogVersionNotFoundError,
 )
 from policyengine_api.data.v2.models import (

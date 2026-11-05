@@ -91,10 +91,9 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### API v2 layer boundaries
 
-- Checked: `api.v2.connectors-mutations-no-reads`, `api.v2.connectors-reads-no-mutations`, `api.v2.crud-checks-cover-every-resource`, `api.v2.session-modules-no-queries`, `api.v2.user-services-no-sql`, `api.v2.validators-transformations-no-db`
+- Checked: `api.v2.connectors-mutations-no-reads`, `api.v2.connectors-no-cross-calls`, `api.v2.connectors-reads-no-mutations`, `api.v2.crud-checks-cover-every-resource`, `api.v2.import-layers`, `api.v2.pure-modules-no-database`, `api.v2.routes-import-no-database-access`, `api.v2.session-modules-no-queries`, `api.v2.types-transformations-no-validators`, `api.v2.user-services-no-sql`, `api.v2.validators-transformations-no-db`
 - `api.routes.shared-query-parameters`: Routes that accept query parameters define them through the shared typed query models, never with a second manual parser. (doc-only, not checked: follow it yourself)
 - `api.v2.connectors-never-commit`: v2 connectors receive a session from the service and never open, commit, roll back or close it. (doc-only, not checked: follow it yourself)
-- `api.v2.connectors-no-cross-calls`: v2 connector modules never call one another to sequence a workflow; the service does the sequencing. (doc-only, not checked: follow it yourself)
 - `api.v2.routes-no-sessions-or-sql`: v2 route modules never open database sessions or construct SQL; they call one service method and map typed failures to HTTP. (doc-only, not checked: follow it yourself)
 - `api.v2.services-no-sql`: v2 services sequence work but never construct SQL expressions, call Session.exec, or define HTTP response models. (doc-only, not checked: follow it yourself)
 
@@ -108,7 +107,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Data source isolation
 
-- Checked: `api.catalog.extractor-import-isolation`, `api.metadata.read-modules-isolated`, `api.reports.v1-persistence-only`, `api.stage12.comparison-tables-isolated`, `api.stage12.retirement-owned`, `api.v2.single-orm-layer`
+- Checked: `api.catalog.extractor-import-isolation`, `api.catalog.selection-validation-no-database`, `api.metadata.read-modules-isolated`, `api.reports.v1-persistence-only`, `api.stage12.comparison-tables-isolated`, `api.stage12.retirement-owned`, `api.v2.single-orm-layer`
 
 ### Migration and schema
 

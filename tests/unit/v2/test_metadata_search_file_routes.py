@@ -10,7 +10,7 @@ from typing import Union, get_args, get_origin, get_type_hints
 import pytest
 from pydantic import BaseModel
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogVersionNotFoundError,
 )
 from policyengine_api.data.v2.catalog.parameter_search_file import (

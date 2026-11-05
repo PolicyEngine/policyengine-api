@@ -118,7 +118,11 @@ database connectors. Names should describe the represented data, such as
 `PolicyCreationInput`, not an architectural pattern such as “command.”
 
 Types may enforce their own field-level invariants through Pydantic validation,
-but multi-record or catalog validation belongs in `validators.py`.
+but multi-record or catalog validation belongs in `validators.py`. Types and
+transformations never import a validators module, directly or through other
+modules; validators import types (rule
+`api.v2.types-transformations-no-validators`, with today's exceptions in its
+baseline).
 
 ### `database_session.py`
 
@@ -146,7 +150,8 @@ Connector functions receive a session from the service. They do not open,
 commit, roll back, or close it. They do not call route functions, perform
 request-level or business validation, or convert rows into public response
 types. Connector modules do not call one another to sequence a workflow; the
-service makes that ordering explicit.
+service makes that ordering explicit. They never import one another (rule
+`api.v2.connectors-no-cross-calls`, with today's exceptions in its baseline).
 
 The module name also decides which table privileges the connector needs
 (rule `api.v2.runtime-privileges-declared`): `reads` modules need SELECT;
@@ -172,6 +177,40 @@ route -> service -> database session + database connectors -> SQLModel tables
                    -> transformations
                    -> types
 ```
+
+Import Linter checks these directions in CI with the contracts in
+`[tool.importlinter]` in `pyproject.toml`. Imports made only under
+`TYPE_CHECKING` count:
+
+- v2 routes may import v2 services and v2 data modules, and v2 services may
+  import v2 data modules, never the reverse, directly or through other modules
+  (rule `api.v2.import-layers`);
+- v2 route modules never import a connector, a `database_session` module or
+  `policyengine_api.data.v2.database` themselves (rule
+  `api.v2.routes-import-no-database-access`). They reach them through
+  `fastapi_routes/dependencies.py` and the services they call, so this
+  contract checks direct imports only;
+- validators, transformations and types never reach SQLAlchemy, SQLModel, a
+  connector, a `database_session` module or the v2 database module, directly
+  or through other modules, except through the table models (rule
+  `api.v2.pure-modules-no-database`).
+
+The table models' own imports of SQLAlchemy and SQLModel are allowed, one
+model module at a time, so a new module in `policyengine_api/data/v2/models/`
+needs its two imports added to the rule. Import Linter reads import
+statements. It does not see a name that a module re-exports from another, and
+a tolerated exception covers every import between its two modules and every
+chain through them: today `identity.types -> sqlmodel` also covers
+`identity.transformations`, `user_accounts.types`,
+`user_accounts.transformations` and `user_accounts.validators`, which reach
+SQLModel only through it.
+
+Catalog version validation, its error types and `SelectedCatalog` live in
+`policyengine_api/data/v2/catalog/catalog_selection_validation.py`, which
+loads no database code, so validators, transformations, types and routes may
+import it (rule `api.catalog.selection-validation-no-database`). The catalog
+query itself, `select_catalog`, is in `catalog_selection_reads.py`; the
+policies and metadata read connectors call it.
 
 Database connectors may consume service-layer input types when inserting or
 updating rows. They must not import route modules. Validators and

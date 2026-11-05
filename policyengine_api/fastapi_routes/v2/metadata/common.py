@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from starlette.responses import Response
 from starlette.status import HTTP_200_OK
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,

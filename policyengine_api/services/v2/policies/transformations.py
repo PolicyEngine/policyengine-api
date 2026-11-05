@@ -36,7 +36,9 @@ if TYPE_CHECKING:
     from collections.abc import Container, Mapping
     from uuid import UUID
 
-    from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
+    from policyengine_api.data.v2.catalog.catalog_selection_validation import (
+        SelectedCatalog,
+    )
     from policyengine_api.data.v2.models import (
         Parameter,
         ParameterValue,

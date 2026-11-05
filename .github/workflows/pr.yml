@@ -134,6 +134,9 @@ jobs:
         run: uv lock --check
       - name: Test the rules registry tool
         run: uv run --frozen --extra dev python -m unittest discover -s scripts/rules/tests -t .
+      # The v2 import contracts in [tool.importlinter] in pyproject.toml.
+      - name: Check v2 import contracts with Import Linter
+        run: uv run --frozen --extra dev lint-imports --config pyproject.toml
       - name: Install shellcheck (for the ci-scripts guard)
         run: pip install "shellcheck-py==0.11.0.1"
       - name: Run quality guards
