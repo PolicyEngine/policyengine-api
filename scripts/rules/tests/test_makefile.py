@@ -79,6 +79,11 @@ class MakefileProblemsTest(unittest.TestCase):
             ("export SHELL := /usr/bin/true\n", "SHELL"),
             ("check: SHELL := /usr/bin/true\n", "SHELL"),
             ("override .SHELLFLAGS = -c\n", ".SHELLFLAGS"),
+            (".IGNORE::\n", ".IGNORE"),
+            ("GNUMAKEFLAGS += -i\n", "GNUMAKEFLAGS"),
+            ("MAKEFILES = ci.mk\n", "MAKEFILES"),
+            ("M = MAKE\n$(M)FLAGS += -i\n", "computed"),
+            ("I = .IGNORE\n$(I):\n", "computed"),
         ):
             with self.subTest(setting=setting):
                 problems = makefile_problems(setting + "check:\n\tmypy\n")
@@ -184,6 +189,19 @@ class MakeTargetsRunTest(unittest.TestCase):
             # MAKEFLAGS in the command's environment works as the options do.
             "MAKEFLAGS=-i make quality",
             "env MAKEFLAGS=i make quality",
+            "GNUMAKEFLAGS=-i make quality",
+            "MAKEFILES=ci.mk make quality",
+            # -o treats a target as up to date; --eval and -E read more of
+            # the Makefile; settings on the command line override it.
+            "make -o quality quality",
+            "make --old-file=quality quality",
+            "make -oquality quality",
+            "make --eval=.IGNORE: quality",
+            "make -E .IGNORE: quality",
+            "make quality SHELL=/bin/true",
+            "make quality MAKEFLAGS=-i",
+            # make here is an argument, not the command.
+            "echo make quality",
         ):
             with self.subTest(command=command):
                 self.assertEqual(make_targets_run(command), [])
@@ -223,6 +241,21 @@ class MakeTargetInvocationTest(unittest.TestCase):
                     "does not run 'mypy'" in message and ".IGNORE" in message
                     for message in messages
                 ),
+                messages,
+            )
+
+    def test_a_command_whose_failure_make_ignores_does_not_count(self) -> None:
+        with Repo() as repo:
+            repo.edit(
+                ".github/workflows/pr.yml", "- run: uv run mypy", "- run: make quality"
+            )
+            repo.write(
+                "Makefile", MAKEFILE.replace("\tmake loop\n", "\t-uv run mypy\n")
+            )
+            messages = repo.messages()
+
+            self.assertTrue(
+                any("does not run 'mypy'" in message for message in messages),
                 messages,
             )
 

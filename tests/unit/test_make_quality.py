@@ -51,6 +51,10 @@ JOB = "quality-guards"
 CHANGES_FILES = re.compile(r"--fix\b|\b(?:ruff format|uv lock)\b(?!.*--check)")
 # Environment variables whose value can make make ignore failing commands.
 MAKE_FLAG_VARIABLES = ("MAKEFLAGS", "MFLAGS")
+# Variables of make's own that a test's make runs mustn't inherit.
+MAKE_ENVIRONMENT = frozenset(
+    {"MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "MAKEFILES", "MAKELEVEL"}
+)
 
 
 def quality_problems(makefile: str, workflow: str) -> list[str]:
@@ -128,6 +132,69 @@ def quality_problems(makefile: str, workflow: str) -> list[str]:
         problems += [f"pr.yml's {name} job runs {tool} itself" for tool in tools]
     if JOB not in jobs.get("ci-complete", {}).get("needs", []):
         problems.append(f"CI complete doesn't need {JOB}")
+    return problems
+
+
+# A stand-in for uv that records each call and fails the one named in
+# UV_STUB_FAIL_ON, so make quality can be run for real without the checks.
+STUB_UV = """#!/bin/sh
+printf '%s\\n' "$*" >> "$UV_STUB_LOG"
+if [ "$*" = "$UV_STUB_FAIL_ON" ]; then
+  exit 1
+fi
+exit 0
+"""
+
+
+def _uv_arguments(command: str) -> str:
+    """Return what a Makefile command passes to uv: ``run ...`` or ``lock ...``."""
+    return command.split("uv ", 1)[1]
+
+
+def make_quality_behavior_problems(makefile: str, directory: Path) -> list[str]:
+    """Run make quality with a stand-in uv; return how it hides a failing check.
+
+    Whatever the Makefile does, make quality must run the fixes and every check
+    in order when they pass, and fail when any one of them fails.
+    """
+    (directory / "Makefile").write_text(makefile)
+    stubs = directory / "stubs"
+    stubs.mkdir(exist_ok=True)
+    (stubs / "uv").write_text(STUB_UV)
+    (stubs / "uv").chmod(0o755)
+    log = directory / "uv.log"
+    expected = [_uv_arguments(command) for command in (*FIXES, *CHECKS)]
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if name not in MAKE_ENVIRONMENT
+    }
+    environment["PATH"] = f"{stubs}{os.pathsep}{environment.get('PATH', '')}"
+    environment["UV_STUB_LOG"] = str(log)
+
+    def run(fail_on: str) -> tuple[int, list[str]]:
+        log.write_text("")
+        result = subprocess.run(
+            ["make", "--no-print-directory", "quality"],
+            cwd=directory,
+            env={**environment, "UV_STUB_FAIL_ON": fail_on},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result.returncode, log.read_text().splitlines()
+
+    problems = []
+    returncode, calls = run("")
+    if returncode != 0 or calls != expected:
+        problems.append(
+            f"make quality, with every check passing, exited {returncode} and "
+            f"ran {calls}, not {expected}"
+        )
+    for arguments in expected:
+        returncode, _ = run(arguments)
+        if returncode == 0:
+            problems.append(f"make quality passes although 'uv {arguments}' fails")
     return problems
 
 
@@ -264,12 +331,98 @@ DIFF_STEP = "      - run: git diff --exit-code HEAD\n"
             "after ';'",
             id="a recipe after a semicolon replaces the checks",
         ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            "defaults:\n  run:\n    shell: true {0}\n" + ACCEPTED_WORKFLOW,
+            "defaults",
+            id="a default shell for the workflow",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW.replace(
+                "  quality-guards:\n",
+                "  quality-guards:\n"
+                "    defaults:\n      run:\n        shell: true {0}\n",
+            ),
+            "defaults",
+            id="a default shell for the job",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW.replace(
+                MAKE_QUALITY_STEP,
+                '      - run: echo "MAKEFLAGS=-i" >> "$GITHUB_ENV"\n'
+                + MAKE_QUALITY_STEP,
+            ),
+            "GITHUB_ENV",
+            id="an earlier step sets the environment",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW.replace(
+                "  quality-guards:\n",
+                "  quality-guards:\n    env:\n      GNUMAKEFLAGS: -i\n",
+            ),
+            "GNUMAKEFLAGS",
+            id="GNUMAKEFLAGS for the job",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW.replace(
+                "  quality-guards:\n",
+                "  quality-guards:\n    env:\n      MAKEFILES: ci.mk\n",
+            ),
+            "MAKEFILES",
+            id="MAKEFILES for the job",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW.replace(
+                MAKE_QUALITY_STEP,
+                MAKE_QUALITY_STEP + "        working-directory: docs\n",
+            ),
+            "may skip or ignore 'make quality'",
+            id="another working directory",
+        ),
     ],
 )
 def test_ways_to_skip_or_ignore_a_check_are_rejected(makefile, workflow, problem):
     problems = quality_problems(makefile, workflow)
 
     assert any(problem in reported for reported in problems), problems
+
+
+@pytest.mark.parametrize(
+    "setting",
+    [
+        pytest.param(".IGNORE::\n", id="double-colon .IGNORE"),
+        pytest.param("GNUMAKEFLAGS += -i\n", id="GNUMAKEFLAGS"),
+        pytest.param("M = MAKE\n$(M)FLAGS += -i\n", id="computed MAKEFLAGS"),
+        pytest.param(
+            "DRY_RUN := $(findstring n,$(firstword -$(MAKEFLAGS)))\n"
+            "REAL_RUN_TARGET := $(if $(DRY_RUN),dry-run-only,quality-check)\n"
+            "$(REAL_RUN_TARGET):\n"
+            "\t@true\n",
+            id="a recipe only for real runs",
+        ),
+    ],
+)
+def test_settings_that_hide_a_failing_check_are_rejected(setting, tmp_path):
+    # Reading the Makefile reports what it recognizes; running make quality
+    # with a failing check catches the rest, on whichever make honors them
+    # (GNUMAKEFLAGS needs GNU make 4.0, which CI has).
+    makefile = ACCEPTED_MAKEFILE + setting
+    problems = quality_problems(
+        makefile, ACCEPTED_WORKFLOW
+    ) + make_quality_behavior_problems(makefile, tmp_path)
+
+    assert problems
+
+
+def test_make_quality_fails_whenever_a_check_fails(tmp_path):
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+
+    assert make_quality_behavior_problems(makefile, tmp_path) == []
 
 
 def test_make_itself_runs_the_listed_commands():
