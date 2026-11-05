@@ -96,13 +96,23 @@ in `policyengine_api/` run in the unit or integration tests. The
 `diff-coverage` job in `pr.yml` runs after the `Test` shards and the
 integration tests. It downloads every shard's `coverage.xml` and the
 integration tests' `coverage-v2.xml`, and runs `diff-cover --fail-under=80`
-against the pull request's base commit. A line counts as covered if any
-report covers it. `CI complete` needs the job, so a pull request below the
-minimum can't merge. The job's log lists each changed file's uncovered lines.
+against `HEAD^1`. CI checks out GitHub's merge of the pull request into its
+base branch, so `HEAD^1` is that branch as the merge saw it, and the diff
+holds only the pull request's changes. The event's `base.sha` isn't used: it
+can stay where the branch left `master`, which would count `master`'s later
+changes as the pull request's. A line counts as covered if any report covers
+it. `CI complete` needs the job, so a pull request below the minimum can't
+merge. The job's log lists each changed file's uncovered lines.
 
 Only measured files count, so a pull request that changes no code under
-`policyengine_api/` passes. Codecov's patch status shows the same 80% target
-but doesn't block a merge.
+`policyengine_api/` passes. coverage.py measures every module there, whether
+or not a test imports it, but only inside a package: every directory under
+`policyengine_api/` needs an `__init__.py`, or its untested modules are left
+out and their changed lines pass.
+`tests/unit/test_diff_coverage.py::test_coverage_reports_every_module_no_test_imports`
+fails for a directory without one. Lines under `if TYPE_CHECKING:`, which
+never run, and lines marked `# pragma: no cover` don't count (`.coveragerc`).
+Codecov's patch status shows the same 80% target but doesn't block a merge.
 
 To check before pushing, after `make test` has written `coverage.xml`:
 

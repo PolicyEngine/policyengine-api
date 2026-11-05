@@ -2,8 +2,15 @@
 source = policyengine_api
 
 [report]
+# Setting exclude_lines replaces coverage.py's default, so it lists that
+# default, `pragma: no cover`, again. Imports under `if TYPE_CHECKING:` never
+# run, and ruff's TC rules move imports there, so counting them as missed
+# would fail a fully tested change (api.quality.diff-coverage).
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
 omit =
     tests/*
     */tests/*
     tests/conftest.py
-    
+
