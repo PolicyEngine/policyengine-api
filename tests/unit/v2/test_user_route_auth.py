@@ -245,7 +245,7 @@ def test_default_dependencies_publish_the_bearer_security_scheme() -> None:
 def _recorded_failure_logs(operation) -> tuple[object, list]:
     import logging
 
-    from policyengine_api.fastapi_routes.v2 import user_resources
+    from policyengine_api.fastapi_routes.v2 import user_resources_support
 
     class RecordingHandler(logging.Handler):
         def __init__(self) -> None:
@@ -258,14 +258,14 @@ def _recorded_failure_logs(operation) -> tuple[object, list]:
     # Alembic tests run logging.config.fileConfig, which disables loggers that
     # already exist, so re-enable this one and record on it directly.
     handler = RecordingHandler()
-    was_disabled = user_resources.logger.disabled
-    user_resources.logger.disabled = False
-    user_resources.logger.addHandler(handler)
+    was_disabled = user_resources_support.logger.disabled
+    user_resources_support.logger.disabled = False
+    user_resources_support.logger.addHandler(handler)
     try:
-        response = user_resources.user_resource_operation(operation)
+        response = user_resources_support.user_resource_operation(operation)
     finally:
-        user_resources.logger.removeHandler(handler)
-        user_resources.logger.disabled = was_disabled
+        user_resources_support.logger.removeHandler(handler)
+        user_resources_support.logger.disabled = was_disabled
     return response, handler.records
 
 

@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.fastapi_routes.v2 import user_resources
+from policyengine_api.fastapi_routes.v2 import user_resources_support
 from policyengine_api.services.v2.associations.validators import (
     AssociationConflictError,
     AssociationLinkNotFoundError,
@@ -60,10 +60,10 @@ def failure_records(
     # Alembic tests run logging.config.fileConfig, which disables loggers that
     # already exist, so re-enable this one and record on it directly.
     handler = _RecordingHandler()
-    monkeypatch.setattr(user_resources.logger, "disabled", False)
-    user_resources.logger.addHandler(handler)
+    monkeypatch.setattr(user_resources_support.logger, "disabled", False)
+    user_resources_support.logger.addHandler(handler)
     yield handler.records
-    user_resources.logger.removeHandler(handler)
+    user_resources_support.logger.removeHandler(handler)
 
 
 def _failing(error: Exception):
@@ -183,7 +183,7 @@ class _FailureCase(NamedTuple):
 def test_each_failure_maps_to_its_typed_response(
     failure_records: list[logging.LogRecord], case: _FailureCase
 ) -> None:
-    response = user_resources.user_resource_operation(_failing(case.error))
+    response = user_resources_support.user_resource_operation(_failing(case.error))
 
     assert response.status_code == case.status_code
     body = json.loads(response.body)
@@ -195,4 +195,4 @@ def test_each_failure_maps_to_its_typed_response(
 
 
 def test_a_successful_operation_returns_its_result() -> None:
-    assert user_resources.user_resource_operation(lambda: "result") == "result"
+    assert user_resources_support.user_resource_operation(lambda: "result") == "result"

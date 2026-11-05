@@ -8,17 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Request
 from starlette.responses import JSONResponse, Response
 
-from policyengine_api.fastapi_routes.v2.metadata.common import (
-    METADATA_RESPONSES,
-    PARAMETER_SEARCH_FILE_ERROR_RESPONSES,
-    PARAMETER_TREE_ERROR_RESPONSES,
-    CacheableMetadataRoute,
-    names_entity_tag,
-    read_resource,
-    run_metadata_read,
-    take_utc_instant_for_read,
-)
-from policyengine_api.fastapi_routes.v2.metadata.query_dependencies import (
+from policyengine_api.fastapi_routes.v2.metadata.query_support import (
     CatalogQueryDependency,
     ParameterChildrenQueryDependency,
     ParameterCollectionQueryDependency,
@@ -32,7 +22,17 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataParameterValueDetailResponse,
     MetadataParameterValuePageResponse,
 )
-from policyengine_api.fastapi_routes.v2.metadata.search_file_response import (
+from policyengine_api.fastapi_routes.v2.metadata.route_support import (
+    METADATA_RESPONSES,
+    PARAMETER_SEARCH_FILE_ERROR_RESPONSES,
+    PARAMETER_TREE_ERROR_RESPONSES,
+    CacheableMetadataRoute,
+    names_entity_tag,
+    read_resource,
+    run_metadata_read,
+    take_utc_instant_for_read,
+)
+from policyengine_api.fastapi_routes.v2.metadata.search_file_support import (
     SEARCH_FILE_RESPONSE_HEADERS,
     parameter_search_file_response,
     search_file_entity_tag,

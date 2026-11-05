@@ -182,28 +182,79 @@ job = "test"
 invocation = "make test"
 
 [[rule]]
+id = "api.v2.files-assigned-to-layers"
+category = "v2-layers"
+statement = "Every .py file under services/v2 and fastapi_routes/v2 gets a layer from its file name alone, so the layer rules check it. A file that can't be renamed needs a [[rule.exception]] for this rule in rules/registry.toml; it then gets the route checks under fastapi_routes/v2, or the validator, transformation and types checks under services/v2."
+rationale = "docs/engineering/skills/v2-code-organization.md#file-layers"
+scope = ["policyengine_api/services/v2/**/*.py", "policyengine_api/fastapi_routes/v2/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.files-assigned-to-layers/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.files-assigned-to-layers/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_files_assigned_to_layers"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
 id = "api.v2.routes-no-sessions-or-sql"
 category = "v2-layers"
-statement = "v2 route modules never open database sessions or construct SQL; they call one service method and map typed failures to HTTP."
+statement = "v2 route modules never open database sessions or construct SQL: they import no SQLAlchemy, SQLModel, connector, database_session, v1 ORM or v2 database module, and call no SQL builder, session method or session factory; they call one service method and map typed failures to HTTP."
 rationale = "docs/engineering/skills/v2-code-organization.md#http-adapters"
 scope = ["policyengine_api/fastapi_routes/v2/**/*.py"]
 tier = "mechanical"
-status = "doc-only"
+status = "ratcheted"
 autofix = false
 [rule.enforcer]
-kind = "none"
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.routes-no-sessions-or-sql/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.routes-no-sessions-or-sql/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_routes_no_sessions_or_sql"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+[rule.baseline]
+file = "rules/baselines/v2-layers-routes.txt"
+count = 4
 
 [[rule]]
 id = "api.v2.services-no-sql"
 category = "v2-layers"
-statement = "v2 services sequence work but never construct SQL expressions, call Session.exec, or define HTTP response models."
+statement = "v2 services sequence work but never construct SQL expressions (they import nothing from SQLAlchemy or SQLModel but the Session type and sqlalchemy.exc), call Session.exec or another data-access session method, or define HTTP response models (they import no FastAPI or Starlette)."
 rationale = "docs/engineering/skills/v2-code-organization.md#servicespy"
 scope = ["policyengine_api/services/v2/*/services.py"]
 tier = "mechanical"
-status = "doc-only"
+status = "enforced"
 autofix = false
 [rule.enforcer]
-kind = "none"
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.services-no-sql/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.services-no-sql/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_services_no_sql"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
 
 [[rule]]
 id = "api.v2.user-services-no-sql"
@@ -227,16 +278,76 @@ good_fixture = "rules/fixtures/api.v2.user-services-no-sql/good_services.py"
 test = "tests/unit/v2/test_data_crud_boundaries.py::test_rule_proof_user_services_no_sql"
 
 [[rule]]
+id = "api.v2.pure-modules-no-session-calls"
+category = "v2-layers"
+statement = "v2 validators, transformations, types, process-state modules, package __init__ files and files under services/v2 excepted from api.v2.files-assigned-to-layers import nothing from SQLAlchemy or SQLModel but the Session type, import no connector, database_session, v1 ORM or v2 database module, and call no session method, SQLAlchemy or SQLModel function or session factory; they work on values and rows a connector loaded."
+rationale = "docs/engineering/skills/v2-code-organization.md#validatorspy"
+scope = ["policyengine_api/services/v2/*/validators.py", "policyengine_api/services/v2/*/transformations.py", "policyengine_api/services/v2/*/types.py", "policyengine_api/services/v2/*/process_state.py", "policyengine_api/services/v2/__init__.py", "policyengine_api/services/v2/*/__init__.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.pure-modules-no-session-calls/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.pure-modules-no-session-calls/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_pure_modules_no_session_calls"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
+id = "api.v2.session-modules-no-data-access"
+category = "v2-layers"
+statement = "v2 database_session modules sit directly in their resource package and only open, commit, roll back and close sessions: they call no data-access session method (add, get, merge, exec, execute and so on) or SQL builder, and import no connector."
+rationale = "docs/engineering/skills/v2-code-organization.md#database_sessionpy"
+scope = ["policyengine_api/services/v2/*/database_session.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.session-modules-no-data-access/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.session-modules-no-data-access/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_session_modules_no_data_access"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
 id = "api.v2.connectors-never-commit"
 category = "v2-layers"
-statement = "v2 connectors receive a session from the service and never open, commit, roll back or close it."
+statement = "v2 connectors receive a session from the service and never open (with a session factory or a database_session container), commit, roll back or close it, or import the v1 ORM, the v2 database or a database_session module."
 rationale = "docs/engineering/skills/v2-code-organization.md#database_connectors"
 scope = ["policyengine_api/services/v2/*/database_connectors/*.py"]
 tier = "mechanical"
-status = "doc-only"
+status = "enforced"
 autofix = false
 [rule.enforcer]
-kind = "none"
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.connectors-never-commit/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.connectors-never-commit/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_connectors_never_commit"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
 
 [[rule]]
 id = "api.v2.connectors-no-cross-calls"

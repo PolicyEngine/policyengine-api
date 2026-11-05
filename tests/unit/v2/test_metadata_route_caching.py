@@ -10,7 +10,7 @@ from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
 )
 from policyengine_api.fastapi_routes import dependencies as route_dependencies
-from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+from policyengine_api.fastapi_routes.v2.metadata.response_cache_support import (
     MetadataResponseCache,
 )
 from policyengine_api.services.v2.metadata.validators import (
@@ -190,9 +190,9 @@ def test_current_parameter_values_are_reused_only_until_the_next_utc_day(
     query: str,
     expected_cache_control: str,
 ) -> None:
-    from policyengine_api.fastapi_routes.v2.metadata import common
+    from policyengine_api.fastapi_routes.v2.metadata import route_support
 
-    monkeypatch.setattr(common, "utc_now", lambda: now)
+    monkeypatch.setattr(route_support, "utc_now", lambda: now)
     results, _ids = resource_results()
 
     response = metadata_route_client(lambda: ResourceReader(results)).get(
@@ -206,17 +206,20 @@ def test_current_parameter_values_are_reused_only_until_the_next_utc_day(
 def test_a_kept_response_is_served_without_hashing_its_body_again(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from policyengine_api.fastapi_routes.v2.metadata import common, response_cache
+    from policyengine_api.fastapi_routes.v2.metadata import (
+        response_cache_support,
+        route_support,
+    )
 
     hashed_bodies: list[int] = []
-    original_entity_tag = response_cache.body_entity_tag
+    original_entity_tag = response_cache_support.body_entity_tag
 
     def counting_entity_tag(body: bytes) -> str:
         hashed_bodies.append(len(body))
         return original_entity_tag(body)
 
-    monkeypatch.setattr(response_cache, "body_entity_tag", counting_entity_tag)
-    monkeypatch.setattr(common, "body_entity_tag", counting_entity_tag)
+    monkeypatch.setattr(response_cache_support, "body_entity_tag", counting_entity_tag)
+    monkeypatch.setattr(route_support, "body_entity_tag", counting_entity_tag)
     results, _ids = resource_results()
     client = metadata_route_client(
         lambda: ResourceReader(results), response_cache=MetadataResponseCache()
@@ -259,11 +262,11 @@ def test_current_values_read_just_before_midnight_expire_at_that_midnight(
     # The read and the response headers must use the same day: values read for
     # 31 December may not be reused into 1 January, even when the headers are
     # written after midnight.
-    from policyengine_api.fastapi_routes.v2.metadata import common
+    from policyengine_api.fastapi_routes.v2.metadata import route_support
 
     read_instant = datetime(2026, 12, 31, 23, 59, 59, tzinfo=UTC)
     instants = iter([read_instant, datetime(2027, 1, 1, 0, 0, 1, tzinfo=UTC)])
-    monkeypatch.setattr(common, "utc_now", lambda: next(instants))
+    monkeypatch.setattr(route_support, "utc_now", lambda: next(instants))
     results, _ids = resource_results()
     reader = ResourceReader(results)
 
