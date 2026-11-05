@@ -16,7 +16,7 @@ from fixture_api.services.v2.policies.database_connectors.reads import read_poli
 "fixture_api/fastapi_routes/v2/households/routes.py" = """
 from fixture_api.services.v2.households.database_session import HouseholdDatabaseSession
 """
-"fixture_api/fastapi_routes/v2/metadata/common.py" = """
+"fixture_api/fastapi_routes/v2/metadata/route_support.py" = """
 from fixture_api.data.v2.database import get_v2_session_factory
 """
 "fixture_api/services/v2/policies/database_connectors/reads.py" = """

@@ -1,0 +1,33 @@
+# Proof fixture for rule api.v2.files-assigned-to-layers. The guard must accept
+# it: every file is named after its layer, and the one excepted file passes
+# the pure-module checks it gets under services/v2.
+
+exceptions = ["policyengine_api/services/v2/household_calculations/legacy_client.py"]
+expected_findings = []
+
+[files]
+"policyengine_api/services/v2/__init__.py" = ""
+"policyengine_api/services/v2/policies/__init__.py" = ""
+"policyengine_api/services/v2/policies/services.py" = ""
+"policyengine_api/services/v2/policies/validators.py" = ""
+"policyengine_api/services/v2/policies/transformations.py" = ""
+"policyengine_api/services/v2/policies/types.py" = ""
+"policyengine_api/services/v2/policies/process_state.py" = ""
+"policyengine_api/services/v2/policies/database_session.py" = ""
+"policyengine_api/services/v2/policies/database_connectors/__init__.py" = ""
+"policyengine_api/services/v2/policies/database_connectors/creates.py" = ""
+"policyengine_api/services/v2/policies/database_connectors/reads_parameters.py" = ""
+"policyengine_api/services/v2/household_calculations/legacy_client.py" = """
+def describe(household):
+    return household.label
+"""
+"policyengine_api/fastapi_routes/v2/__init__.py" = ""
+"policyengine_api/fastapi_routes/v2/routes.py" = ""
+"policyengine_api/fastapi_routes/v2/errors_support.py" = ""
+"policyengine_api/fastapi_routes/v2/policies/__init__.py" = ""
+"policyengine_api/fastapi_routes/v2/policies/routes.py" = ""
+"policyengine_api/fastapi_routes/v2/policies/request_models.py" = ""
+"policyengine_api/fastapi_routes/v2/policies/response_models.py" = ""
+"policyengine_api/fastapi_routes/v2/households/document_models.py" = ""
+"policyengine_api/fastapi_routes/v2/metadata/catalog_routes.py" = ""
+"policyengine_api/fastapi_routes/v2/metadata/route_support.py" = ""

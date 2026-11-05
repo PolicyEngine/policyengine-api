@@ -8,7 +8,7 @@ import time
 import pytest
 from starlette.responses import JSONResponse
 
-from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+from policyengine_api.fastapi_routes.v2.metadata.response_cache_support import (
     BuiltResponse,
     KeptResponse,
     MetadataResponseCache,

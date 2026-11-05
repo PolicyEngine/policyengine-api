@@ -1,0 +1,23 @@
+# Proof fixture for rule api.v2.routes-no-sessions-or-sql. The guard must
+# reject it: a route module imports a connector and SQLModel, builds a select
+# and calls a method on a session.
+
+# Each expected finding is "<rule id>: <path> <detail>".
+expected_findings = [
+    "api.v2.routes-no-sessions-or-sql: policyengine_api/fastapi_routes/v2/policies/routes.py calls session.add",
+    "api.v2.routes-no-sessions-or-sql: policyengine_api/fastapi_routes/v2/policies/routes.py calls sqlmodel.select",
+    "api.v2.routes-no-sessions-or-sql: policyengine_api/fastapi_routes/v2/policies/routes.py imports policyengine_api.services.v2.policies.database_connectors.reads",
+    "api.v2.routes-no-sessions-or-sql: policyengine_api/fastapi_routes/v2/policies/routes.py imports sqlmodel",
+]
+
+[files]
+"policyengine_api/fastapi_routes/v2/policies/routes.py" = """
+from sqlmodel import select
+
+from policyengine_api.services.v2.policies.database_connectors.reads import read_policy
+
+
+def create_policy(session, row):
+    session.add(row)
+    return read_policy(session, select(row))
+"""

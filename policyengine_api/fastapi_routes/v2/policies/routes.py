@@ -18,7 +18,7 @@ from policyengine_api.fastapi_routes.dependencies import (
     _default_v2_policy_service_factory,
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
-from policyengine_api.fastapi_routes.v2.errors import (
+from policyengine_api.fastapi_routes.v2.errors_support import (
     V2ErrorMapping,
     V2RequestTooLargeError,
     run_v2_operation,
