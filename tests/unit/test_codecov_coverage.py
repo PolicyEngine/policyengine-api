@@ -570,6 +570,53 @@ def test_an_upload_must_send_what_its_job_downloaded():
     ]
 
 
+def test_a_download_or_upload_that_keeps_one_shard_fails_the_check():
+    def problems(download: dict, **inputs: object) -> list[str]:
+        workflows = {
+            "pr.yml": {
+                "on": "pull_request",
+                "jobs": {
+                    "test": SHARDED_SUITE,
+                    "upload": _upload_job(download, **inputs),
+                },
+            }
+        }
+        return coverage_problems(workflows, GOOD_CONFIG)
+
+    missing = ["no job in pr.yml uploads all of test's coverage.xml flagged unit"]
+    # Every shard's coverage.xml would land in one directory, each replacing
+    # the one before.
+    assert problems({"pattern": "cov-*", "merge-multiple": True}) == missing
+    assert problems({"artifact-ids": "123"}) == missing
+    assert problems({"pattern": "cov-*"}, disable_search=True, files="cov-1/x") == (
+        missing
+    )
+
+
+def test_a_job_uploading_its_own_report_flags_it_integration():
+    workflows = {
+        "pr.yml": {
+            "on": "pull_request",
+            "jobs": {
+                "integration": {
+                    "timeout-minutes": 10,
+                    "steps": [
+                        {"run": "coverage xml -o coverage-v2.xml"},
+                        {
+                            "uses": "codecov/codecov-action@v5",
+                            "with": {"token": TOKEN, "flags": UNIT},
+                        },
+                    ],
+                }
+            },
+        }
+    }
+
+    assert coverage_problems(workflows, GOOD_CONFIG) == [
+        "pr.yml:integration uploads its coverage report without the integration flag"
+    ]
+
+
 def test_an_integration_report_is_uploaded_flagged_integration():
     report = {
         "steps": [
@@ -721,7 +768,10 @@ def test_master_uploads_the_release_tests_coverage_for_the_merge_commit_too():
     merge_commit_step = _steps_using(upload, CODECOV_ACTION)[1]
 
     assert checkout["with"]["fetch-depth"] == 2
-    assert parent_step["run"] == 'echo "sha=$(git rev-parse HEAD^)" >> "$GITHUB_OUTPUT"'
+    # A pipeline, so that GitHub's pipefail fails the step if rev-parse fails.
+    assert parent_step["run"] == (
+        "git rev-parse --verify HEAD^ | sed 's/^/sha=/' >> \"$GITHUB_OUTPUT\""
+    )
     assert merge_commit_step["with"]["override_commit"] == (
         "${{ steps.merge_commit.outputs.sha }}"
     )
