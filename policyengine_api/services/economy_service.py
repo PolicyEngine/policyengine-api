@@ -49,6 +49,8 @@ from policyengine_api.services.economy_impact_types import (
     BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES,
     COMPLETE_STATUSES,
     COMPUTING_STATUS,
+    FAILED_IMPACT_DELETE_ATTEMPTS,
+    FAILED_IMPACT_DELETE_LOCKOUT_SECONDS,
     LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES,
     LOCAL_AREA_BREAKDOWN_RETRY_NOTE,
     LOCAL_AREA_BREAKDOWN_SIMULATION_KIND,
@@ -59,6 +61,8 @@ from policyengine_api.services.economy_impact_types import (
     BudgetWindowYearProgress,
     EconomicImpactResult,
     EconomicImpactSetupOptions,
+    FailedImpactDeletion,
+    FailedImpactDeletionOutcome,
     ImpactAction,
     ImpactStatus,
     RuntimeBundleIdentity,
@@ -97,6 +101,8 @@ __all__ = [
     "EconomicImpactResult",
     "EconomicImpactSetupOptions",
     "EconomyService",
+    "FailedImpactDeletion",
+    "FailedImpactDeletionOutcome",
     "ImpactAction",
     "ImpactStatus",
     "RuntimeBundleIdentity",
@@ -211,6 +217,61 @@ class EconomyService(
                 set_runtime_context(
                     observability_id=(economic_impact_setup_options.observability_id)
                 )
+
+    def delete_failed_economic_impact(
+        self,
+        impact_request: EconomicImpactRequest,
+        time_period: str,
+    ) -> FailedImpactDeletion:
+        """Remove the stored failure that get_economic_impact would answer from.
+
+        The request is validated and its stored record selected exactly as
+        get_economic_impact does, without submitting or polling a job. Only a
+        failure recorded at least ``FAILED_IMPACT_DELETE_LOCKOUT_SECONDS``
+        earlier is removed, with its index entries, so the next request
+        submits a new job. A record that is computing or complete is never
+        removed: removal happens only if the record still holds the failure
+        that was checked, and a record that changed in between is selected
+        and checked again. Raise ValueError for an invalid request and
+        CacheCoordinationError when the cache cannot be used or the record
+        keeps changing.
+        """
+        set_runtime_context(
+            country_id=impact_request.country_id,
+            policy_id=impact_request.policy_id,
+            baseline_policy_id=impact_request.baseline_policy_id,
+            simulation_year=time_period,
+        )
+        setup_options = self._build_economic_impact_setup_options(
+            self._with_normalized_region(impact_request),
+            time_period=time_period,
+        )
+        for _attempt in range(FAILED_IMPACT_DELETE_ATTEMPTS):
+            # Selection resolves the worker app into the options it is given,
+            # so each attempt starts from the request's own options, as a GET
+            # does.
+            stored = self._get_reusable_impact(setup_options.model_copy(deep=True))
+            if stored is None:
+                return FailedImpactDeletion.not_found()
+            if stored.status != ImpactStatus.ERROR.value:
+                return FailedImpactDeletion.not_a_failure(stored.status)
+            delete_after_seconds = self._reform_impacts.get_reform_impact_seconds_until(
+                stored, seconds_after_end=FAILED_IMPACT_DELETE_LOCKOUT_SECONDS
+            )
+            if delete_after_seconds > 0:
+                return FailedImpactDeletion.locked(delete_after_seconds)
+            if self._reform_impacts.delete_failed_reform_impact(stored):
+                logger.log_struct(
+                    {
+                        "message": "Deleted a stored economic impact failure",
+                        "deleted_observability_id": stored.observability_id,
+                        **setup_options.model_dump(),
+                    },
+                    severity="INFO",
+                )
+                return FailedImpactDeletion.deleted()
+        msg = "the stored economic impact changed repeatedly while being deleted"
+        raise CacheCoordinationError(msg)
 
     def _build_economic_impact_setup_options(
         self,

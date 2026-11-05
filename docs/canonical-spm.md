@@ -378,7 +378,23 @@ earlier of its record's expiry and its scope index's), after which the next
 request submits a new job. It is null when no failure is stored, when the
 next request would answer from a newer job (a late poll of a job that a newer
 one replaced), or when the cache cannot be read. It is the longest wait: a deploy that changes the
-versions or worker app a request resolves to starts a new run sooner.
+versions or worker app a request resolves to starts a new run sooner. The
+502 also carries `delete_after_seconds`: the whole seconds, rounded up, until
+a `DELETE` on the same URL may remove that failure; 0 once it may, and null
+whenever `retry_after_seconds` is null.
+
+`DELETE /<country_id>/economy/<policy_id>/over/<baseline_policy_id>` takes
+the GET's query parameters, parsed by the same model, and acts on the stored
+record the GET would answer from. It covers every failed job: national,
+state, congressional district, place, UK and local-area breakdown jobs, and
+typed SPM failures. It removes the record and its index entries, so the next
+GET submits a new job, only when the record is a failure recorded at least
+10 seconds earlier, and answers 204 with no body. A more recent failure gives
+409 with `delete_after_seconds`. A record that is computing or complete gives
+409 with `delete_after_seconds` null and is never removed: the record is
+removed only if it still holds the failure that was checked, so a job a GET
+submits meanwhile is left alone. 404 means nothing is stored. Invalid query
+parameters give the GET's 400.
 
 Before cache access or submission,
 the API validates the selected worker application's `canonical-spm-v1` capability

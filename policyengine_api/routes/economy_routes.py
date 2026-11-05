@@ -22,6 +22,8 @@ from policyengine_api.services.economy_service import (
     BudgetWindowEconomicImpactResult,
     EconomicImpactResult,
     EconomyService,
+    FailedImpactDeletion,
+    FailedImpactDeletionOutcome,
 )
 from policyengine_api.services.policy_service import PolicyNotFoundError
 from policyengine_api.spm import (
@@ -78,13 +80,14 @@ def _simulation_unreachable_response(
     """Return 502 when a request to the simulation service got no response.
 
     Nothing is stored for the calculation, so the next request tries again, and
-    ``retry_after_seconds`` is null.
+    ``retry_after_seconds`` and ``delete_after_seconds`` are null.
     """
     return _make_error_response(
         error,
         HTTPStatus.BAD_GATEWAY,
         result=None,
         retry_after_seconds=None,
+        delete_after_seconds=None,
     )
 
 
@@ -96,6 +99,30 @@ def _policy_not_found_response(error: PolicyNotFoundError) -> Response:
         f"{noun} {policy_ids} not found.",
         HTTPStatus.NOT_FOUND,
         result=None,
+    )
+
+
+def _annual_impact_request(
+    country_id: str,
+    policy_id: int,
+    baseline_policy_id: int,
+    query: AnnualEconomyQuery,
+) -> EconomicImpactRequest:
+    """Return the annual impact a GET or DELETE on the economy URL names.
+
+    A policy ID of 0 means current law.
+    """
+    return EconomicImpactRequest(
+        country_id=country_id,
+        policy_id=int(policy_id or get_current_law_policy_id(country_id)),
+        baseline_policy_id=int(
+            baseline_policy_id or get_current_law_policy_id(country_id)
+        ),
+        region=query.region,
+        dataset="default",
+        options=query.calculation_options(),
+        api_version=query.version or COUNTRY_PACKAGE_VERSIONS.get(country_id),
+        target=query.target,
     )
 
 
@@ -124,27 +151,16 @@ def get_economic_impact(
     when no failure is stored, the next request would answer from a newer
     job, or the failure's lifetime cannot be read. It is the longest wait: a
     deploy that changes the versions or worker app a request resolves to lets
-    a request start a new run sooner.
+    a request start a new run sooner. Its ``delete_after_seconds`` is how
+    long until a DELETE on this URL may remove the stored failure, 0 once it
+    may, and null whenever ``retry_after_seconds`` is null.
     """
-    policy_id = int(policy_id or get_current_law_policy_id(country_id))
-    baseline_policy_id = int(
-        baseline_policy_id or get_current_law_policy_id(country_id)
-    )
-
     try:
         query = parse_multidict_query(AnnualEconomyQuery, request.args)
         economic_impact_result: EconomicImpactResult = (
             economy_service.get_economic_impact(
-                impact_request=EconomicImpactRequest(
-                    country_id=country_id,
-                    policy_id=policy_id,
-                    baseline_policy_id=baseline_policy_id,
-                    region=query.region,
-                    dataset="default",
-                    options=query.calculation_options(),
-                    api_version=query.version
-                    or COUNTRY_PACKAGE_VERSIONS.get(country_id),
-                    target=query.target,
+                impact_request=_annual_impact_request(
+                    country_id, policy_id, baseline_policy_id, query
                 ),
                 time_period=query.time_period,
             )
@@ -164,6 +180,7 @@ def get_economic_impact(
             HTTPStatus.BAD_GATEWAY,
             result=None,
             retry_after_seconds=result_dict.get("retry_after_seconds"),
+            delete_after_seconds=result_dict.get("delete_after_seconds"),
         )
 
     body = {
@@ -179,6 +196,50 @@ def get_economic_impact(
     ):
         body.update(economic_impact_result.run_progress.to_dict())
     return _json_response(body)
+
+
+@economy_bp.route(
+    "/<country_id>/economy/<int:policy_id>/over/<int:baseline_policy_id>",
+    methods=["DELETE"],
+)
+@validate_country
+def delete_failed_economic_impact(
+    country_id: str, policy_id: int, baseline_policy_id: int
+) -> Response:
+    """Remove the stored failure a GET on this URL answers from.
+
+    The query is the GET's, parsed by the same model, so it names the same
+    stored record. 204 with no body when the record was a failure recorded
+    at least 10 seconds ago and is now removed, so the next GET submits a new
+    job. 409 when it is a more recent failure, with ``delete_after_seconds``
+    until it may be removed, or when it is computing or complete, with
+    ``delete_after_seconds`` null. 404 when nothing is stored. Invalid query
+    parameters give 400, as for the GET, and a request to the simulation
+    service that gets no response gives 502.
+    """
+    try:
+        query = parse_multidict_query(AnnualEconomyQuery, request.args)
+        deletion: FailedImpactDeletion = economy_service.delete_failed_economic_impact(
+            impact_request=_annual_impact_request(
+                country_id, policy_id, baseline_policy_id, query
+            ),
+            time_period=query.time_period,
+        )
+    except ValueError as error:
+        return _bad_request_response(error)
+    except SimulationEntrypointConnectionError as error:
+        return _make_error_response(error, HTTPStatus.BAD_GATEWAY, result=None)
+
+    if deletion.outcome == FailedImpactDeletionOutcome.DELETED:
+        return Response(status=HTTPStatus.NO_CONTENT)
+    if deletion.outcome == FailedImpactDeletionOutcome.NOT_FOUND:
+        return _make_error_response(deletion.message, HTTPStatus.NOT_FOUND, result=None)
+    return _make_error_response(
+        deletion.message,
+        HTTPStatus.CONFLICT,
+        result=None,
+        delete_after_seconds=deletion.delete_after_seconds,
+    )
 
 
 @economy_bp.route(

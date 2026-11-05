@@ -131,6 +131,7 @@ def unreachable_body(path):
         "message": f"No response from the simulation service to GET {path}",
         "result": None,
         "retry_after_seconds": None,
+        "delete_after_seconds": None,
     }
 
 

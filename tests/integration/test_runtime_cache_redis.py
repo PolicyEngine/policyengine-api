@@ -260,3 +260,57 @@ def test_real_reform_indexes_are_cross_connection_bounded_and_expiring(
     ]
     time.sleep(1.1)
     assert reader.recent(10) == []
+
+
+def _real_computing_impact(execution_id: str, day: int) -> CachedReformImpact:
+    return CachedReformImpact(
+        reform_impact_id=reform_impact_id(execution_id),
+        baseline_policy_id=1,
+        reform_policy_id=2,
+        country_id="us",
+        region="state/ca",
+        dataset="default",
+        time_period="2026",
+        options_json={},
+        options_hash="hash",
+        api_version="v1",
+        reform_impact_json={},
+        status="computing",
+        message=None,
+        start_time=datetime(2026, 1, day),
+        end_time=None,
+        execution_id=execution_id,
+    )
+
+
+def test_real_failure_delete_removes_only_the_unchanged_failure(redis_pair) -> None:
+    first, second, namespace = redis_pair
+    writer = ReformImpactCache(first, namespace)
+    deleter = ReformImpactCache(second, namespace)
+    identity = ReformImpactIdentity(
+        scope=ReformImpactScope(
+            country_id="us",
+            reform_policy_id=2,
+            baseline_policy_id=1,
+            region="state/ca",
+            dataset="default",
+            time_period="2026",
+        ),
+        api_version="v1",
+        options_hash="hash",
+    )
+    assert writer.set(_real_computing_impact("failed-job", day=1))
+    failure = writer.update("failed-job", status="error", message="out of memory")
+    newer_job = _real_computing_impact("newer-job", day=2)
+    assert writer.set(newer_job)
+    # A later poll rewrites the failure after the deleter read it.
+    rewritten = writer.update("failed-job", message="out of memory again")
+
+    refused = deleter.delete_failure(failure)
+    removed = deleter.delete_failure(rewritten)
+
+    assert refused is False
+    assert removed is True
+    assert writer.get_by_execution_id("failed-job") is None
+    assert writer.matching(identity) == [newer_job]
+    assert writer.recent(10) == [newer_job]

@@ -83,6 +83,7 @@ def test_economy_route_returns_bad_gateway_for_failed_simulation(
         "message": error_message,
         "result": None,
         "retry_after_seconds": None,
+        "delete_after_seconds": None,
     }
 
 

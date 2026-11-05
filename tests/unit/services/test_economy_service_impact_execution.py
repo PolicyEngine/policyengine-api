@@ -265,6 +265,9 @@ class TestEconomyService:
             mock_reform_impacts_service.get_reform_impact_seconds_left.return_value = (
                 120
             )
+            mock_reform_impacts_service.get_reform_impact_seconds_until.return_value = (
+                10
+            )
 
             # When
             result = economy_service._handle_execution_state(
@@ -283,7 +286,7 @@ class TestEconomyService:
                 {"message": expected_message}, severity="ERROR"
             )
             assert result == EconomicImpactResult.error(
-                expected_message, retry_after_seconds=120
+                expected_message, retry_after_seconds=120, delete_after_seconds=10
             )
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once_with(
                 execution_id=MOCK_EXECUTION_ID,
@@ -292,6 +295,9 @@ class TestEconomyService:
             )
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
                 stored_failure
+            )
+            mock_reform_impacts_service.get_reform_impact_seconds_until.assert_called_once_with(
+                stored_failure, seconds_after_end=10
             )
             next_lookup.assert_called_once_with(state_setup_options)
 
@@ -324,6 +330,9 @@ class TestEconomyService:
             mock_reform_impacts_service.get_reform_impact_seconds_left.return_value = (
                 2_591_000
             )
+            mock_reform_impacts_service.get_reform_impact_seconds_until.return_value = (
+                10
+            )
 
             # When
             result = economy_service._handle_execution_state(
@@ -333,7 +342,9 @@ class TestEconomyService:
             # Then
             expected_message = "Simulation entrypoint execution failed: out of memory"
             assert result == EconomicImpactResult.error(
-                expected_message, retry_after_seconds=2_591_000
+                expected_message,
+                retry_after_seconds=2_591_000,
+                delete_after_seconds=10,
             )
             # Without keep_seconds the error has the cache's 30-day lifetime.
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once_with(
@@ -342,6 +353,9 @@ class TestEconomyService:
             )
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
                 stored_failure
+            )
+            mock_reform_impacts_service.get_reform_impact_seconds_until.assert_called_once_with(
+                stored_failure, seconds_after_end=10
             )
             next_lookup.assert_called_once_with(region_setup_options)
 
@@ -387,7 +401,9 @@ class TestEconomyService:
             # Then
             assert result.status == ImpactStatus.ERROR
             assert result.retry_after_seconds is None
+            assert result.delete_after_seconds is None
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_not_called()
+            mock_reform_impacts_service.get_reform_impact_seconds_until.assert_not_called()
 
         @pytest.mark.usefixtures("mock_logger")
         @pytest.mark.parametrize("region", ["state/ca", MOCK_REGION])
@@ -414,7 +430,9 @@ class TestEconomyService:
             # Then
             assert result.status == ImpactStatus.ERROR
             assert result.retry_after_seconds is None
+            assert result.delete_after_seconds is None
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_not_called()
+            mock_reform_impacts_service.get_reform_impact_seconds_until.assert_not_called()
 
         @pytest.mark.usefixtures("mock_logger")
         def test__given_modal_running_state__then_returns_computing_result(
@@ -511,6 +529,8 @@ class TestEconomyService:
             )
             seconds_left = mock_reform_impacts_service.get_reform_impact_seconds_left
             seconds_left.return_value = 75
+            seconds_until = mock_reform_impacts_service.get_reform_impact_seconds_until
+            seconds_until.return_value = 4
 
             # When
             result = economy_service._handle_failed_impact(stored_failure)
@@ -519,6 +539,7 @@ class TestEconomyService:
             assert result == EconomicImpactResult.error(
                 "Simulation entrypoint execution failed: out of memory",
                 retry_after_seconds=75,
+                delete_after_seconds=4,
             )
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
                 stored_failure

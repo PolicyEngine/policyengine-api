@@ -2,6 +2,8 @@
 
 import contextlib
 import datetime
+import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -38,12 +40,23 @@ class ReformImpactExecution:
 class ReformImpactsService:
     """Preserve historical lookup contracts over an expiring cache repository."""
 
-    def __init__(self, cache: ReformImpactCache | None = None) -> None:
-        """Use this reform-impact cache, or one on the runtime cache if omitted."""
+    def __init__(
+        self,
+        cache: ReformImpactCache | None = None,
+        *,
+        now: Callable[[], datetime.datetime] | None = None,
+    ) -> None:
+        """Use this reform-impact cache, or one on the runtime cache if omitted.
+
+        ``now`` returns the current time as a naive UTC datetime; it stamps a
+        finished impact's ``end_time`` and counts time since. The system clock
+        is used if omitted.
+        """
         if cache is None:
             context = get_runtime_cache_context()
             cache = ReformImpactCache(context.client, context.namespace)
         self._cache = cache
+        self._clock = now or _utc_now
 
     def get_all_reform_impacts(
         self,
@@ -182,6 +195,32 @@ class ReformImpactsService:
             end_time=self._now(),
         )
 
+    def delete_failed_reform_impact(self, failure: CachedReformImpact) -> bool:
+        """Remove this stored failure and its index entries if it is unchanged.
+
+        Return whether it was removed: False when its record has changed
+        since it was read, or is gone. Every other record is left alone. Raise
+        ValueError for an impact that is not a failure and
+        CacheCoordinationError when the cache cannot be read or written.
+        """
+        return self._cache.delete_failure(failure)
+
+    def get_reform_impact_seconds_until(
+        self, impact: CachedReformImpact, *, seconds_after_end: int
+    ) -> int:
+        """Return the whole seconds until ``seconds_after_end`` follow the impact's end.
+
+        Counted from the impact's ``end_time`` on this service's clock and
+        rounded up, so a caller that waits this long is never early. 0 once
+        they have passed, or when the impact has no end time; never more than
+        ``seconds_after_end``, even when the end time is later than this
+        clock's time.
+        """
+        if impact.end_time is None:
+            return 0
+        elapsed = (self._now() - impact.end_time).total_seconds()
+        return min(seconds_after_end, max(0, math.ceil(seconds_after_end - elapsed)))
+
     def get_reform_impact_seconds_left(self, impact: CachedReformImpact) -> int | None:
         """Return the whole seconds until a lookup stops finding this cached impact.
 
@@ -209,6 +248,10 @@ class ReformImpactsService:
             end_time=self._now(),
         )
 
-    @staticmethod
-    def _now() -> datetime.datetime:
-        return datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+    def _now(self) -> datetime.datetime:
+        return self._clock()
+
+
+def _utc_now() -> datetime.datetime:
+    """Return the current time as a naive UTC datetime, as stored impacts hold it."""
+    return datetime.datetime.now(datetime.UTC).replace(tzinfo=None)

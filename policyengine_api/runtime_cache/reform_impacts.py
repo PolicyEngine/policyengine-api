@@ -28,6 +28,19 @@ REFORM_IMPACT_TTL_SECONDS = 2_592_000
 REFORM_IMPACT_INDEX_LIMIT = 1_000
 REFORM_IMPACT_START_CLAIM_TTL_SECONDS = 300
 REFORM_IMPACT_START_CLAIM_FAMILY = "reform-impact-start-claim"
+# Remove a record (KEYS[1]) and its entries in the scope and recent indexes
+# (KEYS[2], KEYS[3]) only if the record still holds exactly ARGV[1], the value
+# the caller read and checked. One script, so nothing can rewrite the record
+# between the comparison and the removal.
+DELETE_UNCHANGED_RECORD = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+  redis.call('del', KEYS[1])
+  redis.call('zrem', KEYS[2], KEYS[1])
+  redis.call('zrem', KEYS[3], KEYS[1])
+  return 1
+end
+return 0
+""".strip()
 
 
 @dataclass(frozen=True)
@@ -460,22 +473,31 @@ class ReformImpactCache:
             return 0
         return math.ceil(min(record_milliseconds, index_milliseconds) / 1000)
 
+    def _read_index(
+        self, index: str, limit: int
+    ) -> list[tuple[str, str | bytes | None]]:
+        """Return each record key in the index, newest first, with its stored value.
+
+        Raise whatever the cache client raises when it cannot be read.
+        """
+        keys = self.client.zrevrange(index, 0, max(limit - 1, 0))  # type: ignore[attr-defined]
+        return [(key, self.client.get(key)) for key in keys]
+
+    def _decode_impact(self, value: str | bytes | None) -> CachedReformImpact | None:
+        return _impact_from_wire(
+            decode_envelope(
+                value,
+                family=self.family,
+                schema_version=REFORM_IMPACT_SCHEMA_VERSION,
+            )
+        )
+
     def _from_index(self, index: str, limit: int) -> list[CachedReformImpact]:
         try:
-            keys = self.client.zrevrange(index, 0, max(limit - 1, 0))  # type: ignore[attr-defined]
-            values = [self.client.get(key) for key in keys]
+            entries = self._read_index(index, limit)
         except Exception:  # noqa: BLE001  # a cache outage reads as empty, never a failed request
             return []
-        impacts = [
-            _impact_from_wire(
-                decode_envelope(
-                    value,
-                    family=self.family,
-                    schema_version=REFORM_IMPACT_SCHEMA_VERSION,
-                )
-            )
-            for value in values
-        ]
+        impacts = [self._decode_impact(value) for _key, value in entries]
         return [impact for impact in impacts if impact is not None]
 
     def recent(self, limit: int) -> list[CachedReformImpact]:
@@ -564,6 +586,61 @@ class ReformImpactCache:
             record_ttl_seconds=record_ttl_seconds,
         )
         return updated if stored else None
+
+    def delete_failure(self, failure: CachedReformImpact) -> bool:
+        """Remove a stored failure and its index entries, if its record still holds it.
+
+        The record is found through the failure's scope index, so a typed
+        failure whose worker handle was cleared is found as well. One script
+        removes it only if the record still holds exactly the value read here,
+        so a record rewritten since then, and every other job's record, is
+        left alone. Return whether it was removed: False when its record has
+        changed or is gone. Raise ValueError for an impact that is not a
+        failure, and CacheCoordinationError when the cache cannot be read or
+        written.
+        """
+        if failure.status != "error":
+            msg = "only a failed reform impact can be deleted"
+            raise ValueError(msg)
+        started_at = time.perf_counter()
+        scope_index = self._scope_index(failure)
+        try:
+            entries = self._read_index(scope_index, REFORM_IMPACT_INDEX_LIMIT)
+            stored = next(
+                (
+                    (record_key, value)
+                    for record_key, value in entries
+                    if value is not None and self._decode_impact(value) == failure
+                ),
+                None,
+            )
+            deleted = stored is not None and bool(
+                self.client.eval(
+                    DELETE_UNCHANGED_RECORD,
+                    3,
+                    stored[0],
+                    scope_index,
+                    self._recent_index(),
+                    stored[1],
+                )
+            )
+        except Exception as error:
+            record_cache_event(
+                family=self.family,
+                event="coordination-failed",
+                operation="failure-delete",
+                started_at=started_at,
+                severity="WARNING",
+            )
+            msg = "the stored reform-impact failure could not be deleted"
+            raise CacheCoordinationError(msg) from error
+        record_cache_event(
+            family=self.family,
+            event="deleted" if deleted else "delete-skipped",
+            operation="failure-delete",
+            started_at=started_at,
+        )
+        return deleted
 
     def delete_matching_computing(
         self,
