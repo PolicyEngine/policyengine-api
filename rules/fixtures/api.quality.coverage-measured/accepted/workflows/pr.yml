@@ -12,6 +12,7 @@ jobs:
           name: test-coverage-shard-${{ matrix.shard_index }}
           path: coverage.xml
   upload-test-coverage:
+    timeout-minutes: 10
     needs: test
     steps:
       - uses: actions/download-artifact@v4
@@ -24,6 +25,7 @@ jobs:
   integration:
     uses: ./.github/workflows/integration.yml
   upload-integration-coverage:
+    timeout-minutes: 10
     needs: integration
     steps:
       - uses: actions/download-artifact@v4

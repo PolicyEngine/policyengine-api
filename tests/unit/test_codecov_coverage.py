@@ -325,17 +325,23 @@ def test_rule_proof_coverage_measured():
         "carries forward",
         "integration.yml:integration uploads coverage in a reusable workflow; keep "
         "the report as an artifact for a job in the calling workflow to upload",
+        "integration.yml:integration has no timeout-minutes of at most 15, so a "
+        "stalled upload can hold up the runs after it",
         "no job in pr.yml uploads all of test's coverage.xml flagged unit",
         "pr.yml:upload-test-coverage uploads coverage without a flag codecov.yml "
         "carries forward",
         "pr.yml:upload-test-coverage doesn't pass the CODECOV_TOKEN secret as the "
         "token",
+        "pr.yml:upload-test-coverage has no timeout-minutes of at most 15, so a "
+        "stalled upload can hold up the runs after it",
         "pr.yml:integration measures coverage but uploads none",
         "push.yml:release-tests runs the test suite but keeps no coverage.xml",
         "push.yml:merge-upload uploads coverage without a flag codecov.yml carries "
         "forward",
         "push.yml:merge-upload runs on master but a failed upload doesn't fail the run",
         "push.yml:merge-upload uploads coverage, and deploy waits for it",
+        "push.yml:merge-upload has no timeout-minutes of at most 15, so a stalled "
+        "upload can hold up the runs after it",
     ]
     assert accepted == []
 
@@ -356,6 +362,7 @@ SHARDED_SUITE = {
 def _upload_job(download: dict, *, needs: str = "test", **inputs: object) -> dict:
     return {
         "needs": needs,
+        "timeout-minutes": 10,
         "steps": [
             {"uses": "actions/download-artifact@v4", "with": download},
             {
@@ -470,6 +477,109 @@ def test_a_master_upload_that_can_be_skipped_or_ignored_fails_the_check():
         assert coverage_problems(workflows, GOOD_CONFIG) == [expected[case]], case
 
 
+def test_matrices_and_downloads_are_read_as_github_reads_them():
+    def suite(matrix: object) -> dict:
+        return {**SHARDED_SUITE, "strategy": {"matrix": matrix}}
+
+    def problems(test_job: dict, download: dict) -> list[str]:
+        workflows = {
+            "pr.yml": {
+                "on": "pull_request",
+                "jobs": {"test": test_job, "upload": _upload_job(download)},
+            }
+        }
+        return coverage_problems(workflows, GOOD_CONFIG)
+
+    missing = ["no job in pr.yml uploads all of test's coverage.xml flagged unit"]
+    included = suite({"include": [{"shard_index": 1}, {"shard_index": 2}]})
+    computed = suite({"shard_index": "${{ fromJSON(needs.plan.outputs.shards) }}"})
+    assert problems(included, {"pattern": "cov-1"}) == missing
+    assert problems(included, {"pattern": "cov-*"}) == []
+    assert problems(computed, {"pattern": "cov-1"}) == missing
+    assert problems(computed, {"pattern": "cov-*"}) == []
+    # download-artifact ignores pattern when name is set.
+    assert problems(SHARDED_SUITE, {"name": "cov-1", "pattern": "cov-*"}) == missing
+
+
+def test_an_upload_must_send_what_its_job_downloaded():
+    def problems(download: dict, **inputs: object) -> list[str]:
+        workflows = {
+            "pr.yml": {
+                "on": "pull_request",
+                "jobs": {
+                    "test": SHARDED_SUITE,
+                    "upload": _upload_job(download, **inputs),
+                },
+            }
+        }
+        return coverage_problems(workflows, GOOD_CONFIG)
+
+    assert problems({"pattern": "cov-*", "path": "reports"}, directory="reports") == []
+    assert problems({"pattern": "cov-*", "path": "reports"}, directory="elsewhere") == [
+        "no job in pr.yml uploads all of test's coverage.xml flagged unit"
+    ]
+
+
+def test_an_integration_report_is_uploaded_flagged_integration():
+    report = {
+        "steps": [
+            {"run": "coverage xml -o coverage-v2.xml"},
+            {
+                "uses": "actions/upload-artifact@v4",
+                "with": {"name": "integration-coverage", "path": "coverage-v2.xml"},
+            },
+        ]
+    }
+    workflows = {
+        "pr.yml": {
+            "on": "pull_request",
+            "jobs": {
+                "integration": report,
+                "upload": _upload_job(
+                    {"name": "integration-coverage"}, needs="integration"
+                ),
+            },
+        }
+    }
+
+    assert coverage_problems(workflows, GOOD_CONFIG) == [
+        "no job in pr.yml uploads all of integration's coverage report flagged "
+        "integration"
+    ]
+
+
+def test_quoted_true_and_workspace_paths_are_accepted():
+    workflows = _master_upload()
+    workflows["push.yml"]["jobs"]["upload"]["steps"][1]["with"]["fail_ci_if_error"] = (
+        "true"
+    )
+    workspace_suite = {
+        "steps": [
+            {"run": "make test"},
+            {
+                "uses": "actions/upload-artifact@v4",
+                "with": {"name": "cov", "path": "${{ github.workspace }}/coverage.xml"},
+            },
+        ]
+    }
+    workflows["pr.yml"] = {
+        "on": "pull_request",
+        "jobs": {"test": workspace_suite, "upload": _upload_job({"name": "cov"})},
+    }
+
+    assert coverage_problems(workflows, GOOD_CONFIG) == []
+
+
+def test_an_upload_job_without_a_short_timeout_fails_the_check():
+    workflows = _master_upload()
+    del workflows["push.yml"]["jobs"]["upload"]["timeout-minutes"]
+
+    assert coverage_problems(workflows, GOOD_CONFIG) == [
+        "push.yml:upload has no timeout-minutes of at most 15, so a stalled upload "
+        "can hold up the runs after it"
+    ]
+
+
 def test_codecov_config_details():
     def problems_with(**changes: object) -> list[str]:
         config = yaml.safe_load((FIXTURES / "accepted" / "codecov.yml").read_text())
@@ -535,10 +645,33 @@ def test_master_uploads_the_release_tests_coverage_in_one_upload():
     jobs = _load_workflows(WORKFLOWS)["push.yml"]["jobs"]
     release_tests = jobs["release-tests"]
     upload = jobs["upload-release-test-coverage"]
-    (codecov_step,) = _steps_using(upload, CODECOV_ACTION)
+    release_commit_step, merge_commit_step = _steps_using(upload, CODECOV_ACTION)
     (download_step,) = _steps_using(upload, DOWNLOAD_ARTIFACT)
 
     assert _needs(upload) == ["release-tests"]
     assert not _steps_using(release_tests, CODECOV_ACTION)
-    assert codecov_step["with"]["directory"] == download_step["with"]["path"]
-    assert codecov_step["with"]["slug"] == "PolicyEngine/policyengine-api"
+    for step in (release_commit_step, merge_commit_step):
+        assert step["with"]["directory"] == download_step["with"]["path"]
+        assert step["with"]["slug"] == "PolicyEngine/policyengine-api"
+    assert "override_commit" not in release_commit_step["with"]
+
+
+def test_master_uploads_the_release_tests_coverage_for_the_merge_commit_too():
+    # The release commit changes only the version, uv.lock and the changelog,
+    # so its tests measure the merge commit's code too. Pull requests that
+    # branch from the merge commit, before its release commit lands, then
+    # compare with unit coverage measured on that code.
+    upload = _load_workflows(WORKFLOWS)["push.yml"]["jobs"][
+        "upload-release-test-coverage"
+    ]
+    (checkout,) = _steps_using(upload, "actions/checkout@")
+    parent_step = next(
+        step for step in upload["steps"] if step.get("id") == "merge_commit"
+    )
+    merge_commit_step = _steps_using(upload, CODECOV_ACTION)[1]
+
+    assert checkout["with"]["fetch-depth"] == 2
+    assert parent_step["run"] == 'echo "sha=$(git rev-parse HEAD^)" >> "$GITHUB_OUTPUT"'
+    assert merge_commit_step["with"]["override_commit"] == (
+        "${{ steps.merge_commit.outputs.sha }}"
+    )
