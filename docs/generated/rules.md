@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 69 | 5 | 1 | 8 | 83 |
+| mechanical | 69 | 7 | 1 | 8 | 85 |
 | metric | 1 | 0 | 0 | 0 | 1 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 75 of 85 rules.
+**Blocking:** 77 of 87 rules.
 
 ## Gaps
 
@@ -23,7 +23,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 - `api.observability.id-is-diagnostic-only`: observability_id is used only to query diagnostic records, never for idempotency, cache ownership, authorization, database identity, routing or calculation behavior.
 - `api.observability.registered-stages-only`: Span names come from the stage plans in policyengine_api.observability.stages; route and service code never adds span-name string literals.
 - `api.process.agents-never-bypass`: Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human.
-- `api.process.agents-suppress-as-last-resort`: Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason.
+- `api.process.agents-suppress-as-last-resort`: Agents add an inline suppression (noqa or type: ignore) only when neither a code change nor a checker setting removes the finding, and a PR lists every inline suppression it adds, with the reason. That each suppression names its code and gives its reason is the mechanical rule api.quality.suppressions-explained.
 - `api.process.makefile-phony`: Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed.
 - `api.process.rule-machinery-code-owned`: Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author.
 - `api.routes.shared-query-parameters`: Routes that accept query parameters define them through the shared typed query models, never with a second manual parser.
@@ -62,6 +62,8 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 ### Ratcheted (existing violations still tolerated)
 
 - `api.dependencies.declared-and-used`: 16 remaining in `rules/baselines/deptry.txt`
+- `api.quality.suppressions-explained`: 29 remaining in `rules/baselines/suppressions.txt`
+- `api.quality.tests-assert`: 21 remaining in `rules/baselines/tests-without-checks.txt`
 - `api.v2.connectors-no-cross-calls`: 7 remaining in `rules/baselines/import-linter-api-v2-connectors-independent.txt`
 - `api.v2.pure-modules-no-database`: 1 remaining in `rules/baselines/import-linter-api-v2-pure-modules-no-database.txt`
 - `api.v2.routes-no-sessions-or-sql`: 4 remaining in `rules/baselines/v2-layers-routes.txt`
@@ -376,6 +378,8 @@ flowchart LR
 | `api.quality.ruff-format` | All Python files are formatted with ruff format. | mechanical | enforced | yes | ruff format | `pr.yml:lint` | — |
 | `api.quality.ruff-lint` | All Python code passes ruff check with every ruff rule selected (ALL), with no ratchet, except the ignores in pyproject.toml: COM812 and ISC001, which conflict with ruff format, and D203 and D213, which conflict with the kept D211 and D212. | mechanical | enforced | yes | ruff check (ALL) | `pr.yml:lint` | — |
 | `api.quality.runtime-evaluated-models-resolve` | Every package model is one ruff treats as runtime-evaluated (a base resolves, through the import in its own module, to a name in runtime-evaluated-base-classes, or is a same-module class that does), and every Pydantic model and SQLAlchemy mapper resolves its annotations once the package is imported. | mechanical | enforced | yes | pytest `tests/unit/test_runtime_evaluated_annotations.py` | `pr.yml:test` | **unproven** |
+| `api.quality.suppressions-explained` | Every noqa, ruff: disable and type: ignore comment names what it suppresses and says why: a noqa comment, line-level or file-level (ruff: noqa, flake8: noqa), lists its ruff codes, a ruff: disable range suppression lists its ruff codes in brackets, a type: ignore comment lists its mypy error codes in brackets, and the comment also gives a reason in another # part, as # noqa: CODE  # reason or # type: ignore[code]  # reason; apart from the suppressions rules/baselines/suppressions.txt lists. | mechanical | ratcheted | yes | quality guard `suppressions` | `pr.yml:quality-guards`, `push.yml:quality-guards` | yes |
+| `api.quality.tests-assert` | Every test function pytest or unittest collects checks something: its body contains an assert, a raise AssertionError, pytest.raises, pytest.warns, pytest.deprecated_call or pytest.fail, a call to an assert function or method (unittest's self.assertEqual, a mock's assert_called_once_with) or self.fail, or a call to a test helper that does (a function of the same file, a method of the test's class, or a function imported by name from test code); apart from the tests rules/baselines/tests-without-checks.txt lists. | mechanical | ratcheted | yes | quality guard `asserting-tests` | `pr.yml:quality-guards`, `push.yml:quality-guards` | yes |
 | `api.quality.tests-pass` | The unit, contract and to-refactor test suites pass, each test in exactly one of the shards they run in. | mechanical | enforced | yes | CI job `test`, `check-test-shards` | `pr.yml:test`, `pr.yml:check-test-shards` | — |
 | `api.quality.tests-ruff-exemptions` | Test files may use pytest's bare assert, need no docstrings, annotations or named constants for magic numbers, and may reach into private members, live outside packages and import inside a test (S101, D1, ANN, PLR2004, SLF001, INP001, PLC0415). Their fakes may name methods after the interface they replace, such as a gRPC stub's Export (N802). They may also use fake credentials, naive datetimes, subprocess calls to repository scripts, SQL built from strings and prints (S105, S106, DTZ001, DTZ011, S603, S607, S608, T201), may import the lazily loaded packages at module level (TID253), and may leave a stand-in's arguments unused (ARG001, ARG002, ARG005). Every other ruff rule applies to tests. | mechanical | enforced | yes | ruff per-file ignore of ANN, ARG001, ARG002, ARG005, D1, DTZ001, DTZ011, INP001, N802, PLC0415, PLR2004, S101, S105, S106, S603, S607, S608, SLF001, T201, TID253 for `**/tests/**` | `pr.yml:lint` | — |
 | `api.quality.unittest-ruff-exemptions` | The shared rules tool's tests use unittest, because the tool needs only the standard library, so ruff's pytest-style rules (PT) don't apply to them. | mechanical | enforced | yes | ruff per-file ignore of PT for `scripts/rules/tests/**` | `pr.yml:lint` | — |
@@ -409,6 +413,11 @@ flowchart LR
   e_ruff_check__ALL_["ruff check (ALL)"]
   r_api_quality_runtime_evaluated_models_resolve("api.quality.runtime-evaluated-models-resolve (enforced)")
   e_pytest_tests_unit_test_runtime_evaluated_annotations_py["pytest tests/unit/test_runtime_evaluated_annotations.py"]
+  r_api_quality_suppressions_explained("api.quality.suppressions-explained (ratcheted)")
+  e_quality_guard_suppressions["quality guard suppressions"]
+  j_CI_push_yml_quality_guards["CI push.yml:quality-guards"]
+  r_api_quality_tests_assert("api.quality.tests-assert (ratcheted)")
+  e_quality_guard_asserting_tests["quality guard asserting-tests"]
   r_api_quality_tests_pass("api.quality.tests-pass (enforced)")
   e_CI_job_test__check_test_shards["CI job test, check-test-shards"]
   j_CI_pr_yml_check_test_shards["CI pr.yml:check-test-shards"]
@@ -437,6 +446,12 @@ flowchart LR
   e_ruff_check__ALL_ --> j_CI_pr_yml_lint
   r_api_quality_runtime_evaluated_models_resolve --> e_pytest_tests_unit_test_runtime_evaluated_annotations_py
   e_pytest_tests_unit_test_runtime_evaluated_annotations_py --> j_CI_pr_yml_test
+  r_api_quality_suppressions_explained --> e_quality_guard_suppressions
+  e_quality_guard_suppressions --> j_CI_pr_yml_quality_guards
+  e_quality_guard_suppressions --> j_CI_push_yml_quality_guards
+  r_api_quality_tests_assert --> e_quality_guard_asserting_tests
+  e_quality_guard_asserting_tests --> j_CI_pr_yml_quality_guards
+  e_quality_guard_asserting_tests --> j_CI_push_yml_quality_guards
   r_api_quality_tests_pass --> e_CI_job_test__check_test_shards
   e_CI_job_test__check_test_shards --> j_CI_pr_yml_test
   e_CI_job_test__check_test_shards --> j_CI_pr_yml_check_test_shards
@@ -520,7 +535,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `api.agents.adapters-point-to-agents-md` | CLAUDE.md and .github/copilot-instructions.md only point to AGENTS.md; skills and rules are listed in AGENTS.md alone. | mechanical | enforced | yes | quality guard `rules-registry` | `pr.yml:quality-guards` | yes |
 | `api.process.agents-never-bypass` | Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human. | mechanical | doc-only | no | nothing | — | — |
-| `api.process.agents-suppress-as-last-resort` | Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason. | judgment | doc-only | no | nothing | — | — |
+| `api.process.agents-suppress-as-last-resort` | Agents add an inline suppression (noqa or type: ignore) only when neither a code change nor a checker setting removes the finding, and a PR lists every inline suppression it adds, with the reason. That each suppression names its code and gives its reason is the mechanical rule api.quality.suppressions-explained. | judgment | doc-only | no | nothing | — | — |
 | `api.process.changelog-fragment` | Every PR adds, relative to its base commit, at least one changelog fragment of its own, a non-empty file directly in changelog.d/ named `<name>.<type>.md` with a type from [tool.towncrier] in pyproject.toml, and leaves nothing else there but .gitkeep; the PR check and the release's version bump read fragments through one definition, .github/changelog_fragments.py. | mechanical | enforced | yes | CI job `check-changelog`, `versioning` | `pr.yml:check-changelog`, `push.yml:versioning` | yes |
 | `api.process.cloud-run-image-builds` | The Cloud Run container image builds. | mechanical | enforced | yes | CI job `test_cloud_run_container_builds` | `pr.yml:test_cloud_run_container_builds` | — |
 | `api.process.docker-image-builds` | The API Docker image builds. | mechanical | enforced | yes | CI job `test_container_builds` | `pr.yml:test_container_builds` | — |

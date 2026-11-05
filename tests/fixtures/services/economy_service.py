@@ -174,6 +174,7 @@ def mock_reform_impacts_service():
     mock_service.set_complete_reform_impact.return_value = None
     mock_service.set_error_reform_impact.return_value = None
     mock_service.get_reform_impact_seconds_left.return_value = None
+    mock_service.get_reform_impact_seconds_until.return_value = 0
 
     with patch(
         "policyengine_api.services.economy_service.ReformImpactsService",

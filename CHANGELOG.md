@@ -1,3 +1,21 @@
+## [5.30.0] - 2026-11-05
+
+### Added
+
+- A `DELETE` on an annual economy URL, with the GET's query, removes the stored failure the GET answers from once it is at least 10 seconds old, so the next GET starts a new run, and a failed GET's 502 says when in `delete_after_seconds`.
+
+
+## [5.29.0] - 2026-11-05
+
+### Added
+
+- Check that every API v2 route and service file is named after its layer, and that v2 route modules open no session and build no SQL, services construct no SQL, connectors never open, commit, roll back or close a session, session modules do no data access, and validators, transformations and types make no session calls, in a new v2-layers quality guard. Eight v2 modules are renamed to fit (for example `fastapi_routes/v2/errors.py` is now `errors_support.py`).
+
+### Changed
+
+- Catalog publication reads regions from the Public API's checked-in reference files, one per country, instead of PolicyEngine.py's region registry. Each region takes its dataset from the certified data release and a row filter from a scoping rule: state_fips or congressional_district_geoid for US states and districts, the UK region column for UK nations, and constituency_code_oa or la_code_oa on the local-area dataset the release routes UK constituencies and local authorities to. The UK now publishes 1,016 regions, with 650 constituencies and 361 local authorities (including Ards and North Down) by ONS code and Northern Ireland as country/northern_ireland; the national regions are "United States" and "United Kingdom". US places are listed in the reference file but left out of the catalog until they can run, and the publication evidence counts them. Before it publishes a catalog version that is not stored yet, the publication command reads the HDF5 metadata of the certified datasets the filters use, from Hugging Face at their pinned revisions, and stops if a filter's column is missing; the seed workflow's publication step receives the UK data read token as HUGGING_FACE_TOKEN for this. A catalog version that is already stored keeps the regions it was published with, so region file changes take effect in the next catalog version; republishing it logs the difference in region rows instead of failing, its evidence counts the stored regions and lists the kept version under kept_regions, and every other table must still match.
+
+
 ## [5.28.0] - 2026-11-05
 
 ### Added

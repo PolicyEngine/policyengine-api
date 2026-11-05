@@ -22,6 +22,79 @@ versions the Cloud Run image installs (`gcp/cloud_run/Dockerfile`):
   and `api.dependencies.test-from-lock`
   ([dependencies.md](dependencies.md)) check every install and test command.
 
+## Every Test Checks Something
+
+`api.quality.tests-assert`: every test function checks its outcome. A test
+that checks nothing passes whatever the code returns, as long as nothing
+raises. The `asserting-tests` quality guard
+(`scripts/rules/asserting_tests.py`) reads every tracked `test_*.py` and
+`*_test.py` file, apart from the rules' proof fixtures under `rules/fixtures/`
+and `scripts/rules/tests/fixtures/`. It finds the tests pytest and unittest
+collect, and fails on a test whose body contains none of:
+
+- an `assert` statement, or `raise AssertionError`;
+- `pytest.raises`, `pytest.warns`, `pytest.deprecated_call` or `pytest.fail`,
+  also through `import pytest as pt` or `from pytest import raises`;
+- a call to a function or method whose name starts with `assert` or
+  `_assert`, such as `self.assertEqual`, a mock's `assert_called_once_with`
+  or `assert_frame_equal` (also imported under another name), or unittest's
+  `self.fail`;
+- a call to a test helper that does one of these, followed through further
+  helpers: a function of the same file called by name, a method of the
+  test's own class called through `self`, `cls` or `super()` (looked up in
+  Python's method resolution order), or a function
+  imported by name (`from tests.unit.support import check_response`, at the
+  top of the file or inside the test, also through a re-export or a star
+  import) from test code: a module under a `tests` directory, a test file or
+  a `conftest.py`.
+
+Only the test's body counts, not its decorators or default arguments. A
+function, class or lambda assigned to a name in the body counts only when the
+body refers to it by name: a stand-in that raises `AssertionError` when the
+code calls it is a check once the test passes it to the code. `self` in a
+stand-in class's methods is the stand-in, not the test's class. Production
+code isn't a helper, even if it raises on bad input. A name resolves from
+the call's own scope outward, as in Python: a parameter (such as a fixture
+called like a function), a local variable, a lambda or comprehension
+variable, or an import inside the test hides a module-level helper of the
+same name, but a name bound only in a nested function doesn't.
+
+The guard collects tests as pytest does, for what it can read without
+importing anything:
+
+- module-level `test*` functions, also inside `if`, `try` and `with` blocks,
+  except pytest fixtures;
+- `test*` methods of `Test*` classes that have no `__init__` or `__new__` and
+  aren't dataclasses, including methods and nested `Test*` classes inherited
+  from bases in test code;
+- methods of `unittest.TestCase` subclasses;
+- test functions and classes imported into a test module, by name or with a
+  star import, under the name the import binds.
+
+Methods are looked up as Python looks them up, including those in `if`
+blocks of a class body; a later definition replaces an earlier one, and an
+attribute such as `test_inherited = None` switches an inherited test off.
+The nearest `__test__` setting on a module or class decides whether it is
+collected, as for pytest: `False` switches a class off, and `True` collects
+a class whatever its name. `scripts/rules/tests/` runs under
+`unittest discover`, which collects only `TestCase` subclasses and ignores
+`__test__`. A base class outside test code isn't read, so an `__init__`
+there isn't seen.
+
+A test that only shows that a call doesn't raise checks nothing: assert what
+the call returns or what it changes instead. A helper reached any other way
+(`support.check(...)` after `import tests.unit.support as support`, or a
+method of another object) isn't followed, so name it `assert_...` or import
+it by name.
+
+The rule is ratcheted. `rules/baselines/tests-without-checks.txt` lists the
+21 tests that checked nothing when the rule was added, as `<path>::<test>`
+(`<test>` is `Class::method` for a method). A test not listed there fails,
+and a listed one that is gone or now checks something fails as stale: remove
+its line and lower the rule's baseline `count`. Renaming or moving a listed
+test also fails, because its new entry is one the base branch's baseline
+lacks, so give it a check in the same change.
+
 ## Coverage
 
 `api.quality.coverage-measured`: Codecov measures the same tests on `master`

@@ -4,6 +4,9 @@ import hashlib
 import math
 import re
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
@@ -28,6 +31,24 @@ REFORM_IMPACT_TTL_SECONDS = 2_592_000
 REFORM_IMPACT_INDEX_LIMIT = 1_000
 REFORM_IMPACT_START_CLAIM_TTL_SECONDS = 300
 REFORM_IMPACT_START_CLAIM_FAMILY = "reform-impact-start-claim"
+# Whether index lookups in the current context raise, rather than read as
+# empty, when the cache cannot be read (see ReformImpactCache.reads_fail_closed).
+_LOOKUPS_FAIL_CLOSED: ContextVar[bool] = ContextVar(
+    "reform_impact_lookups_fail_closed", default=False
+)
+# Remove a record (KEYS[1]) and its entries in the scope and recent indexes
+# (KEYS[2], KEYS[3]) only if the record still holds exactly ARGV[1], the value
+# the caller read and checked. One script, so nothing can rewrite the record
+# between the comparison and the removal.
+DELETE_UNCHANGED_RECORD = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+  redis.call('del', KEYS[1])
+  redis.call('zrem', KEYS[2], KEYS[1])
+  redis.call('zrem', KEYS[3], KEYS[1])
+  return 1
+end
+return 0
+""".strip()
 
 
 @dataclass(frozen=True)
@@ -369,14 +390,19 @@ class ReformImpactCache:
         *,
         record_execution_id: str | None = None,
         record_ttl_seconds: int | None = None,
+        only_if_present: bool = False,
     ) -> bool:
         """Store an impact and index it by scope and recency in one transaction.
 
         Each index keeps only the newest 1,000 entries. ``record_ttl_seconds``
         gives this record a shorter lifetime than the usual 30 days; the
         indexes keep theirs, and an index entry whose record has expired is
-        skipped when read. Return False if the write failed; raise ValueError
-        when there is no record identifier.
+        skipped when read. ``only_if_present`` writes the record only if it
+        still exists, so a write based on an earlier read never puts back a
+        record that was deleted or expired since; the index entries it adds
+        then point at no record and are skipped when read. Return False if
+        the record was not written; raise ValueError when there is no record
+        identifier.
         """
         # Terminal errors clear the worker handle in the payload while keeping
         # the original record key and lookup indexes stable.
@@ -397,6 +423,8 @@ class ReformImpactCache:
                         _impact_to_wire(impact),
                     ),
                     ex=record_ttl_seconds or ttl_seconds,
+                    # Redis's XX: write only a key that exists.
+                    **({"xx": True} if only_if_present else {}),
                 )
                 for index in indexes:
                     pipeline.zadd(index, {record_key: self._score(impact)})
@@ -406,7 +434,7 @@ class ReformImpactCache:
                         -(REFORM_IMPACT_INDEX_LIMIT + 1),
                     )
                     pipeline.expire(index, ttl_seconds)
-                pipeline.execute()
+                replies = pipeline.execute()
         except Exception:  # noqa: BLE001  # a failed cache write returns False instead of failing the request
             record_cache_event(
                 family=self.family,
@@ -415,7 +443,8 @@ class ReformImpactCache:
                 severity="WARNING",
             )
             return False
-        return True
+        # SET answers None when XX finds no record; any other write stands.
+        return not only_if_present or replies[0] is not None
 
     def get_by_execution_id(self, execution_id: str) -> CachedReformImpact | None:
         """Return the job's impact, or None if absent, unreadable or unreachable."""
@@ -460,22 +489,62 @@ class ReformImpactCache:
             return 0
         return math.ceil(min(record_milliseconds, index_milliseconds) / 1000)
 
-    def _from_index(self, index: str, limit: int) -> list[CachedReformImpact]:
-        try:
-            keys = self.client.zrevrange(index, 0, max(limit - 1, 0))  # type: ignore[attr-defined]
-            values = [self.client.get(key) for key in keys]
-        except Exception:  # noqa: BLE001  # a cache outage reads as empty, never a failed request
-            return []
-        impacts = [
-            _impact_from_wire(
-                decode_envelope(
-                    value,
-                    family=self.family,
-                    schema_version=REFORM_IMPACT_SCHEMA_VERSION,
-                )
+    def _read_index(
+        self, index: str, limit: int
+    ) -> list[tuple[str, str | bytes | None]]:
+        """Return each record key in the index, newest first, with its stored value.
+
+        Raise whatever the cache client raises when it cannot be read.
+        """
+        keys = self.client.zrevrange(index, 0, max(limit - 1, 0))  # type: ignore[attr-defined]
+        return [(key, self.client.get(key)) for key in keys]
+
+    def _decode_impact(self, value: str | bytes | None) -> CachedReformImpact | None:
+        return _impact_from_wire(
+            decode_envelope(
+                value,
+                family=self.family,
+                schema_version=REFORM_IMPACT_SCHEMA_VERSION,
             )
-            for value in values
-        ]
+        )
+
+    @staticmethod
+    @contextmanager
+    def reads_fail_closed() -> Iterator[None]:
+        """Make index lookups inside this block raise when the cache cannot be read.
+
+        A lookup normally reads a cache it cannot reach, or a record it cannot
+        read from it, as holding no impacts. Inside this block it raises
+        CacheCoordinationError instead, so a caller for whom "nothing stored"
+        must not hide an outage can select with the usual lookups. A record
+        that is read but cannot be decoded is still skipped, as it is outside
+        the block. Only the current context is affected.
+        """
+        token = _LOOKUPS_FAIL_CLOSED.set(True)
+        try:
+            yield
+        finally:
+            _LOOKUPS_FAIL_CLOSED.reset(token)
+
+    def _from_index(self, index: str, limit: int) -> list[CachedReformImpact]:
+        started_at = time.perf_counter()
+        try:
+            entries = self._read_index(index, limit)
+        except Exception as error:
+            # A cache outage reads as empty, never a failed request, unless
+            # the caller asked lookups to fail closed.
+            if not _LOOKUPS_FAIL_CLOSED.get():
+                return []
+            record_cache_event(
+                family=self.family,
+                event="coordination-failed",
+                operation="index-read",
+                started_at=started_at,
+                severity="WARNING",
+            )
+            msg = "reform-impact lookups cannot read the cache"
+            raise CacheCoordinationError(msg) from error
+        impacts = [self._decode_impact(value) for _key, value in entries]
         return [impact for impact in impacts if impact is not None]
 
     def recent(self, limit: int) -> list[CachedReformImpact]:
@@ -549,8 +618,10 @@ class ReformImpactCache:
         """Apply field changes to a cached impact and rewrite it under the same key.
 
         ``clear_execution_id`` drops the worker handle without moving the record,
-        and ``record_ttl_seconds`` shortens its lifetime (see ``set``). Return the
-        updated impact, or None if it is missing or the write failed.
+        and ``record_ttl_seconds`` shortens its lifetime (see ``set``). The
+        record is rewritten only if it still exists, so an update never puts
+        back a record deleted after it was read. Return the updated impact, or
+        None if it is missing or the write failed.
         """
         impact = self.get_by_execution_id(execution_id)
         if impact is None:
@@ -562,8 +633,64 @@ class ReformImpactCache:
             updated,
             record_execution_id=execution_id,
             record_ttl_seconds=record_ttl_seconds,
+            only_if_present=True,
         )
         return updated if stored else None
+
+    def delete_failure(self, failure: CachedReformImpact) -> bool:
+        """Remove a stored failure and its index entries, if its record still holds it.
+
+        The record is found through the failure's scope index, so a typed
+        failure whose worker handle was cleared is found as well. One script
+        removes it only if the record still holds exactly the value read here,
+        so a record rewritten since then, and every other job's record, is
+        left alone. Return whether it was removed: False when its record has
+        changed or is gone. Raise ValueError for an impact that is not a
+        failure, and CacheCoordinationError when the cache cannot be read or
+        written.
+        """
+        if failure.status != "error":
+            msg = "only a failed reform impact can be deleted"
+            raise ValueError(msg)
+        started_at = time.perf_counter()
+        scope_index = self._scope_index(failure)
+        try:
+            entries = self._read_index(scope_index, REFORM_IMPACT_INDEX_LIMIT)
+            stored = next(
+                (
+                    (record_key, value)
+                    for record_key, value in entries
+                    if value is not None and self._decode_impact(value) == failure
+                ),
+                None,
+            )
+            deleted = stored is not None and bool(
+                self.client.eval(
+                    DELETE_UNCHANGED_RECORD,
+                    3,
+                    stored[0],
+                    scope_index,
+                    self._recent_index(),
+                    stored[1],
+                )
+            )
+        except Exception as error:
+            record_cache_event(
+                family=self.family,
+                event="coordination-failed",
+                operation="failure-delete",
+                started_at=started_at,
+                severity="WARNING",
+            )
+            msg = "the stored reform-impact failure could not be deleted"
+            raise CacheCoordinationError(msg) from error
+        record_cache_event(
+            family=self.family,
+            event="deleted" if deleted else "delete-skipped",
+            operation="failure-delete",
+            started_at=started_at,
+        )
+        return deleted
 
     def delete_matching_computing(
         self,
