@@ -1,6 +1,6 @@
 #!/bin/sh
 # Proof fixture for api.quality.pre-commit-hook (rejected): it runs make
-# quality but lets the commit through whether the checks fail or ruff's fixes
-# changed a file.
+# quality but lets the commit through whether uv is missing, the working tree
+# holds unstaged changes, the checks fail, or ruff's fixes changed a file.
 make quality
 exit 0

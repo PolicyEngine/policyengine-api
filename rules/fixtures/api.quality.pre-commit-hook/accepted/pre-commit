@@ -1,7 +1,9 @@
 #!/bin/sh
 # Proof fixture for api.quality.pre-commit-hook (accepted): the least a hook
-# must do. It runs make quality, fails when make quality fails, and fails when
-# make quality changed a file, whose fix still needs staging.
-before=$(git diff)
+# must do. It stops the commit when uv is missing, when the working tree holds
+# changes the commit doesn't (make quality would check them instead), when
+# make quality fails, and when make quality changed a file.
+command -v uv >/dev/null 2>&1 || exit 1
+git diff --quiet || exit 1
 make quality || exit 1
-[ "$(git diff)" = "$before" ] || exit 1
+git diff --quiet || exit 1
