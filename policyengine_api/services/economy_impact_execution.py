@@ -99,7 +99,7 @@ class ImpactExecutionMixin:
                     retry_note=retry_note,
                 )
 
-            self._set_reform_impact_error(
+            stored_failure = self._set_reform_impact_error(
                 setup_options=setup_options,
                 message=error_message,
                 execution_id=reform_impact.execution_id,
@@ -108,7 +108,12 @@ class ImpactExecutionMixin:
                 {"message": error_message},
                 severity="ERROR",
             )
-            return EconomicImpactResult.error(message=error_message)
+            return self._stored_failure_result(
+                error_message,
+                self._failure_the_next_request_answers_from(
+                    stored_failure, setup_options
+                ),
+            )
 
         if execution_state in EXECUTION_STATUSES_PENDING:
             logger.log_struct(
@@ -179,19 +184,24 @@ class ImpactExecutionMixin:
         ``RETRYABLE_FAILURE_SECONDS``. Until then every request gets the same
         error, which ends with ``retry_note`` to say when to try again; after
         it, the next request finds no record and submits a new job. No other
-        job's record is read or changed, and no submission claim is held at
-        this point: it was released once the job was handed off. Other failed
-        jobs, and typed SPM failures, are stored as before.
+        job's record is changed (the scope's records are read only to check
+        that the next request answers from this one), and no submission claim
+        is held at this point: it was released once the job was handed off.
+        Other failed jobs, and typed SPM failures, are stored as before.
         """
         message = f"{reason}. {retry_note}"
+        stored_failure = None
         if reform_impact.execution_id:
-            self._set_reform_impact_error(
+            stored_failure = self._set_reform_impact_error(
                 setup_options=setup_options,
                 message=message,
                 execution_id=reform_impact.execution_id,
                 keep_seconds=RETRYABLE_FAILURE_SECONDS,
             )
-        return EconomicImpactResult.error(message=message)
+        return self._stored_failure_result(
+            message,
+            self._failure_the_next_request_answers_from(stored_failure, setup_options),
+        )
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_COMPLETED)
@@ -269,11 +279,11 @@ class ImpactExecutionMixin:
                 most_recent_impact.error_code, most_recent_impact.message
             )
         # Failed executions have no successful output or SPM receipts to
-        # validate. Replay their original failure on every later poll.
-        return EconomicImpactResult.error(
-            message=(
-                most_recent_impact.message or "Simulation entrypoint execution failed"
-            )
+        # validate. Replay their original failure on every later poll, with
+        # the seconds until its record expires and a new job can start.
+        return self._stored_failure_result(
+            most_recent_impact.message or "Simulation entrypoint execution failed",
+            most_recent_impact,
         )
 
     @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_POLL_ACTIVE))

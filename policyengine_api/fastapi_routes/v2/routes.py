@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse
 from policyengine_api.fastapi_routes.v2.countries.routes import (
     build_v2_country_router,
 )
-from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
+from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorResponse
 from policyengine_api.fastapi_routes.v2.households.routes import (
     build_v2_household_router,
 )

@@ -1,3 +1,126 @@
+## [5.32.0] - 2026-11-05
+
+### Added
+
+- Pull requests must now cover at least 80% of the lines they change in `policyengine_api/` with the unit and integration tests together, checked by a new diff-cover job that `CI complete` needs.
+
+### Changed
+
+- Codecov now measures the unit tests on master too, from the release tests on each release commit and its merge commit, and tells unit and integration coverage apart with flags it carries forward, so most pull requests' coverage is compared with a base that measured the same tests; a failed upload on master fails the run without stopping the release.
+
+### Fixed
+
+- Reject an exception from the API v2 file-layer check that has no expires date, sets `category`, `removal` or `match`, names a module in a `database_connectors` package, or gives a path other than the one `git ls-files` lists, and say in the fix message where each layer name must sit.
+
+
+## [5.31.0] - 2026-11-05
+
+### Added
+
+- Registered a rule, checked by a new quality guard, that every `noqa` and `type: ignore` comment names its codes and gives a reason, as `# noqa: CODE  # reason`; the 29 suppressions without a reason today are listed in a baseline that may only shrink.
+- Registered a rule, checked by a new quality guard, that every test function checks something: an `assert`, `pytest.raises` or another check, directly or through a helper; the 21 tests that check nothing today are listed in a baseline that may only shrink.
+
+
+## [5.30.0] - 2026-11-05
+
+### Added
+
+- A `DELETE` on an annual economy URL, with the GET's query, removes the stored failure the GET answers from once it is at least 10 seconds old, so the next GET starts a new run, and a failed GET's 502 says when in `delete_after_seconds`.
+
+
+## [5.29.0] - 2026-11-05
+
+### Added
+
+- Check that every API v2 route and service file is named after its layer, and that v2 route modules open no session and build no SQL, services construct no SQL, connectors never open, commit, roll back or close a session, session modules do no data access, and validators, transformations and types make no session calls, in a new v2-layers quality guard. Eight v2 modules are renamed to fit (for example `fastapi_routes/v2/errors.py` is now `errors_support.py`).
+
+### Changed
+
+- Catalog publication reads regions from the Public API's checked-in reference files, one per country, instead of PolicyEngine.py's region registry. Each region takes its dataset from the certified data release and a row filter from a scoping rule: state_fips or congressional_district_geoid for US states and districts, the UK region column for UK nations, and constituency_code_oa or la_code_oa on the local-area dataset the release routes UK constituencies and local authorities to. The UK now publishes 1,016 regions, with 650 constituencies and 361 local authorities (including Ards and North Down) by ONS code and Northern Ireland as country/northern_ireland; the national regions are "United States" and "United Kingdom". US places are listed in the reference file but left out of the catalog until they can run, and the publication evidence counts them. Before it publishes a catalog version that is not stored yet, the publication command reads the HDF5 metadata of the certified datasets the filters use, from Hugging Face at their pinned revisions, and stops if a filter's column is missing; the seed workflow's publication step receives the UK data read token as HUGGING_FACE_TOKEN for this. A catalog version that is already stored keeps the regions it was published with, so region file changes take effect in the next catalog version; republishing it logs the difference in region rows instead of failing, its evidence counts the stored regions and lists the kept version under kept_regions, and every other table must still match.
+
+
+## [5.28.0] - 2026-11-05
+
+### Added
+
+- Registered a rule, checked by a new quality guard that runs deptry on `policyengine_api`, that `pyproject.toml` declares every distribution the package imports and no runtime dependency it never imports; the 16 findings today are listed in a baseline that may only shrink, and gunicorn, uvicorn and pymysql, which the application loads by name, are registered exceptions.
+
+
+## [5.27.1] - 2026-11-05
+
+### Fixed
+
+- A read-only request to the simulation service whose connection breaks is sent once more on a new connection, with timeouts of at most 10 seconds. The economy routes answer 502, not 400 or 500, when a request still gets no response, except for the check of whether a finished stored impact is out of date, which then answers from the stored impact. Each request to the simulation service, and each v1 database connect, invalidation, close and error, is recorded with its connection's socket details. The database access check's exceptions now live in rules/registry.toml, and Ruff no longer lints or formats the Alembic revisions.
+
+
+## [5.27.0] - 2026-11-05
+
+### Added
+
+- Check the v2 import architecture with Import Linter in the quality-guards CI job: v2 routes, services and data import each other in one direction only, v2 validators, transformations and types reach no database code except the table models, v2 routes import no connector or session module, types and transformations import no validators, and connectors import no other connector. Today's exceptions are listed as shrink-only baselines.
+
+
+## [5.26.0] - 2026-11-04
+
+### Added
+
+- PATCH /v2/user-policies/{id} accepts policy_id and PATCH /v2/user-households/{id} accepts household_id, so a saved policy or household can point at another v2 record in its country while keeping its ID, name and creation time. Supplied alone, the v2 reference clears the v1 reference (legacy_policy_id or legacy_household_id); supplied with it, both are stored, and the v2 reference must be the v2 copy of that v1 record when one exists. Unknown, other-country and conflicting records are refused as on creation, and saved policies maintained by the v1 saved-policy mirror still return 409.
+
+### Changed
+
+- Split the v2 catalog version selection into `catalog_selection_validation`, which loads no database code, and `catalog_selection_reads`, which holds the one catalog query, and stop the `policyengine_api.data.v2.catalog` package importing its extraction module when it loads. Importing a v2 validators, transformations or types module no longer loads SQLAlchemy unless that module imports the table models itself.
+
+
+## [5.25.0] - 2026-11-04
+
+### Added
+
+- Check that every pull request description starts with `Fixes #N` for an open issue in this repository, and start automated PolicyEngine bundle-update pull requests with that line.
+
+
+## [5.24.0] - 2026-11-04
+
+### Added
+
+- A failed economy calculation's 502 body now has `retry_after_seconds`: the longest time the Public API keeps returning the stored failure before a request starts a new run, read from the cache's own expiry of the stored failure and its lookup index, or null when no failure is stored or its lifetime cannot be read.
+
+
+## [5.23.1] - 2026-11-04
+
+### Fixed
+
+- Release runs tag each release commit with its version again. The tag step read the version from the removed `setup.py` and ignored the failure, so no tag was created after 3.34.3; it now reads `pyproject.toml`, pushes only the release tag, and fails if the version is missing or the tag already names another commit.
+
+
+## [5.23.0] - 2026-11-03
+
+### Added
+
+- Catalog publication writes a parameter search file for each catalog version it publishes into a new table, parameter_search_files, built from the installed packages' catalog: every parameter a reform can change with its path, stored label, unit, description and whether a draft can edit its current-law value (with the dates from which that changes), the stored labels of the other parameters under gov, and gov and every labelled node under it, as gzip-compressed JSON with its SHA-256. A new route, /v2/parameters/search-file, serves a version's file with a strong ETag, 304 revalidation and long-lived caching for a named version, as gzip to clients that accept it. Publication writes a file for each catalog format 2 version it publishes or runs with installed, so a version stored before catalog format 2, or stored before search files existed and not installed since, has none and returns 503 with a message naming it.
+
+### Fixed
+
+- Responses are gzip-compressed according to the qualities in Accept-Encoding instead of a search for the text "gzip": a client that refuses gzip (for example gzip;q=0) now receives an uncompressed response, and `Accept-Encoding: *` or a differently cased value such as GZIP now receives gzip, where both used to receive an uncompressed response.
+
+
+## [5.22.0] - 2026-11-03
+
+### Added
+
+- Add `household_options.time_period` to the `/{country}/metadata` response: the years offered for household calculations, in the shape of `economy_options.time_period`. The US years are the years the certified SPM forecast covers, up to the last year of the CPI-U parameter; the UK years follow the rule for the UK society-wide years. `economy_options` is unchanged.
+- A `breakdown=local_areas` result of `GET /{country_id}/economy/{policy_id}/over/{baseline_policy_id}` carries `constituency_withheld_codes` and `local_authority_withheld_codes` unchanged from the simulation API, and the SPM guide documents them: the sorted ONS codes of each level's areas that the run estimated but disclosure control withheld, `[]` when none were, and null or absent when the result doesn't report them.
+- Catalog publication writes parameter trees into a new table, parameter_tree_children, built from the installed packages' catalog records for each version: one row per node and parameter under its parent's path, with its label, its position among its siblings, its direct child counts, and whether a reform can change it. A bracket schedule is one node whose children are its brackets, labelled "Bracket 1", "Bracket 2" and so on, and labels take the form the app's v3 workspace shows, with a path without a stored label getting one made from the last part of its name. Publication writes the tree of each version it publishes, and of the installed version when an earlier release stored it with catalog format 2 but without one; its evidence lists them. Other stored versions, and an installed version stored before catalog format 2, have no tree.
+
+### Changed
+
+- The Cloud SQL migration and household mirror-event workflows install their dependencies from uv.lock and run their scripts through uv run --frozen, instead of an unlocked pip install.
+- /v2/parameters/children reads one level of the stored parameter tree with one indexed read. A bracket schedule is now listed as one node whose children are its brackets, instead of its brackets appearing beside its parent's groups under their raw names, and every child carries its label in the form the app's v3 workspace shows: the stored label with underscores as spaces and its first letter upper-cased, or one made from the last part of its name. A label PolicyEngine.py made for a bracket field or breakdown parameter without one of its own, such as "Standard deduction (Single)", is shown by the last part of its name, as v3 shows it today. reform_changeable=true lists only the children a reform can change, sorted by label, with child counts that count only those, following the rules of the tree the app's v3 workspace builds. The route now reads its query through the shared strict models, so unknown or repeated parameters, an unsupported country and a malformed policyengine_version return 422 (an unsupported country and a malformed version returned 400 before), and a catalog version without a tree returns 503 with a message naming the version.
+
+### Fixed
+
+- UK `breakdown=local_areas` results cached before the simulation API listed each level's withheld area codes (`constituency_withheld_codes` and `local_authority_withheld_codes`) are no longer served: a breakdown request's options hash now includes `breakdown_schema=2`, so the next request computes the breakdown again. Hashes and cached results of requests without a breakdown are unchanged.
+
+
 ## [5.21.0] - 2026-11-03
 
 ### Changed

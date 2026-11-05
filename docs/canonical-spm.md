@@ -343,7 +343,19 @@ accepted only for the UK, with `region` exactly `uk` or one UK country
 requests, including other spellings of those regions, return HTTP 400 before
 anything is read from the cache or submitted. The API sends `"breakdown": "local_areas"` to the simulation API,
 which computes the impacts in a run separate from the national result, and
-returns its result (`kind: "local_areas"`) like any other economy result. If
+returns its result (`kind: "local_areas"`) like any other economy result.
+Besides `constituency_impact` and `local_authority_impact`, the result has
+`constituency_withheld_codes` and `local_authority_withheld_codes`: the ONS
+codes, sorted, of each level's areas that the run estimated but disclosure
+control withheld, which the impact lists leave out. `[]` means none were
+withheld. `null` or an absent field means the result doesn't report them, as
+in results computed before the simulation API reported them. An area the run
+never estimated, such as one with no households in the dataset, is not listed.
+The API stores and returns these fields unchanged. A breakdown's options hash
+also includes `breakdown_schema=2`, the version of the breakdown result, so a
+breakdown cached before the result reported withheld codes is not returned and
+the next request computes it again; hashes of requests without `breakdown`
+don't include it. If
 the simulation API refuses the request with HTTP 400 or 422, because the
 deployed simulation API or the .py release it routes to cannot run breakdowns,
 the route returns HTTP 502 with the simulation API's reason and stores
@@ -360,7 +372,45 @@ state can be requested again, so a client can retry one state of a
 nationwide report's congressional districts. Any other failed job, such as
 a national, congressional district or place job, is still stored and
 returned again for the cache lifetime of 30 days, and so is a typed SPM
-failure.
+failure. A 502 for a stored failure also carries `retry_after_seconds`: the
+whole seconds, rounded up, until lookups stop finding that failure (the
+earlier of its record's expiry and its scope index's), after which the next
+request submits a new job. It is null when no failure is stored, when the
+next request would answer from a newer job (a late poll of a job that a newer
+one replaced), or when the cache cannot be read. It is the longest wait: a deploy that changes the
+versions or worker app a request resolves to starts a new run sooner. The
+502 also carries `delete_after_seconds`: the whole seconds, rounded up, until
+a `DELETE` on the same URL may remove that failure; 0 once it may, and null
+whenever `retry_after_seconds` is null. Each instance counts the 10 seconds
+on its own clock from the failure's recorded time, and the value is never
+more than 10: if the instance that recorded the failure has a clock ahead of
+the one answering, a `DELETE` sent after that wait can still get a 409 with
+the seconds left, and if it is behind, a `DELETE` is accepted sooner. Like
+`retry_after_seconds`, it assumes the next request answers from this failure:
+after a deploy that changes the versions or worker app a request resolves
+to, the `DELETE` finds nothing to remove (404) and the next GET starts a new
+run anyway.
+
+`DELETE /<country_id>/economy/<policy_id>/over/<baseline_policy_id>` takes
+the GET's query parameters, parsed by the same model, and acts on the stored
+record the GET would answer from. It covers every failed job: national,
+state, congressional district, place, UK and local-area breakdown jobs, and
+typed SPM failures. It removes the record and its index entries, so the next
+GET submits a new job, only when the record is a failure recorded at least
+10 seconds earlier, and answers 204 with no body. A more recent failure gives
+409 with `delete_after_seconds`. A record that is computing or complete gives
+409 with `delete_after_seconds` null and is never removed: the record is
+removed only if it still holds the failure that was checked, so a job a GET
+submits meanwhile is left alone, and a late poll of the failed job cannot
+write the removed failure back. 404 means nothing is stored that the GET
+would answer from, so the next GET submits a new job (or answers `computing`
+while another request is submitting one). A record whose stored value cannot
+be decoded counts as nothing stored, for the DELETE as for the GET; when the
+cache cannot be reached, or a record cannot be read from it, the answer is
+500, never 404.
+Invalid query parameters give
+the GET's 400, and a request to the simulation service that gets no response
+gives 502 with only `status`, `message` and `result`.
 
 Before cache access or submission,
 the API validates the selected worker application's `canonical-spm-v1` capability

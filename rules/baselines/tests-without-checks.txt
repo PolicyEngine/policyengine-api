@@ -1,0 +1,26 @@
+# Tolerated test functions that check nothing, for api.quality.tests-assert:
+# one "<path>::<test>" per line, where <test> is Class::method for a method
+# and Outer::Inner::method for a method of a nested class.
+# Comments go on lines of their own. This list may only shrink: give a test
+# a check, then remove its line and lower the rule's baseline count.
+tests/unit/data/test_places.py::TestValidatePlaceCode::test__given_valid_place_code__no_error
+tests/unit/libs/test_gateway_auth.py::TestRequireAllOrNoneGatewayAuthEnv::test__given_all_env__then_ok
+tests/unit/libs/test_gateway_auth.py::TestRequireAllOrNoneGatewayAuthEnv::test__given_core_env_plus_secret_resource__then_ok
+tests/unit/libs/test_gateway_auth.py::TestRequireAllOrNoneGatewayAuthEnv::test__given_no_env__then_ok
+tests/unit/runtime_cache/test_runtime_cache_contracts.py::test_delete_swallows_a_failed_cache_write
+tests/unit/services/test_economy_service_regions.py::TestEconomicImpactSetupOptions::TestValidateUsRegion::test__given_valid_congressional_district__does_not_raise
+tests/unit/services/test_economy_service_regions.py::TestEconomicImpactSetupOptions::TestValidateUsRegion::test__given_valid_congressional_district_lowercase__does_not_raise
+tests/unit/services/test_economy_service_regions.py::TestEconomicImpactSetupOptions::TestValidateUsRegion::test__given_valid_state__does_not_raise
+tests/unit/services/test_economy_service_regions.py::TestEconomicImpactSetupOptions::TestValidateUsRegion::test__given_valid_state_uppercase__does_not_raise
+tests/unit/services/test_worker_spm.py::test_worker_valid_annual_and_window_shapes_cover_requested_year
+tests/unit/test_country.py::TestUKCountryMetadata::test__uk_metadata_is_json_serializable
+tests/unit/test_observability_runtime.py::test_runtime_context_failure_does_not_escape
+tests/unit/test_observability_runtime.py::test_unhandled_exception_recording_failure_does_not_escape
+tests/unit/test_runtime_evaluated_annotations.py::test_every_sqlalchemy_mapper_configures
+tests/unit/test_warmup.py::test_run_startup_warmup_swallows_calculate_errors
+tests/unit/v2/test_alembic_v2.py::test_persistent_target_allows_stamped_previous_revision_inventory
+tests/unit/v2/test_alembic_v2.py::test_v2_head_accepts_schema_matching_metadata
+tests/unit/v2/test_country_service.py::test_rows_for_exactly_the_listed_countries_pass_verification
+tests/unit/v2/test_country_validators.py::test_the_same_countries_in_any_order_match
+tests/unit/v2/test_metadata_validation.py::test_current_metadata_contains_no_rejected_tables
+tests/unit/v2/test_metadata_validation.py::test_new_table_name_requires_no_allowlist_update

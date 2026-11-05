@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
@@ -16,8 +19,16 @@ from sqlalchemy.sql.elements import TextClause
 
 from policyengine_api.data.v2.catalog import (
     publication,
+    publication_inserts,
     publication_reconciliation,
     publication_staging,
+    publication_tables,
+)
+from policyengine_api.data.v2.catalog.publication_parameter_tree import (
+    catalog_parameter_tree,
+)
+from policyengine_api.data.v2.catalog.publication_types import (
+    CatalogPublicationError,
 )
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
 from policyengine_api.data.v2.models import (
@@ -185,14 +196,14 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
         Region.__table__,
         Variable.__table__,
     ) == (
-        publication_reconciliation.DATASETS,
-        publication_reconciliation.MODELS,
-        publication_reconciliation.MODEL_VERSIONS,
-        publication_reconciliation.PARAMETERS,
-        publication_reconciliation.PARAMETER_NODES,
-        publication_reconciliation.PARAMETER_VALUES,
-        publication_reconciliation.REGIONS,
-        publication_reconciliation.VARIABLES,
+        publication_tables.DATASETS,
+        publication_tables.MODELS,
+        publication_tables.MODEL_VERSIONS,
+        publication_tables.PARAMETERS,
+        publication_tables.PARAMETER_NODES,
+        publication_tables.PARAMETER_VALUES,
+        publication_tables.REGIONS,
+        publication_tables.VARIABLES,
     )
     staging_ddl = tuple(
         str(CreateTable(table).compile(dialect=dialect))
@@ -203,7 +214,7 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
         for statement in staging_ddl
     )
 
-    inserts = publication_reconciliation.SET_BASED_INSERT_STATEMENTS
+    inserts = publication_inserts.SET_BASED_INSERT_STATEMENTS
     assert all(not isinstance(statement, TextClause) for statement in inserts)
     compiled_inserts = tuple(
         str(statement.compile(dialect=dialect)) for statement in inserts
@@ -219,26 +230,37 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
         )
         for with_format_2 in (False, True)
     )
+    region_pair = publication_reconciliation._region_comparison_pair(
+        catalog.country("us")
+    )
     for comparisons in (format_1_comparisons, format_2_comparisons):
+        assert [table_name for table_name, _staged, _stored in comparisons] == [
+            "model version",
+            "variables",
+            "parameter nodes",
+            "parameters",
+            "parameter values",
+            "datasets",
+        ]
+        pairs = (*comparisons, ("regions", *region_pair))
         assert all(
             isinstance(statement, sa.sql.Select)
             and not isinstance(statement, TextClause)
-            for pair in comparisons
+            for _table_name, *pair in pairs
             for statement in pair
         )
         assert all(
             len(staged.selected_columns) == len(stored.selected_columns)
-            for staged, stored in comparisons
+            for _table_name, staged, stored in pairs
         )
-    # Format 2 compares model versions, variables and parameters on more fields;
-    # the pairs are model versions, variables, parameter nodes, parameters,
-    # parameter values, datasets and regions.
+    # Format 2 compares model versions, variables and parameters on more fields.
+    # Regions are compared separately, on the same fields in both formats.
     assert [
-        len(format_2[0].selected_columns) - len(format_1[0].selected_columns)
+        len(format_2[1].selected_columns) - len(format_1[1].selected_columns)
         for format_1, format_2 in zip(
             format_1_comparisons, format_2_comparisons, strict=True
         )
-    ] == [3, 8, 0, 2, 0, 0, 0]
+    ] == [3, 8, 0, 2, 0, 0]
 
     class Result:
         def scalar_one(self):
@@ -271,6 +293,10 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         entity_counts={"parameters": 12},
         fallback_summaries=(("us", "state", 3),),
         elapsed_seconds=2.3456,
+        omitted_region_summaries=(("us", "place", 333),),
+        kept_region_summaries=(("uk", "6.7.5", 5, 1_015),),
+        parameter_trees_written=(("policyengine-uk", "6.7.5", 2_430),),
+        parameter_search_files_written=(("policyengine-uk", "6.7.5", 412_000, 61_000),),
     ).as_dict()
 
     assert evidence == {
@@ -280,6 +306,32 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         "entity_counts": {"parameters": 12},
         "fallback_summaries": [
             {"country_id": "us", "region_type": "state", "count": 3}
+        ],
+        "omitted_region_summaries": [
+            {"country_id": "us", "region_type": "place", "count": 333}
+        ],
+        "kept_regions": [
+            {
+                "country_id": "uk",
+                "policyengine_version": "6.7.5",
+                "stored_regions": 5,
+                "staged_regions": 1_015,
+            }
+        ],
+        "parameter_trees_written": [
+            {
+                "model": "policyengine-uk",
+                "version": "6.7.5",
+                "rows": 2_430,
+            }
+        ],
+        "parameter_search_files_written": [
+            {
+                "model": "policyengine-uk",
+                "version": "6.7.5",
+                "uncompressed_bytes": 412_000,
+                "compressed_bytes": 61_000,
+            }
         ],
         "elapsed_seconds": 2.346,
     }
@@ -313,3 +365,83 @@ def test_fallback_summary_emits_one_non_secret_warning() -> None:
     rendered_message = message_template % (logged_summaries,)
     assert "regional dataset fallback summary" in rendered_message
     assert "postgresql://" not in rendered_message
+
+
+def test_a_catalog_tree_needs_a_stored_row_for_every_parameter() -> None:
+    """Each tree parameter references the stored parameter of the same name.
+
+    The stored IDs differ from the catalog's, so the tree must take them from
+    the stored rows, not from the catalog records.
+    """
+    country = normalized_catalog().country("us")
+    stored_ids = {parameter.name: uuid4() for parameter in country.parameters}
+
+    rows = catalog_parameter_tree(country, stored_ids)
+    leaves = [row for row in rows if row.child_type == "parameter"]
+
+    assert [(row.path, row.parameter_id) for row in leaves] == [
+        (parameter.name, stored_ids[parameter.name]) for parameter in country.parameters
+    ]
+    assert {row.parameter_id for row in leaves}.isdisjoint(
+        parameter.id for parameter in country.parameters
+    )
+    with pytest.raises(
+        CatalogPublicationError,
+        match=re.escape(
+            f"the stored us catalog version {country.model_version.version} "
+            "lacks the parameter gov.example.rate"
+        ),
+    ):
+        catalog_parameter_tree(country, {})
+
+
+def _kept_region_records(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    differences: tuple[int, int],
+) -> list[logging.LogRecord]:
+    monkeypatch.setattr(
+        publication,
+        "count_region_differences",
+        lambda _connection, _country: differences,
+    )
+    monkeypatch.setattr(publication, "count_stored_regions", lambda *_args: 4)
+    # An earlier test's Alembic logging setup may have disabled existing loggers.
+    monkeypatch.setattr(publication.LOGGER, "disabled", False)
+    us = normalized_catalog().country("us")
+    with caplog.at_level(logging.WARNING, logger=publication.LOGGER.name):
+        summary = publication._kept_region_summary(object(), us)
+    assert summary == (None if differences == (0, 0) else ("us", "5.0.4", 4, 3))
+    return [
+        record for record in caplog.records if record.name == publication.LOGGER.name
+    ]
+
+
+def test_kept_region_warning_prints_country_version_and_counts_without_logging_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    [record] = _kept_region_records(monkeypatch, caplog, (1, 2))
+
+    # The seed command configures no logging, so Python's last-resort handler
+    # prints the record; this is the text the job output shows.
+    assert logging.lastResort is not None
+    assert logging.lastResort.format(record) == (
+        "kept the published regions of the stored us catalog version 5.0.4: "
+        "1 staged region rows are not stored and 2 stored region rows are not "
+        "staged"
+    )
+    assert record.levelno == logging.WARNING
+    assert record.policyengine_attributes == {
+        "country_id": "us",
+        "policyengine_version": "5.0.4",
+        "staged_region_rows_not_stored": 1,
+        "stored_region_rows_not_staged": 2,
+    }
+
+
+def test_matching_kept_regions_log_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    assert _kept_region_records(monkeypatch, caplog, (0, 0)) == []

@@ -7,12 +7,13 @@ the service's steps shows up as a difference here.
 
 import json
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import pytest
 
 from policyengine_api.libs.simulation_entrypoint import ModalSimulationExecution
+from policyengine_api.runtime_cache import reform_impacts
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import (
@@ -32,7 +33,10 @@ from policyengine_api.services.economy_service import (
     ImpactStatus,
     RuntimeBundleIdentity,
 )
-from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from policyengine_api.services.reform_impacts_service import (
+    ReformImpactExecution,
+    ReformImpactsService,
+)
 from tests.fixtures.libs.simulation_entrypoint import MOCK_LOCAL_AREA_BREAKDOWN_RESULT
 from tests.fixtures.services.economy_service import (
     MOCK_API_VERSION,
@@ -55,6 +59,8 @@ from tests.fixtures.spm import resolved_options
 pytest_plugins = ("tests.fixtures.services.economy_service",)
 
 NAMESPACE = CacheNamespace("test", "api")
+# The reform-impact service's clock reads the fake cache's clock from here.
+CLOCK_START = datetime(2026, 11, 5, 12, 0)
 CACHE_VERSION = "economy-cache-version"
 
 
@@ -111,6 +117,13 @@ def reform_impact_backend():
 
 
 @pytest.fixture
+def unjittered_record_lifetime(monkeypatch):
+    """Give every reform-impact record the full 30 days, so its lifetime is exact."""
+    monkeypatch.setattr(reform_impacts, "jittered_ttl", lambda ttl: ttl)
+    return reform_impacts.REFORM_IMPACT_TTL_SECONDS
+
+
+@pytest.fixture
 def economy_service(
     service_environment,
     mock_simulation_entrypoint,
@@ -118,7 +131,10 @@ def economy_service(
 ):
     return EconomyService(
         reform_impacts_service_=ReformImpactsService(
-            ReformImpactCache(reform_impact_backend, NAMESPACE)
+            ReformImpactCache(reform_impact_backend, NAMESPACE),
+            # End times follow the cache's clock, so both waits count down
+            # together when a test moves it.
+            now=lambda: CLOCK_START + timedelta(seconds=reform_impact_backend._now()),
         ),
         budget_window_cache_=BudgetWindowCache(InMemoryCacheBackend(), NAMESPACE),
         simulation_entrypoint_=mock_simulation_entrypoint,
@@ -412,7 +428,16 @@ UK_BUNDLE_HASH_FIELDS = (
     f"&policyengine_version={MOCK_POLICYENGINE_VERSION}"
 )
 UK_NATIONAL_LOOKUP_HASH = f"[{UK_BUNDLE_HASH_FIELDS}]"
-UK_BREAKDOWN_LOOKUP_HASH = f"[breakdown=local_areas&{UK_BUNDLE_HASH_FIELDS}]"
+# A breakdown's hash names the version of the breakdown result it holds, so
+# breakdowns cached before the result listed its withheld area codes are not
+# served. Hashes without a breakdown have no such field and keep their values.
+UK_BREAKDOWN_LOOKUP_HASH = (
+    f"[breakdown=local_areas&{UK_BUNDLE_HASH_FIELDS}&breakdown_schema=2]"
+)
+# The hash a breakdown had before that version was added.
+UK_BREAKDOWN_LOOKUP_HASH_BEFORE_WITHHELD_CODES = (
+    f"[breakdown=local_areas&{UK_BUNDLE_HASH_FIELDS}]"
+)
 
 
 def _stored_options_hash(lookup_hash: str) -> str:
@@ -573,6 +598,139 @@ def test_national_and_breakdown_hashes_never_match_each_others_lookup(
         assert not _like_matches(_stored_options_hash(other_hash), pattern)
 
 
+# The hashes a request without a breakdown stored before breakdowns had a
+# result version, written out so that any change to them shows here.
+UK_STORED_HASH_WITHOUT_BREAKDOWN = (
+    "[dataset=default&model_version=1.2.3&policyengine_version=3.4.0"
+    "&runtime_app_name=policyengine-simulation-us1-2-3-uk2-7-8]"
+)
+
+
+@pytest.mark.usefixtures("uk_package_versions")
+@pytest.mark.parametrize(
+    ("country_id", "region", "options", "stored_hash"),
+    [
+        ("uk", "uk", {}, UK_STORED_HASH_WITHOUT_BREAKDOWN),
+        ("uk", "country/scotland", {}, UK_STORED_HASH_WITHOUT_BREAKDOWN),
+        ("uk", "country/northern_ireland", {}, UK_STORED_HASH_WITHOUT_BREAKDOWN),
+        ("us", "us", MOCK_OPTIONS, MOCK_OPTIONS_HASH),
+        ("us", "ca", MOCK_OPTIONS, MOCK_OPTIONS_HASH),
+    ],
+    ids=[
+        "uk-national",
+        "uk-nation-scotland",
+        "uk-nation-northern-ireland",
+        "us-national",
+        "us-state",
+    ],
+)
+def test_requests_without_a_breakdown_keep_their_stored_hashes(
+    economy_service, country_id, region, options, stored_hash
+):
+    economy_service.get_economic_impact(
+        EconomicImpactRequest(
+            country_id=country_id,
+            policy_id=MOCK_POLICY_ID,
+            baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+            region=region,
+            dataset="default",
+            options=options,
+            api_version=MOCK_API_VERSION,
+        ),
+        time_period="2025",
+    )
+
+    stored = economy_service._reform_impacts._cache.recent(5)
+    assert [impact.options_hash for impact in stored] == [stored_hash]
+
+
+def _store_completed_uk_impact(
+    service: EconomyService,
+    *,
+    options: dict,
+    options_hash: str,
+    job_id: str,
+    result: dict,
+) -> None:
+    """Store a finished impact for the UK in 2026 under this options hash."""
+    service._reform_impacts.set_reform_impact(
+        identity=ReformImpactIdentity(
+            scope=ReformImpactScope(
+                country_id="uk",
+                reform_policy_id=MOCK_POLICY_ID,
+                baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                region="uk",
+                dataset="default",
+                time_period="2026",
+            ),
+            api_version=CACHE_VERSION,
+            options_hash=options_hash,
+        ),
+        execution=ReformImpactExecution(
+            execution_id=job_id,
+            start_time=datetime(2026, 10, 1, 12, 0),
+            observability_id=MOCK_OBSERVABILITY_ID,
+        ),
+        options=options,
+        status="computing",
+        reform_impact_json={},
+    )
+    service._reform_impacts.set_complete_reform_impact(
+        execution_id=job_id,
+        reform_impact_json={**result, "resolved_app_name": MOCK_RESOLVED_APP_NAME},
+    )
+
+
+UK_NATIONAL_RESULT = {"budget": {"budgetary_impact": 1.0}}
+
+
+@pytest.mark.usefixtures("uk_package_versions")
+def test_a_breakdown_cached_before_the_withheld_codes_is_recomputed_but_not_national(
+    economy_service, mock_simulation_entrypoint
+):
+    _store_completed_uk_impact(
+        economy_service,
+        options={"breakdown": "local_areas"},
+        options_hash=_stored_options_hash(
+            UK_BREAKDOWN_LOOKUP_HASH_BEFORE_WITHHELD_CODES
+        ),
+        job_id="breakdown-job-before-withheld-codes",
+        result=MOCK_LOCAL_AREA_BREAKDOWN_RESULT,
+    )
+    _store_completed_uk_impact(
+        economy_service,
+        options={},
+        options_hash=_stored_options_hash(UK_NATIONAL_LOOKUP_HASH),
+        job_id="national-job",
+        result=UK_NATIONAL_RESULT,
+    )
+
+    national = economy_service.get_economic_impact(_uk_request({}), time_period="2026")
+    breakdown = economy_service.get_economic_impact(
+        _uk_request({"breakdown": "local_areas"}), time_period="2026"
+    )
+
+    # The national result is still read from its cache entry.
+    assert national.status == ImpactStatus.OK
+    assert national.data is not None
+    assert national.data["budget"] == UK_NATIONAL_RESULT["budget"]
+    # The breakdown stored without the withheld codes is not: a new job runs.
+    assert breakdown == EconomicImpactResult.computing()
+    submitted = [
+        call.args[0].get("breakdown")
+        for call in mock_simulation_entrypoint.run.call_args_list
+    ]
+    assert submitted == ["local_areas"]
+    stored = economy_service._reform_impacts._cache.recent(5)
+    assert {impact.execution_id: impact.options_hash for impact in stored} == {
+        "breakdown-job-before-withheld-codes": _stored_options_hash(
+            UK_BREAKDOWN_LOOKUP_HASH_BEFORE_WITHHELD_CODES
+        ),
+        "national-job": _stored_options_hash(UK_NATIONAL_LOOKUP_HASH),
+        MOCK_MODAL_JOB_ID: _stored_options_hash(UK_BREAKDOWN_LOOKUP_HASH),
+    }
+
+
 @pytest.mark.usefixtures("uk_package_versions")
 def test_a_breakdown_request_never_reuses_the_national_job(
     economy_service, mock_simulation_entrypoint
@@ -649,7 +807,8 @@ def _finish_jobs_with(
 
 
 BREAKDOWN_RETRY_NOTE = (
-    "A new local-area breakdown can be requested 2 minutes after this failure."
+    "A new local-area breakdown can be requested 2 minutes after this failure, "
+    "or 10 seconds after it by first sending DELETE to this URL."
 )
 
 
@@ -675,12 +834,17 @@ def test_a_failed_breakdown_is_returned_for_two_minutes_then_resubmitted(
     reform_impact_backend.advance(61)
     retried = economy_service.get_economic_impact(request, time_period="2026")
 
-    expected = EconomicImpactResult.error(
+    message = (
         f"Simulation entrypoint execution failed: out of memory. {BREAKDOWN_RETRY_NOTE}"
     )
-    assert failed == expected
-    # Within two minutes the stored failure is returned without a new job.
-    assert within_two_minutes == expected
+    assert failed == EconomicImpactResult.error(
+        message, retry_after_seconds=120, delete_after_seconds=10
+    )
+    # Within two minutes the stored failure is returned without a new job, with
+    # the seconds left until its record expires; a DELETE may now remove it.
+    assert within_two_minutes == EconomicImpactResult.error(
+        message, retry_after_seconds=60, delete_after_seconds=0
+    )
     mock_simulation_entrypoint.get_execution_by_id.assert_called_once_with(
         "first-breakdown-job"
     )
@@ -773,6 +937,10 @@ def test_a_late_poll_of_a_failed_breakdown_leaves_the_next_job_alone(
     )
 
     assert result.status == ImpactStatus.ERROR
+    # The next request answers from the second job, so this failure's lifetime
+    # says nothing about when a new run can start, or when to delete it.
+    assert result.retry_after_seconds is None
+    assert result.delete_after_seconds is None
     second_record = cache.get_by_execution_id("second-breakdown-job")
     assert second_record is not None
     assert second_record.status == "computing"
@@ -780,7 +948,10 @@ def test_a_late_poll_of_a_failed_breakdown_leaves_the_next_job_alone(
 
 @pytest.mark.usefixtures("uk_package_versions")
 def test_a_failed_national_job_is_still_replayed(
-    economy_service, mock_simulation_entrypoint, reform_impact_backend
+    economy_service,
+    mock_simulation_entrypoint,
+    reform_impact_backend,
+    unjittered_record_lifetime,
 ):
     _finish_jobs_with(
         mock_simulation_entrypoint, status="failed", error="out of memory"
@@ -792,11 +963,17 @@ def test_a_failed_national_job_is_still_replayed(
     reform_impact_backend.advance(121)
     replayed = economy_service.get_economic_impact(request, time_period="2026")
 
-    expected = EconomicImpactResult.error(
-        "Simulation entrypoint execution failed: out of memory"
+    message = "Simulation entrypoint execution failed: out of memory"
+    assert failed == EconomicImpactResult.error(
+        message,
+        retry_after_seconds=unjittered_record_lifetime,
+        delete_after_seconds=10,
     )
-    assert failed == expected
-    assert replayed == expected
+    assert replayed == EconomicImpactResult.error(
+        message,
+        retry_after_seconds=unjittered_record_lifetime - 121,
+        delete_after_seconds=0,
+    )
     mock_simulation_entrypoint.run.assert_called_once()
     mock_simulation_entrypoint.get_execution_by_id.assert_called_once()
     stored = economy_service._reform_impacts._cache.recent(5)
@@ -804,7 +981,8 @@ def test_a_failed_national_job_is_still_replayed(
 
 
 US_STATE_RETRY_NOTE = (
-    "A new run for this state can be requested 2 minutes after this failure."
+    "A new run for this state can be requested 2 minutes after this failure, "
+    "or 10 seconds after it by first sending DELETE to this URL."
 )
 
 
@@ -831,12 +1009,17 @@ def test_a_failed_us_state_job_is_returned_for_two_minutes_then_resubmitted(
     reform_impact_backend.advance(61)
     retried = economy_service.get_economic_impact(request, time_period="2025")
 
-    expected = EconomicImpactResult.error(
+    message = (
         f"Simulation entrypoint execution failed: out of memory. {US_STATE_RETRY_NOTE}"
     )
-    assert failed == expected
-    # Within two minutes the stored failure is returned without a new job.
-    assert within_two_minutes == expected
+    assert failed == EconomicImpactResult.error(
+        message, retry_after_seconds=120, delete_after_seconds=10
+    )
+    # Within two minutes the stored failure is returned without a new job, with
+    # the seconds left until its record expires; a DELETE may now remove it.
+    assert within_two_minutes == EconomicImpactResult.error(
+        message, retry_after_seconds=60, delete_after_seconds=0
+    )
     mock_simulation_entrypoint.get_execution_by_id.assert_called_once_with(
         "first-state-job"
     )
@@ -849,8 +1032,32 @@ def test_a_failed_us_state_job_is_returned_for_two_minutes_then_resubmitted(
     ] == [("state/ca", "second-state-job", "computing")]
 
 
+def test_a_failing_poll_asks_the_simulation_api_for_no_worker_app(
+    economy_service, mock_simulation_entrypoint
+):
+    _finish_jobs_with(
+        mock_simulation_entrypoint, status="failed", error="out of memory"
+    )
+    request = _us_request("state/ca")
+    economy_service.get_economic_impact(request, time_period="2025")
+    resolutions_before_the_poll = mock_simulation_entrypoint.resolve_app_name.call_count
+
+    failed = economy_service.get_economic_impact(request, time_period="2025")
+
+    assert failed.retry_after_seconds == 120
+    assert failed.delete_after_seconds == 10
+    # Checking which record the next request answers from reads only the cache.
+    assert (
+        mock_simulation_entrypoint.resolve_app_name.call_count
+        == resolutions_before_the_poll
+    )
+
+
 def test_a_failed_us_national_job_is_still_replayed(
-    economy_service, mock_simulation_entrypoint, reform_impact_backend
+    economy_service,
+    mock_simulation_entrypoint,
+    reform_impact_backend,
+    unjittered_record_lifetime,
 ):
     _finish_jobs_with(
         mock_simulation_entrypoint, status="failed", error="out of memory"
@@ -862,11 +1069,17 @@ def test_a_failed_us_national_job_is_still_replayed(
     reform_impact_backend.advance(121)
     replayed = economy_service.get_economic_impact(request, time_period="2025")
 
-    expected = EconomicImpactResult.error(
-        "Simulation entrypoint execution failed: out of memory"
+    message = "Simulation entrypoint execution failed: out of memory"
+    assert failed == EconomicImpactResult.error(
+        message,
+        retry_after_seconds=unjittered_record_lifetime,
+        delete_after_seconds=10,
     )
-    assert failed == expected
-    assert replayed == expected
+    assert replayed == EconomicImpactResult.error(
+        message,
+        retry_after_seconds=unjittered_record_lifetime - 121,
+        delete_after_seconds=0,
+    )
     mock_simulation_entrypoint.run.assert_called_once()
     mock_simulation_entrypoint.get_execution_by_id.assert_called_once()
     stored = economy_service._reform_impacts._cache.recent(5)
@@ -874,7 +1087,10 @@ def test_a_failed_us_national_job_is_still_replayed(
 
 
 def test_a_failed_us_district_job_is_still_replayed(
-    economy_service, mock_simulation_entrypoint, reform_impact_backend
+    economy_service,
+    mock_simulation_entrypoint,
+    reform_impact_backend,
+    unjittered_record_lifetime,
 ):
     _finish_jobs_with(
         mock_simulation_entrypoint, status="failed", error="out of memory"
@@ -886,11 +1102,17 @@ def test_a_failed_us_district_job_is_still_replayed(
     reform_impact_backend.advance(121)
     replayed = economy_service.get_economic_impact(request, time_period="2025")
 
-    expected = EconomicImpactResult.error(
-        "Simulation entrypoint execution failed: out of memory"
+    message = "Simulation entrypoint execution failed: out of memory"
+    assert failed == EconomicImpactResult.error(
+        message,
+        retry_after_seconds=unjittered_record_lifetime,
+        delete_after_seconds=10,
     )
-    assert failed == expected
-    assert replayed == expected
+    assert replayed == EconomicImpactResult.error(
+        message,
+        retry_after_seconds=unjittered_record_lifetime - 121,
+        delete_after_seconds=0,
+    )
     mock_simulation_entrypoint.run.assert_called_once()
     mock_simulation_entrypoint.get_execution_by_id.assert_called_once()
     stored = economy_service._reform_impacts._cache.recent(5)
@@ -934,7 +1156,9 @@ def test_a_breakdown_job_without_a_local_areas_result_is_not_stored(
     expected = EconomicImpactResult.error(
         "The simulation API returned a result of kind "
         f"{reported_kind} for a local-area breakdown request, which needs kind "
-        f"'local_areas'; the result was not stored. {BREAKDOWN_RETRY_NOTE}"
+        f"'local_areas'; the result was not stored. {BREAKDOWN_RETRY_NOTE}",
+        retry_after_seconds=120,
+        delete_after_seconds=10,
     )
     assert completed == expected
     assert within_two_minutes == expected
@@ -985,6 +1209,20 @@ def test_options_hash_marks_spm_provenance_schema():
     assert options_hash == (
         "[spm={'scenario': 'x'}&dataset=default&model_version=1"
         "&spm_provenance_schema=canonical-spm-comparison-v2&runtime_app_name=app]"
+    )
+
+
+def test_options_hash_marks_the_breakdown_result_schema():
+    options_hash = EconomyService()._build_options_hash(
+        options={"breakdown": "local_areas"},
+        bundle=RuntimeBundleIdentity(
+            dataset="default", model_version="1", runtime_app_name="app"
+        ),
+    )
+
+    assert options_hash == (
+        "[breakdown=local_areas&dataset=default&model_version=1"
+        "&breakdown_schema=2&runtime_app_name=app]"
     )
 
 

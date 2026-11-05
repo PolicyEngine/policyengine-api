@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogNotPublishedError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,

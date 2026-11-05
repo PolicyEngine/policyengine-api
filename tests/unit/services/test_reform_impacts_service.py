@@ -1,4 +1,5 @@
-from datetime import datetime
+from dataclasses import replace
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -210,6 +211,21 @@ def test_a_briefly_kept_error_expires_and_leaves_other_records() -> None:
     ]
 
 
+def test_a_failed_records_seconds_left_count_down_to_its_expiry() -> None:
+    backend = InMemoryCacheBackend()
+    service = ReformImpactsService(
+        ReformImpactCache(backend, CacheNamespace("test", "api"))
+    )
+    _create_impact(service, execution_id="failed-job", options_hash="hash", day=1)
+    stored_failure = service.set_error_reform_impact(
+        "failed-job", message="out of memory", keep_seconds=120
+    )
+
+    backend.advance(30)
+
+    assert service.get_reform_impact_seconds_left(stored_failure) == 90
+
+
 def test_impact_cached_under_previous_economy_schema_version_is_not_matched(
     service,
 ):
@@ -263,3 +279,80 @@ def test_impact_cached_under_previous_economy_schema_version_is_not_matched(
         )
         == []
     )
+
+
+class ManualClock:
+    """A naive-UTC clock that moves only when a test advances it."""
+
+    def __init__(self) -> None:
+        self.now = datetime(2026, 11, 5, 12, 0)
+
+    def __call__(self) -> datetime:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += timedelta(seconds=seconds)
+
+
+def _clocked_service(clock: ManualClock) -> ReformImpactsService:
+    return ReformImpactsService(
+        ReformImpactCache(InMemoryCacheBackend(), CacheNamespace("test", "api")),
+        now=clock,
+    )
+
+
+def test_seconds_until_counts_down_from_the_failure_s_end_time() -> None:
+    clock = ManualClock()
+    service = _clocked_service(clock)
+    _create_impact(service, execution_id="failed-job", options_hash="hash", day=1)
+    failure = service.set_error_reform_impact("failed-job", message="out of memory")
+
+    at_once = service.get_reform_impact_seconds_until(failure, seconds_after_end=10)
+    clock.advance(3.2)
+    part_way = service.get_reform_impact_seconds_until(failure, seconds_after_end=10)
+    clock.advance(6.8)
+    at_the_end = service.get_reform_impact_seconds_until(failure, seconds_after_end=10)
+    clock.advance(100)
+    long_after = service.get_reform_impact_seconds_until(failure, seconds_after_end=10)
+
+    # The failure's end time is the service clock's time when it was recorded.
+    assert failure.end_time == datetime(2026, 11, 5, 12, 0)
+    # Rounded up, so a caller that waits this long is never early.
+    assert (at_once, part_way, at_the_end, long_after) == (10, 7, 0, 0)
+
+
+def test_seconds_until_is_zero_without_an_end_time_and_never_above_the_wait() -> None:
+    clock = ManualClock()
+    service = _clocked_service(clock)
+    computing = _create_impact(
+        service, execution_id="old-job", options_hash="hash", day=1
+    )
+    # Recorded by an instance whose clock runs 30 seconds ahead of this one.
+    from_a_clock_ahead = replace(
+        computing, status="error", end_time=clock.now + timedelta(seconds=30)
+    )
+
+    without_end_time = service.get_reform_impact_seconds_until(
+        replace(computing, status="error"), seconds_after_end=10
+    )
+    ahead = service.get_reform_impact_seconds_until(
+        from_a_clock_ahead, seconds_after_end=10
+    )
+
+    assert without_end_time == 0
+    assert ahead == 10
+
+
+def test_delete_failed_reform_impact_removes_only_that_failure(service) -> None:
+    _create_impact(service, execution_id="failed-job", options_hash="hash", day=1)
+    _create_impact(service, execution_id="next-job", options_hash="hash", day=2)
+    failure = service.set_error_reform_impact("failed-job", message="out of memory")
+    identity = ReformImpactIdentity(scope=SCOPE, api_version="1", options_hash="hash")
+
+    deleted = service.delete_failed_reform_impact(failure)
+    deleted_again = service.delete_failed_reform_impact(failure)
+
+    assert (deleted, deleted_again) == (True, False)
+    assert [
+        impact.execution_id for impact in service.get_all_reform_impacts(identity)
+    ] == ["next-job"]

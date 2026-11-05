@@ -1,0 +1,20 @@
+# Proof fixture for api.dependencies.declared-and-used (the accepted case).
+#
+# The proof test runs deptry on policyengine_api/ in this directory, in the
+# repository's environment. Every module the package imports comes from a
+# declared runtime dependency, every declared runtime dependency is imported,
+# and pytest, declared only in the dev extra, is not imported, so deptry must
+# report nothing.
+
+[project]
+name = "deptry-proof-accepted"
+version = "0"
+dependencies = ["flask", "starlette"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+# The settings the rule requires (scripts/rules/declared_dependencies.py).
+[tool.deptry]
+known_first_party = ["policyengine_api"]
+optional_dependencies_dev_groups = ["dev"]

@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
+from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorResponse
 from policyengine_api.fastapi_routes.v2.households.document_models import (
     HouseholdDocument,
 )

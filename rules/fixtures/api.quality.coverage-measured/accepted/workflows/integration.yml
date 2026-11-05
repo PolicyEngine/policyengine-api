@@ -1,0 +1,15 @@
+# Proof fixture for api.quality.coverage-measured (the accepted case): a
+# reusable workflow keeps its coverage report for its callers to upload.
+on:
+  workflow_call:
+jobs:
+  integration:
+    strategy:
+      matrix:
+        database: [mysql]
+    steps:
+      - run: uv run --frozen --extra dev coverage xml -i -o coverage-v2.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: integration-coverage
+          path: coverage-v2.xml

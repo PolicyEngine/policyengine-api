@@ -185,8 +185,14 @@ must execute in this order:
    Alembic chain, confirms all heads are current, and detects ungenerated model
    changes.
 3. Remove the migration URL from the command environment.
-4. Supply only `V2_DATA_WRITE_DATABASE_URL` and the same target identity, then
-   run `uv run python scripts/publish_v2_metadata_catalog.py`.
+4. Supply only `V2_DATA_WRITE_DATABASE_URL`, the same target identity and
+   `HUGGING_FACE_TOKEN` (from the organization secret
+   `PE_UK_PRIVATE_HF_READ_TOKEN`), then run
+   `uv run python scripts/publish_v2_metadata_catalog.py`. Before publishing a
+   catalog version that is not stored yet, the command reads the certified data
+   artifacts its regions' filters use and stops if one cannot select a region.
+   It stops before reading anything if a UK version needs checking and
+   `HUGGING_FACE_TOKEN` is unset, because the UK data repository is private.
 5. Require the command to finish successfully and retain its non-secret JSON
    evidence before creating the candidate revision.
 6. Deploy the Cloud Run candidate with the target identity and
@@ -252,24 +258,160 @@ does not reorder, deduplicate, or repair package output. A value superseded on
 the immediately following day therefore has equal start and end dates and is a
 valid one-day interval.
 
-Each country's default dataset is the one the installed PolicyEngine.py
-release names in its manifest (`default_dataset`); the Public API sets none of
-its own. Publication stops if the manifest names no default, or if the release
-gives the national region another dataset. The US national region uses the
-release's default (`populace_us_2024` in 6.11.1). A US state,
-congressional-district, or place region uses its PolicyEngine.py regional
-alternative when one is available. Until a later reviewed change removes the
-fallback, a subnational region without such an alternative uses the default.
-The command emits one summary warning containing only the affected region
-types and counts. The UK national and country regions use the release's
-default (`microcosm_uk_2024_25` in 6.11.1); a country filters that national
-file. UK constituency and local-authority regions use the dataset
-PolicyEngine.py routes them to, `microcosm_uk_2024_25_dense`, because the
-national file has no area codes.
+Regions come from the Public API's checked-in reference files, one per country
+(`policyengine_api/data/v2/catalog/region_reference_files/`), not from
+PolicyEngine.py's region registry. Each row lists a region's code, label, type,
+parent, US state, the value that selects its households, and the v1 identifier
+it replaces. Each country's default dataset is the one the installed
+PolicyEngine.py release names in its manifest (`default_dataset`); the Public
+API sets none of its own. Publication stops if the manifest names no default,
+if the release does not certify it, or if the release routes national regions
+to another dataset. A scoping rule per country and region type gives each
+region its dataset from the certified data release and its filter:
 
-Review the fallback summary on every new PolicyEngine.py release. A changed
-count may identify an upstream change to the release's datasets even when
-publication otherwise succeeds.
+| Regions | Dataset | Filter |
+| --- | --- | --- |
+| US national | the release's default dataset (`populace_us_2024` in 6.11.1) | none |
+| US states and congressional districts | the release's state and district dataset | `row_filter` on `state_fips` or `congressional_district_geoid` |
+| UK national | the release's default dataset (`microcosm_uk_2024_25` in 6.11.1) | none |
+| UK nations | the release's default dataset | `row_filter` on `region` |
+| UK constituencies and local authorities | the release's local-area dataset (`microcosm_uk_2024_25_dense` in 6.11.1), which carries their codes | `row_filter` on `constituency_code_oa` or `la_code_oa`, value the ONS code |
+
+If the release names no dataset for a US state or district, those regions use
+the default dataset and the command emits one summary warning with the affected
+region types and counts. A UK constituency or local authority cannot fall back,
+since the national file has no area codes: a release that routes no dataset to
+their type stops publication. Region types without a rule, such as US places
+until the data can select them, are left out and counted in the evidence's
+`omitted_region_summaries`.
+
+Before a new catalog version is published, the command reads the HDF5 metadata
+of each dataset the row filters use, with ranged requests at the pinned
+revision, and stops if a filter's column is missing from its dataset's
+household columns. It does not check that a column holds rows for every
+region's value.
+
+Review the fallback and omitted-region summaries on every new PolicyEngine.py
+release. A changed count may identify an upstream change to the release's
+datasets even when publication otherwise succeeds.
+
+A catalog version is identified by its country and PolicyEngine.py version and
+never changes once published. When the command republishes a stored version
+whose staged regions differ from the stored ones, it keeps the stored regions
+unchanged, prints a warning with the country, the version and the counts of
+staged region rows the stored version lacks and of stored rows not staged, and
+continues. Its evidence then describes what is stored: the region count is the
+stored one, `kept_regions` lists the country, version, stored and staged region
+counts, and the fallback and omitted-region summaries leave that country out,
+since they describe staged regions that were not published. Every other table
+must still match exactly. Region reference changes therefore take effect in the
+next catalog version that is published.
+
+### Parameter tree
+
+Publication also writes parameter trees into `parameter_tree_children`, which
+`/v2/parameters/children` reads one level at a time. A tree is built from a
+catalog version's parameter and node records: every node and parameter is one
+row under its parent's path, a `[` starts a child as a `.` does (so a bracket schedule is one node
+whose children are its brackets, labelled "Bracket 1", "Bracket 2" and so on),
+and labels take the form the app's newer interface shows in every view: the
+stored label with underscores as spaces and its first letter upper-cased, or,
+without one, the last part of the name in that form (so an unlabelled schedule
+`...rates.uk` is "Uk"). A label PolicyEngine.py made for a parameter without
+one also gets the last part of the name, as v3 shows it today: a bracket field
+labelled from its schedule ("Income Tax main rates (bracket 1 rate)" is
+"Rate") and a breakdown parameter labelled from its breakdown parent
+("Standard deduction (Single)" is "SINGLE"). A breakdown label is recognised
+when it is an ancestor's stored label followed by one value per level below
+it, each the key, a label the catalog's enum variables give the key, or a
+dimension label followed by the key. A label the package writes in one of
+those forms is shortened too, such as the UK's "Maximum LHA (category A)",
+shown as "A". The catalog's other reads keep the label. Each row also records its position among all its
+siblings and, if a reform can change it, among the siblings a reform can
+change: a parameter under `gov` whose economy or household flag is set and whose path names
+neither `taxsim`, `gov.abolitions` nor `pycache`, and every node above such a
+parameter. These are the rules of the tree the app's newer interface builds
+from v1 metadata. Trees are written only for versions with catalog format 2,
+so every parameter in a tree has both flags.
+
+In the same transaction, the command writes the tree of each version in the
+catalog it publishes, which comes from the installed packages, when that
+version has none: the versions it publishes now, and the installed version when
+an earlier release stored it with catalog format 2 but without a tree. An
+installed version stored before catalog format 2 gets none, since its parameter
+rows store no flags. The rows are built from the
+catalog's own parameter and node records; only the stored parameters' IDs are
+read, by name, so the rows reference them, after publication has checked that
+the stored rows match the catalog. This is a row-only, idempotent insert of
+package-derived rows, which the deployment-seeder passage of the Alembic skill
+allows. The evidence's `parameter_trees_written` lists each version written,
+with its model, version and row count, and publication fails if a version in
+the catalog with catalog format 2 is still without a tree when it finishes.
+
+Other stored versions get no tree. Writing one for them would derive rows from
+what earlier releases stored, a data migration that the Alembic skill's rules
+leave to a human migration decision, so it is not done; such a version gets a
+tree only if a person decides on that migration.
+
+`/v2/parameters/children` lists one level with one indexed read:
+`parent_path` names the node ("" for the top level), and
+`reform_changeable=true` keeps only the children a reform can change, sorted
+by label, with child counts that count only those. Without it, children are
+in path order, with a schedule's brackets in bracket order. A node carries
+its child count, a parameter its summary. An unknown parent path has no
+children. The route reads its query through the shared strict query models,
+so unknown or repeated parameters, an unsupported country and a malformed
+`policyengine_version` return 422 (the last two returned 400 before). A
+catalog version without a tree returns 503 with a message that names the
+version.
+
+### Parameter search file
+
+Publication also writes the parameter search file of each catalog version it
+publishes into `parameter_search_files`: one gzip-compressed JSON file per
+version and file format, with the SHA-256 of the uncompressed JSON. The file
+holds what the app's newer interface's parameter search reads:
+
+- every parameter a reform can change (the parameter tree's rule) with its
+  path, stored label, unit, description, and whether a draft can edit its
+  current-law value: a number, a yes/no value or an infinite threshold. Where
+  that changes over time (a bracket that stops applying has a null value from
+  that date), `editable` describes the earliest value and `editable_changes`
+  lists the dates from which it changes, so the file does not depend on the
+  day it was built;
+- the path and stored label of every other parameter under `gov`, which the
+  search's concept clusters, acronym aliases and member labels read;
+- the path and stored label of `gov` and every node under it that has a stored
+  label, for breadcrumbs, schedule names and concept clusters.
+
+Labels are stored labels, or null: the search treats a label that only
+restates its path's last key as a placeholder, so its reader applies v1's
+fallback (the key with underscores as spaces, "bracket N" for a bracket).
+
+The file is built from the installed packages' catalog, never from rows an
+earlier release stored, so publication writes one only for the versions it
+publishes: each new version, and the installed version when an earlier
+release stored it before search files existed. A version that is neither has
+no file until a person decides otherwise. An installed version stored before
+catalog format 2 (`catalog_format` null) gets none either: it has no stored
+economy or household flags, so a file built from the installed catalog's
+flags would contradict its own parameter rows. Writing only inserts; a stored file
+of the same format must equal the one built from the installed packages, and
+publication fails if it differs or if a version it publishes is left without a
+file. A later file format adds a row for the version instead of changing the
+stored one. The evidence's `parameter_search_files_written` lists each file
+written with its model, version and uncompressed and compressed sizes in bytes.
+
+`/v2/parameters/search-file` (query `country_id` and optional
+`policyengine_version`) serves the selected version's file of the current
+format. A client that accepts gzip receives the stored bytes with
+`Content-Encoding: gzip`; any other client receives the uncompressed JSON. The
+body is the file itself, not the `status`/`result` envelope. Each
+representation has its own strong `ETag`, made from the SHA-256 of the
+uncompressed JSON (`"<sha256>"`, or `"<sha256>-gzip"` for the gzip one). The
+cache lifetime, `Vary` and the 304 for a matching `If-None-Match` are those of
+every metadata route. A version without a file of the current format returns
+503.
 
 ## Validation evidence and retry
 
@@ -278,7 +420,13 @@ Successful JSON evidence contains:
 - the canonical PolicyEngine.py version;
 - the dependency versions derived from its packaged manifest;
 - catalog entity counts;
-- US fallback counts;
+- fallback counts and omitted-region counts by country and region type, and
+  the stored and staged region counts of any stored version whose regions were
+  kept;
+- the model, version and row count of each catalog version whose parameter
+  tree was written;
+- the model, version and uncompressed and compressed sizes of each parameter
+  search file written;
 - elapsed publication time; and
 - a success outcome.
 
@@ -297,8 +445,11 @@ confirms existing simulation and report record counts are unchanged.
 A failed attempt rolls back all catalog changes. Retry the same artifact only
 after correcting the external failure. A matching retry preserves identifiers,
 content, and row counts. Different normalized content under the same
-PolicyEngine.py version fails for operator review; it is never silently
-replaced. A later PolicyEngine.py version adds a catalog version without
+PolicyEngine.py version fails for operator review, with an error naming the
+first table that differs; it is never silently replaced. Regions are the
+exception: they come from the Public API's reference files, so a stored version
+keeps the regions it was published with (see "Source and regional dataset
+behavior"). A later PolicyEngine.py version adds a catalog version without
 deleting or modifying earlier versioned rows, including their logical datasets,
 regions, model descriptions, current-law IDs, and time-period options.
 

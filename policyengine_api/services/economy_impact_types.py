@@ -49,18 +49,43 @@ LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES = frozenset({400, 422})
 # run on that dataset each time. Every other failed job's error is kept for the
 # cache lifetime of 30 days.
 RETRYABLE_FAILURE_SECONDS = 120
+# How long after a failure is recorded a DELETE on the economy URL may remove
+# it, so the next request submits a new job. Any stored failure can be
+# removed, but not at once: a client that deletes and requests again on every
+# failed answer would otherwise start a new run each time.
+FAILED_IMPACT_DELETE_LOCKOUT_SECONDS = 10
+_DELETE_RETRY_NOTE = (
+    f"or {FAILED_IMPACT_DELETE_LOCKOUT_SECONDS} seconds after it by first sending "
+    "DELETE to this URL."
+)
 LOCAL_AREA_BREAKDOWN_RETRY_NOTE = (
     "A new local-area breakdown can be requested "
-    f"{RETRYABLE_FAILURE_SECONDS // 60} minutes after this failure."
+    f"{RETRYABLE_FAILURE_SECONDS // 60} minutes after this failure, "
+    f"{_DELETE_RETRY_NOTE}"
 )
 US_STATE_RETRY_NOTE = (
     "A new run for this state can be requested "
-    f"{RETRYABLE_FAILURE_SECONDS // 60} minutes after this failure."
+    f"{RETRYABLE_FAILURE_SECONDS // 60} minutes after this failure, "
+    f"{_DELETE_RETRY_NOTE}"
 )
+# How many times a DELETE selects the stored record again when that record
+# changed between being selected and being removed.
+FAILED_IMPACT_DELETE_ATTEMPTS = 3
 # The telemetry simulation_kind of a breakdown run. The simulation API's
 # telemetry envelope forbids extra fields, so the run is marked here rather
 # than by a new field; geography_type and geography_code still name its region.
 LOCAL_AREA_BREAKDOWN_SIMULATION_KIND = "local_area_breakdown"
+# The version of the local-area breakdown result that a breakdown request's
+# options hash names, as breakdown_schema. A breakdown result cached under an
+# earlier version, or before the hash named one, is not served, and the next
+# request computes it again. Requests without a breakdown have no such field,
+# so their hashes and cache entries don't change. Raise it when the simulation
+# API's local-area result gains or changes fields, since a simulation API
+# deploy that keeps the same .py version doesn't change any other part of the
+# cache identity.
+# 2: each level lists the ONS codes of the areas the run estimated but
+# disclosure control withheld (PolicyEngine/policyengine-sim-api#968).
+LOCAL_AREA_BREAKDOWN_RESULT_SCHEMA_VERSION = 2
 BUDGET_WINDOW_CLAIM_ATTEMPTS = 3
 REFORM_IMPACT_START_CLAIM_ATTEMPTS = 3
 # A budget-window progress message names this many computing years and counts
@@ -147,24 +172,35 @@ class EconomicImpactResult(BaseModel):
     """The status of an economic impact calculation and, once complete, its result.
 
     ``data`` holds the reform impact JSON when the status is ok, and ``message``
-    explains an error.
+    explains an error. For an error, ``retry_after_seconds`` is how long the
+    stored failure is still returned: once it has passed, a request finds no
+    record and submits a new job. It is the longest wait, since a deploy that
+    changes the versions or worker app a request resolves to stops the record
+    being found sooner. It is None when no failure is stored, the next request
+    would answer from a newer job, or the failure's lifetime cannot be read.
+    ``delete_after_seconds`` is how long until a DELETE may remove the stored
+    failure, 0 once it may; it is None whenever ``retry_after_seconds`` is.
     """
 
     status: ImpactStatus
     data: dict | None = None
     message: str | None = None
+    retry_after_seconds: int | None = None
+    delete_after_seconds: int | None = None
     # Stage fields relayed from the Simulation Entrypoint while computing.
     # Kept out of to_dict(); the route adds them only when present.
     run_progress: SimulationRunProgress | None = None
 
     model_config = {"frozen": True}  # Make model immutable
 
-    def to_dict(self) -> dict[str, str | dict | None]:
+    def to_dict(self) -> dict[str, str | dict | int | None]:
         """Convert the EconomicImpactResult to a dictionary."""
         return {
             "status": self.status.value,
             "data": self.data,
             "message": self.message,
+            "retry_after_seconds": self.retry_after_seconds,
+            "delete_after_seconds": self.delete_after_seconds,
         }
 
     @classmethod
@@ -180,10 +216,81 @@ class EconomicImpactResult(BaseModel):
         return cls(status=ImpactStatus.COMPUTING, data=None, run_progress=run_progress)
 
     @classmethod
-    def error(cls, message: str) -> "EconomicImpactResult":
+    def error(
+        cls,
+        message: str,
+        *,
+        retry_after_seconds: int | None = None,
+        delete_after_seconds: int | None = None,
+    ) -> "EconomicImpactResult":
         """Create an EconomicImpactResult for an error in the impact calculation."""
         logger.log_struct({"message": message}, severity="ERROR")
-        return cls(status=ImpactStatus.ERROR, data=None, message=message)
+        return cls(
+            status=ImpactStatus.ERROR,
+            data=None,
+            message=message,
+            retry_after_seconds=retry_after_seconds,
+            delete_after_seconds=delete_after_seconds,
+        )
+
+
+class FailedImpactDeletionOutcome(Enum):
+    """What a DELETE on the economy URL did with the stored record it selected."""
+
+    DELETED = "deleted"
+    LOCKED = "locked"
+    NOT_A_FAILURE = "not_a_failure"
+    NOT_FOUND = "not_found"
+
+
+@dataclass(frozen=True)
+class FailedImpactDeletion:
+    """The outcome of a DELETE on the economy URL, with its message.
+
+    ``delete_after_seconds`` is set only when the failure is too recent to
+    remove: the whole seconds, rounded up, until it may be.
+    """
+
+    outcome: FailedImpactDeletionOutcome
+    message: str | None = None
+    delete_after_seconds: int | None = None
+
+    @classmethod
+    def deleted(cls) -> "FailedImpactDeletion":
+        """Report that the stored failure and its index entries were removed."""
+        return cls(FailedImpactDeletionOutcome.DELETED)
+
+    @classmethod
+    def locked(cls, delete_after_seconds: int) -> "FailedImpactDeletion":
+        """Report a stored failure too recent to remove, and when it may be."""
+        return cls(
+            FailedImpactDeletionOutcome.LOCKED,
+            message=(
+                "This failure was recorded less than "
+                f"{FAILED_IMPACT_DELETE_LOCKOUT_SECONDS} seconds ago, so it was not "
+                f"deleted. It can be deleted in {delete_after_seconds} seconds."
+            ),
+            delete_after_seconds=delete_after_seconds,
+        )
+
+    @classmethod
+    def not_a_failure(cls, status: str) -> "FailedImpactDeletion":
+        """Report a stored record that is computing or complete, which stays."""
+        return cls(
+            FailedImpactDeletionOutcome.NOT_A_FAILURE,
+            message=(
+                f"The stored economic impact is {status}, not a failure, so it "
+                "was not deleted."
+            ),
+        )
+
+    @classmethod
+    def not_found(cls) -> "FailedImpactDeletion":
+        """Report that no record is stored for the request, or it expired."""
+        return cls(
+            FailedImpactDeletionOutcome.NOT_FOUND,
+            message="No economic impact is stored for this request.",
+        )
 
 
 class BudgetWindowEconomicImpactResult(BaseModel):

@@ -66,6 +66,36 @@ class ParameterNodeLabelRow(NamedTuple):
     label: str | None
 
 
+@dataclass(frozen=True)
+class MetadataParameterSearchFile:
+    """A catalog version's stored parameter search file and what identifies it.
+
+    ``compressed_content`` is gzip-compressed JSON; ``content_sha256`` is the
+    SHA-256 of the uncompressed JSON, so it names the content whichever
+    encoding a response uses.
+    """
+
+    policyengine_version: str
+    file_format: int
+    compressed_content: bytes
+    content_sha256: str
+    uncompressed_size: int
+    compressed_size: int
+
+
+@dataclass(frozen=True)
+class ParameterTreeLevel:
+    """Which level of a catalog version's parameter tree a listing reads.
+
+    ``parent_path`` names the node whose direct children are listed ("" for
+    the top level); ``reform_changeable`` keeps only the children a reform can
+    change, sorted by label, with child counts that count only those.
+    """
+
+    parent_path: str = ""
+    reform_changeable: bool = False
+
+
 class StrictResponseModel(BaseModel):
     """Base for metadata results that rejects unknown fields and non-finite numbers."""
 
@@ -197,8 +227,10 @@ class MetadataDataset(StrictResponseModel):
 class MetadataRegion(StrictResponseModel):
     """A region the model can simulate, such as a country, state or constituency.
 
-    When requires_filter is true, the region is simulated by filtering its
-    default dataset on filter_field and filter_value.
+    When requires_filter is true, filter_strategy says how the region selects
+    households of its default dataset. With "row_filter", it keeps the
+    households whose filter_field column equals filter_value (or is in it,
+    when filter_value is a JSON list).
     """
 
     id: UUID

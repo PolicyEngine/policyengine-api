@@ -20,7 +20,7 @@ from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.pool import NullPool
 
-from policyengine_api.data import orm
+from policyengine_api.data import orm, orm_pool_events
 from policyengine_api.data.v1_models import ReportOutput
 from tests.integration.test_mysql_policy_dual_write import _mysql_url
 
@@ -75,6 +75,9 @@ def v1_remote_engine(monkeypatch, mysql_database_url):
         yield engine
     finally:
         engine.dispose()
+        # Building the engine sends the connector's logs to the runtime; undo
+        # that, so later tests in this process see the logger unchanged.
+        orm_pool_events.stop_recording_connector_refresh_logs()
 
 
 @pytest.fixture

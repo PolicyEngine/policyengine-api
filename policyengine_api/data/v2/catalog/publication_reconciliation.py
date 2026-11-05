@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from sqlalchemy import Connection, Select
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 
 from policyengine_api.data.v2.catalog.publication_staging import (
     STAGE_CATALOG_DATASETS,
@@ -18,33 +18,24 @@ from policyengine_api.data.v2.catalog.publication_staging import (
     STAGE_CATALOG_REGIONS,
     STAGE_CATALOG_VARIABLES,
 )
+from policyengine_api.data.v2.catalog.publication_tables import (
+    DATASETS,
+    MODEL_VERSIONS,
+    MODELS,
+    PARAMETER_NODES,
+    PARAMETER_VALUES,
+    PARAMETERS,
+    REGIONS,
+    VARIABLES,
+)
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
 )
-from policyengine_api.data.v2.models import (
-    Dataset,
-    Parameter,
-    ParameterNode,
-    ParameterValue,
-    Region,
-    TaxBenefitModel,
-    TaxBenefitModelVersion,
-    Variable,
-)
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from policyengine_api.data.v2.catalog.records import CountryCatalog
-
-DATASETS = Dataset.__table__
-MODELS = TaxBenefitModel.__table__
-MODEL_VERSIONS = TaxBenefitModelVersion.__table__
-PARAMETERS = Parameter.__table__
-PARAMETER_NODES = ParameterNode.__table__
-PARAMETER_VALUES = ParameterValue.__table__
-REGIONS = Region.__table__
-VARIABLES = Variable.__table__
-
-COUNTRY_ID = sa.bindparam("country_id")
 
 
 def version_exists(connection: Connection, country: CountryCatalog) -> bool:
@@ -76,16 +67,24 @@ def _versioned_table_from(table: sa.Table) -> sa.Join:
     )
 
 
-def stored_catalog_format(
-    connection: Connection, country: CountryCatalog
-) -> int | None:
-    """Return the catalog format this country's stored version was published with.
+@dataclass(frozen=True, slots=True)
+class StoredVersion:
+    """A country's stored catalog version: its ID and catalog format.
 
-    None means it was published before catalog format 2, so its format 2
-    fields are empty.
+    ``catalog_format`` is None for a version published before catalog format 2,
+    whose format 2 fields are empty.
     """
+
+    id: UUID
+    catalog_format: int | None
+
+
+def stored_version(
+    connection: Connection, country: CountryCatalog
+) -> StoredVersion | None:
+    """Return this country's stored catalog version, or None if it is not stored."""
     statement = (
-        sa.select(MODEL_VERSIONS.c.catalog_format)
+        sa.select(MODEL_VERSIONS.c.id, MODEL_VERSIONS.c.catalog_format)
         .select_from(
             MODEL_VERSIONS.join(
                 MODELS,
@@ -97,15 +96,18 @@ def stored_catalog_format(
             MODEL_VERSIONS.c.version == country.model_version.version,
         )
     )
-    return connection.execute(statement).scalar_one_or_none()
+    row = connection.execute(statement).one_or_none()
+    if row is None:
+        return None
+    return StoredVersion(id=row.id, catalog_format=row.catalog_format)
 
 
 def _comparison_pairs(
     country: CountryCatalog,
     *,
     with_format_2: bool,
-) -> tuple[tuple[Select, Select], ...]:
-    """Return the staged and stored rows of each compared table.
+) -> tuple[tuple[str, Select, Select], ...]:
+    """Return each compared table's name with its staged and stored rows.
 
     Without ``with_format_2``, catalog format 2's fields are left out: a
     version published before format 2 keeps them empty, and publication never
@@ -291,6 +293,22 @@ def _comparison_pairs(
         )
     )
 
+    return (
+        ("model version", staged_model_version, actual_model_version),
+        ("variables", staged_variables, actual_variables),
+        ("parameter nodes", staged_parameter_nodes, actual_parameter_nodes),
+        ("parameters", staged_parameters, actual_parameters),
+        ("parameter values", staged_parameter_values, actual_parameter_values),
+        ("datasets", staged_datasets, actual_datasets),
+    )
+
+
+def _region_comparison_pair(country: CountryCatalog) -> tuple[Select, Select]:
+    """Return the staged and stored region rows of one country's catalog version."""
+    selected_version = sa.and_(
+        MODELS.c.name == country.model.name,
+        MODEL_VERSIONS.c.version == country.model_version.version,
+    )
     staged_regions = sa.select(
         STAGE_CATALOG_REGIONS.c.code,
         STAGE_CATALOG_REGIONS.c.label,
@@ -327,15 +345,7 @@ def _comparison_pairs(
         .where(selected_version)
     )
 
-    return (
-        (staged_model_version, actual_model_version),
-        (staged_variables, actual_variables),
-        (staged_parameter_nodes, actual_parameter_nodes),
-        (staged_parameters, actual_parameters),
-        (staged_parameter_values, actual_parameter_values),
-        (staged_datasets, actual_datasets),
-        (staged_regions, actual_regions),
-    )
+    return staged_regions, actual_regions
 
 
 def _sets_differ(
@@ -355,394 +365,59 @@ def _sets_differ(
 def assert_country_matches(
     connection: Connection,
     country: CountryCatalog,
+    *,
+    include_regions: bool = True,
 ) -> None:
     """Raise CatalogPublicationError if the stored version differs from the staged one.
 
     Rows are compared as sets in both directions, so a missing row and an extra
-    row both fail. A version published before catalog format 2 is compared
-    without format 2's fields.
+    row both fail; the error names the first table that differs, never its
+    rows. Without ``include_regions``, region rows are not compared: they come
+    from the Public API's reference files, which may change while the
+    PolicyEngine.py version stays the same. A version published before catalog
+    format 2 is compared without format 2's fields.
     """
-    stored_format = stored_catalog_format(connection, country)
-    pairs = _comparison_pairs(country, with_format_2=stored_format is not None)
-    for staged, actual in pairs:
+    stored = stored_version(connection, country)
+    pairs = _comparison_pairs(
+        country,
+        with_format_2=stored is not None and stored.catalog_format is not None,
+    )
+    if include_regions:
+        pairs = (*pairs, ("regions", *_region_comparison_pair(country)))
+    for table_name, staged, actual in pairs:
         if _sets_differ(connection, staged, actual):
-            msg = f"persisted {country.country_id} catalog differs from PolicyEngine.py"
+            msg = (
+                f"the stored {country.country_id} catalog version "
+                f"{country.model_version.version} differs from the staged catalog "
+                f"in its {table_name}"
+            )
             raise CatalogPublicationError(msg)
 
 
-INSERT_MODEL = (
-    postgresql_insert(MODELS)
-    .from_select(
-        ["id", "created_at", "updated_at", "name", "description"],
-        sa.select(
-            STAGE_CATALOG_MODELS.c.id,
-            sa.func.current_timestamp(),
-            sa.func.current_timestamp(),
-            STAGE_CATALOG_MODELS.c.name,
-            STAGE_CATALOG_MODELS.c.description,
-        ).where(STAGE_CATALOG_MODELS.c.country_id == COUNTRY_ID),
-    )
-    .on_conflict_do_nothing(index_elements=[MODELS.c.name])
-)
-
-INSERT_MODEL_VERSION = sa.insert(MODEL_VERSIONS).from_select(
-    [
-        "id",
-        "created_at",
-        "model_id",
-        "version",
-        "description",
-        "current_law_id",
-        "metadata_time_periods",
-        "catalog_format",
-        "entities",
-        "basic_inputs",
-    ],
-    sa.select(
-        STAGE_CATALOG_MODELS.c.version_id,
-        sa.func.current_timestamp(),
-        MODELS.c.id,
-        STAGE_CATALOG_MODELS.c.version,
-        STAGE_CATALOG_MODELS.c.version_description,
-        STAGE_CATALOG_MODELS.c.current_law_id,
-        sa.cast(
-            STAGE_CATALOG_MODELS.c.metadata_time_periods,
-            MODEL_VERSIONS.c.metadata_time_periods.type,
-        ),
-        STAGE_CATALOG_MODELS.c.catalog_format,
-        sa.cast(STAGE_CATALOG_MODELS.c.entities, MODEL_VERSIONS.c.entities.type),
-        sa.cast(
-            STAGE_CATALOG_MODELS.c.basic_inputs,
-            MODEL_VERSIONS.c.basic_inputs.type,
-        ),
-    )
-    .select_from(
-        STAGE_CATALOG_MODELS.join(
-            MODELS,
-            MODELS.c.name == STAGE_CATALOG_MODELS.c.name,
-        )
-    )
-    .where(STAGE_CATALOG_MODELS.c.country_id == COUNTRY_ID),
-)
-
-INSERT_DATASETS = sa.insert(DATASETS).from_select(
-    [
-        "id",
-        "created_at",
-        "updated_at",
-        "name",
-        "description",
-        "storage_path",
-        "year",
-        "is_output_dataset",
-        "tax_benefit_model_version_id",
-    ],
-    sa.select(
-        STAGE_CATALOG_DATASETS.c.id,
-        sa.func.current_timestamp(),
-        sa.func.current_timestamp(),
-        STAGE_CATALOG_DATASETS.c.name,
-        STAGE_CATALOG_DATASETS.c.description,
-        sa.cast(sa.null(), DATASETS.c.storage_path.type),
-        STAGE_CATALOG_DATASETS.c.year,
-        sa.literal(value=False),
-        MODEL_VERSIONS.c.id,
-    )
-    .select_from(
-        STAGE_CATALOG_DATASETS.join(
-            STAGE_CATALOG_MODELS,
-            STAGE_CATALOG_MODELS.c.country_id == STAGE_CATALOG_DATASETS.c.country_id,
-        )
-        .join(MODELS, MODELS.c.name == STAGE_CATALOG_MODELS.c.name)
-        .join(
-            MODEL_VERSIONS,
-            sa.and_(
-                MODEL_VERSIONS.c.model_id == MODELS.c.id,
-                MODEL_VERSIONS.c.version == STAGE_CATALOG_MODELS.c.version,
-            ),
-        )
-    )
-    .where(STAGE_CATALOG_DATASETS.c.country_id == COUNTRY_ID),
-)
-
-INSERT_VARIABLES = sa.insert(VARIABLES).from_select(
-    [
-        "id",
-        "created_at",
-        "name",
-        "label",
-        "entity",
-        "description",
-        "data_type",
-        "possible_values",
-        "default_value",
-        "adds",
-        "subtracts",
-        "is_input_variable",
-        "hidden_input",
-        "module_name",
-        "adds_parameter_path",
-        "subtracts_parameter_path",
-        "enum_values",
-        "unit",
-        "definition_period",
-        "tax_benefit_model_version_id",
-    ],
-    sa.select(
-        STAGE_CATALOG_VARIABLES.c.id,
-        sa.func.current_timestamp(),
-        STAGE_CATALOG_VARIABLES.c.name,
-        STAGE_CATALOG_VARIABLES.c.label,
-        STAGE_CATALOG_VARIABLES.c.entity,
-        STAGE_CATALOG_VARIABLES.c.description,
-        STAGE_CATALOG_VARIABLES.c.data_type,
-        sa.cast(
-            STAGE_CATALOG_VARIABLES.c.possible_values,
-            VARIABLES.c.possible_values.type,
-        ),
-        sa.cast(
-            STAGE_CATALOG_VARIABLES.c.default_value,
-            VARIABLES.c.default_value.type,
-        ),
-        sa.cast(STAGE_CATALOG_VARIABLES.c.adds, VARIABLES.c.adds.type),
-        sa.cast(
-            STAGE_CATALOG_VARIABLES.c.subtracts,
-            VARIABLES.c.subtracts.type,
-        ),
-        STAGE_CATALOG_VARIABLES.c.is_input_variable,
-        STAGE_CATALOG_VARIABLES.c.hidden_input,
-        STAGE_CATALOG_VARIABLES.c.module_name,
-        STAGE_CATALOG_VARIABLES.c.adds_parameter_path,
-        STAGE_CATALOG_VARIABLES.c.subtracts_parameter_path,
-        sa.cast(
-            STAGE_CATALOG_VARIABLES.c.enum_values,
-            VARIABLES.c.enum_values.type,
-        ),
-        STAGE_CATALOG_VARIABLES.c.unit,
-        STAGE_CATALOG_VARIABLES.c.definition_period,
-        MODEL_VERSIONS.c.id,
-    )
-    .select_from(
-        STAGE_CATALOG_VARIABLES.join(
-            STAGE_CATALOG_MODELS,
-            STAGE_CATALOG_MODELS.c.country_id == STAGE_CATALOG_VARIABLES.c.country_id,
-        )
-        .join(MODELS, MODELS.c.name == STAGE_CATALOG_MODELS.c.name)
-        .join(
-            MODEL_VERSIONS,
-            sa.and_(
-                MODEL_VERSIONS.c.model_id == MODELS.c.id,
-                MODEL_VERSIONS.c.version == STAGE_CATALOG_MODELS.c.version,
-            ),
-        )
-    )
-    .where(STAGE_CATALOG_VARIABLES.c.country_id == COUNTRY_ID),
-)
-
-INSERT_PARAMETER_NODES = sa.insert(PARAMETER_NODES).from_select(
-    [
-        "id",
-        "created_at",
-        "name",
-        "label",
-        "description",
-        "tax_benefit_model_version_id",
-    ],
-    sa.select(
-        STAGE_CATALOG_PARAMETER_NODES.c.id,
-        sa.func.current_timestamp(),
-        STAGE_CATALOG_PARAMETER_NODES.c.name,
-        STAGE_CATALOG_PARAMETER_NODES.c.label,
-        STAGE_CATALOG_PARAMETER_NODES.c.description,
-        MODEL_VERSIONS.c.id,
-    )
-    .select_from(
-        STAGE_CATALOG_PARAMETER_NODES.join(
-            STAGE_CATALOG_MODELS,
-            STAGE_CATALOG_MODELS.c.country_id
-            == STAGE_CATALOG_PARAMETER_NODES.c.country_id,
-        )
-        .join(MODELS, MODELS.c.name == STAGE_CATALOG_MODELS.c.name)
-        .join(
-            MODEL_VERSIONS,
-            sa.and_(
-                MODEL_VERSIONS.c.model_id == MODELS.c.id,
-                MODEL_VERSIONS.c.version == STAGE_CATALOG_MODELS.c.version,
-            ),
-        )
-    )
-    .where(STAGE_CATALOG_PARAMETER_NODES.c.country_id == COUNTRY_ID),
-)
-
-INSERT_PARAMETERS = sa.insert(PARAMETERS).from_select(
-    [
-        "id",
-        "created_at",
-        "name",
-        "label",
-        "description",
-        "data_type",
-        "unit",
-        "economy",
-        "household",
-        "tax_benefit_model_version_id",
-    ],
-    sa.select(
-        STAGE_CATALOG_PARAMETERS.c.id,
-        sa.func.current_timestamp(),
-        STAGE_CATALOG_PARAMETERS.c.name,
-        STAGE_CATALOG_PARAMETERS.c.label,
-        STAGE_CATALOG_PARAMETERS.c.description,
-        STAGE_CATALOG_PARAMETERS.c.data_type,
-        STAGE_CATALOG_PARAMETERS.c.unit,
-        STAGE_CATALOG_PARAMETERS.c.economy,
-        STAGE_CATALOG_PARAMETERS.c.household,
-        MODEL_VERSIONS.c.id,
-    )
-    .select_from(
-        STAGE_CATALOG_PARAMETERS.join(
-            STAGE_CATALOG_MODELS,
-            STAGE_CATALOG_MODELS.c.country_id == STAGE_CATALOG_PARAMETERS.c.country_id,
-        )
-        .join(MODELS, MODELS.c.name == STAGE_CATALOG_MODELS.c.name)
-        .join(
-            MODEL_VERSIONS,
-            sa.and_(
-                MODEL_VERSIONS.c.model_id == MODELS.c.id,
-                MODEL_VERSIONS.c.version == STAGE_CATALOG_MODELS.c.version,
-            ),
-        )
-    )
-    .where(STAGE_CATALOG_PARAMETERS.c.country_id == COUNTRY_ID),
-)
-
-INSERT_PARAMETER_VALUES = sa.insert(PARAMETER_VALUES).from_select(
-    [
-        "id",
-        "created_at",
-        "parameter_id",
-        "value_json",
-        "start_date",
-        "end_date",
-        "policy_id",
-        "dynamic_id",
-    ],
-    sa.select(
-        STAGE_CATALOG_PARAMETER_VALUES.c.id,
-        sa.func.current_timestamp(),
-        PARAMETERS.c.id,
-        sa.cast(
-            STAGE_CATALOG_PARAMETER_VALUES.c.value_json,
-            PARAMETER_VALUES.c.value_json.type,
-        ),
-        STAGE_CATALOG_PARAMETER_VALUES.c.start_date,
-        STAGE_CATALOG_PARAMETER_VALUES.c.end_date,
-        sa.cast(sa.null(), PARAMETER_VALUES.c.policy_id.type),
-        sa.cast(sa.null(), PARAMETER_VALUES.c.dynamic_id.type),
-    )
-    .select_from(
-        STAGE_CATALOG_PARAMETER_VALUES.join(
-            STAGE_CATALOG_MODELS,
-            STAGE_CATALOG_MODELS.c.country_id
-            == STAGE_CATALOG_PARAMETER_VALUES.c.country_id,
-        )
-        .join(MODELS, MODELS.c.name == STAGE_CATALOG_MODELS.c.name)
-        .join(
-            MODEL_VERSIONS,
-            sa.and_(
-                MODEL_VERSIONS.c.model_id == MODELS.c.id,
-                MODEL_VERSIONS.c.version == STAGE_CATALOG_MODELS.c.version,
-            ),
-        )
-        .join(
-            PARAMETERS,
-            sa.and_(
-                PARAMETERS.c.tax_benefit_model_version_id == MODEL_VERSIONS.c.id,
-                PARAMETERS.c.name == STAGE_CATALOG_PARAMETER_VALUES.c.parameter_name,
-            ),
-        )
-    )
-    .where(STAGE_CATALOG_PARAMETER_VALUES.c.country_id == COUNTRY_ID),
-)
-
-INSERT_REGIONS = sa.insert(REGIONS).from_select(
-    [
-        "id",
-        "created_at",
-        "updated_at",
-        "code",
-        "label",
-        "region_type",
-        "requires_filter",
-        "filter_field",
-        "filter_value",
-        "filter_strategy",
-        "parent_code",
-        "state_code",
-        "state_name",
-        "tax_benefit_model_version_id",
-        "default_dataset_id",
-    ],
-    sa.select(
-        STAGE_CATALOG_REGIONS.c.id,
-        sa.func.current_timestamp(),
-        sa.func.current_timestamp(),
-        STAGE_CATALOG_REGIONS.c.code,
-        STAGE_CATALOG_REGIONS.c.label,
-        sa.cast(STAGE_CATALOG_REGIONS.c.region_type, REGIONS.c.region_type.type),
-        STAGE_CATALOG_REGIONS.c.requires_filter,
-        STAGE_CATALOG_REGIONS.c.filter_field,
-        STAGE_CATALOG_REGIONS.c.filter_value,
-        STAGE_CATALOG_REGIONS.c.filter_strategy,
-        STAGE_CATALOG_REGIONS.c.parent_code,
-        STAGE_CATALOG_REGIONS.c.state_code,
-        STAGE_CATALOG_REGIONS.c.state_name,
-        MODEL_VERSIONS.c.id,
-        DATASETS.c.id,
-    )
-    .select_from(
-        STAGE_CATALOG_REGIONS.join(
-            STAGE_CATALOG_MODELS,
-            STAGE_CATALOG_MODELS.c.country_id == STAGE_CATALOG_REGIONS.c.country_id,
-        )
-        .join(MODELS, MODELS.c.name == STAGE_CATALOG_MODELS.c.name)
-        .join(
-            MODEL_VERSIONS,
-            sa.and_(
-                MODEL_VERSIONS.c.model_id == MODELS.c.id,
-                MODEL_VERSIONS.c.version == STAGE_CATALOG_MODELS.c.version,
-            ),
-        )
-        .join(
-            DATASETS,
-            sa.and_(
-                DATASETS.c.tax_benefit_model_version_id == MODEL_VERSIONS.c.id,
-                DATASETS.c.name == STAGE_CATALOG_REGIONS.c.default_dataset_name,
-            ),
-        )
-    )
-    .where(STAGE_CATALOG_REGIONS.c.country_id == COUNTRY_ID),
-)
-
-SET_BASED_INSERT_STATEMENTS = (
-    INSERT_MODEL,
-    INSERT_MODEL_VERSION,
-    INSERT_DATASETS,
-    INSERT_VARIABLES,
-    INSERT_PARAMETER_NODES,
-    INSERT_PARAMETERS,
-    INSERT_PARAMETER_VALUES,
-    INSERT_REGIONS,
-)
+def count_stored_regions(connection: Connection, country: CountryCatalog) -> int:
+    """Count the region rows stored for one country's catalog version."""
+    _staged, actual = _region_comparison_pair(country)
+    return connection.execute(
+        sa.select(sa.func.count()).select_from(actual.subquery())
+    ).scalar_one()
 
 
-def publish_new_country(connection: Connection, country: CountryCatalog) -> None:
-    """Insert one country's staged catalog into the v2 tables, parents first.
-
-    The model row is reused if one with the same name already exists.
-    """
-    for statement in SET_BASED_INSERT_STATEMENTS:
-        connection.execute(statement, {"country_id": country.country_id})
+def count_region_differences(
+    connection: Connection,
+    country: CountryCatalog,
+) -> tuple[int, int]:
+    """Count staged region rows the stored version lacks, and stored rows not staged."""
+    staged, actual = _region_comparison_pair(country)
+    staged_not_stored = sa.except_(staged, actual).subquery()
+    stored_not_staged = sa.except_(actual, staged).subquery()
+    return (
+        connection.execute(
+            sa.select(sa.func.count()).select_from(staged_not_stored)
+        ).scalar_one(),
+        connection.execute(
+            sa.select(sa.func.count()).select_from(stored_not_staged)
+        ).scalar_one(),
+    )
 
 
 def assert_canonical_value_uniqueness(connection: Connection) -> None:

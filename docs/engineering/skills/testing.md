@@ -22,6 +22,202 @@ versions the Cloud Run image installs (`gcp/cloud_run/Dockerfile`):
   and `api.dependencies.test-from-lock`
   ([dependencies.md](dependencies.md)) check every install and test command.
 
+## Every Test Checks Something
+
+`api.quality.tests-assert`: every test function checks its outcome. A test
+that checks nothing passes whatever the code returns, as long as nothing
+raises. The `asserting-tests` quality guard
+(`scripts/rules/asserting_tests.py`) reads every tracked `test_*.py` and
+`*_test.py` file, apart from the rules' proof fixtures under `rules/fixtures/`
+and `scripts/rules/tests/fixtures/`. It finds the tests pytest and unittest
+collect, and fails on a test whose body contains none of:
+
+- an `assert` statement, or `raise AssertionError`;
+- `pytest.raises`, `pytest.warns`, `pytest.deprecated_call` or `pytest.fail`,
+  also through `import pytest as pt` or `from pytest import raises`;
+- a call to a function or method whose name starts with `assert` or
+  `_assert`, such as `self.assertEqual`, a mock's `assert_called_once_with`
+  or `assert_frame_equal` (also imported under another name), or unittest's
+  `self.fail`;
+- a call to a test helper that does one of these, followed through further
+  helpers: a function of the same file called by name, a method of the
+  test's own class called through `self`, `cls` or `super()` (looked up in
+  Python's method resolution order), or a function
+  imported by name (`from tests.unit.support import check_response`, at the
+  top of the file or inside the test, also through a re-export or a star
+  import) from test code: a module under a `tests` directory, a test file or
+  a `conftest.py`.
+
+Only the test's body counts, not its decorators or default arguments. A
+function, class or lambda assigned to a name in the body counts only when the
+body refers to it by name: a stand-in that raises `AssertionError` when the
+code calls it is a check once the test passes it to the code. `self` in a
+stand-in class's methods is the stand-in, not the test's class. Production
+code isn't a helper, even if it raises on bad input. A name resolves from
+the call's own scope outward, as in Python: a parameter (such as a fixture
+called like a function), a local variable, a lambda or comprehension
+variable, or an import inside the test hides a module-level helper of the
+same name, but a name bound only in a nested function doesn't.
+
+The guard collects tests as pytest does, for what it can read without
+importing anything:
+
+- module-level `test*` functions, also inside `if`, `try` and `with` blocks,
+  except pytest fixtures;
+- `test*` methods of `Test*` classes that have no `__init__` or `__new__` and
+  aren't dataclasses, including methods and nested `Test*` classes inherited
+  from bases in test code;
+- methods of `unittest.TestCase` subclasses;
+- test functions and classes imported into a test module, by name or with a
+  star import, under the name the import binds.
+
+Methods are looked up as Python looks them up, including those in `if`
+blocks of a class body; a later definition replaces an earlier one, and an
+attribute such as `test_inherited = None` switches an inherited test off.
+The nearest `__test__` setting on a module or class decides whether it is
+collected, as for pytest: `False` switches a class off, and `True` collects
+a class whatever its name. `scripts/rules/tests/` runs under
+`unittest discover`, which collects only `TestCase` subclasses and ignores
+`__test__`. A base class outside test code isn't read, so an `__init__`
+there isn't seen.
+
+A test that only shows that a call doesn't raise checks nothing: assert what
+the call returns or what it changes instead. A helper reached any other way
+(`support.check(...)` after `import tests.unit.support as support`, or a
+method of another object) isn't followed, so name it `assert_...` or import
+it by name.
+
+The rule is ratcheted. `rules/baselines/tests-without-checks.txt` lists the
+21 tests that checked nothing when the rule was added, as `<path>::<test>`
+(`<test>` is `Class::method` for a method). A test not listed there fails,
+and a listed one that is gone or now checks something fails as stale: remove
+its line and lower the rule's baseline `count`. Renaming or moving a listed
+test also fails, because its new entry is one the base branch's baseline
+lacks, so give it a check in the same change.
+
+## Coverage
+
+`api.quality.coverage-measured`: Codecov measures the same tests on `master`
+as on pull requests, so a pull request's project coverage is compared with a
+base that measured them too. `codecov.yml` defines two flags, both carried
+forward and both covering `policyengine_api/` (`.coveragerc`'s source):
+
+- `unit`: `make test`. On a pull request, the six `Test` shards keep their
+  `coverage.xml`, and `upload-test-coverage` in `pr.yml` sends them to
+  Codecov in one upload. On `master`, `push.yml`'s `release-tests` shards do
+  the same on each release commit, and `upload-release-test-coverage` sends
+  them; it is the only run of the unit tests on the merged code.
+- `integration`: the cross-database integration tests in
+  `v2-integration-check.yml`. The reusable workflow keeps its report as an
+  artifact, and `upload-integration-coverage` in `pr.yml` and in `push.yml`
+  sends it, wherever those tests run.
+
+A commit that uploads one flag carries the other forward from its Codecov
+parent, a git parent that has a Codecov report. When both of a merge
+commit's parents have one, which Codecov takes isn't fixed. On `master`:
+
+- the merge run uploads `integration` for the merge commit, which carries
+  `unit` forward from the pull request head or from the `master` commit before
+  it until the release run;
+- the release run uploads the release tests' `unit` coverage for the release
+  commit, which carries `integration` forward from the merge commit, and also
+  for the merge commit (`override_commit`): `versioning`'s release commit
+  changes only the version, `uv.lock` and the changelog, so the release tests
+  measure the merge commit's code too.
+
+Codecov compares a pull request with the `master` commit it branched from or
+last merged in. For 40 recently merged pull requests that was a release
+commit for 21 and a merge commit for 17, since a merge commit is `master`'s
+tip until its release commit lands, and a lower stacked pull request's
+commit for 2. A release commit, and a merge commit followed by its own
+release commit (7 of the 17), measured both flags on their own code. The
+other merge commits never got a release commit: `versioning`'s push fails
+when `master` moves during the merge run, and the next release covers both
+merges. Their `unit` coverage stays carried forward from an earlier commit.
+Codecov also recomputes a pull request's comparison only when the pull
+request gets an upload, so one compared before its base's `unit` upload shows
+the carried-forward figure until its next push.
+
+The release tests run in the `staging` environment, with its variables
+(`SIM_ENTRYPOINT`, `SIMULATION_ENTRYPOINT_URL`,
+`POLICYENGINE_DB_INSTANCE_CONNECTION_NAME`,
+`PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET`, the
+`GATEWAY_AUTH_*` secrets) and the local Redis runtime cache, and without GCP
+credentials. The pull request `Test` job authenticates to GCP and sets none
+of those. Code that branches on them is covered differently in the two, so
+`master`'s unit figure and a pull request's can differ by those lines even for
+the same code.
+
+Every upload passes the `CODECOV_TOKEN` repository secret as its `token` and
+runs in a job with a timeout of at most 15 minutes, since the Codecov action
+sets no network timeouts. An upload on `master` fails the run when it fails
+(`fail_ci_if_error`), and no job in a `master` run waits for an upload, so a
+Codecov outage fails the upload job but can't stop a release. On a pull
+request, `CI complete` needs the upload jobs, which don't fail on an upload
+error. `tests/unit/test_codecov_coverage.py` checks the uploads and
+`codecov.yml`: a new job that measures coverage needs an upload of every
+shard of its report, flagged `unit` for the test suite and `integration`
+otherwise.
+
+The project status allows a 0.5% drop. The patch status reports coverage of
+the changed lines without blocking a merge.
+
+### Changed lines
+
+`api.quality.diff-coverage`: at least 80% of the lines a pull request changes
+in `policyengine_api/` that coverage.py measures run in the unit or
+integration tests. The `diff-coverage` job in `pr.yml` runs after the `Test`
+shards and the integration tests. It downloads every shard's `coverage.xml`
+and the integration tests' `coverage-v2.xml`, and runs
+`diff-cover --fail-under=80` against `HEAD^1`. CI checks out the merge commit
+GitHub builds for the pull request, so `HEAD^1` is the commit that merge is
+built on: the base branch, or for a pull request stacked on another, the
+lower one's merge commit (the job runs only on the lowest pull request of a
+stack). Either way the diff holds only the pull request's changes. The
+event's `base.sha` isn't used: it can stay where the branch left `master`,
+which would count `master`'s later changes as the pull request's. A line
+counts as covered if any report covers it. `CI complete` needs the job, so a
+pull request below the minimum can't merge. The job's log lists each changed
+file's uncovered lines.
+
+Only measured files count, so a pull request that changes no code under
+`policyengine_api/` passes. coverage.py measures every module there, whether
+or not a test imports it, but only inside a package: every directory under
+`policyengine_api/` needs an `__init__.py`, or its untested modules are left
+out and their changed lines pass.
+`tests/unit/test_diff_coverage.py::test_coverage_reports_every_module_no_test_imports`
+fails for a directory without one. Lines that never run by design don't
+count (`.coveragerc`): imports under `if TYPE_CHECKING:`, `...` alone on a
+line (the bodies of Protocol methods and other stubs), and lines marked
+`# pragma: no cover`.
+
+What counts as a line is coverage.py's: the first line of each statement.
+Changing the second or a later line of a statement that spans several lines
+adds nothing to the count, and a line that ran counts as covered even if one
+of its branches never ran. Only the `Test` shards and the tests in
+`v2-integration-check.yml` are measured: code that runs only in the Alembic
+checks, the environment-variable tests, `push.yml`'s live tests or a
+subprocess a test starts counts as uncovered. Moving code into a new file
+counts its lines as changed, so splitting a module that tests cover poorly
+needs tests for the moved code. git's rename detection is the exception: a
+new file at least 50% similar to a file the pull request deletes is paired
+with it, and only its edited lines count.
+
+Codecov's patch status shows an 80% target too, but doesn't block a merge,
+and its figure can differ: it compares with the `master` commit the branch
+left from or last merged in, and counts a line with a branch that never ran
+as not covered.
+
+To check before pushing, delete `.coverage` (`make test` adds to it), run
+`make test`, which writes `coverage.xml`, and then:
+
+```bash
+uv run --frozen --extra dev --python 3.12 diff-cover coverage.xml --compare-branch=origin/master --fail-under=80
+```
+
+That leaves out the integration tests, which need the databases
+`v2-integration-check.yml` starts, so CI's figure can be higher.
+
 ## Tests That Run a Country Model
 
 A new unit test stands in for the country model: a calculation with the
@@ -107,7 +303,7 @@ The generated-only v2 Alembic chain and disposable Postgres lifecycle:
 ```bash
 uv run pytest tests/unit/v2/test_alembic_v2.py tests/unit/test_alembic_workflows.py -q
 V2_ALEMBIC_DISPOSABLE_TEST=1 V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
-  uv run pytest tests/integration/test_alembic_v2_lifecycle.py -q
+  uv run pytest tests/integration/test_alembic_v2_lifecycle.py tests/integration/test_alembic_v2_catalog_tables.py -q
 ```
 
 The disposable lifecycle must start from empty Postgres, upgrade to `head`,
@@ -305,6 +501,7 @@ V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test
 uv run pytest \
   tests/integration/test_alembic_mysql_lifecycle.py \
   tests/integration/test_alembic_v2_lifecycle.py \
+  tests/integration/test_alembic_v2_catalog_tables.py \
   tests/integration/test_v2_policy_persistence.py \
   tests/integration/test_v1_policy_dual_write.py \
   tests/integration/test_mysql_policy_dual_write.py \
@@ -379,6 +576,7 @@ V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test
 uv run --frozen pytest \
   tests/integration/test_alembic_mysql_lifecycle.py \
   tests/integration/test_alembic_v2_lifecycle.py \
+  tests/integration/test_alembic_v2_catalog_tables.py \
   tests/integration/test_v2_household_persistence.py \
   tests/integration/test_v1_household_dual_write.py \
   tests/integration/test_mysql_household_spm_dual_write.py -q
@@ -436,6 +634,7 @@ V2_ALEMBIC_DISPOSABLE_TEST=1 \
 V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
 uv run --frozen pytest \
   tests/integration/test_alembic_v2_lifecycle.py \
+  tests/integration/test_alembic_v2_catalog_tables.py \
   tests/integration/test_v2_user_identity_persistence.py -q
 ```
 

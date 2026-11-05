@@ -25,6 +25,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataModelVersionDetail,
     MetadataPageResult,
     MetadataParameterChild,
+    MetadataParameterSearchFile,
     MetadataParameterSummary,
     MetadataRegion,
     MetadataRegionOption,
@@ -36,7 +37,9 @@ from policyengine_api.services.v2.metadata.types import (
 )
 
 if TYPE_CHECKING:
-    from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
+    from policyengine_api.data.v2.catalog.catalog_selection_validation import (
+        SelectedCatalog,
+    )
     from policyengine_api.data.v2.models import (
         Dataset,
         Parameter,
@@ -325,13 +328,15 @@ def metadata_region(region: Region) -> MetadataRegion:
 def metadata_parameter_children(rows: list[Any]) -> list[MetadataParameterChild]:
     """Build parameter-tree children from read_parameter_children rows.
 
-    Parameter leaves carry the same summary as the parameter routes, and a child
-    with no label is labelled with the last segment of its path.
+    Parameter leaves carry the same summary as the parameter routes. Every
+    stored child has a label in the form v3 shows it: its stored label with
+    underscores as spaces and its first letter upper-cased, "Bracket N" for a
+    bracket, or the last part of its name in that form.
     """
     return [
         MetadataParameterChild(
             path=row.path,
-            label=row.label or row.path.rsplit(".", 1)[-1],
+            label=row.label,
             type=row.type,
             child_count=row.child_count,
             parameter=(
@@ -345,6 +350,26 @@ def metadata_parameter_children(rows: list[Any]) -> list[MetadataParameterChild]
 def national_region(regions: list[Region], country_id: str) -> Region | None:
     """Return the country's national region (its code is the country ID), or None."""
     return next((region for region in regions if region.code == country_id), None)
+
+
+def metadata_parameter_search_file(
+    selected: SelectedCatalog, rows: list[Any]
+) -> MetadataParameterSearchFile | None:
+    """Build the selected version's search file from read_parameter_search_file rows.
+
+    Return None when the version has no stored file of the format read.
+    """
+    if not rows:
+        return None
+    row = rows[0]
+    return MetadataParameterSearchFile(
+        policyengine_version=selected.policyengine_version,
+        file_format=row.file_format,
+        compressed_content=bytes(row.compressed_content),
+        content_sha256=row.content_sha256,
+        uncompressed_size=row.uncompressed_size,
+        compressed_size=row.compressed_size,
+    )
 
 
 def metadata_economy_options(

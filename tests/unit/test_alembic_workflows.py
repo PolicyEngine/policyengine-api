@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
+# The arguments the migration script passes to uv for each database command.
+LOCKED_MIGRATION_COMMAND = "run --frozen python scripts/v1_database_migration.py"
 
 
 STACKED_PR_CONDITION = (
@@ -86,7 +88,9 @@ def test_pr_always_runs_reusable_alembic_and_v2_integration_checks():
     assert "CODECOV_TOKEN" not in alembic_job
     assert "v2-integration-check:" in workflow
     assert "uses: ./.github/workflows/v2-integration-check.yml" in integration_job
-    assert "CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}" in integration_job
+    # The integration tests' coverage is uploaded by a job of pr.yml, so the
+    # reusable workflow gets no Codecov token.
+    assert "CODECOV_TOKEN" not in integration_job
     assert "needs:" not in alembic_job
     assert "needs:" not in integration_job
     # The only condition allowed is the stacked-PR one: these checks run on
@@ -111,7 +115,9 @@ def test_push_requires_schema_and_v2_integration_checks_before_versioning():
     assert "uses: ./.github/workflows/alembic-v2-check.yml" in workflow
     assert "v2-integration-check:" in workflow
     assert "uses: ./.github/workflows/v2-integration-check.yml" in workflow
-    assert "CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}" in workflow
+    # A Codecov upload is no release's prerequisite: a job nothing waits for
+    # uploads the integration tests' coverage (tests/unit/test_codecov_coverage.py).
+    assert "CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}" not in workflow
     for required_job in (
         "lint",
         "alembic-v1-check",
@@ -147,15 +153,23 @@ def test_versioning_refreshes_the_lock_after_bumping_the_project_version():
     assert changelog_target.index("uv lock") < changelog_target.index("towncrier build")
 
 
-def test_release_migration_uses_the_installed_python_environment():
+def test_release_migration_runs_in_the_locked_python_environment():
     workflow = _workflow("migrate-v1-cloud-sql.yml")
     orchestration_script = (
         REPO / ".github" / "scripts" / "migrate_v1_cloud_sql.sh"
     ).read_text(encoding="utf-8")
+    python_commands = re.findall(
+        r"^.*\bpython scripts/.*$", orchestration_script, flags=re.MULTILINE
+    )
 
+    assert "run: uv sync --frozen" in workflow
+    assert "pip install" not in workflow
     assert "bash .github/scripts/migrate_v1_cloud_sql.sh" in workflow
-    assert "python scripts/v1_database_migration.py" in orchestration_script
-    assert "uv run" not in orchestration_script
+    assert len(python_commands) == 3
+    assert all(
+        "uv run --frozen python scripts/v1_database_migration.py" in python_command
+        for python_command in python_commands
+    ), python_commands
 
 
 def test_reusable_alembic_check_uses_only_disposable_mysql():
@@ -193,6 +207,7 @@ def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     assert "bash .github/scripts/test_alembic_v2_lifecycle.sh" in workflow
     assert "test_alembic_v2.py" in lifecycle_script
     assert "test_alembic_v2_lifecycle.py" in lifecycle_script
+    assert "test_alembic_v2_catalog_tables.py" in lifecycle_script
     assert "redis:7.2-alpine" not in workflow
     assert "RUNTIME_CACHE_TEST_URL" not in workflow
     assert "test_v2_catalog_installed.py" not in workflow
@@ -241,8 +256,11 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert workflow.count("coverage run --branch") == 1
     assert workflow.count("coverage run -a --branch") == 7
     assert "coverage xml -i -o coverage-v2.xml" in workflow
-    assert "codecov/codecov-action@v5" in workflow
-    assert "files: coverage-v2.xml" in workflow
+    # The report goes to the calling workflow as an artifact, and a job there
+    # uploads it to Codecov.
+    assert "codecov/codecov-action" not in workflow
+    assert "name: integration-coverage" in workflow
+    assert "path: coverage-v2.xml" in workflow
 
 
 def test_v2_integration_check_grants_and_verifies_privileges_before_tests():
@@ -351,24 +369,29 @@ def _write_fake_migration_commands(tmp_path: Path) -> tuple[Path, Path]:
     )
     gcloud_path.chmod(0o755)
 
-    python_path = bin_path / "python"
-    python_path.write_text(
+    # The script runs every Python command through uv run --frozen. The fake
+    # uv fails unless it receives the fetched passwords and none of the
+    # job-level database URLs the script unsets.
+    uv_path = bin_path / "uv"
+    uv_path.write_text(
         "#!/usr/bin/env bash\n"
-        ': "${POLICYENGINE_DB_READONLY_PASSWORD:?}"\n'
-        ': "${POLICYENGINE_DB_MIGRATION_PASSWORD:?}"\n'
-        'printf "%s\\n" "$*" >> "${PYTHON_CALLS}"\n'
+        '[[ "${POLICYENGINE_DB_READONLY_PASSWORD:-}" == reader-p@ss ]] || exit 91\n'
+        '[[ "${POLICYENGINE_DB_MIGRATION_PASSWORD:-}" == migrator-p@ss ]] || exit 92\n'
+        '[[ -z "${STAGE7_EXISTING_DATABASE_URL+set}" ]] || exit 93\n'
+        '[[ -z "${ALEMBIC_DATABASE_URL+set}" ]] || exit 94\n'
+        'printf "%s\\n" "$*" >> "${UV_CALLS}"\n'
         'if [[ "$*" == *"--mode state"* ]]; then\n'
         '  printf "%s\\n" "${DATABASE_STATE}"\n'
         "fi\n",
         encoding="utf-8",
     )
-    python_path.chmod(0o755)
+    uv_path.chmod(0o755)
     return bin_path, gcloud_path
 
 
 def _run_migration_orchestrator(tmp_path: Path, database_state: str):
     bin_path, _ = _write_fake_migration_commands(tmp_path)
-    python_calls = tmp_path / "python-calls"
+    uv_calls = tmp_path / "uv-calls"
     gcloud_calls = tmp_path / "gcloud-calls"
     result = subprocess.run(
         ["bash", ".github/scripts/migrate_v1_cloud_sql.sh"],
@@ -377,7 +400,10 @@ def _run_migration_orchestrator(tmp_path: Path, database_state: str):
             **os.environ,
             "DATABASE_STATE": database_state,
             "GCLOUD_CALLS": str(gcloud_calls),
-            "PYTHON_CALLS": str(python_calls),
+            "UV_CALLS": str(uv_calls),
+            # A job-level URL must never reach the migration commands.
+            "STAGE7_EXISTING_DATABASE_URL": "mysql+pymysql://job:url@db/state",
+            "ALEMBIC_DATABASE_URL": "mysql+pymysql://job:url@db/upgrade",
             "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": "project:region:instance",
             "PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": (
                 "project:region:instance"
@@ -401,37 +427,35 @@ def _run_migration_orchestrator(tmp_path: Path, database_state: str):
         text=True,
         check=False,
     )
-    return result, python_calls, gcloud_calls
+    return result, uv_calls, gcloud_calls
 
 
 def test_migration_orchestrator_keeps_credentials_local_and_upgrades_pending_schema(
     tmp_path,
 ):
-    result, python_calls, gcloud_calls = _run_migration_orchestrator(
-        tmp_path, "pending"
-    )
+    result, uv_calls, gcloud_calls = _run_migration_orchestrator(tmp_path, "pending")
 
     assert result.returncode == 0, result.stderr
     assert "::add-mask::reader-p@ss" in result.stdout
     assert "::add-mask::migrator-p@ss" in result.stdout
     assert "STAGE7_EXISTING_DATABASE_URL" not in result.stdout
     assert "ALEMBIC_DATABASE_URL" not in result.stdout
-    calls = python_calls.read_text(encoding="utf-8").splitlines()
+    calls = uv_calls.read_text(encoding="utf-8").splitlines()
     assert calls == [
-        "scripts/v1_database_migration.py --mode state",
-        "scripts/v1_database_migration.py --mode upgrade --backup-id backup-123",
-        "scripts/v1_database_migration.py --mode verify-head",
+        f"{LOCKED_MIGRATION_COMMAND} --mode state",
+        f"{LOCKED_MIGRATION_COMMAND} --mode upgrade --backup-id backup-123",
+        f"{LOCKED_MIGRATION_COMMAND} --mode verify-head",
     ]
     assert "sql backups create" in gcloud_calls.read_text(encoding="utf-8")
 
 
 def test_migration_orchestrator_skips_backup_and_upgrade_at_head(tmp_path):
-    result, python_calls, gcloud_calls = _run_migration_orchestrator(tmp_path, "head")
+    result, uv_calls, gcloud_calls = _run_migration_orchestrator(tmp_path, "head")
 
     assert result.returncode == 0, result.stderr
-    assert python_calls.read_text(encoding="utf-8").splitlines() == [
-        "scripts/v1_database_migration.py --mode state",
-        "scripts/v1_database_migration.py --mode verify-head",
+    assert uv_calls.read_text(encoding="utf-8").splitlines() == [
+        f"{LOCKED_MIGRATION_COMMAND} --mode state",
+        f"{LOCKED_MIGRATION_COMMAND} --mode verify-head",
     ]
     assert "sql backups create" not in gcloud_calls.read_text(encoding="utf-8")
 
@@ -441,14 +465,14 @@ def test_migration_orchestrator_refuses_unsafe_database_states(
     tmp_path,
     database_state,
 ):
-    result, python_calls, gcloud_calls = _run_migration_orchestrator(
+    result, uv_calls, gcloud_calls = _run_migration_orchestrator(
         tmp_path, database_state
     )
 
     assert result.returncode != 0
     assert "automatic baseline stamping is disabled" in result.stderr
-    assert python_calls.read_text(encoding="utf-8").splitlines() == [
-        "scripts/v1_database_migration.py --mode state"
+    assert uv_calls.read_text(encoding="utf-8").splitlines() == [
+        f"{LOCKED_MIGRATION_COMMAND} --mode state"
     ]
     assert "sql backups create" not in gcloud_calls.read_text(encoding="utf-8")
 

@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_reads import select_catalog
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
     SelectedCatalog,
-    select_catalog,
 )
 
 if TYPE_CHECKING:
@@ -25,7 +25,7 @@ def read_metadata_catalog(
 ) -> SelectedCatalog:
     """Return the country's catalog for policyengine_version, else the running version.
 
-    Raise the catalog_selection errors for an unsupported country, an
+    Raise the catalog_selection_validation errors for an unsupported country, an
     unpublished version or an unreachable database.
     """
     return select_catalog(

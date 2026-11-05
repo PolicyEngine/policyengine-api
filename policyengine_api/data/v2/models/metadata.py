@@ -2,11 +2,12 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 from uuid import UUID
 
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship
+from sqlmodel.sql.sqltypes import AutoString
 from typing_extensions import TypedDict
 
 from policyengine_api.data.v2.models.base import (
@@ -139,8 +140,9 @@ class Region(TimestampedModel, table=True):
     """A region in one model version, unique by code within that version.
 
     Its default dataset must belong to the same version. Filtered regions
-    (``requires_filter``) also name the variable and value that select their
-    households.
+    (``requires_filter``) also name how they select their households: a
+    ``row_filter`` keeps the households whose ``filter_field`` column matches
+    ``filter_value``.
     """
 
     __tablename__ = "regions"
@@ -463,3 +465,102 @@ class ParameterValue(IdentifiedModel, table=True):
     parameter: Parameter = Relationship(back_populates="values")
     policy: Optional["Policy"] = Relationship(back_populates="parameter_values")
     dynamic: Optional["Dynamic"] = Relationship(back_populates="parameter_values")
+
+
+class ParameterTreeChild(IdentifiedModel, table=True):
+    """One direct child in a catalog version's parameter tree.
+
+    Catalog publication writes a version's rows from the installed packages'
+    catalog: for each version it publishes, and for the installed version when
+    it is stored with catalog format 2 but without a tree. Other versions have
+    no rows. Every node and parameter of the version is one row under its
+    parent's path ("" for top-level paths), so listing one level reads one
+    index. ``position`` orders all children of a parent; ``reform_position``
+    orders only those a reform can change and is null for the others. Node rows
+    count their direct children; parameter rows reference their parameter and
+    copy its flags.
+    """
+
+    __tablename__ = "parameter_tree_children"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "tax_benefit_model_version_id",
+            "path",
+            name="uq_parameter_tree_children_model_version_path",
+        ),
+        sa.Index(
+            "ix_parameter_tree_children_listing",
+            "tax_benefit_model_version_id",
+            "parent_path",
+            "position",
+            unique=True,
+        ),
+        sa.Index(
+            "ix_parameter_tree_children_reform_listing",
+            "tax_benefit_model_version_id",
+            "parent_path",
+            "reform_position",
+            unique=True,
+        ),
+        sa.CheckConstraint(
+            "child_type IN ('node', 'parameter')",
+            name="ck_parameter_tree_children_child_type",
+        ),
+        sa.CheckConstraint(
+            "(child_type = 'parameter') = (parameter_id IS NOT NULL)",
+            name="ck_parameter_tree_children_parameter_reference",
+        ),
+    )
+
+    tax_benefit_model_version_id: UUID = Field(
+        foreign_key="tax_benefit_model_versions.id",
+        ondelete="CASCADE",
+    )
+    parent_path: str = Field(max_length=512)
+    path: str = Field(max_length=512)
+    position: int
+    label: str = Field(max_length=512)
+    # The column stays a plain string, kept to these two values by
+    # ck_parameter_tree_children_child_type.
+    child_type: Literal["node", "parameter"] = Field(sa_type=AutoString(length=16))
+    child_count: int | None = None
+    reform_position: int | None = None
+    reform_child_count: int | None = None
+    parameter_id: UUID | None = Field(
+        default=None,
+        foreign_key="parameters.id",
+        ondelete="CASCADE",
+        index=True,
+    )
+    economy: bool | None = None
+    household: bool | None = None
+
+
+class ParameterSearchFile(IdentifiedModel, table=True):
+    """One catalog version's parameter search file, as gzip-compressed JSON.
+
+    Built from the installed packages' catalog when catalog publication
+    publishes the version (``parameter_search_file`` describes the content).
+    A version has at most one file per file format, so a later format adds a
+    row rather than changing a stored one. ``content_sha256`` is the SHA-256 of
+    the uncompressed JSON, which the route serves as the file's ETag.
+    """
+
+    __tablename__ = "parameter_search_files"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "tax_benefit_model_version_id",
+            "file_format",
+            name="uq_parameter_search_files_model_version_format",
+        ),
+    )
+
+    tax_benefit_model_version_id: UUID = Field(
+        foreign_key="tax_benefit_model_versions.id",
+        ondelete="CASCADE",
+    )
+    file_format: int
+    compressed_content: bytes = Field(sa_type=sa.LargeBinary)
+    content_sha256: str = Field(max_length=64)
+    uncompressed_size: int
+    compressed_size: int

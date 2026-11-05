@@ -1,0 +1,37 @@
+# Proof fixture for api.quality.coverage-measured (the accepted case).
+on: pull_request
+jobs:
+  test:
+    strategy:
+      matrix:
+        shard_index: [1, 2, 3]
+    steps:
+      - run: make test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-coverage-shard-${{ matrix.shard_index }}
+          path: coverage.xml
+  upload-test-coverage:
+    timeout-minutes: 10
+    needs: test
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: test-coverage-shard-*
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: unit
+  integration:
+    uses: ./.github/workflows/integration.yml
+  upload-integration-coverage:
+    timeout-minutes: 10
+    needs: integration
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: integration-coverage
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: integration

@@ -1,4 +1,4 @@
-"""Database selections for direct parameter-tree children."""
+"""Database selections for one level of a catalog version's parameter tree."""
 
 from __future__ import annotations
 
@@ -7,158 +7,91 @@ from typing import TYPE_CHECKING, Any
 import sqlalchemy as sa
 from sqlmodel import Session, col
 
-from policyengine_api.data.v2.models import Parameter, ParameterNode
+from policyengine_api.data.v2.models import Parameter, ParameterTreeChild
 from policyengine_api.services.v2.metadata.database_connectors.reads import read_rows
 
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from sqlalchemy.orm import Mapped
-
-
-def _escaped_like(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-def _path_segment(
-    remainder: sa.ColumnElement[str], dialect: str
-) -> sa.ColumnElement[str]:
-    dot_position = (
-        sa.func.instr(remainder, ".")
-        if dialect == "sqlite"
-        else sa.func.strpos(remainder, ".")
-    )
-    return sa.case(
-        (dot_position > 0, sa.func.substr(remainder, 1, dot_position - 1)),
-        else_=remainder,
-    )
-
-
-def _child_path(
-    column: Mapped[str], prefix: str, dialect: str
-) -> sa.ColumnElement[str]:
-    remainder = sa.func.substr(column, len(prefix) + 1)
-    return sa.literal(prefix) + _path_segment(remainder, dialect)
-
-
-def _direct_child_path(
-    column: Mapped[str], parent_path: sa.ColumnElement[str], dialect: str
-) -> sa.ColumnElement[str]:
-    remainder = sa.func.substr(column, sa.func.length(parent_path) + 2)
-    return parent_path + "." + _path_segment(remainder, dialect)
-
-
-def _has_path_prefix(
-    column: Mapped[str], parent_path: sa.ColumnElement[str]
-) -> sa.ColumnElement[bool]:
-    return (
-        sa.func.substr(column, 1, sa.func.length(parent_path) + 1) == parent_path + "."
-    )
+    from policyengine_api.services.v2.metadata.types import ParameterTreeLevel
 
 
 def _parameter_children_statement(
     *,
     model_version_id: UUID,
-    parent_path: str,
-    dialect: str,
+    level: ParameterTreeLevel,
     offset: int,
     limit: int,
 ) -> sa.Select[Any]:
-    prefix = f"{parent_path}." if parent_path else ""
-    escaped_prefix = _escaped_like(prefix)
-    node_name = col(ParameterNode.name)
-    node_model_version_id = col(ParameterNode.tax_benefit_model_version_id)
-    parameter_name = col(Parameter.name)
-    parameter_model_version_id = col(Parameter.tax_benefit_model_version_id)
-    node_child_path = _child_path(node_name, prefix, dialect)
-    parameter_child_path = _child_path(parameter_name, prefix, dialect)
-    paths = sa.union(
-        sa.select(node_child_path.label("path")).where(
-            node_model_version_id == model_version_id,
-            node_name.like(f"{escaped_prefix}%", escape="\\"),
-        ),
-        sa.select(parameter_child_path.label("path")).where(
-            parameter_model_version_id == model_version_id,
-            parameter_name.like(f"{escaped_prefix}%", escape="\\"),
-        ),
-    ).subquery()
-    direct_child_paths = sa.union(
-        sa.select(_direct_child_path(node_name, paths.c.path, dialect).label("path"))
-        .where(
-            node_model_version_id == model_version_id,
-            _has_path_prefix(node_name, paths.c.path),
-        )
-        .correlate(paths),
-        sa.select(
-            _direct_child_path(parameter_name, paths.c.path, dialect).label("path")
-        )
-        .where(
-            parameter_model_version_id == model_version_id,
-            _has_path_prefix(parameter_name, paths.c.path),
-        )
-        .correlate(paths),
-    ).subquery()
-    direct_child_count = (
-        sa.select(sa.func.count())
-        .select_from(direct_child_paths)
-        .correlate(paths)
-        .scalar_subquery()
+    position = (
+        col(ParameterTreeChild.reform_position)
+        if level.reform_changeable
+        else col(ParameterTreeChild.position)
     )
-    parameter_id = col(Parameter.id)
-    is_node = sa.or_(direct_child_count > 0, parameter_id.is_(None))
-    return (
+    child_count = (
+        col(ParameterTreeChild.reform_child_count)
+        if level.reform_changeable
+        else col(ParameterTreeChild.child_count)
+    )
+    statement: sa.Select[Any] = (
         sa.select(
-            paths.c.path,
-            sa.func.coalesce(col(ParameterNode.label), col(Parameter.label)).label(
-                "label"
-            ),
-            sa.case((is_node, "node"), else_="parameter").label("type"),
-            sa.case((is_node, direct_child_count), else_=None).label("child_count"),
+            col(ParameterTreeChild.path).label("path"),
+            col(ParameterTreeChild.label).label("label"),
+            col(ParameterTreeChild.child_type).label("type"),
+            child_count.label("child_count"),
             Parameter,
         )
-        .select_from(
-            paths.outerjoin(
-                ParameterNode,
-                sa.and_(
-                    node_name == paths.c.path,
-                    node_model_version_id == model_version_id,
-                ),
-            ).outerjoin(
-                Parameter,
-                sa.and_(
-                    parameter_name == paths.c.path,
-                    parameter_model_version_id == model_version_id,
-                ),
-            )
+        .select_from(ParameterTreeChild)
+        .outerjoin(
+            Parameter,
+            col(Parameter.id) == col(ParameterTreeChild.parameter_id),
         )
-        .order_by(paths.c.path)
-        .offset(offset)
-        .limit(limit + 1)
+        .where(
+            col(ParameterTreeChild.tax_benefit_model_version_id) == model_version_id,
+            col(ParameterTreeChild.parent_path) == level.parent_path,
+        )
     )
+    if level.reform_changeable:
+        statement = statement.where(position.is_not(None))
+    return statement.order_by(position).offset(offset).limit(limit + 1)
 
 
 def read_parameter_children(
     session: Session,
     *,
     model_version_id: UUID,
-    parent_path: str,
+    level: ParameterTreeLevel,
     offset: int,
     limit: int,
 ) -> list[Any]:
-    """Return a page of the direct children of parent_path in a model version's tree.
+    """Return a page of the level's direct children from the stored tree.
 
-    Each row has the child's path, label, type (node or parameter), child count
-    and the stored Parameter (None for a node). The session's dialect
-    selects SQLite or PostgreSQL string functions; limit + 1 rows are fetched so
-    the caller can tell whether another page exists.
+    One read of a listing index: every child in tree order, or for a
+    reform-changeable level only the children a reform can change, in label order,
+    with child counts that count only those. Each row has the child's path,
+    label, type (node or parameter), child count and the stored Parameter
+    (None for a node); limit + 1 rows are fetched so the caller can tell
+    whether another page exists.
     """
     return read_rows(
         session,
         _parameter_children_statement(
             model_version_id=model_version_id,
-            parent_path=parent_path,
-            dialect=session.get_bind().dialect.name,
+            level=level,
             offset=offset,
             limit=limit,
         ),
     )
+
+
+def read_parameter_tree_written(session: Session, *, model_version_id: UUID) -> bool:
+    """Return whether the version's parameter tree has any stored row."""
+    rows = read_rows(
+        session,
+        sa.select(
+            sa.exists().where(
+                col(ParameterTreeChild.tax_benefit_model_version_id) == model_version_id
+            )
+        ),
+    )
+    return bool(rows[0][0])

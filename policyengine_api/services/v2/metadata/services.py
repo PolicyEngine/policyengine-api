@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     SelectedCatalog,
     validate_policyengine_version,
+)
+from policyengine_api.data.v2.catalog.parameter_search_file import (
+    PARAMETER_SEARCH_FILE_FORMAT,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads import (
     read_metadata_catalog,
@@ -19,8 +22,13 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_datasets im
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_nodes import (  # noqa: E501  # a dotted module path cannot be wrapped
     read_parameter_node_labels,
 )
+from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_search_file import (  # noqa: E501  # a dotted module path cannot be wrapped
+    read_parameter_search_file,
+    read_parameter_search_file_hash,
+)
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_tree import (  # noqa: E501  # a dotted module path cannot be wrapped
     read_parameter_children,
+    read_parameter_tree_written,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameters import (
     read_current_law_values_by_parameter_name,
@@ -53,6 +61,7 @@ from policyengine_api.services.v2.metadata.transformations import (
     metadata_model_version,
     metadata_parameter,
     metadata_parameter_children,
+    metadata_parameter_search_file,
     metadata_parameter_value,
     metadata_region,
     metadata_variable,
@@ -74,13 +83,17 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataModelVersionDetail,
     MetadataPageResult,
     MetadataParameterChild,
+    MetadataParameterSearchFile,
     MetadataParameterSummary,
     MetadataRegion,
     MetadataVariable,
     ParameterFilter,
+    ParameterTreeLevel,
     ParameterValueFilter,
 )
 from policyengine_api.services.v2.metadata.validators import (
+    ParameterSearchFileUnavailableError,
+    ParameterTreeUnavailableError,
     require_metadata_resource,
     validate_economy_options,
     validate_metadata_page,
@@ -94,9 +107,20 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.metadata.database_session import (
         MetadataDatabaseSession,
     )
-    from policyengine_api.services.v2.metadata.selected_catalogs import (
+    from policyengine_api.services.v2.metadata.process_state import (
         SelectedCatalogStore,
     )
+
+
+def _parameter_search_file_unavailable(
+    selected: SelectedCatalog,
+) -> ParameterSearchFileUnavailableError:
+    msg = (
+        f"catalog version {selected.policyengine_version} has no parameter search "
+        "file: only catalog format 2 versions that catalog publication has "
+        "published, or run with installed, since search files were added have one"
+    )
+    return ParameterSearchFileUnavailableError(msg)
 
 
 class V2MetadataService:
@@ -345,31 +369,92 @@ class V2MetadataService:
         country_id: str,
         policyengine_version: str | None = None,
         *,
-        parent_path: str = "",
+        level: ParameterTreeLevel | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> MetadataPageResult[MetadataParameterChild]:
-        """Return a page of the direct children of parent_path in the parameter tree.
+        """Return a page of one level of the version's stored parameter tree.
 
-        An empty parent_path lists the top-level children. A child is a parameter
-        when it is a leaf with a parameter row, and a node otherwise.
+        The level's parent path "" lists the top-level children. A bracket
+        schedule is one node whose children are its brackets. With the level's
+        ``reform_changeable``, only the children a reform can change are listed,
+        sorted by label. Raise ParameterTreeUnavailableError when the version has
+        no tree: catalog publication writes trees only for the versions it
+        publishes and for the installed version stored with catalog format 2.
         """
+        selected_level = level if level is not None else ParameterTreeLevel()
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
         )
+        session = self._database_session.session
         rows = read_parameter_children(
-            self._database_session.session,
+            session,
             model_version_id=selected.model_version.id,
-            parent_path=parent_path,
+            level=selected_level,
             offset=offset,
             limit=limit,
         )
+        if not rows and not read_parameter_tree_written(
+            session, model_version_id=selected.model_version.id
+        ):
+            msg = (
+                f"catalog version {selected.policyengine_version} has no parameter "
+                "tree: catalog publication writes trees only for the versions it "
+                "publishes and for the installed version with catalog format 2"
+            )
+            raise ParameterTreeUnavailableError(msg)
         return page_result(
             selected,
             metadata_parameter_children(rows),
             offset=offset,
             limit=limit,
         )
+
+    def get_parameter_search_file(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> MetadataParameterSearchFile:
+        """Return the selected catalog version's stored parameter search file.
+
+        Raise ParameterSearchFileUnavailableError when the version has no file
+        of the current format: publication writes one only for the versions it
+        publishes.
+        """
+        selected = self._select_catalog(country_id, policyengine_version)
+        search_file = metadata_parameter_search_file(
+            selected,
+            read_parameter_search_file(
+                self._database_session.session,
+                model_version_id=selected.model_version.id,
+                file_format=PARAMETER_SEARCH_FILE_FORMAT,
+            ),
+        )
+        if search_file is None:
+            raise _parameter_search_file_unavailable(selected)
+        return search_file
+
+    def get_parameter_search_file_hash(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> str:
+        """Return the SHA-256 of the selected version's uncompressed search file.
+
+        It reads the hash only, so a client revalidating its copy does not load
+        the file. Raise ParameterSearchFileUnavailableError as
+        ``get_parameter_search_file`` does.
+        """
+        selected = self._select_catalog(country_id, policyengine_version)
+        rows = read_parameter_search_file_hash(
+            self._database_session.session,
+            model_version_id=selected.model_version.id,
+            file_format=PARAMETER_SEARCH_FILE_FORMAT,
+        )
+        if not rows:
+            raise _parameter_search_file_unavailable(selected)
+        content_sha256: str = rows[0].content_sha256
+        return content_sha256
 
     def list_parameter_values(
         self,

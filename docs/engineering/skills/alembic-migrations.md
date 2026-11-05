@@ -75,14 +75,17 @@ Alembic revisions.
   `DROP` or `TRUNCATE` SQL.
 
 `tests/unit/data/test_database_access_boundaries.py` checks `policyengine_api/`,
-`scripts/`, `migrations/` and `.github/`, skipping tests and the generated
-revisions under `migrations/*/versions/`. It parses each module and reports:
+`scripts/`, `migrations/` and `.github/`, skipping tests and the paths the
+rule's `migration-revision` exception names: the generated revisions under
+`migrations/*/versions/`. It parses each module and reports:
 
 - imports of `psycopg`, `psycopg2`, `pymysql`, `MySQLdb`, `mysql.connector`,
   `sqlite3`, `asyncpg`, `pg8000`, `aiosqlite` or `aiomysql`, including through
   `importlib.import_module`;
 - access to the driver connection beneath SQLAlchemy: the `driver_connection`
-  and `dbapi_connection` attributes and `raw_connection()`;
+  and `dbapi_connection` attributes and `raw_connection()`, and a driver
+  connection's private attributes (pymysql's socket, `_sock`), read as an
+  attribute or through `getattr`;
 - `create_all()`, `drop_all()`, and `create()` or `drop()` on a table, index
   or sequence; SQLAlchemy DDL constructs such as `CreateTable`; and `op.*`
   calls or `alembic.op` imports outside `migrations/`;
@@ -92,27 +95,54 @@ revisions under `migrations/*/versions/`. It parses each module and reports:
 
 ### Declared exceptions
 
-The guard allows exactly two exceptions, both in
-`policyengine_api/data/v2/catalog/publication_staging.py`, which stages a
-metadata catalog before publishing it. The guard fails when either exception
-gains a name or a file, and when either is no longer used.
+The rule's exceptions are its `[[rule.exception]]` entries in
+`rules/registry.toml`, which the check reads. Each has a `path`, a `category`
+and a `reason`:
 
-1. **COPY through the driver connection.** Publication writes rows with
-   Postgres `COPY ... FROM STDIN`, which SQLAlchemy has no API for. `copy_rows`
-   uses the psycopg connection beneath a SQLAlchemy `Connection`
-   (`connection.connection.driver_connection`) that SQLAlchemy opened and
-   still manages, so the transaction stays SQLAlchemy's. It imports
-   `psycopg.sql` to compose the `COPY` statement and `psycopg.types.json.Jsonb`
-   to send JSON values.
-2. **Temporary staging tables.** `create_staging_tables` calls
-   `STAGING_METADATA.create_all` for tables declared `TEMPORARY` with
-   `ON COMMIT DROP`. Postgres drops them when the publishing transaction
-   commits, so they are not persistent schema. The guard checks that every
-   table on `STAGING_METADATA` compiles to `CREATE TEMPORARY TABLE ... ON
-   COMMIT DROP`.
+- **`driver-access`** and **`schema-change`**: one construct in one file. The
+  entry's `path` names the file and its `match` names the construct, exactly
+  as the check reports it, such as `import psycopg.sql` or
+  `call STAGING_METADATA.create_all()`.
+- **`migration-revision`**: a path pattern the check doesn't scan at all.
 
-A new exception is a rule change: add it to the guard's declared sets, explain
-here why SQLAlchemy or Alembic can't do the job, and get it reviewed as one.
+The check fails on a construct no entry allows, on an entry with an unknown
+category or a missing `match`, and on an entry that no longer matches anything,
+so an exception can't gain a name or a file, and is removed once it's unused.
+The entries:
+
+1. **COPY through the driver connection** (`driver-access`, three entries).
+   Publication writes rows with Postgres `COPY ... FROM STDIN`, which
+   SQLAlchemy has no API for. `copy_rows` in
+   `policyengine_api/data/v2/catalog/publication_staging.py` uses the psycopg
+   connection beneath a SQLAlchemy `Connection`
+   (`connection.connection.driver_connection`) that SQLAlchemy opened and still
+   manages, so the transaction stays SQLAlchemy's. It imports `psycopg.sql` to
+   compose the `COPY` statement and `psycopg.types.json.Jsonb` to send JSON
+   values.
+2. **Temporary staging tables** (`schema-change`). `create_staging_tables` in
+   the same module calls `STAGING_METADATA.create_all` for tables declared
+   `TEMPORARY` with `ON COMMIT DROP`. Postgres drops them when the publishing
+   transaction commits, so they are not persistent schema. The check confirms
+   that every table on `STAGING_METADATA` compiles to
+   `CREATE TEMPORARY TABLE ... ON COMMIT DROP`.
+3. **The v1 pool's socket diagnostics** (`driver-access`). The listeners in
+   `policyengine_api/data/orm_pool_events.py` that record the v1 Cloud SQL
+   pool's connects, invalidations and closes read the file descriptor and
+   local port of pymysql's socket, `getattr(connection, "_sock", None)`, from
+   the driver connection SQLAlchemy's `connect` pool event passes them.
+   SQLAlchemy has no API for a connection's socket, and the records need it to
+   show whether a database reconnect reused or closed an HTTP connection's
+   socket. The listeners never read or write through the socket or the driver
+   connection, and import no driver.
+4. **Alembic revisions** (`migration-revision`), `migrations/*/versions/*.py`.
+   Revisions are where schema changes belong, and Alembic generates them, so
+   the check doesn't scan them. Ruff skips the same files (`extend-exclude` in
+   `pyproject.toml`).
+
+A new exception is a rule change: add a `[[rule.exception]]` entry to the rule
+in `rules/registry.toml`, explain here why SQLAlchemy or Alembic can't do the
+job, and get it reviewed as one. `rules/` is code-owned
+(`api.process.rule-machinery-code-owned`).
 
 ### Out of scope
 
@@ -233,9 +263,10 @@ check the declarations:
 - `api.v2.runtime-privileges-declared`: a unit test reads each connector
   module and fails when it needs a privilege its role isn't declared to hold.
 - `api.v2.runtime-privileges-tested-as-runtime-role`: the cross-database
-  integration tests run the v2 user services as `policyengine_v2_runtime` and
-  the comparison-run services as `policyengine_stage12_test`, holding only
-  their declared privileges.
+  integration tests run the v2 user services and the parameter tree read as
+  `policyengine_v2_runtime`, catalog publication as
+  `policyengine_v2_catalog_writer`, and the comparison-run services as
+  `policyengine_stage12_test`, holding only their declared privileges.
 - `api.v2.deployed-privileges-match`: every deploy runs
   `scripts/reconcile_v2_privileges.py apply` right after the schema upgrade,
   then `verify`, before the catalog is seeded.
@@ -267,6 +298,8 @@ When a pull request adds or changes a v2 table, or a connector's use of one:
    uv run python scripts/reconcile_v2_privileges.py verify
    uv run pytest -q tests/integration/test_v2_user_identity_persistence.py \
      tests/integration/test_v2_stage12_comparison_persistence.py \
+     tests/integration/test_v2_metadata_routes.py \
+     tests/integration/test_v2_catalog_publication.py \
      tests/integration/test_v2_privilege_reconciliation.py
    ```
 

@@ -1,0 +1,28 @@
+# Proof fixture for rule api.v2.import-layers. The contract must reject it,
+# reporting exactly the expected violations: v2 data modules import a v2
+# service and a v2 route module, and a v2 service imports a v2 route module.
+# tests/unit/v2/test_import_linter_contracts.py writes each module below into a
+# temporary fixture_api package and runs the rule's contract on it.
+
+expected_violations = [
+    "fixture_api.data.v2 -> fixture_api.fastapi_routes.v2",
+    "fixture_api.data.v2 -> fixture_api.services.v2",
+    "fixture_api.services.v2 -> fixture_api.fastapi_routes.v2",
+]
+
+[modules]
+"fixture_api/fastapi_routes/v2/policies/routes.py" = """
+from fixture_api.services.v2.policies import services
+"""
+"fixture_api/services/v2/policies/services.py" = """
+from fixture_api.data.v2 import models
+"""
+"fixture_api/services/v2/households/services.py" = """
+from fixture_api.fastapi_routes.v2.policies.routes import create_policy_route
+"""
+"fixture_api/data/v2/models.py" = """
+from fixture_api.services.v2.policies.services import create_policy
+"""
+"fixture_api/data/v2/catalog.py" = """
+from fixture_api.fastapi_routes.v2.policies.routes import create_policy_route
+"""

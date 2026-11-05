@@ -13,7 +13,7 @@ from policyengine_api.fastapi_routes.dependencies import (
     _default_v2_user_policy_service_factory,
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
-from policyengine_api.fastapi_routes.v2.errors import v2_error_response
+from policyengine_api.fastapi_routes.v2.errors_support import v2_error_response
 from policyengine_api.fastapi_routes.v2.user_policies.request_models import (
     UserPolicyCreateRequest,
     UserPolicyPatchRequest,
@@ -26,7 +26,7 @@ from policyengine_api.fastapi_routes.v2.user_policies.response_models import (
     UserPolicyPageResponse,
     UserPolicyPageResult,
 )
-from policyengine_api.fastapi_routes.v2.user_resources import (
+from policyengine_api.fastapi_routes.v2.user_resources_support import (
     enforce_user_write_request_size,
     user_resource_operation,
 )
@@ -168,9 +168,13 @@ def build_v2_user_policy_router(
         response_model=UserPolicyDetailResponse,
         summary="Update or repoint one of the current user's saved policies",
         description=(
-            "Changing legacy_policy_id repoints the row and re-resolves policy_id "
-            "from the Stage 10 mirror mapping, or clears it. Rows maintained by "
-            "the v1 saved-policy mirror return 409."
+            "The row keeps its id, owner and creation time. Changing "
+            "legacy_policy_id repoints the row and re-resolves policy_id from the "
+            "Stage 10 mirror mapping, or clears it. Changing policy_id alone points "
+            "the row at that v2 policy, which must exist in the same country, and "
+            "clears legacy_policy_id. Supplied together, both are stored, and "
+            "policy_id must be the mirror copy of legacy_policy_id when one exists. "
+            "Rows maintained by the v1 saved-policy mirror return 409."
         ),
     )
     def patch_user_policy_route(

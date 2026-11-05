@@ -1,0 +1,1017 @@
+code,label,region_type,parent_code,state_code,state_name,filter_value,v1_code
+uk,United Kingdom,national,,,,,uk
+country/england,England,country,uk,,,"[""NORTH_EAST"",""NORTH_WEST"",""YORKSHIRE"",""EAST_MIDLANDS"",""WEST_MIDLANDS"",""EAST_OF_ENGLAND"",""LONDON"",""SOUTH_EAST"",""SOUTH_WEST""]",country/england
+country/scotland,Scotland,country,uk,,,SCOTLAND,country/scotland
+country/wales,Wales,country,uk,,,WALES,country/wales
+country/northern_ireland,Northern Ireland,country,uk,,,NORTHERN_IRELAND,country/ni
+constituency/E14001063,Aldershot,constituency,country/england,,,E14001063,constituency/Aldershot
+constituency/E14001064,Aldridge-Brownhills,constituency,country/england,,,E14001064,constituency/Aldridge-Brownhills
+constituency/E14001065,Altrincham and Sale West,constituency,country/england,,,E14001065,constituency/Altrincham and Sale West
+constituency/E14001066,Amber Valley,constituency,country/england,,,E14001066,constituency/Amber Valley
+constituency/E14001067,Arundel and South Downs,constituency,country/england,,,E14001067,constituency/Arundel and South Downs
+constituency/E14001068,Ashfield,constituency,country/england,,,E14001068,constituency/Ashfield
+constituency/E14001069,Ashford,constituency,country/england,,,E14001069,constituency/Ashford
+constituency/E14001070,Ashton-under-Lyne,constituency,country/england,,,E14001070,constituency/Ashton-under-Lyne
+constituency/E14001071,Aylesbury,constituency,country/england,,,E14001071,constituency/Aylesbury
+constituency/E14001072,Banbury,constituency,country/england,,,E14001072,constituency/Banbury
+constituency/E14001073,Barking,constituency,country/england,,,E14001073,constituency/Barking
+constituency/E14001074,Barnsley North,constituency,country/england,,,E14001074,constituency/Barnsley North
+constituency/E14001075,Barnsley South,constituency,country/england,,,E14001075,constituency/Barnsley South
+constituency/E14001076,Barrow and Furness,constituency,country/england,,,E14001076,constituency/Barrow and Furness
+constituency/E14001077,Basildon and Billericay,constituency,country/england,,,E14001077,constituency/Basildon and Billericay
+constituency/E14001078,Basingstoke,constituency,country/england,,,E14001078,constituency/Basingstoke
+constituency/E14001079,Bassetlaw,constituency,country/england,,,E14001079,constituency/Bassetlaw
+constituency/E14001080,Bath,constituency,country/england,,,E14001080,constituency/Bath
+constituency/E14001081,Battersea,constituency,country/england,,,E14001081,constituency/Battersea
+constituency/E14001082,Beaconsfield,constituency,country/england,,,E14001082,constituency/Beaconsfield
+constituency/E14001083,Beckenham and Penge,constituency,country/england,,,E14001083,constituency/Beckenham and Penge
+constituency/E14001084,Bedford,constituency,country/england,,,E14001084,constituency/Bedford
+constituency/E14001085,Bermondsey and Old Southwark,constituency,country/england,,,E14001085,constituency/Bermondsey and Old Southwark
+constituency/E14001086,Bethnal Green and Stepney,constituency,country/england,,,E14001086,constituency/Bethnal Green and Stepney
+constituency/E14001087,Beverley and Holderness,constituency,country/england,,,E14001087,constituency/Beverley and Holderness
+constituency/E14001088,Bexhill and Battle,constituency,country/england,,,E14001088,constituency/Bexhill and Battle
+constituency/E14001089,Bexleyheath and Crayford,constituency,country/england,,,E14001089,constituency/Bexleyheath and Crayford
+constituency/E14001090,Bicester and Woodstock,constituency,country/england,,,E14001090,constituency/Bicester and Woodstock
+constituency/E14001091,Birkenhead,constituency,country/england,,,E14001091,constituency/Birkenhead
+constituency/E14001092,Birmingham Edgbaston,constituency,country/england,,,E14001092,constituency/Birmingham Edgbaston
+constituency/E14001093,Birmingham Erdington,constituency,country/england,,,E14001093,constituency/Birmingham Erdington
+constituency/E14001094,Birmingham Hall Green and Moseley,constituency,country/england,,,E14001094,constituency/Birmingham Hall Green and Moseley
+constituency/E14001095,Birmingham Hodge Hill and Solihull North,constituency,country/england,,,E14001095,constituency/Birmingham Hodge Hill and Solihull North
+constituency/E14001096,Birmingham Ladywood,constituency,country/england,,,E14001096,constituency/Birmingham Ladywood
+constituency/E14001097,Birmingham Northfield,constituency,country/england,,,E14001097,constituency/Birmingham Northfield
+constituency/E14001098,Birmingham Perry Barr,constituency,country/england,,,E14001098,constituency/Birmingham Perry Barr
+constituency/E14001099,Birmingham Selly Oak,constituency,country/england,,,E14001099,constituency/Birmingham Selly Oak
+constituency/E14001100,Birmingham Yardley,constituency,country/england,,,E14001100,constituency/Birmingham Yardley
+constituency/E14001101,Bishop Auckland,constituency,country/england,,,E14001101,constituency/Bishop Auckland
+constituency/E14001102,Blackburn,constituency,country/england,,,E14001102,constituency/Blackburn
+constituency/E14001103,Blackley and Middleton South,constituency,country/england,,,E14001103,constituency/Blackley and Middleton South
+constituency/E14001104,Blackpool North and Fleetwood,constituency,country/england,,,E14001104,constituency/Blackpool North and Fleetwood
+constituency/E14001105,Blackpool South,constituency,country/england,,,E14001105,constituency/Blackpool South
+constituency/E14001106,Blaydon and Consett,constituency,country/england,,,E14001106,constituency/Blaydon and Consett
+constituency/E14001107,Blyth and Ashington,constituency,country/england,,,E14001107,constituency/Blyth and Ashington
+constituency/E14001108,Bognor Regis and Littlehampton,constituency,country/england,,,E14001108,constituency/Bognor Regis and Littlehampton
+constituency/E14001109,Bolsover,constituency,country/england,,,E14001109,constituency/Bolsover
+constituency/E14001110,Bolton North East,constituency,country/england,,,E14001110,constituency/Bolton North East
+constituency/E14001111,Bolton South and Walkden,constituency,country/england,,,E14001111,constituency/Bolton South and Walkden
+constituency/E14001112,Bolton West,constituency,country/england,,,E14001112,constituency/Bolton West
+constituency/E14001113,Bootle,constituency,country/england,,,E14001113,constituency/Bootle
+constituency/E14001114,Boston and Skegness,constituency,country/england,,,E14001114,constituency/Boston and Skegness
+constituency/E14001115,Bournemouth East,constituency,country/england,,,E14001115,constituency/Bournemouth East
+constituency/E14001116,Bournemouth West,constituency,country/england,,,E14001116,constituency/Bournemouth West
+constituency/E14001117,Bracknell,constituency,country/england,,,E14001117,constituency/Bracknell
+constituency/E14001118,Bradford East,constituency,country/england,,,E14001118,constituency/Bradford East
+constituency/E14001119,Bradford South,constituency,country/england,,,E14001119,constituency/Bradford South
+constituency/E14001120,Bradford West,constituency,country/england,,,E14001120,constituency/Bradford West
+constituency/E14001121,Braintree,constituency,country/england,,,E14001121,constituency/Braintree
+constituency/E14001122,Brent East,constituency,country/england,,,E14001122,constituency/Brent East
+constituency/E14001123,Brent West,constituency,country/england,,,E14001123,constituency/Brent West
+constituency/E14001124,Brentford and Isleworth,constituency,country/england,,,E14001124,constituency/Brentford and Isleworth
+constituency/E14001125,Brentwood and Ongar,constituency,country/england,,,E14001125,constituency/Brentwood and Ongar
+constituency/E14001126,Bridgwater,constituency,country/england,,,E14001126,constituency/Bridgwater
+constituency/E14001127,Bridlington and The Wolds,constituency,country/england,,,E14001127,constituency/Bridlington and The Wolds
+constituency/E14001128,Brigg and Immingham,constituency,country/england,,,E14001128,constituency/Brigg and Immingham
+constituency/E14001129,Brighton Kemptown and Peacehaven,constituency,country/england,,,E14001129,constituency/Brighton Kemptown and Peacehaven
+constituency/E14001130,Brighton Pavilion,constituency,country/england,,,E14001130,constituency/Brighton Pavilion
+constituency/E14001131,Bristol Central,constituency,country/england,,,E14001131,constituency/Bristol Central
+constituency/E14001132,Bristol East,constituency,country/england,,,E14001132,constituency/Bristol East
+constituency/E14001133,Bristol North East,constituency,country/england,,,E14001133,constituency/Bristol North East
+constituency/E14001134,Bristol North West,constituency,country/england,,,E14001134,constituency/Bristol North West
+constituency/E14001135,Bristol South,constituency,country/england,,,E14001135,constituency/Bristol South
+constituency/E14001136,Broadland and Fakenham,constituency,country/england,,,E14001136,constituency/Broadland and Fakenham
+constituency/E14001137,Bromley and Biggin Hill,constituency,country/england,,,E14001137,constituency/Bromley and Biggin Hill
+constituency/E14001138,Bromsgrove,constituency,country/england,,,E14001138,constituency/Bromsgrove
+constituency/E14001139,Broxbourne,constituency,country/england,,,E14001139,constituency/Broxbourne
+constituency/E14001140,Broxtowe,constituency,country/england,,,E14001140,constituency/Broxtowe
+constituency/E14001141,Buckingham and Bletchley,constituency,country/england,,,E14001141,constituency/Buckingham and Bletchley
+constituency/E14001142,Burnley,constituency,country/england,,,E14001142,constituency/Burnley
+constituency/E14001143,Burton and Uttoxeter,constituency,country/england,,,E14001143,constituency/Burton and Uttoxeter
+constituency/E14001144,Bury North,constituency,country/england,,,E14001144,constituency/Bury North
+constituency/E14001145,Bury South,constituency,country/england,,,E14001145,constituency/Bury South
+constituency/E14001146,Bury St Edmunds and Stowmarket,constituency,country/england,,,E14001146,constituency/Bury St Edmunds and Stowmarket
+constituency/E14001147,Calder Valley,constituency,country/england,,,E14001147,constituency/Calder Valley
+constituency/E14001148,Camborne and Redruth,constituency,country/england,,,E14001148,constituency/Camborne and Redruth
+constituency/E14001149,Cambridge,constituency,country/england,,,E14001149,constituency/Cambridge
+constituency/E14001150,Cannock Chase,constituency,country/england,,,E14001150,constituency/Cannock Chase
+constituency/E14001151,Canterbury,constituency,country/england,,,E14001151,constituency/Canterbury
+constituency/E14001152,Carlisle,constituency,country/england,,,E14001152,constituency/Carlisle
+constituency/E14001153,Carshalton and Wallington,constituency,country/england,,,E14001153,constituency/Carshalton and Wallington
+constituency/E14001154,Castle Point,constituency,country/england,,,E14001154,constituency/Castle Point
+constituency/E14001155,Central Devon,constituency,country/england,,,E14001155,constituency/Central Devon
+constituency/E14001156,Central Suffolk and North Ipswich,constituency,country/england,,,E14001156,constituency/Central Suffolk and North Ipswich
+constituency/E14001157,Chatham and Aylesford,constituency,country/england,,,E14001157,constituency/Chatham and Aylesford
+constituency/E14001158,Cheadle,constituency,country/england,,,E14001158,constituency/Cheadle
+constituency/E14001159,Chelmsford,constituency,country/england,,,E14001159,constituency/Chelmsford
+constituency/E14001160,Chelsea and Fulham,constituency,country/england,,,E14001160,constituency/Chelsea and Fulham
+constituency/E14001161,Cheltenham,constituency,country/england,,,E14001161,constituency/Cheltenham
+constituency/E14001162,Chesham and Amersham,constituency,country/england,,,E14001162,constituency/Chesham and Amersham
+constituency/E14001163,Chester North and Neston,constituency,country/england,,,E14001163,constituency/Chester North and Neston
+constituency/E14001164,Chester South and Eddisbury,constituency,country/england,,,E14001164,constituency/Chester South and Eddisbury
+constituency/E14001165,Chesterfield,constituency,country/england,,,E14001165,constituency/Chesterfield
+constituency/E14001166,Chichester,constituency,country/england,,,E14001166,constituency/Chichester
+constituency/E14001167,Chingford and Woodford Green,constituency,country/england,,,E14001167,constituency/Chingford and Woodford Green
+constituency/E14001168,Chippenham,constituency,country/england,,,E14001168,constituency/Chippenham
+constituency/E14001169,Chipping Barnet,constituency,country/england,,,E14001169,constituency/Chipping Barnet
+constituency/E14001170,Chorley,constituency,country/england,,,E14001170,constituency/Chorley
+constituency/E14001171,Christchurch,constituency,country/england,,,E14001171,constituency/Christchurch
+constituency/E14001172,Cities of London and Westminster,constituency,country/england,,,E14001172,constituency/Cities of London and Westminster
+constituency/E14001173,City of Durham,constituency,country/england,,,E14001173,constituency/City of Durham
+constituency/E14001174,Clacton,constituency,country/england,,,E14001174,constituency/Clacton
+constituency/E14001175,Clapham and Brixton Hill,constituency,country/england,,,E14001175,constituency/Clapham and Brixton Hill
+constituency/E14001176,Colchester,constituency,country/england,,,E14001176,constituency/Colchester
+constituency/E14001177,Colne Valley,constituency,country/england,,,E14001177,constituency/Colne Valley
+constituency/E14001178,Congleton,constituency,country/england,,,E14001178,constituency/Congleton
+constituency/E14001179,Corby and East Northamptonshire,constituency,country/england,,,E14001179,constituency/Corby and East Northamptonshire
+constituency/E14001180,Coventry East,constituency,country/england,,,E14001180,constituency/Coventry East
+constituency/E14001181,Coventry North West,constituency,country/england,,,E14001181,constituency/Coventry North West
+constituency/E14001182,Coventry South,constituency,country/england,,,E14001182,constituency/Coventry South
+constituency/E14001183,Cramlington and Killingworth,constituency,country/england,,,E14001183,constituency/Cramlington and Killingworth
+constituency/E14001184,Crawley,constituency,country/england,,,E14001184,constituency/Crawley
+constituency/E14001185,Crewe and Nantwich,constituency,country/england,,,E14001185,constituency/Crewe and Nantwich
+constituency/E14001186,Croydon East,constituency,country/england,,,E14001186,constituency/Croydon East
+constituency/E14001187,Croydon South,constituency,country/england,,,E14001187,constituency/Croydon South
+constituency/E14001188,Croydon West,constituency,country/england,,,E14001188,constituency/Croydon West
+constituency/E14001189,Dagenham and Rainham,constituency,country/england,,,E14001189,constituency/Dagenham and Rainham
+constituency/E14001190,Darlington,constituency,country/england,,,E14001190,constituency/Darlington
+constituency/E14001191,Dartford,constituency,country/england,,,E14001191,constituency/Dartford
+constituency/E14001192,Daventry,constituency,country/england,,,E14001192,constituency/Daventry
+constituency/E14001193,Derby North,constituency,country/england,,,E14001193,constituency/Derby North
+constituency/E14001194,Derby South,constituency,country/england,,,E14001194,constituency/Derby South
+constituency/E14001195,Derbyshire Dales,constituency,country/england,,,E14001195,constituency/Derbyshire Dales
+constituency/E14001196,Dewsbury and Batley,constituency,country/england,,,E14001196,constituency/Dewsbury and Batley
+constituency/E14001197,Didcot and Wantage,constituency,country/england,,,E14001197,constituency/Didcot and Wantage
+constituency/E14001198,Doncaster Central,constituency,country/england,,,E14001198,constituency/Doncaster Central
+constituency/E14001199,Doncaster East and the Isle of Axholme,constituency,country/england,,,E14001199,constituency/Doncaster East and the Isle of Axholme
+constituency/E14001200,Doncaster North,constituency,country/england,,,E14001200,constituency/Doncaster North
+constituency/E14001201,Dorking and Horley,constituency,country/england,,,E14001201,constituency/Dorking and Horley
+constituency/E14001202,Dover and Deal,constituency,country/england,,,E14001202,constituency/Dover and Deal
+constituency/E14001203,Droitwich and Evesham,constituency,country/england,,,E14001203,constituency/Droitwich and Evesham
+constituency/E14001204,Dudley,constituency,country/england,,,E14001204,constituency/Dudley
+constituency/E14001205,Dulwich and West Norwood,constituency,country/england,,,E14001205,constituency/Dulwich and West Norwood
+constituency/E14001206,Dunstable and Leighton Buzzard,constituency,country/england,,,E14001206,constituency/Dunstable and Leighton Buzzard
+constituency/E14001207,Ealing Central and Acton,constituency,country/england,,,E14001207,constituency/Ealing Central and Acton
+constituency/E14001208,Ealing North,constituency,country/england,,,E14001208,constituency/Ealing North
+constituency/E14001209,Ealing Southall,constituency,country/england,,,E14001209,constituency/Ealing Southall
+constituency/E14001210,Earley and Woodley,constituency,country/england,,,E14001210,constituency/Earley and Woodley
+constituency/E14001211,Easington,constituency,country/england,,,E14001211,constituency/Easington
+constituency/E14001212,East Grinstead and Uckfield,constituency,country/england,,,E14001212,constituency/East Grinstead and Uckfield
+constituency/E14001213,East Ham,constituency,country/england,,,E14001213,constituency/East Ham
+constituency/E14001214,East Hampshire,constituency,country/england,,,E14001214,constituency/East Hampshire
+constituency/E14001215,East Surrey,constituency,country/england,,,E14001215,constituency/East Surrey
+constituency/E14001216,East Thanet,constituency,country/england,,,E14001216,constituency/East Thanet
+constituency/E14001217,East Wiltshire,constituency,country/england,,,E14001217,constituency/East Wiltshire
+constituency/E14001218,East Worthing and Shoreham,constituency,country/england,,,E14001218,constituency/East Worthing and Shoreham
+constituency/E14001219,Eastbourne,constituency,country/england,,,E14001219,constituency/Eastbourne
+constituency/E14001220,Eastleigh,constituency,country/england,,,E14001220,constituency/Eastleigh
+constituency/E14001221,Edmonton and Winchmore Hill,constituency,country/england,,,E14001221,constituency/Edmonton and Winchmore Hill
+constituency/E14001222,Ellesmere Port and Bromborough,constituency,country/england,,,E14001222,constituency/Ellesmere Port and Bromborough
+constituency/E14001223,Eltham and Chislehurst,constituency,country/england,,,E14001223,constituency/Eltham and Chislehurst
+constituency/E14001224,Ely and East Cambridgeshire,constituency,country/england,,,E14001224,constituency/Ely and East Cambridgeshire
+constituency/E14001225,Enfield North,constituency,country/england,,,E14001225,constituency/Enfield North
+constituency/E14001226,Epping Forest,constituency,country/england,,,E14001226,constituency/Epping Forest
+constituency/E14001227,Epsom and Ewell,constituency,country/england,,,E14001227,constituency/Epsom and Ewell
+constituency/E14001228,Erewash,constituency,country/england,,,E14001228,constituency/Erewash
+constituency/E14001229,Erith and Thamesmead,constituency,country/england,,,E14001229,constituency/Erith and Thamesmead
+constituency/E14001230,Esher and Walton,constituency,country/england,,,E14001230,constituency/Esher and Walton
+constituency/E14001231,Exeter,constituency,country/england,,,E14001231,constituency/Exeter
+constituency/E14001232,Exmouth and Exeter East,constituency,country/england,,,E14001232,constituency/Exmouth and Exeter East
+constituency/E14001233,Fareham and Waterlooville,constituency,country/england,,,E14001233,constituency/Fareham and Waterlooville
+constituency/E14001234,Farnham and Bordon,constituency,country/england,,,E14001234,constituency/Farnham and Bordon
+constituency/E14001235,Faversham and Mid Kent,constituency,country/england,,,E14001235,constituency/Faversham and Mid Kent
+constituency/E14001236,Feltham and Heston,constituency,country/england,,,E14001236,constituency/Feltham and Heston
+constituency/E14001237,Filton and Bradley Stoke,constituency,country/england,,,E14001237,constituency/Filton and Bradley Stoke
+constituency/E14001238,Finchley and Golders Green,constituency,country/england,,,E14001238,constituency/Finchley and Golders Green
+constituency/E14001239,Folkestone and Hythe,constituency,country/england,,,E14001239,constituency/Folkestone and Hythe
+constituency/E14001240,Forest of Dean,constituency,country/england,,,E14001240,constituency/Forest of Dean
+constituency/E14001241,Frome and East Somerset,constituency,country/england,,,E14001241,constituency/Frome and East Somerset
+constituency/E14001242,Fylde,constituency,country/england,,,E14001242,constituency/Fylde
+constituency/E14001243,Gainsborough,constituency,country/england,,,E14001243,constituency/Gainsborough
+constituency/E14001244,Gateshead Central and Whickham,constituency,country/england,,,E14001244,constituency/Gateshead Central and Whickham
+constituency/E14001245,Gedling,constituency,country/england,,,E14001245,constituency/Gedling
+constituency/E14001246,Gillingham and Rainham,constituency,country/england,,,E14001246,constituency/Gillingham and Rainham
+constituency/E14001247,Glastonbury and Somerton,constituency,country/england,,,E14001247,constituency/Glastonbury and Somerton
+constituency/E14001248,Gloucester,constituency,country/england,,,E14001248,constituency/Gloucester
+constituency/E14001249,Godalming and Ash,constituency,country/england,,,E14001249,constituency/Godalming and Ash
+constituency/E14001250,Goole and Pocklington,constituency,country/england,,,E14001250,constituency/Goole and Pocklington
+constituency/E14001251,Gorton and Denton,constituency,country/england,,,E14001251,constituency/Gorton and Denton
+constituency/E14001252,Gosport,constituency,country/england,,,E14001252,constituency/Gosport
+constituency/E14001253,Grantham and Bourne,constituency,country/england,,,E14001253,constituency/Grantham and Bourne
+constituency/E14001254,Gravesham,constituency,country/england,,,E14001254,constituency/Gravesham
+constituency/E14001255,Great Grimsby and Cleethorpes,constituency,country/england,,,E14001255,constituency/Great Grimsby and Cleethorpes
+constituency/E14001256,Great Yarmouth,constituency,country/england,,,E14001256,constituency/Great Yarmouth
+constituency/E14001257,Greenwich and Woolwich,constituency,country/england,,,E14001257,constituency/Greenwich and Woolwich
+constituency/E14001258,Guildford,constituency,country/england,,,E14001258,constituency/Guildford
+constituency/E14001259,Hackney North and Stoke Newington,constituency,country/england,,,E14001259,constituency/Hackney North and Stoke Newington
+constituency/E14001260,Hackney South and Shoreditch,constituency,country/england,,,E14001260,constituency/Hackney South and Shoreditch
+constituency/E14001261,Halesowen,constituency,country/england,,,E14001261,constituency/Halesowen
+constituency/E14001262,Halifax,constituency,country/england,,,E14001262,constituency/Halifax
+constituency/E14001263,Hamble Valley,constituency,country/england,,,E14001263,constituency/Hamble Valley
+constituency/E14001264,Hammersmith and Chiswick,constituency,country/england,,,E14001264,constituency/Hammersmith and Chiswick
+constituency/E14001265,Hampstead and Highgate,constituency,country/england,,,E14001265,constituency/Hampstead and Highgate
+constituency/E14001266,"Harborough, Oadby and Wigston",constituency,country/england,,,E14001266,"constituency/Harborough, Oadby and Wigston"
+constituency/E14001267,Harlow,constituency,country/england,,,E14001267,constituency/Harlow
+constituency/E14001268,Harpenden and Berkhamsted,constituency,country/england,,,E14001268,constituency/Harpenden and Berkhamsted
+constituency/E14001269,Harrogate and Knaresborough,constituency,country/england,,,E14001269,constituency/Harrogate and Knaresborough
+constituency/E14001270,Harrow East,constituency,country/england,,,E14001270,constituency/Harrow East
+constituency/E14001271,Harrow West,constituency,country/england,,,E14001271,constituency/Harrow West
+constituency/E14001272,Hartlepool,constituency,country/england,,,E14001272,constituency/Hartlepool
+constituency/E14001273,Harwich and North Essex,constituency,country/england,,,E14001273,constituency/Harwich and North Essex
+constituency/E14001274,Hastings and Rye,constituency,country/england,,,E14001274,constituency/Hastings and Rye
+constituency/E14001275,Havant,constituency,country/england,,,E14001275,constituency/Havant
+constituency/E14001276,Hayes and Harlington,constituency,country/england,,,E14001276,constituency/Hayes and Harlington
+constituency/E14001277,Hazel Grove,constituency,country/england,,,E14001277,constituency/Hazel Grove
+constituency/E14001278,Hemel Hempstead,constituency,country/england,,,E14001278,constituency/Hemel Hempstead
+constituency/E14001279,Hendon,constituency,country/england,,,E14001279,constituency/Hendon
+constituency/E14001280,Henley and Thame,constituency,country/england,,,E14001280,constituency/Henley and Thame
+constituency/E14001281,Hereford and South Herefordshire,constituency,country/england,,,E14001281,constituency/Hereford and South Herefordshire
+constituency/E14001282,Herne Bay and Sandwich,constituency,country/england,,,E14001282,constituency/Herne Bay and Sandwich
+constituency/E14001283,Hertford and Stortford,constituency,country/england,,,E14001283,constituency/Hertford and Stortford
+constituency/E14001284,Hertsmere,constituency,country/england,,,E14001284,constituency/Hertsmere
+constituency/E14001285,Hexham,constituency,country/england,,,E14001285,constituency/Hexham
+constituency/E14001286,Heywood and Middleton North,constituency,country/england,,,E14001286,constituency/Heywood and Middleton North
+constituency/E14001287,High Peak,constituency,country/england,,,E14001287,constituency/High Peak
+constituency/E14001288,Hinckley and Bosworth,constituency,country/england,,,E14001288,constituency/Hinckley and Bosworth
+constituency/E14001289,Hitchin,constituency,country/england,,,E14001289,constituency/Hitchin
+constituency/E14001290,Holborn and St Pancras,constituency,country/england,,,E14001290,constituency/Holborn and St Pancras
+constituency/E14001291,Honiton and Sidmouth,constituency,country/england,,,E14001291,constituency/Honiton and Sidmouth
+constituency/E14001292,Hornchurch and Upminster,constituency,country/england,,,E14001292,constituency/Hornchurch and Upminster
+constituency/E14001293,Hornsey and Friern Barnet,constituency,country/england,,,E14001293,constituency/Hornsey and Friern Barnet
+constituency/E14001294,Horsham,constituency,country/england,,,E14001294,constituency/Horsham
+constituency/E14001295,Houghton and Sunderland South,constituency,country/england,,,E14001295,constituency/Houghton and Sunderland South
+constituency/E14001296,Hove and Portslade,constituency,country/england,,,E14001296,constituency/Hove and Portslade
+constituency/E14001297,Huddersfield,constituency,country/england,,,E14001297,constituency/Huddersfield
+constituency/E14001298,Huntingdon,constituency,country/england,,,E14001298,constituency/Huntingdon
+constituency/E14001299,Hyndburn,constituency,country/england,,,E14001299,constituency/Hyndburn
+constituency/E14001300,Ilford North,constituency,country/england,,,E14001300,constituency/Ilford North
+constituency/E14001301,Ilford South,constituency,country/england,,,E14001301,constituency/Ilford South
+constituency/E14001302,Ipswich,constituency,country/england,,,E14001302,constituency/Ipswich
+constituency/E14001303,Isle of Wight East,constituency,country/england,,,E14001303,constituency/Isle of Wight East
+constituency/E14001304,Isle of Wight West,constituency,country/england,,,E14001304,constituency/Isle of Wight West
+constituency/E14001305,Islington North,constituency,country/england,,,E14001305,constituency/Islington North
+constituency/E14001306,Islington South and Finsbury,constituency,country/england,,,E14001306,constituency/Islington South and Finsbury
+constituency/E14001307,Jarrow and Gateshead East,constituency,country/england,,,E14001307,constituency/Jarrow and Gateshead East
+constituency/E14001308,Keighley and Ilkley,constituency,country/england,,,E14001308,constituency/Keighley and Ilkley
+constituency/E14001309,Kenilworth and Southam,constituency,country/england,,,E14001309,constituency/Kenilworth and Southam
+constituency/E14001310,Kensington and Bayswater,constituency,country/england,,,E14001310,constituency/Kensington and Bayswater
+constituency/E14001311,Kettering,constituency,country/england,,,E14001311,constituency/Kettering
+constituency/E14001312,Kingston and Surbiton,constituency,country/england,,,E14001312,constituency/Kingston and Surbiton
+constituency/E14001313,Kingston upon Hull East,constituency,country/england,,,E14001313,constituency/Kingston upon Hull East
+constituency/E14001314,Kingston upon Hull North and Cottingham,constituency,country/england,,,E14001314,constituency/Kingston upon Hull North and Cottingham
+constituency/E14001315,Kingston upon Hull West and Haltemprice,constituency,country/england,,,E14001315,constituency/Kingston upon Hull West and Haltemprice
+constituency/E14001316,Kingswinford and South Staffordshire,constituency,country/england,,,E14001316,constituency/Kingswinford and South Staffordshire
+constituency/E14001317,Knowsley,constituency,country/england,,,E14001317,constituency/Knowsley
+constituency/E14001318,Lancaster and Wyre,constituency,country/england,,,E14001318,constituency/Lancaster and Wyre
+constituency/E14001319,Leeds Central and Headingley,constituency,country/england,,,E14001319,constituency/Leeds Central and Headingley
+constituency/E14001320,Leeds East,constituency,country/england,,,E14001320,constituency/Leeds East
+constituency/E14001321,Leeds North East,constituency,country/england,,,E14001321,constituency/Leeds North East
+constituency/E14001322,Leeds North West,constituency,country/england,,,E14001322,constituency/Leeds North West
+constituency/E14001323,Leeds South,constituency,country/england,,,E14001323,constituency/Leeds South
+constituency/E14001324,Leeds South West and Morley,constituency,country/england,,,E14001324,constituency/Leeds South West and Morley
+constituency/E14001325,Leeds West and Pudsey,constituency,country/england,,,E14001325,constituency/Leeds West and Pudsey
+constituency/E14001326,Leicester East,constituency,country/england,,,E14001326,constituency/Leicester East
+constituency/E14001327,Leicester South,constituency,country/england,,,E14001327,constituency/Leicester South
+constituency/E14001328,Leicester West,constituency,country/england,,,E14001328,constituency/Leicester West
+constituency/E14001329,Leigh and Atherton,constituency,country/england,,,E14001329,constituency/Leigh and Atherton
+constituency/E14001330,Lewes,constituency,country/england,,,E14001330,constituency/Lewes
+constituency/E14001331,Lewisham East,constituency,country/england,,,E14001331,constituency/Lewisham East
+constituency/E14001332,Lewisham North,constituency,country/england,,,E14001332,constituency/Lewisham North
+constituency/E14001333,Lewisham West and East Dulwich,constituency,country/england,,,E14001333,constituency/Lewisham West and East Dulwich
+constituency/E14001334,Leyton and Wanstead,constituency,country/england,,,E14001334,constituency/Leyton and Wanstead
+constituency/E14001335,Lichfield,constituency,country/england,,,E14001335,constituency/Lichfield
+constituency/E14001336,Lincoln,constituency,country/england,,,E14001336,constituency/Lincoln
+constituency/E14001337,Liverpool Garston,constituency,country/england,,,E14001337,constituency/Liverpool Garston
+constituency/E14001338,Liverpool Riverside,constituency,country/england,,,E14001338,constituency/Liverpool Riverside
+constituency/E14001339,Liverpool Walton,constituency,country/england,,,E14001339,constituency/Liverpool Walton
+constituency/E14001340,Liverpool Wavertree,constituency,country/england,,,E14001340,constituency/Liverpool Wavertree
+constituency/E14001341,Liverpool West Derby,constituency,country/england,,,E14001341,constituency/Liverpool West Derby
+constituency/E14001342,Loughborough,constituency,country/england,,,E14001342,constituency/Loughborough
+constituency/E14001343,Louth and Horncastle,constituency,country/england,,,E14001343,constituency/Louth and Horncastle
+constituency/E14001344,Lowestoft,constituency,country/england,,,E14001344,constituency/Lowestoft
+constituency/E14001345,Luton North,constituency,country/england,,,E14001345,constituency/Luton North
+constituency/E14001346,Luton South and South Bedfordshire,constituency,country/england,,,E14001346,constituency/Luton South and South Bedfordshire
+constituency/E14001347,Macclesfield,constituency,country/england,,,E14001347,constituency/Macclesfield
+constituency/E14001348,Maidenhead,constituency,country/england,,,E14001348,constituency/Maidenhead
+constituency/E14001349,Maidstone and Malling,constituency,country/england,,,E14001349,constituency/Maidstone and Malling
+constituency/E14001350,Makerfield,constituency,country/england,,,E14001350,constituency/Makerfield
+constituency/E14001351,Maldon,constituency,country/england,,,E14001351,constituency/Maldon
+constituency/E14001352,Manchester Central,constituency,country/england,,,E14001352,constituency/Manchester Central
+constituency/E14001353,Manchester Rusholme,constituency,country/england,,,E14001353,constituency/Manchester Rusholme
+constituency/E14001354,Manchester Withington,constituency,country/england,,,E14001354,constituency/Manchester Withington
+constituency/E14001355,Mansfield,constituency,country/england,,,E14001355,constituency/Mansfield
+constituency/E14001356,Melksham and Devizes,constituency,country/england,,,E14001356,constituency/Melksham and Devizes
+constituency/E14001357,Melton and Syston,constituency,country/england,,,E14001357,constituency/Melton and Syston
+constituency/E14001358,Meriden and Solihull East,constituency,country/england,,,E14001358,constituency/Meriden and Solihull East
+constituency/E14001359,Mid Bedfordshire,constituency,country/england,,,E14001359,constituency/Mid Bedfordshire
+constituency/E14001360,Mid Buckinghamshire,constituency,country/england,,,E14001360,constituency/Mid Buckinghamshire
+constituency/E14001361,Mid Cheshire,constituency,country/england,,,E14001361,constituency/Mid Cheshire
+constituency/E14001362,Mid Derbyshire,constituency,country/england,,,E14001362,constituency/Mid Derbyshire
+constituency/E14001363,Mid Dorset and North Poole,constituency,country/england,,,E14001363,constituency/Mid Dorset and North Poole
+constituency/E14001364,Mid Leicestershire,constituency,country/england,,,E14001364,constituency/Mid Leicestershire
+constituency/E14001365,Mid Norfolk,constituency,country/england,,,E14001365,constituency/Mid Norfolk
+constituency/E14001366,Mid Sussex,constituency,country/england,,,E14001366,constituency/Mid Sussex
+constituency/E14001367,Middlesbrough and Thornaby East,constituency,country/england,,,E14001367,constituency/Middlesbrough and Thornaby East
+constituency/E14001368,Middlesbrough South and East Cleveland,constituency,country/england,,,E14001368,constituency/Middlesbrough South and East Cleveland
+constituency/E14001369,Milton Keynes Central,constituency,country/england,,,E14001369,constituency/Milton Keynes Central
+constituency/E14001370,Milton Keynes North,constituency,country/england,,,E14001370,constituency/Milton Keynes North
+constituency/E14001371,Mitcham and Morden,constituency,country/england,,,E14001371,constituency/Mitcham and Morden
+constituency/E14001372,Morecambe and Lunesdale,constituency,country/england,,,E14001372,constituency/Morecambe and Lunesdale
+constituency/E14001373,New Forest East,constituency,country/england,,,E14001373,constituency/New Forest East
+constituency/E14001374,New Forest West,constituency,country/england,,,E14001374,constituency/New Forest West
+constituency/E14001375,Newark,constituency,country/england,,,E14001375,constituency/Newark
+constituency/E14001376,Newbury,constituency,country/england,,,E14001376,constituency/Newbury
+constituency/E14001377,Newcastle upon Tyne Central and West,constituency,country/england,,,E14001377,constituency/Newcastle upon Tyne Central and West
+constituency/E14001378,Newcastle upon Tyne East and Wallsend,constituency,country/england,,,E14001378,constituency/Newcastle upon Tyne East and Wallsend
+constituency/E14001379,Newcastle upon Tyne North,constituency,country/england,,,E14001379,constituency/Newcastle upon Tyne North
+constituency/E14001380,Newcastle-under-Lyme,constituency,country/england,,,E14001380,constituency/Newcastle-under-Lyme
+constituency/E14001381,Newton Abbot,constituency,country/england,,,E14001381,constituency/Newton Abbot
+constituency/E14001382,Newton Aycliffe and Spennymoor,constituency,country/england,,,E14001382,constituency/Newton Aycliffe and Spennymoor
+constituency/E14001383,Normanton and Hemsworth,constituency,country/england,,,E14001383,constituency/Normanton and Hemsworth
+constituency/E14001384,North Bedfordshire,constituency,country/england,,,E14001384,constituency/North Bedfordshire
+constituency/E14001385,North Cornwall,constituency,country/england,,,E14001385,constituency/North Cornwall
+constituency/E14001386,North Cotswolds,constituency,country/england,,,E14001386,constituency/North Cotswolds
+constituency/E14001387,North Devon,constituency,country/england,,,E14001387,constituency/North Devon
+constituency/E14001388,North Dorset,constituency,country/england,,,E14001388,constituency/North Dorset
+constituency/E14001389,North Durham,constituency,country/england,,,E14001389,constituency/North Durham
+constituency/E14001390,North East Cambridgeshire,constituency,country/england,,,E14001390,constituency/North East Cambridgeshire
+constituency/E14001391,North East Derbyshire,constituency,country/england,,,E14001391,constituency/North East Derbyshire
+constituency/E14001392,North East Hampshire,constituency,country/england,,,E14001392,constituency/North East Hampshire
+constituency/E14001393,North East Hertfordshire,constituency,country/england,,,E14001393,constituency/North East Hertfordshire
+constituency/E14001394,North East Somerset and Hanham,constituency,country/england,,,E14001394,constituency/North East Somerset and Hanham
+constituency/E14001395,North Herefordshire,constituency,country/england,,,E14001395,constituency/North Herefordshire
+constituency/E14001396,North Norfolk,constituency,country/england,,,E14001396,constituency/North Norfolk
+constituency/E14001397,North Northumberland,constituency,country/england,,,E14001397,constituency/North Northumberland
+constituency/E14001398,North Shropshire,constituency,country/england,,,E14001398,constituency/North Shropshire
+constituency/E14001399,North Somerset,constituency,country/england,,,E14001399,constituency/North Somerset
+constituency/E14001400,North Warwickshire and Bedworth,constituency,country/england,,,E14001400,constituency/North Warwickshire and Bedworth
+constituency/E14001401,North West Cambridgeshire,constituency,country/england,,,E14001401,constituency/North West Cambridgeshire
+constituency/E14001402,North West Essex,constituency,country/england,,,E14001402,constituency/North West Essex
+constituency/E14001403,North West Hampshire,constituency,country/england,,,E14001403,constituency/North West Hampshire
+constituency/E14001404,North West Leicestershire,constituency,country/england,,,E14001404,constituency/North West Leicestershire
+constituency/E14001405,North West Norfolk,constituency,country/england,,,E14001405,constituency/North West Norfolk
+constituency/E14001406,Northampton North,constituency,country/england,,,E14001406,constituency/Northampton North
+constituency/E14001407,Northampton South,constituency,country/england,,,E14001407,constituency/Northampton South
+constituency/E14001408,Norwich North,constituency,country/england,,,E14001408,constituency/Norwich North
+constituency/E14001409,Norwich South,constituency,country/england,,,E14001409,constituency/Norwich South
+constituency/E14001410,Nottingham East,constituency,country/england,,,E14001410,constituency/Nottingham East
+constituency/E14001411,Nottingham North and Kimberley,constituency,country/england,,,E14001411,constituency/Nottingham North and Kimberley
+constituency/E14001412,Nottingham South,constituency,country/england,,,E14001412,constituency/Nottingham South
+constituency/E14001413,Nuneaton,constituency,country/england,,,E14001413,constituency/Nuneaton
+constituency/E14001414,Old Bexley and Sidcup,constituency,country/england,,,E14001414,constituency/Old Bexley and Sidcup
+constituency/E14001415,Oldham East and Saddleworth,constituency,country/england,,,E14001415,constituency/Oldham East and Saddleworth
+constituency/E14001416,"Oldham West, Chadderton and Royton",constituency,country/england,,,E14001416,"constituency/Oldham West, Chadderton and Royton"
+constituency/E14001417,Orpington,constituency,country/england,,,E14001417,constituency/Orpington
+constituency/E14001418,Ossett and Denby Dale,constituency,country/england,,,E14001418,constituency/Ossett and Denby Dale
+constituency/E14001419,Oxford East,constituency,country/england,,,E14001419,constituency/Oxford East
+constituency/E14001420,Oxford West and Abingdon,constituency,country/england,,,E14001420,constituency/Oxford West and Abingdon
+constituency/E14001421,Peckham,constituency,country/england,,,E14001421,constituency/Peckham
+constituency/E14001422,Pendle and Clitheroe,constituency,country/england,,,E14001422,constituency/Pendle and Clitheroe
+constituency/E14001423,Penistone and Stocksbridge,constituency,country/england,,,E14001423,constituency/Penistone and Stocksbridge
+constituency/E14001424,Penrith and Solway,constituency,country/england,,,E14001424,constituency/Penrith and Solway
+constituency/E14001425,Peterborough,constituency,country/england,,,E14001425,constituency/Peterborough
+constituency/E14001426,Plymouth Moor View,constituency,country/england,,,E14001426,constituency/Plymouth Moor View
+constituency/E14001427,Plymouth Sutton and Devonport,constituency,country/england,,,E14001427,constituency/Plymouth Sutton and Devonport
+constituency/E14001428,"Pontefract, Castleford and Knottingley",constituency,country/england,,,E14001428,"constituency/Pontefract, Castleford and Knottingley"
+constituency/E14001429,Poole,constituency,country/england,,,E14001429,constituency/Poole
+constituency/E14001430,Poplar and Limehouse,constituency,country/england,,,E14001430,constituency/Poplar and Limehouse
+constituency/E14001431,Portsmouth North,constituency,country/england,,,E14001431,constituency/Portsmouth North
+constituency/E14001432,Portsmouth South,constituency,country/england,,,E14001432,constituency/Portsmouth South
+constituency/E14001433,Preston,constituency,country/england,,,E14001433,constituency/Preston
+constituency/E14001434,Putney,constituency,country/england,,,E14001434,constituency/Putney
+constituency/E14001435,Queen's Park and Maida Vale,constituency,country/england,,,E14001435,constituency/Queen's Park and Maida Vale
+constituency/E14001436,Rawmarsh and Conisbrough,constituency,country/england,,,E14001436,constituency/Rawmarsh and Conisbrough
+constituency/E14001437,Rayleigh and Wickford,constituency,country/england,,,E14001437,constituency/Rayleigh and Wickford
+constituency/E14001438,Reading Central,constituency,country/england,,,E14001438,constituency/Reading Central
+constituency/E14001439,Reading West and Mid Berkshire,constituency,country/england,,,E14001439,constituency/Reading West and Mid Berkshire
+constituency/E14001440,Redcar,constituency,country/england,,,E14001440,constituency/Redcar
+constituency/E14001441,Redditch,constituency,country/england,,,E14001441,constituency/Redditch
+constituency/E14001442,Reigate,constituency,country/england,,,E14001442,constituency/Reigate
+constituency/E14001443,Ribble Valley,constituency,country/england,,,E14001443,constituency/Ribble Valley
+constituency/E14001444,Richmond and Northallerton,constituency,country/england,,,E14001444,constituency/Richmond and Northallerton
+constituency/E14001445,Richmond Park,constituency,country/england,,,E14001445,constituency/Richmond Park
+constituency/E14001446,Rochdale,constituency,country/england,,,E14001446,constituency/Rochdale
+constituency/E14001447,Rochester and Strood,constituency,country/england,,,E14001447,constituency/Rochester and Strood
+constituency/E14001448,Romford,constituency,country/england,,,E14001448,constituency/Romford
+constituency/E14001449,Romsey and Southampton North,constituency,country/england,,,E14001449,constituency/Romsey and Southampton North
+constituency/E14001450,Rossendale and Darwen,constituency,country/england,,,E14001450,constituency/Rossendale and Darwen
+constituency/E14001451,Rother Valley,constituency,country/england,,,E14001451,constituency/Rother Valley
+constituency/E14001452,Rotherham,constituency,country/england,,,E14001452,constituency/Rotherham
+constituency/E14001453,Rugby,constituency,country/england,,,E14001453,constituency/Rugby
+constituency/E14001454,"Ruislip, Northwood and Pinner",constituency,country/england,,,E14001454,"constituency/Ruislip, Northwood and Pinner"
+constituency/E14001455,Runcorn and Helsby,constituency,country/england,,,E14001455,constituency/Runcorn and Helsby
+constituency/E14001456,Runnymede and Weybridge,constituency,country/england,,,E14001456,constituency/Runnymede and Weybridge
+constituency/E14001457,Rushcliffe,constituency,country/england,,,E14001457,constituency/Rushcliffe
+constituency/E14001458,Rutland and Stamford,constituency,country/england,,,E14001458,constituency/Rutland and Stamford
+constituency/E14001459,Salford,constituency,country/england,,,E14001459,constituency/Salford
+constituency/E14001460,Salisbury,constituency,country/england,,,E14001460,constituency/Salisbury
+constituency/E14001461,Scarborough and Whitby,constituency,country/england,,,E14001461,constituency/Scarborough and Whitby
+constituency/E14001462,Scunthorpe,constituency,country/england,,,E14001462,constituency/Scunthorpe
+constituency/E14001463,Sefton Central,constituency,country/england,,,E14001463,constituency/Sefton Central
+constituency/E14001464,Selby,constituency,country/england,,,E14001464,constituency/Selby
+constituency/E14001465,Sevenoaks,constituency,country/england,,,E14001465,constituency/Sevenoaks
+constituency/E14001466,Sheffield Brightside and Hillsborough,constituency,country/england,,,E14001466,constituency/Sheffield Brightside and Hillsborough
+constituency/E14001467,Sheffield Central,constituency,country/england,,,E14001467,constituency/Sheffield Central
+constituency/E14001468,Sheffield Hallam,constituency,country/england,,,E14001468,constituency/Sheffield Hallam
+constituency/E14001469,Sheffield Heeley,constituency,country/england,,,E14001469,constituency/Sheffield Heeley
+constituency/E14001470,Sheffield South East,constituency,country/england,,,E14001470,constituency/Sheffield South East
+constituency/E14001471,Sherwood Forest,constituency,country/england,,,E14001471,constituency/Sherwood Forest
+constituency/E14001472,Shipley,constituency,country/england,,,E14001472,constituency/Shipley
+constituency/E14001473,Shrewsbury,constituency,country/england,,,E14001473,constituency/Shrewsbury
+constituency/E14001474,Sittingbourne and Sheppey,constituency,country/england,,,E14001474,constituency/Sittingbourne and Sheppey
+constituency/E14001475,Skipton and Ripon,constituency,country/england,,,E14001475,constituency/Skipton and Ripon
+constituency/E14001476,Sleaford and North Hykeham,constituency,country/england,,,E14001476,constituency/Sleaford and North Hykeham
+constituency/E14001477,Slough,constituency,country/england,,,E14001477,constituency/Slough
+constituency/E14001478,Smethwick,constituency,country/england,,,E14001478,constituency/Smethwick
+constituency/E14001479,Solihull West and Shirley,constituency,country/england,,,E14001479,constituency/Solihull West and Shirley
+constituency/E14001480,South Basildon and East Thurrock,constituency,country/england,,,E14001480,constituency/South Basildon and East Thurrock
+constituency/E14001481,South Cambridgeshire,constituency,country/england,,,E14001481,constituency/South Cambridgeshire
+constituency/E14001482,South Cotswolds,constituency,country/england,,,E14001482,constituency/South Cotswolds
+constituency/E14001483,South Derbyshire,constituency,country/england,,,E14001483,constituency/South Derbyshire
+constituency/E14001484,South Devon,constituency,country/england,,,E14001484,constituency/South Devon
+constituency/E14001485,South Dorset,constituency,country/england,,,E14001485,constituency/South Dorset
+constituency/E14001486,South East Cornwall,constituency,country/england,,,E14001486,constituency/South East Cornwall
+constituency/E14001487,South Holland and The Deepings,constituency,country/england,,,E14001487,constituency/South Holland and The Deepings
+constituency/E14001488,South Leicestershire,constituency,country/england,,,E14001488,constituency/South Leicestershire
+constituency/E14001489,South Norfolk,constituency,country/england,,,E14001489,constituency/South Norfolk
+constituency/E14001490,South Northamptonshire,constituency,country/england,,,E14001490,constituency/South Northamptonshire
+constituency/E14001491,South Ribble,constituency,country/england,,,E14001491,constituency/South Ribble
+constituency/E14001492,South Shields,constituency,country/england,,,E14001492,constituency/South Shields
+constituency/E14001493,South Shropshire,constituency,country/england,,,E14001493,constituency/South Shropshire
+constituency/E14001494,South Suffolk,constituency,country/england,,,E14001494,constituency/South Suffolk
+constituency/E14001495,South West Devon,constituency,country/england,,,E14001495,constituency/South West Devon
+constituency/E14001496,South West Hertfordshire,constituency,country/england,,,E14001496,constituency/South West Hertfordshire
+constituency/E14001497,South West Norfolk,constituency,country/england,,,E14001497,constituency/South West Norfolk
+constituency/E14001498,South West Wiltshire,constituency,country/england,,,E14001498,constituency/South West Wiltshire
+constituency/E14001499,Southampton Itchen,constituency,country/england,,,E14001499,constituency/Southampton Itchen
+constituency/E14001500,Southampton Test,constituency,country/england,,,E14001500,constituency/Southampton Test
+constituency/E14001501,Southend East and Rochford,constituency,country/england,,,E14001501,constituency/Southend East and Rochford
+constituency/E14001502,Southend West and Leigh,constituency,country/england,,,E14001502,constituency/Southend West and Leigh
+constituency/E14001503,Southgate and Wood Green,constituency,country/england,,,E14001503,constituency/Southgate and Wood Green
+constituency/E14001504,Southport,constituency,country/england,,,E14001504,constituency/Southport
+constituency/E14001505,Spelthorne,constituency,country/england,,,E14001505,constituency/Spelthorne
+constituency/E14001506,Spen Valley,constituency,country/england,,,E14001506,constituency/Spen Valley
+constituency/E14001507,St Albans,constituency,country/england,,,E14001507,constituency/St Albans
+constituency/E14001508,St Austell and Newquay,constituency,country/england,,,E14001508,constituency/St Austell and Newquay
+constituency/E14001509,St Helens North,constituency,country/england,,,E14001509,constituency/St Helens North
+constituency/E14001510,St Helens South and Whiston,constituency,country/england,,,E14001510,constituency/St Helens South and Whiston
+constituency/E14001511,St Ives,constituency,country/england,,,E14001511,constituency/St Ives
+constituency/E14001512,St Neots and Mid Cambridgeshire,constituency,country/england,,,E14001512,constituency/St Neots and Mid Cambridgeshire
+constituency/E14001513,Stafford,constituency,country/england,,,E14001513,constituency/Stafford
+constituency/E14001514,Staffordshire Moorlands,constituency,country/england,,,E14001514,constituency/Staffordshire Moorlands
+constituency/E14001515,Stalybridge and Hyde,constituency,country/england,,,E14001515,constituency/Stalybridge and Hyde
+constituency/E14001516,Stevenage,constituency,country/england,,,E14001516,constituency/Stevenage
+constituency/E14001517,Stockport,constituency,country/england,,,E14001517,constituency/Stockport
+constituency/E14001518,Stockton North,constituency,country/england,,,E14001518,constituency/Stockton North
+constituency/E14001519,Stockton West,constituency,country/england,,,E14001519,constituency/Stockton West
+constituency/E14001520,Stoke-on-Trent Central,constituency,country/england,,,E14001520,constituency/Stoke-on-Trent Central
+constituency/E14001521,Stoke-on-Trent North,constituency,country/england,,,E14001521,constituency/Stoke-on-Trent North
+constituency/E14001522,Stoke-on-Trent South,constituency,country/england,,,E14001522,constituency/Stoke-on-Trent South
+constituency/E14001523,"Stone, Great Wyrley and Penkridge",constituency,country/england,,,E14001523,"constituency/Stone, Great Wyrley and Penkridge"
+constituency/E14001524,Stourbridge,constituency,country/england,,,E14001524,constituency/Stourbridge
+constituency/E14001525,Stratford and Bow,constituency,country/england,,,E14001525,constituency/Stratford and Bow
+constituency/E14001526,Stratford-on-Avon,constituency,country/england,,,E14001526,constituency/Stratford-on-Avon
+constituency/E14001527,Streatham and Croydon North,constituency,country/england,,,E14001527,constituency/Streatham and Croydon North
+constituency/E14001528,Stretford and Urmston,constituency,country/england,,,E14001528,constituency/Stretford and Urmston
+constituency/E14001529,Stroud,constituency,country/england,,,E14001529,constituency/Stroud
+constituency/E14001530,Suffolk Coastal,constituency,country/england,,,E14001530,constituency/Suffolk Coastal
+constituency/E14001531,Sunderland Central,constituency,country/england,,,E14001531,constituency/Sunderland Central
+constituency/E14001532,Surrey Heath,constituency,country/england,,,E14001532,constituency/Surrey Heath
+constituency/E14001533,Sussex Weald,constituency,country/england,,,E14001533,constituency/Sussex Weald
+constituency/E14001534,Sutton and Cheam,constituency,country/england,,,E14001534,constituency/Sutton and Cheam
+constituency/E14001535,Sutton Coldfield,constituency,country/england,,,E14001535,constituency/Sutton Coldfield
+constituency/E14001536,Swindon North,constituency,country/england,,,E14001536,constituency/Swindon North
+constituency/E14001537,Swindon South,constituency,country/england,,,E14001537,constituency/Swindon South
+constituency/E14001538,Tamworth,constituency,country/england,,,E14001538,constituency/Tamworth
+constituency/E14001539,Tatton,constituency,country/england,,,E14001539,constituency/Tatton
+constituency/E14001540,Taunton and Wellington,constituency,country/england,,,E14001540,constituency/Taunton and Wellington
+constituency/E14001541,Telford,constituency,country/england,,,E14001541,constituency/Telford
+constituency/E14001542,Tewkesbury,constituency,country/england,,,E14001542,constituency/Tewkesbury
+constituency/E14001543,The Wrekin,constituency,country/england,,,E14001543,constituency/The Wrekin
+constituency/E14001544,Thirsk and Malton,constituency,country/england,,,E14001544,constituency/Thirsk and Malton
+constituency/E14001545,Thornbury and Yate,constituency,country/england,,,E14001545,constituency/Thornbury and Yate
+constituency/E14001546,Thurrock,constituency,country/england,,,E14001546,constituency/Thurrock
+constituency/E14001547,Tipton and Wednesbury,constituency,country/england,,,E14001547,constituency/Tipton and Wednesbury
+constituency/E14001548,Tiverton and Minehead,constituency,country/england,,,E14001548,constituency/Tiverton and Minehead
+constituency/E14001549,Tonbridge,constituency,country/england,,,E14001549,constituency/Tonbridge
+constituency/E14001550,Tooting,constituency,country/england,,,E14001550,constituency/Tooting
+constituency/E14001551,Torbay,constituency,country/england,,,E14001551,constituency/Torbay
+constituency/E14001552,Torridge and Tavistock,constituency,country/england,,,E14001552,constituency/Torridge and Tavistock
+constituency/E14001553,Tottenham,constituency,country/england,,,E14001553,constituency/Tottenham
+constituency/E14001554,Truro and Falmouth,constituency,country/england,,,E14001554,constituency/Truro and Falmouth
+constituency/E14001555,Tunbridge Wells,constituency,country/england,,,E14001555,constituency/Tunbridge Wells
+constituency/E14001556,Twickenham,constituency,country/england,,,E14001556,constituency/Twickenham
+constituency/E14001557,Tynemouth,constituency,country/england,,,E14001557,constituency/Tynemouth
+constituency/E14001558,Uxbridge and South Ruislip,constituency,country/england,,,E14001558,constituency/Uxbridge and South Ruislip
+constituency/E14001559,Vauxhall and Camberwell Green,constituency,country/england,,,E14001559,constituency/Vauxhall and Camberwell Green
+constituency/E14001560,Wakefield and Rothwell,constituency,country/england,,,E14001560,constituency/Wakefield and Rothwell
+constituency/E14001561,Wallasey,constituency,country/england,,,E14001561,constituency/Wallasey
+constituency/E14001562,Walsall and Bloxwich,constituency,country/england,,,E14001562,constituency/Walsall and Bloxwich
+constituency/E14001563,Walthamstow,constituency,country/england,,,E14001563,constituency/Walthamstow
+constituency/E14001564,Warrington North,constituency,country/england,,,E14001564,constituency/Warrington North
+constituency/E14001565,Warrington South,constituency,country/england,,,E14001565,constituency/Warrington South
+constituency/E14001566,Warwick and Leamington,constituency,country/england,,,E14001566,constituency/Warwick and Leamington
+constituency/E14001567,Washington and Gateshead South,constituency,country/england,,,E14001567,constituency/Washington and Gateshead South
+constituency/E14001568,Watford,constituency,country/england,,,E14001568,constituency/Watford
+constituency/E14001569,Waveney Valley,constituency,country/england,,,E14001569,constituency/Waveney Valley
+constituency/E14001570,Weald of Kent,constituency,country/england,,,E14001570,constituency/Weald of Kent
+constituency/E14001571,Wellingborough and Rushden,constituency,country/england,,,E14001571,constituency/Wellingborough and Rushden
+constituency/E14001572,Wells and Mendip Hills,constituency,country/england,,,E14001572,constituency/Wells and Mendip Hills
+constituency/E14001573,Welwyn Hatfield,constituency,country/england,,,E14001573,constituency/Welwyn Hatfield
+constituency/E14001574,West Bromwich,constituency,country/england,,,E14001574,constituency/West Bromwich
+constituency/E14001575,West Dorset,constituency,country/england,,,E14001575,constituency/West Dorset
+constituency/E14001576,West Ham and Beckton,constituency,country/england,,,E14001576,constituency/West Ham and Beckton
+constituency/E14001577,West Lancashire,constituency,country/england,,,E14001577,constituency/West Lancashire
+constituency/E14001578,West Suffolk,constituency,country/england,,,E14001578,constituency/West Suffolk
+constituency/E14001579,West Worcestershire,constituency,country/england,,,E14001579,constituency/West Worcestershire
+constituency/E14001580,Westmorland and Lonsdale,constituency,country/england,,,E14001580,constituency/Westmorland and Lonsdale
+constituency/E14001581,Weston-super-Mare,constituency,country/england,,,E14001581,constituency/Weston-super-Mare
+constituency/E14001582,Wetherby and Easingwold,constituency,country/england,,,E14001582,constituency/Wetherby and Easingwold
+constituency/E14001583,Whitehaven and Workington,constituency,country/england,,,E14001583,constituency/Whitehaven and Workington
+constituency/E14001584,Widnes and Halewood,constituency,country/england,,,E14001584,constituency/Widnes and Halewood
+constituency/E14001585,Wigan,constituency,country/england,,,E14001585,constituency/Wigan
+constituency/E14001586,Wimbledon,constituency,country/england,,,E14001586,constituency/Wimbledon
+constituency/E14001587,Winchester,constituency,country/england,,,E14001587,constituency/Winchester
+constituency/E14001588,Windsor,constituency,country/england,,,E14001588,constituency/Windsor
+constituency/E14001589,Wirral West,constituency,country/england,,,E14001589,constituency/Wirral West
+constituency/E14001590,Witham,constituency,country/england,,,E14001590,constituency/Witham
+constituency/E14001591,Witney,constituency,country/england,,,E14001591,constituency/Witney
+constituency/E14001592,Woking,constituency,country/england,,,E14001592,constituency/Woking
+constituency/E14001593,Wokingham,constituency,country/england,,,E14001593,constituency/Wokingham
+constituency/E14001594,Wolverhampton North East,constituency,country/england,,,E14001594,constituency/Wolverhampton North East
+constituency/E14001595,Wolverhampton South East,constituency,country/england,,,E14001595,constituency/Wolverhampton South East
+constituency/E14001596,Wolverhampton West,constituency,country/england,,,E14001596,constituency/Wolverhampton West
+constituency/E14001597,Worcester,constituency,country/england,,,E14001597,constituency/Worcester
+constituency/E14001598,Worsley and Eccles,constituency,country/england,,,E14001598,constituency/Worsley and Eccles
+constituency/E14001599,Worthing West,constituency,country/england,,,E14001599,constituency/Worthing West
+constituency/E14001600,Wycombe,constituency,country/england,,,E14001600,constituency/Wycombe
+constituency/E14001601,Wyre Forest,constituency,country/england,,,E14001601,constituency/Wyre Forest
+constituency/E14001602,Wythenshawe and Sale East,constituency,country/england,,,E14001602,constituency/Wythenshawe and Sale East
+constituency/E14001603,Yeovil,constituency,country/england,,,E14001603,constituency/Yeovil
+constituency/E14001604,York Central,constituency,country/england,,,E14001604,constituency/York Central
+constituency/E14001605,York Outer,constituency,country/england,,,E14001605,constituency/York Outer
+constituency/N05000001,Belfast East,constituency,country/northern_ireland,,,N05000001,constituency/Belfast East
+constituency/N05000002,Belfast North,constituency,country/northern_ireland,,,N05000002,constituency/Belfast North
+constituency/N05000003,Belfast South and Mid Down,constituency,country/northern_ireland,,,N05000003,constituency/Belfast South and Mid Down
+constituency/N05000004,Belfast West,constituency,country/northern_ireland,,,N05000004,constituency/Belfast West
+constituency/N05000005,East Antrim,constituency,country/northern_ireland,,,N05000005,constituency/East Antrim
+constituency/N05000006,East Londonderry,constituency,country/northern_ireland,,,N05000006,constituency/East Londonderry
+constituency/N05000007,Fermanagh and South Tyrone,constituency,country/northern_ireland,,,N05000007,constituency/Fermanagh and South Tyrone
+constituency/N05000008,Foyle,constituency,country/northern_ireland,,,N05000008,constituency/Foyle
+constituency/N05000009,Lagan Valley,constituency,country/northern_ireland,,,N05000009,constituency/Lagan Valley
+constituency/N05000010,Mid Ulster,constituency,country/northern_ireland,,,N05000010,constituency/Mid Ulster
+constituency/N05000011,Newry and Armagh,constituency,country/northern_ireland,,,N05000011,constituency/Newry and Armagh
+constituency/N05000012,North Antrim,constituency,country/northern_ireland,,,N05000012,constituency/North Antrim
+constituency/N05000013,North Down,constituency,country/northern_ireland,,,N05000013,constituency/North Down
+constituency/N05000014,South Antrim,constituency,country/northern_ireland,,,N05000014,constituency/South Antrim
+constituency/N05000015,South Down,constituency,country/northern_ireland,,,N05000015,constituency/South Down
+constituency/N05000016,Strangford,constituency,country/northern_ireland,,,N05000016,constituency/Strangford
+constituency/N05000017,Upper Bann,constituency,country/northern_ireland,,,N05000017,constituency/Upper Bann
+constituency/N05000018,West Tyrone,constituency,country/northern_ireland,,,N05000018,constituency/West Tyrone
+constituency/S14000021,East Renfrewshire,constituency,country/scotland,,,S14000021,constituency/East Renfrewshire
+constituency/S14000027,Na h-Eileanan an Iar,constituency,country/scotland,,,S14000027,constituency/Na h-Eileanan an Iar
+constituency/S14000045,Midlothian,constituency,country/scotland,,,S14000045,constituency/Midlothian
+constituency/S14000048,North Ayrshire and Arran,constituency,country/scotland,,,S14000048,constituency/North Ayrshire and Arran
+constituency/S14000051,Orkney and Shetland,constituency,country/scotland,,,S14000051,constituency/Orkney and Shetland
+constituency/S14000060,Aberdeen North,constituency,country/scotland,,,S14000060,constituency/Aberdeen North
+constituency/S14000061,Aberdeen South,constituency,country/scotland,,,S14000061,constituency/Aberdeen South
+constituency/S14000062,Aberdeenshire North and Moray East,constituency,country/scotland,,,S14000062,constituency/Aberdeenshire North and Moray East
+constituency/S14000063,Airdrie and Shotts,constituency,country/scotland,,,S14000063,constituency/Airdrie and Shotts
+constituency/S14000064,Alloa and Grangemouth,constituency,country/scotland,,,S14000064,constituency/Alloa and Grangemouth
+constituency/S14000065,Angus and Perthshire Glens,constituency,country/scotland,,,S14000065,constituency/Angus and Perthshire Glens
+constituency/S14000066,Arbroath and Broughty Ferry,constituency,country/scotland,,,S14000066,constituency/Arbroath and Broughty Ferry
+constituency/S14000067,"Argyll, Bute and South Lochaber",constituency,country/scotland,,,S14000067,"constituency/Argyll, Bute and South Lochaber"
+constituency/S14000068,Bathgate and Linlithgow,constituency,country/scotland,,,S14000068,constituency/Bathgate and Linlithgow
+constituency/S14000069,"Caithness, Sutherland and Easter Ross",constituency,country/scotland,,,S14000069,"constituency/Caithness, Sutherland and Easter Ross"
+constituency/S14000070,Coatbridge and Bellshill,constituency,country/scotland,,,S14000070,constituency/Coatbridge and Bellshill
+constituency/S14000071,Cowdenbeath and Kirkcaldy,constituency,country/scotland,,,S14000071,constituency/Cowdenbeath and Kirkcaldy
+constituency/S14000072,Cumbernauld and Kirkintilloch,constituency,country/scotland,,,S14000072,constituency/Cumbernauld and Kirkintilloch
+constituency/S14000073,Dumfries and Galloway,constituency,country/scotland,,,S14000073,constituency/Dumfries and Galloway
+constituency/S14000074,"Dumfriesshire, Clydesdale and Tweeddale",constituency,country/scotland,,,S14000074,"constituency/Dumfriesshire, Clydesdale and Tweeddale"
+constituency/S14000075,Dundee Central,constituency,country/scotland,,,S14000075,constituency/Dundee Central
+constituency/S14000076,Dunfermline and Dollar,constituency,country/scotland,,,S14000076,constituency/Dunfermline and Dollar
+constituency/S14000077,East Kilbride and Strathaven,constituency,country/scotland,,,S14000077,constituency/East Kilbride and Strathaven
+constituency/S14000078,Edinburgh East and Musselburgh,constituency,country/scotland,,,S14000078,constituency/Edinburgh East and Musselburgh
+constituency/S14000079,Edinburgh North and Leith,constituency,country/scotland,,,S14000079,constituency/Edinburgh North and Leith
+constituency/S14000080,Edinburgh South,constituency,country/scotland,,,S14000080,constituency/Edinburgh South
+constituency/S14000081,Edinburgh South West,constituency,country/scotland,,,S14000081,constituency/Edinburgh South West
+constituency/S14000082,Edinburgh West,constituency,country/scotland,,,S14000082,constituency/Edinburgh West
+constituency/S14000083,Falkirk,constituency,country/scotland,,,S14000083,constituency/Falkirk
+constituency/S14000084,Glasgow East,constituency,country/scotland,,,S14000084,constituency/Glasgow East
+constituency/S14000085,Glasgow North,constituency,country/scotland,,,S14000085,constituency/Glasgow North
+constituency/S14000086,Glasgow North East,constituency,country/scotland,,,S14000086,constituency/Glasgow North East
+constituency/S14000087,Glasgow South,constituency,country/scotland,,,S14000087,constituency/Glasgow South
+constituency/S14000088,Glasgow South West,constituency,country/scotland,,,S14000088,constituency/Glasgow South West
+constituency/S14000089,Glasgow West,constituency,country/scotland,,,S14000089,constituency/Glasgow West
+constituency/S14000090,Glenrothes and Mid Fife,constituency,country/scotland,,,S14000090,constituency/Glenrothes and Mid Fife
+constituency/S14000091,Gordon and Buchan,constituency,country/scotland,,,S14000091,constituency/Gordon and Buchan
+constituency/S14000092,Hamilton and Clyde Valley,constituency,country/scotland,,,S14000092,constituency/Hamilton and Clyde Valley
+constituency/S14000093,Inverclyde and Renfrewshire West,constituency,country/scotland,,,S14000093,constituency/Inverclyde and Renfrewshire West
+constituency/S14000094,"Inverness, Skye and West Ross-shire",constituency,country/scotland,,,S14000094,"constituency/Inverness, Skye and West Ross-shire"
+constituency/S14000095,Livingston,constituency,country/scotland,,,S14000095,constituency/Livingston
+constituency/S14000096,Lothian East,constituency,country/scotland,,,S14000096,constituency/Lothian East
+constituency/S14000097,Mid Dunbartonshire,constituency,country/scotland,,,S14000097,constituency/Mid Dunbartonshire
+constituency/S14000098,"Moray West, Nairn and Strathspey",constituency,country/scotland,,,S14000098,"constituency/Moray West, Nairn and Strathspey"
+constituency/S14000099,"Motherwell, Wishaw and Carluke",constituency,country/scotland,,,S14000099,"constituency/Motherwell, Wishaw and Carluke"
+constituency/S14000100,North East Fife,constituency,country/scotland,,,S14000100,constituency/North East Fife
+constituency/S14000101,Paisley and Renfrewshire North,constituency,country/scotland,,,S14000101,constituency/Paisley and Renfrewshire North
+constituency/S14000102,Paisley and Renfrewshire South,constituency,country/scotland,,,S14000102,constituency/Paisley and Renfrewshire South
+constituency/S14000103,Perth and Kinross-shire,constituency,country/scotland,,,S14000103,constituency/Perth and Kinross-shire
+constituency/S14000104,Rutherglen,constituency,country/scotland,,,S14000104,constituency/Rutherglen
+constituency/S14000105,Stirling and Strathallan,constituency,country/scotland,,,S14000105,constituency/Stirling and Strathallan
+constituency/S14000106,West Dunbartonshire,constituency,country/scotland,,,S14000106,constituency/West Dunbartonshire
+constituency/S14000107,"Ayr, Carrick and Cumnock",constituency,country/scotland,,,S14000107,"constituency/Ayr, Carrick and Cumnock"
+constituency/S14000108,"Berwickshire, Roxburgh and Selkirk",constituency,country/scotland,,,S14000108,"constituency/Berwickshire, Roxburgh and Selkirk"
+constituency/S14000109,Central Ayrshire,constituency,country/scotland,,,S14000109,constituency/Central Ayrshire
+constituency/S14000110,Kilmarnock and Loudoun,constituency,country/scotland,,,S14000110,constituency/Kilmarnock and Loudoun
+constituency/S14000111,West Aberdeenshire and Kincardine,constituency,country/scotland,,,S14000111,constituency/West Aberdeenshire and Kincardine
+constituency/W07000081,Aberafan Maesteg,constituency,country/wales,,,W07000081,constituency/Aberafan Maesteg
+constituency/W07000082,Alyn and Deeside,constituency,country/wales,,,W07000082,constituency/Alyn and Deeside
+constituency/W07000083,Bangor Aberconwy,constituency,country/wales,,,W07000083,constituency/Bangor Aberconwy
+constituency/W07000084,Blaenau Gwent and Rhymney,constituency,country/wales,,,W07000084,constituency/Blaenau Gwent and Rhymney
+constituency/W07000085,"Brecon, Radnor and Cwm Tawe",constituency,country/wales,,,W07000085,"constituency/Brecon, Radnor and Cwm Tawe"
+constituency/W07000086,Bridgend,constituency,country/wales,,,W07000086,constituency/Bridgend
+constituency/W07000087,Caerfyrddin,constituency,country/wales,,,W07000087,constituency/Caerfyrddin
+constituency/W07000088,Caerphilly,constituency,country/wales,,,W07000088,constituency/Caerphilly
+constituency/W07000089,Cardiff East,constituency,country/wales,,,W07000089,constituency/Cardiff East
+constituency/W07000090,Cardiff North,constituency,country/wales,,,W07000090,constituency/Cardiff North
+constituency/W07000091,Cardiff South and Penarth,constituency,country/wales,,,W07000091,constituency/Cardiff South and Penarth
+constituency/W07000092,Cardiff West,constituency,country/wales,,,W07000092,constituency/Cardiff West
+constituency/W07000093,Ceredigion Preseli,constituency,country/wales,,,W07000093,constituency/Ceredigion Preseli
+constituency/W07000094,Clwyd East,constituency,country/wales,,,W07000094,constituency/Clwyd East
+constituency/W07000095,Clwyd North,constituency,country/wales,,,W07000095,constituency/Clwyd North
+constituency/W07000096,Dwyfor Meirionnydd,constituency,country/wales,,,W07000096,constituency/Dwyfor Meirionnydd
+constituency/W07000097,Gower,constituency,country/wales,,,W07000097,constituency/Gower
+constituency/W07000098,Llanelli,constituency,country/wales,,,W07000098,constituency/Llanelli
+constituency/W07000099,Merthyr Tydfil and Aberdare,constituency,country/wales,,,W07000099,constituency/Merthyr Tydfil and Aberdare
+constituency/W07000100,Mid and South Pembrokeshire,constituency,country/wales,,,W07000100,constituency/Mid and South Pembrokeshire
+constituency/W07000101,Monmouthshire,constituency,country/wales,,,W07000101,constituency/Monmouthshire
+constituency/W07000102,Montgomeryshire and Glyndwr,constituency,country/wales,,,W07000102,constituency/Montgomeryshire and Glyndwr
+constituency/W07000103,Neath and Swansea East,constituency,country/wales,,,W07000103,constituency/Neath and Swansea East
+constituency/W07000104,Newport East,constituency,country/wales,,,W07000104,constituency/Newport East
+constituency/W07000105,Newport West and Islwyn,constituency,country/wales,,,W07000105,constituency/Newport West and Islwyn
+constituency/W07000106,Pontypridd,constituency,country/wales,,,W07000106,constituency/Pontypridd
+constituency/W07000107,Rhondda and Ogmore,constituency,country/wales,,,W07000107,constituency/Rhondda and Ogmore
+constituency/W07000108,Swansea West,constituency,country/wales,,,W07000108,constituency/Swansea West
+constituency/W07000109,Torfaen,constituency,country/wales,,,W07000109,constituency/Torfaen
+constituency/W07000110,Vale of Glamorgan,constituency,country/wales,,,W07000110,constituency/Vale of Glamorgan
+constituency/W07000111,Wrexham,constituency,country/wales,,,W07000111,constituency/Wrexham
+constituency/W07000112,Ynys Môn,constituency,country/wales,,,W07000112,constituency/Ynys Môn
+local_authority/E06000001,Hartlepool,local_authority,country/england,,,E06000001,local_authority/Hartlepool
+local_authority/E06000002,Middlesbrough,local_authority,country/england,,,E06000002,local_authority/Middlesbrough
+local_authority/E06000003,Redcar and Cleveland,local_authority,country/england,,,E06000003,local_authority/Redcar and Cleveland
+local_authority/E06000004,Stockton-on-Tees,local_authority,country/england,,,E06000004,local_authority/Stockton-on-Tees
+local_authority/E06000005,Darlington,local_authority,country/england,,,E06000005,local_authority/Darlington
+local_authority/E06000006,Halton,local_authority,country/england,,,E06000006,local_authority/Halton
+local_authority/E06000007,Warrington,local_authority,country/england,,,E06000007,local_authority/Warrington
+local_authority/E06000008,Blackburn with Darwen,local_authority,country/england,,,E06000008,local_authority/Blackburn with Darwen
+local_authority/E06000009,Blackpool,local_authority,country/england,,,E06000009,local_authority/Blackpool
+local_authority/E06000010,"Kingston upon Hull, City of",local_authority,country/england,,,E06000010,"local_authority/Kingston upon Hull, City of"
+local_authority/E06000011,East Riding of Yorkshire,local_authority,country/england,,,E06000011,local_authority/East Riding of Yorkshire
+local_authority/E06000012,North East Lincolnshire,local_authority,country/england,,,E06000012,local_authority/North East Lincolnshire
+local_authority/E06000013,North Lincolnshire,local_authority,country/england,,,E06000013,local_authority/North Lincolnshire
+local_authority/E06000014,York,local_authority,country/england,,,E06000014,local_authority/York
+local_authority/E06000015,Derby,local_authority,country/england,,,E06000015,local_authority/Derby
+local_authority/E06000016,Leicester,local_authority,country/england,,,E06000016,local_authority/Leicester
+local_authority/E06000017,Rutland,local_authority,country/england,,,E06000017,local_authority/Rutland
+local_authority/E06000018,Nottingham,local_authority,country/england,,,E06000018,local_authority/Nottingham
+local_authority/E06000019,"Herefordshire, County of",local_authority,country/england,,,E06000019,"local_authority/Herefordshire, County of"
+local_authority/E06000020,Telford and Wrekin,local_authority,country/england,,,E06000020,local_authority/Telford and Wrekin
+local_authority/E06000021,Stoke-on-Trent,local_authority,country/england,,,E06000021,local_authority/Stoke-on-Trent
+local_authority/E06000022,Bath and North East Somerset,local_authority,country/england,,,E06000022,local_authority/Bath and North East Somerset
+local_authority/E06000023,"Bristol, City of",local_authority,country/england,,,E06000023,"local_authority/Bristol, City of"
+local_authority/E06000024,North Somerset,local_authority,country/england,,,E06000024,local_authority/North Somerset
+local_authority/E06000025,South Gloucestershire,local_authority,country/england,,,E06000025,local_authority/South Gloucestershire
+local_authority/E06000026,Plymouth,local_authority,country/england,,,E06000026,local_authority/Plymouth
+local_authority/E06000027,Torbay,local_authority,country/england,,,E06000027,local_authority/Torbay
+local_authority/E06000030,Swindon,local_authority,country/england,,,E06000030,local_authority/Swindon
+local_authority/E06000031,Peterborough,local_authority,country/england,,,E06000031,local_authority/Peterborough
+local_authority/E06000032,Luton,local_authority,country/england,,,E06000032,local_authority/Luton
+local_authority/E06000033,Southend-on-Sea,local_authority,country/england,,,E06000033,local_authority/Southend-on-Sea
+local_authority/E06000034,Thurrock,local_authority,country/england,,,E06000034,local_authority/Thurrock
+local_authority/E06000035,Medway,local_authority,country/england,,,E06000035,local_authority/Medway
+local_authority/E06000036,Bracknell Forest,local_authority,country/england,,,E06000036,local_authority/Bracknell Forest
+local_authority/E06000037,West Berkshire,local_authority,country/england,,,E06000037,local_authority/West Berkshire
+local_authority/E06000038,Reading,local_authority,country/england,,,E06000038,local_authority/Reading
+local_authority/E06000039,Slough,local_authority,country/england,,,E06000039,local_authority/Slough
+local_authority/E06000040,Windsor and Maidenhead,local_authority,country/england,,,E06000040,local_authority/Windsor and Maidenhead
+local_authority/E06000041,Wokingham,local_authority,country/england,,,E06000041,local_authority/Wokingham
+local_authority/E06000042,Milton Keynes,local_authority,country/england,,,E06000042,local_authority/Milton Keynes
+local_authority/E06000043,Brighton and Hove,local_authority,country/england,,,E06000043,local_authority/Brighton and Hove
+local_authority/E06000044,Portsmouth,local_authority,country/england,,,E06000044,local_authority/Portsmouth
+local_authority/E06000045,Southampton,local_authority,country/england,,,E06000045,local_authority/Southampton
+local_authority/E06000046,Isle of Wight,local_authority,country/england,,,E06000046,local_authority/Isle of Wight
+local_authority/E06000047,County Durham,local_authority,country/england,,,E06000047,local_authority/County Durham
+local_authority/E06000049,Cheshire East,local_authority,country/england,,,E06000049,local_authority/Cheshire East
+local_authority/E06000050,Cheshire West and Chester,local_authority,country/england,,,E06000050,local_authority/Cheshire West and Chester
+local_authority/E06000051,Shropshire,local_authority,country/england,,,E06000051,local_authority/Shropshire
+local_authority/E06000052,Cornwall,local_authority,country/england,,,E06000052,local_authority/Cornwall
+local_authority/E06000053,Isles of Scilly,local_authority,country/england,,,E06000053,local_authority/Isles of Scilly
+local_authority/E06000054,Wiltshire,local_authority,country/england,,,E06000054,local_authority/Wiltshire
+local_authority/E06000055,Bedford,local_authority,country/england,,,E06000055,local_authority/Bedford
+local_authority/E06000056,Central Bedfordshire,local_authority,country/england,,,E06000056,local_authority/Central Bedfordshire
+local_authority/E06000057,Northumberland,local_authority,country/england,,,E06000057,local_authority/Northumberland
+local_authority/E06000058,"Bournemouth, Christchurch and Poole",local_authority,country/england,,,E06000058,"local_authority/Bournemouth, Christchurch and Poole"
+local_authority/E06000059,Dorset,local_authority,country/england,,,E06000059,local_authority/Dorset
+local_authority/E06000060,Buckinghamshire,local_authority,country/england,,,E06000060,local_authority/Buckinghamshire
+local_authority/E06000061,North Northamptonshire,local_authority,country/england,,,E06000061,local_authority/North Northamptonshire
+local_authority/E06000062,West Northamptonshire,local_authority,country/england,,,E06000062,local_authority/West Northamptonshire
+local_authority/E06000063,Cumberland,local_authority,country/england,,,E06000063,local_authority/Cumberland
+local_authority/E06000064,Westmorland and Furness,local_authority,country/england,,,E06000064,local_authority/Westmorland and Furness
+local_authority/E06000065,North Yorkshire,local_authority,country/england,,,E06000065,local_authority/North Yorkshire
+local_authority/E06000066,Somerset,local_authority,country/england,,,E06000066,local_authority/Somerset
+local_authority/E07000008,Cambridge,local_authority,country/england,,,E07000008,local_authority/Cambridge
+local_authority/E07000009,East Cambridgeshire,local_authority,country/england,,,E07000009,local_authority/East Cambridgeshire
+local_authority/E07000010,Fenland,local_authority,country/england,,,E07000010,local_authority/Fenland
+local_authority/E07000011,Huntingdonshire,local_authority,country/england,,,E07000011,local_authority/Huntingdonshire
+local_authority/E07000012,South Cambridgeshire,local_authority,country/england,,,E07000012,local_authority/South Cambridgeshire
+local_authority/E07000032,Amber Valley,local_authority,country/england,,,E07000032,local_authority/Amber Valley
+local_authority/E07000033,Bolsover,local_authority,country/england,,,E07000033,local_authority/Bolsover
+local_authority/E07000034,Chesterfield,local_authority,country/england,,,E07000034,local_authority/Chesterfield
+local_authority/E07000035,Derbyshire Dales,local_authority,country/england,,,E07000035,local_authority/Derbyshire Dales
+local_authority/E07000036,Erewash,local_authority,country/england,,,E07000036,local_authority/Erewash
+local_authority/E07000037,High Peak,local_authority,country/england,,,E07000037,local_authority/High Peak
+local_authority/E07000038,North East Derbyshire,local_authority,country/england,,,E07000038,local_authority/North East Derbyshire
+local_authority/E07000039,South Derbyshire,local_authority,country/england,,,E07000039,local_authority/South Derbyshire
+local_authority/E07000040,East Devon,local_authority,country/england,,,E07000040,local_authority/East Devon
+local_authority/E07000041,Exeter,local_authority,country/england,,,E07000041,local_authority/Exeter
+local_authority/E07000042,Mid Devon,local_authority,country/england,,,E07000042,local_authority/Mid Devon
+local_authority/E07000043,North Devon,local_authority,country/england,,,E07000043,local_authority/North Devon
+local_authority/E07000044,South Hams,local_authority,country/england,,,E07000044,local_authority/South Hams
+local_authority/E07000045,Teignbridge,local_authority,country/england,,,E07000045,local_authority/Teignbridge
+local_authority/E07000046,Torridge,local_authority,country/england,,,E07000046,local_authority/Torridge
+local_authority/E07000047,West Devon,local_authority,country/england,,,E07000047,local_authority/West Devon
+local_authority/E07000061,Eastbourne,local_authority,country/england,,,E07000061,local_authority/Eastbourne
+local_authority/E07000062,Hastings,local_authority,country/england,,,E07000062,local_authority/Hastings
+local_authority/E07000063,Lewes,local_authority,country/england,,,E07000063,local_authority/Lewes
+local_authority/E07000064,Rother,local_authority,country/england,,,E07000064,local_authority/Rother
+local_authority/E07000065,Wealden,local_authority,country/england,,,E07000065,local_authority/Wealden
+local_authority/E07000066,Basildon,local_authority,country/england,,,E07000066,local_authority/Basildon
+local_authority/E07000067,Braintree,local_authority,country/england,,,E07000067,local_authority/Braintree
+local_authority/E07000068,Brentwood,local_authority,country/england,,,E07000068,local_authority/Brentwood
+local_authority/E07000069,Castle Point,local_authority,country/england,,,E07000069,local_authority/Castle Point
+local_authority/E07000070,Chelmsford,local_authority,country/england,,,E07000070,local_authority/Chelmsford
+local_authority/E07000071,Colchester,local_authority,country/england,,,E07000071,local_authority/Colchester
+local_authority/E07000072,Epping Forest,local_authority,country/england,,,E07000072,local_authority/Epping Forest
+local_authority/E07000073,Harlow,local_authority,country/england,,,E07000073,local_authority/Harlow
+local_authority/E07000074,Maldon,local_authority,country/england,,,E07000074,local_authority/Maldon
+local_authority/E07000075,Rochford,local_authority,country/england,,,E07000075,local_authority/Rochford
+local_authority/E07000076,Tendring,local_authority,country/england,,,E07000076,local_authority/Tendring
+local_authority/E07000077,Uttlesford,local_authority,country/england,,,E07000077,local_authority/Uttlesford
+local_authority/E07000078,Cheltenham,local_authority,country/england,,,E07000078,local_authority/Cheltenham
+local_authority/E07000079,Cotswold,local_authority,country/england,,,E07000079,local_authority/Cotswold
+local_authority/E07000080,Forest of Dean,local_authority,country/england,,,E07000080,local_authority/Forest of Dean
+local_authority/E07000081,Gloucester,local_authority,country/england,,,E07000081,local_authority/Gloucester
+local_authority/E07000082,Stroud,local_authority,country/england,,,E07000082,local_authority/Stroud
+local_authority/E07000083,Tewkesbury,local_authority,country/england,,,E07000083,local_authority/Tewkesbury
+local_authority/E07000084,Basingstoke and Deane,local_authority,country/england,,,E07000084,local_authority/Basingstoke and Deane
+local_authority/E07000085,East Hampshire,local_authority,country/england,,,E07000085,local_authority/East Hampshire
+local_authority/E07000086,Eastleigh,local_authority,country/england,,,E07000086,local_authority/Eastleigh
+local_authority/E07000087,Fareham,local_authority,country/england,,,E07000087,local_authority/Fareham
+local_authority/E07000088,Gosport,local_authority,country/england,,,E07000088,local_authority/Gosport
+local_authority/E07000089,Hart,local_authority,country/england,,,E07000089,local_authority/Hart
+local_authority/E07000090,Havant,local_authority,country/england,,,E07000090,local_authority/Havant
+local_authority/E07000091,New Forest,local_authority,country/england,,,E07000091,local_authority/New Forest
+local_authority/E07000092,Rushmoor,local_authority,country/england,,,E07000092,local_authority/Rushmoor
+local_authority/E07000093,Test Valley,local_authority,country/england,,,E07000093,local_authority/Test Valley
+local_authority/E07000094,Winchester,local_authority,country/england,,,E07000094,local_authority/Winchester
+local_authority/E07000095,Broxbourne,local_authority,country/england,,,E07000095,local_authority/Broxbourne
+local_authority/E07000096,Dacorum,local_authority,country/england,,,E07000096,local_authority/Dacorum
+local_authority/E07000098,Hertsmere,local_authority,country/england,,,E07000098,local_authority/Hertsmere
+local_authority/E07000099,North Hertfordshire,local_authority,country/england,,,E07000099,local_authority/North Hertfordshire
+local_authority/E07000102,Three Rivers,local_authority,country/england,,,E07000102,local_authority/Three Rivers
+local_authority/E07000103,Watford,local_authority,country/england,,,E07000103,local_authority/Watford
+local_authority/E07000105,Ashford,local_authority,country/england,,,E07000105,local_authority/Ashford
+local_authority/E07000106,Canterbury,local_authority,country/england,,,E07000106,local_authority/Canterbury
+local_authority/E07000107,Dartford,local_authority,country/england,,,E07000107,local_authority/Dartford
+local_authority/E07000108,Dover,local_authority,country/england,,,E07000108,local_authority/Dover
+local_authority/E07000109,Gravesham,local_authority,country/england,,,E07000109,local_authority/Gravesham
+local_authority/E07000110,Maidstone,local_authority,country/england,,,E07000110,local_authority/Maidstone
+local_authority/E07000111,Sevenoaks,local_authority,country/england,,,E07000111,local_authority/Sevenoaks
+local_authority/E07000112,Folkestone and Hythe,local_authority,country/england,,,E07000112,local_authority/Folkestone and Hythe
+local_authority/E07000113,Swale,local_authority,country/england,,,E07000113,local_authority/Swale
+local_authority/E07000114,Thanet,local_authority,country/england,,,E07000114,local_authority/Thanet
+local_authority/E07000115,Tonbridge and Malling,local_authority,country/england,,,E07000115,local_authority/Tonbridge and Malling
+local_authority/E07000116,Tunbridge Wells,local_authority,country/england,,,E07000116,local_authority/Tunbridge Wells
+local_authority/E07000117,Burnley,local_authority,country/england,,,E07000117,local_authority/Burnley
+local_authority/E07000118,Chorley,local_authority,country/england,,,E07000118,local_authority/Chorley
+local_authority/E07000119,Fylde,local_authority,country/england,,,E07000119,local_authority/Fylde
+local_authority/E07000120,Hyndburn,local_authority,country/england,,,E07000120,local_authority/Hyndburn
+local_authority/E07000121,Lancaster,local_authority,country/england,,,E07000121,local_authority/Lancaster
+local_authority/E07000122,Pendle,local_authority,country/england,,,E07000122,local_authority/Pendle
+local_authority/E07000123,Preston,local_authority,country/england,,,E07000123,local_authority/Preston
+local_authority/E07000124,Ribble Valley,local_authority,country/england,,,E07000124,local_authority/Ribble Valley
+local_authority/E07000125,Rossendale,local_authority,country/england,,,E07000125,local_authority/Rossendale
+local_authority/E07000126,South Ribble,local_authority,country/england,,,E07000126,local_authority/South Ribble
+local_authority/E07000127,West Lancashire,local_authority,country/england,,,E07000127,local_authority/West Lancashire
+local_authority/E07000128,Wyre,local_authority,country/england,,,E07000128,local_authority/Wyre
+local_authority/E07000129,Blaby,local_authority,country/england,,,E07000129,local_authority/Blaby
+local_authority/E07000130,Charnwood,local_authority,country/england,,,E07000130,local_authority/Charnwood
+local_authority/E07000131,Harborough,local_authority,country/england,,,E07000131,local_authority/Harborough
+local_authority/E07000132,Hinckley and Bosworth,local_authority,country/england,,,E07000132,local_authority/Hinckley and Bosworth
+local_authority/E07000133,Melton,local_authority,country/england,,,E07000133,local_authority/Melton
+local_authority/E07000134,North West Leicestershire,local_authority,country/england,,,E07000134,local_authority/North West Leicestershire
+local_authority/E07000135,Oadby and Wigston,local_authority,country/england,,,E07000135,local_authority/Oadby and Wigston
+local_authority/E07000136,Boston,local_authority,country/england,,,E07000136,local_authority/Boston
+local_authority/E07000137,East Lindsey,local_authority,country/england,,,E07000137,local_authority/East Lindsey
+local_authority/E07000138,Lincoln,local_authority,country/england,,,E07000138,local_authority/Lincoln
+local_authority/E07000139,North Kesteven,local_authority,country/england,,,E07000139,local_authority/North Kesteven
+local_authority/E07000140,South Holland,local_authority,country/england,,,E07000140,local_authority/South Holland
+local_authority/E07000141,South Kesteven,local_authority,country/england,,,E07000141,local_authority/South Kesteven
+local_authority/E07000142,West Lindsey,local_authority,country/england,,,E07000142,local_authority/West Lindsey
+local_authority/E07000143,Breckland,local_authority,country/england,,,E07000143,local_authority/Breckland
+local_authority/E07000144,Broadland,local_authority,country/england,,,E07000144,local_authority/Broadland
+local_authority/E07000145,Great Yarmouth,local_authority,country/england,,,E07000145,local_authority/Great Yarmouth
+local_authority/E07000146,King's Lynn and West Norfolk,local_authority,country/england,,,E07000146,local_authority/King's Lynn and West Norfolk
+local_authority/E07000147,North Norfolk,local_authority,country/england,,,E07000147,local_authority/North Norfolk
+local_authority/E07000148,Norwich,local_authority,country/england,,,E07000148,local_authority/Norwich
+local_authority/E07000149,South Norfolk,local_authority,country/england,,,E07000149,local_authority/South Norfolk
+local_authority/E07000170,Ashfield,local_authority,country/england,,,E07000170,local_authority/Ashfield
+local_authority/E07000171,Bassetlaw,local_authority,country/england,,,E07000171,local_authority/Bassetlaw
+local_authority/E07000172,Broxtowe,local_authority,country/england,,,E07000172,local_authority/Broxtowe
+local_authority/E07000173,Gedling,local_authority,country/england,,,E07000173,local_authority/Gedling
+local_authority/E07000174,Mansfield,local_authority,country/england,,,E07000174,local_authority/Mansfield
+local_authority/E07000175,Newark and Sherwood,local_authority,country/england,,,E07000175,local_authority/Newark and Sherwood
+local_authority/E07000176,Rushcliffe,local_authority,country/england,,,E07000176,local_authority/Rushcliffe
+local_authority/E07000177,Cherwell,local_authority,country/england,,,E07000177,local_authority/Cherwell
+local_authority/E07000178,Oxford,local_authority,country/england,,,E07000178,local_authority/Oxford
+local_authority/E07000179,South Oxfordshire,local_authority,country/england,,,E07000179,local_authority/South Oxfordshire
+local_authority/E07000180,Vale of White Horse,local_authority,country/england,,,E07000180,local_authority/Vale of White Horse
+local_authority/E07000181,West Oxfordshire,local_authority,country/england,,,E07000181,local_authority/West Oxfordshire
+local_authority/E07000192,Cannock Chase,local_authority,country/england,,,E07000192,local_authority/Cannock Chase
+local_authority/E07000193,East Staffordshire,local_authority,country/england,,,E07000193,local_authority/East Staffordshire
+local_authority/E07000194,Lichfield,local_authority,country/england,,,E07000194,local_authority/Lichfield
+local_authority/E07000195,Newcastle-under-Lyme,local_authority,country/england,,,E07000195,local_authority/Newcastle-under-Lyme
+local_authority/E07000196,South Staffordshire,local_authority,country/england,,,E07000196,local_authority/South Staffordshire
+local_authority/E07000197,Stafford,local_authority,country/england,,,E07000197,local_authority/Stafford
+local_authority/E07000198,Staffordshire Moorlands,local_authority,country/england,,,E07000198,local_authority/Staffordshire Moorlands
+local_authority/E07000199,Tamworth,local_authority,country/england,,,E07000199,local_authority/Tamworth
+local_authority/E07000200,Babergh,local_authority,country/england,,,E07000200,local_authority/Babergh
+local_authority/E07000202,Ipswich,local_authority,country/england,,,E07000202,local_authority/Ipswich
+local_authority/E07000203,Mid Suffolk,local_authority,country/england,,,E07000203,local_authority/Mid Suffolk
+local_authority/E07000207,Elmbridge,local_authority,country/england,,,E07000207,local_authority/Elmbridge
+local_authority/E07000208,Epsom and Ewell,local_authority,country/england,,,E07000208,local_authority/Epsom and Ewell
+local_authority/E07000209,Guildford,local_authority,country/england,,,E07000209,local_authority/Guildford
+local_authority/E07000210,Mole Valley,local_authority,country/england,,,E07000210,local_authority/Mole Valley
+local_authority/E07000211,Reigate and Banstead,local_authority,country/england,,,E07000211,local_authority/Reigate and Banstead
+local_authority/E07000212,Runnymede,local_authority,country/england,,,E07000212,local_authority/Runnymede
+local_authority/E07000213,Spelthorne,local_authority,country/england,,,E07000213,local_authority/Spelthorne
+local_authority/E07000214,Surrey Heath,local_authority,country/england,,,E07000214,local_authority/Surrey Heath
+local_authority/E07000215,Tandridge,local_authority,country/england,,,E07000215,local_authority/Tandridge
+local_authority/E07000216,Waverley,local_authority,country/england,,,E07000216,local_authority/Waverley
+local_authority/E07000217,Woking,local_authority,country/england,,,E07000217,local_authority/Woking
+local_authority/E07000218,North Warwickshire,local_authority,country/england,,,E07000218,local_authority/North Warwickshire
+local_authority/E07000219,Nuneaton and Bedworth,local_authority,country/england,,,E07000219,local_authority/Nuneaton and Bedworth
+local_authority/E07000220,Rugby,local_authority,country/england,,,E07000220,local_authority/Rugby
+local_authority/E07000221,Stratford-on-Avon,local_authority,country/england,,,E07000221,local_authority/Stratford-on-Avon
+local_authority/E07000222,Warwick,local_authority,country/england,,,E07000222,local_authority/Warwick
+local_authority/E07000223,Adur,local_authority,country/england,,,E07000223,local_authority/Adur
+local_authority/E07000224,Arun,local_authority,country/england,,,E07000224,local_authority/Arun
+local_authority/E07000225,Chichester,local_authority,country/england,,,E07000225,local_authority/Chichester
+local_authority/E07000226,Crawley,local_authority,country/england,,,E07000226,local_authority/Crawley
+local_authority/E07000227,Horsham,local_authority,country/england,,,E07000227,local_authority/Horsham
+local_authority/E07000228,Mid Sussex,local_authority,country/england,,,E07000228,local_authority/Mid Sussex
+local_authority/E07000229,Worthing,local_authority,country/england,,,E07000229,local_authority/Worthing
+local_authority/E07000234,Bromsgrove,local_authority,country/england,,,E07000234,local_authority/Bromsgrove
+local_authority/E07000235,Malvern Hills,local_authority,country/england,,,E07000235,local_authority/Malvern Hills
+local_authority/E07000236,Redditch,local_authority,country/england,,,E07000236,local_authority/Redditch
+local_authority/E07000237,Worcester,local_authority,country/england,,,E07000237,local_authority/Worcester
+local_authority/E07000238,Wychavon,local_authority,country/england,,,E07000238,local_authority/Wychavon
+local_authority/E07000239,Wyre Forest,local_authority,country/england,,,E07000239,local_authority/Wyre Forest
+local_authority/E07000240,St Albans,local_authority,country/england,,,E07000240,local_authority/St Albans
+local_authority/E07000241,Welwyn Hatfield,local_authority,country/england,,,E07000241,local_authority/Welwyn Hatfield
+local_authority/E07000242,East Hertfordshire,local_authority,country/england,,,E07000242,local_authority/East Hertfordshire
+local_authority/E07000243,Stevenage,local_authority,country/england,,,E07000243,local_authority/Stevenage
+local_authority/E07000244,East Suffolk,local_authority,country/england,,,E07000244,local_authority/East Suffolk
+local_authority/E07000245,West Suffolk,local_authority,country/england,,,E07000245,local_authority/West Suffolk
+local_authority/E08000001,Bolton,local_authority,country/england,,,E08000001,local_authority/Bolton
+local_authority/E08000002,Bury,local_authority,country/england,,,E08000002,local_authority/Bury
+local_authority/E08000003,Manchester,local_authority,country/england,,,E08000003,local_authority/Manchester
+local_authority/E08000004,Oldham,local_authority,country/england,,,E08000004,local_authority/Oldham
+local_authority/E08000005,Rochdale,local_authority,country/england,,,E08000005,local_authority/Rochdale
+local_authority/E08000006,Salford,local_authority,country/england,,,E08000006,local_authority/Salford
+local_authority/E08000007,Stockport,local_authority,country/england,,,E08000007,local_authority/Stockport
+local_authority/E08000008,Tameside,local_authority,country/england,,,E08000008,local_authority/Tameside
+local_authority/E08000009,Trafford,local_authority,country/england,,,E08000009,local_authority/Trafford
+local_authority/E08000010,Wigan,local_authority,country/england,,,E08000010,local_authority/Wigan
+local_authority/E08000011,Knowsley,local_authority,country/england,,,E08000011,local_authority/Knowsley
+local_authority/E08000012,Liverpool,local_authority,country/england,,,E08000012,local_authority/Liverpool
+local_authority/E08000013,St. Helens,local_authority,country/england,,,E08000013,local_authority/St. Helens
+local_authority/E08000014,Sefton,local_authority,country/england,,,E08000014,local_authority/Sefton
+local_authority/E08000015,Wirral,local_authority,country/england,,,E08000015,local_authority/Wirral
+local_authority/E08000016,Barnsley,local_authority,country/england,,,E08000016,local_authority/Barnsley
+local_authority/E08000017,Doncaster,local_authority,country/england,,,E08000017,local_authority/Doncaster
+local_authority/E08000018,Rotherham,local_authority,country/england,,,E08000018,local_authority/Rotherham
+local_authority/E08000019,Sheffield,local_authority,country/england,,,E08000019,local_authority/Sheffield
+local_authority/E08000021,Newcastle upon Tyne,local_authority,country/england,,,E08000021,local_authority/Newcastle upon Tyne
+local_authority/E08000022,North Tyneside,local_authority,country/england,,,E08000022,local_authority/North Tyneside
+local_authority/E08000023,South Tyneside,local_authority,country/england,,,E08000023,local_authority/South Tyneside
+local_authority/E08000024,Sunderland,local_authority,country/england,,,E08000024,local_authority/Sunderland
+local_authority/E08000025,Birmingham,local_authority,country/england,,,E08000025,local_authority/Birmingham
+local_authority/E08000026,Coventry,local_authority,country/england,,,E08000026,local_authority/Coventry
+local_authority/E08000027,Dudley,local_authority,country/england,,,E08000027,local_authority/Dudley
+local_authority/E08000028,Sandwell,local_authority,country/england,,,E08000028,local_authority/Sandwell
+local_authority/E08000029,Solihull,local_authority,country/england,,,E08000029,local_authority/Solihull
+local_authority/E08000030,Walsall,local_authority,country/england,,,E08000030,local_authority/Walsall
+local_authority/E08000031,Wolverhampton,local_authority,country/england,,,E08000031,local_authority/Wolverhampton
+local_authority/E08000032,Bradford,local_authority,country/england,,,E08000032,local_authority/Bradford
+local_authority/E08000033,Calderdale,local_authority,country/england,,,E08000033,local_authority/Calderdale
+local_authority/E08000034,Kirklees,local_authority,country/england,,,E08000034,local_authority/Kirklees
+local_authority/E08000035,Leeds,local_authority,country/england,,,E08000035,local_authority/Leeds
+local_authority/E08000036,Wakefield,local_authority,country/england,,,E08000036,local_authority/Wakefield
+local_authority/E08000037,Gateshead,local_authority,country/england,,,E08000037,local_authority/Gateshead
+local_authority/E09000001,City of London,local_authority,country/england,,,E09000001,local_authority/City of London
+local_authority/E09000002,Barking and Dagenham,local_authority,country/england,,,E09000002,local_authority/Barking and Dagenham
+local_authority/E09000003,Barnet,local_authority,country/england,,,E09000003,local_authority/Barnet
+local_authority/E09000004,Bexley,local_authority,country/england,,,E09000004,local_authority/Bexley
+local_authority/E09000005,Brent,local_authority,country/england,,,E09000005,local_authority/Brent
+local_authority/E09000006,Bromley,local_authority,country/england,,,E09000006,local_authority/Bromley
+local_authority/E09000007,Camden,local_authority,country/england,,,E09000007,local_authority/Camden
+local_authority/E09000008,Croydon,local_authority,country/england,,,E09000008,local_authority/Croydon
+local_authority/E09000009,Ealing,local_authority,country/england,,,E09000009,local_authority/Ealing
+local_authority/E09000010,Enfield,local_authority,country/england,,,E09000010,local_authority/Enfield
+local_authority/E09000011,Greenwich,local_authority,country/england,,,E09000011,local_authority/Greenwich
+local_authority/E09000012,Hackney,local_authority,country/england,,,E09000012,local_authority/Hackney
+local_authority/E09000013,Hammersmith and Fulham,local_authority,country/england,,,E09000013,local_authority/Hammersmith and Fulham
+local_authority/E09000014,Haringey,local_authority,country/england,,,E09000014,local_authority/Haringey
+local_authority/E09000015,Harrow,local_authority,country/england,,,E09000015,local_authority/Harrow
+local_authority/E09000016,Havering,local_authority,country/england,,,E09000016,local_authority/Havering
+local_authority/E09000017,Hillingdon,local_authority,country/england,,,E09000017,local_authority/Hillingdon
+local_authority/E09000018,Hounslow,local_authority,country/england,,,E09000018,local_authority/Hounslow
+local_authority/E09000019,Islington,local_authority,country/england,,,E09000019,local_authority/Islington
+local_authority/E09000020,Kensington and Chelsea,local_authority,country/england,,,E09000020,local_authority/Kensington and Chelsea
+local_authority/E09000021,Kingston upon Thames,local_authority,country/england,,,E09000021,local_authority/Kingston upon Thames
+local_authority/E09000022,Lambeth,local_authority,country/england,,,E09000022,local_authority/Lambeth
+local_authority/E09000023,Lewisham,local_authority,country/england,,,E09000023,local_authority/Lewisham
+local_authority/E09000024,Merton,local_authority,country/england,,,E09000024,local_authority/Merton
+local_authority/E09000025,Newham,local_authority,country/england,,,E09000025,local_authority/Newham
+local_authority/E09000026,Redbridge,local_authority,country/england,,,E09000026,local_authority/Redbridge
+local_authority/E09000027,Richmond upon Thames,local_authority,country/england,,,E09000027,local_authority/Richmond upon Thames
+local_authority/E09000028,Southwark,local_authority,country/england,,,E09000028,local_authority/Southwark
+local_authority/E09000029,Sutton,local_authority,country/england,,,E09000029,local_authority/Sutton
+local_authority/E09000030,Tower Hamlets,local_authority,country/england,,,E09000030,local_authority/Tower Hamlets
+local_authority/E09000031,Waltham Forest,local_authority,country/england,,,E09000031,local_authority/Waltham Forest
+local_authority/E09000032,Wandsworth,local_authority,country/england,,,E09000032,local_authority/Wandsworth
+local_authority/E09000033,Westminster,local_authority,country/england,,,E09000033,local_authority/Westminster
+local_authority/N09000001,Antrim and Newtownabbey,local_authority,country/northern_ireland,,,N09000001,local_authority/Antrim and Newtownabbey
+local_authority/N09000002,"Armagh City, Banbridge and Craigavon",local_authority,country/northern_ireland,,,N09000002,"local_authority/Armagh City, Banbridge and Craigavon"
+local_authority/N09000003,Belfast,local_authority,country/northern_ireland,,,N09000003,local_authority/Belfast
+local_authority/N09000004,Causeway Coast and Glens,local_authority,country/northern_ireland,,,N09000004,local_authority/Causeway Coast and Glens
+local_authority/N09000005,Derry City and Strabane,local_authority,country/northern_ireland,,,N09000005,local_authority/Derry City and Strabane
+local_authority/N09000006,Fermanagh and Omagh,local_authority,country/northern_ireland,,,N09000006,local_authority/Fermanagh and Omagh
+local_authority/N09000007,Lisburn and Castlereagh,local_authority,country/northern_ireland,,,N09000007,local_authority/Lisburn and Castlereagh
+local_authority/N09000008,Mid and East Antrim,local_authority,country/northern_ireland,,,N09000008,local_authority/Mid and East Antrim
+local_authority/N09000009,Mid Ulster,local_authority,country/northern_ireland,,,N09000009,local_authority/Mid Ulster
+local_authority/N09000010,"Newry, Mourne and Down",local_authority,country/northern_ireland,,,N09000010,"local_authority/Newry, Mourne and Down"
+local_authority/N09000011,Ards and North Down,local_authority,country/northern_ireland,,,N09000011,local_authority/Ards and North Down
+local_authority/S12000005,Clackmannanshire,local_authority,country/scotland,,,S12000005,local_authority/Clackmannanshire
+local_authority/S12000006,Dumfries and Galloway,local_authority,country/scotland,,,S12000006,local_authority/Dumfries and Galloway
+local_authority/S12000008,East Ayrshire,local_authority,country/scotland,,,S12000008,local_authority/East Ayrshire
+local_authority/S12000010,East Lothian,local_authority,country/scotland,,,S12000010,local_authority/East Lothian
+local_authority/S12000011,East Renfrewshire,local_authority,country/scotland,,,S12000011,local_authority/East Renfrewshire
+local_authority/S12000013,Na h-Eileanan Siar,local_authority,country/scotland,,,S12000013,local_authority/Na h-Eileanan Siar
+local_authority/S12000014,Falkirk,local_authority,country/scotland,,,S12000014,local_authority/Falkirk
+local_authority/S12000017,Highland,local_authority,country/scotland,,,S12000017,local_authority/Highland
+local_authority/S12000018,Inverclyde,local_authority,country/scotland,,,S12000018,local_authority/Inverclyde
+local_authority/S12000019,Midlothian,local_authority,country/scotland,,,S12000019,local_authority/Midlothian
+local_authority/S12000020,Moray,local_authority,country/scotland,,,S12000020,local_authority/Moray
+local_authority/S12000021,North Ayrshire,local_authority,country/scotland,,,S12000021,local_authority/North Ayrshire
+local_authority/S12000023,Orkney Islands,local_authority,country/scotland,,,S12000023,local_authority/Orkney Islands
+local_authority/S12000026,Scottish Borders,local_authority,country/scotland,,,S12000026,local_authority/Scottish Borders
+local_authority/S12000027,Shetland Islands,local_authority,country/scotland,,,S12000027,local_authority/Shetland Islands
+local_authority/S12000028,South Ayrshire,local_authority,country/scotland,,,S12000028,local_authority/South Ayrshire
+local_authority/S12000029,South Lanarkshire,local_authority,country/scotland,,,S12000029,local_authority/South Lanarkshire
+local_authority/S12000030,Stirling,local_authority,country/scotland,,,S12000030,local_authority/Stirling
+local_authority/S12000033,Aberdeen City,local_authority,country/scotland,,,S12000033,local_authority/Aberdeen City
+local_authority/S12000034,Aberdeenshire,local_authority,country/scotland,,,S12000034,local_authority/Aberdeenshire
+local_authority/S12000035,Argyll and Bute,local_authority,country/scotland,,,S12000035,local_authority/Argyll and Bute
+local_authority/S12000036,City of Edinburgh,local_authority,country/scotland,,,S12000036,local_authority/City of Edinburgh
+local_authority/S12000038,Renfrewshire,local_authority,country/scotland,,,S12000038,local_authority/Renfrewshire
+local_authority/S12000039,West Dunbartonshire,local_authority,country/scotland,,,S12000039,local_authority/West Dunbartonshire
+local_authority/S12000040,West Lothian,local_authority,country/scotland,,,S12000040,local_authority/West Lothian
+local_authority/S12000041,Angus,local_authority,country/scotland,,,S12000041,local_authority/Angus
+local_authority/S12000042,Dundee City,local_authority,country/scotland,,,S12000042,local_authority/Dundee City
+local_authority/S12000045,East Dunbartonshire,local_authority,country/scotland,,,S12000045,local_authority/East Dunbartonshire
+local_authority/S12000047,Fife,local_authority,country/scotland,,,S12000047,local_authority/Fife
+local_authority/S12000048,Perth and Kinross,local_authority,country/scotland,,,S12000048,local_authority/Perth and Kinross
+local_authority/S12000049,Glasgow City,local_authority,country/scotland,,,S12000049,local_authority/Glasgow City
+local_authority/S12000050,North Lanarkshire,local_authority,country/scotland,,,S12000050,local_authority/North Lanarkshire
+local_authority/W06000001,Isle of Anglesey,local_authority,country/wales,,,W06000001,local_authority/Isle of Anglesey
+local_authority/W06000002,Gwynedd,local_authority,country/wales,,,W06000002,local_authority/Gwynedd
+local_authority/W06000003,Conwy,local_authority,country/wales,,,W06000003,local_authority/Conwy
+local_authority/W06000004,Denbighshire,local_authority,country/wales,,,W06000004,local_authority/Denbighshire
+local_authority/W06000005,Flintshire,local_authority,country/wales,,,W06000005,local_authority/Flintshire
+local_authority/W06000006,Wrexham,local_authority,country/wales,,,W06000006,local_authority/Wrexham
+local_authority/W06000008,Ceredigion,local_authority,country/wales,,,W06000008,local_authority/Ceredigion
+local_authority/W06000009,Pembrokeshire,local_authority,country/wales,,,W06000009,local_authority/Pembrokeshire
+local_authority/W06000010,Carmarthenshire,local_authority,country/wales,,,W06000010,local_authority/Carmarthenshire
+local_authority/W06000011,Swansea,local_authority,country/wales,,,W06000011,local_authority/Swansea
+local_authority/W06000012,Neath Port Talbot,local_authority,country/wales,,,W06000012,local_authority/Neath Port Talbot
+local_authority/W06000013,Bridgend,local_authority,country/wales,,,W06000013,local_authority/Bridgend
+local_authority/W06000014,Vale of Glamorgan,local_authority,country/wales,,,W06000014,local_authority/Vale of Glamorgan
+local_authority/W06000015,Cardiff,local_authority,country/wales,,,W06000015,local_authority/Cardiff
+local_authority/W06000016,Rhondda Cynon Taf,local_authority,country/wales,,,W06000016,local_authority/Rhondda Cynon Taf
+local_authority/W06000018,Caerphilly,local_authority,country/wales,,,W06000018,local_authority/Caerphilly
+local_authority/W06000019,Blaenau Gwent,local_authority,country/wales,,,W06000019,local_authority/Blaenau Gwent
+local_authority/W06000020,Torfaen,local_authority,country/wales,,,W06000020,local_authority/Torfaen
+local_authority/W06000021,Monmouthshire,local_authority,country/wales,,,W06000021,local_authority/Monmouthshire
+local_authority/W06000022,Newport,local_authority,country/wales,,,W06000022,local_authority/Newport
+local_authority/W06000023,Powys,local_authority,country/wales,,,W06000023,local_authority/Powys
+local_authority/W06000024,Merthyr Tydfil,local_authority,country/wales,,,W06000024,local_authority/Merthyr Tydfil

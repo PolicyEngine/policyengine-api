@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Generic, Literal, TypeVar
+
+from pydantic import Field
 
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
@@ -160,3 +163,59 @@ class MetadataCatalogParametersResponse(
     MetadataResourceSuccessResponse[MetadataCatalogParametersResult]
 ):
     """Success response holding parameters fetched by name, with their values."""
+
+
+class MetadataParameterSearchFileEditabilityChange(StrictResponseModel):
+    """From ``start_date`` (an ISO date), whether a draft can edit the value."""
+
+    start_date: date
+    editable: bool
+
+
+class MetadataParameterSearchFileParameter(StrictResponseModel):
+    """A parameter a reform can change, with what v3's search indexes.
+
+    ``label`` is the stored label, or null when none is stored. ``editable``
+    says whether a draft can edit the earliest current-law value (a number, a
+    yes/no value or an infinite threshold); ``editable_changes``, present only
+    when that changes over time and never null, lists the dates from which it
+    changes.
+    """
+
+    path: str
+    label: str | None
+    unit: str | None
+    description: str | None
+    editable: bool
+    editable_changes: list[MetadataParameterSearchFileEditabilityChange] = Field(
+        default_factory=list
+    )
+
+
+class MetadataParameterSearchFileLabel(StrictResponseModel):
+    """Another parameter under ``gov``: its path and stored label, or null."""
+
+    path: str
+    label: str | None
+
+
+class MetadataParameterSearchFileNode(StrictResponseModel):
+    """``gov`` or a node under it that has a stored label."""
+
+    path: str
+    label: str
+
+
+class MetadataParameterSearchFileContent(StrictResponseModel):
+    """One catalog version's parameter search file, ordered by path.
+
+    It holds what v3's parameter search reads, without the catalog's values.
+    A reader applies v1's label fallback where a label is null.
+    """
+
+    format: int
+    country_id: str
+    policyengine_version: str
+    parameters: list[MetadataParameterSearchFileParameter]
+    other_parameters: list[MetadataParameterSearchFileLabel]
+    nodes: list[MetadataParameterSearchFileNode]
