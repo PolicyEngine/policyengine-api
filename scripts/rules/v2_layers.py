@@ -105,6 +105,17 @@ SERVICE_FILE_LAYERS = {
     "database_session.py": "session",
 }
 CONNECTOR_OPERATIONS = ("creates", "reads", "updates", "deletes")
+# The names that give a layer, by directory, for the files rule's fix message.
+LAYER_NAMES = {
+    SERVICES_DIRECTORY: (
+        "services.py, validators.py, transformations.py, types.py, "
+        "process_state.py, database_session.py or "
+        "database_connectors/<creates|reads|updates|deletes>[_name].py"
+    ),
+    ROUTES_DIRECTORY: (
+        "routes.py, <name>_routes.py, <name>_models.py or <name>_support.py"
+    ),
+}
 # What a [[rule.exception]] for the files rule makes a file: no layer of its
 # own, and its directory's strictest checks.
 EXCEPTED = "excepted"
@@ -173,12 +184,9 @@ HTTP_PACKAGES = ("fastapi", "starlette")
 
 FIXES = {
     FILES_RULE: (
-        "name it after its layer (services.py, validators.py, transformations.py, "
-        "types.py, process_state.py, database_session.py, "
-        "database_connectors/<creates|reads|updates|deletes>[_name].py, routes.py, "
-        "<name>_routes.py, <name>_models.py or <name>_support.py), or, if it "
-        f"can't be renamed, add a [[rule.exception]] for {FILES_RULE} to "
-        f"{REGISTRY_FILE} with its path and a reason"
+        "name it after its layer ({names}), or, if it can't be renamed, add a "
+        f"[[rule.exception]] for {FILES_RULE} to {REGISTRY_FILE} with its path, "
+        "a reason and an expires date or removal condition"
     ),
     ROUTES_RULE: (
         "v2 route modules call one service method and map its typed failures to "
@@ -704,6 +712,16 @@ def _occurrences(count: int) -> str:
     return f"{count} occurrence" if count == 1 else f"{count} occurrences"
 
 
+def _fix(rule_id: str, entry: str) -> str:
+    """Return the rule's fix; the files rule's names the layers of its directory."""
+    if rule_id != FILES_RULE:
+        return FIXES[rule_id]
+    directory = (
+        SERVICES_DIRECTORY if entry.startswith(SERVICES_DIRECTORY) else ROUTES_DIRECTORY
+    )
+    return FIXES[FILES_RULE].format(names=LAYER_NAMES[directory])
+
+
 def _compare(
     rule_id: str,
     found: Counter[str],
@@ -721,7 +739,7 @@ def _compare(
             else f"{entry} ({_occurrences(found[entry])}, the baseline tolerates "
             f"{tolerated[entry]})"
         )
-        violations.append(Violation(rule_id, CHECK_NAME, message, FIXES[rule_id]))
+        violations.append(Violation(rule_id, CHECK_NAME, message, _fix(rule_id, entry)))
     for entry in sorted(tolerated):
         if tolerated[entry] <= found[entry]:
             continue

@@ -2,11 +2,12 @@
 # reject it: a route module imports a connector and SQLModel, builds a select
 # and calls a method on a session.
 
+# Each expected finding is "<rule id>: <path> <detail>".
 expected_findings = [
-    "policyengine_api/fastapi_routes/v2/policies/routes.py calls session.add",
-    "policyengine_api/fastapi_routes/v2/policies/routes.py calls sqlmodel.select",
-    "policyengine_api/fastapi_routes/v2/policies/routes.py imports policyengine_api.services.v2.policies.database_connectors.reads",
-    "policyengine_api/fastapi_routes/v2/policies/routes.py imports sqlmodel",
+    "api.v2.routes-no-sessions-or-sql: policyengine_api/fastapi_routes/v2/policies/routes.py calls session.add",
+    "api.v2.routes-no-sessions-or-sql: policyengine_api/fastapi_routes/v2/policies/routes.py calls sqlmodel.select",
+    "api.v2.routes-no-sessions-or-sql: policyengine_api/fastapi_routes/v2/policies/routes.py imports policyengine_api.services.v2.policies.database_connectors.reads",
+    "api.v2.routes-no-sessions-or-sql: policyengine_api/fastapi_routes/v2/policies/routes.py imports sqlmodel",
 ]
 
 [files]

@@ -2,11 +2,12 @@
 # service imports and builds a select, runs it with Session.exec and defines
 # an HTTP response with FastAPI.
 
+# Each expected finding is "<rule id>: <path> <detail>".
 expected_findings = [
-    "policyengine_api/services/v2/policies/services.py calls _session.exec",
-    "policyengine_api/services/v2/policies/services.py calls sqlmodel.select",
-    "policyengine_api/services/v2/policies/services.py imports fastapi.responses",
-    "policyengine_api/services/v2/policies/services.py imports sqlmodel.select",
+    "api.v2.services-no-sql: policyengine_api/services/v2/policies/services.py calls _session.exec",
+    "api.v2.services-no-sql: policyengine_api/services/v2/policies/services.py calls sqlmodel.select",
+    "api.v2.services-no-sql: policyengine_api/services/v2/policies/services.py imports fastapi.responses",
+    "api.v2.services-no-sql: policyengine_api/services/v2/policies/services.py imports sqlmodel.select",
 ]
 
 [files]

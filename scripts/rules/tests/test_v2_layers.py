@@ -586,6 +586,7 @@ class TestBaselineAndExceptions(unittest.TestCase):
             )
             excepted = "".join(
                 f'[[rule.exception]]\npath = "{path}"\nreason = "Generated."\n'
+                "expires = 2099-01-01\n"
                 for path in (exceptions if rule_id == FILES_RULE else ())
             )
             rules.append(

@@ -24,9 +24,10 @@ guard (`scripts/rules/v2_layers.py`) takes from the file's name alone:
 A file with another name fails the guard (rule
 `api.v2.files-assigned-to-layers`): rename it. A file that can't be renamed
 needs a `[[rule.exception]]` for that rule in `rules/registry.toml`, with its
-path and a reason. An exception chooses no layer: the file gets its
-directory's strictest checks, the route checks under `fastapi_routes/v2` and
-the validator, transformation and types checks under `services/v2`. The guard
+`path`, a `reason`, and an `expires` date or a `removal` condition. An
+exception chooses no layer: the file gets the route checks under
+`fastapi_routes/v2`, and the validator, transformation and types checks
+(rule `api.v2.pure-modules-no-session-calls`) under `services/v2`. The guard
 fails on an exception for a file that no longer exists or whose name already
 gives it a layer.
 

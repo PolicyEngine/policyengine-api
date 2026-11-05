@@ -4,11 +4,12 @@
 # scripts/rules/tests/test_v2_layers.py writes each file into a temporary
 # directory and runs the v2-layers guard's scan on it, with no manifest.
 
+# Each expected finding is "<rule id>: <path> <detail>".
 expected_findings = [
-    "policyengine_api/services/v2/policies/database_session.py calls session.add",
-    "policyengine_api/services/v2/policies/database_session.py calls session.execute",
-    "policyengine_api/services/v2/policies/database_session.py calls session.get",
-    "policyengine_api/services/v2/policies/database_session.py calls sqlalchemy.text",
+    "api.v2.session-modules-no-data-access: policyengine_api/services/v2/policies/database_session.py calls session.add",
+    "api.v2.session-modules-no-data-access: policyengine_api/services/v2/policies/database_session.py calls session.execute",
+    "api.v2.session-modules-no-data-access: policyengine_api/services/v2/policies/database_session.py calls session.get",
+    "api.v2.session-modules-no-data-access: policyengine_api/services/v2/policies/database_session.py calls sqlalchemy.text",
 ]
 
 [files]

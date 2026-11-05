@@ -13,10 +13,11 @@ exceptions = [
     "policyengine_api/fastapi_routes/v2/reports/legacy_helpers.py",
     "policyengine_api/services/v2/household_calculations/legacy_client.py",
 ]
+# Each expected finding is "<rule id>: <path> <detail>".
 expected_findings = [
-    "policyengine_api/fastapi_routes/v2/reports/legacy_helpers.py calls session.add",
-    "policyengine_api/services/v2/household_calculations/legacy_client.py calls session.get",
-    "policyengine_api/services/v2/household_calculations/simulation_client.py matches no v2 layer",
+    "api.v2.routes-no-sessions-or-sql: policyengine_api/fastapi_routes/v2/reports/legacy_helpers.py calls session.add",
+    "api.v2.pure-modules-no-session-calls: policyengine_api/services/v2/household_calculations/legacy_client.py calls session.get",
+    "api.v2.files-assigned-to-layers: policyengine_api/services/v2/household_calculations/simulation_client.py matches no v2 layer",
 ]
 
 [files]

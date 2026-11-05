@@ -4,12 +4,13 @@
 # scripts/rules/tests/test_v2_layers.py writes each file into a temporary
 # directory and runs the v2-layers guard's scan on it, with no manifest.
 
+# Each expected finding is "<rule id>: <path> <detail>".
 expected_findings = [
-    "policyengine_api/services/v2/policies/__init__.py calls session.commit",
-    "policyengine_api/services/v2/policies/types.py calls session.exec",
-    "policyengine_api/services/v2/policies/types.py calls sqlmodel.select",
-    "policyengine_api/services/v2/policies/types.py imports sqlmodel.select",
-    "policyengine_api/services/v2/policies/validators.py calls session.get",
+    "api.v2.pure-modules-no-session-calls: policyengine_api/services/v2/policies/__init__.py calls session.commit",
+    "api.v2.pure-modules-no-session-calls: policyengine_api/services/v2/policies/types.py calls session.exec",
+    "api.v2.pure-modules-no-session-calls: policyengine_api/services/v2/policies/types.py calls sqlmodel.select",
+    "api.v2.pure-modules-no-session-calls: policyengine_api/services/v2/policies/types.py imports sqlmodel.select",
+    "api.v2.pure-modules-no-session-calls: policyengine_api/services/v2/policies/validators.py calls session.get",
 ]
 
 [files]
