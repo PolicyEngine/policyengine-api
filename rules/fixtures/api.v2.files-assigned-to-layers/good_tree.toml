@@ -1,6 +1,6 @@
 # Proof fixture for rule api.v2.files-assigned-to-layers. The guard must accept
 # it: every file is named after its layer, and the one excepted file passes
-# the strictest checks of its directory.
+# the pure-module checks it gets under services/v2.
 
 exceptions = ["policyengine_api/services/v2/household_calculations/legacy_client.py"]
 expected_findings = []

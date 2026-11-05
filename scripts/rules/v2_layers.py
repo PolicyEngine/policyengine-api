@@ -5,9 +5,10 @@ Every ``.py`` file under ``policyengine_api/services/v2`` and
 (see ``assign_layer``). A file whose name gives none fails (rule
 ``api.v2.files-assigned-to-layers``), so a new file is never left unchecked.
 A file that can't be renamed needs a ``[[rule.exception]]`` for that rule in
-rules/registry.toml. The exception gives it no layer: it gets its directory's
-strictest checks, the route checks under ``fastapi_routes/v2`` and the
-pure-module checks under ``services/v2``.
+rules/registry.toml, ending on an ``expires`` date. The exception gives it no
+layer: it gets the route checks under ``fastapi_routes/v2``, and the
+pure-module (validator, transformation and types) checks under
+``services/v2``.
 
 Then each file's imports and calls are checked against its layer's rule:
 
@@ -117,7 +118,8 @@ LAYER_NAMES = {
     ),
 }
 # What a [[rule.exception]] for the files rule makes a file: no layer of its
-# own, and its directory's strictest checks.
+# own; under services/v2 it gets the pure-module checks (under
+# fastapi_routes/v2 every file gets the route checks).
 EXCEPTED = "excepted"
 PURE_LAYERS = frozenset(
     {EXCEPTED, "package", "process-state", "transformation", "types", "validator"}
@@ -186,7 +188,7 @@ FIXES = {
     FILES_RULE: (
         "name it after its layer ({names}), or, if it can't be renamed, add a "
         f"[[rule.exception]] for {FILES_RULE} to {REGISTRY_FILE} with its path, "
-        "a reason and an expires date or removal condition"
+        "a reason and an expires date"
     ),
     ROUTES_RULE: (
         "v2 route modules call one service method and map its typed failures to "
@@ -249,8 +251,8 @@ def _module_name(path: str) -> tuple[str, bool]:
 def assign_layer(path: str, exceptions: Collection[str] = ()) -> str | None:
     """Return the layer of the file at ``path`` (repository-relative), or None.
 
-    A path in ``exceptions`` is ``excepted``: it gets its directory's
-    strictest checks.
+    A path in ``exceptions`` is ``excepted``: under services/v2 it gets the
+    pure-module checks, and under fastapi_routes/v2 the route checks.
     """
     if path in exceptions:
         return EXCEPTED

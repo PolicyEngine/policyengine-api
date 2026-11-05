@@ -2,7 +2,7 @@
 # reject it: a validator loads a row through the session it was handed, a
 # types module runs a query, and a package __init__ commits.
 # scripts/rules/tests/test_v2_layers.py writes each file into a temporary
-# directory and runs the v2-layers guard's scan on it, with no manifest.
+# directory and runs the v2-layers guard's scan on it.
 
 # Each expected finding is "<rule id>: <path> <detail>".
 expected_findings = [

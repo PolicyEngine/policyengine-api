@@ -2,7 +2,7 @@
 # reject it: the database_session module adds a row, loads one with
 # Session.get and runs raw SQL, work that belongs in a connector.
 # scripts/rules/tests/test_v2_layers.py writes each file into a temporary
-# directory and runs the v2-layers guard's scan on it, with no manifest.
+# directory and runs the v2-layers guard's scan on it.
 
 # Each expected finding is "<rule id>: <path> <detail>".
 expected_findings = [
