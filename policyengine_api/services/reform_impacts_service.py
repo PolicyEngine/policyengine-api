@@ -205,16 +205,25 @@ class ReformImpactsService:
         """
         return self._cache.delete_failure(failure)
 
+    def confirm_reform_impacts_readable(self) -> None:
+        """Raise CacheCoordinationError unless the reform-impact cache can be read.
+
+        Lookups read an unreachable cache as holding nothing; this tells the
+        two apart.
+        """
+        self._cache.confirm_readable()
+
     def get_reform_impact_seconds_until(
         self, impact: CachedReformImpact, *, seconds_after_end: int
     ) -> int:
         """Return the whole seconds until ``seconds_after_end`` follow the impact's end.
 
         Counted from the impact's ``end_time`` on this service's clock and
-        rounded up, so a caller that waits this long is never early. 0 once
-        they have passed, or when the impact has no end time; never more than
-        ``seconds_after_end``, even when the end time is later than this
-        clock's time.
+        rounded up, so by this clock a caller that waits this long is not
+        early. 0 once they have passed, or when the impact has no end time.
+        Never more than ``seconds_after_end``: when the end time is later than
+        this clock's time (another instance's clock ran ahead), the answer is
+        capped there, and a caller may be early by that difference.
         """
         if impact.end_time is None:
             return 0

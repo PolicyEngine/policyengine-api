@@ -13,6 +13,9 @@ from werkzeug.datastructures import MultiDict
 
 from policyengine_api import worker_spm
 from policyengine_api.asgi_factory import create_asgi_app
+from policyengine_api.libs.simulation_entrypoint_transport import (
+    SimulationEntrypointConnectionError,
+)
 from policyengine_api.query_parameters import AnnualEconomyQuery, parse_multidict_query
 from policyengine_api.routes import economy_routes
 from policyengine_api.runtime_cache import reform_impacts
@@ -32,7 +35,7 @@ from tests.fixtures.services.economy_service import ECONOMY_SERVICE_LOGGER_MODUL
 FAILED_JOB = "failed-worker-job"
 NEXT_JOB = "next-worker-job"
 WORKER_ERROR = "Worker exhausted available memory"
-STATE_QUERY = {"region": "state/ca", "time_period": "2026", "version": "1.0.0"}
+STATE_QUERY = {"region": "state/ca"}
 LOCKED_MESSAGE = (
     "This failure was recorded less than 10 seconds ago, so it was not deleted. "
     "It can be deleted in {seconds} seconds."
@@ -97,13 +100,18 @@ def _harness(
     *,
     country_id: str = "us",
     query: dict[str, str] | None = None,
+    version: str | None = "1.0.0",
     store_job: bool = True,
 ) -> Harness:
     # The fake worker reports an ordinary failure with no SPM output, so SPM
     # certification is out of this test's scope.
     monkeypatch.setattr(worker_spm, "normalize_spm_selection", lambda *_: None)
     monkeypatch.setattr(reform_impacts, "jittered_ttl", lambda ttl: ttl - 7)
-    query = {"time_period": "2026", "version": "1.0.0", **(query or STATE_QUERY)}
+    query = {
+        "time_period": "2026",
+        **({"version": version} if version else {}),
+        **(query or STATE_QUERY),
+    }
     clock = SharedClock()
     gateway = Mock()
     gateway.resolve_app_name.side_effect = lambda _country, version=None, **_: (
@@ -461,3 +469,155 @@ def test_a_browser_may_send_the_delete_from_another_origin(
     assert refused.headers["access-control-allow-origin"] == origin
     assert deleted.status_code == 204
     assert deleted.headers["access-control-allow-origin"] == origin
+
+
+def test_a_delete_without_a_version_uses_the_installed_one_as_the_get_does(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _harness(monkeypatch, version=None)
+
+    failed = harness.client.get(harness.url)
+    harness.clock.advance(10)
+    deleted = harness.client.delete(harness.url)
+
+    assert "version" not in harness.url
+    assert failed.status_code == 502
+    assert deleted.status_code == 204
+    assert harness.stored() == []
+
+
+def test_a_delete_normalizes_a_bare_state_code_as_the_get_does(
+    harness: Harness,
+) -> None:
+    harness.client.get(harness.url)
+    harness.clock.advance(10)
+
+    deleted = harness.client.delete(
+        "/us/economy/1/over/2?region=ca&time_period=2026&version=1.0.0"
+    )
+
+    assert deleted.status_code == 204
+    assert harness.stored() == []
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/us/economy/1/over/2?region=state/ny&time_period=2026&version=1.0.0",
+        "/us/economy/1/over/2?region=state/ca&time_period=2027&version=1.0.0",
+        "/us/economy/3/over/2?region=state/ca&time_period=2026&version=1.0.0",
+        "/us/economy/1/over/3?region=state/ca&time_period=2026&version=1.0.0",
+    ],
+    ids=["region", "year", "policy", "baseline"],
+)
+def test_a_delete_for_another_request_leaves_this_failure(
+    harness: Harness, url: str
+) -> None:
+    harness.client.get(harness.url)
+    harness.clock.advance(10)
+
+    other = harness.client.delete(url)
+
+    assert other.status_code == 404
+    assert other.json == NOT_FOUND_BODY
+    assert [impact.status for impact in harness.stored()] == ["error"]
+
+
+def test_a_delete_removes_a_typed_spm_failure_that_the_get_answers_with_400(
+    harness: Harness,
+) -> None:
+    harness.impacts.set_error_reform_impact(
+        FAILED_JOB,
+        message="The forecast has no SPM thresholds for 2026",
+        error_code="SPM_YEAR_UNAVAILABLE",
+    )
+
+    replayed = harness.client.get(harness.url)
+    at_once = harness.client.delete(harness.url)
+    harness.clock.advance(10)
+    deleted = harness.client.delete(harness.url)
+
+    assert replayed.status_code == 400
+    assert replayed.json["errors"][0]["code"] == "SPM_YEAR_UNAVAILABLE"
+    assert at_once.status_code == 409
+    assert at_once.json == _locked_body(10)
+    assert deleted.status_code == 204
+    assert harness.stored() == []
+
+
+def test_a_delete_leaves_an_older_failure_when_the_get_answers_from_a_newer_job(
+    harness: Harness,
+) -> None:
+    harness.client.get(harness.url)
+    # A newer job for the same request, which the GET now answers from.
+    _store_newer_job(harness)
+    harness.clock.advance(10)
+
+    refused = harness.client.delete(harness.url)
+
+    assert refused.status_code == 409
+    assert refused.json == _not_a_failure_body("computing")
+    assert {(impact.execution_id, impact.status) for impact in harness.stored()} == {
+        (FAILED_JOB, "error"),
+        (NEXT_JOB, "computing"),
+    }
+
+
+def test_a_delete_that_gets_no_response_from_the_simulation_service_answers_502(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    unreachable = SimulationEntrypointConnectionError("GET", "/versions")
+    monkeypatch.setattr(
+        economy_routes.economy_service,
+        "delete_failed_economic_impact",
+        Mock(side_effect=unreachable),
+    )
+
+    response = harness.client.delete(harness.url)
+
+    assert response.status_code == 502
+    assert response.json == {
+        "status": "error",
+        "message": str(unreachable),
+        "result": None,
+    }
+
+
+def test_a_delete_does_not_report_nothing_stored_when_the_cache_cannot_be_read(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    harness.client.get(harness.url)
+    harness.clock.advance(10)
+
+    def unreachable(*_args: object, **_kwargs: object) -> object:
+        raise ConnectionError
+
+    monkeypatch.setattr(harness.cache.client, "zrevrange", unreachable)
+
+    with pytest.raises(CacheCoordinationError):
+        harness.client.delete(harness.url)
+
+
+def test_after_a_204_a_late_poll_cannot_bring_the_failure_back(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    harness.client.get(harness.url)
+    harness.clock.advance(10)
+    write = harness.cache.set
+    deletions = []
+
+    def delete_then_write(impact: CachedReformImpact, **options: object) -> bool:
+        # The DELETE lands between a late poll's read of the job and its write.
+        deletions.append(harness.client.delete(harness.url))
+        return write(impact, **options)
+
+    monkeypatch.setattr(harness.cache, "set", delete_then_write)
+    harness.impacts.set_error_reform_impact(FAILED_JOB, message=WORKER_ERROR)
+    monkeypatch.setattr(harness.cache, "set", write)
+
+    next_get = harness.client.get(harness.url)
+
+    assert [deletion.status_code for deletion in deletions] == [204]
+    assert next_get.status_code == 200
+    assert next_get.json["status"] == "computing"
+    harness.gateway.run.assert_called_once()

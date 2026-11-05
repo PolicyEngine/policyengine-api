@@ -314,3 +314,52 @@ def test_real_failure_delete_removes_only_the_unchanged_failure(redis_pair) -> N
     assert writer.get_by_execution_id("failed-job") is None
     assert writer.matching(identity) == [newer_job]
     assert writer.recent(10) == [newer_job]
+
+
+def test_real_failure_delete_refuses_a_record_rewritten_before_the_script_runs(
+    redis_pair, monkeypatch
+) -> None:
+    first, second, namespace = redis_pair
+    writer = ReformImpactCache(first, namespace)
+    deleter = ReformImpactCache(second, namespace)
+    assert writer.set(_real_computing_impact("failed-job", day=1))
+    failure = writer.update("failed-job", status="error", message="out of memory")
+    run_script = second.eval
+    rewritten = []
+
+    def rewrite_then_run(script, numkeys, *keys_and_args):
+        # Another instance rewrites the record after the deleter read it.
+        rewritten.append(writer.update("failed-job", message="out of memory again"))
+        return run_script(script, numkeys, *keys_and_args)
+
+    monkeypatch.setattr(second, "eval", rewrite_then_run)
+
+    deleted = deleter.delete_failure(failure)
+
+    assert deleted is False
+    assert writer.get_by_execution_id("failed-job") == rewritten[0]
+    assert writer.recent(10) == rewritten
+
+
+def test_real_late_write_never_puts_back_a_deleted_failure(
+    redis_pair, monkeypatch
+) -> None:
+    first, second, namespace = redis_pair
+    poller = ReformImpactCache(first, namespace)
+    deleter = ReformImpactCache(second, namespace)
+    assert poller.set(_real_computing_impact("failed-job", day=1))
+    failure = poller.update("failed-job", status="error", message="out of memory")
+    write = poller.set
+
+    def delete_then_write(impact, **options):
+        # The DELETE runs between the late poll's read and its write.
+        assert deleter.delete_failure(failure) is True
+        return write(impact, **options)
+
+    monkeypatch.setattr(poller, "set", delete_then_write)
+
+    late_write = poller.update("failed-job", message="out of memory again")
+
+    assert late_write is None
+    assert deleter.get_by_execution_id("failed-job") is None
+    assert deleter.recent(10) == []

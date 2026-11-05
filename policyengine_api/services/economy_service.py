@@ -232,8 +232,9 @@ class EconomyService(
         submits a new job. A record that is computing or complete is never
         removed: removal happens only if the record still holds the failure
         that was checked, and a record that changed in between is selected
-        and checked again. Raise ValueError for an invalid request and
-        CacheCoordinationError when the cache cannot be used or the record
+        and checked again. Raise ValueError for an invalid request, and
+        CacheCoordinationError when the cache cannot be read or written (an
+        unreadable cache is never reported as holding nothing) or the record
         keeps changing.
         """
         set_runtime_context(
@@ -252,6 +253,7 @@ class EconomyService(
             # does.
             stored = self._get_reusable_impact(setup_options.model_copy(deep=True))
             if stored is None:
+                self._reform_impacts.confirm_reform_impacts_readable()
                 return FailedImpactDeletion.not_found()
             if stored.status != ImpactStatus.ERROR.value:
                 return FailedImpactDeletion.not_a_failure(stored.status)

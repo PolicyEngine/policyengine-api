@@ -70,3 +70,13 @@ def test_record_delete_refuses_other_shapes(key_count, keys_and_arguments):
 
     with pytest.raises(ValueError, match="three keys and one argument"):
         backend.eval(DELETE_UNCHANGED_RECORD, key_count, *keys_and_arguments)
+
+
+def test_set_with_xx_writes_only_a_key_that_exists():
+    backend = InMemoryCacheBackend()
+
+    assert backend.set("record", "first", xx=True) is None
+    assert backend.get("record") is None
+    backend.set("record", "first")
+    assert backend.set("record", "second", xx=True) is True
+    assert backend.get("record") == "second"

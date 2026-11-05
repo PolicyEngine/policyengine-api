@@ -213,9 +213,10 @@ def delete_failed_economic_impact(
     at least 10 seconds ago and is now removed, so the next GET submits a new
     job. 409 when it is a more recent failure, with ``delete_after_seconds``
     until it may be removed, or when it is computing or complete, with
-    ``delete_after_seconds`` null. 404 when nothing is stored. Invalid query
-    parameters give 400, as for the GET, and a request to the simulation
-    service that gets no response gives 502.
+    ``delete_after_seconds`` null. 404 when nothing is stored; a cache that
+    cannot be read gives 500, never 404. Invalid query parameters give 400,
+    as for the GET, and a request to the simulation service that gets no
+    response gives 502.
     """
     try:
         query = parse_multidict_query(AnnualEconomyQuery, request.args)

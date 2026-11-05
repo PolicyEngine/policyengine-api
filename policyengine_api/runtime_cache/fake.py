@@ -72,15 +72,17 @@ class InMemoryCacheBackend:
         *,
         ex: int | None = None,
         nx: bool = False,
+        xx: bool = False,
     ) -> bool | None:
-        """Emulate SET with the ``ex`` and ``nx`` options only.
+        """Emulate SET with the ``ex``, ``nx`` and ``xx`` options only.
 
-        Like redis-py, return True on a write and None when ``nx`` finds the key
-        already set; a write without ``ex`` clears any earlier TTL.
+        Like redis-py, return True on a write, and None when ``nx`` finds the
+        key already set or ``xx`` finds it missing; a write without ``ex``
+        clears any earlier TTL.
         """
         with self._lock:
             self._purge(key)
-            if nx and key in self._values:
+            if (nx and key in self._values) or (xx and key not in self._values):
                 return None
             self._values[key] = value
             if ex is not None:
