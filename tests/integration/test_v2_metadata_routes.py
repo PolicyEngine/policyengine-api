@@ -50,6 +50,7 @@ from tests.fixtures.v2_catalog import (
     bundle,
     installed_version,
     normalized_catalog,
+    region_references,
     source_models,
 )
 
@@ -786,6 +787,7 @@ def _catalog_with_a_bracket_schedule():
         policyengine_version=POLICYENGINE_VERSION,
         models=models,
         installed_version=installed_version,
+        region_references=region_references(),
     )
 
 
@@ -964,6 +966,7 @@ def _catalog_shaped_like_policyengine_py_output():
         policyengine_version=POLICYENGINE_VERSION,
         models=models,
         installed_version=installed_version,
+        region_references=region_references(),
     )
 
 

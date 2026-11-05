@@ -5,8 +5,9 @@ values). This test runs the real US and UK models through extraction and
 publication instead, each reduced to the parameters under the folders in
 SELECTED_FOLDERS, and checks that every extracted value comes back from
 PostgreSQL unchanged. Extraction gets only what it needs besides those
-parameters: each model's identity, package, release manifest and entities, its
-national region, and no variables or basic inputs.
+parameters: each model's identity, package, release manifest and entities, the
+national region of its country's region reference file, and no variables or
+basic inputs.
 
 tests/fixtures/v2_catalog_value_shapes.py covers the value shapes extraction
 accepts that the installed models don't hold, such as text and mappings.
@@ -29,7 +30,7 @@ from sqlalchemy.pool import NullPool
 
 from policyengine_api.data.v2.catalog.extraction import extract_catalog
 from policyengine_api.data.v2.catalog.publication import publish_catalog
-from tests.fixtures.v2_catalog import RegionRegistry
+from policyengine_api.data.v2.catalog.region_references import load_region_references
 from tests.integration.catalog_rows import assert_catalog_stored_unchanged
 
 if TYPE_CHECKING:
@@ -111,10 +112,6 @@ def selected_model(country_id: str, model: object, folders: Iterable[str]) -> ob
         model=model.model,
         model_package=model.model_package,
         release_manifest=model.release_manifest,
-        region_registry=RegionRegistry(
-            country_id,
-            [region for region in model.region_registry if region.code == country_id],
-        ),
         entities=model.entities,
         # Basic inputs name variables, and the reduced model has none.
         basic_inputs=[],
@@ -154,6 +151,14 @@ def selected_catalog(installed_models: Mapping[str, object]) -> NormalizedCatalo
         models={
             country_id: selected_model(country_id, model, SELECTED_FOLDERS[country_id])
             for country_id, model in installed_models.items()
+        },
+        region_references={
+            country_id: tuple(
+                reference
+                for reference in load_region_references(country_id)
+                if reference.code == country_id
+            )
+            for country_id in installed_models
         },
     )
 

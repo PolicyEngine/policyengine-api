@@ -1,4 +1,4 @@
-"""Catalog extraction errors, record identifiers, and text and JSON value checks."""
+"""Catalog record identifiers, and text and JSON value checks."""
 
 from __future__ import annotations
 
@@ -9,12 +9,10 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from policyengine_api.data.v2.catalog.errors import CatalogExtractionError
+
 if TYPE_CHECKING:
     from policyengine_api.json_types import JSONValue
-
-
-class CatalogExtractionError(RuntimeError):
-    """Raised before database access when source metadata cannot be normalized."""
 
 
 def catalog_identifier(*parts: object) -> UUID:
