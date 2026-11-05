@@ -7,7 +7,8 @@ Use this skill whenever adding, moving, or reviewing tests.
 Tests run in the environment `uv.lock` defines, on Python 3.12, the same
 versions the Cloud Run image installs (`gcp/cloud_run/Dockerfile`):
 
-- `make install` runs `uv sync --frozen --extra dev`, and `make test` runs
+- `make install` turns on the git hooks in `.githooks` and runs
+  `uv sync --frozen --extra dev`, and `make test` runs
   pytest and coverage through `uv run --frozen --extra dev`. The Makefile sets
   `UV_PYTHON=3.12` unless it is already set, because `.python-version` selects
   3.14.

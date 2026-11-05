@@ -1198,7 +1198,7 @@ test = "tests/unit/services/test_microdata_weight_boundaries.py::test_rule_proof
 [[rule]]
 id = "api.quality.pre-commit-hook"
 category = "quality"
-statement = "make install turns on a git pre-commit hook, .githooks/pre-commit, through core.hooksPath, which every worktree of the clone shares. The hook runs make quality from the root of the working tree and stops the commit when a check fails, when ruff's fixes changed a file that still needs staging (naming it), or when make, uv or the worktree's dev environment (.venv) is missing."
+statement = "make install turns on the git hooks in .githooks through core.hooksPath, a setting of the clone that every worktree shares and resolves against its own checkout, unless that would change an enclosing repository, replace another core.hooksPath, or stop the clone's own hooks, which it says. pre-commit runs make quality from the root of the working tree before git commit, and pre-merge-commit runs it before a merge commits without conflicts. Because make quality checks the working tree, the hook stops the commit when the working tree holds unstaged changes to tracked files or untracked files outside .gitignore, when make quality fails, when ruff's fixes changed a file, or when make, uv or the dev environment is missing, naming the files or what to install."
 rationale = "docs/engineering/skills/github-prs.md#commit-hygiene"
 scope = [".githooks/pre-commit", "Makefile"]
 tier = "mechanical"
@@ -1211,13 +1211,24 @@ nodes = [
   "tests/unit/test_pre_commit_hook.py::test_a_commit_runs_make_quality",
   "tests/unit/test_pre_commit_hook.py::test_a_failing_check_stops_the_commit",
   "tests/unit/test_pre_commit_hook.py::test_fixes_that_need_staging_stop_the_commit_and_are_named",
-  "tests/unit/test_pre_commit_hook.py::test_unstaged_changes_make_quality_leaves_alone_dont_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_fixes_from_an_earlier_failed_run_stop_the_next_commit",
+  "tests/unit/test_pre_commit_hook.py::test_unstaged_changes_stop_the_commit_and_are_named",
+  "tests/unit/test_pre_commit_hook.py::test_untracked_files_stop_the_commit_and_are_named",
+  "tests/unit/test_pre_commit_hook.py::test_commit_all_runs_make_quality",
+  "tests/unit/test_pre_commit_hook.py::test_a_merge_without_conflicts_runs_the_hook",
+  "tests/unit/test_pre_commit_hook.py::test_make_flags_from_the_environment_cant_hide_a_failure",
   "tests/unit/test_pre_commit_hook.py::test_a_missing_uv_stops_the_commit_with_a_message",
+  "tests/unit/test_pre_commit_hook.py::test_a_missing_make_stops_the_commit_with_a_message",
   "tests/unit/test_pre_commit_hook.py::test_a_missing_dev_environment_stops_the_commit_with_a_message",
-  "tests/unit/test_pre_commit_hook.py::test_every_worktree_of_the_clone_runs_the_hook",
+  "tests/unit/test_pre_commit_hook.py::test_the_dev_environment_can_be_where_uv_project_environment_says",
+  "tests/unit/test_pre_commit_hook.py::test_each_worktree_runs_its_own_checkout_s_hook",
   "tests/unit/test_pre_commit_hook.py::test_make_install_turns_the_hook_on",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_in_a_linked_worktree_turns_the_hook_on",
   "tests/unit/test_pre_commit_hook.py::test_make_install_outside_a_git_repository_still_installs",
-  "tests/unit/test_pre_commit_hook.py::test_the_hook_is_executable_in_git",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_leaves_an_enclosing_repository_alone",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_keeps_another_hooks_path",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_keeps_the_clone_s_own_hooks_running",
+  "tests/unit/test_pre_commit_hook.py::test_the_hooks_are_executable_in_git",
 ]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"

@@ -64,13 +64,16 @@ named `changelog.d/<name>.<type>.md`, where `<type>` is `breaking`, `added`,
 Agents must never bypass branch rules (for example with `gh pr merge --admin`).
 
 Run `make install` once per clone: it installs the dev environment and turns
-on the pre-commit hook, which runs `make quality` before every commit in
-every worktree of the clone. In a new worktree, run `make install` again
-to create its `.venv`; the hook stops commits until it exists. `make
-quality` applies ruff's fixes, then runs the checks pr.yml's
-`quality-guards` job runs, apart from the rules registry tool's own tests
-(see "Commit Hygiene" in `docs/engineering/skills/github-prs.md` for how
-a local run can differ). Don't skip the hook with `--no-verify`.
+on the git hooks in `.githooks`, which run `make quality` before each
+`git commit` and each merge commit, in every worktree of the clone. In a new
+worktree, run `make install` again to create its `.venv`; the hook stops
+commits until it exists. Stage everything the commit needs first: the hook
+stops a commit while the working tree holds unstaged changes or untracked
+files, because `make quality` would check them instead of what is
+committed. `make quality` applies ruff's fixes, then runs the checks
+pr.yml's `quality-guards` job runs, apart from the rules registry tool's
+own tests (see "Commit Hygiene" in `docs/engineering/skills/github-prs.md`).
+Don't skip the hook with `--no-verify`.
 
 Before creating or sharing a migration PR, run the focused migration guards:
 

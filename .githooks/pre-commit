@@ -1,14 +1,18 @@
 #!/bin/sh
 # The repository's pre-commit hook (api.quality.pre-commit-hook). It runs
-# make quality before each commit, so the checks pull-request CI runs fail
-# here first. make install turns it on with git config core.hooksPath
-# .githooks; every worktree of the clone shares that setting and runs its own
-# checkout's copy of this file. git commit --no-verify skips it, and CI's
-# Quality checks job still runs the same checks.
+# make quality before git commit, and pre-merge-commit runs it before a merge
+# commits without conflicts, so the checks pull-request CI runs fail here
+# first. make install turns both on with git config core.hooksPath .githooks;
+# every worktree of the clone shares that setting and runs its own checkout's
+# copy. git commit --no-verify skips them, git's cherry-pick, revert and
+# rebase make commits without them, and CI's Quality checks job still runs
+# the same checks.
 #
-# The commit stops when make quality fails, when ruff's fixes changed a file
-# that still needs staging, or when make, uv or the worktree's .venv is
-# missing.
+# make quality checks the working tree, so the hook first requires it to hold
+# exactly what is being committed: no unstaged changes to tracked files and no
+# untracked files outside .gitignore. The commit stops, saying why, when that
+# isn't so, when make quality fails, when ruff's fixes changed a file, or when
+# make, uv or the worktree's dev environment is missing.
 set -u
 
 fail() {
@@ -20,36 +24,32 @@ root=$(git rev-parse --show-toplevel) ||
   fail "can't find the root of this working tree."
 cd "$root" || fail "can't enter $root."
 
+# make's own variables from the environment could make it ignore a failing
+# check or read another Makefile.
+unset MAKEFLAGS MFLAGS GNUMAKEFLAGS MAKEFILES MAKELEVEL
+
 command -v make >/dev/null 2>&1 ||
   fail "make isn't installed, so make quality can't run. Install make, then commit again."
 command -v uv >/dev/null 2>&1 ||
   fail "uv isn't installed, so make quality can't run. Install uv (https://docs.astral.sh/uv/), run make install, then commit again."
-[ -d .venv ] ||
-  fail "this worktree has no dev environment (.venv). Run make install here, then commit again."
+environment=${UV_PROJECT_ENVIRONMENT:-.venv}
+[ -d "$environment" ] ||
+  fail "this worktree has no dev environment ($environment). Run make install here, then commit again."
 
-# Each tracked file with changes not staged for this commit, with a hash of
-# its content. A line that differs after make quality is a file it changed.
-unstaged_files() {
-  git diff --name-only | while IFS= read -r path; do
-    if [ -f "$path" ]; then
-      printf '%s %s\n' "$(git hash-object -- "$path")" "$path"
-    else
-      printf 'deleted %s\n' "$path"
-    fi
-  done
-}
+# Names as they are, not quoted as git quotes names outside ASCII.
+unstaged=$(git -c core.quotePath=false diff --name-only)
+[ -z "$unstaged" ] ||
+  fail "make quality checks the working tree, which holds changes this commit doesn't. Stage them, or set them aside with git stash push --keep-index, then commit again:
+$unstaged"
+untracked=$(git -c core.quotePath=false ls-files --others --exclude-standard)
+[ -z "$untracked" ] ||
+  fail "make quality checks the working tree, which holds files git doesn't track. Add them, remove them, or list them in .git/info/exclude, then commit again:
+$untracked"
 
-before=$(mktemp) || fail "can't create a temporary file."
-after=$(mktemp) || fail "can't create a temporary file."
-trap 'rm -f "$before" "$after"' EXIT
-
-unstaged_files >"$before"
 make quality ||
   fail "make quality failed. Fix what it reported above, then commit again."
-unstaged_files >"$after"
 
-changed=$(grep -Fxv -f "$before" "$after" | sed 's/^[^ ]* //')
-if [ -n "$changed" ]; then
-  printf 'pre-commit: make quality changed these files. Review the fixes, stage them, then commit again:\n%s\n' "$changed" >&2
-  exit 1
-fi
+fixed=$(git -c core.quotePath=false diff --name-only)
+[ -z "$fixed" ] ||
+  fail "make quality changed these files. Review the fixes, stage them, then commit again:
+$fixed"
