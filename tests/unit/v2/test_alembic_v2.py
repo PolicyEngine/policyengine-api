@@ -48,7 +48,6 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "parameter_search_files",
         "parameter_tree_children",
         "report_run_comparisons",
-        "report_run_simulation_runs",
         "simulation_runs",
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
@@ -1023,14 +1022,11 @@ def _simulation_runs_revision_source() -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_simulation_runs_revision_is_generated_with_two_documented_corrections() -> (
-    None
-):
+def test_simulation_runs_revision_is_generated_with_one_documented_correction() -> None:
     """One generated revision follows the parameter search file revision.
 
-    Its two corrections handle enum types: ``simulation_runs.status`` reuses the
-    type the baseline created for ``simulations.status``, and the downgrade
-    drops the role type the upgrade creates with ``report_run_simulation_runs``.
+    Its one correction makes ``simulation_runs.status`` reuse the type the
+    baseline created for ``simulations.status``.
     """
     revision = _simulation_runs_revision_source()
     upgrade = revision[
@@ -1047,16 +1043,11 @@ def test_simulation_runs_revision_is_generated_with_two_documented_corrections()
         in revision
     )
     assert revision.count("Dialect correction:") == 1
-    assert revision.count("Post-generation reversibility correction:") == 1
+    assert "reversibility correction" not in revision
     assert 'name="v2_simulation_status",\n                create_type=False,' in (
         upgrade
     )
-    assert 'sa.Enum(name="v2_simulation_role").drop(op.get_bind())' in downgrade
-    for table_name in (
-        "simulation_runs",
-        "report_run_simulation_runs",
-        "report_run_comparisons",
-    ):
+    for table_name in ("simulation_runs", "report_run_comparisons"):
         assert f'op.create_table(\n        "{table_name}"' in upgrade
         assert f'op.drop_table("{table_name}")' in downgrade
     assert upgrade.count("op.drop_table(") == 0

@@ -83,10 +83,8 @@ from policyengine_api.data.v2.models.reports import (  # noqa: E402
     Report,
     ReportRun,
     ReportRunComparison,
-    ReportRunSimulationRun,
     ReportRunStatus,
     ReportRunTrigger,
-    SimulationRole,
 )
 from policyengine_api.data.v2.models.simulations import (  # noqa: E402
     Simulation,
@@ -143,11 +141,9 @@ __all__ = [
     "Report",
     "ReportRun",
     "ReportRunComparison",
-    "ReportRunSimulationRun",
     "ReportRunStatus",
     "ReportRunTrigger",
     "Simulation",
-    "SimulationRole",
     "SimulationRun",
     "SimulationStatus",
     "SimulationType",

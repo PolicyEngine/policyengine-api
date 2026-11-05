@@ -46,7 +46,6 @@ SIMULATION_SERVICE_CREATES = frozenset(
         "reports",
         "simulation_runs",
         "report_runs",
-        "report_run_simulation_runs",
         "household_jobs",
     }
 )

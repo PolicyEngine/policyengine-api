@@ -508,16 +508,18 @@ model changes:
   the catalog version, country package version and PolicyEngine.py version it
   used, and its Modal call ID; `output_dataset_id` is replaced by the run's
   output file (`output_uri`, `output_sha256`).
-- The new `report_run_simulation_runs` names the simulation runs each report
-  run combines, as its baseline or its reform, and the new
-  `report_run_comparisons` keeps, per compared pair, the parts of an economy
-  comparison that have no result table (`labor_supply_result`,
-  `cliff_impact_result`, `spm_provenance`, `data_version`).
+- A report run compares one pair of simulation runs: `report_runs` names its
+  `baseline_simulation_run_id` (required) and `reform_simulation_run_id`
+  (empty for a household report with only a baseline), each a foreign key to
+  `simulation_runs` with `RESTRICT`. The new `report_run_comparisons` keeps
+  the parts of an economy comparison that have no result table
+  (`labor_supply_result`, `cliff_impact_result`, `spm_provenance`,
+  `data_version`).
 - `poverty` and `inequality` belong to a simulation run (`simulation_run_id`);
   the other result tables belong to a report run and name the two simulation
-  runs they compare (`baseline_simulation_run_id`, `reform_simulation_run_id`),
-  which join each table's unique key. `aggregates` and `change_aggregates` are
-  unchanged.
+  runs they compare (`baseline_simulation_run_id`, `reform_simulation_run_id`);
+  each of their rows is unique within its report run. `aggregates` and
+  `change_aggregates` are unchanged.
 - The result tables gain the economy output's fields that had no column: the
   winner, loser and no-change shares of `congressional_district_impacts`, and
   the UK disclosure control fields (`disclosure_tier`, checked to be
@@ -547,18 +549,14 @@ Missing values in the unique keys of `poverty`, `decile_impacts` and
 `program_statistics` count as equal (`NULLS NOT DISTINCT`, which PostgreSQL
 supports from version 15).
 
-It has two post-generation corrections, each commented in the revision:
+It has one post-generation correction, commented in the revision:
+`simulation_runs.status` reuses the `v2_simulation_status` type the baseline
+created for `simulations.status`. The generated `create_table` would create
+the type again and fail, so the column uses
+`postgresql.ENUM(..., create_type=False)`.
 
-1. **Dialect:** `simulation_runs.status` reuses the `v2_simulation_status`
-   type the baseline created for `simulations.status`. The generated
-   `create_table` would create the type again and fail, so the column uses
-   `postgresql.ENUM(..., create_type=False)`.
-2. **Reversibility:** the downgrade drops `v2_simulation_role` after dropping
-   `report_run_simulation_runs`, because Alembic does not drop a table's enum
-   type with it.
-
-The upgrade adds required columns without server defaults to `household_jobs`
-and the result tables, so it needs them empty, as they are while no managed
+The upgrade adds required columns without server defaults to `household_jobs`,
+`report_runs` and the result tables, so it needs them empty, as they are while no managed
 role holds a write privilege on them; on a table with rows it fails, and the
 deploy stops before anything changes. The downgrade restores required columns
 the same way, so it needs `simulations`, `household_jobs` and the result

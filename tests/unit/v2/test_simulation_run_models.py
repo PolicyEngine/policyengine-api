@@ -2,8 +2,8 @@
 
 A simulation defines what to calculate and each calculation of it is a run that
 records the catalog and PolicyEngine.py versions it used. A report run names
-the simulation runs it combines, results are keyed by run, and a household job
-calculates one household for one year under one policy.
+its baseline and reform simulation runs, results are keyed by run, and a
+household job calculates one household for one year under one policy.
 """
 
 import sqlalchemy as sa
@@ -14,8 +14,6 @@ from policyengine_api.data.v2.models import (
     V2_METADATA,
     ReportRun,
     ReportRunComparison,
-    ReportRunSimulationRun,
-    SimulationRole,
     SimulationRun,
 )
 
@@ -38,7 +36,6 @@ SIMULATION_SIDE_TABLES = frozenset(
         "simulation_runs",
         "reports",
         "report_runs",
-        "report_run_simulation_runs",
         "report_run_comparisons",
         "household_jobs",
         "aggregates",
@@ -247,17 +244,12 @@ def test_each_comparison_keeps_the_parts_without_a_result_table() -> None:
     assert ReportRunComparison.__module__.endswith(".reports")
 
 
-def test_report_run_relationships_name_member_and_comparison_rows() -> None:
+def test_report_run_relationships_name_comparison_rows() -> None:
     relationships = sa.inspect(ReportRun).relationships
 
-    assert relationships["simulation_run_members"].mapper.class_ is (
-        ReportRunSimulationRun
-    )
     assert relationships["comparisons"].mapper.class_ is ReportRunComparison
-    assert (
-        sa.inspect(SimulationRun).relationships["report_run_memberships"].mapper.class_
-        is ReportRunSimulationRun
-    )
+    assert "simulation_run_members" not in relationships
+    assert "report_run_memberships" not in sa.inspect(SimulationRun).relationships
 
 
 def test_uk_area_impacts_record_disclosure_control() -> None:
@@ -296,36 +288,29 @@ def test_detailed_budget_rows_need_neither_an_entity_nor_a_tax_flag() -> None:
     )
     assert (
         "CONSTRAINT uq_program_statistics_run_program_entity UNIQUE NULLS NOT "
-        "DISTINCT (report_run_id, baseline_simulation_run_id, "
-        "reform_simulation_run_id, program_name, entity)"
+        "DISTINCT (report_run_id, program_name, entity)"
     ) in statement
 
 
-def test_report_runs_name_the_simulation_runs_they_combine() -> None:
-    members = V2_METADATA.tables["report_run_simulation_runs"]
+def test_report_runs_name_their_baseline_and_reform_simulation_runs() -> None:
+    """A report run compares one pair; a household report may have no reform."""
+    report_runs = V2_METADATA.tables["report_runs"]
 
-    assert set(members.c.keys()) == {
-        "id",
-        "created_at",
-        "report_run_id",
-        "simulation_run_id",
-        "role",
+    assert not report_runs.c.baseline_simulation_run_id.nullable
+    assert report_runs.c.reform_simulation_run_id.nullable
+    for column_name in ("baseline_simulation_run_id", "reform_simulation_run_id"):
+        run_key = _foreign_key(report_runs, column_name)
+        assert run_key.target_fullname == "simulation_runs.id"
+        assert run_key.ondelete == "RESTRICT"
+        assert (column_name,) in _indexes(report_runs).values()
+    assert "report_run_simulation_runs" not in V2_METADATA.tables
+    enum_type_names = {
+        column.type.name
+        for table in V2_METADATA.tables.values()
+        for column in table.columns
+        if isinstance(column.type, sa.Enum)
     }
-    assert all(not column.nullable for column in members.columns)
-    report_run_key = _foreign_key(members, "report_run_id")
-    simulation_run_key = _foreign_key(members, "simulation_run_id")
-    assert report_run_key.target_fullname == "report_runs.id"
-    assert report_run_key.ondelete == "CASCADE"
-    assert simulation_run_key.target_fullname == "simulation_runs.id"
-    assert simulation_run_key.ondelete == "RESTRICT"
-    assert members.c.role.type.name == "v2_simulation_role"
-    assert list(members.c.role.type.enums) == ["baseline", "reform"]
-    assert [role.value for role in SimulationRole] == ["baseline", "reform"]
-    assert _unique_column_sets(members) == {
-        ("report_run_id", "role", "simulation_run_id")
-    }
-    assert "ix_report_run_simulation_runs_simulation_run_id" in _indexes(members)
-    assert ReportRunSimulationRun.__module__.endswith(".reports")
+    assert "v2_simulation_role" not in enum_type_names
 
 
 def test_household_jobs_calculate_one_household_year_and_policy() -> None:
@@ -402,13 +387,12 @@ def test_comparison_results_name_the_two_simulation_runs_they_compare() -> None:
             run_key = _foreign_key(table, column_name)
             assert run_key.target_fullname == "simulation_runs.id", table_name
             assert run_key.ondelete == "RESTRICT"
-        # A budget-window run compares one pair of simulation runs per year, so
-        # each row is unique within its report run and pair.
+        # A report run compares one pair of simulation runs, so each row is
+        # unique within its report run.
         (unique_columns,) = _unique_column_sets(table)
-        assert unique_columns[:3] == (
-            "report_run_id",
-            "baseline_simulation_run_id",
-            "reform_simulation_run_id",
+        assert unique_columns[0] == "report_run_id", table_name
+        assert {"baseline_simulation_run_id", "reform_simulation_run_id"}.isdisjoint(
+            unique_columns
         ), table_name
 
 

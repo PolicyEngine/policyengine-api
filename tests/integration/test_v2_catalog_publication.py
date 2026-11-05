@@ -36,6 +36,7 @@ from policyengine_api.data.v2.models import (
     Report,
     ReportRun,
     Simulation,
+    SimulationRun,
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
@@ -512,8 +513,17 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
         )
         session.add_all((dataset_version, simulation, report))
         session.flush()
+        simulation_run = SimulationRun(
+            simulation_id=simulation.id,
+            tax_benefit_model_version_id=model_version.id,
+            country_package_version="existing-country-version",
+            policyengine_version="existing-policyengine-version",
+        )
+        session.add(simulation_run)
+        session.flush()
         report_run = ReportRun(
             report_id=report.id,
+            baseline_simulation_run_id=simulation_run.id,
             country_package_version="existing-country-version",
             policyengine_version="existing-policyengine-version",
         )

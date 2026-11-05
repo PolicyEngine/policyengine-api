@@ -1,10 +1,9 @@
 """Canonical SQLModel tables for stable reports, runs, and run outputs.
 
-Results that compare a baseline with a reform belong to a report run and name
-the two simulation runs they compare; each such row is unique within its report
-run and pair of simulation runs, because a budget-window run compares one pair
-per year. Poverty and inequality, which describe one simulation, belong to a
-simulation run.
+A report run compares one baseline simulation run with one reform simulation
+run. Results that compare them belong to the report run and name the two
+simulation runs; each such row is unique within its report run. Poverty and
+inequality, which describe one simulation, belong to a simulation run.
 """
 
 from datetime import datetime
@@ -70,13 +69,6 @@ class DecileType(StrEnum):
 
     INCOME = "income"
     WEALTH = "wealth"
-
-
-class SimulationRole(StrEnum):
-    """The part a simulation run plays in the report run that combines it."""
-
-    BASELINE = "baseline"
-    REFORM = "reform"
 
 
 class Report(TimestampedModel, table=True):
@@ -170,9 +162,10 @@ class Report(TimestampedModel, table=True):
 class ReportRun(TimestampedModel, table=True):
     """One immutable-version execution attempt for a stable report.
 
-    Its ``simulation_run_members`` name the simulation runs it combines, and
-    its ``comparisons`` hold, per compared pair, the parts of an economy
-    comparison that have no result table.
+    It compares ``baseline_simulation_run_id`` with
+    ``reform_simulation_run_id``; a household report with only a baseline has
+    no reform run. Its ``comparisons`` hold the parts of an economy comparison
+    that have no result table.
     """
 
     __tablename__ = "report_runs"
@@ -202,6 +195,17 @@ class ReportRun(TimestampedModel, table=True):
         foreign_key="reports.id",
         ondelete="CASCADE",
     )
+    baseline_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    reform_simulation_run_id: UUID | None = Field(
+        default=None,
+        foreign_key="simulation_runs.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
     country_package_version: str = Field(max_length=128)
     policyengine_version: str = Field(max_length=128)
     status: ReportRunStatus = Field(
@@ -226,10 +230,6 @@ class ReportRun(TimestampedModel, table=True):
     markdown: str | None = Field(default=None, sa_type=sa.Text)
 
     report: Report = Relationship(back_populates="runs")
-    simulation_run_members: list["ReportRunSimulationRun"] = Relationship(
-        back_populates="report_run",
-        cascade_delete=True,
-    )
     comparisons: list["ReportRunComparison"] = Relationship(
         back_populates="report_run",
         cascade_delete=True,
@@ -268,42 +268,6 @@ class ReportRun(TimestampedModel, table=True):
     program_statistics: list["ProgramStatistics"] = Relationship(
         back_populates="report_run",
         cascade_delete=True,
-    )
-
-
-class ReportRunSimulationRun(IdentifiedModel, table=True):
-    """One simulation run a report run combines, as its baseline or its reform.
-
-    A single-year report run names one of each (a household report may name
-    only a baseline); a budget-window run names one of each per year.
-    """
-
-    __tablename__ = "report_run_simulation_runs"
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "report_run_id",
-            "role",
-            "simulation_run_id",
-            name="uq_report_run_simulation_runs_member",
-        ),
-    )
-
-    report_run_id: UUID = Field(
-        foreign_key="report_runs.id",
-        ondelete="CASCADE",
-    )
-    simulation_run_id: UUID = Field(
-        foreign_key="simulation_runs.id",
-        ondelete="RESTRICT",
-        index=True,
-    )
-    role: SimulationRole = Field(
-        sa_type=enum_type(SimulationRole, "v2_simulation_role"),
-    )
-
-    report_run: ReportRun = Relationship(back_populates="simulation_run_members")
-    simulation_run: SimulationRun = Relationship(
-        back_populates="report_run_memberships"
     )
 
 
@@ -430,15 +394,13 @@ class ChangeAggregate(IdentifiedModel, table=True):
 class BudgetSummary(IdentifiedModel, table=True):
     """Baseline and reform totals of one budget variable for a report run.
 
-    One row per report run, pair of simulation runs, variable and entity.
+    One row per report run, variable and entity.
     """
 
     __tablename__ = "budget_summary"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
-            "baseline_simulation_run_id",
-            "reform_simulation_run_id",
             "variable_name",
             "entity",
             name="uq_budget_summary_run_variable_entity",
@@ -470,18 +432,16 @@ class DecileImpact(IdentifiedModel, table=True):
     """Mean income change and better/worse-off counts in one income quantile.
 
     ``decile`` runs from 1 to ``quantiles``; there is one row per report run,
-    pair of simulation runs, income variable, decile variable, entity, quantile
-    count and decile. ``decile_variable`` names a variable that groups the
-    households instead of the income variable's own deciles, such as
-    ``household_wealth_decile``; rows without one count as equal.
+    income variable, decile variable, entity, quantile count and decile.
+    ``decile_variable`` names a variable that groups the households instead of
+    the income variable's own deciles, such as ``household_wealth_decile``; rows
+    without one count as equal.
     """
 
     __tablename__ = "decile_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
-            "baseline_simulation_run_id",
-            "reform_simulation_run_id",
             "income_variable",
             "decile_variable",
             "entity",
@@ -528,16 +488,14 @@ class DecileImpact(IdentifiedModel, table=True):
 class IntraDecileImpact(IdentifiedModel, table=True):
     """Shares of one decile whose income rises or falls by more or less than 5%.
 
-    One row per report run, pair of simulation runs, decile type and decile,
-    where ``decile`` is 0 to 10.
+    One row per report run, decile type and decile, where ``decile`` is 0 to
+    10.
     """
 
     __tablename__ = "intra_decile_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
-            "baseline_simulation_run_id",
-            "reform_simulation_run_id",
             "decile_type",
             "decile",
             name="uq_intra_decile_impacts_run_type_decile",
@@ -641,18 +599,16 @@ class Poverty(IdentifiedModel, table=True):
 class ProgramStatistics(IdentifiedModel, table=True):
     """Baseline and reform totals, counts, winners and losers for one program.
 
-    One row per report run, pair of simulation runs, program and entity;
-    ``is_tax`` marks taxes. The economy
-    output's detailed budget names neither the entity nor whether a program is
-    a tax, so both may be null, and rows without an entity count as equal.
+    One row per report run, program and entity; ``is_tax`` marks taxes. The
+    economy output's detailed budget names neither the entity nor whether a
+    program is a tax, so both may be null, and rows without an entity count as
+    equal.
     """
 
     __tablename__ = "program_statistics"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
-            "baseline_simulation_run_id",
-            "reform_simulation_run_id",
             "program_name",
             "entity",
             name="uq_program_statistics_run_program_entity",
@@ -731,16 +687,14 @@ def _disclosure_tier_check(table_name: str) -> sa.CheckConstraint:
 class CongressionalDistrictImpact(GeographicImpactBase, table=True):
     """Household income change and population in one US congressional district.
 
-    One row per report run, pair of simulation runs and district GEOID, with the
-    shares of people who gain, lose or see no change.
+    One row per report run and district GEOID, with the shares of people who
+    gain, lose or see no change.
     """
 
     __tablename__ = "congressional_district_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
-            "baseline_simulation_run_id",
-            "reform_simulation_run_id",
             "district_geoid",
             name="uq_congressional_district_impacts_run_geoid",
         ),
@@ -761,15 +715,13 @@ class CongressionalDistrictImpact(GeographicImpactBase, table=True):
 class ConstituencyImpact(UKAreaImpactBase, table=True):
     """Household income change in one UK constituency.
 
-    One row per report run, pair of simulation runs and constituency code.
+    One row per report run and constituency code.
     """
 
     __tablename__ = "constituency_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
-            "baseline_simulation_run_id",
-            "reform_simulation_run_id",
             "constituency_code",
             name="uq_constituency_impacts_run_code",
         ),
@@ -785,15 +737,13 @@ class ConstituencyImpact(UKAreaImpactBase, table=True):
 class LocalAuthorityImpact(UKAreaImpactBase, table=True):
     """Household income change in one UK local authority.
 
-    One row per report run, pair of simulation runs and local authority code.
+    One row per report run and local authority code.
     """
 
     __tablename__ = "local_authority_impacts"
     __table_args__ = (
         sa.UniqueConstraint(
             "report_run_id",
-            "baseline_simulation_run_id",
-            "reform_simulation_run_id",
             "local_authority_code",
             name="uq_local_authority_impacts_run_code",
         ),

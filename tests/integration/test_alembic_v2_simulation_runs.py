@@ -42,9 +42,7 @@ if TYPE_CHECKING:
     from sqlalchemy import Connection, Engine
 
 SIMULATION_RUNS_PREVIOUS_REVISION = "c614b6bcccfc"
-NEW_TABLES = frozenset(
-    {"simulation_runs", "report_run_simulation_runs", "report_run_comparisons"}
-)
+NEW_TABLES = frozenset({"simulation_runs", "report_run_comparisons"})
 CHANGED_TABLES = frozenset(
     {
         "budget_summary",
@@ -227,13 +225,13 @@ def test_the_revision_downgrades_to_its_parent_and_upgrades_again(
         if column["name"] == "entity"
     )
     assert not program_entity["nullable"]
-    enum_types = _enum_type_names(engine)
-    assert "v2_simulation_status" in enum_types
-    assert "v2_simulation_role" not in enum_types
+    assert "v2_simulation_status" in _enum_type_names(engine)
 
     command.upgrade(config, "head")
     command.check(config)
-    assert "v2_simulation_role" in _enum_type_names(engine)
+    assert {"baseline_simulation_run_id", "reform_simulation_run_id"} <= (
+        _column_names(engine, "report_runs")
+    )
 
 
 def test_head_keeps_the_foreign_keys_to_the_public_api_tables(
@@ -313,8 +311,12 @@ def _insert_simulation_run(
 
 
 def _insert_report_run(
-    connection: Connection, public_api_rows: PublicApiRows
+    connection: Connection,
+    public_api_rows: PublicApiRows,
+    baseline_run_id: object,
+    reform_run_id: object | None = None,
 ) -> object:
+    """Store a report and one run of it comparing the two simulation runs."""
     report_id, report_run_id = uuid4(), uuid4()
     insert_row(
         connection,
@@ -330,6 +332,8 @@ def _insert_report_run(
         "report_runs",
         id=report_run_id,
         report_id=report_id,
+        baseline_simulation_run_id=baseline_run_id,
+        reform_simulation_run_id=reform_run_id,
         status="running",
         trigger="initial",
         **RUN_VERSIONS,
@@ -414,33 +418,31 @@ def test_simulation_runs_need_a_completion_time_and_a_whole_output(
     assert _count(connection, "poverty", "simulation_run_id", finished_run_id) == 0
 
 
-def test_report_run_members_are_unique_and_keep_their_simulation_runs(
+def test_report_runs_name_a_baseline_run_and_keep_their_simulation_runs(
     connection: Connection, public_api_rows: PublicApiRows
 ) -> None:
-    run_id = _insert_simulation_run(
-        connection, _insert_simulation(connection, public_api_rows)
-    )
-    report_run_id = _insert_report_run(connection, public_api_rows)
-    member = {
-        "report_run_id": report_run_id,
-        "simulation_run_id": run_id,
-        "role": "baseline",
-    }
-    insert_row(connection, "report_run_simulation_runs", id=uuid4(), **member)
+    simulation_id = _insert_simulation(connection, public_api_rows)
+    baseline_run_id = _insert_simulation_run(connection, simulation_id)
+    reform_run_id = _insert_simulation_run(connection, simulation_id)
 
-    with refused(connection):
-        insert_row(connection, "report_run_simulation_runs", id=uuid4(), **member)
-    with refused(connection):
-        connection.execute(
-            text("DELETE FROM simulation_runs WHERE id = :id"), {"id": run_id}
-        )
+    with refused(connection, match="baseline_simulation_run_id"):
+        _insert_report_run(connection, public_api_rows, None)
+    with refused(connection, match="foreign key constraint"):
+        _insert_report_run(connection, public_api_rows, uuid4())
+    # A household report with only a baseline names no reform run.
+    _insert_report_run(connection, public_api_rows, baseline_run_id)
+    report_run_id = _insert_report_run(
+        connection, public_api_rows, baseline_run_id, reform_run_id
+    )
+    for run_id in (baseline_run_id, reform_run_id):
+        with refused(connection, match="foreign key constraint"):
+            connection.execute(
+                text("DELETE FROM simulation_runs WHERE id = :id"), {"id": run_id}
+            )
     connection.execute(
         text("DELETE FROM report_runs WHERE id = :id"), {"id": report_run_id}
     )
-    assert (
-        _count(connection, "report_run_simulation_runs", "report_run_id", report_run_id)
-        == 0
-    )
+    assert _count(connection, "simulation_runs", "id", reform_run_id) == 1
 
 
 def test_results_are_unique_per_run_and_name_runs_that_exist(
@@ -450,7 +452,9 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
     baseline_run_id = _insert_simulation_run(connection, simulation_id)
     reform_run_id = _insert_simulation_run(connection, simulation_id)
     comparison_runs = {
-        "report_run_id": _insert_report_run(connection, public_api_rows),
+        "report_run_id": _insert_report_run(
+            connection, public_api_rows, baseline_run_id, reform_run_id
+        ),
         "baseline_simulation_run_id": baseline_run_id,
         "reform_simulation_run_id": reform_run_id,
     }
@@ -500,26 +504,25 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
         insert_row(connection, "decile_impacts", id=uuid4(), **decile)
     budget = {"variable_name": "household_tax", "entity": "household"}
     insert_row(connection, "budget_summary", id=uuid4(), **budget, **comparison_runs)
-    next_year_runs = {
-        **comparison_runs,
-        "baseline_simulation_run_id": _insert_simulation_run(connection, simulation_id),
-        "reform_simulation_run_id": _insert_simulation_run(connection, simulation_id),
-    }
-    insert_row(connection, "budget_summary", id=uuid4(), **budget, **next_year_runs)
+    # A report run compares one pair, so its rows are unique within it.
     with refused(connection):
-        insert_row(connection, "budget_summary", id=uuid4(), **budget, **next_year_runs)
-    # One comparison row per compared pair holds the untabled parts.
-    for runs in (comparison_runs, next_year_runs):
         insert_row(
             connection,
-            "report_run_comparisons",
+            "budget_summary",
             id=uuid4(),
-            labor_supply_result="{}",
-            data_version="1.0.0",
-            **runs,
+            **budget,
+            **{**comparison_runs, "reform_simulation_run_id": baseline_run_id},
         )
+    insert_row(
+        connection,
+        "report_run_comparisons",
+        id=uuid4(),
+        labor_supply_result="{}",
+        data_version="1.0.0",
+        **comparison_runs,
+    )
     with refused(connection):
-        insert_row(connection, "report_run_comparisons", id=uuid4(), **next_year_runs)
+        insert_row(connection, "report_run_comparisons", id=uuid4(), **comparison_runs)
     insert_row(
         connection,
         "program_statistics",

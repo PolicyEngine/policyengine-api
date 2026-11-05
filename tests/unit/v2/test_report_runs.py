@@ -27,6 +27,7 @@ from policyengine_api.data.v2.models import (
 )
 from policyengine_api.data.v2.report_runs import (
     ReportRunPackageVersions,
+    ReportRunSimulationRuns,
     ReportRunStateError,
     ReportTypeImmutableError,
     begin_report_run,
@@ -40,6 +41,11 @@ from policyengine_api.data.v2.report_runs import (
 DEPLOYED_COUNTRY_VERSIONS = {"us": "1.2.3"}
 DEPLOYED_POLICYENGINE_VERSION = "4.5.6"
 NOW = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
+# The simulation runs each report run compares. SQLite doesn't enforce foreign
+# keys, so these tests store no simulation run rows for them.
+SIMULATION_RUNS = ReportRunSimulationRuns(
+    baseline_simulation_run_id=UUID(int=101), reform_simulation_run_id=UUID(int=102)
+)
 
 
 @pytest.fixture
@@ -86,6 +92,7 @@ def _create_run(
             policyengine_version=policyengine_version,
         ),
         trigger=ReportRunTrigger.MANUAL,
+        simulation_runs=SIMULATION_RUNS,
         idempotency_key=key if key is not None else uuid4(),
     )
 
@@ -152,6 +159,7 @@ def test_manual_rerun_requires_an_idempotency_key(engine) -> None:
                     policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
                 ),
                 trigger=ReportRunTrigger.MANUAL,
+                simulation_runs=SIMULATION_RUNS,
             )
 
 
@@ -214,6 +222,7 @@ def test_concurrent_idempotent_requests_resolve_to_one_run(tmp_path: Path) -> No
                     policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
                 ),
                 trigger=ReportRunTrigger.MANUAL,
+                simulation_runs=SIMULATION_RUNS,
                 idempotency_key=request_key,
             )
             run_id = run.id
@@ -310,6 +319,7 @@ def test_selector_uses_versions_success_completion_time_and_stable_id(engine) ->
             ReportRun(
                 id=UUID(int=1),
                 report=report,
+                baseline_simulation_run_id=UUID(int=101),
                 country_package_version="1.2.3",
                 policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
                 status=ReportRunStatus.SUCCEEDED,
@@ -318,6 +328,7 @@ def test_selector_uses_versions_success_completion_time_and_stable_id(engine) ->
             ReportRun(
                 id=UUID(int=2),
                 report=report,
+                baseline_simulation_run_id=UUID(int=101),
                 country_package_version="1.2.3",
                 policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
                 status=ReportRunStatus.SUCCEEDED,
@@ -326,6 +337,7 @@ def test_selector_uses_versions_success_completion_time_and_stable_id(engine) ->
             ReportRun(
                 id=UUID(int=3),
                 report=report,
+                baseline_simulation_run_id=UUID(int=101),
                 country_package_version="9.9.9",
                 policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
                 status=ReportRunStatus.SUCCEEDED,
@@ -334,6 +346,7 @@ def test_selector_uses_versions_success_completion_time_and_stable_id(engine) ->
             ReportRun(
                 id=UUID(int=4),
                 report=report,
+                baseline_simulation_run_id=UUID(int=101),
                 country_package_version="1.2.3",
                 policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
                 status=ReportRunStatus.RUNNING,

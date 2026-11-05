@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -21,7 +21,14 @@ from policyengine_api.data.v2.models import (
 from policyengine_api.data.v2.report_runs import (
     ReportNotFoundError,
     ReportRunPackageVersions,
+    ReportRunSimulationRuns,
     create_report_run,
+)
+
+# The simulation runs each report run compares. SQLite doesn't enforce foreign
+# keys, so these tests store no simulation run rows for them.
+SIMULATION_RUNS = ReportRunSimulationRuns(
+    baseline_simulation_run_id=UUID(int=101), reform_simulation_run_id=UUID(int=102)
 )
 
 
@@ -65,6 +72,7 @@ def test_unknown_report_is_rejected_before_any_validation(engine) -> None:
                 policyengine_version="",
             ),
             trigger=ReportRunTrigger.MANUAL,
+            simulation_runs=SIMULATION_RUNS,
         )
 
 
@@ -83,6 +91,7 @@ def test_manual_run_without_a_key_is_rejected_before_version_checks(engine) -> N
                     policyengine_version="",
                 ),
                 trigger=ReportRunTrigger.MANUAL,
+                simulation_runs=SIMULATION_RUNS,
             )
 
 
@@ -109,6 +118,7 @@ def test_empty_package_versions_are_rejected(
                     policyengine_version=policyengine_version,
                 ),
                 trigger=ReportRunTrigger.SYSTEM,
+                simulation_runs=SIMULATION_RUNS,
             )
 
 
@@ -124,6 +134,7 @@ def test_run_without_a_key_is_inserted_without_a_savepoint(engine) -> None:
                 policyengine_version="4.5.6",
             ),
             trigger=ReportRunTrigger.INITIAL,
+            simulation_runs=SIMULATION_RUNS,
         )
 
         stored = session.exec(select(ReportRun)).one()
@@ -134,6 +145,8 @@ def test_run_without_a_key_is_inserted_without_a_savepoint(engine) -> None:
         assert run.trigger is ReportRunTrigger.INITIAL
         assert run.idempotency_key is None
         assert run.status is ReportRunStatus.PENDING
+        assert run.baseline_simulation_run_id == UUID(int=101)
+        assert run.reform_simulation_run_id == UUID(int=102)
 
 
 def test_conflict_without_a_matching_keyed_run_reraises(
@@ -160,6 +173,7 @@ def test_conflict_without_a_matching_keyed_run_reraises(
                     policyengine_version="4.5.6",
                 ),
                 trigger=ReportRunTrigger.MANUAL,
+                simulation_runs=SIMULATION_RUNS,
                 idempotency_key=uuid4(),
             )
 

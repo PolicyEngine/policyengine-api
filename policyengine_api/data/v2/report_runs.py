@@ -53,6 +53,17 @@ class ReportRunPackageVersions:
     policyengine_version: str
 
 
+@dataclass(frozen=True)
+class ReportRunSimulationRuns:
+    """The simulation runs one report run compares.
+
+    A household report with only a baseline has no reform run.
+    """
+
+    baseline_simulation_run_id: UUID
+    reform_simulation_run_id: UUID | None
+
+
 def _locked_report(session: Session, report_id: UUID) -> Report:
     # SQLModel's select remains the query surface. Row locking is the bounded
     # SQLAlchemy capability needed to serialize first-run/type updates.
@@ -94,9 +105,14 @@ def create_report_run(
     report_id: UUID,
     versions: ReportRunPackageVersions,
     trigger: ReportRunTrigger,
+    simulation_runs: ReportRunSimulationRuns,
     idempotency_key: UUID | None = None,
 ) -> ReportRun:
-    """Create one run, or return the run for a retried idempotent request."""
+    """Create one run, or return the run for a retried idempotent request.
+
+    A retried request gets the run its first attempt created, with the
+    simulation runs that attempt named.
+    """
     _locked_report(session, report_id)
     if trigger is ReportRunTrigger.MANUAL and idempotency_key is None:
         msg = "manual report reruns require an idempotency key"
@@ -107,6 +123,8 @@ def create_report_run(
 
     run = ReportRun(
         report_id=report_id,
+        baseline_simulation_run_id=simulation_runs.baseline_simulation_run_id,
+        reform_simulation_run_id=simulation_runs.reform_simulation_run_id,
         country_package_version=versions.country_package_version,
         policyengine_version=versions.policyengine_version,
         trigger=trigger,

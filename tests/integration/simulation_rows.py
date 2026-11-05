@@ -101,3 +101,14 @@ def refused(
     with pytest.raises(error, match=match):
         yield
     savepoint.rollback()
+
+
+def delete_public_api_rows(connection: Connection, rows: PublicApiRows) -> None:
+    """Delete what ``insert_public_api_rows`` stored, once nothing names it."""
+    for table, row_id in (
+        ("households", rows.household_id),
+        ("datasets", rows.dataset_id),
+        ("tax_benefit_model_versions", rows.version_id),
+        ("tax_benefit_models", rows.model_id),
+    ):
+        connection.execute(text(f"DELETE FROM {table} WHERE id = :id"), {"id": row_id})

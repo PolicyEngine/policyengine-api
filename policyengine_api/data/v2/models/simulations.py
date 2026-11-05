@@ -22,7 +22,6 @@ if TYPE_CHECKING:
         Inequality,
         Poverty,
         Report,
-        ReportRunSimulationRun,
     )
 
 
@@ -215,9 +214,6 @@ class SimulationRun(TimestampedModel, table=True):
     output_sha256: str | None = Field(default=None, max_length=64)
 
     simulation: Simulation = Relationship(back_populates="runs")
-    report_run_memberships: list["ReportRunSimulationRun"] = Relationship(
-        back_populates="simulation_run"
-    )
     poverty_results: list["Poverty"] = Relationship(
         back_populates="simulation_run",
         cascade_delete=True,

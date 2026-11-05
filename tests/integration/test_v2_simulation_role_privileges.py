@@ -111,17 +111,10 @@ def _create_simulation_rows(
         "report_runs",
         id=ids["report_run"],
         report_id=ids["report"],
+        baseline_simulation_run_id=ids["run"],
         status="pending",
         trigger="initial",
         **RUN_VERSIONS,
-    )
-    insert_row(
-        connection,
-        "report_run_simulation_runs",
-        id=uuid4(),
-        report_run_id=ids["report_run"],
-        simulation_run_id=ids["run"],
-        role="baseline",
     )
     insert_row(
         connection,
@@ -248,14 +241,14 @@ def test_the_public_api_reads_runs_and_results_but_writes_neither(
 ) -> None:
     _act_as(connection, managed_v2_roles.runtime)
 
-    for table in ("simulation_runs", "report_run_simulation_runs", "poverty"):
+    for table in ("simulation_runs", "report_runs", "poverty"):
         connection.execute(text(f"SELECT count(*) FROM {table}")).scalar_one()
     _refused(
         connection,
-        "INSERT INTO report_run_simulation_runs "
-        "(id, report_run_id, simulation_run_id, role) "
-        "VALUES (:id, :report_run_id, :run_id, 'baseline')",
+        "INSERT INTO report_runs (id, report_id, baseline_simulation_run_id, "
+        "country_package_version, policyengine_version, status, trigger) "
+        "VALUES (:id, :report_id, :run_id, '1.0.0', '4.0.0', 'pending', 'initial')",
         id=uuid4(),
-        report_run_id=uuid4(),
+        report_id=uuid4(),
         run_id=uuid4(),
     )

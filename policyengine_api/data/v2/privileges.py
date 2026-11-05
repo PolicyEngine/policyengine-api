@@ -149,7 +149,6 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Simulations, reports, their runs and household jobs. The catalog writer
     # checks that publication leaves the rows of three of them untouched.
     "household_jobs": _RUN_STATUS,
-    "report_run_simulation_runs": _SIMULATION_DEFINITION,
     "report_runs": replace(_RUN_STATUS, catalog_writer=READ),
     "reports": replace(_SIMULATION_DEFINITION, catalog_writer=READ),
     "simulation_runs": _RUN_STATUS,
