@@ -1588,6 +1588,55 @@ workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
 invocation = "unittest discover -s scripts/rules/tests"
 
+[[rule]]
+id = "api.dependencies.declared-and-used"
+category = "dependencies"
+statement = "pyproject.toml declares what policyengine_api imports and nothing else: deptry finds no import that no declared distribution provides (DEP001), no declared runtime dependency the package never imports (DEP002), no import of a module installed only as another package's dependency (DEP003), no import of a package declared only as a development dependency (DEP004) and no declared standard-library module (DEP005), apart from the findings rules/baselines/deptry.txt lists and the rule's not-imported-package exceptions."
+rationale = "docs/engineering/skills/dependencies.md#we-declare-what-we-import"
+scope = ["pyproject.toml", "policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "declared-dependencies"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[[rule.ci]]
+workflow = ".github/workflows/push.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.baseline]
+file = "rules/baselines/deptry.txt"
+count = 16
+[rule.proof]
+bad_fixture = "rules/fixtures/api.dependencies.declared-and-used/rejected"
+good_fixture = "rules/fixtures/api.dependencies.declared-and-used/accepted"
+test = "scripts/rules/tests/test_declared_dependencies.py::TestDeclaredDependenciesProof::test_rule_proof_declared_and_used"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule.exception]]
+path = "gcp/cloud_run/start.sh"
+match = "gunicorn"
+category = "not-imported-package"
+reason = "The Cloud Run start command runs gunicorn as the server process; no module imports it."
+
+[[rule.exception]]
+path = "gcp/cloud_run/start.sh"
+match = "uvicorn"
+category = "not-imported-package"
+reason = "gunicorn loads uvicorn's worker class by name (--worker-class uvicorn.workers.UvicornWorker); no module imports it."
+
+[[rule.exception]]
+path = "policyengine_api/data/orm.py"
+match = "pymysql"
+category = "not-imported-package"
+reason = "The Cloud SQL connector loads the MySQL driver by name (driver=\"pymysql\"), as SQLAlchemy's mysql+pymysql dialect does; no module imports it."
+
 # --- Process and repository hygiene ----------------------------------------
 
 [[rule]]
