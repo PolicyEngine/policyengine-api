@@ -1,17 +1,14 @@
-"""Check the simulation runs revisions against disposable Postgres.
+"""Check the simulation runs revision against disposable Postgres.
 
-Five revisions follow the parameter tree revision. The first adds
-simulation runs and the table naming the simulation runs a report run
-combines, keys every result table by run, and gives household jobs one
-household, one year and one policy. The second drops the foreign keys from
-those tables to the Public API's tables. The third adds the economy output's
-fields that had no column. The fourth makes each result row tell apart its
-pair of simulation runs, decile grouping and poverty group. The fifth moves
-the parts of a comparison without a result table from the report run to one
-row per compared pair. None changes any other table. The previous Public API
-revision keeps working while they are deployed: its roles can't read or write
-any table they change, except the catalog writer, which counts the rows of
-simulations, reports and report_runs.
+One revision follows the parameter search file revision. It adds simulation
+runs and the table naming the simulation runs a report run combines, keys
+every result table by run, gives household jobs one household, one year and
+one policy, drops the foreign keys from those tables to the Public API's
+tables, adds the economy output's fields that had no column, and keeps the
+parts of a comparison without a result table in one row per compared pair. It
+changes no other table. The previous Public API revision keeps working while
+it is deployed: its roles can't read or write any table it changes, except the
+catalog writer, which counts the rows of simulations, reports and report_runs.
 """
 
 from __future__ import annotations
@@ -39,10 +36,6 @@ if TYPE_CHECKING:
     from sqlalchemy import Connection, Engine
 
 SIMULATION_RUNS_PREVIOUS_REVISION = "c614b6bcccfc"
-SIMULATION_RUNS_REVISION = "2ffd50f47a2b"
-CROSS_SERVICE_KEYS_REVISION = "7a83a87d029a"
-ECONOMY_OUTPUT_REVISION = "7f43d2c7c3c6"
-RESULT_IDENTITY_REVISION = "2e3de7c572ed"
 NEW_TABLES = frozenset(
     {"simulation_runs", "report_run_simulation_runs", "report_run_comparisons"}
 )
@@ -160,7 +153,7 @@ def _enum_type_names(engine: Engine) -> set[str]:
         )
 
 
-def test_the_revisions_add_three_tables_and_change_only_simulation_side_tables(
+def test_the_revision_adds_three_tables_and_changes_only_simulation_side_tables(
     config: Config, engine: Engine
 ) -> None:
     command.downgrade(config, SIMULATION_RUNS_PREVIOUS_REVISION)
@@ -176,42 +169,10 @@ def test_the_revisions_add_three_tables_and_change_only_simulation_side_tables(
     assert changed == CHANGED_TABLES
 
 
-def test_each_revision_downgrades_to_its_parent_and_upgrades_again(
+def test_the_revision_downgrades_to_its_parent_and_upgrades_again(
     config: Config, engine: Engine
 ) -> None:
     command.upgrade(config, "head")
-
-    command.downgrade(config, RESULT_IDENTITY_REVISION)
-    assert "report_run_comparisons" not in inspect(engine).get_table_names()
-    assert {"labor_supply_result", "data_version"} <= _column_names(
-        engine, "report_runs"
-    )
-
-    command.downgrade(config, ECONOMY_OUTPUT_REVISION)
-    assert "decile_variable" not in _column_names(engine, "decile_impacts")
-    assert "filter_group" not in _column_names(engine, "poverty")
-    budget_key = next(
-        constraint
-        for constraint in inspect(engine).get_unique_constraints("budget_summary")
-        if constraint["name"] == "uq_budget_summary_run_variable_entity"
-    )
-    assert budget_key["column_names"] == ["report_run_id", "variable_name", "entity"]
-
-    command.downgrade(config, CROSS_SERVICE_KEYS_REVISION)
-    assert {"spm_provenance", "data_version"}.isdisjoint(
-        _column_names(engine, "report_runs")
-    )
-    program_entity = next(
-        column
-        for column in inspect(engine).get_columns("program_statistics")
-        if column["name"] == "entity"
-    )
-    assert not program_entity["nullable"]
-
-    command.downgrade(config, SIMULATION_RUNS_REVISION)
-    assert {"datasets", "households", "policies"} <= {
-        key["referred_table"] for key in inspect(engine).get_foreign_keys("simulations")
-    }
 
     command.downgrade(config, SIMULATION_RUNS_PREVIOUS_REVISION)
     assert NEW_TABLES.isdisjoint(inspect(engine).get_table_names(schema="public"))
@@ -219,6 +180,15 @@ def test_each_revision_downgrades_to_its_parent_and_upgrades_again(
         engine, "simulations"
     )
     assert {"report_run_id", "simulation_id"} <= _column_names(engine, "poverty")
+    assert {"datasets", "households", "policies"} <= {
+        key["referred_table"] for key in inspect(engine).get_foreign_keys("simulations")
+    }
+    program_entity = next(
+        column
+        for column in inspect(engine).get_columns("program_statistics")
+        if column["name"] == "entity"
+    )
+    assert not program_entity["nullable"]
     enum_types = _enum_type_names(engine)
     assert "v2_simulation_status" in enum_types
     assert "v2_simulation_role" not in enum_types

@@ -67,54 +67,6 @@ AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
 PARAMETER_TREE_REVISION = "3869eb814a90"
 # The parameter search file revision, parent of the simulation runs revision.
 SIMULATION_RUNS_PARENT_REVISION = "c614b6bcccfc"
-SIMULATION_RUNS_REVISION_PATH = (
-    REPO
-    / "migrations/v2/versions/2ffd50f47a2b_add_simulation_runs_and_key_results_by_.py"
-)
-# The simulation runs revision, parent of the cross-service foreign key revision.
-CROSS_SERVICE_KEYS_PARENT_REVISION = "2ffd50f47a2b"
-# The cross-service foreign key revision, parent of the economy output revision.
-ECONOMY_OUTPUT_PARENT_REVISION = "7a83a87d029a"
-# The economy output revision, parent of the result row identity revision.
-RESULT_IDENTITY_PARENT_REVISION = "7f43d2c7c3c6"
-# The result row identity revision, parent of the comparisons revision.
-COMPARISONS_PARENT_REVISION = "2e3de7c572ed"
-UNTABLED_COMPARISON_COLUMNS = (
-    "labor_supply_result",
-    "cliff_impact_result",
-    "spm_provenance",
-    "data_version",
-)
-# Each comparison result table's unique key, which gains the pair of runs.
-COMPARISON_UNIQUE_KEYS = {
-    "budget_summary": "uq_budget_summary_run_variable_entity",
-    "congressional_district_impacts": "uq_congressional_district_impacts_run_geoid",
-    "constituency_impacts": "uq_constituency_impacts_run_code",
-    "decile_impacts": "uq_decile_impacts_run_measure",
-    "intra_decile_impacts": "uq_intra_decile_impacts_run_type_decile",
-    "local_authority_impacts": "uq_local_authority_impacts_run_code",
-    "program_statistics": "uq_program_statistics_run_program_entity",
-}
-# The foreign keys from the simulation service's tables to the Public API's.
-CROSS_SERVICE_KEYS = {
-    "household_jobs": {"dynamics", "policies"},
-    "reports": {
-        "datasets",
-        "households",
-        "policies",
-        "regions",
-        "tax_benefit_models",
-        "users",
-    },
-    "simulations": {
-        "datasets",
-        "dynamics",
-        "households",
-        "policies",
-        "regions",
-        "tax_benefit_model_versions",
-    },
-}
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -296,10 +248,6 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
-        COMPARISONS_PARENT_REVISION,
-        RESULT_IDENTITY_PARENT_REVISION,
-        ECONOMY_OUTPUT_PARENT_REVISION,
-        CROSS_SERVICE_KEYS_PARENT_REVISION,
         SIMULATION_RUNS_PARENT_REVISION,
         PARAMETER_TREE_REVISION,
         AREA_IMPACT_COORDINATE_REVISION,
@@ -1069,13 +1017,22 @@ def test_parameter_search_file_revision_creates_only_the_files_table() -> None:
         assert "op.add_column(" not in body
 
 
-def test_simulation_runs_revision_has_only_its_two_documented_corrections() -> None:
-    """The revision is generated; its two corrections handle enum types.
+def _simulation_runs_revision_source() -> str:
+    """Return the source of the one revision after the parameter search files."""
+    (path,) = (REPO / "migrations/v2/versions").glob(f"{V2_ALEMBIC_HEAD_REVISION}_*.py")
+    return path.read_text(encoding="utf-8")
 
-    ``simulation_runs.status`` reuses the type the baseline created for
-    ``simulations.status``, and the downgrade drops the new role type.
+
+def test_simulation_runs_revision_is_generated_with_two_documented_corrections() -> (
+    None
+):
+    """One generated revision follows the parameter search file revision.
+
+    Its two corrections handle enum types: ``simulation_runs.status`` reuses the
+    type the baseline created for ``simulations.status``, and the downgrade
+    drops the role type the upgrade creates with ``report_run_simulation_runs``.
     """
-    revision = SIMULATION_RUNS_REVISION_PATH.read_text(encoding="utf-8")
+    revision = _simulation_runs_revision_source()
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")
     ]
@@ -1095,10 +1052,13 @@ def test_simulation_runs_revision_has_only_its_two_documented_corrections() -> N
         upgrade
     )
     assert 'sa.Enum(name="v2_simulation_role").drop(op.get_bind())' in downgrade
-    assert 'op.create_table(\n        "simulation_runs"' in upgrade
-    assert 'op.create_table(\n        "report_run_simulation_runs"' in upgrade
-    assert 'op.drop_table("report_run_simulation_runs")' in downgrade
-    assert 'op.drop_table("simulation_runs")' in downgrade
+    for table_name in (
+        "simulation_runs",
+        "report_run_simulation_runs",
+        "report_run_comparisons",
+    ):
+        assert f'op.create_table(\n        "{table_name}"' in upgrade
+        assert f'op.drop_table("{table_name}")' in downgrade
     assert upgrade.count("op.drop_table(") == 0
     for removed_column in (
         "status",
@@ -1109,214 +1069,6 @@ def test_simulation_runs_revision_has_only_its_two_documented_corrections() -> N
         "output_dataset_id",
     ):
         assert f'op.drop_column("simulations", "{removed_column}")' in upgrade
-    for body in (upgrade, downgrade):
-        assert "op.execute(" not in body
-        assert "op.bulk_insert(" not in body
-
-
-def test_cross_service_key_revision_only_drops_and_restores_foreign_keys() -> None:
-    """The revision after the simulation runs revision is generated.
-
-    Its upgrade drops each foreign key from a table the simulation service
-    writes to a table the Public API writes; its downgrade restores them.
-    """
-    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
-    children = [
-        revision
-        for revision in script.walk_revisions()
-        if revision.down_revision == CROSS_SERVICE_KEYS_PARENT_REVISION
-    ]
-    assert len(children) == 1
-    revision = Path(children[0].path).read_text(encoding="utf-8")
-    upgrade = revision[
-        revision.index("def upgrade()") : revision.index("def downgrade()")
-    ]
-    downgrade = revision[revision.index("def downgrade()") :]
-
-    assert (
-        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
-        in revision
-    )
-    assert "No post-generation corrections." in revision
-    dropped_tables = re.findall(
-        r'op\.drop_constraint\(\s*op\.f\("[^"]+"\),\s*"([a-z_]+)",\s*'
-        r'type_="foreignkey"',
-        upgrade,
-    )
-    restored_keys = re.findall(
-        r'op\.create_foreign_key\(\s*op\.f\("[^"]+"\),\s*"([a-z_]+)",\s*"([a-z_]+)"',
-        downgrade,
-    )
-    expected_count = sum(len(targets) for targets in CROSS_SERVICE_KEYS.values())
-    assert len(dropped_tables) == upgrade.count("op.drop_constraint(")
-    assert len(dropped_tables) == expected_count
-    assert {table: dropped_tables.count(table) for table in CROSS_SERVICE_KEYS} == {
-        table: len(targets) for table, targets in CROSS_SERVICE_KEYS.items()
-    }
-    assert len(restored_keys) == downgrade.count("op.create_foreign_key(")
-    restored_targets: dict[str, set[str]] = {}
-    for table, target in restored_keys:
-        restored_targets.setdefault(table, set()).add(target)
-    assert restored_targets == CROSS_SERVICE_KEYS
-    for body in (upgrade, downgrade):
-        for operation in (
-            "op.add_column(",
-            "op.drop_column(",
-            "op.create_table(",
-            "op.drop_table(",
-            "op.execute(",
-            "op.bulk_insert(",
-        ):
-            assert operation not in body
-
-
-def test_economy_output_revision_only_adds_columns_and_relaxes_two() -> None:
-    """The revision after the cross-service key revision is generated.
-
-    It adds the economy output's fields that had no column and lets a detailed
-    budget row omit its entity and tax flag; it removes nothing.
-    """
-    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
-    children = [
-        revision
-        for revision in script.walk_revisions()
-        if revision.down_revision == ECONOMY_OUTPUT_PARENT_REVISION
-    ]
-    assert len(children) == 1
-    revision = Path(children[0].path).read_text(encoding="utf-8")
-    upgrade = revision[
-        revision.index("def upgrade()") : revision.index("def downgrade()")
-    ]
-    downgrade = revision[revision.index("def downgrade()") :]
-
-    assert (
-        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
-        in revision
-    )
-    assert "No post-generation corrections." in revision
-    added_columns = set(
-        re.findall(r'op\.add_column\(\s*"(\w+)",\s*sa\.Column\(\s*"(\w+)"', upgrade)
-    )
-    uk_disclosure_columns = {
-        "disclosure_tier",
-        "average_household_income_change_lower",
-        "average_household_income_change_upper",
-        "relative_household_income_change_lower",
-        "relative_household_income_change_upper",
-    }
-    assert added_columns == {
-        ("report_runs", "spm_provenance"),
-        ("report_runs", "data_version"),
-        ("congressional_district_impacts", "winner_percentage"),
-        ("congressional_district_impacts", "loser_percentage"),
-        ("congressional_district_impacts", "no_change_percentage"),
-        *(("constituency_impacts", column) for column in uk_disclosure_columns),
-        *(("local_authority_impacts", column) for column in uk_disclosure_columns),
-    }
-    assert upgrade.count("op.add_column(") == len(added_columns)
-    relaxed_columns = re.findall(
-        r'op\.alter_column\(\s*"(\w+)",\s*"(\w+)",\s*'
-        r"existing_type=sa\.\w+\([^)]*\),\s*nullable=True",
-        upgrade,
-    )
-    assert upgrade.count("op.alter_column(") == 2
-    assert set(relaxed_columns) == {
-        ("program_statistics", "entity"),
-        ("program_statistics", "is_tax"),
-    }
-    assert downgrade.count("op.drop_column(") == len(added_columns)
-    for body in (upgrade, downgrade):
-        assert "op.drop_table(" not in body
-        assert "op.execute(" not in body
-        assert "op.bulk_insert(" not in body
-    assert "op.drop_column(" not in upgrade
-
-
-def test_result_identity_revision_adds_two_columns_and_widens_unique_keys() -> None:
-    """The revision after the economy output revision is generated.
-
-    It adds ``decile_impacts.decile_variable`` and ``poverty.filter_group`` and
-    rebuilds each comparison result table's unique key with the pair of
-    simulation runs, and ``poverty``'s with its group.
-    """
-    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
-    children = [
-        revision
-        for revision in script.walk_revisions()
-        if revision.down_revision == RESULT_IDENTITY_PARENT_REVISION
-    ]
-    assert len(children) == 1
-    revision = Path(children[0].path).read_text(encoding="utf-8")
-    upgrade = revision[
-        revision.index("def upgrade()") : revision.index("def downgrade()")
-    ]
-    downgrade = revision[revision.index("def downgrade()") :]
-
-    assert (
-        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
-        in revision
-    )
-    assert "No post-generation corrections." in revision
-    added_columns = set(
-        re.findall(r'op\.add_column\(\s*"(\w+)",\s*sa\.Column\(\s*"(\w+)"', upgrade)
-    )
-    assert added_columns == {
-        ("decile_impacts", "decile_variable"),
-        ("poverty", "filter_group"),
-    }
-    rebuilt_keys = {
-        table: name
-        for name, table in re.findall(
-            r'op\.create_unique_constraint\(\s*"(\w+)",\s*"(\w+)"', upgrade
-        )
-    }
-    assert rebuilt_keys == {
-        **COMPARISON_UNIQUE_KEYS,
-        "poverty": "uq_poverty_simulation_run_measure",
-    }
-    assert upgrade.count("op.drop_constraint(") == len(rebuilt_keys)
-    assert upgrade.count('"baseline_simulation_run_id",') == len(COMPARISON_UNIQUE_KEYS)
-    assert downgrade.count("op.create_unique_constraint(") == len(rebuilt_keys)
-    assert downgrade.count("op.drop_column(") == len(added_columns)
-    for body in (upgrade, downgrade):
-        assert "op.drop_table(" not in body
-        assert "op.execute(" not in body
-        assert "op.bulk_insert(" not in body
-    assert "op.drop_column(" not in upgrade
-
-
-def test_comparisons_revision_moves_untabled_results_to_one_row_per_pair() -> None:
-    """The revision after the result row identity revision is generated.
-
-    It creates ``report_run_comparisons`` and drops the four columns it takes
-    over from ``report_runs``; the downgrade puts them back.
-    """
-    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
-    children = [
-        revision
-        for revision in script.walk_revisions()
-        if revision.down_revision == COMPARISONS_PARENT_REVISION
-    ]
-    assert len(children) == 1
-    revision = Path(children[0].path).read_text(encoding="utf-8")
-    upgrade = revision[
-        revision.index("def upgrade()") : revision.index("def downgrade()")
-    ]
-    downgrade = revision[revision.index("def downgrade()") :]
-
-    assert (
-        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
-        in revision
-    )
-    assert "No post-generation corrections." in revision
-    assert 'op.create_table(\n        "report_run_comparisons"' in upgrade
-    assert "uq_report_run_comparisons_run_pair" in upgrade
-    assert upgrade.count("op.drop_column(") == len(UNTABLED_COMPARISON_COLUMNS)
-    assert downgrade.count("op.add_column(") == len(UNTABLED_COMPARISON_COLUMNS)
-    for column_name in UNTABLED_COMPARISON_COLUMNS:
-        assert f'op.drop_column("report_runs", "{column_name}")' in upgrade
-        assert f'"{column_name}"' in downgrade
-    assert 'op.drop_table("report_run_comparisons")' in downgrade
     for body in (upgrade, downgrade):
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body
