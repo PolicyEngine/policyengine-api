@@ -18,12 +18,14 @@ from policyengine_api.query_parameters import (
 )
 from policyengine_api.response_factory import _make_error_response
 from policyengine_api.services.economic_impact_request import EconomicImpactRequest
+from policyengine_api.services.economy_impact_types import (
+    FailedImpactDeletion,
+    FailedImpactDeletionOutcome,
+)
 from policyengine_api.services.economy_service import (
     BudgetWindowEconomicImpactResult,
     EconomicImpactResult,
     EconomyService,
-    FailedImpactDeletion,
-    FailedImpactDeletionOutcome,
 )
 from policyengine_api.services.policy_service import PolicyNotFoundError
 from policyengine_api.spm import (
