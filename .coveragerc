@@ -1,13 +1,19 @@
 [run]
 source = policyengine_api
+# Record file paths relative to the checkout, so a report written in one
+# checkout directory, such as a container job's, matches the same files in
+# another; with absolute paths diff-cover finds no changed file in it and
+# passes (api.quality.diff-coverage).
+relative_files = True
 
 [report]
-# Setting exclude_lines replaces coverage.py's default, so it lists that
-# default, `pragma: no cover`, again. Imports under `if TYPE_CHECKING:` never
-# run, and ruff's TC rules move imports there, so counting them as missed
-# would fail a fully tested change (api.quality.diff-coverage).
+# Setting exclude_lines replaces coverage.py's default, so the first pattern is
+# that default again, with `\#` because a value that starts with `#` is read as
+# a comment. Imports under `if TYPE_CHECKING:` never run, and ruff's TC rules
+# move imports there, so counting them as missed would fail a fully tested
+# change (api.quality.diff-coverage).
 exclude_lines =
-    pragma: no cover
+    \#\s*(pragma|PRAGMA)[:\s]?\s*(no|NO)\s*(cover|COVER)
     if TYPE_CHECKING:
 omit =
     tests/*

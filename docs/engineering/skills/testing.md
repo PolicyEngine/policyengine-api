@@ -92,7 +92,8 @@ the changed lines without blocking a merge.
 ### Changed lines
 
 `api.quality.diff-coverage`: at least 80% of the lines a pull request changes
-in `policyengine_api/` run in the unit or integration tests. The
+in `policyengine_api/` that coverage.py measures run in the unit or
+integration tests. The
 `diff-coverage` job in `pr.yml` runs after the `Test` shards and the
 integration tests. It downloads every shard's `coverage.xml` and the
 integration tests' `coverage-v2.xml`, and runs `diff-cover --fail-under=80`
@@ -112,12 +113,27 @@ out and their changed lines pass.
 `tests/unit/test_diff_coverage.py::test_coverage_reports_every_module_no_test_imports`
 fails for a directory without one. Lines under `if TYPE_CHECKING:`, which
 never run, and lines marked `# pragma: no cover` don't count (`.coveragerc`).
-Codecov's patch status shows the same 80% target but doesn't block a merge.
 
-To check before pushing, after `make test` has written `coverage.xml`:
+What counts as a line is coverage.py's: the first line of each statement.
+Changing the second or a later line of a statement that spans several lines
+adds nothing to the count, and a line that ran counts as covered even if one
+of its branches never ran. Only the `Test` shards and the tests in
+`v2-integration-check.yml` are measured: code that runs only in the Alembic
+checks, the environment-variable tests, `push.yml`'s live tests or a
+subprocess a test starts counts as uncovered. Moving code into a new file
+counts its lines as changed, so splitting a module that tests cover poorly
+needs tests for the moved code.
+
+Codecov's patch status shows an 80% target too, but doesn't block a merge,
+and its figure can differ: it compares with the `master` commit the branch
+left from or last merged in, and counts a line with a branch that never ran
+as not covered.
+
+To check before pushing, delete `.coverage` (`make test` adds to it), run
+`make test`, which writes `coverage.xml`, and then:
 
 ```bash
-uv run --frozen --extra dev diff-cover coverage.xml --compare-branch=origin/master --fail-under=80
+uv run --frozen --extra dev --python 3.12 diff-cover coverage.xml --compare-branch=origin/master --fail-under=80
 ```
 
 That leaves out the integration tests, which need the databases
