@@ -553,17 +553,19 @@ model changes:
   calculate their simulations again (`recalculate`), status, error and times.
   `report_runs.budget_window_run_id` and `year` name the window run and year a
   report run calculates, at most one report run per year of a window run; a
-  composite foreign key keeps it to a window run of the same report. That key
-  is `NO ACTION`, which PostgreSQL checks at the end of the statement, so
-  deleting a report deletes its window runs and their report runs together.
+  composite foreign key keeps it to a window run of the same report, and
+  deletes it with the window run (`CASCADE`), as deleting a report deletes its
+  runs.
 - `household_jobs` calculates one household (`household_id`) for one `year`
   under one policy, and records its catalog and package versions and its
   Modal call ID.
 - The new columns that name the Public API's rows are foreign keys with the
   delete rules the same columns have on `simulations`:
   `simulation_runs.tax_benefit_model_version_id` and `dataset_id` (`RESTRICT`)
-  and `region_id` (`SET NULL`), and `household_jobs.household_id` and
-  `tax_benefit_model_version_id` (`RESTRICT`). `reports.user_id` gains an
+  and `region_id` (`SET NULL`), `household_jobs.household_id` and
+  `tax_benefit_model_version_id` (`RESTRICT`), and
+  `budget_window_runs.tax_benefit_model_version_id` (`RESTRICT`), 20 keys
+  between the two services' tables in all. `reports.user_id` gains an
   index, which account deletion's `SET NULL` searches. Each service writes only
   its own tables, and the foreign keys between them stay: PostgreSQL checks
   each named row when a row is written, with the privileges of the named

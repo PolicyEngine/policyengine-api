@@ -1,14 +1,16 @@
 """Check the simulation runs revision against disposable Postgres.
 
 One revision follows the parameter search file revision. It adds simulation
-runs and the table naming the simulation runs a report run combines, keys
-every result table by run, gives household jobs one household, one year and
-one policy, drops the foreign keys from those tables to the Public API's
-tables, adds the economy output's fields that had no column, and keeps the
-parts of a comparison without a result table in one row per compared pair. It
-changes no other table. The previous Public API revision keeps working while
-it is deployed: its roles can't read or write any table it changes, except the
-catalog writer, which counts the rows of simulations, reports and report_runs.
+runs, one per simulation and year; has each report run name its baseline and
+reform simulation runs; keys every result table by run; types a report run's
+cliff impact and labour supply; adds the budget-window tables; gives household
+jobs one household, one year and one policy; and adds the economy output's
+fields that had no column. The foreign keys from those tables to the Public
+API's tables stay, and the new columns that name the Public API's rows get
+keys too. It changes no other table. The previous Public API revision keeps
+working while it is deployed: its roles can't read or write any table it
+changes, except the catalog writer, which counts the rows of simulations,
+reports and report_runs.
 """
 
 from __future__ import annotations
@@ -213,29 +215,15 @@ def _enum_type_names(engine: Engine) -> set[str]:
         )
 
 
-def test_the_revision_adds_its_tables_and_changes_only_simulation_side_tables(
-    config: Config, engine: Engine
-) -> None:
-    command.downgrade(config, SIMULATION_RUNS_PREVIOUS_REVISION)
-    before = _shapes(engine)
-    command.upgrade(config, "head")
-    after = _shapes(engine)
-
-    assert set(after) - set(before) == NEW_TABLES
-    assert set(before) <= set(after)
-    changed = {
-        table_name for table_name in before if before[table_name] != after[table_name]
-    }
-    assert changed == CHANGED_TABLES
-
-
 def test_the_revision_downgrades_to_its_parent_and_upgrades_again(
     config: Config, engine: Engine
 ) -> None:
+    """The revision adds its tables and changes only simulation-side tables."""
     command.upgrade(config, "head")
 
     command.downgrade(config, SIMULATION_RUNS_PREVIOUS_REVISION)
-    assert NEW_TABLES.isdisjoint(inspect(engine).get_table_names(schema="public"))
+    before = _shapes(engine)
+    assert NEW_TABLES.isdisjoint(before)
     assert {"status", "household_result", "output_dataset_id"} <= _column_names(
         engine, "simulations"
     )
@@ -253,6 +241,13 @@ def test_the_revision_downgrades_to_its_parent_and_upgrades_again(
 
     command.upgrade(config, "head")
     command.check(config)
+    after = _shapes(engine)
+    assert set(after) - set(before) == NEW_TABLES
+    assert set(before) <= set(after)
+    changed = {
+        table_name for table_name in before if before[table_name] != after[table_name]
+    }
+    assert changed == CHANGED_TABLES
     assert {"baseline_simulation_run_id", "reform_simulation_run_id"} <= (
         _column_names(engine, "report_runs")
     )
@@ -746,14 +741,18 @@ def test_budget_windows_hold_one_report_run_per_year(
         insert_year(2028, of_report=other_report_id)
     with refused(connection, match="ck_simulation_runs_year"):
         _insert_simulation_run(connection, simulation_id, year=1800)
-    with refused(connection, match="foreign key constraint"):
-        connection.execute(
-            text("DELETE FROM budget_window_runs WHERE id = :id"),
-            {"id": window_run_id},
-        )
+    # A window run owns its years, as the report owns its runs.
+    second_window_run_id = _insert_budget_window_run(
+        connection, public_api_rows, report_id
+    )
+    connection.execute(
+        text("DELETE FROM budget_window_runs WHERE id = :id"),
+        {"id": window_run_id},
+    )
+    assert _count(connection, "report_runs", "budget_window_run_id", window_run_id) == 0
 
     connection.execute(text("DELETE FROM reports WHERE id = :id"), {"id": report_id})
-    assert _count(connection, "budget_window_runs", "report_id", report_id) == 0
+    assert _count(connection, "budget_window_runs", "id", second_window_run_id) == 0
     assert _count(connection, "report_runs", "report_id", report_id) == 0
 
 

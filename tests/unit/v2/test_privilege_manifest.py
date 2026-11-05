@@ -105,16 +105,21 @@ RUN_DEFINITION_COLUMNS = {
             "year",
             "country_package_version",
             "policyengine_version",
+            "trigger",
+            "idempotency_key",
         }
     ),
     "household_jobs": frozenset(
         {
+            "country",
             "household_id",
             "year",
             "policy_id",
             "dynamic_id",
             "request_data",
             "tax_benefit_model_version_id",
+            "country_package_version",
+            "policyengine_version",
         }
     ),
 }

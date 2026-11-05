@@ -441,8 +441,8 @@ def test_report_runs_hold_one_year_of_a_budget_window_run() -> None:
         for constraint in report_runs.foreign_key_constraints
         if constraint.referred_table.name == "budget_window_runs"
     )
-    # A year's report run belongs to a window run of the same report. The check
-    # waits for the end of the statement, so deleting the report deletes both.
+    # A year's report run belongs to a window run of the same report, which
+    # owns it as the report owns its runs.
     assert [column.name for column in window_key.columns] == [
         "budget_window_run_id",
         "report_id",
@@ -451,7 +451,7 @@ def test_report_runs_hold_one_year_of_a_budget_window_run() -> None:
         "budget_window_runs.id",
         "budget_window_runs.report_id",
     ]
-    assert window_key.ondelete is None
+    assert window_key.ondelete == "CASCADE"
     assert ("budget_window_run_id", "year") in _unique_column_sets(report_runs)
     assert {"ck_report_runs_year", "ck_report_runs_budget_window_year"} <= (
         _check_names(report_runs)
@@ -603,6 +603,5 @@ def test_decile_rows_name_the_variable_that_groups_them() -> None:
     statement = str(CreateTable(decile_impacts).compile(dialect=postgresql.dialect()))
     assert (
         "CONSTRAINT uq_decile_impacts_run_measure UNIQUE NULLS NOT DISTINCT "
-        "(report_run_id, baseline_simulation_run_id, reform_simulation_run_id, "
-        "income_variable, decile_variable, entity, decile, quantiles)"
+        "(report_run_id, income_variable, decile_variable, entity, decile, quantiles)"
     ) in statement

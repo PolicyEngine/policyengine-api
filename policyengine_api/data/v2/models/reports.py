@@ -264,13 +264,13 @@ class ReportRun(TimestampedModel, table=True):
             "year",
             name="uq_report_runs_budget_window_run_id_year",
         ),
-        # A year's report run belongs to a budget-window run of its own report.
-        # NO ACTION waits for the end of the statement, so deleting the report
-        # deletes the window run and its years together.
+        # A year's report run belongs to a budget-window run of its own report,
+        # which owns it as the report owns its runs.
         sa.ForeignKeyConstraint(
             ["budget_window_run_id", "report_id"],
             ["budget_window_runs.id", "budget_window_runs.report_id"],
             name="fk_report_runs_budget_window_run_id_budget_window_runs",
+            ondelete="CASCADE",
         ),
         sa.CheckConstraint(
             "(baseline_cliff_gap IS NULL) = (baseline_cliff_share IS NULL) "
