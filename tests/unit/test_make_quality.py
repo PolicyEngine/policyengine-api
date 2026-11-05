@@ -10,7 +10,9 @@ shard's coverage report, so pr.yml runs it in a job of its own.
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -35,15 +37,15 @@ CHECKS = (
     f"{LOCKED} lint-imports --config pyproject.toml",
     f"{LOCKED} mypy",
     # Without site-packages (-S), so the guards keep to the standard library,
-    # as push.yml runs them; and comparing baselines with the base branch,
-    # as CI does, or with master locally.
-    f"GITHUB_BASE_REF=$${{GITHUB_BASE_REF:-master}} {LOCKED} python -S "
-    "scripts/run_quality_guards.py",
+    # as push.yml runs them; and comparing baselines and rule statuses with
+    # the commit the branch shares with its base branch (master locally).
+    "RULES_BASE_REF=$$(git merge-base HEAD origin/$${GITHUB_BASE_REF:-master}) "
+    f"{LOCKED} python -S scripts/run_quality_guards.py",
 )
 # The tools that pr.yml may run only through make quality.
 CHECK_TOOLS = re.compile(r"\b(ruff|mypy|lint-imports|run_quality_guards\.py)\b")
 # The quality job's steps, which may not be skipped or allowed to fail.
-REQUIRED_STEPS = ("make quality", "git diff --exit-code")
+REQUIRED_STEPS = ("make quality", "git diff --exit-code HEAD")
 JOB = "quality-guards"
 
 
@@ -137,6 +139,7 @@ def test_make_quality_runs_every_check_and_ci_runs_it():
 ACCEPTED_MAKEFILE = (FIXTURES / "accepted" / "Makefile").read_text(encoding="utf-8")
 ACCEPTED_WORKFLOW = (FIXTURES / "accepted" / "pr.yml").read_text(encoding="utf-8")
 MAKE_QUALITY_STEP = "      - run: make quality\n"
+DIFF_STEP = "      - run: git diff --exit-code HEAD\n"
 
 
 @pytest.mark.parametrize(
@@ -187,12 +190,89 @@ MAKE_QUALITY_STEP = "      - run: make quality\n"
             "pr.yml's format job runs ruff itself",
             id="ruff at the end of a command",
         ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            "env:\n  MAKEFLAGS: -i\n" + ACCEPTED_WORKFLOW,
+            "MAKEFLAGS",
+            id="MAKEFLAGS for the workflow",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW.replace(
+                "  quality-guards:\n",
+                "  quality-guards:\n    env:\n      MAKEFLAGS: -i\n",
+            ),
+            "MAKEFLAGS",
+            id="MAKEFLAGS for the job",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW.replace(
+                MAKE_QUALITY_STEP,
+                MAKE_QUALITY_STEP + "        env:\n          MAKEFLAGS: -i\n",
+            ),
+            "MAKEFLAGS",
+            id="MAKEFLAGS for the step",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW.replace(
+                MAKE_QUALITY_STEP, MAKE_QUALITY_STEP + "        shell: bash {0}\n"
+            ),
+            "may skip or ignore 'make quality'",
+            id="step shell",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW.replace(
+                DIFF_STEP, "      - run: git add -A\n" + DIFF_STEP
+            ),
+            "must run make quality, then git diff --exit-code HEAD",
+            id="a step between make quality and git diff",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE.replace(
+                "\tuv lock --check\n", "\tuv lock\n\tuv lock --check\n"
+            ),
+            ACCEPTED_WORKFLOW,
+            "changes files: 'uv lock'",
+            id="quality-check relocks",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE + "\nquality-check: ; @true\n",
+            ACCEPTED_WORKFLOW,
+            "after ';'",
+            id="a recipe after a semicolon replaces the checks",
+        ),
     ],
 )
 def test_ways_to_skip_or_ignore_a_check_are_rejected(makefile, workflow, problem):
     problems = quality_problems(makefile, workflow)
 
     assert any(problem in reported for reported in problems), problems
+
+
+def test_make_itself_runs_the_listed_commands():
+    # The Makefile reader follows a subset of make. make -n prints what make
+    # would run, in CI's environment, so make itself must agree with it.
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if name not in {"MAKEFLAGS", "MFLAGS", "MAKELEVEL"}
+    }
+    environment["GITHUB_ACTIONS"] = "true"
+    printed = subprocess.run(
+        ["make", "-n", "--no-print-directory", "quality"],
+        cwd=REPO,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+
+    # make -n also prints the recursive call, as its own path to make.
+    commands = [line for line in printed if not line.endswith("make quality-check")]
+    assert commands == [command.replace("$$", "$") for command in (*FIXES, *CHECKS)]
 
 
 def test_the_quality_job_can_run_every_check():

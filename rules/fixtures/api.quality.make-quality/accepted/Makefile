@@ -13,4 +13,4 @@ quality-check:
 	uv run --frozen --extra dev ruff format --check .
 	uv run --frozen --extra dev lint-imports --config pyproject.toml
 	uv run --frozen --extra dev mypy
-	GITHUB_BASE_REF=$${GITHUB_BASE_REF:-master} uv run --frozen --extra dev python -S scripts/run_quality_guards.py
+	RULES_BASE_REF=$$(git merge-base HEAD origin/$${GITHUB_BASE_REF:-master}) uv run --frozen --extra dev python -S scripts/run_quality_guards.py

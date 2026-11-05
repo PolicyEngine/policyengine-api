@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from scripts.rules.makefile import (
     make_commands,
     make_recipes,
     make_targets_run,
     makefile_problems,
+    root_makefile_problems,
 )
 from scripts.rules.tests.support import Repo
 
@@ -82,6 +85,39 @@ class MakefileProblemsTest(unittest.TestCase):
 
                 self.assertTrue(any(name in problem for problem in problems), problems)
 
+    def test_reports_syntax_the_reader_does_not_follow(self) -> None:
+        # Each can change what make runs without the reader seeing it, so the
+        # reader rejects it rather than guess.
+        for setting, name in (
+            ("include extra.mk\n", "include"),
+            ("-include extra.mk\n", "include"),
+            ("ifdef GITHUB_ACTIONS\ncheck:\n\t@true\nendif\n", "ifdef"),
+            ("ifeq ($(CI),true)\nendif\n", "ifeq"),
+            ("define SKIP\n@true\nendef\n", "define"),
+            ("$(eval MAKEFLAGS += -i)\n", "$(eval"),
+            ('check: ; @echo "nothing runs"\n', "after ';'"),
+        ):
+            with self.subTest(setting=setting):
+                problems = makefile_problems("check:\n\tmypy\n" + setting)
+
+                self.assertTrue(any(name in problem for problem in problems), problems)
+
+    def test_reports_another_makefile_make_reads_first(self) -> None:
+        # GNU make reads GNUmakefile, then makefile, before Makefile.
+        for name in ("GNUmakefile", "makefile"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "Makefile").write_text(MAKEFILE)
+                (root / name).write_text("quality:\n\t@true\n")
+                listed = {path.name for path in root.iterdir()}
+                if listed != {"Makefile", name}:
+                    # A file system that ignores case keeps one of the two.
+                    continue
+
+                problems = root_makefile_problems(root)
+
+                self.assertTrue(any(name in problem for problem in problems), problems)
+
     def test_ordinary_rules_and_variables_are_fine(self) -> None:
         self.assertEqual(makefile_problems(MAKEFILE), [])
 
@@ -112,7 +148,15 @@ class MakeTargetsRunTest(unittest.TestCase):
             ["quality", "test"],
         )
         self.assertEqual(make_targets_run("$(MAKE) quality-check"), ["quality-check"])
-        self.assertEqual(make_targets_run("make -C docs html"), ["html"])
+        # Another directory's or file's targets aren't the root Makefile's.
+        for command in (
+            "make -C docs html",
+            "make --directory=docs html",
+            "make -f other.mk quality",
+            "make --file=other.mk quality",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(make_targets_run(command), [])
 
     def test_a_call_that_runs_no_command_or_ignores_failures_runs_nothing(
         self,
@@ -128,6 +172,18 @@ class MakeTargetsRunTest(unittest.TestCase):
             "make -i quality",
             "make --ignore-errors quality",
             "make -ki quality",
+            # GNU make accepts an unambiguous start of a long option.
+            "make --dry quality",
+            "make --just quality",
+            "make --ign quality",
+            # These print something and exit.
+            "make -v quality",
+            "make --version quality",
+            "make -h quality",
+            "make --help quality",
+            # MAKEFLAGS in the command's environment works as the options do.
+            "MAKEFLAGS=-i make quality",
+            "env MAKEFLAGS=i make quality",
         ):
             with self.subTest(command=command):
                 self.assertEqual(make_targets_run(command), [])

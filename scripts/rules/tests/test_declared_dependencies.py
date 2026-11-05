@@ -650,8 +650,11 @@ class TestWorkflows(unittest.TestCase):
                         'UV_PYTHON: "3.12"', _job_text(workflow_text, job.id) + header
                     )
                     self.assertTrue(
-                        "uv sync --frozen --extra dev" in job.run_text
-                        or "uv run --frozen --extra dev" in job.run_text
+                        any(
+                            "uv sync --frozen --extra dev" in command
+                            or "uv run --frozen --extra dev" in command
+                            for command in commands
+                        )
                     )
         self.assertEqual(
             guard_jobs, ["pr.yml:quality-guards", "push.yml:quality-guards"]
