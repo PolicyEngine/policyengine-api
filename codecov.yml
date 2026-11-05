@@ -1,0 +1,47 @@
+# Codecov settings (rule api.quality.coverage-measured;
+# tests/unit/test_codecov_coverage.py checks them with the uploads).
+#
+# Two flags tell the uploads apart:
+#   unit         make test: pr.yml's upload-test-coverage, and push.yml's
+#                upload-release-test-coverage on each release commit.
+#   integration  the cross-database integration tests in
+#                v2-integration-check.yml, on pull requests and merge commits.
+# Both measure policyengine_api (.coveragerc's source), so both have its path.
+#
+# A commit that uploads one flag carries the other forward from its Codecov
+# parent. A master merge commit, which uploads only integration, gets unit
+# from the pull request head (Codecov takes a merge commit's second parent as
+# its parent); the release commit, which uploads only unit, gets integration
+# from the merge commit. A pull request's project coverage is therefore
+# compared with a base that measured both.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        # Room for rounding and for lines whose coverage moves between runs.
+        threshold: 0.5%
+    patch:
+      default:
+        target: auto
+        # Reported but not blocking until the minimum for changed lines is
+        # decided and enforced.
+        informational: true
+
+flag_management:
+  default_rules:
+    carryforward: true
+  individual_flags:
+    - name: unit
+      paths:
+        - policyengine_api/
+      carryforward: true
+    - name: integration
+      paths:
+        - policyengine_api/
+      carryforward: true
+
+ignore:
+  - "tests/**"
+  # Alembic revisions stay exactly as Alembic generated them.
+  - "migrations/*/versions/**"

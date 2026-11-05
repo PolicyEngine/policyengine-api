@@ -102,3 +102,8 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: PolicyEngine/policyengine-api
           files: coverage-v2.xml
+          # codecov.yml defines the flag and carries it forward.
+          flags: integration
+          # On a merge to master a failed upload fails the run, so master's
+          # coverage can't silently go unmeasured.
+          fail_ci_if_error: ${{ github.event_name == 'push' }}

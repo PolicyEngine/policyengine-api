@@ -1306,6 +1306,31 @@ job = "check-test-shards"
 invocation = "scripts.release_test_shards check-coverage"
 
 [[rule]]
+id = "api.quality.coverage-measured"
+category = "quality"
+statement = "Codecov measures the same tests on master as on pull requests: every CI job that measures test coverage sends it to Codecov with a flag that codecov.yml carries forward (unit for make test, in pr.yml and in push.yml's release tests; integration for the cross-database integration tests), passing the CODECOV_TOKEN secret, and an upload in a master run fails the run when it fails."
+rationale = "docs/engineering/skills/testing.md#coverage"
+scope = ["codecov.yml", ".github/workflows/*.yml"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/test_codecov_coverage.py::test_every_coverage_upload_is_flagged_and_master_uploads_fail_the_run",
+  "tests/unit/test_codecov_coverage.py::test_master_and_pull_requests_measure_both_flags",
+  "tests/unit/test_codecov_coverage.py::test_master_uploads_the_release_tests_coverage_in_one_upload",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.quality.coverage-measured/rejected"
+good_fixture = "rules/fixtures/api.quality.coverage-measured/accepted"
+test = "tests/unit/test_codecov_coverage.py::test_rule_proof_coverage_measured"
+
+[[rule]]
 id = "api.quality.environment-variables-load"
 category = "quality"
 statement = "Required environment variables and credentials load in a deployed-like environment."

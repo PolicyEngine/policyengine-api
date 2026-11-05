@@ -22,6 +22,35 @@ versions the Cloud Run image installs (`gcp/cloud_run/Dockerfile`):
   and `api.dependencies.test-from-lock`
   ([dependencies.md](dependencies.md)) check every install and test command.
 
+## Coverage
+
+`api.quality.coverage-measured`: Codecov measures the same tests on `master`
+as on pull requests, so a pull request's project coverage is compared with a
+base that measured them too. `codecov.yml` defines two flags, both carried
+forward and both covering `policyengine_api/` (`.coveragerc`'s source):
+
+- `unit`: `make test`. On a pull request, the six `Test` shards keep their
+  `coverage.xml`, and `upload-test-coverage` in `pr.yml` sends them to
+  Codecov in one upload. On `master`, `push.yml`'s `release-tests` shards do
+  the same on each release commit, and `upload-release-test-coverage` sends
+  them; it is the only run of the unit tests on the merged code.
+- `integration`: the cross-database integration tests in
+  `v2-integration-check.yml`, on pull requests and merge commits.
+
+A commit that uploads one flag carries the other forward from its Codecov
+parent. A merge commit, which uploads only `integration`, gets `unit` from
+the pull request head: Codecov takes a merge commit's second parent as its
+parent. The release commit, which uploads only `unit`, gets `integration`
+from the merge commit.
+
+Every upload passes the `CODECOV_TOKEN` repository secret as its `token`, and
+an upload on `master` fails the run when it fails (`fail_ci_if_error`).
+`tests/unit/test_codecov_coverage.py` checks the uploads and `codecov.yml`:
+a new job that measures coverage needs an upload with one of the flags.
+
+The project status allows a 0.5% drop. The patch status reports coverage of
+the changed lines without blocking a merge.
+
 ## Tests That Run a Country Model
 
 A new unit test stands in for the country model: a calculation with the

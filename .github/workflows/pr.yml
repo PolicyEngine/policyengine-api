@@ -351,6 +351,8 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: PolicyEngine/policyengine-api
           directory: ${{ runner.temp }}/test-coverage
+          # codecov.yml defines the flag and carries it forward.
+          flags: unit
 
   check-test-shards:
     # Fails unless every shard collected the same tests and each test ran in

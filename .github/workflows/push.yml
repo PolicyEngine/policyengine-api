@@ -343,6 +343,45 @@ jobs:
           path: ${{ runner.temp }}/release-test-shard
           if-no-files-found: error
           retention-days: 7
+      # upload-release-test-coverage sends every shard's report to Codecov at
+      # once.
+      - name: Keep this shard's coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-test-coverage-shard-${{ matrix.shard_index }}
+          path: coverage.xml
+          if-no-files-found: error
+          retention-days: 7
+
+  upload-release-test-coverage:
+    # Sends the six release-test shards' coverage reports to Codecov in one
+    # upload, flagged unit, as pr.yml's upload-test-coverage does for pull
+    # requests. The release commit is the only master commit whose unit tests
+    # run, so this measures the merged code; codecov.yml carries the
+    # integration flag forward from the merge commit. A failed upload fails
+    # the run. The staging deploy doesn't wait for it.
+    name: Upload the release test coverage to Codecov
+    runs-on: ubuntu-latest
+    needs: release-tests
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Download every shard's coverage report
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-test-coverage-shard-*
+          path: ${{ runner.temp }}/release-test-coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: PolicyEngine/policyengine-api
+          directory: ${{ runner.temp }}/release-test-coverage
+          # codecov.yml defines the flag and carries it forward.
+          flags: unit
+          fail_ci_if_error: true
 
   check-release-test-shards:
     # Fails unless every shard collected the same tests and each test ran in
