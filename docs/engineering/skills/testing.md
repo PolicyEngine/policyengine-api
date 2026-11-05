@@ -93,17 +93,19 @@ the changed lines without blocking a merge.
 
 `api.quality.diff-coverage`: at least 80% of the lines a pull request changes
 in `policyengine_api/` that coverage.py measures run in the unit or
-integration tests. The
-`diff-coverage` job in `pr.yml` runs after the `Test` shards and the
-integration tests. It downloads every shard's `coverage.xml` and the
-integration tests' `coverage-v2.xml`, and runs `diff-cover --fail-under=80`
-against `HEAD^1`. CI checks out GitHub's merge of the pull request into its
-base branch, so `HEAD^1` is that branch as the merge saw it, and the diff
-holds only the pull request's changes. The event's `base.sha` isn't used: it
-can stay where the branch left `master`, which would count `master`'s later
-changes as the pull request's. A line counts as covered if any report covers
-it. `CI complete` needs the job, so a pull request below the minimum can't
-merge. The job's log lists each changed file's uncovered lines.
+integration tests. The `diff-coverage` job in `pr.yml` runs after the `Test`
+shards and the integration tests. It downloads every shard's `coverage.xml`
+and the integration tests' `coverage-v2.xml`, and runs
+`diff-cover --fail-under=80` against `HEAD^1`. CI checks out the merge commit
+GitHub builds for the pull request, so `HEAD^1` is the commit that merge is
+built on: the base branch, or for a pull request stacked on another, the
+lower one's merge commit (the job runs only on the lowest pull request of a
+stack). Either way the diff holds only the pull request's changes. The
+event's `base.sha` isn't used: it can stay where the branch left `master`,
+which would count `master`'s later changes as the pull request's. A line
+counts as covered if any report covers it. `CI complete` needs the job, so a
+pull request below the minimum can't merge. The job's log lists each changed
+file's uncovered lines.
 
 Only measured files count, so a pull request that changes no code under
 `policyengine_api/` passes. coverage.py measures every module there, whether
@@ -111,8 +113,10 @@ or not a test imports it, but only inside a package: every directory under
 `policyengine_api/` needs an `__init__.py`, or its untested modules are left
 out and their changed lines pass.
 `tests/unit/test_diff_coverage.py::test_coverage_reports_every_module_no_test_imports`
-fails for a directory without one. Lines under `if TYPE_CHECKING:`, which
-never run, and lines marked `# pragma: no cover` don't count (`.coveragerc`).
+fails for a directory without one. Lines that never run by design don't
+count (`.coveragerc`): imports under `if TYPE_CHECKING:`, `...` alone on a
+line (the bodies of Protocol methods and other stubs), and lines marked
+`# pragma: no cover`.
 
 What counts as a line is coverage.py's: the first line of each statement.
 Changing the second or a later line of a statement that spans several lines
@@ -122,7 +126,9 @@ of its branches never ran. Only the `Test` shards and the tests in
 checks, the environment-variable tests, `push.yml`'s live tests or a
 subprocess a test starts counts as uncovered. Moving code into a new file
 counts its lines as changed, so splitting a module that tests cover poorly
-needs tests for the moved code.
+needs tests for the moved code. git's rename detection is the exception: a
+new file at least 50% similar to a file the pull request deletes is paired
+with it, and only its edited lines count.
 
 Codecov's patch status shows an 80% target too, but doesn't block a merge,
 and its figure can differ: it compares with the `master` commit the branch

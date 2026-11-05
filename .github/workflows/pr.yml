@@ -423,11 +423,13 @@ jobs:
         with:
           name: integration-coverage
           path: ${{ runner.temp }}/coverage/integration-coverage
-      # The checkout is GitHub's merge of the pull request into its base
-      # branch, so HEAD^1 is that branch as the merge saw it and the diff
-      # holds only the pull request's changes. The event's base.sha can be
-      # older: it often stays where the branch left master, and comparing
-      # with it would count master's later changes too.
+      # The checkout is the merge commit GitHub builds for the pull request,
+      # so HEAD^1 is the commit that merge is built on: the base branch, or
+      # for a pull request stacked on another, the lower one's merge commit
+      # (this job is skipped there). Either way the diff holds only the pull
+      # request's changes. The event's base.sha can be older: it often stays
+      # where the branch left master, and comparing with it would count
+      # master's later changes too.
       - name: Check the coverage of the changed lines
         run: uv run --frozen --extra dev diff-cover "$RUNNER_TEMP"/coverage/*/coverage*.xml --compare-branch=HEAD^1 --fail-under=80
 

@@ -1445,7 +1445,7 @@ test = "tests/unit/test_codecov_coverage.py::test_rule_proof_coverage_measured"
 [[rule]]
 id = "api.quality.diff-coverage"
 category = "quality"
-statement = "The lines a pull request changes in policyengine_api that coverage.py measures (the first line of each statement) are at least 80% covered by the unit and integration tests together: pr.yml's diff-coverage job runs diff-cover --fail-under=80 on every test shard's and the integration tests' coverage reports, against the base branch the merge commit CI checks out is built on (HEAD^1), and CI complete needs it."
+statement = "The lines a pull request changes in policyengine_api that coverage.py measures (the first line of each statement) are at least 80% covered by the unit and integration tests together: pr.yml's diff-coverage job runs diff-cover --fail-under=80 on every test shard's and the integration tests' coverage reports, against the commit that the merge commit CI checks out is built on (HEAD^1: the base branch, or a lower stacked pull request's merge commit), and CI complete needs it."
 rationale = "docs/engineering/skills/testing.md#changed-lines"
 scope = ["policyengine_api/**/*.py"]
 tier = "metric"
