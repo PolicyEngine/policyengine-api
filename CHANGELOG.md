@@ -1,3 +1,18 @@
+## [5.32.0] - 2026-11-05
+
+### Added
+
+- Pull requests must now cover at least 80% of the lines they change in `policyengine_api/` with the unit and integration tests together, checked by a new diff-cover job that `CI complete` needs.
+
+### Changed
+
+- Codecov now measures the unit tests on master too, from the release tests on each release commit and its merge commit, and tells unit and integration coverage apart with flags it carries forward, so most pull requests' coverage is compared with a base that measured the same tests; a failed upload on master fails the run without stopping the release.
+
+### Fixed
+
+- Reject an exception from the API v2 file-layer check that has no expires date, sets `category`, `removal` or `match`, names a module in a `database_connectors` package, or gives a path other than the one `git ls-files` lists, and say in the fix message where each layer name must sit.
+
+
 ## [5.31.0] - 2026-11-05
 
 ### Added
