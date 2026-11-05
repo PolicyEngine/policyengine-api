@@ -1,3 +1,10 @@
+## [5.30.0] - 2026-11-05
+
+### Added
+
+- A `DELETE` on an annual economy URL, with the GET's query, removes the stored failure the GET answers from once it is at least 10 seconds old, so the next GET starts a new run, and a failed GET's 502 says when in `delete_after_seconds`.
+
+
 ## [5.29.0] - 2026-11-05
 
 ### Added
