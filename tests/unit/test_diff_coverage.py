@@ -184,7 +184,7 @@ def test_rule_proof_diff_coverage(tmp_path: Path):
     at_minimum = _run_diff_cover(FIXTURES / "at_threshold.toml", tmp_path / "at")
 
     assert below.returncode != 0, below.stdout
-    assert "Coverage: 70%" in below.stdout
+    assert "Coverage: 79%" in below.stdout
     assert at_minimum.returncode == 0, at_minimum.stdout
     assert "Coverage: 80%" in at_minimum.stdout
 
@@ -236,6 +236,44 @@ def test_a_line_counts_as_covered_if_any_report_covers_it(tmp_path: Path):
     assert "Coverage: 80%" in result.stdout
 
 
+def test_reports_match_the_changed_files_in_another_checkout(tmp_path: Path):
+    # A report names each file by a source directory and the path below it.
+    # An absolute source written in another checkout directory, such as a
+    # container job's, matches no changed file, and diff-cover then passes with
+    # "No lines with coverage information". The pull request adds an untested
+    # function: one of its two changed lines runs.
+    base = "VALUE = 0\n"
+    head = base + "def untested():\n    return VALUE\n"
+    measured = tmp_path / "measured"
+    (measured / "policyengine_api").mkdir(parents=True)
+    (measured / "policyengine_api" / "__init__.py").write_text("")
+    (measured / "policyengine_api" / "module.py").write_text(head)
+    (measured / "run.py").write_text("import policyengine_api.module\n")
+    report = tmp_path / "coverage.xml"
+    data_file = tmp_path / ".coverage"
+    rcfile = f"--rcfile={COVERAGE_CONFIG}"
+    _run_coverage(measured, data_file, "run", rcfile, "--branch", "run.py")
+    _run_coverage(measured, data_file, "xml", rcfile, "-q", "-o", str(report))
+    checked = tmp_path / "checked"
+    (checked / "policyengine_api").mkdir(parents=True)
+    (checked / "policyengine_api" / "__init__.py").write_text("")
+    (checked / "policyengine_api" / "module.py").write_text(base)
+    _git(checked, "init", "--quiet")
+    _git(checked, "add", ".")
+    _git(checked, "commit", "--quiet", "-m", "base")
+    (checked / "policyengine_api" / "module.py").write_text(head)
+    _git(checked, "commit", "--quiet", "-am", "the pull request's change")
+
+    result = _run_job_check(
+        checked,
+        {"test-coverage-shard-1/coverage.xml": report.read_text()},
+        base_sha="unused",
+    )
+
+    assert result.returncode != 0, result.stdout
+    assert "Coverage: 50%" in result.stdout
+
+
 def test_coverage_reports_every_module_no_test_imports(tmp_path: Path):
     # diff-cover only counts the files a report lists. coverage.py lists a
     # module no test imported only if every directory between it and the
@@ -261,7 +299,8 @@ def test_coverage_reports_every_module_no_test_imports(tmp_path: Path):
 def test_type_only_imports_and_pragmas_are_not_counted_as_missed(tmp_path: Path):
     # Imports under `if TYPE_CHECKING:` never run, and ruff's TC rules move
     # imports there, so counting them would fail a fully tested change.
-    # `pragma: no cover` keeps working too.
+    # coverage.py's default `pragma: no cover` pattern keeps working too, in
+    # each spelling it accepts.
     package = tmp_path / "policyengine_api"
     package.mkdir()
     (package / "__init__.py").write_text("")
@@ -276,6 +315,14 @@ def test_type_only_imports_and_pragmas_are_not_counted_as_missed(tmp_path: Path)
         "\n"
         "def unused():  # pragma: no cover\n"
         "    return VALUE\n"
+        "\n"
+        "\n"
+        "def also_unused():  #pragma:no cover\n"
+        "    return VALUE\n"
+        "\n"
+        "\n"
+        "def unused_too():  # PRAGMA NO COVER\n"
+        "    return VALUE\n"
     )
     (tmp_path / "run.py").write_text("import policyengine_api.module\n")
     report = tmp_path / "coverage.json"
@@ -287,7 +334,7 @@ def test_type_only_imports_and_pragmas_are_not_counted_as_missed(tmp_path: Path)
 
     module = json.loads(report.read_text())["files"]["policyengine_api/module.py"]
     assert module["missing_lines"] == []
-    assert {4, 10} <= set(module["excluded_lines"])
+    assert {4, 10, 14, 18} <= set(module["excluded_lines"])
 
 
 def test_pull_requests_check_the_coverage_of_their_changed_lines():
@@ -301,6 +348,9 @@ def test_pull_requests_check_the_coverage_of_their_changed_lines():
     # It runs after both kinds of tests, with no condition of its own: on a
     # stacked pull request above the lowest one they are skipped, so it is
     # skipped too, and CI complete fails there as it already does.
+    # HEAD^1 below is the base branch only in a pull_request event's merge
+    # checkout. (PyYAML reads the `on` key as True.)
+    assert workflow[True] == "pull_request"
     assert sorted(job["needs"]) == ["test", "v2-integration-check"]
     assert "if" not in job
     assert JOB in workflow["jobs"]["ci-complete"]["needs"]

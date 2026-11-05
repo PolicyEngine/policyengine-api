@@ -2,7 +2,8 @@
 #
 # The proof test commits a module, then adds `changed_lines` lines to it in a
 # second commit, and writes a coverage report in which the first
-# `covered_lines` of them ran. diff-cover --fail-under=80 must fail: 7 of 10
-# changed lines is 70%, the closest a 10-line change comes below 80%.
-changed_lines = 10
-covered_lines = 7
+# `covered_lines` of them ran. diff-cover --fail-under=80 must fail: 799 of
+# 1,000 changed lines is 79.9%, which diff-cover truncates to 79. A diff-cover
+# that rounded the figure up would accept it.
+changed_lines = 1000
+covered_lines = 799
