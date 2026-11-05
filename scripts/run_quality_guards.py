@@ -12,6 +12,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.guards import migration_contracts  # noqa: E402
 from scripts.rules import (  # noqa: E402  # the sys.path setup above must run first
+    asserting_tests,
     ci_scripts,
     declared_dependencies,
     file_length,
@@ -31,6 +32,7 @@ GUARDS: tuple[Guard, ...] = (
     ("file-length", file_length.check),
     ("declared-dependencies", declared_dependencies.check),
     ("suppressions", suppressions.check),
+    ("asserting-tests", asserting_tests.check),
     ("v2-layers", v2_layers.check),
 )
 
