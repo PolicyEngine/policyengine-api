@@ -236,7 +236,9 @@ def _ci_command_violations(rule: Rule, root: Path, config_name: str) -> list[Vio
     The registry's invocation check only looks for a substring, which an
     added ``--contract`` or ``|| true`` would still contain. The commands of
     the make targets a job runs count as the job's, and a recipe's ``-``
-    prefix, which ignores the command's failure, doesn't match.
+    prefix, which ignores the command's failure, doesn't match. A Makefile
+    that can hide a failing command in another way gives its targets no
+    credit at all (``makefile.makefile_problems``).
     """
     exact = re.compile(
         rf"^(?:uv run .*\s)?lint-imports --config {re.escape(config_name)}$"

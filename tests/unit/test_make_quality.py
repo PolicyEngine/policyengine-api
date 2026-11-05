@@ -10,12 +10,18 @@ shard's coverage report, so pr.yml runs it in a job of its own.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 import yaml
 
-from scripts.rules.makefile import make_recipes
+from scripts.rules.makefile import (
+    job_make_targets,
+    make_commands,
+    make_recipes,
+    makefile_problems,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURES = REPO / "rules" / "fixtures" / "api.quality.make-quality"
@@ -35,14 +41,16 @@ CHECKS = (
     "scripts/run_quality_guards.py",
 )
 # The tools that pr.yml may run only through make quality.
-CHECK_TOOLS = ("ruff ", "mypy", "lint-imports", "run_quality_guards.py")
+CHECK_TOOLS = re.compile(r"\b(ruff|mypy|lint-imports|run_quality_guards\.py)\b")
+# The quality job's steps, which may not be skipped or allowed to fail.
+REQUIRED_STEPS = ("make quality", "git diff --exit-code")
 JOB = "quality-guards"
 
 
 def quality_problems(makefile: str, workflow: str) -> list[str]:
     """Return how a Makefile and pr.yml break api.quality.make-quality."""
     recipes = make_recipes(makefile)
-    problems = []
+    problems = [f"the Makefile {problem}" for problem in makefile_problems(makefile)]
     if recipes.get("quality") != ([], [*FIXES, "$(MAKE) quality-check"]):
         problems.append(
             "make quality must run ruff's two fixes, then $(MAKE) quality-check"
@@ -59,7 +67,8 @@ def quality_problems(makefile: str, workflow: str) -> list[str]:
         if "--fix" in command or command == FIXES[1]
     ]
     jobs = yaml.safe_load(workflow)["jobs"]
-    runs = [step.get("run", "") for step in jobs.get(JOB, {}).get("steps", [])]
+    job = jobs.get(JOB, {})
+    runs = [step.get("run", "") for step in job.get("steps", [])]
     if (
         "make quality" not in runs
         or "git diff --exit-code" not in runs[runs.index("make quality") + 1 :]
@@ -67,13 +76,34 @@ def quality_problems(makefile: str, workflow: str) -> list[str]:
         problems.append(
             f"pr.yml's {JOB} job must run make quality, then git diff --exit-code"
         )
-    for name, job in jobs.items():
-        text = "\n".join(step.get("run", "") for step in job.get("steps", []))
-        problems += [
-            f"pr.yml's {name} job runs {tool.strip()} itself"
-            for tool in CHECK_TOOLS
-            if tool in text
+    if "continue-on-error" in job:
+        problems.append(f"pr.yml's {JOB} job ignores its failures (continue-on-error)")
+    problems += [
+        f"pr.yml's {JOB} job may skip or ignore '{step['run']}'"
+        for step in job.get("steps", [])
+        if step.get("run") in REQUIRED_STEPS
+        and ("if" in step or "continue-on-error" in step)
+    ]
+    for name, other in jobs.items():
+        run_text = "\n".join(step.get("run", "") for step in other.get("steps", []))
+        # The quality job runs the checks through make quality; any other
+        # job that runs a make target runs that target's commands itself.
+        commands = [
+            run_text,
+            *(
+                []
+                if name == JOB
+                else make_commands(makefile, job_make_targets(run_text))
+            ),
         ]
+        tools = sorted(
+            {
+                match.group(1)
+                for command in commands
+                for match in CHECK_TOOLS.finditer(command)
+            }
+        )
+        problems += [f"pr.yml's {name} job runs {tool} itself" for tool in tools]
     if JOB not in jobs.get("ci-complete", {}).get("needs", []):
         problems.append(f"CI complete doesn't need {JOB}")
     return problems

@@ -64,8 +64,9 @@ named `changelog.d/<name>.<type>.md`, where `<type>` is `breaking`, `added`,
 Agents must never bypass branch rules (for example with `gh pr merge --admin`).
 
 Before committing, run `make quality`: it applies ruff's fixes, then runs
-every check pr.yml's `quality-guards` job runs (see "Commit Hygiene" in
-`docs/engineering/skills/github-prs.md`).
+the checks pr.yml's `quality-guards` job runs, apart from the rules
+registry tool's own tests (see "Commit Hygiene" in
+`docs/engineering/skills/github-prs.md` for how a local run can differ).
 
 Before creating or sharing a migration PR, run the focused migration guards:
 

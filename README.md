@@ -216,7 +216,7 @@ In addition to the tests, we check the code with ruff, Import Linter, mypy and t
 make quality
 ```
 
-This applies ruff's fixes, then runs every check the pull request's `Quality checks` job runs. Commit the fixes it makes.
+This applies ruff's fixes, then runs the checks the pull request's `Quality checks` job runs, apart from the rules registry tool's own tests. Commit the fixes it makes.
 
 ### Step 3: Changelogging
 

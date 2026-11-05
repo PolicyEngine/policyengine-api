@@ -200,10 +200,23 @@ then runs `make quality-check`: `uv lock --check`, `ruff check`,
 `ruff format --check`, Import Linter, mypy and the quality guards
 (`scripts/run_quality_guards.py`), without changing files. Commit the fixes
 it makes with your change. pr.yml's `quality-guards` job runs the same
-command and fails if the fixes changed a file, so a pull request that passes
-it locally passes there too (`api.quality.make-quality`). diff-cover isn't
-part of it: it needs every test shard's coverage report (see the testing
-skill).
+command and fails if the fixes changed a file (`api.quality.make-quality`).
+
+A local run can still differ from CI's:
+
+- The job also runs the rules registry tool's own tests
+  (`scripts/rules/tests`), which `make quality` leaves out.
+- The rules guard compares baselines and rule statuses with the branch in
+  `GITHUB_BASE_REF`: CI sets it to the pull request's base branch, and
+  `make quality-check` defaults it to `master`. Fetch `origin` first.
+- Without `shellcheck` installed, the ci-scripts guard skips that check
+  locally; CI installs it and fails without it.
+- `uv lock --check` runs your uv; CI pins uv 0.13.4.
+- `make quality` stops at the first failing check, so fix it and run it
+  again to see the next one.
+
+diff-cover isn't part of it: it needs every test shard's coverage report
+(see the testing skill).
 
 Commit only after `make quality` passes. If a check fails on unrelated
 pre-existing issues, include that result in the handoff instead of hiding it.

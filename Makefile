@@ -34,14 +34,18 @@ quality:
 	$(MAKE) quality-check
 
 # Every check, changing no file. diff-cover isn't here: it needs every test
-# shard's coverage report, so pr.yml runs it in a job of its own.
+# shard's coverage report, so pr.yml runs it in a job of its own. The quality
+# guards run without site-packages (python -S), so they keep to the standard
+# library as push.yml runs them, and with GITHUB_BASE_REF, which CI sets to
+# the pull request's base branch, defaulting to master: the rules guard
+# compares baselines and rule statuses with that branch.
 quality-check:
 	uv lock --check
 	uv run --frozen --extra dev ruff check .
 	uv run --frozen --extra dev ruff format --check .
 	uv run --frozen --extra dev lint-imports --config pyproject.toml
 	uv run --frozen --extra dev mypy
-	uv run --frozen --extra dev python scripts/run_quality_guards.py
+	GITHUB_BASE_REF=$${GITHUB_BASE_REF:-master} uv run --frozen --extra dev python -S scripts/run_quality_guards.py
 
 quality-guards:
 	python scripts/run_quality_guards.py
