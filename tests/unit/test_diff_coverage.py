@@ -296,16 +296,19 @@ def test_coverage_reports_every_module_no_test_imports(tmp_path: Path):
     assert sorted(modules - reported) == []
 
 
-def test_type_only_imports_and_pragmas_are_not_counted_as_missed(tmp_path: Path):
-    # Imports under `if TYPE_CHECKING:` never run, and ruff's TC rules move
-    # imports there, so counting them would fail a fully tested change.
-    # coverage.py's default `pragma: no cover` pattern keeps working too, in
-    # each spelling it accepts.
+def test_only_lines_that_can_run_are_counted(tmp_path: Path):
+    # Lines that never run by design aren't counted as missed:
+    # - imports under `if TYPE_CHECKING:`, where ruff's TC rules move them;
+    # - `...` bodies of Protocol methods and other stubs;
+    # - lines marked with coverage.py's default `pragma: no cover` pattern, in
+    #   each spelling it accepts.
+    # An untested function whose comment only mentions `if TYPE_CHECKING:`
+    # still counts: coverage.py excludes the whole block a matching line opens.
     package = tmp_path / "policyengine_api"
     package.mkdir()
     (package / "__init__.py").write_text("")
     (package / "module.py").write_text(
-        "from typing import TYPE_CHECKING\n"
+        "from typing import TYPE_CHECKING, Protocol\n"
         "\n"
         "if TYPE_CHECKING:\n"
         "    from collections.abc import Iterator\n"
@@ -323,6 +326,15 @@ def test_type_only_imports_and_pragmas_are_not_counted_as_missed(tmp_path: Path)
         "\n"
         "def unused_too():  # PRAGMA NO COVER\n"
         "    return VALUE\n"
+        "\n"
+        "\n"
+        "class Reader(Protocol):\n"
+        "    def read(self) -> int:\n"
+        "        ...\n"
+        "\n"
+        "\n"
+        "def untested():  # not under if TYPE_CHECKING:\n"
+        "    return VALUE\n"
     )
     (tmp_path / "run.py").write_text("import policyengine_api.module\n")
     report = tmp_path / "coverage.json"
@@ -333,8 +345,9 @@ def test_type_only_imports_and_pragmas_are_not_counted_as_missed(tmp_path: Path)
     _run_coverage(tmp_path, data_file, "json", rcfile, "-q", "-o", str(report))
 
     module = json.loads(report.read_text())["files"]["policyengine_api/module.py"]
-    assert module["missing_lines"] == []
-    assert {4, 10, 14, 18} <= set(module["excluded_lines"])
+    assert module["missing_lines"] == [27]
+    assert {4, 10, 14, 18, 23} <= set(module["excluded_lines"])
+    assert 26 not in module["excluded_lines"]
 
 
 def test_pull_requests_check_the_coverage_of_their_changed_lines():
