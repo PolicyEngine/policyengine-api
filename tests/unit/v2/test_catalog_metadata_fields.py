@@ -23,6 +23,7 @@ from tests.fixtures.v2_catalog import (
     bundle,
     installed_version,
     normalized_catalog,
+    region_references,
     source_models,
 )
 
@@ -36,6 +37,7 @@ def _extract(models: dict[str, SimpleNamespace]) -> NormalizedCatalog:
         policyengine_version=POLICYENGINE_VERSION,
         models=models,
         installed_version=installed_version,
+        region_references=region_references(),
     )
 
 

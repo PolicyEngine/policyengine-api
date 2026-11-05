@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
@@ -14,7 +14,7 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
 )
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes import dependencies as route_dependencies
-from policyengine_api.services.v2.metadata.selected_catalogs import (
+from policyengine_api.services.v2.metadata.process_state import (
     SelectedCatalogStore,
 )
 from policyengine_api.services.v2.metadata.types import (

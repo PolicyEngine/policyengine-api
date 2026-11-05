@@ -1,0 +1,822 @@
+code,label,region_type,parent_code,state_code,state_name,filter_value,v1_code
+us,United States,national,,,,,us
+state/ak,Alaska,state,us,AK,Alaska,2,state/ak
+state/al,Alabama,state,us,AL,Alabama,1,state/al
+state/ar,Arkansas,state,us,AR,Arkansas,5,state/ar
+state/az,Arizona,state,us,AZ,Arizona,4,state/az
+state/ca,California,state,us,CA,California,6,state/ca
+state/co,Colorado,state,us,CO,Colorado,8,state/co
+state/ct,Connecticut,state,us,CT,Connecticut,9,state/ct
+state/dc,District of Columbia,state,us,DC,District of Columbia,11,state/dc
+state/de,Delaware,state,us,DE,Delaware,10,state/de
+state/fl,Florida,state,us,FL,Florida,12,state/fl
+state/ga,Georgia,state,us,GA,Georgia,13,state/ga
+state/hi,Hawaii,state,us,HI,Hawaii,15,state/hi
+state/ia,Iowa,state,us,IA,Iowa,19,state/ia
+state/id,Idaho,state,us,ID,Idaho,16,state/id
+state/il,Illinois,state,us,IL,Illinois,17,state/il
+state/in,Indiana,state,us,IN,Indiana,18,state/in
+state/ks,Kansas,state,us,KS,Kansas,20,state/ks
+state/ky,Kentucky,state,us,KY,Kentucky,21,state/ky
+state/la,Louisiana,state,us,LA,Louisiana,22,state/la
+state/ma,Massachusetts,state,us,MA,Massachusetts,25,state/ma
+state/md,Maryland,state,us,MD,Maryland,24,state/md
+state/me,Maine,state,us,ME,Maine,23,state/me
+state/mi,Michigan,state,us,MI,Michigan,26,state/mi
+state/mn,Minnesota,state,us,MN,Minnesota,27,state/mn
+state/mo,Missouri,state,us,MO,Missouri,29,state/mo
+state/ms,Mississippi,state,us,MS,Mississippi,28,state/ms
+state/mt,Montana,state,us,MT,Montana,30,state/mt
+state/nc,North Carolina,state,us,NC,North Carolina,37,state/nc
+state/nd,North Dakota,state,us,ND,North Dakota,38,state/nd
+state/ne,Nebraska,state,us,NE,Nebraska,31,state/ne
+state/nh,New Hampshire,state,us,NH,New Hampshire,33,state/nh
+state/nj,New Jersey,state,us,NJ,New Jersey,34,state/nj
+state/nm,New Mexico,state,us,NM,New Mexico,35,state/nm
+state/nv,Nevada,state,us,NV,Nevada,32,state/nv
+state/ny,New York,state,us,NY,New York,36,state/ny
+state/oh,Ohio,state,us,OH,Ohio,39,state/oh
+state/ok,Oklahoma,state,us,OK,Oklahoma,40,state/ok
+state/or,Oregon,state,us,OR,Oregon,41,state/or
+state/pa,Pennsylvania,state,us,PA,Pennsylvania,42,state/pa
+state/ri,Rhode Island,state,us,RI,Rhode Island,44,state/ri
+state/sc,South Carolina,state,us,SC,South Carolina,45,state/sc
+state/sd,South Dakota,state,us,SD,South Dakota,46,state/sd
+state/tn,Tennessee,state,us,TN,Tennessee,47,state/tn
+state/tx,Texas,state,us,TX,Texas,48,state/tx
+state/ut,Utah,state,us,UT,Utah,49,state/ut
+state/va,Virginia,state,us,VA,Virginia,51,state/va
+state/vt,Vermont,state,us,VT,Vermont,50,state/vt
+state/wa,Washington,state,us,WA,Washington,53,state/wa
+state/wi,Wisconsin,state,us,WI,Wisconsin,55,state/wi
+state/wv,West Virginia,state,us,WV,West Virginia,54,state/wv
+state/wy,Wyoming,state,us,WY,Wyoming,56,state/wy
+congressional_district/AK-01,Alaska's at-large congressional district,congressional_district,state/ak,AK,Alaska,200,congressional_district/AK-01
+congressional_district/AL-01,Alabama's 1st congressional district,congressional_district,state/al,AL,Alabama,101,congressional_district/AL-01
+congressional_district/AL-02,Alabama's 2nd congressional district,congressional_district,state/al,AL,Alabama,102,congressional_district/AL-02
+congressional_district/AL-03,Alabama's 3rd congressional district,congressional_district,state/al,AL,Alabama,103,congressional_district/AL-03
+congressional_district/AL-04,Alabama's 4th congressional district,congressional_district,state/al,AL,Alabama,104,congressional_district/AL-04
+congressional_district/AL-05,Alabama's 5th congressional district,congressional_district,state/al,AL,Alabama,105,congressional_district/AL-05
+congressional_district/AL-06,Alabama's 6th congressional district,congressional_district,state/al,AL,Alabama,106,congressional_district/AL-06
+congressional_district/AL-07,Alabama's 7th congressional district,congressional_district,state/al,AL,Alabama,107,congressional_district/AL-07
+congressional_district/AR-01,Arkansas's 1st congressional district,congressional_district,state/ar,AR,Arkansas,501,congressional_district/AR-01
+congressional_district/AR-02,Arkansas's 2nd congressional district,congressional_district,state/ar,AR,Arkansas,502,congressional_district/AR-02
+congressional_district/AR-03,Arkansas's 3rd congressional district,congressional_district,state/ar,AR,Arkansas,503,congressional_district/AR-03
+congressional_district/AR-04,Arkansas's 4th congressional district,congressional_district,state/ar,AR,Arkansas,504,congressional_district/AR-04
+congressional_district/AZ-01,Arizona's 1st congressional district,congressional_district,state/az,AZ,Arizona,401,congressional_district/AZ-01
+congressional_district/AZ-02,Arizona's 2nd congressional district,congressional_district,state/az,AZ,Arizona,402,congressional_district/AZ-02
+congressional_district/AZ-03,Arizona's 3rd congressional district,congressional_district,state/az,AZ,Arizona,403,congressional_district/AZ-03
+congressional_district/AZ-04,Arizona's 4th congressional district,congressional_district,state/az,AZ,Arizona,404,congressional_district/AZ-04
+congressional_district/AZ-05,Arizona's 5th congressional district,congressional_district,state/az,AZ,Arizona,405,congressional_district/AZ-05
+congressional_district/AZ-06,Arizona's 6th congressional district,congressional_district,state/az,AZ,Arizona,406,congressional_district/AZ-06
+congressional_district/AZ-07,Arizona's 7th congressional district,congressional_district,state/az,AZ,Arizona,407,congressional_district/AZ-07
+congressional_district/AZ-08,Arizona's 8th congressional district,congressional_district,state/az,AZ,Arizona,408,congressional_district/AZ-08
+congressional_district/AZ-09,Arizona's 9th congressional district,congressional_district,state/az,AZ,Arizona,409,congressional_district/AZ-09
+congressional_district/CA-01,California's 1st congressional district,congressional_district,state/ca,CA,California,601,congressional_district/CA-01
+congressional_district/CA-02,California's 2nd congressional district,congressional_district,state/ca,CA,California,602,congressional_district/CA-02
+congressional_district/CA-03,California's 3rd congressional district,congressional_district,state/ca,CA,California,603,congressional_district/CA-03
+congressional_district/CA-04,California's 4th congressional district,congressional_district,state/ca,CA,California,604,congressional_district/CA-04
+congressional_district/CA-05,California's 5th congressional district,congressional_district,state/ca,CA,California,605,congressional_district/CA-05
+congressional_district/CA-06,California's 6th congressional district,congressional_district,state/ca,CA,California,606,congressional_district/CA-06
+congressional_district/CA-07,California's 7th congressional district,congressional_district,state/ca,CA,California,607,congressional_district/CA-07
+congressional_district/CA-08,California's 8th congressional district,congressional_district,state/ca,CA,California,608,congressional_district/CA-08
+congressional_district/CA-09,California's 9th congressional district,congressional_district,state/ca,CA,California,609,congressional_district/CA-09
+congressional_district/CA-10,California's 10th congressional district,congressional_district,state/ca,CA,California,610,congressional_district/CA-10
+congressional_district/CA-11,California's 11th congressional district,congressional_district,state/ca,CA,California,611,congressional_district/CA-11
+congressional_district/CA-12,California's 12th congressional district,congressional_district,state/ca,CA,California,612,congressional_district/CA-12
+congressional_district/CA-13,California's 13th congressional district,congressional_district,state/ca,CA,California,613,congressional_district/CA-13
+congressional_district/CA-14,California's 14th congressional district,congressional_district,state/ca,CA,California,614,congressional_district/CA-14
+congressional_district/CA-15,California's 15th congressional district,congressional_district,state/ca,CA,California,615,congressional_district/CA-15
+congressional_district/CA-16,California's 16th congressional district,congressional_district,state/ca,CA,California,616,congressional_district/CA-16
+congressional_district/CA-17,California's 17th congressional district,congressional_district,state/ca,CA,California,617,congressional_district/CA-17
+congressional_district/CA-18,California's 18th congressional district,congressional_district,state/ca,CA,California,618,congressional_district/CA-18
+congressional_district/CA-19,California's 19th congressional district,congressional_district,state/ca,CA,California,619,congressional_district/CA-19
+congressional_district/CA-20,California's 20th congressional district,congressional_district,state/ca,CA,California,620,congressional_district/CA-20
+congressional_district/CA-21,California's 21st congressional district,congressional_district,state/ca,CA,California,621,congressional_district/CA-21
+congressional_district/CA-22,California's 22nd congressional district,congressional_district,state/ca,CA,California,622,congressional_district/CA-22
+congressional_district/CA-23,California's 23rd congressional district,congressional_district,state/ca,CA,California,623,congressional_district/CA-23
+congressional_district/CA-24,California's 24th congressional district,congressional_district,state/ca,CA,California,624,congressional_district/CA-24
+congressional_district/CA-25,California's 25th congressional district,congressional_district,state/ca,CA,California,625,congressional_district/CA-25
+congressional_district/CA-26,California's 26th congressional district,congressional_district,state/ca,CA,California,626,congressional_district/CA-26
+congressional_district/CA-27,California's 27th congressional district,congressional_district,state/ca,CA,California,627,congressional_district/CA-27
+congressional_district/CA-28,California's 28th congressional district,congressional_district,state/ca,CA,California,628,congressional_district/CA-28
+congressional_district/CA-29,California's 29th congressional district,congressional_district,state/ca,CA,California,629,congressional_district/CA-29
+congressional_district/CA-30,California's 30th congressional district,congressional_district,state/ca,CA,California,630,congressional_district/CA-30
+congressional_district/CA-31,California's 31st congressional district,congressional_district,state/ca,CA,California,631,congressional_district/CA-31
+congressional_district/CA-32,California's 32nd congressional district,congressional_district,state/ca,CA,California,632,congressional_district/CA-32
+congressional_district/CA-33,California's 33rd congressional district,congressional_district,state/ca,CA,California,633,congressional_district/CA-33
+congressional_district/CA-34,California's 34th congressional district,congressional_district,state/ca,CA,California,634,congressional_district/CA-34
+congressional_district/CA-35,California's 35th congressional district,congressional_district,state/ca,CA,California,635,congressional_district/CA-35
+congressional_district/CA-36,California's 36th congressional district,congressional_district,state/ca,CA,California,636,congressional_district/CA-36
+congressional_district/CA-37,California's 37th congressional district,congressional_district,state/ca,CA,California,637,congressional_district/CA-37
+congressional_district/CA-38,California's 38th congressional district,congressional_district,state/ca,CA,California,638,congressional_district/CA-38
+congressional_district/CA-39,California's 39th congressional district,congressional_district,state/ca,CA,California,639,congressional_district/CA-39
+congressional_district/CA-40,California's 40th congressional district,congressional_district,state/ca,CA,California,640,congressional_district/CA-40
+congressional_district/CA-41,California's 41st congressional district,congressional_district,state/ca,CA,California,641,congressional_district/CA-41
+congressional_district/CA-42,California's 42nd congressional district,congressional_district,state/ca,CA,California,642,congressional_district/CA-42
+congressional_district/CA-43,California's 43rd congressional district,congressional_district,state/ca,CA,California,643,congressional_district/CA-43
+congressional_district/CA-44,California's 44th congressional district,congressional_district,state/ca,CA,California,644,congressional_district/CA-44
+congressional_district/CA-45,California's 45th congressional district,congressional_district,state/ca,CA,California,645,congressional_district/CA-45
+congressional_district/CA-46,California's 46th congressional district,congressional_district,state/ca,CA,California,646,congressional_district/CA-46
+congressional_district/CA-47,California's 47th congressional district,congressional_district,state/ca,CA,California,647,congressional_district/CA-47
+congressional_district/CA-48,California's 48th congressional district,congressional_district,state/ca,CA,California,648,congressional_district/CA-48
+congressional_district/CA-49,California's 49th congressional district,congressional_district,state/ca,CA,California,649,congressional_district/CA-49
+congressional_district/CA-50,California's 50th congressional district,congressional_district,state/ca,CA,California,650,congressional_district/CA-50
+congressional_district/CA-51,California's 51st congressional district,congressional_district,state/ca,CA,California,651,congressional_district/CA-51
+congressional_district/CA-52,California's 52nd congressional district,congressional_district,state/ca,CA,California,652,congressional_district/CA-52
+congressional_district/CO-01,Colorado's 1st congressional district,congressional_district,state/co,CO,Colorado,801,congressional_district/CO-01
+congressional_district/CO-02,Colorado's 2nd congressional district,congressional_district,state/co,CO,Colorado,802,congressional_district/CO-02
+congressional_district/CO-03,Colorado's 3rd congressional district,congressional_district,state/co,CO,Colorado,803,congressional_district/CO-03
+congressional_district/CO-04,Colorado's 4th congressional district,congressional_district,state/co,CO,Colorado,804,congressional_district/CO-04
+congressional_district/CO-05,Colorado's 5th congressional district,congressional_district,state/co,CO,Colorado,805,congressional_district/CO-05
+congressional_district/CO-06,Colorado's 6th congressional district,congressional_district,state/co,CO,Colorado,806,congressional_district/CO-06
+congressional_district/CO-07,Colorado's 7th congressional district,congressional_district,state/co,CO,Colorado,807,congressional_district/CO-07
+congressional_district/CO-08,Colorado's 8th congressional district,congressional_district,state/co,CO,Colorado,808,congressional_district/CO-08
+congressional_district/CT-01,Connecticut's 1st congressional district,congressional_district,state/ct,CT,Connecticut,901,congressional_district/CT-01
+congressional_district/CT-02,Connecticut's 2nd congressional district,congressional_district,state/ct,CT,Connecticut,902,congressional_district/CT-02
+congressional_district/CT-03,Connecticut's 3rd congressional district,congressional_district,state/ct,CT,Connecticut,903,congressional_district/CT-03
+congressional_district/CT-04,Connecticut's 4th congressional district,congressional_district,state/ct,CT,Connecticut,904,congressional_district/CT-04
+congressional_district/CT-05,Connecticut's 5th congressional district,congressional_district,state/ct,CT,Connecticut,905,congressional_district/CT-05
+congressional_district/DC-01,District of Columbia's at-large congressional district,congressional_district,state/dc,DC,District of Columbia,1100,congressional_district/DC-01
+congressional_district/DE-01,Delaware's at-large congressional district,congressional_district,state/de,DE,Delaware,1000,congressional_district/DE-01
+congressional_district/FL-01,Florida's 1st congressional district,congressional_district,state/fl,FL,Florida,1201,congressional_district/FL-01
+congressional_district/FL-02,Florida's 2nd congressional district,congressional_district,state/fl,FL,Florida,1202,congressional_district/FL-02
+congressional_district/FL-03,Florida's 3rd congressional district,congressional_district,state/fl,FL,Florida,1203,congressional_district/FL-03
+congressional_district/FL-04,Florida's 4th congressional district,congressional_district,state/fl,FL,Florida,1204,congressional_district/FL-04
+congressional_district/FL-05,Florida's 5th congressional district,congressional_district,state/fl,FL,Florida,1205,congressional_district/FL-05
+congressional_district/FL-06,Florida's 6th congressional district,congressional_district,state/fl,FL,Florida,1206,congressional_district/FL-06
+congressional_district/FL-07,Florida's 7th congressional district,congressional_district,state/fl,FL,Florida,1207,congressional_district/FL-07
+congressional_district/FL-08,Florida's 8th congressional district,congressional_district,state/fl,FL,Florida,1208,congressional_district/FL-08
+congressional_district/FL-09,Florida's 9th congressional district,congressional_district,state/fl,FL,Florida,1209,congressional_district/FL-09
+congressional_district/FL-10,Florida's 10th congressional district,congressional_district,state/fl,FL,Florida,1210,congressional_district/FL-10
+congressional_district/FL-11,Florida's 11th congressional district,congressional_district,state/fl,FL,Florida,1211,congressional_district/FL-11
+congressional_district/FL-12,Florida's 12th congressional district,congressional_district,state/fl,FL,Florida,1212,congressional_district/FL-12
+congressional_district/FL-13,Florida's 13th congressional district,congressional_district,state/fl,FL,Florida,1213,congressional_district/FL-13
+congressional_district/FL-14,Florida's 14th congressional district,congressional_district,state/fl,FL,Florida,1214,congressional_district/FL-14
+congressional_district/FL-15,Florida's 15th congressional district,congressional_district,state/fl,FL,Florida,1215,congressional_district/FL-15
+congressional_district/FL-16,Florida's 16th congressional district,congressional_district,state/fl,FL,Florida,1216,congressional_district/FL-16
+congressional_district/FL-17,Florida's 17th congressional district,congressional_district,state/fl,FL,Florida,1217,congressional_district/FL-17
+congressional_district/FL-18,Florida's 18th congressional district,congressional_district,state/fl,FL,Florida,1218,congressional_district/FL-18
+congressional_district/FL-19,Florida's 19th congressional district,congressional_district,state/fl,FL,Florida,1219,congressional_district/FL-19
+congressional_district/FL-20,Florida's 20th congressional district,congressional_district,state/fl,FL,Florida,1220,congressional_district/FL-20
+congressional_district/FL-21,Florida's 21st congressional district,congressional_district,state/fl,FL,Florida,1221,congressional_district/FL-21
+congressional_district/FL-22,Florida's 22nd congressional district,congressional_district,state/fl,FL,Florida,1222,congressional_district/FL-22
+congressional_district/FL-23,Florida's 23rd congressional district,congressional_district,state/fl,FL,Florida,1223,congressional_district/FL-23
+congressional_district/FL-24,Florida's 24th congressional district,congressional_district,state/fl,FL,Florida,1224,congressional_district/FL-24
+congressional_district/FL-25,Florida's 25th congressional district,congressional_district,state/fl,FL,Florida,1225,congressional_district/FL-25
+congressional_district/FL-26,Florida's 26th congressional district,congressional_district,state/fl,FL,Florida,1226,congressional_district/FL-26
+congressional_district/FL-27,Florida's 27th congressional district,congressional_district,state/fl,FL,Florida,1227,congressional_district/FL-27
+congressional_district/FL-28,Florida's 28th congressional district,congressional_district,state/fl,FL,Florida,1228,congressional_district/FL-28
+congressional_district/GA-01,Georgia's 1st congressional district,congressional_district,state/ga,GA,Georgia,1301,congressional_district/GA-01
+congressional_district/GA-02,Georgia's 2nd congressional district,congressional_district,state/ga,GA,Georgia,1302,congressional_district/GA-02
+congressional_district/GA-03,Georgia's 3rd congressional district,congressional_district,state/ga,GA,Georgia,1303,congressional_district/GA-03
+congressional_district/GA-04,Georgia's 4th congressional district,congressional_district,state/ga,GA,Georgia,1304,congressional_district/GA-04
+congressional_district/GA-05,Georgia's 5th congressional district,congressional_district,state/ga,GA,Georgia,1305,congressional_district/GA-05
+congressional_district/GA-06,Georgia's 6th congressional district,congressional_district,state/ga,GA,Georgia,1306,congressional_district/GA-06
+congressional_district/GA-07,Georgia's 7th congressional district,congressional_district,state/ga,GA,Georgia,1307,congressional_district/GA-07
+congressional_district/GA-08,Georgia's 8th congressional district,congressional_district,state/ga,GA,Georgia,1308,congressional_district/GA-08
+congressional_district/GA-09,Georgia's 9th congressional district,congressional_district,state/ga,GA,Georgia,1309,congressional_district/GA-09
+congressional_district/GA-10,Georgia's 10th congressional district,congressional_district,state/ga,GA,Georgia,1310,congressional_district/GA-10
+congressional_district/GA-11,Georgia's 11th congressional district,congressional_district,state/ga,GA,Georgia,1311,congressional_district/GA-11
+congressional_district/GA-12,Georgia's 12th congressional district,congressional_district,state/ga,GA,Georgia,1312,congressional_district/GA-12
+congressional_district/GA-13,Georgia's 13th congressional district,congressional_district,state/ga,GA,Georgia,1313,congressional_district/GA-13
+congressional_district/GA-14,Georgia's 14th congressional district,congressional_district,state/ga,GA,Georgia,1314,congressional_district/GA-14
+congressional_district/HI-01,Hawaii's 1st congressional district,congressional_district,state/hi,HI,Hawaii,1501,congressional_district/HI-01
+congressional_district/HI-02,Hawaii's 2nd congressional district,congressional_district,state/hi,HI,Hawaii,1502,congressional_district/HI-02
+congressional_district/IA-01,Iowa's 1st congressional district,congressional_district,state/ia,IA,Iowa,1901,congressional_district/IA-01
+congressional_district/IA-02,Iowa's 2nd congressional district,congressional_district,state/ia,IA,Iowa,1902,congressional_district/IA-02
+congressional_district/IA-03,Iowa's 3rd congressional district,congressional_district,state/ia,IA,Iowa,1903,congressional_district/IA-03
+congressional_district/IA-04,Iowa's 4th congressional district,congressional_district,state/ia,IA,Iowa,1904,congressional_district/IA-04
+congressional_district/ID-01,Idaho's 1st congressional district,congressional_district,state/id,ID,Idaho,1601,congressional_district/ID-01
+congressional_district/ID-02,Idaho's 2nd congressional district,congressional_district,state/id,ID,Idaho,1602,congressional_district/ID-02
+congressional_district/IL-01,Illinois's 1st congressional district,congressional_district,state/il,IL,Illinois,1701,congressional_district/IL-01
+congressional_district/IL-02,Illinois's 2nd congressional district,congressional_district,state/il,IL,Illinois,1702,congressional_district/IL-02
+congressional_district/IL-03,Illinois's 3rd congressional district,congressional_district,state/il,IL,Illinois,1703,congressional_district/IL-03
+congressional_district/IL-04,Illinois's 4th congressional district,congressional_district,state/il,IL,Illinois,1704,congressional_district/IL-04
+congressional_district/IL-05,Illinois's 5th congressional district,congressional_district,state/il,IL,Illinois,1705,congressional_district/IL-05
+congressional_district/IL-06,Illinois's 6th congressional district,congressional_district,state/il,IL,Illinois,1706,congressional_district/IL-06
+congressional_district/IL-07,Illinois's 7th congressional district,congressional_district,state/il,IL,Illinois,1707,congressional_district/IL-07
+congressional_district/IL-08,Illinois's 8th congressional district,congressional_district,state/il,IL,Illinois,1708,congressional_district/IL-08
+congressional_district/IL-09,Illinois's 9th congressional district,congressional_district,state/il,IL,Illinois,1709,congressional_district/IL-09
+congressional_district/IL-10,Illinois's 10th congressional district,congressional_district,state/il,IL,Illinois,1710,congressional_district/IL-10
+congressional_district/IL-11,Illinois's 11th congressional district,congressional_district,state/il,IL,Illinois,1711,congressional_district/IL-11
+congressional_district/IL-12,Illinois's 12th congressional district,congressional_district,state/il,IL,Illinois,1712,congressional_district/IL-12
+congressional_district/IL-13,Illinois's 13th congressional district,congressional_district,state/il,IL,Illinois,1713,congressional_district/IL-13
+congressional_district/IL-14,Illinois's 14th congressional district,congressional_district,state/il,IL,Illinois,1714,congressional_district/IL-14
+congressional_district/IL-15,Illinois's 15th congressional district,congressional_district,state/il,IL,Illinois,1715,congressional_district/IL-15
+congressional_district/IL-16,Illinois's 16th congressional district,congressional_district,state/il,IL,Illinois,1716,congressional_district/IL-16
+congressional_district/IL-17,Illinois's 17th congressional district,congressional_district,state/il,IL,Illinois,1717,congressional_district/IL-17
+congressional_district/IN-01,Indiana's 1st congressional district,congressional_district,state/in,IN,Indiana,1801,congressional_district/IN-01
+congressional_district/IN-02,Indiana's 2nd congressional district,congressional_district,state/in,IN,Indiana,1802,congressional_district/IN-02
+congressional_district/IN-03,Indiana's 3rd congressional district,congressional_district,state/in,IN,Indiana,1803,congressional_district/IN-03
+congressional_district/IN-04,Indiana's 4th congressional district,congressional_district,state/in,IN,Indiana,1804,congressional_district/IN-04
+congressional_district/IN-05,Indiana's 5th congressional district,congressional_district,state/in,IN,Indiana,1805,congressional_district/IN-05
+congressional_district/IN-06,Indiana's 6th congressional district,congressional_district,state/in,IN,Indiana,1806,congressional_district/IN-06
+congressional_district/IN-07,Indiana's 7th congressional district,congressional_district,state/in,IN,Indiana,1807,congressional_district/IN-07
+congressional_district/IN-08,Indiana's 8th congressional district,congressional_district,state/in,IN,Indiana,1808,congressional_district/IN-08
+congressional_district/IN-09,Indiana's 9th congressional district,congressional_district,state/in,IN,Indiana,1809,congressional_district/IN-09
+congressional_district/KS-01,Kansas's 1st congressional district,congressional_district,state/ks,KS,Kansas,2001,congressional_district/KS-01
+congressional_district/KS-02,Kansas's 2nd congressional district,congressional_district,state/ks,KS,Kansas,2002,congressional_district/KS-02
+congressional_district/KS-03,Kansas's 3rd congressional district,congressional_district,state/ks,KS,Kansas,2003,congressional_district/KS-03
+congressional_district/KS-04,Kansas's 4th congressional district,congressional_district,state/ks,KS,Kansas,2004,congressional_district/KS-04
+congressional_district/KY-01,Kentucky's 1st congressional district,congressional_district,state/ky,KY,Kentucky,2101,congressional_district/KY-01
+congressional_district/KY-02,Kentucky's 2nd congressional district,congressional_district,state/ky,KY,Kentucky,2102,congressional_district/KY-02
+congressional_district/KY-03,Kentucky's 3rd congressional district,congressional_district,state/ky,KY,Kentucky,2103,congressional_district/KY-03
+congressional_district/KY-04,Kentucky's 4th congressional district,congressional_district,state/ky,KY,Kentucky,2104,congressional_district/KY-04
+congressional_district/KY-05,Kentucky's 5th congressional district,congressional_district,state/ky,KY,Kentucky,2105,congressional_district/KY-05
+congressional_district/KY-06,Kentucky's 6th congressional district,congressional_district,state/ky,KY,Kentucky,2106,congressional_district/KY-06
+congressional_district/LA-01,Louisiana's 1st congressional district,congressional_district,state/la,LA,Louisiana,2201,congressional_district/LA-01
+congressional_district/LA-02,Louisiana's 2nd congressional district,congressional_district,state/la,LA,Louisiana,2202,congressional_district/LA-02
+congressional_district/LA-03,Louisiana's 3rd congressional district,congressional_district,state/la,LA,Louisiana,2203,congressional_district/LA-03
+congressional_district/LA-04,Louisiana's 4th congressional district,congressional_district,state/la,LA,Louisiana,2204,congressional_district/LA-04
+congressional_district/LA-05,Louisiana's 5th congressional district,congressional_district,state/la,LA,Louisiana,2205,congressional_district/LA-05
+congressional_district/LA-06,Louisiana's 6th congressional district,congressional_district,state/la,LA,Louisiana,2206,congressional_district/LA-06
+congressional_district/MA-01,Massachusetts's 1st congressional district,congressional_district,state/ma,MA,Massachusetts,2501,congressional_district/MA-01
+congressional_district/MA-02,Massachusetts's 2nd congressional district,congressional_district,state/ma,MA,Massachusetts,2502,congressional_district/MA-02
+congressional_district/MA-03,Massachusetts's 3rd congressional district,congressional_district,state/ma,MA,Massachusetts,2503,congressional_district/MA-03
+congressional_district/MA-04,Massachusetts's 4th congressional district,congressional_district,state/ma,MA,Massachusetts,2504,congressional_district/MA-04
+congressional_district/MA-05,Massachusetts's 5th congressional district,congressional_district,state/ma,MA,Massachusetts,2505,congressional_district/MA-05
+congressional_district/MA-06,Massachusetts's 6th congressional district,congressional_district,state/ma,MA,Massachusetts,2506,congressional_district/MA-06
+congressional_district/MA-07,Massachusetts's 7th congressional district,congressional_district,state/ma,MA,Massachusetts,2507,congressional_district/MA-07
+congressional_district/MA-08,Massachusetts's 8th congressional district,congressional_district,state/ma,MA,Massachusetts,2508,congressional_district/MA-08
+congressional_district/MA-09,Massachusetts's 9th congressional district,congressional_district,state/ma,MA,Massachusetts,2509,congressional_district/MA-09
+congressional_district/MD-01,Maryland's 1st congressional district,congressional_district,state/md,MD,Maryland,2401,congressional_district/MD-01
+congressional_district/MD-02,Maryland's 2nd congressional district,congressional_district,state/md,MD,Maryland,2402,congressional_district/MD-02
+congressional_district/MD-03,Maryland's 3rd congressional district,congressional_district,state/md,MD,Maryland,2403,congressional_district/MD-03
+congressional_district/MD-04,Maryland's 4th congressional district,congressional_district,state/md,MD,Maryland,2404,congressional_district/MD-04
+congressional_district/MD-05,Maryland's 5th congressional district,congressional_district,state/md,MD,Maryland,2405,congressional_district/MD-05
+congressional_district/MD-06,Maryland's 6th congressional district,congressional_district,state/md,MD,Maryland,2406,congressional_district/MD-06
+congressional_district/MD-07,Maryland's 7th congressional district,congressional_district,state/md,MD,Maryland,2407,congressional_district/MD-07
+congressional_district/MD-08,Maryland's 8th congressional district,congressional_district,state/md,MD,Maryland,2408,congressional_district/MD-08
+congressional_district/ME-01,Maine's 1st congressional district,congressional_district,state/me,ME,Maine,2301,congressional_district/ME-01
+congressional_district/ME-02,Maine's 2nd congressional district,congressional_district,state/me,ME,Maine,2302,congressional_district/ME-02
+congressional_district/MI-01,Michigan's 1st congressional district,congressional_district,state/mi,MI,Michigan,2601,congressional_district/MI-01
+congressional_district/MI-02,Michigan's 2nd congressional district,congressional_district,state/mi,MI,Michigan,2602,congressional_district/MI-02
+congressional_district/MI-03,Michigan's 3rd congressional district,congressional_district,state/mi,MI,Michigan,2603,congressional_district/MI-03
+congressional_district/MI-04,Michigan's 4th congressional district,congressional_district,state/mi,MI,Michigan,2604,congressional_district/MI-04
+congressional_district/MI-05,Michigan's 5th congressional district,congressional_district,state/mi,MI,Michigan,2605,congressional_district/MI-05
+congressional_district/MI-06,Michigan's 6th congressional district,congressional_district,state/mi,MI,Michigan,2606,congressional_district/MI-06
+congressional_district/MI-07,Michigan's 7th congressional district,congressional_district,state/mi,MI,Michigan,2607,congressional_district/MI-07
+congressional_district/MI-08,Michigan's 8th congressional district,congressional_district,state/mi,MI,Michigan,2608,congressional_district/MI-08
+congressional_district/MI-09,Michigan's 9th congressional district,congressional_district,state/mi,MI,Michigan,2609,congressional_district/MI-09
+congressional_district/MI-10,Michigan's 10th congressional district,congressional_district,state/mi,MI,Michigan,2610,congressional_district/MI-10
+congressional_district/MI-11,Michigan's 11th congressional district,congressional_district,state/mi,MI,Michigan,2611,congressional_district/MI-11
+congressional_district/MI-12,Michigan's 12th congressional district,congressional_district,state/mi,MI,Michigan,2612,congressional_district/MI-12
+congressional_district/MI-13,Michigan's 13th congressional district,congressional_district,state/mi,MI,Michigan,2613,congressional_district/MI-13
+congressional_district/MN-01,Minnesota's 1st congressional district,congressional_district,state/mn,MN,Minnesota,2701,congressional_district/MN-01
+congressional_district/MN-02,Minnesota's 2nd congressional district,congressional_district,state/mn,MN,Minnesota,2702,congressional_district/MN-02
+congressional_district/MN-03,Minnesota's 3rd congressional district,congressional_district,state/mn,MN,Minnesota,2703,congressional_district/MN-03
+congressional_district/MN-04,Minnesota's 4th congressional district,congressional_district,state/mn,MN,Minnesota,2704,congressional_district/MN-04
+congressional_district/MN-05,Minnesota's 5th congressional district,congressional_district,state/mn,MN,Minnesota,2705,congressional_district/MN-05
+congressional_district/MN-06,Minnesota's 6th congressional district,congressional_district,state/mn,MN,Minnesota,2706,congressional_district/MN-06
+congressional_district/MN-07,Minnesota's 7th congressional district,congressional_district,state/mn,MN,Minnesota,2707,congressional_district/MN-07
+congressional_district/MN-08,Minnesota's 8th congressional district,congressional_district,state/mn,MN,Minnesota,2708,congressional_district/MN-08
+congressional_district/MO-01,Missouri's 1st congressional district,congressional_district,state/mo,MO,Missouri,2901,congressional_district/MO-01
+congressional_district/MO-02,Missouri's 2nd congressional district,congressional_district,state/mo,MO,Missouri,2902,congressional_district/MO-02
+congressional_district/MO-03,Missouri's 3rd congressional district,congressional_district,state/mo,MO,Missouri,2903,congressional_district/MO-03
+congressional_district/MO-04,Missouri's 4th congressional district,congressional_district,state/mo,MO,Missouri,2904,congressional_district/MO-04
+congressional_district/MO-05,Missouri's 5th congressional district,congressional_district,state/mo,MO,Missouri,2905,congressional_district/MO-05
+congressional_district/MO-06,Missouri's 6th congressional district,congressional_district,state/mo,MO,Missouri,2906,congressional_district/MO-06
+congressional_district/MO-07,Missouri's 7th congressional district,congressional_district,state/mo,MO,Missouri,2907,congressional_district/MO-07
+congressional_district/MO-08,Missouri's 8th congressional district,congressional_district,state/mo,MO,Missouri,2908,congressional_district/MO-08
+congressional_district/MS-01,Mississippi's 1st congressional district,congressional_district,state/ms,MS,Mississippi,2801,congressional_district/MS-01
+congressional_district/MS-02,Mississippi's 2nd congressional district,congressional_district,state/ms,MS,Mississippi,2802,congressional_district/MS-02
+congressional_district/MS-03,Mississippi's 3rd congressional district,congressional_district,state/ms,MS,Mississippi,2803,congressional_district/MS-03
+congressional_district/MS-04,Mississippi's 4th congressional district,congressional_district,state/ms,MS,Mississippi,2804,congressional_district/MS-04
+congressional_district/MT-01,Montana's 1st congressional district,congressional_district,state/mt,MT,Montana,3001,congressional_district/MT-01
+congressional_district/MT-02,Montana's 2nd congressional district,congressional_district,state/mt,MT,Montana,3002,congressional_district/MT-02
+congressional_district/NC-01,North Carolina's 1st congressional district,congressional_district,state/nc,NC,North Carolina,3701,congressional_district/NC-01
+congressional_district/NC-02,North Carolina's 2nd congressional district,congressional_district,state/nc,NC,North Carolina,3702,congressional_district/NC-02
+congressional_district/NC-03,North Carolina's 3rd congressional district,congressional_district,state/nc,NC,North Carolina,3703,congressional_district/NC-03
+congressional_district/NC-04,North Carolina's 4th congressional district,congressional_district,state/nc,NC,North Carolina,3704,congressional_district/NC-04
+congressional_district/NC-05,North Carolina's 5th congressional district,congressional_district,state/nc,NC,North Carolina,3705,congressional_district/NC-05
+congressional_district/NC-06,North Carolina's 6th congressional district,congressional_district,state/nc,NC,North Carolina,3706,congressional_district/NC-06
+congressional_district/NC-07,North Carolina's 7th congressional district,congressional_district,state/nc,NC,North Carolina,3707,congressional_district/NC-07
+congressional_district/NC-08,North Carolina's 8th congressional district,congressional_district,state/nc,NC,North Carolina,3708,congressional_district/NC-08
+congressional_district/NC-09,North Carolina's 9th congressional district,congressional_district,state/nc,NC,North Carolina,3709,congressional_district/NC-09
+congressional_district/NC-10,North Carolina's 10th congressional district,congressional_district,state/nc,NC,North Carolina,3710,congressional_district/NC-10
+congressional_district/NC-11,North Carolina's 11th congressional district,congressional_district,state/nc,NC,North Carolina,3711,congressional_district/NC-11
+congressional_district/NC-12,North Carolina's 12th congressional district,congressional_district,state/nc,NC,North Carolina,3712,congressional_district/NC-12
+congressional_district/NC-13,North Carolina's 13th congressional district,congressional_district,state/nc,NC,North Carolina,3713,congressional_district/NC-13
+congressional_district/NC-14,North Carolina's 14th congressional district,congressional_district,state/nc,NC,North Carolina,3714,congressional_district/NC-14
+congressional_district/ND-01,North Dakota's at-large congressional district,congressional_district,state/nd,ND,North Dakota,3800,congressional_district/ND-01
+congressional_district/NE-01,Nebraska's 1st congressional district,congressional_district,state/ne,NE,Nebraska,3101,congressional_district/NE-01
+congressional_district/NE-02,Nebraska's 2nd congressional district,congressional_district,state/ne,NE,Nebraska,3102,congressional_district/NE-02
+congressional_district/NE-03,Nebraska's 3rd congressional district,congressional_district,state/ne,NE,Nebraska,3103,congressional_district/NE-03
+congressional_district/NH-01,New Hampshire's 1st congressional district,congressional_district,state/nh,NH,New Hampshire,3301,congressional_district/NH-01
+congressional_district/NH-02,New Hampshire's 2nd congressional district,congressional_district,state/nh,NH,New Hampshire,3302,congressional_district/NH-02
+congressional_district/NJ-01,New Jersey's 1st congressional district,congressional_district,state/nj,NJ,New Jersey,3401,congressional_district/NJ-01
+congressional_district/NJ-02,New Jersey's 2nd congressional district,congressional_district,state/nj,NJ,New Jersey,3402,congressional_district/NJ-02
+congressional_district/NJ-03,New Jersey's 3rd congressional district,congressional_district,state/nj,NJ,New Jersey,3403,congressional_district/NJ-03
+congressional_district/NJ-04,New Jersey's 4th congressional district,congressional_district,state/nj,NJ,New Jersey,3404,congressional_district/NJ-04
+congressional_district/NJ-05,New Jersey's 5th congressional district,congressional_district,state/nj,NJ,New Jersey,3405,congressional_district/NJ-05
+congressional_district/NJ-06,New Jersey's 6th congressional district,congressional_district,state/nj,NJ,New Jersey,3406,congressional_district/NJ-06
+congressional_district/NJ-07,New Jersey's 7th congressional district,congressional_district,state/nj,NJ,New Jersey,3407,congressional_district/NJ-07
+congressional_district/NJ-08,New Jersey's 8th congressional district,congressional_district,state/nj,NJ,New Jersey,3408,congressional_district/NJ-08
+congressional_district/NJ-09,New Jersey's 9th congressional district,congressional_district,state/nj,NJ,New Jersey,3409,congressional_district/NJ-09
+congressional_district/NJ-10,New Jersey's 10th congressional district,congressional_district,state/nj,NJ,New Jersey,3410,congressional_district/NJ-10
+congressional_district/NJ-11,New Jersey's 11th congressional district,congressional_district,state/nj,NJ,New Jersey,3411,congressional_district/NJ-11
+congressional_district/NJ-12,New Jersey's 12th congressional district,congressional_district,state/nj,NJ,New Jersey,3412,congressional_district/NJ-12
+congressional_district/NM-01,New Mexico's 1st congressional district,congressional_district,state/nm,NM,New Mexico,3501,congressional_district/NM-01
+congressional_district/NM-02,New Mexico's 2nd congressional district,congressional_district,state/nm,NM,New Mexico,3502,congressional_district/NM-02
+congressional_district/NM-03,New Mexico's 3rd congressional district,congressional_district,state/nm,NM,New Mexico,3503,congressional_district/NM-03
+congressional_district/NV-01,Nevada's 1st congressional district,congressional_district,state/nv,NV,Nevada,3201,congressional_district/NV-01
+congressional_district/NV-02,Nevada's 2nd congressional district,congressional_district,state/nv,NV,Nevada,3202,congressional_district/NV-02
+congressional_district/NV-03,Nevada's 3rd congressional district,congressional_district,state/nv,NV,Nevada,3203,congressional_district/NV-03
+congressional_district/NV-04,Nevada's 4th congressional district,congressional_district,state/nv,NV,Nevada,3204,congressional_district/NV-04
+congressional_district/NY-01,New York's 1st congressional district,congressional_district,state/ny,NY,New York,3601,congressional_district/NY-01
+congressional_district/NY-02,New York's 2nd congressional district,congressional_district,state/ny,NY,New York,3602,congressional_district/NY-02
+congressional_district/NY-03,New York's 3rd congressional district,congressional_district,state/ny,NY,New York,3603,congressional_district/NY-03
+congressional_district/NY-04,New York's 4th congressional district,congressional_district,state/ny,NY,New York,3604,congressional_district/NY-04
+congressional_district/NY-05,New York's 5th congressional district,congressional_district,state/ny,NY,New York,3605,congressional_district/NY-05
+congressional_district/NY-06,New York's 6th congressional district,congressional_district,state/ny,NY,New York,3606,congressional_district/NY-06
+congressional_district/NY-07,New York's 7th congressional district,congressional_district,state/ny,NY,New York,3607,congressional_district/NY-07
+congressional_district/NY-08,New York's 8th congressional district,congressional_district,state/ny,NY,New York,3608,congressional_district/NY-08
+congressional_district/NY-09,New York's 9th congressional district,congressional_district,state/ny,NY,New York,3609,congressional_district/NY-09
+congressional_district/NY-10,New York's 10th congressional district,congressional_district,state/ny,NY,New York,3610,congressional_district/NY-10
+congressional_district/NY-11,New York's 11th congressional district,congressional_district,state/ny,NY,New York,3611,congressional_district/NY-11
+congressional_district/NY-12,New York's 12th congressional district,congressional_district,state/ny,NY,New York,3612,congressional_district/NY-12
+congressional_district/NY-13,New York's 13th congressional district,congressional_district,state/ny,NY,New York,3613,congressional_district/NY-13
+congressional_district/NY-14,New York's 14th congressional district,congressional_district,state/ny,NY,New York,3614,congressional_district/NY-14
+congressional_district/NY-15,New York's 15th congressional district,congressional_district,state/ny,NY,New York,3615,congressional_district/NY-15
+congressional_district/NY-16,New York's 16th congressional district,congressional_district,state/ny,NY,New York,3616,congressional_district/NY-16
+congressional_district/NY-17,New York's 17th congressional district,congressional_district,state/ny,NY,New York,3617,congressional_district/NY-17
+congressional_district/NY-18,New York's 18th congressional district,congressional_district,state/ny,NY,New York,3618,congressional_district/NY-18
+congressional_district/NY-19,New York's 19th congressional district,congressional_district,state/ny,NY,New York,3619,congressional_district/NY-19
+congressional_district/NY-20,New York's 20th congressional district,congressional_district,state/ny,NY,New York,3620,congressional_district/NY-20
+congressional_district/NY-21,New York's 21st congressional district,congressional_district,state/ny,NY,New York,3621,congressional_district/NY-21
+congressional_district/NY-22,New York's 22nd congressional district,congressional_district,state/ny,NY,New York,3622,congressional_district/NY-22
+congressional_district/NY-23,New York's 23rd congressional district,congressional_district,state/ny,NY,New York,3623,congressional_district/NY-23
+congressional_district/NY-24,New York's 24th congressional district,congressional_district,state/ny,NY,New York,3624,congressional_district/NY-24
+congressional_district/NY-25,New York's 25th congressional district,congressional_district,state/ny,NY,New York,3625,congressional_district/NY-25
+congressional_district/NY-26,New York's 26th congressional district,congressional_district,state/ny,NY,New York,3626,congressional_district/NY-26
+congressional_district/OH-01,Ohio's 1st congressional district,congressional_district,state/oh,OH,Ohio,3901,congressional_district/OH-01
+congressional_district/OH-02,Ohio's 2nd congressional district,congressional_district,state/oh,OH,Ohio,3902,congressional_district/OH-02
+congressional_district/OH-03,Ohio's 3rd congressional district,congressional_district,state/oh,OH,Ohio,3903,congressional_district/OH-03
+congressional_district/OH-04,Ohio's 4th congressional district,congressional_district,state/oh,OH,Ohio,3904,congressional_district/OH-04
+congressional_district/OH-05,Ohio's 5th congressional district,congressional_district,state/oh,OH,Ohio,3905,congressional_district/OH-05
+congressional_district/OH-06,Ohio's 6th congressional district,congressional_district,state/oh,OH,Ohio,3906,congressional_district/OH-06
+congressional_district/OH-07,Ohio's 7th congressional district,congressional_district,state/oh,OH,Ohio,3907,congressional_district/OH-07
+congressional_district/OH-08,Ohio's 8th congressional district,congressional_district,state/oh,OH,Ohio,3908,congressional_district/OH-08
+congressional_district/OH-09,Ohio's 9th congressional district,congressional_district,state/oh,OH,Ohio,3909,congressional_district/OH-09
+congressional_district/OH-10,Ohio's 10th congressional district,congressional_district,state/oh,OH,Ohio,3910,congressional_district/OH-10
+congressional_district/OH-11,Ohio's 11th congressional district,congressional_district,state/oh,OH,Ohio,3911,congressional_district/OH-11
+congressional_district/OH-12,Ohio's 12th congressional district,congressional_district,state/oh,OH,Ohio,3912,congressional_district/OH-12
+congressional_district/OH-13,Ohio's 13th congressional district,congressional_district,state/oh,OH,Ohio,3913,congressional_district/OH-13
+congressional_district/OH-14,Ohio's 14th congressional district,congressional_district,state/oh,OH,Ohio,3914,congressional_district/OH-14
+congressional_district/OH-15,Ohio's 15th congressional district,congressional_district,state/oh,OH,Ohio,3915,congressional_district/OH-15
+congressional_district/OK-01,Oklahoma's 1st congressional district,congressional_district,state/ok,OK,Oklahoma,4001,congressional_district/OK-01
+congressional_district/OK-02,Oklahoma's 2nd congressional district,congressional_district,state/ok,OK,Oklahoma,4002,congressional_district/OK-02
+congressional_district/OK-03,Oklahoma's 3rd congressional district,congressional_district,state/ok,OK,Oklahoma,4003,congressional_district/OK-03
+congressional_district/OK-04,Oklahoma's 4th congressional district,congressional_district,state/ok,OK,Oklahoma,4004,congressional_district/OK-04
+congressional_district/OK-05,Oklahoma's 5th congressional district,congressional_district,state/ok,OK,Oklahoma,4005,congressional_district/OK-05
+congressional_district/OR-01,Oregon's 1st congressional district,congressional_district,state/or,OR,Oregon,4101,congressional_district/OR-01
+congressional_district/OR-02,Oregon's 2nd congressional district,congressional_district,state/or,OR,Oregon,4102,congressional_district/OR-02
+congressional_district/OR-03,Oregon's 3rd congressional district,congressional_district,state/or,OR,Oregon,4103,congressional_district/OR-03
+congressional_district/OR-04,Oregon's 4th congressional district,congressional_district,state/or,OR,Oregon,4104,congressional_district/OR-04
+congressional_district/OR-05,Oregon's 5th congressional district,congressional_district,state/or,OR,Oregon,4105,congressional_district/OR-05
+congressional_district/OR-06,Oregon's 6th congressional district,congressional_district,state/or,OR,Oregon,4106,congressional_district/OR-06
+congressional_district/PA-01,Pennsylvania's 1st congressional district,congressional_district,state/pa,PA,Pennsylvania,4201,congressional_district/PA-01
+congressional_district/PA-02,Pennsylvania's 2nd congressional district,congressional_district,state/pa,PA,Pennsylvania,4202,congressional_district/PA-02
+congressional_district/PA-03,Pennsylvania's 3rd congressional district,congressional_district,state/pa,PA,Pennsylvania,4203,congressional_district/PA-03
+congressional_district/PA-04,Pennsylvania's 4th congressional district,congressional_district,state/pa,PA,Pennsylvania,4204,congressional_district/PA-04
+congressional_district/PA-05,Pennsylvania's 5th congressional district,congressional_district,state/pa,PA,Pennsylvania,4205,congressional_district/PA-05
+congressional_district/PA-06,Pennsylvania's 6th congressional district,congressional_district,state/pa,PA,Pennsylvania,4206,congressional_district/PA-06
+congressional_district/PA-07,Pennsylvania's 7th congressional district,congressional_district,state/pa,PA,Pennsylvania,4207,congressional_district/PA-07
+congressional_district/PA-08,Pennsylvania's 8th congressional district,congressional_district,state/pa,PA,Pennsylvania,4208,congressional_district/PA-08
+congressional_district/PA-09,Pennsylvania's 9th congressional district,congressional_district,state/pa,PA,Pennsylvania,4209,congressional_district/PA-09
+congressional_district/PA-10,Pennsylvania's 10th congressional district,congressional_district,state/pa,PA,Pennsylvania,4210,congressional_district/PA-10
+congressional_district/PA-11,Pennsylvania's 11th congressional district,congressional_district,state/pa,PA,Pennsylvania,4211,congressional_district/PA-11
+congressional_district/PA-12,Pennsylvania's 12th congressional district,congressional_district,state/pa,PA,Pennsylvania,4212,congressional_district/PA-12
+congressional_district/PA-13,Pennsylvania's 13th congressional district,congressional_district,state/pa,PA,Pennsylvania,4213,congressional_district/PA-13
+congressional_district/PA-14,Pennsylvania's 14th congressional district,congressional_district,state/pa,PA,Pennsylvania,4214,congressional_district/PA-14
+congressional_district/PA-15,Pennsylvania's 15th congressional district,congressional_district,state/pa,PA,Pennsylvania,4215,congressional_district/PA-15
+congressional_district/PA-16,Pennsylvania's 16th congressional district,congressional_district,state/pa,PA,Pennsylvania,4216,congressional_district/PA-16
+congressional_district/PA-17,Pennsylvania's 17th congressional district,congressional_district,state/pa,PA,Pennsylvania,4217,congressional_district/PA-17
+congressional_district/RI-01,Rhode Island's 1st congressional district,congressional_district,state/ri,RI,Rhode Island,4401,congressional_district/RI-01
+congressional_district/RI-02,Rhode Island's 2nd congressional district,congressional_district,state/ri,RI,Rhode Island,4402,congressional_district/RI-02
+congressional_district/SC-01,South Carolina's 1st congressional district,congressional_district,state/sc,SC,South Carolina,4501,congressional_district/SC-01
+congressional_district/SC-02,South Carolina's 2nd congressional district,congressional_district,state/sc,SC,South Carolina,4502,congressional_district/SC-02
+congressional_district/SC-03,South Carolina's 3rd congressional district,congressional_district,state/sc,SC,South Carolina,4503,congressional_district/SC-03
+congressional_district/SC-04,South Carolina's 4th congressional district,congressional_district,state/sc,SC,South Carolina,4504,congressional_district/SC-04
+congressional_district/SC-05,South Carolina's 5th congressional district,congressional_district,state/sc,SC,South Carolina,4505,congressional_district/SC-05
+congressional_district/SC-06,South Carolina's 6th congressional district,congressional_district,state/sc,SC,South Carolina,4506,congressional_district/SC-06
+congressional_district/SC-07,South Carolina's 7th congressional district,congressional_district,state/sc,SC,South Carolina,4507,congressional_district/SC-07
+congressional_district/SD-01,South Dakota's at-large congressional district,congressional_district,state/sd,SD,South Dakota,4600,congressional_district/SD-01
+congressional_district/TN-01,Tennessee's 1st congressional district,congressional_district,state/tn,TN,Tennessee,4701,congressional_district/TN-01
+congressional_district/TN-02,Tennessee's 2nd congressional district,congressional_district,state/tn,TN,Tennessee,4702,congressional_district/TN-02
+congressional_district/TN-03,Tennessee's 3rd congressional district,congressional_district,state/tn,TN,Tennessee,4703,congressional_district/TN-03
+congressional_district/TN-04,Tennessee's 4th congressional district,congressional_district,state/tn,TN,Tennessee,4704,congressional_district/TN-04
+congressional_district/TN-05,Tennessee's 5th congressional district,congressional_district,state/tn,TN,Tennessee,4705,congressional_district/TN-05
+congressional_district/TN-06,Tennessee's 6th congressional district,congressional_district,state/tn,TN,Tennessee,4706,congressional_district/TN-06
+congressional_district/TN-07,Tennessee's 7th congressional district,congressional_district,state/tn,TN,Tennessee,4707,congressional_district/TN-07
+congressional_district/TN-08,Tennessee's 8th congressional district,congressional_district,state/tn,TN,Tennessee,4708,congressional_district/TN-08
+congressional_district/TN-09,Tennessee's 9th congressional district,congressional_district,state/tn,TN,Tennessee,4709,congressional_district/TN-09
+congressional_district/TX-01,Texas's 1st congressional district,congressional_district,state/tx,TX,Texas,4801,congressional_district/TX-01
+congressional_district/TX-02,Texas's 2nd congressional district,congressional_district,state/tx,TX,Texas,4802,congressional_district/TX-02
+congressional_district/TX-03,Texas's 3rd congressional district,congressional_district,state/tx,TX,Texas,4803,congressional_district/TX-03
+congressional_district/TX-04,Texas's 4th congressional district,congressional_district,state/tx,TX,Texas,4804,congressional_district/TX-04
+congressional_district/TX-05,Texas's 5th congressional district,congressional_district,state/tx,TX,Texas,4805,congressional_district/TX-05
+congressional_district/TX-06,Texas's 6th congressional district,congressional_district,state/tx,TX,Texas,4806,congressional_district/TX-06
+congressional_district/TX-07,Texas's 7th congressional district,congressional_district,state/tx,TX,Texas,4807,congressional_district/TX-07
+congressional_district/TX-08,Texas's 8th congressional district,congressional_district,state/tx,TX,Texas,4808,congressional_district/TX-08
+congressional_district/TX-09,Texas's 9th congressional district,congressional_district,state/tx,TX,Texas,4809,congressional_district/TX-09
+congressional_district/TX-10,Texas's 10th congressional district,congressional_district,state/tx,TX,Texas,4810,congressional_district/TX-10
+congressional_district/TX-11,Texas's 11th congressional district,congressional_district,state/tx,TX,Texas,4811,congressional_district/TX-11
+congressional_district/TX-12,Texas's 12th congressional district,congressional_district,state/tx,TX,Texas,4812,congressional_district/TX-12
+congressional_district/TX-13,Texas's 13th congressional district,congressional_district,state/tx,TX,Texas,4813,congressional_district/TX-13
+congressional_district/TX-14,Texas's 14th congressional district,congressional_district,state/tx,TX,Texas,4814,congressional_district/TX-14
+congressional_district/TX-15,Texas's 15th congressional district,congressional_district,state/tx,TX,Texas,4815,congressional_district/TX-15
+congressional_district/TX-16,Texas's 16th congressional district,congressional_district,state/tx,TX,Texas,4816,congressional_district/TX-16
+congressional_district/TX-17,Texas's 17th congressional district,congressional_district,state/tx,TX,Texas,4817,congressional_district/TX-17
+congressional_district/TX-18,Texas's 18th congressional district,congressional_district,state/tx,TX,Texas,4818,congressional_district/TX-18
+congressional_district/TX-19,Texas's 19th congressional district,congressional_district,state/tx,TX,Texas,4819,congressional_district/TX-19
+congressional_district/TX-20,Texas's 20th congressional district,congressional_district,state/tx,TX,Texas,4820,congressional_district/TX-20
+congressional_district/TX-21,Texas's 21st congressional district,congressional_district,state/tx,TX,Texas,4821,congressional_district/TX-21
+congressional_district/TX-22,Texas's 22nd congressional district,congressional_district,state/tx,TX,Texas,4822,congressional_district/TX-22
+congressional_district/TX-23,Texas's 23rd congressional district,congressional_district,state/tx,TX,Texas,4823,congressional_district/TX-23
+congressional_district/TX-24,Texas's 24th congressional district,congressional_district,state/tx,TX,Texas,4824,congressional_district/TX-24
+congressional_district/TX-25,Texas's 25th congressional district,congressional_district,state/tx,TX,Texas,4825,congressional_district/TX-25
+congressional_district/TX-26,Texas's 26th congressional district,congressional_district,state/tx,TX,Texas,4826,congressional_district/TX-26
+congressional_district/TX-27,Texas's 27th congressional district,congressional_district,state/tx,TX,Texas,4827,congressional_district/TX-27
+congressional_district/TX-28,Texas's 28th congressional district,congressional_district,state/tx,TX,Texas,4828,congressional_district/TX-28
+congressional_district/TX-29,Texas's 29th congressional district,congressional_district,state/tx,TX,Texas,4829,congressional_district/TX-29
+congressional_district/TX-30,Texas's 30th congressional district,congressional_district,state/tx,TX,Texas,4830,congressional_district/TX-30
+congressional_district/TX-31,Texas's 31st congressional district,congressional_district,state/tx,TX,Texas,4831,congressional_district/TX-31
+congressional_district/TX-32,Texas's 32nd congressional district,congressional_district,state/tx,TX,Texas,4832,congressional_district/TX-32
+congressional_district/TX-33,Texas's 33rd congressional district,congressional_district,state/tx,TX,Texas,4833,congressional_district/TX-33
+congressional_district/TX-34,Texas's 34th congressional district,congressional_district,state/tx,TX,Texas,4834,congressional_district/TX-34
+congressional_district/TX-35,Texas's 35th congressional district,congressional_district,state/tx,TX,Texas,4835,congressional_district/TX-35
+congressional_district/TX-36,Texas's 36th congressional district,congressional_district,state/tx,TX,Texas,4836,congressional_district/TX-36
+congressional_district/TX-37,Texas's 37th congressional district,congressional_district,state/tx,TX,Texas,4837,congressional_district/TX-37
+congressional_district/TX-38,Texas's 38th congressional district,congressional_district,state/tx,TX,Texas,4838,congressional_district/TX-38
+congressional_district/UT-01,Utah's 1st congressional district,congressional_district,state/ut,UT,Utah,4901,congressional_district/UT-01
+congressional_district/UT-02,Utah's 2nd congressional district,congressional_district,state/ut,UT,Utah,4902,congressional_district/UT-02
+congressional_district/UT-03,Utah's 3rd congressional district,congressional_district,state/ut,UT,Utah,4903,congressional_district/UT-03
+congressional_district/UT-04,Utah's 4th congressional district,congressional_district,state/ut,UT,Utah,4904,congressional_district/UT-04
+congressional_district/VA-01,Virginia's 1st congressional district,congressional_district,state/va,VA,Virginia,5101,congressional_district/VA-01
+congressional_district/VA-02,Virginia's 2nd congressional district,congressional_district,state/va,VA,Virginia,5102,congressional_district/VA-02
+congressional_district/VA-03,Virginia's 3rd congressional district,congressional_district,state/va,VA,Virginia,5103,congressional_district/VA-03
+congressional_district/VA-04,Virginia's 4th congressional district,congressional_district,state/va,VA,Virginia,5104,congressional_district/VA-04
+congressional_district/VA-05,Virginia's 5th congressional district,congressional_district,state/va,VA,Virginia,5105,congressional_district/VA-05
+congressional_district/VA-06,Virginia's 6th congressional district,congressional_district,state/va,VA,Virginia,5106,congressional_district/VA-06
+congressional_district/VA-07,Virginia's 7th congressional district,congressional_district,state/va,VA,Virginia,5107,congressional_district/VA-07
+congressional_district/VA-08,Virginia's 8th congressional district,congressional_district,state/va,VA,Virginia,5108,congressional_district/VA-08
+congressional_district/VA-09,Virginia's 9th congressional district,congressional_district,state/va,VA,Virginia,5109,congressional_district/VA-09
+congressional_district/VA-10,Virginia's 10th congressional district,congressional_district,state/va,VA,Virginia,5110,congressional_district/VA-10
+congressional_district/VA-11,Virginia's 11th congressional district,congressional_district,state/va,VA,Virginia,5111,congressional_district/VA-11
+congressional_district/VT-01,Vermont's at-large congressional district,congressional_district,state/vt,VT,Vermont,5000,congressional_district/VT-01
+congressional_district/WA-01,Washington's 1st congressional district,congressional_district,state/wa,WA,Washington,5301,congressional_district/WA-01
+congressional_district/WA-02,Washington's 2nd congressional district,congressional_district,state/wa,WA,Washington,5302,congressional_district/WA-02
+congressional_district/WA-03,Washington's 3rd congressional district,congressional_district,state/wa,WA,Washington,5303,congressional_district/WA-03
+congressional_district/WA-04,Washington's 4th congressional district,congressional_district,state/wa,WA,Washington,5304,congressional_district/WA-04
+congressional_district/WA-05,Washington's 5th congressional district,congressional_district,state/wa,WA,Washington,5305,congressional_district/WA-05
+congressional_district/WA-06,Washington's 6th congressional district,congressional_district,state/wa,WA,Washington,5306,congressional_district/WA-06
+congressional_district/WA-07,Washington's 7th congressional district,congressional_district,state/wa,WA,Washington,5307,congressional_district/WA-07
+congressional_district/WA-08,Washington's 8th congressional district,congressional_district,state/wa,WA,Washington,5308,congressional_district/WA-08
+congressional_district/WA-09,Washington's 9th congressional district,congressional_district,state/wa,WA,Washington,5309,congressional_district/WA-09
+congressional_district/WA-10,Washington's 10th congressional district,congressional_district,state/wa,WA,Washington,5310,congressional_district/WA-10
+congressional_district/WI-01,Wisconsin's 1st congressional district,congressional_district,state/wi,WI,Wisconsin,5501,congressional_district/WI-01
+congressional_district/WI-02,Wisconsin's 2nd congressional district,congressional_district,state/wi,WI,Wisconsin,5502,congressional_district/WI-02
+congressional_district/WI-03,Wisconsin's 3rd congressional district,congressional_district,state/wi,WI,Wisconsin,5503,congressional_district/WI-03
+congressional_district/WI-04,Wisconsin's 4th congressional district,congressional_district,state/wi,WI,Wisconsin,5504,congressional_district/WI-04
+congressional_district/WI-05,Wisconsin's 5th congressional district,congressional_district,state/wi,WI,Wisconsin,5505,congressional_district/WI-05
+congressional_district/WI-06,Wisconsin's 6th congressional district,congressional_district,state/wi,WI,Wisconsin,5506,congressional_district/WI-06
+congressional_district/WI-07,Wisconsin's 7th congressional district,congressional_district,state/wi,WI,Wisconsin,5507,congressional_district/WI-07
+congressional_district/WI-08,Wisconsin's 8th congressional district,congressional_district,state/wi,WI,Wisconsin,5508,congressional_district/WI-08
+congressional_district/WV-01,West Virginia's 1st congressional district,congressional_district,state/wv,WV,West Virginia,5401,congressional_district/WV-01
+congressional_district/WV-02,West Virginia's 2nd congressional district,congressional_district,state/wv,WV,West Virginia,5402,congressional_district/WV-02
+congressional_district/WY-01,Wyoming's at-large congressional district,congressional_district,state/wy,WY,Wyoming,5600,congressional_district/WY-01
+place/AK-03000,Anchorage,place,state/ak,AK,Alaska,,place/AK-03000
+place/AL-07000,Birmingham,place,state/al,AL,Alabama,,place/AL-07000
+place/AL-37000,Huntsville,place,state/al,AL,Alabama,,place/AL-37000
+place/AL-50000,Mobile,place,state/al,AL,Alabama,,place/AL-50000
+place/AL-51000,Montgomery,place,state/al,AL,Alabama,,place/AL-51000
+place/AL-77256,Tuscaloosa,place,state/al,AL,Alabama,,place/AL-77256
+place/AR-23290,Fayetteville,place,state/ar,AR,Arkansas,,place/AR-23290
+place/AR-41000,Little Rock,place,state/ar,AR,Arkansas,,place/AR-41000
+place/AZ-07940,Buckeye,place,state/az,AZ,Arizona,,place/AZ-07940
+place/AZ-12000,Chandler,place,state/az,AZ,Arizona,,place/AZ-12000
+place/AZ-27400,Gilbert,place,state/az,AZ,Arizona,,place/AZ-27400
+place/AZ-27820,Glendale,place,state/az,AZ,Arizona,,place/AZ-27820
+place/AZ-28380,Goodyear,place,state/az,AZ,Arizona,,place/AZ-28380
+place/AZ-46000,Mesa,place,state/az,AZ,Arizona,,place/AZ-46000
+place/AZ-54050,Peoria,place,state/az,AZ,Arizona,,place/AZ-54050
+place/AZ-55000,Phoenix,place,state/az,AZ,Arizona,,place/AZ-55000
+place/AZ-65000,Scottsdale,place,state/az,AZ,Arizona,,place/AZ-65000
+place/AZ-71510,Surprise,place,state/az,AZ,Arizona,,place/AZ-71510
+place/AZ-73000,Tempe,place,state/az,AZ,Arizona,,place/AZ-73000
+place/AZ-77000,Tucson,place,state/az,AZ,Arizona,,place/AZ-77000
+place/AZ-85540,Yuma,place,state/az,AZ,Arizona,,place/AZ-85540
+place/CA-02000,Anaheim,place,state/ca,CA,California,,place/CA-02000
+place/CA-02252,Antioch,place,state/ca,CA,California,,place/CA-02252
+place/CA-03526,Bakersfield,place,state/ca,CA,California,,place/CA-03526
+place/CA-06000,Berkeley,place,state/ca,CA,California,,place/CA-06000
+place/CA-08954,Burbank,place,state/ca,CA,California,,place/CA-08954
+place/CA-11194,Carlsbad,place,state/ca,CA,California,,place/CA-11194
+place/CA-13014,Chico,place,state/ca,CA,California,,place/CA-13014
+place/CA-13392,Chula Vista,place,state/ca,CA,California,,place/CA-13392
+place/CA-14218,Clovis,place,state/ca,CA,California,,place/CA-14218
+place/CA-16000,Concord,place,state/ca,CA,California,,place/CA-16000
+place/CA-16350,Corona,place,state/ca,CA,California,,place/CA-16350
+place/CA-16532,Costa Mesa,place,state/ca,CA,California,,place/CA-16532
+place/CA-19766,Downey,place,state/ca,CA,California,,place/CA-19766
+place/CA-21712,El Cajon,place,state/ca,CA,California,,place/CA-21712
+place/CA-22020,Elk Grove,place,state/ca,CA,California,,place/CA-22020
+place/CA-22230,El Monte,place,state/ca,CA,California,,place/CA-22230
+place/CA-22804,Escondido,place,state/ca,CA,California,,place/CA-22804
+place/CA-23182,Fairfield,place,state/ca,CA,California,,place/CA-23182
+place/CA-24680,Fontana,place,state/ca,CA,California,,place/CA-24680
+place/CA-26000,Fremont,place,state/ca,CA,California,,place/CA-26000
+place/CA-27000,Fresno,place,state/ca,CA,California,,place/CA-27000
+place/CA-28000,Fullerton,place,state/ca,CA,California,,place/CA-28000
+place/CA-29000,Garden Grove,place,state/ca,CA,California,,place/CA-29000
+place/CA-30000,Glendale,place,state/ca,CA,California,,place/CA-30000
+place/CA-33000,Hayward,place,state/ca,CA,California,,place/CA-33000
+place/CA-33434,Hesperia,place,state/ca,CA,California,,place/CA-33434
+place/CA-36000,Huntington Beach,place,state/ca,CA,California,,place/CA-36000
+place/CA-36546,Inglewood,place,state/ca,CA,California,,place/CA-36546
+place/CA-36770,Irvine,place,state/ca,CA,California,,place/CA-36770
+place/CA-37692,Jurupa Valley,place,state/ca,CA,California,,place/CA-37692
+place/CA-40130,Lancaster,place,state/ca,CA,California,,place/CA-40130
+place/CA-43000,Long Beach,place,state/ca,CA,California,,place/CA-43000
+place/CA-44000,Los Angeles,place,state/ca,CA,California,,place/CA-44000
+place/CA-46842,Menifee,place,state/ca,CA,California,,place/CA-46842
+place/CA-48354,Modesto,place,state/ca,CA,California,,place/CA-48354
+place/CA-49270,Moreno Valley,place,state/ca,CA,California,,place/CA-49270
+place/CA-50076,Murrieta,place,state/ca,CA,California,,place/CA-50076
+place/CA-53000,Oakland,place,state/ca,CA,California,,place/CA-53000
+place/CA-53322,Oceanside,place,state/ca,CA,California,,place/CA-53322
+place/CA-53896,Ontario,place,state/ca,CA,California,,place/CA-53896
+place/CA-53980,Orange,place,state/ca,CA,California,,place/CA-53980
+place/CA-54652,Oxnard,place,state/ca,CA,California,,place/CA-54652
+place/CA-55156,Palmdale,place,state/ca,CA,California,,place/CA-55156
+place/CA-56000,Pasadena,place,state/ca,CA,California,,place/CA-56000
+place/CA-58072,Pomona,place,state/ca,CA,California,,place/CA-58072
+place/CA-59451,Rancho Cucamonga,place,state/ca,CA,California,,place/CA-59451
+place/CA-60466,Rialto,place,state/ca,CA,California,,place/CA-60466
+place/CA-60620,Richmond,place,state/ca,CA,California,,place/CA-60620
+place/CA-62000,Riverside,place,state/ca,CA,California,,place/CA-62000
+place/CA-62938,Roseville,place,state/ca,CA,California,,place/CA-62938
+place/CA-64000,Sacramento,place,state/ca,CA,California,,place/CA-64000
+place/CA-64224,Salinas,place,state/ca,CA,California,,place/CA-64224
+place/CA-65000,San Bernardino,place,state/ca,CA,California,,place/CA-65000
+place/CA-65042,Ventura,place,state/ca,CA,California,,place/CA-65042
+place/CA-66000,San Diego,place,state/ca,CA,California,,place/CA-66000
+place/CA-67000,San Francisco,place,state/ca,CA,California,,place/CA-67000
+place/CA-68000,San Jose,place,state/ca,CA,California,,place/CA-68000
+place/CA-68252,San Mateo,place,state/ca,CA,California,,place/CA-68252
+place/CA-69000,Santa Ana,place,state/ca,CA,California,,place/CA-69000
+place/CA-69084,Santa Clara,place,state/ca,CA,California,,place/CA-69084
+place/CA-69088,Santa Clarita,place,state/ca,CA,California,,place/CA-69088
+place/CA-69196,Santa Maria,place,state/ca,CA,California,,place/CA-69196
+place/CA-70098,Santa Rosa,place,state/ca,CA,California,,place/CA-70098
+place/CA-72016,Simi Valley,place,state/ca,CA,California,,place/CA-72016
+place/CA-75000,Stockton,place,state/ca,CA,California,,place/CA-75000
+place/CA-77000,Sunnyvale,place,state/ca,CA,California,,place/CA-77000
+place/CA-78120,Temecula,place,state/ca,CA,California,,place/CA-78120
+place/CA-78582,Thousand Oaks,place,state/ca,CA,California,,place/CA-78582
+place/CA-80000,Torrance,place,state/ca,CA,California,,place/CA-80000
+place/CA-81554,Vacaville,place,state/ca,CA,California,,place/CA-81554
+place/CA-81666,Vallejo,place,state/ca,CA,California,,place/CA-81666
+place/CA-82590,Victorville,place,state/ca,CA,California,,place/CA-82590
+place/CA-82954,Visalia,place,state/ca,CA,California,,place/CA-82954
+place/CA-84200,West Covina,place,state/ca,CA,California,,place/CA-84200
+place/CO-03455,Arvada,place,state/co,CO,Colorado,,place/CO-03455
+place/CO-04000,Aurora,place,state/co,CO,Colorado,,place/CO-04000
+place/CO-07850,Boulder,place,state/co,CO,Colorado,,place/CO-07850
+place/CO-12815,Centennial,place,state/co,CO,Colorado,,place/CO-12815
+place/CO-16000,Colorado Springs,place,state/co,CO,Colorado,,place/CO-16000
+place/CO-20000,Denver,place,state/co,CO,Colorado,,place/CO-20000
+place/CO-27425,Fort Collins,place,state/co,CO,Colorado,,place/CO-27425
+place/CO-32155,Greeley,place,state/co,CO,Colorado,,place/CO-32155
+place/CO-43000,Lakewood,place,state/co,CO,Colorado,,place/CO-43000
+place/CO-62000,Pueblo,place,state/co,CO,Colorado,,place/CO-62000
+place/CO-77290,Thornton,place,state/co,CO,Colorado,,place/CO-77290
+place/CO-83835,Westminster,place,state/co,CO,Colorado,,place/CO-83835
+place/CT-08000,Bridgeport,place,state/ct,CT,Connecticut,,place/CT-08000
+place/CT-37000,Hartford,place,state/ct,CT,Connecticut,,place/CT-37000
+place/CT-52000,New Haven,place,state/ct,CT,Connecticut,,place/CT-52000
+place/CT-73000,Stamford,place,state/ct,CT,Connecticut,,place/CT-73000
+place/CT-80000,Waterbury,place,state/ct,CT,Connecticut,,place/CT-80000
+place/DC-50000,Washington,place,state/dc,DC,District of Columbia,,place/DC-50000
+place/FL-10275,Cape Coral,place,state/fl,FL,Florida,,place/FL-10275
+place/FL-12875,Clearwater,place,state/fl,FL,Florida,,place/FL-12875
+place/FL-14400,Coral Springs,place,state/fl,FL,Florida,,place/FL-14400
+place/FL-16475,Davie,place,state/fl,FL,Florida,,place/FL-16475
+place/FL-24000,Fort Lauderdale,place,state/fl,FL,Florida,,place/FL-24000
+place/FL-25175,Gainesville,place,state/fl,FL,Florida,,place/FL-25175
+place/FL-30000,Hialeah,place,state/fl,FL,Florida,,place/FL-30000
+place/FL-32000,Hollywood,place,state/fl,FL,Florida,,place/FL-32000
+place/FL-35000,Jacksonville,place,state/fl,FL,Florida,,place/FL-35000
+place/FL-38250,Lakeland,place,state/fl,FL,Florida,,place/FL-38250
+place/FL-45000,Miami,place,state/fl,FL,Florida,,place/FL-45000
+place/FL-45060,Miami Gardens,place,state/fl,FL,Florida,,place/FL-45060
+place/FL-45975,Miramar,place,state/fl,FL,Florida,,place/FL-45975
+place/FL-53000,Orlando,place,state/fl,FL,Florida,,place/FL-53000
+place/FL-54000,Palm Bay,place,state/fl,FL,Florida,,place/FL-54000
+place/FL-54200,Palm Coast,place,state/fl,FL,Florida,,place/FL-54200
+place/FL-55775,Pembroke Pines,place,state/fl,FL,Florida,,place/FL-55775
+place/FL-58050,Pompano Beach,place,state/fl,FL,Florida,,place/FL-58050
+place/FL-58715,Port St. Lucie,place,state/fl,FL,Florida,,place/FL-58715
+place/FL-63000,St. Petersburg,place,state/fl,FL,Florida,,place/FL-63000
+place/FL-70600,Tallahassee,place,state/fl,FL,Florida,,place/FL-70600
+place/FL-71000,Tampa,place,state/fl,FL,Florida,,place/FL-71000
+place/FL-76600,West Palm Beach,place,state/fl,FL,Florida,,place/FL-76600
+place/GA-03440,Athens-Clarke County,place,state/ga,GA,Georgia,,place/GA-03440
+place/GA-04000,Atlanta,place,state/ga,GA,Georgia,,place/GA-04000
+place/GA-04204,Augusta-Richmond County,place,state/ga,GA,Georgia,,place/GA-04204
+place/GA-19000,Columbus,place,state/ga,GA,Georgia,,place/GA-19000
+place/GA-49008,Macon-Bibb County,place,state/ga,GA,Georgia,,place/GA-49008
+place/GA-68516,Sandy Springs,place,state/ga,GA,Georgia,,place/GA-68516
+place/GA-69000,Savannah,place,state/ga,GA,Georgia,,place/GA-69000
+place/GA-72122,South Fulton,place,state/ga,GA,Georgia,,place/GA-72122
+place/HI-71550,Urban Honolulu,place,state/hi,HI,Hawaii,,place/HI-71550
+place/IA-12000,Cedar Rapids,place,state/ia,IA,Iowa,,place/IA-12000
+place/IA-19000,Davenport,place,state/ia,IA,Iowa,,place/IA-19000
+place/IA-21000,Des Moines,place,state/ia,IA,Iowa,,place/IA-21000
+place/ID-08830,Boise City,place,state/id,ID,Idaho,,place/ID-08830
+place/ID-52120,Meridian,place,state/id,ID,Idaho,,place/ID-52120
+place/ID-56260,Nampa,place,state/id,ID,Idaho,,place/ID-56260
+place/IL-03012,Aurora,place,state/il,IL,Illinois,,place/IL-03012
+place/IL-14000,Chicago,place,state/il,IL,Illinois,,place/IL-14000
+place/IL-23074,Elgin,place,state/il,IL,Illinois,,place/IL-23074
+place/IL-38570,Joliet,place,state/il,IL,Illinois,,place/IL-38570
+place/IL-51622,Naperville,place,state/il,IL,Illinois,,place/IL-51622
+place/IL-59000,Peoria,place,state/il,IL,Illinois,,place/IL-59000
+place/IL-65000,Rockford,place,state/il,IL,Illinois,,place/IL-65000
+place/IL-72000,Springfield,place,state/il,IL,Illinois,,place/IL-72000
+place/IN-10342,Carmel,place,state/in,IN,Indiana,,place/IN-10342
+place/IN-22000,Evansville,place,state/in,IN,Indiana,,place/IN-22000
+place/IN-23278,Fishers,place,state/in,IN,Indiana,,place/IN-23278
+place/IN-25000,Fort Wayne,place,state/in,IN,Indiana,,place/IN-25000
+place/IN-36003,Indianapolis,place,state/in,IN,Indiana,,place/IN-36003
+place/IN-71000,South Bend,place,state/in,IN,Indiana,,place/IN-71000
+place/KS-36000,Kansas City,place,state/ks,KS,Kansas,,place/KS-36000
+place/KS-52575,Olathe,place,state/ks,KS,Kansas,,place/KS-52575
+place/KS-53775,Overland Park,place,state/ks,KS,Kansas,,place/KS-53775
+place/KS-71000,Topeka,place,state/ks,KS,Kansas,,place/KS-71000
+place/KS-79000,Wichita,place,state/ks,KS,Kansas,,place/KS-79000
+place/KY-46027,Lexington-Fayette,place,state/ky,KY,Kentucky,,place/KY-46027
+place/KY-48006,Louisville/Jefferson County,place,state/ky,KY,Kentucky,,place/KY-48006
+place/LA-05000,Baton Rouge,place,state/la,LA,Louisiana,,place/LA-05000
+place/LA-40735,Lafayette,place,state/la,LA,Louisiana,,place/LA-40735
+place/LA-55000,New Orleans,place,state/la,LA,Louisiana,,place/LA-55000
+place/LA-70000,Shreveport,place,state/la,LA,Louisiana,,place/LA-70000
+place/MA-07000,Boston,place,state/ma,MA,Massachusetts,,place/MA-07000
+place/MA-09000,Brockton,place,state/ma,MA,Massachusetts,,place/MA-09000
+place/MA-11000,Cambridge,place,state/ma,MA,Massachusetts,,place/MA-11000
+place/MA-37000,Lowell,place,state/ma,MA,Massachusetts,,place/MA-37000
+place/MA-37490,Lynn,place,state/ma,MA,Massachusetts,,place/MA-37490
+place/MA-45000,New Bedford,place,state/ma,MA,Massachusetts,,place/MA-45000
+place/MA-55745,Quincy,place,state/ma,MA,Massachusetts,,place/MA-55745
+place/MA-67000,Springfield,place,state/ma,MA,Massachusetts,,place/MA-67000
+place/MA-82000,Worcester,place,state/ma,MA,Massachusetts,,place/MA-82000
+place/MD-04000,Baltimore,place,state/md,MD,Maryland,,place/MD-04000
+place/MI-03000,Ann Arbor,place,state/mi,MI,Michigan,,place/MI-03000
+place/MI-21000,Dearborn,place,state/mi,MI,Michigan,,place/MI-21000
+place/MI-22000,Detroit,place,state/mi,MI,Michigan,,place/MI-22000
+place/MI-34000,Grand Rapids,place,state/mi,MI,Michigan,,place/MI-34000
+place/MI-46000,Lansing,place,state/mi,MI,Michigan,,place/MI-46000
+place/MI-76460,Sterling Heights,place,state/mi,MI,Michigan,,place/MI-76460
+place/MI-84000,Warren,place,state/mi,MI,Michigan,,place/MI-84000
+place/MN-43000,Minneapolis,place,state/mn,MN,Minnesota,,place/MN-43000
+place/MN-54880,Rochester,place,state/mn,MN,Minnesota,,place/MN-54880
+place/MN-58000,St. Paul,place,state/mn,MN,Minnesota,,place/MN-58000
+place/MO-15670,Columbia,place,state/mo,MO,Missouri,,place/MO-15670
+place/MO-35000,Independence,place,state/mo,MO,Missouri,,place/MO-35000
+place/MO-38000,Kansas City,place,state/mo,MO,Missouri,,place/MO-38000
+place/MO-41348,Lee's Summit,place,state/mo,MO,Missouri,,place/MO-41348
+place/MO-65000,St. Louis,place,state/mo,MO,Missouri,,place/MO-65000
+place/MO-70000,Springfield,place,state/mo,MO,Missouri,,place/MO-70000
+place/MS-36000,Jackson,place,state/ms,MS,Mississippi,,place/MS-36000
+place/MT-06550,Billings,place,state/mt,MT,Montana,,place/MT-06550
+place/NC-10740,Cary,place,state/nc,NC,North Carolina,,place/NC-10740
+place/NC-12000,Charlotte,place,state/nc,NC,North Carolina,,place/NC-12000
+place/NC-14100,Concord,place,state/nc,NC,North Carolina,,place/NC-14100
+place/NC-19000,Durham,place,state/nc,NC,North Carolina,,place/NC-19000
+place/NC-22920,Fayetteville,place,state/nc,NC,North Carolina,,place/NC-22920
+place/NC-28000,Greensboro,place,state/nc,NC,North Carolina,,place/NC-28000
+place/NC-31400,High Point,place,state/nc,NC,North Carolina,,place/NC-31400
+place/NC-55000,Raleigh,place,state/nc,NC,North Carolina,,place/NC-55000
+place/NC-74440,Wilmington,place,state/nc,NC,North Carolina,,place/NC-74440
+place/NC-75000,Winston-Salem,place,state/nc,NC,North Carolina,,place/NC-75000
+place/ND-25700,Fargo,place,state/nd,ND,North Dakota,,place/ND-25700
+place/NE-28000,Lincoln,place,state/ne,NE,Nebraska,,place/NE-28000
+place/NE-37000,Omaha,place,state/ne,NE,Nebraska,,place/NE-37000
+place/NH-45140,Manchester,place,state/nh,NH,New Hampshire,,place/NH-45140
+place/NJ-21000,Elizabeth,place,state/nj,NJ,New Jersey,,place/NJ-21000
+place/NJ-36000,Jersey City,place,state/nj,NJ,New Jersey,,place/NJ-36000
+place/NJ-51000,Newark,place,state/nj,NJ,New Jersey,,place/NJ-51000
+place/NJ-57000,Paterson,place,state/nj,NJ,New Jersey,,place/NJ-57000
+place/NM-02000,Albuquerque,place,state/nm,NM,New Mexico,,place/NM-02000
+place/NM-39380,Las Cruces,place,state/nm,NM,New Mexico,,place/NM-39380
+place/NM-63460,Rio Rancho,place,state/nm,NM,New Mexico,,place/NM-63460
+place/NV-31900,Henderson,place,state/nv,NV,Nevada,,place/NV-31900
+place/NV-40000,Las Vegas,place,state/nv,NV,Nevada,,place/NV-40000
+place/NV-51800,North Las Vegas,place,state/nv,NV,Nevada,,place/NV-51800
+place/NV-60600,Reno,place,state/nv,NV,Nevada,,place/NV-60600
+place/NV-68400,Sparks,place,state/nv,NV,Nevada,,place/NV-68400
+place/NY-01000,Albany,place,state/ny,NY,New York,,place/NY-01000
+place/NY-11000,Buffalo,place,state/ny,NY,New York,,place/NY-11000
+place/NY-51000,New York City,place,state/ny,NY,New York,,place/NY-51000
+place/NY-63000,Rochester,place,state/ny,NY,New York,,place/NY-63000
+place/NY-73000,Syracuse,place,state/ny,NY,New York,,place/NY-73000
+place/NY-84000,Yonkers,place,state/ny,NY,New York,,place/NY-84000
+place/OH-01000,Akron,place,state/oh,OH,Ohio,,place/OH-01000
+place/OH-15000,Cincinnati,place,state/oh,OH,Ohio,,place/OH-15000
+place/OH-16000,Cleveland,place,state/oh,OH,Ohio,,place/OH-16000
+place/OH-18000,Columbus,place,state/oh,OH,Ohio,,place/OH-18000
+place/OH-21000,Dayton,place,state/oh,OH,Ohio,,place/OH-21000
+place/OH-77000,Toledo,place,state/oh,OH,Ohio,,place/OH-77000
+place/OK-09050,Broken Arrow,place,state/ok,OK,Oklahoma,,place/OK-09050
+place/OK-52500,Norman,place,state/ok,OK,Oklahoma,,place/OK-52500
+place/OK-55000,Oklahoma City,place,state/ok,OK,Oklahoma,,place/OK-55000
+place/OK-75000,Tulsa,place,state/ok,OK,Oklahoma,,place/OK-75000
+place/OR-05800,Bend,place,state/or,OR,Oregon,,place/OR-05800
+place/OR-23850,Eugene,place,state/or,OR,Oregon,,place/OR-23850
+place/OR-31250,Gresham,place,state/or,OR,Oregon,,place/OR-31250
+place/OR-34100,Hillsboro,place,state/or,OR,Oregon,,place/OR-34100
+place/OR-59000,Portland,place,state/or,OR,Oregon,,place/OR-59000
+place/OR-64900,Salem,place,state/or,OR,Oregon,,place/OR-64900
+place/PA-02000,Allentown,place,state/pa,PA,Pennsylvania,,place/PA-02000
+place/PA-60000,Philadelphia,place,state/pa,PA,Pennsylvania,,place/PA-60000
+place/PA-61000,Pittsburgh,place,state/pa,PA,Pennsylvania,,place/PA-61000
+place/RI-59000,Providence,place,state/ri,RI,Rhode Island,,place/RI-59000
+place/SC-13330,Charleston,place,state/sc,SC,South Carolina,,place/SC-13330
+place/SC-16000,Columbia,place,state/sc,SC,South Carolina,,place/SC-16000
+place/SC-50875,North Charleston,place,state/sc,SC,South Carolina,,place/SC-50875
+place/SD-59020,Sioux Falls,place,state/sd,SD,South Dakota,,place/SD-59020
+place/TN-14000,Chattanooga,place,state/tn,TN,Tennessee,,place/TN-14000
+place/TN-15160,Clarksville,place,state/tn,TN,Tennessee,,place/TN-15160
+place/TN-40000,Knoxville,place,state/tn,TN,Tennessee,,place/TN-40000
+place/TN-48000,Memphis,place,state/tn,TN,Tennessee,,place/TN-48000
+place/TN-51560,Murfreesboro,place,state/tn,TN,Tennessee,,place/TN-51560
+place/TN-52006,Nashville-Davidson,place,state/tn,TN,Tennessee,,place/TN-52006
+place/TX-01000,Abilene,place,state/tx,TX,Texas,,place/TX-01000
+place/TX-01924,Allen,place,state/tx,TX,Texas,,place/TX-01924
+place/TX-03000,Amarillo,place,state/tx,TX,Texas,,place/TX-03000
+place/TX-04000,Arlington,place,state/tx,TX,Texas,,place/TX-04000
+place/TX-05000,Austin,place,state/tx,TX,Texas,,place/TX-05000
+place/TX-07000,Beaumont,place,state/tx,TX,Texas,,place/TX-07000
+place/TX-10768,Brownsville,place,state/tx,TX,Texas,,place/TX-10768
+place/TX-13024,Carrollton,place,state/tx,TX,Texas,,place/TX-13024
+place/TX-15976,College Station,place,state/tx,TX,Texas,,place/TX-15976
+place/TX-16432,Conroe,place,state/tx,TX,Texas,,place/TX-16432
+place/TX-17000,Corpus Christi,place,state/tx,TX,Texas,,place/TX-17000
+place/TX-19000,Dallas,place,state/tx,TX,Texas,,place/TX-19000
+place/TX-19972,Denton,place,state/tx,TX,Texas,,place/TX-19972
+place/TX-22660,Edinburg,place,state/tx,TX,Texas,,place/TX-22660
+place/TX-24000,El Paso,place,state/tx,TX,Texas,,place/TX-24000
+place/TX-27000,Fort Worth,place,state/tx,TX,Texas,,place/TX-27000
+place/TX-27684,Frisco,place,state/tx,TX,Texas,,place/TX-27684
+place/TX-29000,Garland,place,state/tx,TX,Texas,,place/TX-29000
+place/TX-30464,Grand Prairie,place,state/tx,TX,Texas,,place/TX-30464
+place/TX-35000,Houston,place,state/tx,TX,Texas,,place/TX-35000
+place/TX-37000,Irving,place,state/tx,TX,Texas,,place/TX-37000
+place/TX-39148,Killeen,place,state/tx,TX,Texas,,place/TX-39148
+place/TX-41464,Laredo,place,state/tx,TX,Texas,,place/TX-41464
+place/TX-41980,League City,place,state/tx,TX,Texas,,place/TX-41980
+place/TX-42508,Lewisville,place,state/tx,TX,Texas,,place/TX-42508
+place/TX-45000,Lubbock,place,state/tx,TX,Texas,,place/TX-45000
+place/TX-45384,McAllen,place,state/tx,TX,Texas,,place/TX-45384
+place/TX-45744,McKinney,place,state/tx,TX,Texas,,place/TX-45744
+place/TX-47892,Mesquite,place,state/tx,TX,Texas,,place/TX-47892
+place/TX-48072,Midland,place,state/tx,TX,Texas,,place/TX-48072
+place/TX-50820,New Braunfels,place,state/tx,TX,Texas,,place/TX-50820
+place/TX-53388,Odessa,place,state/tx,TX,Texas,,place/TX-53388
+place/TX-56000,Pasadena,place,state/tx,TX,Texas,,place/TX-56000
+place/TX-56348,Pearland,place,state/tx,TX,Texas,,place/TX-56348
+place/TX-58016,Plano,place,state/tx,TX,Texas,,place/TX-58016
+place/TX-61796,Richardson,place,state/tx,TX,Texas,,place/TX-61796
+place/TX-63500,Round Rock,place,state/tx,TX,Texas,,place/TX-63500
+place/TX-65000,San Antonio,place,state/tx,TX,Texas,,place/TX-65000
+place/TX-70808,Sugar Land,place,state/tx,TX,Texas,,place/TX-70808
+place/TX-74144,Tyler,place,state/tx,TX,Texas,,place/TX-74144
+place/TX-76000,Waco,place,state/tx,TX,Texas,,place/TX-76000
+place/TX-79000,Wichita Falls,place,state/tx,TX,Texas,,place/TX-79000
+place/UT-62470,Provo,place,state/ut,UT,Utah,,place/UT-62470
+place/UT-65330,St. George,place,state/ut,UT,Utah,,place/UT-65330
+place/UT-67000,Salt Lake City,place,state/ut,UT,Utah,,place/UT-67000
+place/UT-82950,West Jordan,place,state/ut,UT,Utah,,place/UT-82950
+place/UT-83470,West Valley City,place,state/ut,UT,Utah,,place/UT-83470
+place/VA-01000,Alexandria,place,state/va,VA,Virginia,,place/VA-01000
+place/VA-16000,Chesapeake,place,state/va,VA,Virginia,,place/VA-16000
+place/VA-35000,Hampton,place,state/va,VA,Virginia,,place/VA-35000
+place/VA-56000,Newport News,place,state/va,VA,Virginia,,place/VA-56000
+place/VA-57000,Norfolk,place,state/va,VA,Virginia,,place/VA-57000
+place/VA-67000,Richmond,place,state/va,VA,Virginia,,place/VA-67000
+place/VA-76432,Suffolk,place,state/va,VA,Virginia,,place/VA-76432
+place/VA-82000,Virginia Beach,place,state/va,VA,Virginia,,place/VA-82000
+place/WA-05210,Bellevue,place,state/wa,WA,Washington,,place/WA-05210
+place/WA-22640,Everett,place,state/wa,WA,Washington,,place/WA-22640
+place/WA-35415,Kent,place,state/wa,WA,Washington,,place/WA-35415
+place/WA-57745,Renton,place,state/wa,WA,Washington,,place/WA-57745
+place/WA-63000,Seattle,place,state/wa,WA,Washington,,place/WA-63000
+place/WA-67000,Spokane,place,state/wa,WA,Washington,,place/WA-67000
+place/WA-67167,Spokane Valley,place,state/wa,WA,Washington,,place/WA-67167
+place/WA-70000,Tacoma,place,state/wa,WA,Washington,,place/WA-70000
+place/WA-74060,Vancouver,place,state/wa,WA,Washington,,place/WA-74060
+place/WI-31000,Green Bay,place,state/wi,WI,Wisconsin,,place/WI-31000
+place/WI-48000,Madison,place,state/wi,WI,Wisconsin,,place/WI-48000
+place/WI-53000,Milwaukee,place,state/wi,WI,Wisconsin,,place/WI-53000

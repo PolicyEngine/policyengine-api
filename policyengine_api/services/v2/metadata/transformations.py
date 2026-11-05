@@ -37,7 +37,9 @@ from policyengine_api.services.v2.metadata.types import (
 )
 
 if TYPE_CHECKING:
-    from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
+    from policyengine_api.data.v2.catalog.catalog_selection_validation import (
+        SelectedCatalog,
+    )
     from policyengine_api.data.v2.models import (
         Dataset,
         Parameter,

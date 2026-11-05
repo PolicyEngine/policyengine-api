@@ -1,0 +1,4 @@
+# Tolerated existing violations. This list may only shrink.
+# Each line is one entry of the Import Linter contract api-v2-pure-modules-no-database's ignore_imports (pyproject.toml).
+# A Session annotation in a Protocol, imported under TYPE_CHECKING.
+policyengine_api.services.v2.identity.types -> sqlmodel

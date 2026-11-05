@@ -21,7 +21,10 @@ python -m unittest discover -s scripts/rules/tests -t .            # the tool's 
 ```
 
 All commands use only the standard library, so they run without installing the
-project.
+project, except the `declared-dependencies` guard and its tests in the tool's
+tests. They run deptry through `uv run --frozen --extra dev`, so they need uv,
+and uv first syncs `.venv` to `uv.lock` on Python 3.12
+([dependencies.md](dependencies.md#we-declare-what-we-import)).
 
 ## Adding or changing a rule
 
@@ -57,7 +60,7 @@ gap is visible, rather than leaving it out.
 | `[[rule.ci]]` | `workflow`, `job`, and an `invocation` string that must appear in that job's `run:` text (or its reusable-workflow `uses:`). |
 | `[rule.proof]` | Optional; see "Proof". |
 | `[rule.baseline]` | Only for `ratcheted` rules: `file` listing tolerated violations, and their `count`. |
-| `[[rule.exception]]` | Carve-out: `path`, `reason`, and `expires`; or, for rules whose guard reads them, `match` (one site), `removal`, `issue` and `category` ([dependencies.md](dependencies.md#exceptions)). |
+| `[[rule.exception]]` | Carve-out: `path`, `reason`, and `expires`; or, for rules whose guard reads them, `match` (one site), `removal`, `issue` and `category` ([dependencies.md](dependencies.md#exceptions); for `api.data.sqlalchemy-and-alembic-only`, `match` is the exact construct and `category` is `driver-access`, `schema-change` or `migration-revision`: [alembic-migrations.md](alembic-migrations.md#declared-exceptions)). |
 | `[rule.downgrade]` | Required `reason` when a rule moves from enforced/ratcheted to advisory/doc-only. |
 
 `blocking` is derived, never declared: a rule blocks merges when its status is
@@ -72,7 +75,8 @@ gap is visible, rather than leaving it out.
 | `ruff` | `mode` = `format`, `lint` (with `codes`) or `per-file-ignore` (with `pattern`, `codes`) | Codes are selected / the ignore entry exists and covers only [files allowed file-level exceptions](#file-level-exceptions) |
 | `mypy` | `paths` | Each path is in `[tool.mypy].files` |
 | `workflow-job` | optional `step` | The CI job exists (the job itself is the check) |
-| `pyright`, `import-linter` | `config` (+ `contract` for Import Linter) | The config file exists |
+| `pyright` | `config` | The config file exists |
+| `import-linter` | `config`, `contract`, `contract_sha256`, optional `allowed_ignore_imports` | The contract with that `id` exists; its definition hashes to `contract_sha256`; and its `ignore_imports` equals the rule's baseline entries plus `allowed_ignore_imports`, with no wildcards and with `unmatched_ignore_imports_alerting = "error"` (see "Baselines") |
 | `docs-guard` | `doc`, `marker` | The doc exists |
 | `llm-review` | `prompt`, `model` | The prompt exists; judgment tier only |
 | `none` | | Nothing; only for `doc-only` and `advisory` rules |
@@ -123,7 +127,42 @@ fail the guard yet.
   `# noqa: CODE  # reason`, except in the files below.
 - Other enforcers (mypy, Pyright, Import Linter, custom guards) may start
   `ratcheted` with a baseline file of tolerated violations. Baselines may only
-  shrink: the guard compares counts against the base branch.
+  shrink: the guard compares each baseline's count and its entries against the
+  base branch, so an entry can't be swapped for a new one at the same count.
+  Entries are counted, so a baseline that lists an entry once per tolerated
+  occurrence can't gain another copy of one either.
+  Each entry is therefore a stable key, such as a path or a code and a module,
+  never a count or a line number, which would change as violations are fixed.
+- **Import Linter** tolerates a violation through the contract's
+  `ignore_imports` in `pyproject.toml`. The rule's baseline file lists the same
+  entries, one per line, so adding one needs a change under the code-owned
+  `rules/` directory; imports the rule allows by design, rather than tolerates,
+  go in `enforcer.allowed_ignore_imports`. The guard fails when the contract's
+  `ignore_imports` and those two lists differ, and
+  `unmatched_ignore_imports_alerting = "error"` makes Import Linter fail on an
+  entry that no longer matches, so fixing an import forces the entry out.
+  No entry may use a wildcard, so each names one importer and one imported
+  module, and a new module's own imports never match an old entry (it can
+  still reach a forbidden module through a tolerated import; see below). CI
+  runs exactly `lint-imports --config pyproject.toml`, which the guard checks,
+  so a `setup.cfg` or `.importlinter` file can't take the contracts' place and
+  `--contract` or `|| true` can't skip them.
+- `enforcer.allowed_ignore_imports` has no count limit. Moving a tolerated
+  import from the baseline into it lowers the baseline's count without fixing
+  anything, so code-owner review of `rules/registry.toml` is the check on it.
+- An Import Linter rule also pins the rest of its contract: the SHA-256 of the
+  top-level `[tool.importlinter]` settings and every contract field except
+  `ignore_imports` (`scripts/rules/import_linter.py`, `contract_fingerprint`)
+  must equal `enforcer.contract_sha256`. Narrowing a contract's modules, or a
+  setting such as `exclude_type_checking_imports`, therefore needs a registry
+  change too; the guard's message gives the new value.
+- Ignoring an import removes it from the graph the contract checks, so the
+  exception also covers every chain from another module that passes through
+  it, including from modules added later. Each such chain goes away when the
+  tolerated import is fixed.
+- Each rule's proof fixture breaks the contract once per source and forbidden
+  module pattern, and lists those violations in `expected_violations`; the
+  proof requires Import Linter to report exactly them.
 - Moving a rule from enforced/ratcheted to advisory/doc-only needs an explicit
   `[rule.downgrade] reason`.
 
@@ -151,17 +190,18 @@ entry's pattern like ruff does and fails when the pattern:
 
 ## Inline suppressions
 
-An inline suppression (`# noqa: <CODE>  # reason`) is the last resort for a
-ruff finding, not the usual way to clear one
+An inline suppression (`# noqa: <CODE>  # reason`, or
+`# type: ignore[<code>]  # reason` for mypy) is the last resort for a ruff or
+mypy finding, not the usual way to clear one
 (`api.process.agents-suppress-as-last-resort`). Before adding one, try:
 
 1. **A code change** that removes the finding: narrow an `except` to the
    errors the code expects, pass the missing argument, or route repeated code
    through one helper so a boundary is handled once instead of at every call
    site.
-2. **A ruff setting**, when several findings share a cause: for example,
-   list a lazily loaded package in `banned-module-level-imports` instead of
-   suppressing each deferred import of it.
+2. **A checker setting**, when several findings share a cause: for example,
+   list a lazily loaded package in ruff's `banned-module-level-imports`
+   instead of suppressing each deferred import of it.
 3. **A file-level exception**, only where the section above allows one.
 
 Keep a suppression only when each of these would change behaviour that
@@ -177,6 +217,55 @@ justification as a suppression.
 A pull request that adds inline suppressions lists each one in its
 description, with the reason a code change or setting wasn't used.
 
+### The form of a suppression
+
+`api.quality.suppressions-explained`: every `noqa`, `ruff: disable` and
+`type: ignore` comment names what it suppresses and says why. The
+`suppressions` quality guard (`scripts/rules/suppressions.py`) reads every
+tracked `.py` and `.pyi` file with `tokenize`, so only real comments count,
+and fails on a suppression that lacks either:
+
+- **a code**: `# noqa` and its file-level forms `# ruff: noqa` and
+  `# flake8: noqa` list ruff codes (`# noqa: E402`), a range suppression
+  `# ruff: disable[T201]` lists ruff codes in brackets (its closing
+  `# ruff: enable[T201]` needs neither), so does ruff's trailing
+  `# ruff: ignore[E501]` (a preview feature in ruff 0.15), and
+  `# type: ignore` lists mypy error codes (`# type: ignore[arg-type]`).
+  Brackets that hold no code, such as `[]` or `[,]`, name none: mypy then
+  ignores every error on the line. As in mypy, `type: ignore` counts only at
+  the start of a comment and with no space before its colon;
+- **a reason**: another `#` part of the same comment that is neither a
+  suppression nor another tool's directive, such as `fmt: skip`,
+  `pragma: no cover`, `pyright: ignore`, `nosec` or `mypy: ignore-errors`:
+  `# noqa: E402  # the path setup must run first` or
+  `# type: ignore[arg-type]  # the stub's annotation is too narrow`. The
+  guard recognizes a directive only when the whole part is in its tool's
+  syntax, so a reason may start with a tool's name and a colon
+  (`# mypy: the plugin can't see it`, `# fmt: on purpose, the columns line
+  up`). A type comment at the start of the comment (`# type: list[int]`)
+  isn't a reason either. Text after the codes in the same part
+  (`# noqa: E402 path setup`) doesn't count. Put the reason after
+  `type: ignore`, which mypy reads only at the start of a comment.
+
+The rule is ratcheted. `rules/baselines/suppressions.txt` lists today's
+unexplained suppressions as `<path> :: <source line>`, one line per
+occurrence. A suppression not listed there fails, and a listed one that is
+gone or now explained fails as stale, so give it its reason, remove its line
+and lower the rule's baseline `count`. Editing a listed line, or renaming or
+moving its file, also makes it fail, because its entry no longer matches and
+the registry guard rejects an entry the base branch's baseline lacks: add the
+reason in the same change. So does `ruff format` rewriting a listed line.
+
+Ruff's PGH003 and PGH004, selected with every other ruff rule, already reject
+a `type: ignore` or a line-level or file-level `noqa` without a code. PGH003
+accepts `# type: ignore[]`, which mypy treats as ignoring every error on the
+line; this rule rejects it, and `[,]`. What the rule adds is the reason.
+Other tools' comments that switch a check off, such as `# mypy: ignore-errors`
+or `# isort: skip_file`, are not checked, and neither are notebooks
+(`.ipynb`), which the repository has none of. Whether the suppression should exist at
+all is still the judgment rule `api.process.agents-suppress-as-last-resort`
+above.
+
 ## Hidden rules
 
 The guard fails when something enforces a rule that the registry doesn't
@@ -186,6 +275,7 @@ describe:
 - a ruff format check in CI, an explicitly selected ruff code, or a ruff
   per-file ignore;
 - a `[tool.mypy].files` entry;
+- an Import Linter contract in `pyproject.toml`;
 - a test matching `[discovery].guard_test_globs` or listed in
   `extra_guard_tests`;
 - a job in a `[discovery].workflows` file.

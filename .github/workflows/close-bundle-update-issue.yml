@@ -1,0 +1,43 @@
+name: Close superseded bundle-update issues
+
+# Each PolicyEngine bundle-update pull request names an issue of its own on
+# the first line of its description (rule api.process.pr-tracking-issue).
+# Merging the pull request closes it; superseded updates are closed without
+# merging, so this job closes their issues. See
+# .github/scripts/close_bundle_update_issue.sh.
+#
+# GitHub doesn't run pull_request workflows while a pull request has a merge
+# conflict, and a superseded update usually conflicts with master, because
+# the newer update that merged changed the same pins. pull_request_target
+# runs anyway, with this workflow and the script from the default branch. The
+# job reads only the event payload and never checks out the pull request.
+
+on:
+  pull_request_target:
+    types: [closed]
+
+# The job token closes the issue; gh issue close also reads the number as an
+# issue or a pull request. pull_request_target gives forks' pull requests the
+# same token, so the job's condition skips any from another repository.
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  close-tracking-issue:
+    name: Close the tracking issue of an unmerged bundle update
+    if: ${{ !github.event.pull_request.merged && startsWith(github.event.pull_request.head.ref, 'auto/update-policyengine-bundle-') && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The default branch's script: no ref, so never the pull request's code.
+      - name: Checkout the script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts/close_bundle_update_issue.sh
+          sparse-checkout-cone-mode: false
+      - name: Close the issue the first line of the description names
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/close_bundle_update_issue.sh

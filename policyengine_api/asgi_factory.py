@@ -21,7 +21,7 @@ from policyengine_api.content_encoding import NegotiatedGZipMiddleware
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.fastapi_routes.health import build_core_health_router
 from policyengine_api.fastapi_routes.metadata import build_metadata_router
-from policyengine_api.fastapi_routes.v2.errors import (
+from policyengine_api.fastapi_routes.v2.errors_support import (
     V2AuthenticationRequiredError,
     V2AuthenticationUnavailableError,
     V2PermissionDeniedError,

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import math
 from threading import RLock
 from typing import TYPE_CHECKING, Self
 
 from typing_extensions import override
+
+from policyengine_api.runtime_cache.core import PTTL_MISSING_KEY, PTTL_NO_EXPIRY
+from policyengine_api.runtime_cache.reform_impacts import DELETE_UNCHANGED_RECORD
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -13,6 +17,9 @@ if TYPE_CHECKING:
 # The claim store's compare-and-delete script takes one key and one argument:
 # the token the key must still hold.
 COMPARE_AND_DELETE_ARGUMENT_COUNT = 2
+# The reform-impact record delete takes the record and its two index keys, and
+# one argument: the value the record must still hold.
+RECORD_DELETE_KEY_COUNT = 3
 
 
 class InMemoryCacheBackend:
@@ -65,15 +72,17 @@ class InMemoryCacheBackend:
         *,
         ex: int | None = None,
         nx: bool = False,
+        xx: bool = False,
     ) -> bool | None:
-        """Emulate SET with the ``ex`` and ``nx`` options only.
+        """Emulate SET with the ``ex``, ``nx`` and ``xx`` options only.
 
-        Like redis-py, return True on a write and None when ``nx`` finds the key
-        already set; a write without ``ex`` clears any earlier TTL.
+        Like redis-py, return True on a write, and None when ``nx`` finds the
+        key already set or ``xx`` finds it missing; a write without ``ex``
+        clears any earlier TTL.
         """
         with self._lock:
             self._purge(key)
-            if nx and key in self._values:
+            if (nx and key in self._values) or (xx and key not in self._values):
                 return None
             self._values[key] = value
             if ex is not None:
@@ -103,6 +112,17 @@ class InMemoryCacheBackend:
                 return False
             self._expires[key] = self._now() + seconds
             return True
+
+    def pttl(self, key: str) -> int:
+        """Emulate PTTL: milliseconds left, -2 for a missing key, -1 for no expiry."""
+        with self._lock:
+            self._purge(key)
+            if key not in self._values and key not in self._sorted_sets:
+                return PTTL_MISSING_KEY
+            expires_at = self._expires.get(key)
+            if expires_at is None:
+                return PTTL_NO_EXPIRY
+            return math.ceil((expires_at - self._now()) * 1000)
 
     def zadd(self, key: str, mapping: dict[str, float]) -> int:
         """Emulate ZADD without flags: upsert scores and count new members only."""
@@ -155,15 +175,20 @@ class InMemoryCacheBackend:
 
     def eval(
         self,
-        _script: str,
+        script: str,
         numkeys: int,
         *keys_and_args: str,
     ) -> int:
-        """Emulate EVAL of the claim store's compare-and-delete script only.
+        """Emulate EVAL of the two scripts the runtime cache runs.
 
-        The script text is ignored: delete the one key if it still holds the
-        expected token, and raise ValueError for any other key/argument shape.
+        The reform-impact record delete (``DELETE_UNCHANGED_RECORD``) removes
+        a record and its two index entries if the record still holds the
+        expected value. Any other script text is taken as the claim store's
+        compare-and-delete: delete the one key if it still holds the expected
+        token. Raise ValueError for any other key/argument shape.
         """
+        if script == DELETE_UNCHANGED_RECORD:
+            return self._delete_unchanged_record(numkeys, *keys_and_args)
         if numkeys != 1 or len(keys_and_args) != COMPARE_AND_DELETE_ARGUMENT_COUNT:
             msg = "fake supports one-key compare-and-delete only"
             raise ValueError(msg)
@@ -172,6 +197,22 @@ class InMemoryCacheBackend:
             if self.get(key) != expected:
                 return 0
             return self.delete(key)
+
+    def _delete_unchanged_record(self, numkeys: int, *keys_and_args: str) -> int:
+        if (
+            numkeys != RECORD_DELETE_KEY_COUNT
+            or len(keys_and_args) != RECORD_DELETE_KEY_COUNT + 1
+        ):
+            msg = "the record delete takes three keys and one argument"
+            raise ValueError(msg)
+        record_key, scope_index, recent_index, expected = keys_and_args
+        with self._lock:
+            if self.get(record_key) != expected:
+                return 0
+            self.delete(record_key)
+            self.zrem(scope_index, record_key)
+            self.zrem(recent_index, record_key)
+            return 1
 
     def pipeline(self, *, transaction: bool = True) -> InMemoryPipeline:
         """Return a pipeline that queues commands until ``execute``."""
@@ -261,6 +302,11 @@ class DisabledCacheBackend(InMemoryCacheBackend):
     def expire(self, key: str, seconds: int) -> bool:
         """Return False, as Redis does for a key that does not exist."""
         return False
+
+    @override
+    def pttl(self, key: str) -> int:
+        """Return -2, as Redis does for a key that does not exist."""
+        return PTTL_MISSING_KEY
 
     @override
     def eval(

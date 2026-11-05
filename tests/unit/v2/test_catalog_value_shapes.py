@@ -128,4 +128,6 @@ def test_holds_each_region_filter_form() -> None:
     assert any(value.startswith("[") for value in stored_forms)
     assert any(value.isalpha() for value in stored_forms)
     assert all(region.filter_strategy == "row_filter" for region in filtered)
-    assert unfiltered_subnational
+    # Regions without a scoping rule, such as US places, are left out, so every
+    # published sub-national region has a filter.
+    assert not unfiltered_subnational

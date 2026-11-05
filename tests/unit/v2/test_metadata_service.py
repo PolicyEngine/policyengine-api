@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import event
 from sqlmodel import Session, select
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
@@ -32,7 +32,7 @@ from policyengine_api.data.v2.models import (
 from policyengine_api.services.v2.metadata.database_session import (
     MetadataDatabaseSession,
 )
-from policyengine_api.services.v2.metadata.selected_catalogs import (
+from policyengine_api.services.v2.metadata.process_state import (
     SelectedCatalogStore,
 )
 from policyengine_api.services.v2.metadata.services import V2MetadataService
@@ -557,7 +557,8 @@ def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
         project_package / "services" / "v2" / "metadata" / "database_connectors"
     )
     modules = (
-        project_package / "data" / "v2" / "catalog" / "catalog_selection.py",
+        project_package / "data" / "v2" / "catalog" / "catalog_selection_reads.py",
+        project_package / "data" / "v2" / "catalog" / "catalog_selection_validation.py",
         connector_directory / "reads.py",
         connector_directory / "reads_datasets.py",
         connector_directory / "reads_parameter_nodes.py",

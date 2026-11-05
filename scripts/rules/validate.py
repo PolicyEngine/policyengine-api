@@ -21,7 +21,10 @@ KIND_FIELDS: dict[Kind, tuple[dict[str, type], dict[str, type]]] = {
     Kind.RUFF: ({"mode": str}, {"codes": list, "pattern": str, "config": str}),
     Kind.MYPY: ({"paths": list}, {"config": str}),
     Kind.PYRIGHT: ({"config": str}, {"project": str}),
-    Kind.IMPORT_LINTER: ({"config": str, "contract": str}, {}),
+    Kind.IMPORT_LINTER: (
+        {"config": str, "contract": str, "contract_sha256": str},
+        {"allowed_ignore_imports": list},
+    ),
     Kind.WORKFLOW_JOB: ({}, {"step": str}),
     Kind.DOCS_GUARD: ({"doc": str, "marker": str}, {}),
     Kind.LLM_REVIEW: ({"prompt": str, "model": str}, {}),
@@ -54,13 +57,18 @@ PROOF_FILE_FIELDS = (
 )
 
 
+def baseline_entry_lines(text: str) -> list[str]:
+    """Return a baseline's entries, skipping blank and ``#`` comment lines."""
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
 def baseline_entries(path: Path) -> int:
     """Count the entries in a baseline file, skipping blank and ``#`` comment lines."""
-    return sum(
-        1
-        for line in path.read_text().splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    )
+    return len(baseline_entry_lines(path.read_text()))
 
 
 def _check_fields(

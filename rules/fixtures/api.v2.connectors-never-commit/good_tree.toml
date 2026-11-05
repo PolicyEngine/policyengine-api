@@ -1,0 +1,16 @@
+# Proof fixture for rule api.v2.connectors-never-commit. The guard must accept
+# it: the connector adds the row to the session it receives and flushes it;
+# the service's database-session container commits.
+
+expected_findings = []
+
+[files]
+"policyengine_api/services/v2/policies/database_connectors/creates.py" = """
+from sqlmodel import Session
+
+
+def create_policy(session: Session, row):
+    session.add(row)
+    session.flush()
+    return row
+"""

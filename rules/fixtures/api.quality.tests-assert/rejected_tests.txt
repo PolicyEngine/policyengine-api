@@ -1,0 +1,39 @@
+# Proof fixture for api.quality.tests-assert (the rejected case).
+# The proof test reads this text as a test module. Every test below checks
+# nothing, so the guard reports each one. The fixture is a .txt file so that
+# neither ruff nor pytest reads it.
+import unittest
+
+
+def compute():
+    return 1
+
+
+def helper_that_checks_nothing():
+    compute()
+
+
+def test_calls_without_checking():
+    compute()
+
+
+def test_calls_a_helper_that_checks_nothing():
+    helper_that_checks_nothing()
+
+
+async def test_awaits_without_checking():
+    compute()
+
+
+class TestThing:
+    def test_method_without_check(self):
+        compute()
+
+    class TestNested:
+        def test_nested_without_check(self):
+            compute()
+
+
+class ThingCase(unittest.TestCase):
+    def test_unittest_method_without_check(self):
+        compute()

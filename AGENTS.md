@@ -55,7 +55,9 @@ code), or splitting a module into smaller ones, read
 
 Read `docs/engineering/skills/github-prs.md` before opening, replacing, or
 sharing any pull request. Every PR needs a tracking issue and
-`Fixes #ISSUE_NUMBER` as the first line of its description. Every PR also adds
+`Fixes #ISSUE_NUMBER` as the first line of its description; the
+`PR description` job fails unless that issue is open in this repository.
+Every PR also adds
 a changelog fragment of its own: a non-empty file directly in `changelog.d/`,
 named `changelog.d/<name>.<type>.md`, where `<type>` is `breaking`, `added`,
 `changed`, `fixed` or `removed` (see "Changelog fragments" in that skill).
@@ -67,6 +69,10 @@ Before creating or sharing a migration PR, run the focused migration guards:
 python scripts/run_quality_guards.py
 python scripts/export_migration_contracts.py
 ```
+
+The quality guards need `uv`: the `declared-dependencies` guard runs deptry
+through `uv run --frozen --extra dev`, which first syncs `.venv` to `uv.lock`
+on Python 3.12 (see `docs/engineering/skills/dependencies.md`).
 
 ## Safety Boundaries
 
@@ -85,12 +91,8 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### API v2 layer boundaries
 
-- Checked: `api.v2.connectors-mutations-no-reads`, `api.v2.connectors-reads-no-mutations`, `api.v2.crud-checks-cover-every-resource`, `api.v2.session-modules-no-queries`, `api.v2.user-services-no-sql`, `api.v2.validators-transformations-no-db`
+- Checked: `api.v2.connectors-mutations-no-reads`, `api.v2.connectors-never-commit`, `api.v2.connectors-no-cross-calls`, `api.v2.connectors-reads-no-mutations`, `api.v2.crud-checks-cover-every-resource`, `api.v2.files-assigned-to-layers`, `api.v2.import-layers`, `api.v2.pure-modules-no-database`, `api.v2.pure-modules-no-session-calls`, `api.v2.routes-import-no-database-access`, `api.v2.routes-no-sessions-or-sql`, `api.v2.services-no-sql`, `api.v2.session-modules-no-data-access`, `api.v2.session-modules-no-queries`, `api.v2.types-transformations-no-validators`, `api.v2.user-services-no-sql`, `api.v2.validators-transformations-no-db`
 - `api.routes.shared-query-parameters`: Routes that accept query parameters define them through the shared typed query models, never with a second manual parser. (doc-only, not checked: follow it yourself)
-- `api.v2.connectors-never-commit`: v2 connectors receive a session from the service and never open, commit, roll back or close it. (doc-only, not checked: follow it yourself)
-- `api.v2.connectors-no-cross-calls`: v2 connector modules never call one another to sequence a workflow; the service does the sequencing. (doc-only, not checked: follow it yourself)
-- `api.v2.routes-no-sessions-or-sql`: v2 route modules never open database sessions or construct SQL; they call one service method and map typed failures to HTTP. (doc-only, not checked: follow it yourself)
-- `api.v2.services-no-sql`: v2 services sequence work but never construct SQL expressions, call Session.exec, or define HTTP response models. (doc-only, not checked: follow it yourself)
 
 ### Runtime persistence and route boundaries
 
@@ -102,7 +104,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Data source isolation
 
-- Checked: `api.catalog.extractor-import-isolation`, `api.metadata.read-modules-isolated`, `api.reports.v1-persistence-only`, `api.stage12.comparison-tables-isolated`, `api.stage12.retirement-owned`, `api.v2.single-orm-layer`
+- Checked: `api.catalog.extractor-import-isolation`, `api.catalog.selection-validation-no-database`, `api.metadata.read-modules-isolated`, `api.reports.v1-persistence-only`, `api.stage12.comparison-tables-isolated`, `api.stage12.retirement-owned`, `api.v2.single-orm-layer`
 
 ### Migration and schema
 
@@ -116,7 +118,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Code quality and types
 
-- Checked: `api.quality.alembic-revisions-unused-imports`, `api.quality.ci-cd-scripts-ruff-exemptions`, `api.quality.command-line-modules-ruff-exemptions`, `api.quality.command-line-scripts-ruff-exemptions`, `api.quality.environment-variables-load`, `api.quality.file-length`, `api.quality.mypy-v2`, `api.quality.ruff-format`, `api.quality.ruff-lint`, `api.quality.runtime-evaluated-models-resolve`, `api.quality.tests-pass`, `api.quality.tests-ruff-exemptions`, `api.quality.unittest-ruff-exemptions`
+- Checked: `api.quality.alembic-revisions-unused-imports`, `api.quality.ci-cd-scripts-ruff-exemptions`, `api.quality.command-line-modules-ruff-exemptions`, `api.quality.command-line-scripts-ruff-exemptions`, `api.quality.coverage-measured`, `api.quality.diff-coverage`, `api.quality.environment-variables-load`, `api.quality.file-length`, `api.quality.mypy-v2`, `api.quality.ruff-format`, `api.quality.ruff-lint`, `api.quality.runtime-evaluated-models-resolve`, `api.quality.suppressions-explained`, `api.quality.tests-assert`, `api.quality.tests-pass`, `api.quality.tests-ruff-exemptions`, `api.quality.unittest-ruff-exemptions`
 
 ### Observability
 
@@ -129,15 +131,14 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Dependencies and uv.lock
 
-- Checked: `api.dependencies.install-from-lock`, `api.dependencies.lock-committed`, `api.dependencies.scheduled-relock`, `api.dependencies.test-from-lock`
+- Checked: `api.dependencies.declared-and-used`, `api.dependencies.install-from-lock`, `api.dependencies.lock-committed`, `api.dependencies.scheduled-relock`, `api.dependencies.test-from-lock`
 
 ### Process and repository hygiene
 
-- Checked: `api.agents.adapters-point-to-agents-md`, `api.process.changelog-fragment`, `api.process.cloud-run-image-builds`, `api.process.docker-image-builds`, `api.process.rules-registry`, `api.process.stacked-prs-full-ci-at-bottom`
+- Checked: `api.agents.adapters-point-to-agents-md`, `api.process.changelog-fragment`, `api.process.cloud-run-image-builds`, `api.process.docker-image-builds`, `api.process.pr-tracking-issue`, `api.process.rules-registry`, `api.process.stacked-prs-full-ci-at-bottom`
 - `api.process.agents-never-bypass`: Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human. (doc-only, not checked: follow it yourself)
-- `api.process.agents-suppress-as-last-resort`: Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason. (doc-only, not checked: follow it yourself)
+- `api.process.agents-suppress-as-last-resort`: Agents add an inline suppression (noqa or type: ignore) only when neither a code change nor a checker setting removes the finding, and a PR lists every inline suppression it adds, with the reason. That each suppression names its code and gives its reason is the mechanical rule api.quality.suppressions-explained. (doc-only, not checked: follow it yourself)
 - `api.process.makefile-phony`: Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed. (doc-only, not checked: follow it yourself)
-- `api.process.pr-tracking-issue`: Every PR has a tracking issue in this repository, and the first line of its description is Fixes #ISSUE_NUMBER. (doc-only, not checked: follow it yourself)
 - `api.process.rule-machinery-code-owned`: Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author. (doc-only, not checked: follow it yourself)
 
 <!-- END GENERATED: rules -->

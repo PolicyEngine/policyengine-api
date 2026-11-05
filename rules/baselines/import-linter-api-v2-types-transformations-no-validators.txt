@@ -1,0 +1,6 @@
+# Tolerated existing violations. This list may only shrink.
+# Each line is one entry of the Import Linter contract api-v2-types-transformations-no-validators's ignore_imports (pyproject.toml).
+policyengine_api.services.v2.households.transformations -> policyengine_api.services.v2.households.validators
+policyengine_api.services.v2.households.types -> policyengine_api.services.v2.households.validators
+policyengine_api.services.v2.policies.transformations -> policyengine_api.services.v2.policies.validators
+policyengine_api.services.v2.policies.types -> policyengine_api.services.v2.policies.validators

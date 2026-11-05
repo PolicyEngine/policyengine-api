@@ -13,7 +13,7 @@ from policyengine_api.fastapi_routes.dependencies import (
     _default_v2_user_household_service_factory,
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
-from policyengine_api.fastapi_routes.v2.errors import v2_error_response
+from policyengine_api.fastapi_routes.v2.errors_support import v2_error_response
 from policyengine_api.fastapi_routes.v2.user_households.request_models import (
     UserHouseholdCreateRequest,
     UserHouseholdPatchRequest,
@@ -26,7 +26,7 @@ from policyengine_api.fastapi_routes.v2.user_households.response_models import (
     UserHouseholdPageResponse,
     UserHouseholdPageResult,
 )
-from policyengine_api.fastapi_routes.v2.user_resources import (
+from policyengine_api.fastapi_routes.v2.user_resources_support import (
     enforce_user_write_request_size,
     user_resource_operation,
 )
@@ -179,8 +179,13 @@ def build_v2_user_household_router(
         response_model=UserHouseholdDetailResponse,
         summary="Update or repoint one of the current user's saved households",
         description=(
-            "Changing legacy_household_id repoints the row and re-resolves "
-            "household_id from the Stage 11 copy mapping, or clears it."
+            "The row keeps its id, owner and creation time. Changing "
+            "legacy_household_id repoints the row and re-resolves household_id "
+            "from the Stage 11 copy mapping, or clears it. Changing household_id "
+            "alone points the row at that v2 household, which must exist in the "
+            "same country, and clears legacy_household_id. Supplied together, both "
+            "are stored, and household_id must be the copy of legacy_household_id "
+            "when one exists."
         ),
     )
     def patch_user_household_route(

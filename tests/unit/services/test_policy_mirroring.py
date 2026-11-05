@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogNotPublishedError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,

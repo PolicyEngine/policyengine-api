@@ -9,7 +9,7 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from policyengine_api.fastapi_routes.v2.user_resources import (
+from policyengine_api.fastapi_routes.v2.user_resources_support import (
     MAXIMUM_USER_WRITE_REQUEST_BYTES,
 )
 from policyengine_api.services.v2.associations.types import (

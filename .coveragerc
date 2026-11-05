@@ -1,9 +1,27 @@
 [run]
 source = policyengine_api
+# Record file paths relative to the checkout, so a report written in one
+# checkout directory, such as a container job's, matches the same files in
+# another; with absolute paths diff-cover finds no changed file in it and
+# passes (api.quality.diff-coverage).
+relative_files = True
 
 [report]
+# Lines that never run by design, which would otherwise count as missed and
+# fail a fully tested change (api.quality.diff-coverage). coverage.py searches
+# each line of text for each pattern, and a matching line that opens a block
+# excludes the whole block, so the last two match only the whole statement.
+# - Setting exclude_lines replaces coverage.py's default, so the first
+#   pattern is that default again, with `\#` because a value that starts with
+#   `#` is read as a comment.
+# - Imports under `if TYPE_CHECKING:`, where ruff's TC rules move them.
+# - `...` alone on a line: the bodies of Protocol methods and other stubs.
+exclude_lines =
+    \#\s*(pragma|PRAGMA)[:\s]?\s*(no|NO)\s*(cover|COVER)
+    ^\s*if TYPE_CHECKING:\s*(\#.*)?$
+    ^\s*\.\.\.\s*(\#.*)?$
 omit =
     tests/*
     */tests/*
     tests/conftest.py
-    
+

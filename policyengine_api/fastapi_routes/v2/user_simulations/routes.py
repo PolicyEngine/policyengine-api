@@ -13,8 +13,8 @@ from policyengine_api.fastapi_routes.dependencies import (
     _default_v2_user_simulation_service_factory,
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
-from policyengine_api.fastapi_routes.v2.errors import v2_error_response
-from policyengine_api.fastapi_routes.v2.user_resources import (
+from policyengine_api.fastapi_routes.v2.errors_support import v2_error_response
+from policyengine_api.fastapi_routes.v2.user_resources_support import (
     USER_RESOURCE_ERROR_RESPONSES,
     enforce_user_write_request_size,
     user_resource_operation,

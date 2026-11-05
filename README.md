@@ -241,7 +241,7 @@ In the first line of your PR, please make sure to include the following:
 Fixes #{issue_number}
 ```
 
-This makes it much easier for us to maintain and prune our issue board.
+This makes it much easier for us to maintain and prune our issue board. The `PR description` check fails unless the first line is exactly `Fixes #` followed by the number of an open issue in this repository; see [the PR skill](docs/engineering/skills/github-prs.md#tracking-issues).
 
 Please try to be detailed in your PRs about the changes you made and why you made them. You may find yourself looking back at them for reference in the future, or needing insight about someone else's changes. Save yourself a conversation and write it all in the PR!
 

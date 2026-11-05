@@ -1,0 +1,22 @@
+# Proof fixture for api.dependencies.declared-and-used (the rejected case).
+#
+# The proof test runs deptry on policyengine_api/ in this directory, in the
+# repository's environment, so every module the fixture imports is installed
+# except module_that_is_not_installed. deptry must report six findings:
+# flask and asyncio are declared and never imported (DEP002); asyncio is also
+# a standard-library module (DEP005); starlette is installed only as FastAPI's
+# dependency (DEP003); pytest is declared only in the dev extra (DEP004); and
+# no declared distribution provides module_that_is_not_installed (DEP001).
+
+[project]
+name = "deptry-proof-rejected"
+version = "0"
+dependencies = ["flask", "asyncio"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+# The settings the rule requires (scripts/rules/declared_dependencies.py).
+[tool.deptry]
+known_first_party = ["policyengine_api"]
+optional_dependencies_dev_groups = ["dev"]

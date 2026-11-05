@@ -56,9 +56,10 @@ id = "process"
 title = "Process and repository hygiene"
 
 [discovery]
-workflows = [".github/workflows/pr.yml"]
+workflows = [".github/workflows/pr.yml", ".github/workflows/pr-description.yml"]
 ignore_jobs = [
   { job = "upload-test-coverage", reason = "sends the test shards' coverage reports to Codecov in one upload; it checks nothing" },
+  { job = "upload-integration-coverage", reason = "sends the cross-database integration tests' coverage report to Codecov; it checks nothing" },
 ]
 guard_test_globs = [
   "tests/**/test_*boundar*.py",
@@ -66,6 +67,9 @@ guard_test_globs = [
   "tests/unit/v2/test_stage12_comparison_isolation.py",
 ]
 extra_guard_tests = [
+  "tests/unit/v2/test_catalog_selection_modules.py::test_importing_the_validation_module_loads_no_database_code",
+  "tests/unit/v2/test_catalog_selection_modules.py::test_the_reads_module_holds_the_catalog_query",
+  "tests/unit/v2/test_catalog_selection_modules.py::test_the_validation_module_imports_no_database_code",
   "tests/unit/v2/test_catalog_extraction.py::test_extractor_has_no_direct_core_country_or_v1_metadata_imports",
   "tests/unit/v2/test_catalog_extraction.py::test_extractor_modules_have_no_direct_core_country_or_v1_metadata_imports",
   "tests/unit/v2/test_catalog_initialization.py::test_initializer_is_not_imported_by_application_startup_modules",
@@ -178,28 +182,79 @@ job = "test"
 invocation = "make test"
 
 [[rule]]
+id = "api.v2.files-assigned-to-layers"
+category = "v2-layers"
+statement = "Every .py file under services/v2 and fastapi_routes/v2 gets a layer from its file name alone, so the layer rules check it. A file that can't be renamed, outside a database_connectors package, needs a [[rule.exception]] for this rule in rules/registry.toml; it then gets the route checks under fastapi_routes/v2, or the validator, transformation and types checks under services/v2."
+rationale = "docs/engineering/skills/v2-code-organization.md#file-layers"
+scope = ["policyengine_api/services/v2/**/*.py", "policyengine_api/fastapi_routes/v2/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.files-assigned-to-layers/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.files-assigned-to-layers/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_files_assigned_to_layers"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
 id = "api.v2.routes-no-sessions-or-sql"
 category = "v2-layers"
-statement = "v2 route modules never open database sessions or construct SQL; they call one service method and map typed failures to HTTP."
+statement = "v2 route modules never open database sessions or construct SQL: they import no SQLAlchemy, SQLModel, connector, database_session, v1 ORM or v2 database module, and call no SQL builder, session method or session factory; they call one service method and map typed failures to HTTP."
 rationale = "docs/engineering/skills/v2-code-organization.md#http-adapters"
 scope = ["policyengine_api/fastapi_routes/v2/**/*.py"]
 tier = "mechanical"
-status = "doc-only"
+status = "ratcheted"
 autofix = false
 [rule.enforcer]
-kind = "none"
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.routes-no-sessions-or-sql/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.routes-no-sessions-or-sql/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_routes_no_sessions_or_sql"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+[rule.baseline]
+file = "rules/baselines/v2-layers-routes.txt"
+count = 4
 
 [[rule]]
 id = "api.v2.services-no-sql"
 category = "v2-layers"
-statement = "v2 services sequence work but never construct SQL expressions, call Session.exec, or define HTTP response models."
+statement = "v2 services sequence work but never construct SQL expressions (they import nothing from SQLAlchemy or SQLModel but the Session type and sqlalchemy.exc), call Session.exec or another data-access session method, or define HTTP response models (they import no FastAPI or Starlette)."
 rationale = "docs/engineering/skills/v2-code-organization.md#servicespy"
 scope = ["policyengine_api/services/v2/*/services.py"]
 tier = "mechanical"
-status = "doc-only"
+status = "enforced"
 autofix = false
 [rule.enforcer]
-kind = "none"
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.services-no-sql/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.services-no-sql/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_services_no_sql"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
 
 [[rule]]
 id = "api.v2.user-services-no-sql"
@@ -223,28 +278,242 @@ good_fixture = "rules/fixtures/api.v2.user-services-no-sql/good_services.py"
 test = "tests/unit/v2/test_data_crud_boundaries.py::test_rule_proof_user_services_no_sql"
 
 [[rule]]
+id = "api.v2.pure-modules-no-session-calls"
+category = "v2-layers"
+statement = "v2 validators, transformations, types, process-state modules, package __init__ files and files under services/v2 excepted from api.v2.files-assigned-to-layers import nothing from SQLAlchemy or SQLModel but the Session type, import no connector, database_session, v1 ORM or v2 database module, and call no session method, SQLAlchemy or SQLModel function or session factory; they work on values and rows a connector loaded."
+rationale = "docs/engineering/skills/v2-code-organization.md#validatorspy"
+scope = ["policyengine_api/services/v2/*/validators.py", "policyengine_api/services/v2/*/transformations.py", "policyengine_api/services/v2/*/types.py", "policyengine_api/services/v2/*/process_state.py", "policyengine_api/services/v2/__init__.py", "policyengine_api/services/v2/*/__init__.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.pure-modules-no-session-calls/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.pure-modules-no-session-calls/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_pure_modules_no_session_calls"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
+id = "api.v2.session-modules-no-data-access"
+category = "v2-layers"
+statement = "v2 database_session modules sit directly in their resource package and only open, commit, roll back and close sessions: they call no data-access session method (add, get, merge, exec, execute and so on) or SQL builder, and import no connector."
+rationale = "docs/engineering/skills/v2-code-organization.md#database_sessionpy"
+scope = ["policyengine_api/services/v2/*/database_session.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.session-modules-no-data-access/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.session-modules-no-data-access/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_session_modules_no_data_access"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
 id = "api.v2.connectors-never-commit"
 category = "v2-layers"
-statement = "v2 connectors receive a session from the service and never open, commit, roll back or close it."
+statement = "v2 connectors receive a session from the service and never open (with a session factory or a database_session container), commit, roll back or close it, or import the v1 ORM, the v2 database or a database_session module."
 rationale = "docs/engineering/skills/v2-code-organization.md#database_connectors"
 scope = ["policyengine_api/services/v2/*/database_connectors/*.py"]
 tier = "mechanical"
-status = "doc-only"
+status = "enforced"
 autofix = false
 [rule.enforcer]
-kind = "none"
+kind = "quality-guard"
+name = "v2-layers"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.connectors-never-commit/bad_tree.toml"
+good_fixture = "rules/fixtures/api.v2.connectors-never-commit/good_tree.toml"
+test = "scripts/rules/tests/test_v2_layers.py::TestV2LayersProof::test_rule_proof_connectors_never_commit"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
 
 [[rule]]
 id = "api.v2.connectors-no-cross-calls"
 category = "v2-layers"
-statement = "v2 connector modules never call one another to sequence a workflow; the service does the sequencing."
+statement = "v2 connector modules never import one another, so they cannot call one another to sequence a workflow; the service does the sequencing."
 rationale = "docs/engineering/skills/v2-code-organization.md#database_connectors"
 scope = ["policyengine_api/services/v2/*/database_connectors/*.py"]
 tier = "mechanical"
-status = "doc-only"
+status = "ratcheted"
 autofix = false
 [rule.enforcer]
-kind = "none"
+kind = "import-linter"
+config = "pyproject.toml"
+contract = "api-v2-connectors-independent"
+contract_sha256 = "6da44212adfe1bc6110ebb9651d282269f353639ae8f644b575c25ace4749de9"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "lint-imports --config pyproject.toml"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.connectors-no-cross-calls/bad_package.toml"
+good_fixture = "rules/fixtures/api.v2.connectors-no-cross-calls/good_package.toml"
+test = "tests/unit/v2/test_import_linter_contracts.py::test_rule_proof_connectors_no_cross_calls"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.baseline]
+file = "rules/baselines/import-linter-api-v2-connectors-independent.txt"
+count = 7
+
+[[rule]]
+id = "api.v2.import-layers"
+category = "v2-layers"
+statement = "v2 route modules may import v2 services and v2 data modules, and v2 services may import v2 data modules, never the reverse, directly or through other modules."
+rationale = "docs/engineering/skills/v2-code-organization.md#dependency-direction"
+scope = ["policyengine_api/fastapi_routes/v2/**/*.py", "policyengine_api/services/v2/**/*.py", "policyengine_api/data/v2/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "import-linter"
+config = "pyproject.toml"
+contract = "api-v2-layers"
+contract_sha256 = "d91c05303198345699ff66356881f18d5bb3ea5bbf44cd9a86346ee7ff5f17b7"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "lint-imports --config pyproject.toml"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.import-layers/bad_package.toml"
+good_fixture = "rules/fixtures/api.v2.import-layers/good_package.toml"
+test = "tests/unit/v2/test_import_linter_contracts.py::test_rule_proof_import_layers"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.v2.pure-modules-no-database"
+category = "v2-layers"
+statement = "v2 validators, transformations and types never reach SQLAlchemy, SQLModel, a connector, a database_session module or the v2 database module, directly or through other modules, except through the v2 table models; imports under TYPE_CHECKING count."
+rationale = "docs/engineering/skills/v2-code-organization.md#dependency-direction"
+scope = ["policyengine_api/services/v2/*/validators.py", "policyengine_api/services/v2/*/transformations.py", "policyengine_api/services/v2/*/types.py"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "import-linter"
+config = "pyproject.toml"
+contract = "api-v2-pure-modules-no-database"
+contract_sha256 = "b5317b97f5680dc5f38b16fe33bd4dc29715a8fb97f52f9da56585069994565d"
+allowed_ignore_imports = [
+  "policyengine_api.data.v2.models -> sqlmodel",
+  "policyengine_api.data.v2.models.associations -> sqlalchemy",
+  "policyengine_api.data.v2.models.associations -> sqlmodel",
+  "policyengine_api.data.v2.models.base -> sqlalchemy",
+  "policyengine_api.data.v2.models.base -> sqlmodel",
+  "policyengine_api.data.v2.models.comparison_runs -> sqlalchemy",
+  "policyengine_api.data.v2.models.comparison_runs -> sqlmodel",
+  "policyengine_api.data.v2.models.countries -> sqlalchemy",
+  "policyengine_api.data.v2.models.countries -> sqlmodel",
+  "policyengine_api.data.v2.models.household_mappings -> sqlalchemy",
+  "policyengine_api.data.v2.models.household_mappings -> sqlmodel",
+  "policyengine_api.data.v2.models.households -> sqlalchemy",
+  "policyengine_api.data.v2.models.households -> sqlmodel",
+  "policyengine_api.data.v2.models.metadata -> sqlalchemy",
+  "policyengine_api.data.v2.models.metadata -> sqlmodel",
+  "policyengine_api.data.v2.models.policies -> sqlalchemy",
+  "policyengine_api.data.v2.models.policies -> sqlmodel",
+  "policyengine_api.data.v2.models.policy_mappings -> sqlalchemy",
+  "policyengine_api.data.v2.models.policy_mappings -> sqlmodel",
+  "policyengine_api.data.v2.models.reports -> sqlalchemy",
+  "policyengine_api.data.v2.models.reports -> sqlmodel",
+  "policyengine_api.data.v2.models.simulations -> sqlalchemy",
+  "policyengine_api.data.v2.models.simulations -> sqlmodel",
+  "policyengine_api.data.v2.models.users -> sqlalchemy",
+  "policyengine_api.data.v2.models.users -> sqlmodel",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "lint-imports --config pyproject.toml"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.pure-modules-no-database/bad_package.toml"
+good_fixture = "rules/fixtures/api.v2.pure-modules-no-database/good_package.toml"
+test = "tests/unit/v2/test_import_linter_contracts.py::test_rule_proof_pure_modules_no_database"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.baseline]
+file = "rules/baselines/import-linter-api-v2-pure-modules-no-database.txt"
+count = 1
+
+[[rule]]
+id = "api.v2.routes-import-no-database-access"
+category = "v2-layers"
+statement = "v2 route modules never import a connector, a database_session module or the v2 database module; they call a service, which does."
+rationale = "docs/engineering/skills/v2-code-organization.md#http-adapters"
+scope = ["policyengine_api/fastapi_routes/v2/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "import-linter"
+config = "pyproject.toml"
+contract = "api-v2-routes-no-database-access"
+contract_sha256 = "03fe42ee3a3fa858932ff92cc6d1df4bf60db0d75dd99344e52c2167391c074b"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "lint-imports --config pyproject.toml"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.routes-import-no-database-access/bad_package.toml"
+good_fixture = "rules/fixtures/api.v2.routes-import-no-database-access/good_package.toml"
+test = "tests/unit/v2/test_import_linter_contracts.py::test_rule_proof_routes_import_no_database_access"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.v2.types-transformations-no-validators"
+category = "v2-layers"
+statement = "v2 types and transformations modules never import a validators module, directly or through other modules; validators import types, not the reverse."
+rationale = "docs/engineering/skills/v2-code-organization.md#typespy"
+scope = ["policyengine_api/services/v2/*/types.py", "policyengine_api/services/v2/*/transformations.py"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "import-linter"
+config = "pyproject.toml"
+contract = "api-v2-types-transformations-no-validators"
+contract_sha256 = "22a4a86fefa71f6097c03ab55eb513a9df045676414b410216ddcd7295e8f711"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "lint-imports --config pyproject.toml"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.types-transformations-no-validators/bad_package.toml"
+good_fixture = "rules/fixtures/api.v2.types-transformations-no-validators/good_package.toml"
+test = "tests/unit/v2/test_import_linter_contracts.py::test_rule_proof_types_transformations_no_validators"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.baseline]
+file = "rules/baselines/import-linter-api-v2-types-transformations-no-validators.txt"
+count = 4
 
 [[rule]]
 id = "api.routes.shared-query-parameters"
@@ -297,6 +566,7 @@ nodes = [
   "tests/unit/data/test_database_access_boundaries.py::test_non_test_code_reaches_database_drivers_only_where_declared",
   "tests/unit/data/test_database_access_boundaries.py::test_non_test_code_changes_schema_only_through_alembic",
   "tests/unit/data/test_database_access_boundaries.py::test_publication_staging_tables_are_temporary_and_dropped_at_commit",
+  "tests/unit/data/test_database_access_boundaries.py::test_rule_exceptions_name_a_known_category_and_what_they_allow",
 ]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
@@ -306,6 +576,44 @@ invocation = "make test"
 bad_fixture = "rules/fixtures/api.data.sqlalchemy-and-alembic-only/bad_database_access.py"
 good_fixture = "rules/fixtures/api.data.sqlalchemy-and-alembic-only/good_database_access.py"
 test = "tests/unit/data/test_database_access_boundaries.py::test_rule_proof_sqlalchemy_and_alembic_only"
+# Each exception names a module and, in match, the one construct the check
+# reports there (category driver-access or schema-change), or a path pattern
+# the check doesn't scan (category migration-revision). The check fails on an
+# exception that no longer matches anything.
+[[rule.exception]]
+path = "policyengine_api/data/v2/catalog/publication_staging.py"
+match = "import psycopg.sql"
+category = "driver-access"
+reason = "Catalog publication streams rows with Postgres COPY ... FROM STDIN, which SQLAlchemy has no API for, and composes the COPY statement with psycopg's SQL composition."
+
+[[rule.exception]]
+path = "policyengine_api/data/v2/catalog/publication_staging.py"
+match = "import psycopg.types.json.Jsonb"
+category = "driver-access"
+reason = "Catalog publication's COPY sends JSON values with psycopg's JSONB adapter."
+
+[[rule.exception]]
+path = "policyengine_api/data/v2/catalog/publication_staging.py"
+match = "attribute .driver_connection"
+category = "driver-access"
+reason = "Catalog publication runs COPY through the psycopg connection beneath a SQLAlchemy Connection that SQLAlchemy opened and still manages, so the transaction stays SQLAlchemy's."
+
+[[rule.exception]]
+path = "policyengine_api/data/v2/catalog/publication_staging.py"
+match = "call STAGING_METADATA.create_all()"
+category = "schema-change"
+reason = "The publication staging tables are TEMPORARY with ON COMMIT DROP, so Postgres drops them when the publishing transaction commits and they are not persistent schema; test_publication_staging_tables_are_temporary_and_dropped_at_commit checks every table."
+
+[[rule.exception]]
+path = "policyengine_api/data/orm_pool_events.py"
+match = "attribute ._sock"
+category = "driver-access"
+reason = "The v1 pool's diagnostics read the file descriptor and local port of pymysql's socket from the driver connection a SQLAlchemy pool event passes them, because SQLAlchemy has no API for a connection's socket. They never read or write through the socket or the driver connection, and import no driver."
+
+[[rule.exception]]
+path = "migrations/*/versions/*.py"
+category = "migration-revision"
+reason = "Alembic generates the revisions, and they are where schema changes belong, so the check doesn't scan them. Ruff skips the same files (extend-exclude in pyproject.toml)."
 
 [[rule]]
 id = "api.legacy.removed-layers-stay-removed"
@@ -526,6 +834,31 @@ nodes = [
 workflow = ".github/workflows/pr.yml"
 job = "test"
 invocation = "make test"
+
+[[rule]]
+id = "api.catalog.selection-validation-no-database"
+category = "isolation"
+statement = "Importing catalog_selection_validation (catalog version validation, its error types and SelectedCatalog) loads no SQLAlchemy, SQLModel, v2 table model or v2 database module; the catalog query lives in catalog_selection_reads."
+rationale = "docs/engineering/skills/v2-code-organization.md#dependency-direction"
+scope = ["policyengine_api/data/__init__.py", "policyengine_api/data/v2/__init__.py", "policyengine_api/data/v2/catalog/__init__.py", "policyengine_api/data/v2/catalog/catalog_selection_validation.py", "policyengine_api/supported_countries.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/v2/test_catalog_selection_modules.py::test_the_validation_module_imports_no_database_code",
+  "tests/unit/v2/test_catalog_selection_modules.py::test_importing_the_validation_module_loads_no_database_code",
+  "tests/unit/v2/test_catalog_selection_modules.py::test_the_reads_module_holds_the_catalog_query",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.catalog.selection-validation-no-database/bad_catalog_validation.py"
+good_fixture = "rules/fixtures/api.catalog.selection-validation-no-database/good_catalog_validation.py"
+test = "tests/unit/v2/test_catalog_selection_modules.py::test_rule_proof_selection_validation_no_database"
 
 [[rule]]
 id = "api.metadata.read-modules-isolated"
@@ -923,7 +1256,7 @@ invocation = "make test"
 [[rule]]
 id = "api.quality.alembic-revisions-unused-imports"
 category = "quality"
-statement = "Ruff doesn't lint Alembic revision files (lint.exclude in pyproject.toml), because they must stay exactly as Alembic generates them."
+statement = "Ruff neither lints nor formats Alembic revision files (extend-exclude in pyproject.toml), because they must stay exactly as Alembic generates them."
 rationale = "docs/engineering/skills/alembic-migrations.md#mandatory-generation-rule"
 scope = ["migrations/*/versions/*.py"]
 tier = "mechanical"
@@ -954,7 +1287,7 @@ invocation = "ruff check ."
 [[rule]]
 id = "api.quality.ci-cd-scripts-ruff-exemptions"
 category = "quality"
-statement = "CI/CD scripts under .github may print their results, fetch fixed URLs, have hyphenated file names and import the lazily loaded packages at module level (T201, S310, N999, TID253); every other ruff rule applies to them."
+statement = "CI/CD scripts under .github may print their results, run other programs, fetch fixed URLs, have hyphenated file names and import the lazily loaded packages at module level (T201, S603, S607, S310, N999, TID253); every other ruff rule applies to them."
 rationale = "docs/engineering/skills/rules-registry.md#file-level-exceptions"
 scope = [".github/**/*.py"]
 tier = "mechanical"
@@ -964,7 +1297,7 @@ autofix = false
 kind = "ruff"
 mode = "per-file-ignore"
 pattern = ".github/**"
-codes = ["N999", "S310", "T201", "TID253"]
+codes = ["N999", "S310", "S603", "S607", "T201", "TID253"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
 job = "lint"
@@ -1085,6 +1418,55 @@ job = "check-test-shards"
 invocation = "scripts.release_test_shards check-coverage"
 
 [[rule]]
+id = "api.quality.coverage-measured"
+category = "quality"
+statement = "Codecov measures the same tests on master as on pull requests: every CI job that measures test coverage sends it to Codecov with a flag that codecov.yml carries forward (unit for make test, in pr.yml and in push.yml's release tests; integration for the cross-database integration tests), passing the CODECOV_TOKEN secret, from a job with a timeout of at most 15 minutes; every shard of a report is uploaded, and in a master run an upload fails the run when it fails and no other job waits for it."
+rationale = "docs/engineering/skills/testing.md#coverage"
+scope = ["codecov.yml", ".github/workflows/*.yml"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/test_codecov_coverage.py::test_every_coverage_upload_is_flagged_and_master_uploads_fail_the_run",
+  "tests/unit/test_codecov_coverage.py::test_master_and_pull_requests_measure_both_flags",
+  "tests/unit/test_codecov_coverage.py::test_master_uploads_the_release_tests_coverage_in_one_upload",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.quality.coverage-measured/rejected"
+good_fixture = "rules/fixtures/api.quality.coverage-measured/accepted"
+test = "tests/unit/test_codecov_coverage.py::test_rule_proof_coverage_measured"
+
+[[rule]]
+id = "api.quality.diff-coverage"
+category = "quality"
+statement = "The lines a pull request changes in policyengine_api that coverage.py measures (the first line of each statement) are at least 80% covered by the unit and integration tests together: pr.yml's diff-coverage job runs diff-cover --fail-under=80 on every test shard's and the integration tests' coverage reports, against the commit that the merge commit CI checks out is built on (HEAD^1: the base branch, or a lower stacked pull request's merge commit), and CI complete needs it."
+rationale = "docs/engineering/skills/testing.md#changed-lines"
+scope = ["policyengine_api/**/*.py"]
+tier = "metric"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "workflow-job"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "diff-coverage"
+invocation = "diff-cover"
+[rule.proof]
+below_fixture = "rules/fixtures/api.quality.diff-coverage/below_threshold.toml"
+above_fixture = "rules/fixtures/api.quality.diff-coverage/at_threshold.toml"
+threshold = 80
+test = "tests/unit/test_diff_coverage.py::test_rule_proof_diff_coverage"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
 id = "api.quality.environment-variables-load"
 category = "quality"
 statement = "Required environment variables and credentials load in a deployed-like environment."
@@ -1127,7 +1509,69 @@ invocation = "unittest discover -s scripts/rules/tests"
 [[rule.exception]]
 path = "migrations/*/versions/*.py"
 category = "migration-revision"
-reason = "Alembic revisions stay exactly as Alembic generated them, and an applied revision has already run against a database, so it is never split. Ruff excludes the same files (lint.exclude in pyproject.toml)."
+reason = "Alembic revisions stay exactly as Alembic generated them, and an applied revision has already run against a database, so it is never split. Ruff skips the same files (extend-exclude in pyproject.toml)."
+
+[[rule]]
+id = "api.quality.suppressions-explained"
+category = "quality"
+statement = "Every noqa, ruff: disable and type: ignore comment names what it suppresses and says why: a noqa comment, line-level or file-level (ruff: noqa, flake8: noqa), lists its ruff codes, a ruff: disable range suppression lists its ruff codes in brackets, a type: ignore comment lists its mypy error codes in brackets, and the comment also gives a reason in another # part, as # noqa: CODE  # reason or # type: ignore[code]  # reason; apart from the suppressions rules/baselines/suppressions.txt lists."
+rationale = "docs/engineering/skills/rules-registry.md#inline-suppressions"
+scope = ["**/*.py"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "suppressions"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[[rule.ci]]
+workflow = ".github/workflows/push.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.baseline]
+file = "rules/baselines/suppressions.txt"
+count = 29
+[rule.proof]
+bad_fixture = "rules/fixtures/api.quality.suppressions-explained/rejected_module.txt"
+good_fixture = "rules/fixtures/api.quality.suppressions-explained/accepted_module.txt"
+test = "scripts/rules/tests/test_suppressions.py::TestSuppressionsProof::test_rule_proof_suppressions_explained"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
+id = "api.quality.tests-assert"
+category = "quality"
+statement = "Every test function pytest or unittest collects checks something: its body contains an assert, a raise AssertionError, pytest.raises, pytest.warns, pytest.deprecated_call or pytest.fail, a call to an assert function or method (unittest's self.assertEqual, a mock's assert_called_once_with) or self.fail, or a call to a test helper that does (a function of the same file, a method of the test's class, or a function imported by name from test code); apart from the tests rules/baselines/tests-without-checks.txt lists."
+rationale = "docs/engineering/skills/testing.md#every-test-checks-something"
+scope = ["**/test_*.py"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "asserting-tests"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[[rule.ci]]
+workflow = ".github/workflows/push.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.baseline]
+file = "rules/baselines/tests-without-checks.txt"
+count = 21
+[rule.proof]
+bad_fixture = "rules/fixtures/api.quality.tests-assert/rejected_tests.txt"
+good_fixture = "rules/fixtures/api.quality.tests-assert/accepted_tests.txt"
+test = "scripts/rules/tests/test_asserting_tests.py::TestAssertingTestsProof::test_rule_proof_tests_assert"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
 
 # --- CI workflows and scripts ----------------------------------------------
 
@@ -1341,6 +1785,55 @@ workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
 invocation = "unittest discover -s scripts/rules/tests"
 
+[[rule]]
+id = "api.dependencies.declared-and-used"
+category = "dependencies"
+statement = "pyproject.toml declares what policyengine_api imports and nothing else: deptry finds no import that no declared distribution provides (DEP001), no declared runtime dependency the package never imports (DEP002), no import of a module installed only as another package's dependency (DEP003), no import of a package declared only as a development dependency (DEP004) and no declared standard-library module (DEP005), apart from the findings rules/baselines/deptry.txt lists and the rule's not-imported-package exceptions."
+rationale = "docs/engineering/skills/dependencies.md#we-declare-what-we-import"
+scope = ["pyproject.toml", "policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "declared-dependencies"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[[rule.ci]]
+workflow = ".github/workflows/push.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.baseline]
+file = "rules/baselines/deptry.txt"
+count = 16
+[rule.proof]
+bad_fixture = "rules/fixtures/api.dependencies.declared-and-used/rejected"
+good_fixture = "rules/fixtures/api.dependencies.declared-and-used/accepted"
+test = "scripts/rules/tests/test_declared_dependencies.py::TestDeclaredDependenciesProof::test_rule_proof_declared_and_used"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule.exception]]
+path = "gcp/cloud_run/start.sh"
+match = "gunicorn"
+category = "not-imported-package"
+reason = "The Cloud Run start command runs gunicorn as the server process; no module imports it."
+
+[[rule.exception]]
+path = "gcp/cloud_run/start.sh"
+match = "uvicorn"
+category = "not-imported-package"
+reason = "gunicorn loads uvicorn's worker class by name (--worker-class uvicorn.workers.UvicornWorker); no module imports it."
+
+[[rule.exception]]
+path = "policyengine_api/data/orm.py"
+match = "pymysql"
+category = "not-imported-package"
+reason = "The Cloud SQL connector loads the MySQL driver by name (driver=\"pymysql\"), as SQLAlchemy's mysql+pymysql dialect does; no module imports it."
+
 # --- Process and repository hygiene ----------------------------------------
 
 [[rule]]
@@ -1387,14 +1880,34 @@ invocation = "unittest discover -s scripts/rules/tests"
 [[rule]]
 id = "api.process.pr-tracking-issue"
 category = "process"
-statement = "Every PR has a tracking issue in this repository, and the first line of its description is Fixes #ISSUE_NUMBER."
+statement = "The first line of every PR's description is Fixes #ISSUE_NUMBER, naming an open issue, not a pull request, in this repository; automated PRs open or reuse such an issue."
 rationale = "docs/engineering/skills/github-prs.md#tracking-issues"
-scope = [".github/pull_request_template.md"]
+scope = [
+  ".github/pull_request_template.md",
+  ".github/workflows/pr-description.yml",
+  ".github/scripts/check_pr_description.py",
+  ".github/scripts/open_relock_pull_request.sh",
+  ".github/scripts/update-policyengine-package.sh",
+  ".github/scripts/close_bundle_update_issue.sh",
+  ".github/workflows/close-bundle-update-issue.yml",
+]
 tier = "mechanical"
-status = "doc-only"
+status = "enforced"
 autofix = false
 [rule.enforcer]
-kind = "none"
+kind = "workflow-job"
+step = "Check the first line and the tracking issue"
+[[rule.ci]]
+workflow = ".github/workflows/pr-description.yml"
+job = "pr-description"
+invocation = "check_pr_description.py"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.process.pr-tracking-issue/bad_event.json"
+good_fixture = "rules/fixtures/api.process.pr-tracking-issue/good_event.json"
+test = "tests/unit/test_pr_description_check.py::test_rule_proof_pr_tracking_issue"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
 
 [[rule]]
 id = "api.process.changelog-fragment"
@@ -1487,7 +2000,7 @@ kind = "none"
 [[rule]]
 id = "api.process.agents-suppress-as-last-resort"
 category = "process"
-statement = "Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason."
+statement = "Agents add an inline suppression (noqa or type: ignore) only when neither a code change nor a checker setting removes the finding, and a PR lists every inline suppression it adds, with the reason. That each suppression names its code and gives its reason is the mechanical rule api.quality.suppressions-explained."
 rationale = "docs/engineering/skills/rules-registry.md#inline-suppressions"
 scope = ["**/*.py"]
 tier = "judgment"

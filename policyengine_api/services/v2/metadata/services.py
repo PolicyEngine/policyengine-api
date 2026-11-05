@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from policyengine_api.data.v2.catalog.catalog_selection import (
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     SelectedCatalog,
     validate_policyengine_version,
 )
@@ -107,7 +107,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.metadata.database_session import (
         MetadataDatabaseSession,
     )
-    from policyengine_api.services.v2.metadata.selected_catalogs import (
+    from policyengine_api.services.v2.metadata.process_state import (
         SelectedCatalogStore,
     )
 

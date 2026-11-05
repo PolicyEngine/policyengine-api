@@ -1,0 +1,13 @@
+# Proof fixture for rule api.v2.import-layers. The contract must accept it:
+# routes import services, and services import data.
+
+[modules]
+"fixture_api/fastapi_routes/v2/policies/routes.py" = """
+from fixture_api.services.v2.policies import services
+"""
+"fixture_api/services/v2/policies/services.py" = """
+from fixture_api.data.v2 import models
+"""
+"fixture_api/data/v2/models.py" = """
+import sqlmodel
+"""

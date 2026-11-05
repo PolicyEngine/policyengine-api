@@ -30,6 +30,7 @@ class RemoteEngineBuild(NamedTuple):
     engine: object
     connector: FakeCloudSqlConnector
     create_engine_calls: list
+    engines_with_pool_events: list
 
 
 @pytest.fixture
@@ -37,6 +38,7 @@ def remote_engine_build(monkeypatch):
     """Build the remote engine with a fake connector and a recording create_engine."""
     connectors = []
     engine_calls = []
+    engines_with_pool_events = []
 
     def connector_factory(**connector_options):
         connector = FakeCloudSqlConnector(**connector_options)
@@ -50,6 +52,7 @@ def remote_engine_build(monkeypatch):
         "create_engine",
         lambda url, **options: engine_calls.append((url, options)) or "engine",
     )
+    monkeypatch.setattr(orm, "record_pool_events", engines_with_pool_events.append)
     monkeypatch.setenv(
         "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME", "project:region:instance"
     )
@@ -60,7 +63,7 @@ def remote_engine_build(monkeypatch):
     engine = orm._build_remote_engine()
 
     [connector] = connectors
-    return RemoteEngineBuild(engine, connector, engine_calls)
+    return RemoteEngineBuild(engine, connector, engine_calls, engines_with_pool_events)
 
 
 def test_sqlalchemy_v2_or_newer_is_installed():
@@ -96,6 +99,10 @@ def test_remote_engine_delegates_connections_and_pooling_to_sqlalchemy(
             "client_flag": CLIENT.FOUND_ROWS,
         }
     ]
+
+
+def test_remote_engine_records_its_pool_events(remote_engine_build):
+    assert remote_engine_build.engines_with_pool_events == ["engine"]
 
 
 def test_remote_engine_connections_report_rows_matched_by_updates(

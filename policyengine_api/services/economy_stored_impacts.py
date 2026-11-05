@@ -13,7 +13,9 @@ from policyengine_api.runtime_cache.reform_impacts import (
     ReformImpactStartClaim,
 )
 from policyengine_api.services.economy_impact_types import (
+    FAILED_IMPACT_DELETE_LOCKOUT_SECONDS,
     LOCAL_AREA_BREAKDOWN_RESULT_SCHEMA_VERSION,
+    EconomicImpactResult,
     EconomicImpactSetupOptions,
     ImpactAction,
     ImpactStatus,
@@ -350,6 +352,60 @@ class StoredImpactMixin:
             )
             raise
 
+    def _failure_the_next_request_answers_from(
+        self,
+        stored_failure: CachedReformImpact | None,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> CachedReformImpact | None:
+        """Return the stored failure when the next request would answer from it.
+
+        A late poll of a job that a newer one has replaced fails onto a record
+        the next request does not select: that request answers from the newer
+        job. Then None, since this failure's lifetime says nothing about when
+        a new run can start. The check is the cache lookup alone, with no
+        request to the simulation API; a deploy that changes the worker app a
+        request resolves to can still start a new run sooner.
+        """
+        if stored_failure is None:
+            return None
+        next_answer = self._get_most_recent_impact(setup_options)
+        if (
+            next_answer is None
+            or next_answer.execution_id != stored_failure.execution_id
+        ):
+            return None
+        return stored_failure
+
+    def _stored_failure_result(
+        self, message: str, stored_failure: CachedReformImpact | None
+    ) -> EconomicImpactResult:
+        """Return a failure with the seconds the Public API keeps returning it.
+
+        Read from the stored failure after it is written, or as it is
+        replayed, so a fresh failure and a replayed one both say how long a
+        lookup still finds it, and how long until a DELETE may remove it.
+        Both are None when no failure was stored, and the second is None
+        whenever the first is.
+        """
+        retry_after_seconds = (
+            self._reform_impacts.get_reform_impact_seconds_left(stored_failure)
+            if stored_failure is not None
+            else None
+        )
+        delete_after_seconds = (
+            self._reform_impacts.get_reform_impact_seconds_until(
+                stored_failure,
+                seconds_after_end=FAILED_IMPACT_DELETE_LOCKOUT_SECONDS,
+            )
+            if stored_failure is not None and retry_after_seconds is not None
+            else None
+        )
+        return EconomicImpactResult.error(
+            message=message,
+            retry_after_seconds=retry_after_seconds,
+            delete_after_seconds=delete_after_seconds,
+        )
+
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_PERSIST_FAILED)
     )
@@ -360,11 +416,12 @@ class StoredImpactMixin:
         execution_id: str,
         error_code: str | None = None,
         keep_seconds: int | None = None,
-    ) -> None:
+    ) -> CachedReformImpact | None:
         """Record the impact as "error" with its message; log and re-raise errors.
 
         ``keep_seconds`` keeps the error for that long instead of the usual
-        30 days.
+        30 days. Return the stored failure, or None when the cache did not
+        store it.
         """
         # Optional fields are passed only when set, as before keep_seconds existed.
         optional_fields: dict[str, Any] = {}
@@ -373,7 +430,7 @@ class StoredImpactMixin:
         if keep_seconds is not None:
             optional_fields["keep_seconds"] = keep_seconds
         try:
-            self._reform_impacts.set_error_reform_impact(
+            return self._reform_impacts.set_error_reform_impact(
                 execution_id=execution_id,
                 message=message,
                 **optional_fields,

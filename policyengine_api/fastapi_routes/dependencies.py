@@ -24,13 +24,15 @@ from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2UserReportResourceService,
     V2UserSimulationResourceService,
 )
-from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+from policyengine_api.fastapi_routes.v2.metadata.response_cache_support import (
     MetadataResponseCache,
 )
-from policyengine_api.fastapi_routes.v2.user_auth import authenticate_account_request
+from policyengine_api.fastapi_routes.v2.user_auth_support import (
+    authenticate_account_request,
+)
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.readiness import is_ready
-from policyengine_api.services.v2.metadata.selected_catalogs import (
+from policyengine_api.services.v2.metadata.process_state import (
     SelectedCatalogStore,
 )
 
