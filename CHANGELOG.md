@@ -1,3 +1,17 @@
+## [5.28.0] - 2026-11-05
+
+### Added
+
+- Registered a rule, checked by a new quality guard that runs deptry on `policyengine_api`, that `pyproject.toml` declares every distribution the package imports and no runtime dependency it never imports; the 16 findings today are listed in a baseline that may only shrink, and gunicorn, uvicorn and pymysql, which the application loads by name, are registered exceptions.
+
+
+## [5.27.1] - 2026-11-05
+
+### Fixed
+
+- A read-only request to the simulation service whose connection breaks is sent once more on a new connection, with timeouts of at most 10 seconds. The economy routes answer 502, not 400 or 500, when a request still gets no response, except for the check of whether a finished stored impact is out of date, which then answers from the stored impact. Each request to the simulation service, and each v1 database connect, invalidation, close and error, is recorded with its connection's socket details. The database access check's exceptions now live in rules/registry.toml, and Ruff no longer lints or formats the Alembic revisions.
+
+
 ## [5.27.0] - 2026-11-05
 
 ### Added

@@ -10,6 +10,7 @@ from pathlib import Path
 from scripts.rules.adapters import check_adapters
 from scripts.rules.baseline import (
     BaseUnavailableError,
+    check_baseline_entries,
     check_baselines,
     default_base_ref,
     load_base_registry,
@@ -132,6 +133,7 @@ def run_guard(
             else:
                 violations, notes = check_baselines(registry, base)
                 result.violations += violations
+                result.violations += check_baseline_entries(root, registry, base, ref)
                 result.notes += notes
     return result
 

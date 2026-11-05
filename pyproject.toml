@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "5.27.0"
+version = "5.28.0"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -67,6 +67,10 @@ dependencies = [
 dev = [
     "build",
     "coverage",
+    # The declared-dependencies quality guard runs it
+    # (api.dependencies.declared-and-used); its findings and report format can
+    # change between minor versions, so an upgrade is its own change.
+    "deptry>=0.25.1,<0.26",
     # pr.yml's diff-coverage job runs it (api.quality.diff-coverage). 11.0 is
     # newer than two weeks; moving to it is its own change.
     "diff-cover>=10.6,<11",
@@ -86,6 +90,20 @@ dev = [
 telemetry-error-issues = [
     "google-cloud-bigquery>=3.30,<4",
 ]
+
+# The declared-dependencies quality guard (scripts/rules/declared_dependencies.py)
+# runs deptry on policyengine_api and requires exactly these settings
+# (api.dependencies.declared-and-used). Tolerated findings live in
+# rules/baselines/deptry.txt and the rule's exceptions in rules/registry.toml,
+# never in a deptry ignore setting here.
+[tool.deptry]
+# The guard scans policyengine_api/ itself, and deptry treats only what is in
+# the scanned directory (api, utils, data, ...) as the project's own modules,
+# so without this it reports every import of policyengine_api.* as an
+# undeclared dependency.
+known_first_party = ["policyengine_api"]
+# The dev extra holds development tools, not runtime dependencies.
+optional_dependencies_dev_groups = ["dev"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["policyengine_api"]

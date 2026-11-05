@@ -21,7 +21,10 @@ python -m unittest discover -s scripts/rules/tests -t .            # the tool's 
 ```
 
 All commands use only the standard library, so they run without installing the
-project.
+project, except the `declared-dependencies` guard and its tests in the tool's
+tests. They run deptry through `uv run --frozen --extra dev`, so they need uv,
+and uv first syncs `.venv` to `uv.lock` on Python 3.12
+([dependencies.md](dependencies.md#we-declare-what-we-import)).
 
 ## Adding or changing a rule
 
@@ -124,7 +127,12 @@ fail the guard yet.
   `# noqa: CODE  # reason`, except in the files below.
 - Other enforcers (mypy, Pyright, Import Linter, custom guards) may start
   `ratcheted` with a baseline file of tolerated violations. Baselines may only
-  shrink: the guard compares counts against the base branch.
+  shrink: the guard compares each baseline's count and its entries against the
+  base branch, so an entry can't be swapped for a new one at the same count.
+  Entries are counted, so a baseline that lists an entry once per tolerated
+  occurrence can't gain another copy of one either.
+  Each entry is therefore a stable key, such as a path or a code and a module,
+  never a count or a line number, which would change as violations are fixed.
 - **Import Linter** tolerates a violation through the contract's
   `ignore_imports` in `pyproject.toml`. The rule's baseline file lists the same
   entries, one per line, so adding one needs a change under the code-owned
