@@ -10,6 +10,7 @@ import pytest
 from policyengine_api.data.v2 import privilege_reconciliation
 from policyengine_api.data.v2.privilege_reconciliation import (
     DefaultPrivilege,
+    GrantedPrivileges,
     PrivilegeEntry,
     ReconciliationPlan,
     grant_statements,
@@ -58,7 +59,7 @@ def _declared() -> dict[str, dict[str, frozenset[TablePrivilege]]]:
 def test_missing_declared_privileges_become_grants() -> None:
     plan = plan_reconciliation(
         _declared(),
-        granted={RUNTIME: {"users": {"SELECT", "INSERT"}}},
+        granted=GrantedPrivileges({RUNTIME: {"users": {"SELECT", "INSERT"}}}),
         existing_roles={RUNTIME, STAGE12},
         existing_tables={"users", "legacy_policy_mappings", "reports"},
     )
@@ -76,14 +77,16 @@ def test_missing_declared_privileges_become_grants() -> None:
 def test_privileges_beyond_the_manifest_are_reported_not_granted_or_revoked() -> None:
     plan = plan_reconciliation(
         _declared(),
-        granted={
-            RUNTIME: {
-                "users": {"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE"},
-                "legacy_policy_mappings": {"SELECT", "INSERT"},
-                "reports": {"SELECT"},
-            },
-            STAGE12: {"users": {"SELECT"}},
-        },
+        granted=GrantedPrivileges(
+            {
+                RUNTIME: {
+                    "users": {"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE"},
+                    "legacy_policy_mappings": {"SELECT", "INSERT"},
+                    "reports": {"SELECT"},
+                },
+                STAGE12: {"users": {"SELECT"}},
+            }
+        ),
         existing_roles={RUNTIME, STAGE12},
         existing_tables={"users", "legacy_policy_mappings", "reports"},
     )
@@ -101,7 +104,7 @@ def test_privileges_beyond_the_manifest_are_reported_not_granted_or_revoked() ->
 def test_privileges_on_tables_outside_the_manifest_are_reported() -> None:
     plan = plan_reconciliation(
         _declared(),
-        granted={RUNTIME: {"scratch_table": {"SELECT"}}},
+        granted=GrantedPrivileges({RUNTIME: {"scratch_table": {"SELECT"}}}),
         existing_roles={RUNTIME, STAGE12},
         existing_tables={"users", "legacy_policy_mappings", "reports", "scratch_table"},
     )
@@ -112,7 +115,7 @@ def test_privileges_on_tables_outside_the_manifest_are_reported() -> None:
 def test_missing_roles_and_tables_are_recorded_and_block_the_plan() -> None:
     plan = plan_reconciliation(
         _declared(),
-        granted={},
+        granted=GrantedPrivileges({}),
         existing_roles={RUNTIME},
         existing_tables={"users", "reports"},
     )
@@ -130,7 +133,7 @@ def test_missing_roles_and_tables_are_recorded_and_block_the_plan() -> None:
 def test_a_missing_role_awaiting_creation_is_skipped_without_blocking() -> None:
     plan = plan_reconciliation(
         _declared(),
-        granted={},
+        granted=GrantedPrivileges({}),
         existing_roles={RUNTIME},
         existing_tables={"users", "legacy_policy_mappings", "reports"},
         roles_awaiting_creation={STAGE12},
@@ -147,7 +150,7 @@ def test_a_role_awaiting_creation_gets_its_privileges_once_it_exists() -> None:
 
     plan = plan_reconciliation(
         declared,
-        granted={},
+        granted=GrantedPrivileges({}),
         existing_roles={RUNTIME, STAGE12},
         existing_tables={"users"},
         roles_awaiting_creation={STAGE12},
@@ -163,7 +166,7 @@ def test_a_role_awaiting_creation_gets_its_privileges_once_it_exists() -> None:
 def test_a_missing_role_not_awaiting_creation_still_blocks_the_plan() -> None:
     plan = plan_reconciliation(
         _declared(),
-        granted={},
+        granted=GrantedPrivileges({}),
         existing_roles={RUNTIME},
         existing_tables={"users", "legacy_policy_mappings", "reports"},
         roles_awaiting_creation={"policyengine_v2_some_other_role"},
@@ -275,10 +278,12 @@ def test_summary_lists_grants_extras_and_default_privileges_without_secrets() ->
 def test_missing_declared_column_privileges_become_column_grants() -> None:
     plan = plan_reconciliation(
         WORKER_DECLARED,
-        granted={WORKER: {"simulation_runs": {"SELECT"}}},
+        granted=GrantedPrivileges(
+            tables={WORKER: {"simulation_runs": {"SELECT"}}},
+            columns={WORKER: {"simulation_runs": {"status": {"UPDATE"}}}},
+        ),
         existing_roles={WORKER},
         existing_tables={"simulation_runs"},
-        granted_columns={WORKER: {"simulation_runs": {"status": {"UPDATE"}}}},
     )
 
     assert plan.grants == (
@@ -290,18 +295,20 @@ def test_missing_declared_column_privileges_become_column_grants() -> None:
 def test_column_and_whole_table_privileges_beyond_the_manifest_are_reported() -> None:
     plan = plan_reconciliation(
         WORKER_DECLARED,
-        granted={WORKER: {"simulation_runs": {"SELECT", "UPDATE"}}},
+        granted=GrantedPrivileges(
+            tables={WORKER: {"simulation_runs": {"SELECT", "UPDATE"}}},
+            columns={
+                WORKER: {
+                    "simulation_runs": {
+                        "status": {"UPDATE"},
+                        "completed_at": {"UPDATE"},
+                        "simulation_id": {"UPDATE"},
+                    }
+                }
+            },
+        ),
         existing_roles={WORKER},
         existing_tables={"simulation_runs"},
-        granted_columns={
-            WORKER: {
-                "simulation_runs": {
-                    "status": {"UPDATE"},
-                    "completed_at": {"UPDATE"},
-                    "simulation_id": {"UPDATE"},
-                }
-            }
-        },
     )
 
     assert plan.grants == ()

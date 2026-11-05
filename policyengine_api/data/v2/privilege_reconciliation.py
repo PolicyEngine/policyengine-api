@@ -36,7 +36,7 @@ import os
 import re
 import sys
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -93,6 +93,20 @@ class PrivilegeEntry:
 
 
 @dataclass(frozen=True)
+class GrantedPrivileges:
+    """The managed roles' direct grants in one database.
+
+    ``tables`` holds grants on whole tables, by role then table, and
+    ``columns`` grants on columns, by role, table, then column.
+    """
+
+    tables: Mapping[str, Mapping[str, Collection[str]]]
+    columns: Mapping[str, Mapping[str, Mapping[str, Collection[str]]]] = field(
+        default_factory=dict
+    )
+
+
+@dataclass(frozen=True)
 class DefaultPrivilege:
     """A default privilege PostgreSQL gives on objects a role creates later."""
 
@@ -139,24 +153,18 @@ def _declared_entries(
     return entries
 
 
-def plan_reconciliation(  # noqa: PLR0913  # the database facts it compares
+def plan_reconciliation(
     declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
-    granted: Mapping[str, Mapping[str, Collection[str]]],
+    granted: GrantedPrivileges,
     *,
     existing_roles: Collection[str],
     existing_tables: Collection[str],
     roles_awaiting_creation: Collection[str] = (),
-    granted_columns: Mapping[str, Mapping[str, Mapping[str, Collection[str]]]]
-    | None = None,
 ) -> ReconciliationPlan:
     """Compare declared privileges with what the database grants.
 
-    ``granted`` holds the managed roles' direct grants on whole tables, by role
-    then table, and ``granted_columns`` their direct grants on columns, by role,
-    table, then column. A missing role in ``roles_awaiting_creation`` is skipped
-    instead of missing.
+    A missing role in ``roles_awaiting_creation`` is skipped instead of missing.
     """
-    granted_columns = granted_columns or {}
     absent_roles = set(declared) - set(existing_roles)
     skipped_roles = tuple(sorted(absent_roles & set(roles_awaiting_creation)))
     missing_roles = tuple(sorted(absent_roles - set(skipped_roles)))
@@ -170,12 +178,12 @@ def plan_reconciliation(  # noqa: PLR0913  # the database facts it compares
     }
     granted_entries = {
         PrivilegeEntry(role, table, privilege)
-        for role, tables in granted.items()
+        for role, tables in granted.tables.items()
         for table, privileges in tables.items()
         for privilege in privileges
     } | {
         PrivilegeEntry(role, table, privilege, column)
-        for role, tables in granted_columns.items()
+        for role, tables in granted.columns.items()
         for table, columns in tables.items()
         for column, privileges in columns.items()
         for privilege in privileges
@@ -543,11 +551,13 @@ def apply_declared_privileges(
     roles = list(declared)
     plan = plan_reconciliation(
         declared,
-        read_granted_privileges(connection, roles),
+        GrantedPrivileges(
+            tables=read_granted_privileges(connection, roles),
+            columns=read_granted_column_privileges(connection, roles),
+        ),
         existing_roles=read_existing_roles(connection, roles),
         existing_tables=read_public_tables(connection),
         roles_awaiting_creation=roles_awaiting_creation,
-        granted_columns=read_granted_column_privileges(connection, roles),
     )
     if plan.can_apply:
         for statement in grant_statements(
