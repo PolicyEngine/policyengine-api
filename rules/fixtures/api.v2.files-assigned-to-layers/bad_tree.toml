@@ -1,10 +1,21 @@
 # Proof fixture for rule api.v2.files-assigned-to-layers. The guard must reject
-# it: simulation_client.py matches no layer's file name and no manifest entry
-# names it (the case of an open pull request that adds a v2 resource).
+# it:
+# - simulation_client.py's name gives it no layer, and no [[rule.exception]]
+#   names it (the case of an open pull request that adds a v2 resource);
+# - the two files listed in ``exceptions`` stand for files a
+#   [[rule.exception]] names. They get no layer, but their directory's
+#   strictest checks: the pure-module checks under services/v2 and the route
+#   checks under fastapi_routes/v2.
 # scripts/rules/tests/test_v2_layers.py writes each file into a temporary
-# directory and runs the v2-layers guard's scan on it, with no manifest.
+# directory and runs the v2-layers guard's scan on it.
 
+exceptions = [
+    "policyengine_api/fastapi_routes/v2/reports/legacy_helpers.py",
+    "policyengine_api/services/v2/household_calculations/legacy_client.py",
+]
 expected_findings = [
+    "policyengine_api/fastapi_routes/v2/reports/legacy_helpers.py calls session.add",
+    "policyengine_api/services/v2/household_calculations/legacy_client.py calls session.get",
     "policyengine_api/services/v2/household_calculations/simulation_client.py matches no v2 layer",
 ]
 
@@ -15,4 +26,12 @@ from policyengine_api.services.v2.household_calculations.simulation_client impor
 """
 "policyengine_api/services/v2/household_calculations/simulation_client.py" = """
 import httpx
+"""
+"policyengine_api/services/v2/household_calculations/legacy_client.py" = """
+def load(session, household_id):
+    return session.get(household_id)
+"""
+"policyengine_api/fastapi_routes/v2/reports/legacy_helpers.py" = """
+def keep(session, row):
+    session.add(row)
 """

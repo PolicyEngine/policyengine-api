@@ -40,16 +40,30 @@ def _findings(files: dict[str, str], rule_id: str) -> set[str]:
         root = Path(directory)
         _write_files(files, root)
         return {
-            str(finding) for finding in scan(root, {}) if finding.rule_id == rule_id
+            str(finding) for finding in scan(root, ()) if finding.rule_id == rule_id
         }
 
 
+def _all_findings(files: dict[str, str], exceptions: tuple[str, ...]) -> set[str]:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        _write_files(files, root)
+        return {str(finding) for finding in scan(root, exceptions)}
+
+
 def _assert_proof(test: unittest.TestCase, rule_id: str) -> None:
+    """Each tree gives exactly its expected findings, of any rule.
+
+    A tree's ``exceptions`` list the files a ``[[rule.exception]]`` for
+    api.v2.files-assigned-to-layers would name.
+    """
     for fixture in ("bad_tree.toml", "good_tree.toml"):
         tree = tomllib.loads((FIXTURES / rule_id / fixture).read_text())
+        exceptions = tuple(tree.get("exceptions", ()))
         with test.subTest(fixture=fixture):
             test.assertEqual(
-                _findings(tree["files"], rule_id), set(tree["expected_findings"])
+                _all_findings(tree["files"], exceptions),
+                set(tree["expected_findings"]),
             )
     bad = tomllib.loads((FIXTURES / rule_id / "bad_tree.toml").read_text())
     test.assertTrue(bad["expected_findings"], "the bad fixture must be rejected")
@@ -102,22 +116,32 @@ class TestLayerAssignment(unittest.TestCase):
             "policyengine_api/fastapi_routes/v2/policies/response_models.py": (
                 "http-model"
             ),
+            "policyengine_api/services/v2/metadata/process_state.py": "process-state",
+            "policyengine_api/fastapi_routes/v2/households/document_models.py": (
+                "http-model"
+            ),
+            "policyengine_api/fastapi_routes/v2/reports/"
+            "household_response_models.py": "http-model",
+            "policyengine_api/fastapi_routes/v2/errors_support.py": "http-support",
+            "policyengine_api/fastapi_routes/v2/metadata/route_support.py": (
+                "http-support"
+            ),
         }
         for path, layer in cases.items():
             with self.subTest(path=path):
-                self.assertEqual(assign_layer(path, {}), layer)
+                self.assertEqual(assign_layer(path, ()), layer)
 
-    def test_other_names_have_no_layer_unless_the_manifest_assigns_one(self) -> None:
+    def test_other_names_have_no_layer_unless_excepted(self) -> None:
         unnamed = "policyengine_api/fastapi_routes/v2/metadata/response_cache.py"
         misnamed_connector = (
             "policyengine_api/services/v2/policies/database_connectors/helpers.py"
         )
+        support_outside_routes = "policyengine_api/services/v2/policies/x_support.py"
 
-        self.assertIsNone(assign_layer(unnamed, {}))
-        self.assertIsNone(assign_layer(misnamed_connector, {}))
-        self.assertEqual(
-            assign_layer(unnamed, {unnamed: "http-support"}), "http-support"
-        )
+        self.assertIsNone(assign_layer(unnamed, ()))
+        self.assertIsNone(assign_layer(misnamed_connector, ()))
+        self.assertIsNone(assign_layer(support_outside_routes, ()))
+        self.assertEqual(assign_layer(unnamed, (unnamed,)), "excepted")
 
     def test_every_file_in_the_repository_has_a_layer(self) -> None:
         violations = [
@@ -389,39 +413,36 @@ class TestSecondReview(unittest.TestCase):
             },
         )
 
-    def test_manifest_layers_get_their_layer_s_checks(self) -> None:
-        process_state = "policyengine_api/services/v2/metadata/selected_catalogs.py"
-        support = "policyengine_api/fastapi_routes/v2/metadata/response_cache.py"
-        manifest = {process_state: "process-state", support: "http-support"}
+    def test_an_excepted_file_gets_its_directory_s_strictest_checks(self) -> None:
+        client = "policyengine_api/services/v2/household_calculations/client.py"
+        helper = "policyengine_api/fastapi_routes/v2/metadata/legacy_helper.py"
+        process_state = "policyengine_api/services/v2/metadata/process_state.py"
         files = {
-            process_state: (
+            client: (
                 "from policyengine_api.data.orm import get_v1_session_factory\n"
-                "from .database_connectors.reads import read_rows\n"
                 "def load(session):\n"
                 "    get_v1_session_factory()\n"
-                "    return session.exec(read_rows)\n"
+                "    return session.exec(1)\n"
             ),
-            support: "def keep(session, row):\n    session.add(row)\n",
+            helper: "def keep(session, row):\n    session.add(row)\n",
+            process_state: "def load(session):\n    return session.exec(1)\n",
         }
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _write_files(files, root)
             found = {
-                (finding.rule_id, str(finding)) for finding in scan(root, manifest)
+                (finding.rule_id, str(finding))
+                for finding in scan(root, (client, helper))
             }
 
         self.assertEqual(
             found,
             {
-                (PURE_RULE, f"{process_state} calls get_v1_session_factory"),
+                (PURE_RULE, f"{client} calls get_v1_session_factory"),
+                (PURE_RULE, f"{client} calls session.exec"),
+                (PURE_RULE, f"{client} imports policyengine_api.data.orm"),
                 (PURE_RULE, f"{process_state} calls session.exec"),
-                (PURE_RULE, f"{process_state} imports policyengine_api.data.orm"),
-                (
-                    PURE_RULE,
-                    f"{process_state} imports "
-                    "policyengine_api.services.v2.metadata.database_connectors.reads",
-                ),
-                (ROUTES_RULE, f"{support} calls session.add"),
+                (ROUTES_RULE, f"{helper} calls session.add"),
             },
         )
 
@@ -542,15 +563,17 @@ class TestThirdReview(unittest.TestCase):
         )
 
 
-class TestBaselineAndManifest(unittest.TestCase):
-    """run_check compares findings with the rule's baseline and checks the manifest."""
+class TestBaselineAndExceptions(unittest.TestCase):
+    """run_check compares findings with the baseline and checks the exceptions."""
 
     def setUp(self) -> None:
         self._directory = tempfile.TemporaryDirectory()
         self.addCleanup(self._directory.cleanup)
         self.root = Path(self._directory.name)
 
-    def _registry(self, baseline_count: int | None) -> str:
+    def _registry(
+        self, baseline_count: int | None, exceptions: tuple[str, ...] = ()
+    ) -> str:
         rules = []
         for rule_id in (FILES_RULE, ROUTES_RULE, SERVICES_RULE, CONNECTORS_RULE):
             ratcheted = rule_id == ROUTES_RULE and baseline_count is not None
@@ -558,6 +581,10 @@ class TestBaselineAndManifest(unittest.TestCase):
                 f'[rule.baseline]\nfile = "{BASELINE_FILE}"\ncount = {baseline_count}\n'
                 if ratcheted
                 else ""
+            )
+            excepted = "".join(
+                f'[[rule.exception]]\npath = "{path}"\nreason = "Generated."\n'
+                for path in (exceptions if rule_id == FILES_RULE else ())
             )
             rules.append(
                 textwrap.dedent(
@@ -581,6 +608,7 @@ class TestBaselineAndManifest(unittest.TestCase):
                     """
                 )
                 + baseline
+                + excepted
             )
         header = (
             'schema_version = 1\nrepo = "example"\n\n'
@@ -664,44 +692,6 @@ class TestBaselineAndManifest(unittest.TestCase):
             ],
         )
 
-    def test_the_manifest_gives_only_layers_of_the_file_s_directory(self) -> None:
-        client = "policyengine_api/services/v2/household_calculations/client.py"
-        support = "policyengine_api/fastapi_routes/v2/metadata/response_cache.py"
-        _write_files(
-            {
-                client: "",
-                support: "",
-                "rules/registry.toml": self._registry(None),
-                "rules/v2-layer-manifest.toml": textwrap.dedent(
-                    f"""
-                    [files."{client}"]
-                    layer = "package"
-                    reason = "Not a package."
-
-                    [files."{support}"]
-                    layer = "http-support"
-                    reason = ""
-                    """
-                ),
-            },
-            self.root,
-        )
-
-        self.assertEqual(
-            sorted(self._messages()),
-            sorted(
-                [
-                    f"[{FILES_RULE}] v2-layers: rules/v2-layer-manifest.toml gives "
-                    f"{client} the layer 'package', which a file under "
-                    "policyengine_api/services/v2 can't have from the manifest. Fix: "
-                    "use one of process-state, service, transformation, types, "
-                    "validator.",
-                    f"[{FILES_RULE}] v2-layers: rules/v2-layer-manifest.toml gives "
-                    f"{support} no reason. Fix: say why the file has that layer.",
-                ]
-            ),
-        )
-
     def test_a_baseline_entry_that_no_longer_applies_fails(self) -> None:
         _write_files({ROUTE: "def route():\n    return 1\n"}, self.root)
         _write_files(
@@ -732,56 +722,68 @@ class TestBaselineAndManifest(unittest.TestCase):
             [
                 f"[{FILES_RULE}] v2-layers: {unassigned} matches no v2 layer. Fix: "
                 "name it after its layer (services.py, validators.py, "
-                "transformations.py, types.py, database_session.py, "
+                "transformations.py, types.py, process_state.py, "
+                "database_session.py, "
                 "database_connectors/<creates|reads|updates|deletes>[_name].py, "
-                "routes.py, <name>_routes.py, request_models.py or "
-                "response_models.py), or add it to rules/v2-layer-manifest.toml "
-                "with its layer and a reason."
+                "routes.py, <name>_routes.py, <name>_models.py or "
+                "<name>_support.py), or, if it can't be renamed, add a "
+                "[[rule.exception]] for api.v2.files-assigned-to-layers to "
+                "rules/registry.toml with its path and a reason."
             ],
         )
 
-    def test_manifest_entries_must_name_existing_unmatched_files_and_known_layers(
-        self,
-    ) -> None:
-        cache = "policyengine_api/fastapi_routes/v2/metadata/response_cache.py"
+    def test_an_exception_gives_no_layer_but_the_strictest_checks(self) -> None:
+        client = "policyengine_api/services/v2/household_calculations/client.py"
         _write_files(
             {
-                cache: "",
-                ROUTE: "",
-                "rules/registry.toml": self._registry(None),
-                "rules/v2-layer-manifest.toml": textwrap.dedent(
-                    f"""
-                    [files."{cache}"]
-                    layer = "cache"
-                    reason = "Keeps serialized responses."
+                client: "def load(session):\n    return session.get(1)\n",
+                "rules/registry.toml": self._registry(None, (client,)),
+            },
+            self.root,
+        )
 
-                    [files."{ROUTE}"]
-                    layer = "route"
-                    reason = "Named routes.py already."
+        self.assertEqual(
+            self._messages(),
+            [
+                f"[{PURE_RULE}] v2-layers: {client} calls session.get. Fix: "
+                "validators, transformations and types work on values and loaded "
+                "rows; load them in a connector and pass them in from the service "
+                "(docs/engineering/skills/v2-code-organization.md)."
+            ],
+        )
 
-                    [files."policyengine_api/services/v2/gone.py"]
-                    layer = "service"
-                    reason = "Removed."
-                    """
+    def test_exceptions_must_name_one_existing_v2_file_without_a_layer(self) -> None:
+        named = ROUTE
+        missing = "policyengine_api/services/v2/policies/gone.py"
+        pattern = "policyengine_api/services/v2/*/client.py"
+        outside = "policyengine_api/libs/user_auth.py"
+        _write_files(
+            {
+                named: "",
+                outside: "",
+                "rules/registry.toml": self._registry(
+                    None, (named, missing, pattern, outside)
                 ),
             },
             self.root,
+        )
+        prefix = f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts"
+        one_file = (
+            "which is not one file under policyengine_api/services/v2 or "
+            "policyengine_api/fastapi_routes/v2. Fix: name one file there, or "
+            "remove the exception."
         )
 
         self.assertEqual(
             sorted(self._messages()),
             sorted(
                 [
-                    f"[{FILES_RULE}] v2-layers: rules/v2-layer-manifest.toml gives "
-                    f"{cache} the layer 'cache', which a file under "
-                    "policyengine_api/fastapi_routes/v2 can't have from the "
-                    "manifest. Fix: use one of http-model, http-support, route.",
-                    f"[{FILES_RULE}] v2-layers: rules/v2-layer-manifest.toml lists "
-                    f"{ROUTE}, which its name already assigns to a layer. Fix: "
-                    "remove the entry.",
-                    f"[{FILES_RULE}] v2-layers: rules/v2-layer-manifest.toml lists "
-                    "policyengine_api/services/v2/gone.py, which does not exist. "
-                    "Fix: remove the entry.",
+                    f"{prefix} {named} from {FILES_RULE}, but its name already "
+                    "gives it a layer. Fix: remove the exception.",
+                    f"{prefix} {missing} from {FILES_RULE}, but it does not "
+                    "exist. Fix: remove the exception.",
+                    f"{prefix} {pattern} from {FILES_RULE}, {one_file}",
+                    f"{prefix} {outside} from {FILES_RULE}, {one_file}",
                 ]
             ),
         )
