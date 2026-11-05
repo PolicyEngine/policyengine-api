@@ -1198,7 +1198,7 @@ test = "tests/unit/services/test_microdata_weight_boundaries.py::test_rule_proof
 [[rule]]
 id = "api.quality.pre-commit-hook"
 category = "quality"
-statement = "make install turns on the git hooks in .githooks through core.hooksPath, a setting of the clone that every worktree shares and resolves against its own checkout, unless that would change an enclosing repository, replace another core.hooksPath, or stop the clone's own hooks (files or symbolic links), which it says; it always exits 0. pre-commit runs make quality from the root of the working tree before git commit, and pre-merge-commit runs it before a merge commits without conflicts, with make's variables from the environment cleared. Because make quality checks the working tree, the hook stops the commit when the working tree holds unstaged changes to tracked files, skip-worktree or assume-unchanged files, untracked files outside the ignore files, or untracked Python files outside the repository's .gitignore files; when make quality fails; when ruff's fixes changed a file; or when make, uv or the dev environment is missing, naming the files or what to install."
+statement = "make install turns on the git hooks in .githooks through core.hooksPath, a setting of the clone that every worktree shares and resolves against its own checkout, unless that would change an enclosing repository, replace another core.hooksPath, or stop the clone's own hooks (files or symbolic links), which .githooks/turn-on.sh says, always exiting 0. pre-commit runs make quality from the root of the working tree before git commit, and pre-merge-commit runs it before a merge commits without conflicts, with make's variables from the environment cleared. Because make quality checks the working tree, the hook stops the commit, naming the files or what to install, when the working tree holds unstaged changes to tracked files (case-only renames included), skip-worktree or assume-unchanged files, untracked files outside the ignore files, Python files or tool settings that only local or global excludes hide (outside virtual environments), or tracked Python files those excludes match; when make quality fails; when ruff's fixes changed a file; or when make, uv or the dev environment is missing."
 rationale = "docs/engineering/skills/github-prs.md#commit-hygiene"
 scope = [".githooks/pre-commit", ".githooks/pre-merge-commit", ".githooks/turn-on.sh", "Makefile"]
 tier = "mechanical"
@@ -1228,6 +1228,20 @@ nodes = [
   "tests/unit/test_pre_commit_hook.py::test_make_install_leaves_an_enclosing_repository_alone",
   "tests/unit/test_pre_commit_hook.py::test_make_install_keeps_another_hooks_path",
   "tests/unit/test_pre_commit_hook.py::test_make_install_keeps_the_clone_s_own_hooks_running",
+  "tests/unit/test_pre_commit_hook.py::test_python_files_hidden_by_local_excludes_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_other_files_hidden_by_local_excludes_dont_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_make_from_the_environment_cant_skip_the_checks",
+  "tests/unit/test_pre_commit_hook.py::test_files_git_doesnt_compare_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_keeps_a_symlinked_hook_running",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_keeps_a_symlinked_hooks_directory_running",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_still_installs_when_git_config_is_locked",
+  "tests/unit/test_pre_commit_hook.py::test_a_commit_passes_in_a_utf8_locale",
+  "tests/unit/test_pre_commit_hook.py::test_tool_settings_hidden_by_local_excludes_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_a_hidden_directory_of_python_files_stops_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_a_hidden_virtual_environment_doesnt_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_tracked_python_files_local_excludes_match_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_a_case_only_rename_stops_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_a_commit_of_some_paths_says_how_to_commit_the_rest",
   "tests/unit/test_pre_commit_hook.py::test_the_hooks_are_executable_in_git",
 ]
 [[rule.ci]]

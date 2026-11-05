@@ -39,7 +39,8 @@ make install
 make setup-env
 ```
 
-Run `make install` once per clone. It turns on the git hooks in `.githooks/`,
+Run `make install` once per clone, and in each new worktree to create its
+`.venv`. It turns on the git hooks in `.githooks/`,
 which run `make quality` before each `git commit` and each merge commit in
 every worktree of the clone (`git config core.hooksPath .githooks`), and runs
 `uv sync --frozen --extra dev`, which creates `.venv` with

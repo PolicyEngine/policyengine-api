@@ -205,14 +205,20 @@ without conflicts. `make quality` checks the working tree, not the commit,
 so the hook first requires the two to match. It stops the commit, naming
 the files and saying what to do:
 
-- when tracked files have unstaged changes: stage them, or set them aside
-  with `git stash push --keep-index`. This covers fixes `make quality` made
-  in an earlier run, and `git commit <paths>` while other files are
-  changed;
-- when there are untracked files outside the ignore files, or untracked
-  Python files outside the repository's `.gitignore` files: add them or
-  remove them. mypy and Import Linter read Python files on disk even when
-  `.git/info/exclude` or a global excludes file hides them;
+- when tracked files have unstaged changes: stage exactly what the commit
+  needs and run `git commit` without paths, or set the rest aside with
+  `git stash push --keep-index`. This covers fixes `make quality` made in an
+  earlier run, `git commit <paths>` while other files are changed, and a
+  rename that changes only a name's case;
+- when there are untracked files outside the ignore files: add them, remove
+  them, or list them in `.git/info/exclude`;
+- when Python files or tool settings (`pyproject.toml`, `setup.cfg`,
+  `mypy.ini`, `ruff.toml`, `.importlinter`) are hidden only by
+  `.git/info/exclude` or a global excludes file: ruff, mypy and Import
+  Linter can read them anyway, so add them or remove them. A virtual
+  environment (a directory with `pyvenv.cfg`) doesn't count;
+- when those excludes match tracked Python files, which ruff then skips
+  but CI checks: remove the pattern;
 - when tracked files are marked skip-worktree or assume-unchanged, which
   `git diff` doesn't compare: clear the marks with
   `git update-index --no-skip-worktree --no-assume-unchanged`;
