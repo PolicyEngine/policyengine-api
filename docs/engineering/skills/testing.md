@@ -95,6 +95,73 @@ its line and lower the rule's baseline `count`. Renaming or moving a listed
 test also fails, because its new entry is one the base branch's baseline
 lacks, so give it a check in the same change.
 
+## Coverage
+
+`api.quality.coverage-measured`: Codecov measures the same tests on `master`
+as on pull requests, so a pull request's project coverage is compared with a
+base that measured them too. `codecov.yml` defines two flags, both carried
+forward and both covering `policyengine_api/` (`.coveragerc`'s source):
+
+- `unit`: `make test`. On a pull request, the six `Test` shards keep their
+  `coverage.xml`, and `upload-test-coverage` in `pr.yml` sends them to
+  Codecov in one upload. On `master`, `push.yml`'s `release-tests` shards do
+  the same on each release commit, and `upload-release-test-coverage` sends
+  them; it is the only run of the unit tests on the merged code.
+- `integration`: the cross-database integration tests in
+  `v2-integration-check.yml`. The reusable workflow keeps its report as an
+  artifact, and `upload-integration-coverage` in `pr.yml` and in `push.yml`
+  sends it, wherever those tests run.
+
+A commit that uploads one flag carries the other forward from its Codecov
+parent, a git parent that has a Codecov report. When both of a merge
+commit's parents have one, which Codecov takes isn't fixed. On `master`:
+
+- the merge run uploads `integration` for the merge commit, which carries
+  `unit` forward from the pull request head or from the `master` commit before
+  it until the release run;
+- the release run uploads the release tests' `unit` coverage for the release
+  commit, which carries `integration` forward from the merge commit, and also
+  for the merge commit (`override_commit`): `versioning`'s release commit
+  changes only the version, `uv.lock` and the changelog, so the release tests
+  measure the merge commit's code too.
+
+Codecov compares a pull request with the `master` commit it branched from or
+last merged in. For 40 recently merged pull requests that was a release
+commit for 21 and a merge commit for 17, since a merge commit is `master`'s
+tip until its release commit lands, and a lower stacked pull request's
+commit for 2. A release commit, and a merge commit followed by its own
+release commit (7 of the 17), measured both flags on their own code. The
+other merge commits never got a release commit: `versioning`'s push fails
+when `master` moves during the merge run, and the next release covers both
+merges. Their `unit` coverage stays carried forward from an earlier commit.
+Codecov also recomputes a pull request's comparison only when the pull
+request gets an upload, so one compared before its base's `unit` upload shows
+the carried-forward figure until its next push.
+
+The release tests run in the `staging` environment, with its variables
+(`SIM_ENTRYPOINT`, `SIMULATION_ENTRYPOINT_URL`,
+`POLICYENGINE_DB_INSTANCE_CONNECTION_NAME`,
+`PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET`, the
+`GATEWAY_AUTH_*` secrets) and the local Redis runtime cache, and without GCP
+credentials. The pull request `Test` job authenticates to GCP and sets none
+of those. Code that branches on them is covered differently in the two, so
+`master`'s unit figure and a pull request's can differ by those lines even for
+the same code.
+
+Every upload passes the `CODECOV_TOKEN` repository secret as its `token` and
+runs in a job with a timeout of at most 15 minutes, since the Codecov action
+sets no network timeouts. An upload on `master` fails the run when it fails
+(`fail_ci_if_error`), and no job in a `master` run waits for an upload, so a
+Codecov outage fails the upload job but can't stop a release. On a pull
+request, `CI complete` needs the upload jobs, which don't fail on an upload
+error. `tests/unit/test_codecov_coverage.py` checks the uploads and
+`codecov.yml`: a new job that measures coverage needs an upload of every
+shard of its report, flagged `unit` for the test suite and `integration`
+otherwise.
+
+The project status allows a 0.5% drop. The patch status reports coverage of
+the changed lines without blocking a merge.
+
 ## Tests That Run a Country Model
 
 A new unit test stands in for the country model: a calculation with the

@@ -2,9 +2,6 @@ name: Cross-database integration tests
 
 on:
   workflow_call:
-    secrets:
-      CODECOV_TOKEN:
-        required: false
   workflow_dispatch:
 
 jobs:
@@ -96,9 +93,16 @@ jobs:
         run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_runtime_cache_redis.py
       - name: Export v2 integration coverage
         run: uv run --frozen --extra dev coverage xml -i -o coverage-v2.xml
-      - name: Upload v2 integration coverage to Codecov
-        uses: codecov/codecov-action@v5
+      # The calling workflow's upload-integration-coverage job sends the report
+      # to Codecov, flagged integration. Nothing that waits for these tests,
+      # such as push.yml's versioning, then waits for Codecov.
+      # A failure to keep it fails only the caller's upload job, which then
+      # finds no report, not these tests, which push.yml's release waits for.
+      - name: Keep the integration coverage report
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: PolicyEngine/policyengine-api
-          files: coverage-v2.xml
+          name: integration-coverage
+          path: coverage-v2.xml
+          if-no-files-found: error
+          retention-days: 7

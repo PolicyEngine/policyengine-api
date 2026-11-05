@@ -33,6 +33,7 @@ jobs:
       - test
       - check-test-shards
       - upload-test-coverage
+      - upload-integration-coverage
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -157,8 +158,6 @@ jobs:
     # Full CI runs only on the lowest unmerged pull request in a stack.
     if: ${{ !github.event.pull_request.stack || github.event.pull_request.stack.base.ref == github.event.pull_request.base.ref }}
     uses: ./.github/workflows/v2-integration-check.yml
-    secrets:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   check-changelog:
     # Rule api.process.changelog-fragment: every pull request adds a changelog
     # fragment the release can read. See
@@ -334,6 +333,9 @@ jobs:
     # after each upload and left codecov/patch in progress on #4145.
     name: Upload the test coverage to Codecov
     runs-on: ubuntu-latest
+    # The Codecov action sets no network timeouts, so a stalled upload would
+    # otherwise run until GitHub's 360-minute default.
+    timeout-minutes: 10
     needs: test
     permissions:
       contents: read
@@ -351,6 +353,37 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: PolicyEngine/policyengine-api
           directory: ${{ runner.temp }}/test-coverage
+          # codecov.yml defines the flag and carries it forward.
+          flags: unit
+
+  upload-integration-coverage:
+    # Sends the cross-database integration tests' coverage report, which
+    # v2-integration-check.yml keeps as an artifact, to Codecov flagged
+    # integration.
+    name: Upload the integration test coverage to Codecov
+    runs-on: ubuntu-latest
+    # The Codecov action sets no network timeouts, so a stalled upload would
+    # otherwise run until GitHub's 360-minute default.
+    timeout-minutes: 10
+    needs: v2-integration-check
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Download the integration coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: integration-coverage
+          path: ${{ runner.temp }}/integration-coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: PolicyEngine/policyengine-api
+          directory: ${{ runner.temp }}/integration-coverage
+          # codecov.yml defines the flag and carries it forward.
+          flags: integration
 
   check-test-shards:
     # Fails unless every shard collected the same tests and each test ran in

@@ -59,6 +59,7 @@ title = "Process and repository hygiene"
 workflows = [".github/workflows/pr.yml", ".github/workflows/pr-description.yml"]
 ignore_jobs = [
   { job = "upload-test-coverage", reason = "sends the test shards' coverage reports to Codecov in one upload; it checks nothing" },
+  { job = "upload-integration-coverage", reason = "sends the cross-database integration tests' coverage report to Codecov; it checks nothing" },
 ]
 guard_test_globs = [
   "tests/**/test_*boundar*.py",
@@ -1415,6 +1416,31 @@ invocation = "make test"
 workflow = ".github/workflows/pr.yml"
 job = "check-test-shards"
 invocation = "scripts.release_test_shards check-coverage"
+
+[[rule]]
+id = "api.quality.coverage-measured"
+category = "quality"
+statement = "Codecov measures the same tests on master as on pull requests: every CI job that measures test coverage sends it to Codecov with a flag that codecov.yml carries forward (unit for make test, in pr.yml and in push.yml's release tests; integration for the cross-database integration tests), passing the CODECOV_TOKEN secret, from a job with a timeout of at most 15 minutes; every shard of a report is uploaded, and in a master run an upload fails the run when it fails and no other job waits for it."
+rationale = "docs/engineering/skills/testing.md#coverage"
+scope = ["codecov.yml", ".github/workflows/*.yml"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/test_codecov_coverage.py::test_every_coverage_upload_is_flagged_and_master_uploads_fail_the_run",
+  "tests/unit/test_codecov_coverage.py::test_master_and_pull_requests_measure_both_flags",
+  "tests/unit/test_codecov_coverage.py::test_master_uploads_the_release_tests_coverage_in_one_upload",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.quality.coverage-measured/rejected"
+good_fixture = "rules/fixtures/api.quality.coverage-measured/accepted"
+test = "tests/unit/test_codecov_coverage.py::test_rule_proof_coverage_measured"
 
 [[rule]]
 id = "api.quality.environment-variables-load"

@@ -1,0 +1,60 @@
+# Codecov settings (rule api.quality.coverage-measured;
+# tests/unit/test_codecov_coverage.py checks them with the uploads).
+#
+# Two flags tell the uploads apart:
+#   unit         make test: pr.yml's upload-test-coverage, and push.yml's
+#                upload-release-test-coverage on each release commit.
+#   integration  the cross-database integration tests in
+#                v2-integration-check.yml, uploaded by pr.yml's and push.yml's
+#                upload-integration-coverage wherever those tests run.
+# Both measure policyengine_api (.coveragerc's source), so both have its path.
+#
+# A commit that uploads one flag carries the other forward from its Codecov
+# parent: a git parent that has a Codecov report (when both of a merge
+# commit's parents have one, which Codecov takes isn't fixed). On master:
+#   - the merge run uploads integration for the merge commit, which until the
+#     release run carries unit forward from the pull request head or from the
+#     master commit before it;
+#   - the release run uploads the release tests' unit coverage for the release
+#     commit, which carries integration forward from the merge commit, and for
+#     the merge commit too, since the release commit changes only the version,
+#     uv.lock and the changelog.
+# A pull request is compared with the master commit it branched from or last
+# merged in. A release commit, and a merge commit followed by its own release
+# commit, measured both flags on their own code. A merge commit whose release
+# never came (versioning's push fails when master moves during the merge run,
+# and the next release covers both merges) keeps unit carried forward from an
+# earlier commit.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        # Room for rounding and for lines whose coverage moves between runs.
+        threshold: 0.5%
+    patch:
+      default:
+        target: auto
+        # Reported but not blocking until the minimum for changed lines is
+        # decided and enforced.
+        informational: true
+
+flag_management:
+  default_rules:
+    carryforward: true
+  individual_flags:
+    - name: unit
+      paths:
+        - policyengine_api/
+      carryforward: true
+    - name: integration
+      paths:
+        - policyengine_api/
+      carryforward: true
+
+# .coveragerc measures only policyengine_api, so these are never reported
+# today; the entries keep test code and generated Alembic revisions out if the
+# measured source ever widens.
+ignore:
+  - "tests/**"
+  - "migrations/*/versions/**"

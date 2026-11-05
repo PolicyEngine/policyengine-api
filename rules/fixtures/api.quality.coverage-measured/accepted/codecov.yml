@@ -1,0 +1,23 @@
+# Proof fixture for api.quality.coverage-measured (the accepted case).
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 0.5%
+    patch:
+      default:
+        target: auto
+flag_management:
+  individual_flags:
+    - name: unit
+      paths:
+        - policyengine_api/
+      carryforward: true
+    - name: integration
+      paths:
+        - policyengine_api/
+      carryforward: true
+ignore:
+  - "tests/**"
+  - "migrations/*/versions/**"

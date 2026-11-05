@@ -88,7 +88,9 @@ def test_pr_always_runs_reusable_alembic_and_v2_integration_checks():
     assert "CODECOV_TOKEN" not in alembic_job
     assert "v2-integration-check:" in workflow
     assert "uses: ./.github/workflows/v2-integration-check.yml" in integration_job
-    assert "CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}" in integration_job
+    # The integration tests' coverage is uploaded by a job of pr.yml, so the
+    # reusable workflow gets no Codecov token.
+    assert "CODECOV_TOKEN" not in integration_job
     assert "needs:" not in alembic_job
     assert "needs:" not in integration_job
     # The only condition allowed is the stacked-PR one: these checks run on
@@ -113,7 +115,9 @@ def test_push_requires_schema_and_v2_integration_checks_before_versioning():
     assert "uses: ./.github/workflows/alembic-v2-check.yml" in workflow
     assert "v2-integration-check:" in workflow
     assert "uses: ./.github/workflows/v2-integration-check.yml" in workflow
-    assert "CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}" in workflow
+    # A Codecov upload is no release's prerequisite: a job nothing waits for
+    # uploads the integration tests' coverage (tests/unit/test_codecov_coverage.py).
+    assert "CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}" not in workflow
     for required_job in (
         "lint",
         "alembic-v1-check",
@@ -252,8 +256,11 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert workflow.count("coverage run --branch") == 1
     assert workflow.count("coverage run -a --branch") == 7
     assert "coverage xml -i -o coverage-v2.xml" in workflow
-    assert "codecov/codecov-action@v5" in workflow
-    assert "files: coverage-v2.xml" in workflow
+    # The report goes to the calling workflow as an artifact, and a job there
+    # uploads it to Codecov.
+    assert "codecov/codecov-action" not in workflow
+    assert "name: integration-coverage" in workflow
+    assert "path: coverage-v2.xml" in workflow
 
 
 def test_v2_integration_check_grants_and_verifies_privileges_before_tests():

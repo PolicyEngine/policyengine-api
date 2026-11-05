@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 68 | 7 | 1 | 8 | 84 |
+| mechanical | 69 | 7 | 1 | 8 | 85 |
 | metric | 1 | 0 | 0 | 0 | 1 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 76 of 86 rules.
+**Blocking:** 77 of 87 rules.
 
 ## Gaps
 
@@ -371,6 +371,7 @@ flowchart LR
 | `api.quality.ci-cd-scripts-ruff-exemptions` | CI/CD scripts under .github may print their results, run other programs, fetch fixed URLs, have hyphenated file names and import the lazily loaded packages at module level (T201, S603, S607, S310, N999, TID253); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of N999, S310, S603, S607, T201, TID253 for `.github/**` | `pr.yml:lint` | — |
 | `api.quality.command-line-modules-ruff-exemptions` | Application modules that also run as command-line programs (if __name__ == "__main__") may print their output (T201); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of T201 for `policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/privilege_reconciliation,data/v2/user_association_migration_qualification,worker_spm_release}.py` | `pr.yml:lint` | — |
 | `api.quality.command-line-scripts-ruff-exemptions` | Command-line scripts under scripts/ may print their output, run other programs, fetch fixed URLs, stamp today's date and pick random samples (T201, S603, S607, S310, DTZ011, S311); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of DTZ011, S310, S311, S603, S607, T201 for `scripts/**` | `pr.yml:lint` | — |
+| `api.quality.coverage-measured` | Codecov measures the same tests on master as on pull requests: every CI job that measures test coverage sends it to Codecov with a flag that codecov.yml carries forward (unit for make test, in pr.yml and in push.yml's release tests; integration for the cross-database integration tests), passing the CODECOV_TOKEN secret, from a job with a timeout of at most 15 minutes; every shard of a report is uploaded, and in a master run an upload fails the run when it fails and no other job waits for it. | mechanical | enforced | yes | pytest `tests/unit/test_codecov_coverage.py` | `pr.yml:test` | yes |
 | `api.quality.environment-variables-load` | Required environment variables and credentials load in a deployed-like environment. | mechanical | enforced | yes | CI job `test_env_vars` | `pr.yml:test_env_vars` | — |
 | `api.quality.file-length` | A tracked Python file has at most 800 physical lines, or at most 1,500 if it is test code (a file under a tests or fixtures directory, or a conftest.py); a longer file is split by responsibility into modules, and keeps its public import path. | metric | enforced | yes | quality guard `file-length` | `pr.yml:quality-guards` | yes |
 | `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, v2 routes and services, the gzip negotiation, the user sign-in and account-deletion libraries, the country list and its startup check pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:typecheck-v2` | — |
@@ -394,6 +395,9 @@ flowchart LR
   e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_privilege_reconciliation_data_v2_user_association_migration_qualification_worker_spm_release__py["ruff per-file ignore of T201 for policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/privilege_reconciliation,data/v2/user_association_migration_qualification,worker_spm_release}.py"]
   r_api_quality_command_line_scripts_ruff_exemptions("api.quality.command-line-scripts-ruff-exemptions (enforced)")
   e_ruff_per_file_ignore_of_DTZ011__S310__S311__S603__S607__T201_for_scripts___["ruff per-file ignore of DTZ011, S310, S311, S603, S607, T201 for scripts/**"]
+  r_api_quality_coverage_measured("api.quality.coverage-measured (enforced)")
+  e_pytest_tests_unit_test_codecov_coverage_py["pytest tests/unit/test_codecov_coverage.py"]
+  j_CI_pr_yml_test["CI pr.yml:test"]
   r_api_quality_environment_variables_load("api.quality.environment-variables-load (enforced)")
   e_CI_job_test_env_vars["CI job test_env_vars"]
   j_CI_pr_yml_test_env_vars["CI pr.yml:test_env_vars"]
@@ -409,7 +413,6 @@ flowchart LR
   e_ruff_check__ALL_["ruff check (ALL)"]
   r_api_quality_runtime_evaluated_models_resolve("api.quality.runtime-evaluated-models-resolve (enforced)")
   e_pytest_tests_unit_test_runtime_evaluated_annotations_py["pytest tests/unit/test_runtime_evaluated_annotations.py"]
-  j_CI_pr_yml_test["CI pr.yml:test"]
   r_api_quality_suppressions_explained("api.quality.suppressions-explained (ratcheted)")
   e_quality_guard_suppressions["quality guard suppressions"]
   j_CI_push_yml_quality_guards["CI push.yml:quality-guards"]
@@ -429,6 +432,8 @@ flowchart LR
   e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_privilege_reconciliation_data_v2_user_association_migration_qualification_worker_spm_release__py --> j_CI_pr_yml_lint
   r_api_quality_command_line_scripts_ruff_exemptions --> e_ruff_per_file_ignore_of_DTZ011__S310__S311__S603__S607__T201_for_scripts___
   e_ruff_per_file_ignore_of_DTZ011__S310__S311__S603__S607__T201_for_scripts___ --> j_CI_pr_yml_lint
+  r_api_quality_coverage_measured --> e_pytest_tests_unit_test_codecov_coverage_py
+  e_pytest_tests_unit_test_codecov_coverage_py --> j_CI_pr_yml_test
   r_api_quality_environment_variables_load --> e_CI_job_test_env_vars
   e_CI_job_test_env_vars --> j_CI_pr_yml_test_env_vars
   r_api_quality_file_length --> e_quality_guard_file_length
