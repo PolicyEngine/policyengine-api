@@ -18,11 +18,8 @@ from policyengine_api.data.v2.models.metadata import (
 from policyengine_api.data.v2.models.policies import Dynamic, Policy
 
 if TYPE_CHECKING:
-    from policyengine_api.data.v2.models.reports import (
-        Inequality,
-        Poverty,
-        Report,
-    )
+    from policyengine_api.data.v2.models.reports import Report
+    from policyengine_api.data.v2.models.run_results import Inequality, Poverty
 
 
 class SimulationStatus(StrEnum):

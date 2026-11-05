@@ -325,7 +325,7 @@ def test_report_run_relationships_name_labor_supply_rows() -> None:
         LaborSupplyDecileResponse
     )
     assert "comparisons" not in relationships
-    assert LaborSupplyResponse.__module__.endswith(".reports")
+    assert LaborSupplyResponse.__module__.endswith(".run_results")
 
 
 def test_uk_area_impacts_record_disclosure_control() -> None:

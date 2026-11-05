@@ -440,6 +440,8 @@ allowed_ignore_imports = [
   "policyengine_api.data.v2.models.policy_mappings -> sqlmodel",
   "policyengine_api.data.v2.models.reports -> sqlalchemy",
   "policyengine_api.data.v2.models.reports -> sqlmodel",
+  "policyengine_api.data.v2.models.run_results -> sqlalchemy",
+  "policyengine_api.data.v2.models.run_results -> sqlmodel",
   "policyengine_api.data.v2.models.simulations -> sqlalchemy",
   "policyengine_api.data.v2.models.simulations -> sqlmodel",
   "policyengine_api.data.v2.models.users -> sqlalchemy",

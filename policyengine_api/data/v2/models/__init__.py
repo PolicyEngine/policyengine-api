@@ -66,10 +66,16 @@ from policyengine_api.data.v2.models.policy_mappings import (  # noqa: E402
     LegacyUserPolicyMapping,
 )
 from policyengine_api.data.v2.models.reports import (  # noqa: E402
+    BudgetWindowRun,
+    Report,
+    ReportRun,
+    ReportRunStatus,
+    ReportRunTrigger,
+)
+from policyengine_api.data.v2.models.run_results import (  # noqa: E402  # tables declared after the naming convention above
     AggregateOutput,
     AggregateType,
     BudgetSummary,
-    BudgetWindowRun,
     ChangeAggregate,
     CongressionalDistrictImpact,
     ConstituencyImpact,
@@ -83,10 +89,6 @@ from policyengine_api.data.v2.models.reports import (  # noqa: E402
     OutputStatus,
     Poverty,
     ProgramStatistics,
-    Report,
-    ReportRun,
-    ReportRunStatus,
-    ReportRunTrigger,
 )
 from policyengine_api.data.v2.models.simulations import (  # noqa: E402
     Simulation,
