@@ -739,25 +739,6 @@ def spm_metadata(country_id: str) -> dict:
     }
 
 
-def certified_spm_forecast_years() -> tuple[int, ...] | None:
-    """Return the years the bundle's certified US SPM forecast covers.
-
-    The US model refuses an SPM calculation in any other year
-    (``SPM_YEAR_UNAVAILABLE``). Return None in the cases in which
-    ``spm_metadata`` reports SPM as unavailable: the bundle certifies no
-    forecast, or the certified one cannot be loaded. The forecast file is read
-    once per process and shared with ``spm_metadata``.
-    """
-    try:
-        defaults = normalize_spm_selection("us", None)
-    except SPMValidationError:
-        return None
-    if defaults is None:
-        return None
-    forecast = _selected_forecast(defaults["forecast_content_sha256"])
-    return tuple(int(year) for year in forecast.years)
-
-
 def calculation_spm_receipt(simulation: Simulation) -> dict:
     """Reduce a country's existing receipt; never request calculations here."""
     if not hasattr(simulation, "spm_config"):
