@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import tempfile
 import textwrap
 import tomllib
@@ -27,6 +28,17 @@ ROUTE = "policyengine_api/fastapi_routes/v2/policies/routes.py"
 SERVICE = "policyengine_api/services/v2/policies/services.py"
 CONNECTOR = "policyengine_api/services/v2/policies/database_connectors/creates.py"
 BASELINE_FILE = "rules/baselines/v2-layers-routes.txt"
+# What the files rule tells a module in a database_connectors package to do.
+CONNECTOR_REMEDY_TEXT = (
+    "if it reads or writes rows, name it after its operation, "
+    "<creates|reads|updates|deletes>[_name].py, and put it directly in "
+    "services/v2/<resource>/database_connectors; otherwise move it out of the "
+    "database_connectors package and name it after its layer"
+)
+CONNECTOR_FIX_TEXT = (
+    f"{CONNECTOR_REMEDY_TEXT}; an exception can't stand in, because a "
+    "database_connectors package holds only connector modules"
+)
 
 
 def _write_files(files: dict[str, str], root: Path) -> None:
@@ -574,7 +586,10 @@ class TestBaselineAndExceptions(unittest.TestCase):
         self.root = Path(self._directory.name)
 
     def _registry(
-        self, baseline_count: int | None, exceptions: tuple[str, ...] = ()
+        self,
+        baseline_count: int | None,
+        exceptions: tuple[str, ...] = (),
+        exception_fields: str = "expires = 2099-01-01\n",
     ) -> str:
         rules = []
         for rule_id in (FILES_RULE, ROUTES_RULE, SERVICES_RULE, CONNECTORS_RULE):
@@ -586,7 +601,7 @@ class TestBaselineAndExceptions(unittest.TestCase):
             )
             excepted = "".join(
                 f'[[rule.exception]]\npath = "{path}"\nreason = "Generated."\n'
-                "expires = 2099-01-01\n"
+                + exception_fields
                 for path in (exceptions if rule_id == FILES_RULE else ())
             )
             rules.append(
@@ -727,14 +742,40 @@ class TestBaselineAndExceptions(unittest.TestCase):
             [
                 f"[{FILES_RULE}] v2-layers: {unassigned} matches no v2 layer. Fix: "
                 "name it after its layer (services.py, validators.py, "
-                "transformations.py, types.py, process_state.py, "
-                "database_session.py or "
-                "database_connectors/<creates|reads|updates|deletes>[_name].py), "
-                "or, if it can't be renamed, add a [[rule.exception]] for "
+                "transformations.py, types.py or process_state.py in a resource "
+                "package under services/v2, database_session.py directly in "
+                "one, or database_connectors/<creates|reads|updates|deletes>"
+                "[_name].py directly in its database_connectors package), or, "
+                "if it can't be renamed, add a [[rule.exception]] for "
                 "api.v2.files-assigned-to-layers to rules/registry.toml with its "
                 "path, a reason and an expires date."
             ],
         )
+
+    def test_an_unassigned_connector_file_is_told_its_name_and_place(self) -> None:
+        connectors = "policyengine_api/services/v2/policies/database_connectors"
+        # The second file already has an operation's name, but sits one level
+        # too deep, so the message must say where it goes too.
+        for unassigned in (
+            f"{connectors}/helpers.py",
+            f"{connectors}/legacy/creates.py",
+        ):
+            with self.subTest(path=unassigned):
+                _write_files(
+                    {unassigned: "", "rules/registry.toml": self._registry(None)},
+                    self.root,
+                )
+
+                messages = self._messages()
+                (self.root / unassigned).unlink()
+
+                self.assertEqual(
+                    messages,
+                    [
+                        f"[{FILES_RULE}] v2-layers: {unassigned} matches no v2 "
+                        f"layer. Fix: {CONNECTOR_FIX_TEXT}."
+                    ],
+                )
 
     def test_an_unassigned_route_file_is_told_the_route_names(self) -> None:
         unassigned = "policyengine_api/fastapi_routes/v2/metadata/helpers.py"
@@ -771,6 +812,169 @@ class TestBaselineAndExceptions(unittest.TestCase):
                 "validators, transformations and types work on values and loaded "
                 "rows; load them in a connector and pass them in from the service "
                 "(docs/engineering/skills/v2-code-organization.md)."
+            ],
+        )
+
+    def test_an_exception_needs_an_expires_date_and_covers_the_whole_file(
+        self,
+    ) -> None:
+        client = "policyengine_api/services/v2/household_calculations/client.py"
+        prefix = f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts {client}"
+        no_date = (
+            f"{prefix} from {FILES_RULE}, but the exception has no expires date. "
+            "Fix: give it an expires date by which the file is renamed."
+        )
+        unassigned = f"[{FILES_RULE}] v2-layers: {client} matches no v2 layer."
+        for fields, field_name, has_expires_date in (
+            ('category = "forever"\n', "category", False),
+            ('removal = "never"\n', "removal", False),
+            ('match = "session.get"\nexpires = 2099-01-01\n', "match", True),
+        ):
+            with self.subTest(field=field_name):
+                _write_files(
+                    {
+                        client: "",
+                        "rules/registry.toml": self._registry(
+                            None, (client,), exception_fields=fields
+                        ),
+                    },
+                    self.root,
+                )
+                expected = [
+                    f"{prefix} from {FILES_RULE}, but the exception sets "
+                    f"{field_name}, which this rule doesn't read. Fix: remove it; "
+                    "a files-rule exception covers the whole file and ends on "
+                    "its expires date."
+                ]
+                if not has_expires_date:
+                    expected.append(no_date)
+
+                messages = self._messages()
+
+                self.assertEqual(
+                    sorted(
+                        message
+                        for message in messages
+                        if not message.startswith(unassigned)
+                    ),
+                    sorted(expected),
+                )
+                self.assertTrue(
+                    any(message.startswith(unassigned) for message in messages)
+                )
+
+    def test_a_connector_module_cannot_be_excepted(self) -> None:
+        connectors = "policyengine_api/services/v2/policies/database_connectors"
+        for helper in (f"{connectors}/helpers.py", f"{connectors}/legacy/creates.py"):
+            with self.subTest(path=helper):
+                _write_files(
+                    {
+                        helper: "",
+                        "rules/registry.toml": self._registry(None, (helper,)),
+                    },
+                    self.root,
+                )
+
+                messages = self._messages()
+                (self.root / helper).unlink()
+
+                self.assertEqual(
+                    sorted(messages),
+                    sorted(
+                        [
+                            f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts "
+                            f"{helper} from {FILES_RULE}, but a database_connectors "
+                            "package holds only connector modules (rule "
+                            "api.v2.crud-checks-cover-every-resource also fails a "
+                            "module directly in "
+                            "services/v2/<resource>/database_connectors whose name "
+                            "doesn't start with an operation). Fix: remove the "
+                            f"exception; {CONNECTOR_REMEDY_TEXT}.",
+                            f"[{FILES_RULE}] v2-layers: {helper} matches no v2 "
+                            f"layer. Fix: {CONNECTOR_FIX_TEXT}.",
+                        ]
+                    ),
+                )
+
+    def test_an_exception_with_no_readable_expires_date_is_reported(self) -> None:
+        # The registry loader also reports these, so this calls the guard
+        # directly rather than through _messages, which requires a clean load.
+        client = "policyengine_api/services/v2/household_calculations/client.py"
+        no_date = (
+            f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts {client} from "
+            f"{FILES_RULE}, but the exception has no expires date. Fix: give it "
+            "an expires date by which the file is renamed."
+        )
+        for fields, case in (("", "no expires"), ('expires = "soon"\n', "bad date")):
+            with self.subTest(case=case):
+                _write_files(
+                    {
+                        client: "",
+                        "rules/registry.toml": self._registry(
+                            None, (client,), exception_fields=fields
+                        ),
+                    },
+                    self.root,
+                )
+
+                self.assertIn(
+                    no_date, [str(violation) for violation in run_check(self.root)]
+                )
+
+    def test_an_exception_path_must_be_written_as_git_lists_it(self) -> None:
+        # Each spelling names the real file, so is_file() accepts it, but the
+        # guard compares exceptions with the paths it scans.
+        client = "policyengine_api/services/v2/household_calculations/client.py"
+        _write_files(
+            {"policyengine_api/services/v2/policies/services.py": ""}, self.root
+        )
+        unassigned = f"[{FILES_RULE}] v2-layers: {client} matches no v2 layer."
+        for spelling in (
+            "policyengine_api/services/v2/household_calculations/./client.py",
+            "policyengine_api/services/v2/household_calculations//client.py",
+            "policyengine_api/services/v2/policies/../household_calculations/client.py",
+        ):
+            with self.subTest(path=spelling):
+                _write_files(
+                    {
+                        client: "",
+                        "rules/registry.toml": self._registry(None, (spelling,)),
+                    },
+                    self.root,
+                )
+
+                messages = self._messages()
+
+                self.assertIn(
+                    f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts "
+                    f"{spelling} from {FILES_RULE}, but no file the guard scans "
+                    "has that exact path, so the exception would match nothing. "
+                    "Fix: write the path as git ls-files lists it, and git add the "
+                    "file if git doesn't track it.",
+                    messages,
+                )
+                self.assertTrue(
+                    any(message.startswith(unassigned) for message in messages)
+                )
+
+    def test_an_exception_for_a_file_git_does_not_track_is_reported(self) -> None:
+        # In a git checkout the guard scans only the files git tracks, so an
+        # exactly spelled exception for an untracked file would match nothing.
+        client = "policyengine_api/services/v2/household_calculations/client.py"
+        _write_files(
+            {client: "", "rules/registry.toml": self._registry(None, (client,))},
+            self.root,
+        )
+        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+
+        self.assertEqual(
+            self._messages(),
+            [
+                f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts {client} "
+                f"from {FILES_RULE}, but no file the guard scans has that exact "
+                "path, so the exception would match nothing. Fix: write the path "
+                "as git ls-files lists it, and git add the file if git doesn't "
+                "track it."
             ],
         )
 

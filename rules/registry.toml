@@ -59,6 +59,7 @@ title = "Process and repository hygiene"
 workflows = [".github/workflows/pr.yml", ".github/workflows/pr-description.yml"]
 ignore_jobs = [
   { job = "upload-test-coverage", reason = "sends the test shards' coverage reports to Codecov in one upload; it checks nothing" },
+  { job = "upload-integration-coverage", reason = "sends the cross-database integration tests' coverage report to Codecov; it checks nothing" },
 ]
 guard_test_globs = [
   "tests/**/test_*boundar*.py",
@@ -183,7 +184,7 @@ invocation = "make test"
 [[rule]]
 id = "api.v2.files-assigned-to-layers"
 category = "v2-layers"
-statement = "Every .py file under services/v2 and fastapi_routes/v2 gets a layer from its file name alone, so the layer rules check it. A file that can't be renamed needs a [[rule.exception]] for this rule in rules/registry.toml; it then gets the route checks under fastapi_routes/v2, or the validator, transformation and types checks under services/v2."
+statement = "Every .py file under services/v2 and fastapi_routes/v2 gets a layer from its file name alone, so the layer rules check it. A file that can't be renamed, outside a database_connectors package, needs a [[rule.exception]] for this rule in rules/registry.toml; it then gets the route checks under fastapi_routes/v2, or the validator, transformation and types checks under services/v2."
 rationale = "docs/engineering/skills/v2-code-organization.md#file-layers"
 scope = ["policyengine_api/services/v2/**/*.py", "policyengine_api/fastapi_routes/v2/**/*.py"]
 tier = "mechanical"
@@ -1441,6 +1442,55 @@ invocation = "make test"
 workflow = ".github/workflows/pr.yml"
 job = "check-test-shards"
 invocation = "scripts.release_test_shards check-coverage"
+
+[[rule]]
+id = "api.quality.coverage-measured"
+category = "quality"
+statement = "Codecov measures the same tests on master as on pull requests: every CI job that measures test coverage sends it to Codecov with a flag that codecov.yml carries forward (unit for make test, in pr.yml and in push.yml's release tests; integration for the cross-database integration tests), passing the CODECOV_TOKEN secret, from a job with a timeout of at most 15 minutes; every shard of a report is uploaded, and in a master run an upload fails the run when it fails and no other job waits for it."
+rationale = "docs/engineering/skills/testing.md#coverage"
+scope = ["codecov.yml", ".github/workflows/*.yml"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/test_codecov_coverage.py::test_every_coverage_upload_is_flagged_and_master_uploads_fail_the_run",
+  "tests/unit/test_codecov_coverage.py::test_master_and_pull_requests_measure_both_flags",
+  "tests/unit/test_codecov_coverage.py::test_master_uploads_the_release_tests_coverage_in_one_upload",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.quality.coverage-measured/rejected"
+good_fixture = "rules/fixtures/api.quality.coverage-measured/accepted"
+test = "tests/unit/test_codecov_coverage.py::test_rule_proof_coverage_measured"
+
+[[rule]]
+id = "api.quality.diff-coverage"
+category = "quality"
+statement = "The lines a pull request changes in policyengine_api that coverage.py measures (the first line of each statement) are at least 80% covered by the unit and integration tests together: pr.yml's diff-coverage job runs diff-cover --fail-under=80 on every test shard's and the integration tests' coverage reports, against the commit that the merge commit CI checks out is built on (HEAD^1: the base branch, or a lower stacked pull request's merge commit), and CI complete needs it."
+rationale = "docs/engineering/skills/testing.md#changed-lines"
+scope = ["policyengine_api/**/*.py"]
+tier = "metric"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "workflow-job"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "diff-coverage"
+invocation = "diff-cover"
+[rule.proof]
+below_fixture = "rules/fixtures/api.quality.diff-coverage/below_threshold.toml"
+above_fixture = "rules/fixtures/api.quality.diff-coverage/at_threshold.toml"
+threshold = 80
+test = "tests/unit/test_diff_coverage.py::test_rule_proof_diff_coverage"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
 
 [[rule]]
 id = "api.quality.environment-variables-load"

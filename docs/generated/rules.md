@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 69 | 7 | 1 | 8 | 85 |
-| metric | 1 | 0 | 0 | 0 | 1 |
+| mechanical | 70 | 7 | 1 | 8 | 86 |
+| metric | 2 | 0 | 0 | 0 | 2 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 77 of 87 rules.
+**Blocking:** 79 of 89 rules.
 
 ## Gaps
 
@@ -98,7 +98,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 | `api.v2.connectors-no-cross-calls` | v2 connector modules never import one another, so they cannot call one another to sequence a workflow; the service does the sequencing. | mechanical | ratcheted | yes | import-linter `pyproject.toml` | `pr.yml:quality-guards` | yes |
 | `api.v2.connectors-reads-no-mutations` | v2 read connectors never insert, add or delete rows. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | **unproven** |
 | `api.v2.crud-checks-cover-every-resource` | The v2 CRUD boundary checks find modules by filename, so every resource package is covered, and every connector module is named as a create, read, update or delete module. | mechanical | enforced | yes | pytest `tests/unit/v2/test_data_crud_boundaries.py` | `pr.yml:test` | **unproven** |
-| `api.v2.files-assigned-to-layers` | Every .py file under services/v2 and fastapi_routes/v2 gets a layer from its file name alone, so the layer rules check it. A file that can't be renamed needs a [[rule.exception]] for this rule in rules/registry.toml; it then gets the route checks under fastapi_routes/v2, or the validator, transformation and types checks under services/v2. | mechanical | enforced | yes | quality guard `v2-layers` | `pr.yml:quality-guards` | yes |
+| `api.v2.files-assigned-to-layers` | Every .py file under services/v2 and fastapi_routes/v2 gets a layer from its file name alone, so the layer rules check it. A file that can't be renamed, outside a database_connectors package, needs a [[rule.exception]] for this rule in rules/registry.toml; it then gets the route checks under fastapi_routes/v2, or the validator, transformation and types checks under services/v2. | mechanical | enforced | yes | quality guard `v2-layers` | `pr.yml:quality-guards` | yes |
 | `api.v2.import-layers` | v2 route modules may import v2 services and v2 data modules, and v2 services may import v2 data modules, never the reverse, directly or through other modules. | mechanical | enforced | yes | import-linter `pyproject.toml` | `pr.yml:quality-guards` | yes |
 | `api.v2.pure-modules-no-database` | v2 validators, transformations and types never reach SQLAlchemy, SQLModel, a connector, a database_session module or the v2 database module, directly or through other modules, except through the v2 table models; imports under TYPE_CHECKING count. | mechanical | ratcheted | yes | import-linter `pyproject.toml` | `pr.yml:quality-guards` | yes |
 | `api.v2.pure-modules-no-session-calls` | v2 validators, transformations, types, process-state modules, package __init__ files and files under services/v2 excepted from api.v2.files-assigned-to-layers import nothing from SQLAlchemy or SQLModel but the Session type, import no connector, database_session, v1 ORM or v2 database module, and call no session method, SQLAlchemy or SQLModel function or session factory; they work on values and rows a connector loaded. | mechanical | enforced | yes | quality guard `v2-layers` | `pr.yml:quality-guards` | yes |
@@ -371,6 +371,8 @@ flowchart LR
 | `api.quality.ci-cd-scripts-ruff-exemptions` | CI/CD scripts under .github may print their results, run other programs, fetch fixed URLs, have hyphenated file names and import the lazily loaded packages at module level (T201, S603, S607, S310, N999, TID253); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of N999, S310, S603, S607, T201, TID253 for `.github/**` | `pr.yml:quality-guards` | — |
 | `api.quality.command-line-modules-ruff-exemptions` | Application modules that also run as command-line programs (if __name__ == "__main__") may print their output (T201); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of T201 for `policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/privilege_reconciliation,data/v2/user_association_migration_qualification,worker_spm_release}.py` | `pr.yml:quality-guards` | — |
 | `api.quality.command-line-scripts-ruff-exemptions` | Command-line scripts under scripts/ may print their output, run other programs, fetch fixed URLs, stamp today's date and pick random samples (T201, S603, S607, S310, DTZ011, S311); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of DTZ011, S310, S311, S603, S607, T201 for `scripts/**` | `pr.yml:quality-guards` | — |
+| `api.quality.coverage-measured` | Codecov measures the same tests on master as on pull requests: every CI job that measures test coverage sends it to Codecov with a flag that codecov.yml carries forward (unit for make test, in pr.yml and in push.yml's release tests; integration for the cross-database integration tests), passing the CODECOV_TOKEN secret, from a job with a timeout of at most 15 minutes; every shard of a report is uploaded, and in a master run an upload fails the run when it fails and no other job waits for it. | mechanical | enforced | yes | pytest `tests/unit/test_codecov_coverage.py` | `pr.yml:test` | yes |
+| `api.quality.diff-coverage` | The lines a pull request changes in policyengine_api that coverage.py measures (the first line of each statement) are at least 80% covered by the unit and integration tests together: pr.yml's diff-coverage job runs diff-cover --fail-under=80 on every test shard's and the integration tests' coverage reports, against the commit that the merge commit CI checks out is built on (HEAD^1: the base branch, or a lower stacked pull request's merge commit), and CI complete needs it. | metric | enforced | yes | CI job `diff-coverage` | `pr.yml:diff-coverage` | yes |
 | `api.quality.environment-variables-load` | Required environment variables and credentials load in a deployed-like environment. | mechanical | enforced | yes | CI job `test_env_vars` | `pr.yml:test_env_vars` | — |
 | `api.quality.file-length` | A tracked Python file has at most 800 physical lines, or at most 1,500 if it is test code (a file under a tests or fixtures directory, or a conftest.py); a longer file is split by responsibility into modules, and keeps its public import path. | metric | enforced | yes | quality guard `file-length` | `pr.yml:quality-guards` | yes |
 | `api.quality.make-quality` | make quality is the command for the quality checks, locally and in CI: it applies ruff check --fix and ruff format, then runs make quality-check, which runs uv lock --check, ruff check, ruff format --check, Import Linter, mypy and the quality guards without changing files. Run with a stand-in uv, make quality runs each of them and fails whenever one fails, and make -n prints the same commands. pr.yml's quality-guards job runs make quality and then git diff --exit-code HEAD, with neither step skipped, allowed to fail, or run in another shell or directory, no MAKEFLAGS, GNUMAKEFLAGS or MAKEFILES set for them, and no earlier step writing to GITHUB_ENV or GITHUB_PATH; the Makefile uses no syntax the rules registry doesn't follow and nothing that hides a failing command; and no other pr.yml job's commands run ruff, mypy, lint-imports or the quality guards, directly or through a make target. | mechanical | enforced | yes | pytest `tests/unit/test_make_quality.py` | `pr.yml:test` | yes |
@@ -395,6 +397,12 @@ flowchart LR
   e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_privilege_reconciliation_data_v2_user_association_migration_qualification_worker_spm_release__py["ruff per-file ignore of T201 for policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/privilege_reconciliation,data/v2/user_association_migration_qualification,worker_spm_release}.py"]
   r_api_quality_command_line_scripts_ruff_exemptions("api.quality.command-line-scripts-ruff-exemptions (enforced)")
   e_ruff_per_file_ignore_of_DTZ011__S310__S311__S603__S607__T201_for_scripts___["ruff per-file ignore of DTZ011, S310, S311, S603, S607, T201 for scripts/**"]
+  r_api_quality_coverage_measured("api.quality.coverage-measured (enforced)")
+  e_pytest_tests_unit_test_codecov_coverage_py["pytest tests/unit/test_codecov_coverage.py"]
+  j_CI_pr_yml_test["CI pr.yml:test"]
+  r_api_quality_diff_coverage("api.quality.diff-coverage (enforced)")
+  e_CI_job_diff_coverage["CI job diff-coverage"]
+  j_CI_pr_yml_diff_coverage["CI pr.yml:diff-coverage"]
   r_api_quality_environment_variables_load("api.quality.environment-variables-load (enforced)")
   e_CI_job_test_env_vars["CI job test_env_vars"]
   j_CI_pr_yml_test_env_vars["CI pr.yml:test_env_vars"]
@@ -402,7 +410,6 @@ flowchart LR
   e_quality_guard_file_length["quality guard file-length"]
   r_api_quality_make_quality("api.quality.make-quality (enforced)")
   e_pytest_tests_unit_test_make_quality_py["pytest tests/unit/test_make_quality.py"]
-  j_CI_pr_yml_test["CI pr.yml:test"]
   r_api_quality_mypy_v2("api.quality.mypy-v2 (enforced)")
   e_mypy["mypy"]
   r_api_quality_ruff_format("api.quality.ruff-format (enforced)")
@@ -416,13 +423,6 @@ flowchart LR
   j_CI_push_yml_quality_guards["CI push.yml:quality-guards"]
   r_api_quality_tests_assert("api.quality.tests-assert (ratcheted)")
   e_quality_guard_asserting_tests["quality guard asserting-tests"]
-  r_api_quality_tests_pass("api.quality.tests-pass (enforced)")
-  e_CI_job_test__check_test_shards["CI job test, check-test-shards"]
-  j_CI_pr_yml_check_test_shards["CI pr.yml:check-test-shards"]
-  r_api_quality_tests_ruff_exemptions("api.quality.tests-ruff-exemptions (enforced)")
-  e_ruff_per_file_ignore_of_ANN__ARG001__ARG002__ARG005__D1__DTZ001__DTZ011__INP001__N802__PLC0415__PLR2004__S101__S105__S106__S603__S607__S608__SLF001__T201__TID253_for____tests___["ruff per-file ignore of ANN, ARG001, ARG002, ARG005, D1, DTZ001, DTZ011, INP001, N802, PLC0415, PLR2004, S101, S105, S106, S603, S607, S608, SLF001, T201, TID253 for **/tests/**"]
-  r_api_quality_unittest_ruff_exemptions("api.quality.unittest-ruff-exemptions (enforced)")
-  e_ruff_per_file_ignore_of_PT_for_scripts_rules_tests___["ruff per-file ignore of PT for scripts/rules/tests/**"]
   r_api_quality_alembic_revisions_unused_imports -.-> gap_unenforced
   r_api_quality_ci_cd_scripts_ruff_exemptions --> e_ruff_per_file_ignore_of_N999__S310__S603__S607__T201__TID253_for__github___
   e_ruff_per_file_ignore_of_N999__S310__S603__S607__T201__TID253_for__github___ --> j_CI_pr_yml_quality_guards
@@ -430,6 +430,10 @@ flowchart LR
   e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_privilege_reconciliation_data_v2_user_association_migration_qualification_worker_spm_release__py --> j_CI_pr_yml_quality_guards
   r_api_quality_command_line_scripts_ruff_exemptions --> e_ruff_per_file_ignore_of_DTZ011__S310__S311__S603__S607__T201_for_scripts___
   e_ruff_per_file_ignore_of_DTZ011__S310__S311__S603__S607__T201_for_scripts___ --> j_CI_pr_yml_quality_guards
+  r_api_quality_coverage_measured --> e_pytest_tests_unit_test_codecov_coverage_py
+  e_pytest_tests_unit_test_codecov_coverage_py --> j_CI_pr_yml_test
+  r_api_quality_diff_coverage --> e_CI_job_diff_coverage
+  e_CI_job_diff_coverage --> j_CI_pr_yml_diff_coverage
   r_api_quality_environment_variables_load --> e_CI_job_test_env_vars
   e_CI_job_test_env_vars --> j_CI_pr_yml_test_env_vars
   r_api_quality_file_length --> e_quality_guard_file_length
@@ -450,6 +454,19 @@ flowchart LR
   r_api_quality_tests_assert --> e_quality_guard_asserting_tests
   e_quality_guard_asserting_tests --> j_CI_pr_yml_quality_guards
   e_quality_guard_asserting_tests --> j_CI_push_yml_quality_guards
+```
+
+```mermaid
+flowchart LR
+  r_api_quality_tests_pass("api.quality.tests-pass (enforced)")
+  e_CI_job_test__check_test_shards["CI job test, check-test-shards"]
+  j_CI_pr_yml_test["CI pr.yml:test"]
+  j_CI_pr_yml_check_test_shards["CI pr.yml:check-test-shards"]
+  r_api_quality_tests_ruff_exemptions("api.quality.tests-ruff-exemptions (enforced)")
+  e_ruff_per_file_ignore_of_ANN__ARG001__ARG002__ARG005__D1__DTZ001__DTZ011__INP001__N802__PLC0415__PLR2004__S101__S105__S106__S603__S607__S608__SLF001__T201__TID253_for____tests___["ruff per-file ignore of ANN, ARG001, ARG002, ARG005, D1, DTZ001, DTZ011, INP001, N802, PLC0415, PLR2004, S101, S105, S106, S603, S607, S608, SLF001, T201, TID253 for **/tests/**"]
+  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
+  r_api_quality_unittest_ruff_exemptions("api.quality.unittest-ruff-exemptions (enforced)")
+  e_ruff_per_file_ignore_of_PT_for_scripts_rules_tests___["ruff per-file ignore of PT for scripts/rules/tests/**"]
   r_api_quality_tests_pass --> e_CI_job_test__check_test_shards
   e_CI_job_test__check_test_shards --> j_CI_pr_yml_test
   e_CI_job_test__check_test_shards --> j_CI_pr_yml_check_test_shards

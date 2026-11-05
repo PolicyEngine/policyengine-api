@@ -51,9 +51,8 @@ def test_the_workflow_runs_when_called_or_dispatched() -> None:
     triggers = _triggers()
 
     assert set(triggers) == {"workflow_call", "workflow_dispatch"}
-    assert triggers["workflow_call"]["secrets"] == {
-        "CODECOV_TOKEN": {"required": False}
-    }
+    # Its callers upload its coverage report, so it takes no secret.
+    assert triggers["workflow_call"] is None
 
 
 def test_the_check_has_one_job_that_always_runs_every_step() -> None:

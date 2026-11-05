@@ -1,0 +1,48 @@
+# Proof fixture for api.quality.coverage-measured (the accepted case): no
+# release job waits for an upload, and every upload fails the run when it
+# fails.
+on:
+  push:
+    branches:
+      - master
+jobs:
+  release-tests:
+    strategy:
+      matrix:
+        shard_index: [1, 2, 3]
+    steps:
+      - run: bash .github/scripts/run_release_tests.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-test-coverage-shard-${{ matrix.shard_index }}
+          path: coverage.xml
+  upload-release-test-coverage:
+    timeout-minutes: 10
+    needs: release-tests
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-test-coverage-shard-*
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: unit
+          fail_ci_if_error: true
+  integration:
+    uses: ./.github/workflows/integration.yml
+  upload-integration-coverage:
+    timeout-minutes: 10
+    needs: integration
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: integration-coverage
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: integration
+          fail_ci_if_error: true
+  versioning:
+    needs: [release-tests, integration]
+    steps:
+      - run: echo version

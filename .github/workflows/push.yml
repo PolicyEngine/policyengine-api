@@ -137,8 +137,6 @@ jobs:
       && (github.repository == 'PolicyEngine/policyengine-api')
       && (needs.check-release-commit.outputs.merge_run_checks_passed != 'true')
     uses: ./.github/workflows/v2-integration-check.yml
-    secrets:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   ensure-staging-model-version-aligns-with-sim-api:
     name: Ensure staging model version aligns with simulation API
@@ -355,6 +353,100 @@ jobs:
           path: ${{ runner.temp }}/release-test-shard
           if-no-files-found: error
           retention-days: 7
+      # upload-release-test-coverage sends every shard's report to Codecov at
+      # once.
+      - name: Keep this shard's coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-test-coverage-shard-${{ matrix.shard_index }}
+          path: coverage.xml
+          if-no-files-found: error
+          retention-days: 7
+
+  upload-release-test-coverage:
+    # Sends the six release-test shards' coverage reports to Codecov in one
+    # upload, flagged unit, as pr.yml's upload-test-coverage does for pull
+    # requests. The release commit is the only master commit whose unit tests
+    # run, so this measures the merged code; codecov.yml carries the
+    # integration flag forward from the merge commit. A failed upload fails
+    # the run. The staging deploy doesn't wait for it.
+    name: Upload the release test coverage to Codecov
+    runs-on: ubuntu-latest
+    # The Codecov action sets no network timeouts, so a stalled upload would
+    # otherwise run until GitHub's 360-minute default.
+    timeout-minutes: 10
+    needs: release-tests
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the release commit and its parent
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      # A pipeline, so that the shell's pipefail fails the step if rev-parse
+      # fails, instead of uploading for an empty commit.
+      - name: Find the merge commit the release commit follows
+        id: merge_commit
+        run: git rev-parse --verify HEAD^ | sed 's/^/sha=/' >> "$GITHUB_OUTPUT"
+      - name: Download every shard's coverage report
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-test-coverage-shard-*
+          path: ${{ runner.temp }}/release-test-coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: PolicyEngine/policyengine-api
+          directory: ${{ runner.temp }}/release-test-coverage
+          # codecov.yml defines the flag and carries it forward.
+          flags: unit
+          fail_ci_if_error: true
+      # versioning's release commit changes only the version, uv.lock and the
+      # changelog, so these tests also measure the merge commit's code. Pull
+      # requests that branch from the merge commit, before its release commit
+      # lands, then compare with unit coverage measured on that code instead
+      # of coverage carried forward from an earlier commit.
+      - name: Upload the same coverage for the merge commit
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: PolicyEngine/policyengine-api
+          directory: ${{ runner.temp }}/release-test-coverage
+          flags: unit
+          fail_ci_if_error: true
+          override_commit: ${{ steps.merge_commit.outputs.sha }}
+
+  upload-integration-coverage:
+    # Sends the cross-database integration tests' coverage report, which
+    # v2-integration-check.yml keeps as an artifact, to Codecov flagged
+    # integration. No job waits for it, so a Codecov failure
+    # can't stop a release; a failed upload fails the run.
+    name: Upload the integration test coverage to Codecov
+    runs-on: ubuntu-latest
+    # The Codecov action sets no network timeouts, so a stalled upload would
+    # otherwise run until GitHub's 360-minute default.
+    timeout-minutes: 10
+    needs: v2-integration-check
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Download the integration coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: integration-coverage
+          path: ${{ runner.temp }}/integration-coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: PolicyEngine/policyengine-api
+          directory: ${{ runner.temp }}/integration-coverage
+          # codecov.yml defines the flag and carries it forward.
+          flags: integration
+          fail_ci_if_error: true
 
   check-release-test-shards:
     # Fails unless every shard collected the same tests and each test ran in
