@@ -1196,6 +1196,39 @@ test = "tests/unit/services/test_microdata_weight_boundaries.py::test_rule_proof
 # --- Code quality and types ------------------------------------------------
 
 [[rule]]
+id = "api.quality.pre-commit-hook"
+category = "quality"
+statement = "make install turns on a git pre-commit hook, .githooks/pre-commit, through core.hooksPath, which every worktree of the clone shares. The hook runs make quality from the root of the working tree and stops the commit when a check fails, when ruff's fixes changed a file that still needs staging (naming it), or when make, uv or the worktree's dev environment (.venv) is missing."
+rationale = "docs/engineering/skills/github-prs.md#commit-hygiene"
+scope = [".githooks/pre-commit", "Makefile"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/test_pre_commit_hook.py::test_the_repository_s_hook_stops_what_it_should",
+  "tests/unit/test_pre_commit_hook.py::test_a_commit_runs_make_quality",
+  "tests/unit/test_pre_commit_hook.py::test_a_failing_check_stops_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_fixes_that_need_staging_stop_the_commit_and_are_named",
+  "tests/unit/test_pre_commit_hook.py::test_unstaged_changes_make_quality_leaves_alone_dont_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_a_missing_uv_stops_the_commit_with_a_message",
+  "tests/unit/test_pre_commit_hook.py::test_a_missing_dev_environment_stops_the_commit_with_a_message",
+  "tests/unit/test_pre_commit_hook.py::test_every_worktree_of_the_clone_runs_the_hook",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_turns_the_hook_on",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_outside_a_git_repository_still_installs",
+  "tests/unit/test_pre_commit_hook.py::test_the_hook_is_executable_in_git",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.quality.pre-commit-hook/rejected"
+good_fixture = "rules/fixtures/api.quality.pre-commit-hook/accepted"
+test = "tests/unit/test_pre_commit_hook.py::test_rule_proof_pre_commit_hook"
+
+[[rule]]
 id = "api.quality.make-quality"
 category = "quality"
 statement = "make quality is the command for the quality checks, locally and in CI: it applies ruff check --fix and ruff format, then runs make quality-check, which runs uv lock --check, ruff check, ruff format --check, Import Linter, mypy and the quality guards without changing files. Run with a stand-in uv, make quality runs each of them and fails whenever one fails, and make -n prints the same commands. pr.yml's quality-guards job runs make quality and then git diff --exit-code HEAD, with neither step skipped, allowed to fail, or run in another shell or directory, no MAKEFLAGS, GNUMAKEFLAGS or MAKEFILES set for them, and no earlier step writing to GITHUB_ENV or GITHUB_PATH; the Makefile uses no syntax the rules registry doesn't follow and nothing that hides a failing command; and no other pr.yml job's commands run ruff, mypy, lint-imports or the quality guards, directly or through a make target."

@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 70 | 7 | 1 | 8 | 86 |
+| mechanical | 71 | 7 | 1 | 8 | 87 |
 | metric | 2 | 0 | 0 | 0 | 2 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 79 of 89 rules.
+**Blocking:** 80 of 90 rules.
 
 ## Gaps
 
@@ -377,6 +377,7 @@ flowchart LR
 | `api.quality.file-length` | A tracked Python file has at most 800 physical lines, or at most 1,500 if it is test code (a file under a tests or fixtures directory, or a conftest.py); a longer file is split by responsibility into modules, and keeps its public import path. | metric | enforced | yes | quality guard `file-length` | `pr.yml:quality-guards` | yes |
 | `api.quality.make-quality` | make quality is the command for the quality checks, locally and in CI: it applies ruff check --fix and ruff format, then runs make quality-check, which runs uv lock --check, ruff check, ruff format --check, Import Linter, mypy and the quality guards without changing files. Run with a stand-in uv, make quality runs each of them and fails whenever one fails, and make -n prints the same commands. pr.yml's quality-guards job runs make quality and then git diff --exit-code HEAD, with neither step skipped, allowed to fail, or run in another shell or directory, no MAKEFLAGS, GNUMAKEFLAGS or MAKEFILES set for them, and no earlier step writing to GITHUB_ENV or GITHUB_PATH; the Makefile uses no syntax the rules registry doesn't follow and nothing that hides a failing command; and no other pr.yml job's commands run ruff, mypy, lint-imports or the quality guards, directly or through a make target. | mechanical | enforced | yes | pytest `tests/unit/test_make_quality.py` | `pr.yml:test` | yes |
 | `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, v2 routes and services, the gzip negotiation, the user sign-in and account-deletion libraries, the country list and its startup check pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:quality-guards` | — |
+| `api.quality.pre-commit-hook` | make install turns on a git pre-commit hook, .githooks/pre-commit, through core.hooksPath, which every worktree of the clone shares. The hook runs make quality from the root of the working tree and stops the commit when a check fails, when ruff's fixes changed a file that still needs staging (naming it), or when make, uv or the worktree's dev environment (.venv) is missing. | mechanical | enforced | yes | pytest `tests/unit/test_pre_commit_hook.py` | `pr.yml:test` | yes |
 | `api.quality.ruff-format` | All Python files are formatted with ruff format. | mechanical | enforced | yes | ruff format | `pr.yml:quality-guards` | — |
 | `api.quality.ruff-lint` | All Python code passes ruff check with every ruff rule selected (ALL), with no ratchet, except the ignores in pyproject.toml: COM812 and ISC001, which conflict with ruff format, and D203 and D213, which conflict with the kept D211 and D212. | mechanical | enforced | yes | ruff check (ALL) | `pr.yml:quality-guards` | — |
 | `api.quality.runtime-evaluated-models-resolve` | Every package model is one ruff treats as runtime-evaluated (a base resolves, through the import in its own module, to a name in runtime-evaluated-base-classes, or is a same-module class that does), and every Pydantic model and SQLAlchemy mapper resolves its annotations once the package is imported. | mechanical | enforced | yes | pytest `tests/unit/test_runtime_evaluated_annotations.py` | `pr.yml:test` | **unproven** |
@@ -412,6 +413,8 @@ flowchart LR
   e_pytest_tests_unit_test_make_quality_py["pytest tests/unit/test_make_quality.py"]
   r_api_quality_mypy_v2("api.quality.mypy-v2 (enforced)")
   e_mypy["mypy"]
+  r_api_quality_pre_commit_hook("api.quality.pre-commit-hook (enforced)")
+  e_pytest_tests_unit_test_pre_commit_hook_py["pytest tests/unit/test_pre_commit_hook.py"]
   r_api_quality_ruff_format("api.quality.ruff-format (enforced)")
   e_ruff_format["ruff format"]
   r_api_quality_ruff_lint("api.quality.ruff-lint (enforced)")
@@ -421,8 +424,6 @@ flowchart LR
   r_api_quality_suppressions_explained("api.quality.suppressions-explained (ratcheted)")
   e_quality_guard_suppressions["quality guard suppressions"]
   j_CI_push_yml_quality_guards["CI push.yml:quality-guards"]
-  r_api_quality_tests_assert("api.quality.tests-assert (ratcheted)")
-  e_quality_guard_asserting_tests["quality guard asserting-tests"]
   r_api_quality_alembic_revisions_unused_imports -.-> gap_unenforced
   r_api_quality_ci_cd_scripts_ruff_exemptions --> e_ruff_per_file_ignore_of_N999__S310__S603__S607__T201__TID253_for__github___
   e_ruff_per_file_ignore_of_N999__S310__S603__S607__T201__TID253_for__github___ --> j_CI_pr_yml_quality_guards
@@ -442,6 +443,8 @@ flowchart LR
   e_pytest_tests_unit_test_make_quality_py --> j_CI_pr_yml_test
   r_api_quality_mypy_v2 --> e_mypy
   e_mypy --> j_CI_pr_yml_quality_guards
+  r_api_quality_pre_commit_hook --> e_pytest_tests_unit_test_pre_commit_hook_py
+  e_pytest_tests_unit_test_pre_commit_hook_py --> j_CI_pr_yml_test
   r_api_quality_ruff_format --> e_ruff_format
   e_ruff_format --> j_CI_pr_yml_quality_guards
   r_api_quality_ruff_lint --> e_ruff_check__ALL_
@@ -451,22 +454,25 @@ flowchart LR
   r_api_quality_suppressions_explained --> e_quality_guard_suppressions
   e_quality_guard_suppressions --> j_CI_pr_yml_quality_guards
   e_quality_guard_suppressions --> j_CI_push_yml_quality_guards
-  r_api_quality_tests_assert --> e_quality_guard_asserting_tests
-  e_quality_guard_asserting_tests --> j_CI_pr_yml_quality_guards
-  e_quality_guard_asserting_tests --> j_CI_push_yml_quality_guards
 ```
 
 ```mermaid
 flowchart LR
+  r_api_quality_tests_assert("api.quality.tests-assert (ratcheted)")
+  e_quality_guard_asserting_tests["quality guard asserting-tests"]
+  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
+  j_CI_push_yml_quality_guards["CI push.yml:quality-guards"]
   r_api_quality_tests_pass("api.quality.tests-pass (enforced)")
   e_CI_job_test__check_test_shards["CI job test, check-test-shards"]
   j_CI_pr_yml_test["CI pr.yml:test"]
   j_CI_pr_yml_check_test_shards["CI pr.yml:check-test-shards"]
   r_api_quality_tests_ruff_exemptions("api.quality.tests-ruff-exemptions (enforced)")
   e_ruff_per_file_ignore_of_ANN__ARG001__ARG002__ARG005__D1__DTZ001__DTZ011__INP001__N802__PLC0415__PLR2004__S101__S105__S106__S603__S607__S608__SLF001__T201__TID253_for____tests___["ruff per-file ignore of ANN, ARG001, ARG002, ARG005, D1, DTZ001, DTZ011, INP001, N802, PLC0415, PLR2004, S101, S105, S106, S603, S607, S608, SLF001, T201, TID253 for **/tests/**"]
-  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
   r_api_quality_unittest_ruff_exemptions("api.quality.unittest-ruff-exemptions (enforced)")
   e_ruff_per_file_ignore_of_PT_for_scripts_rules_tests___["ruff per-file ignore of PT for scripts/rules/tests/**"]
+  r_api_quality_tests_assert --> e_quality_guard_asserting_tests
+  e_quality_guard_asserting_tests --> j_CI_pr_yml_quality_guards
+  e_quality_guard_asserting_tests --> j_CI_push_yml_quality_guards
   r_api_quality_tests_pass --> e_CI_job_test__check_test_shards
   e_CI_job_test__check_test_shards --> j_CI_pr_yml_test
   e_CI_job_test__check_test_shards --> j_CI_pr_yml_check_test_shards

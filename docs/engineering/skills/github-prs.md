@@ -189,11 +189,23 @@ the reason a code change or ruff setting couldn't remove the finding
 ## Commit Hygiene
 
 AI agents must run the quality checks before committing their own code
-changes:
+changes. Run `make install` once per clone: it turns on the pre-commit hook
+(`.githooks/pre-commit`, through `git config core.hooksPath .githooks`),
+which runs them before every commit (`api.quality.pre-commit-hook`):
 
 ```bash
-make quality
+make install   # once per clone, and once in each new worktree for its .venv
+make quality   # what the hook runs; run it yourself to check sooner
 ```
+
+The hook runs `make quality` from the root of the working tree. It stops the
+commit when a check fails, or when ruff's fixes changed a file, which it
+names: review the fixes, stage them and commit again. It also stops the
+commit, saying what to install, when `make`, `uv` or the worktree's `.venv`
+is missing. `core.hooksPath` is a setting of the clone, so every worktree
+runs the hook, from its own checkout. Don't skip it with
+`git commit --no-verify`; CI's `Quality checks` job runs the same checks
+and blocks the merge anyway.
 
 `make quality` applies ruff's fixes (`ruff check --fix`, then `ruff format`),
 then runs `make quality-check`: `uv lock --check`, `ruff check`,
