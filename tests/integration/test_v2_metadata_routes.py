@@ -50,6 +50,7 @@ from tests.fixtures.v2_catalog import (
     bundle,
     installed_version,
     normalized_catalog,
+    region_references,
     source_models,
 )
 
@@ -616,10 +617,10 @@ def test_postgres_production_metadata_reader_keeps_catalogs_and_responses(
     # The production combination: autocommit read sessions, the process's
     # selected catalogs and its whole-version response cache.
     from policyengine_api.data.v2.database import build_v2_read_session_factory
-    from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+    from policyengine_api.fastapi_routes.v2.metadata.response_cache_support import (
         MetadataResponseCache,
     )
-    from policyengine_api.services.v2.metadata.selected_catalogs import (
+    from policyengine_api.services.v2.metadata.process_state import (
         SelectedCatalogStore,
     )
 
@@ -715,11 +716,11 @@ def test_postgres_current_values_and_their_lifetime_use_one_instant(
     monkeypatch: pytest.MonkeyPatch,
     case: tuple[datetime, datetime, list[float], str],
 ) -> None:
-    from policyengine_api.fastapi_routes.v2.metadata import common
+    from policyengine_api.fastapi_routes.v2.metadata import route_support
 
     read_instant, header_instant, expected_values, expected_cache_control = case
     instants = iter([read_instant, header_instant])
-    monkeypatch.setattr(common, "utc_now", lambda: next(instants))
+    monkeypatch.setattr(route_support, "utc_now", lambda: next(instants))
 
     response = _client(published_engine).get(
         "/v2/parameter-values",
@@ -786,6 +787,7 @@ def _catalog_with_a_bracket_schedule():
         policyengine_version=POLICYENGINE_VERSION,
         models=models,
         installed_version=installed_version,
+        region_references=region_references(),
     )
 
 
@@ -964,6 +966,7 @@ def _catalog_shaped_like_policyengine_py_output():
         policyengine_version=POLICYENGINE_VERSION,
         models=models,
         installed_version=installed_version,
+        region_references=region_references(),
     )
 
 

@@ -416,7 +416,7 @@ def test_both_variables_routes_serve_unit_and_definition_period(
     expected_catalog_format: int | None,
     expected_fields: dict[str, tuple[str | None, str | None]],
 ) -> None:
-    from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+    from policyengine_api.fastapi_routes.v2.metadata.response_cache_support import (
         MetadataResponseCache,
     )
     from tests.fixtures.v2_metadata_routes import metadata_route_client

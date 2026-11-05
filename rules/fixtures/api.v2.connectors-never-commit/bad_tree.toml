@@ -1,0 +1,20 @@
+# Proof fixture for rule api.v2.connectors-never-commit. The guard must reject
+# it: the connector opens its own session and commits it.
+
+# Each expected finding is "<rule id>: <path> <detail>".
+expected_findings = [
+    "api.v2.connectors-never-commit: policyengine_api/services/v2/policies/database_connectors/creates.py calls get_v2_session_factory",
+    "api.v2.connectors-never-commit: policyengine_api/services/v2/policies/database_connectors/creates.py calls session.commit",
+    "api.v2.connectors-never-commit: policyengine_api/services/v2/policies/database_connectors/creates.py imports policyengine_api.data.v2.database",
+]
+
+[files]
+"policyengine_api/services/v2/policies/database_connectors/creates.py" = """
+from policyengine_api.data.v2.database import get_v2_session_factory
+
+
+def create_policy(row):
+    session = get_v2_session_factory()()
+    session.add(row)
+    session.commit()
+"""

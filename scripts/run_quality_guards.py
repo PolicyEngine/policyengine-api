@@ -16,6 +16,7 @@ from scripts.rules import (  # noqa: E402
     declared_dependencies,
     file_length,
     locked_installs,
+    v2_layers,
 )
 from scripts.rules import guard as rules_guard  # noqa: E402
 
@@ -28,6 +29,7 @@ GUARDS: tuple[Guard, ...] = (
     ("locked-installs", locked_installs.check),
     ("file-length", file_length.check),
     ("declared-dependencies", declared_dependencies.check),
+    ("v2-layers", v2_layers.check),
 )
 
 

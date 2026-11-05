@@ -1,0 +1,8 @@
+# Tolerated existing violations. This list may only shrink.
+# Each line is one finding of the v2-layers guard for rule api.v2.routes-no-sessions-or-sql,
+# as the guard prints it. These route modules import sqlalchemy.exc to catch SQLAlchemyError;
+# the fix is for their services to raise typed failures instead.
+policyengine_api/fastapi_routes/v2/countries/routes.py imports sqlalchemy.exc
+policyengine_api/fastapi_routes/v2/households/routes.py imports sqlalchemy.exc
+policyengine_api/fastapi_routes/v2/policies/routes.py imports sqlalchemy.exc
+policyengine_api/fastapi_routes/v2/user_resources_support.py imports sqlalchemy.exc

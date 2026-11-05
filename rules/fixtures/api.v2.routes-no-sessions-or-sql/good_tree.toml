@@ -1,0 +1,15 @@
+# Proof fixture for rule api.v2.routes-no-sessions-or-sql. The guard must
+# accept it: the route calls one service method. Adding to a set is not a
+# session call.
+
+expected_findings = []
+
+[files]
+"policyengine_api/fastapi_routes/v2/policies/routes.py" = """
+from policyengine_api.services.v2.policies.services import V2PolicyService
+
+
+def create_policy(service: V2PolicyService, body, seen_ids: set):
+    seen_ids.add(body.id)
+    return service.create_policy(body)
+"""

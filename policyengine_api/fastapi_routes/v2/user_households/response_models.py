@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from policyengine_api.fastapi_routes.v2.user_resources import (
+from policyengine_api.fastapi_routes.v2.user_resources_support import (
     USER_RESOURCE_ERROR_RESPONSES,
 )
 from policyengine_api.query_parameters import CountryId

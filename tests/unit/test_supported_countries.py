@@ -12,6 +12,10 @@ from pydantic import TypeAdapter, ValidationError
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.catalog import extraction
+from policyengine_api.data.v2.catalog.region_references import (
+    REGION_REFERENCE_DIRECTORY,
+)
+from policyengine_api.data.v2.catalog.region_scoping import REGION_SCOPING_RULES
 from policyengine_api.query_parameters import CountryId
 from policyengine_api.supported_countries import (
     SUPPORTED_COUNTRY_IDS,
@@ -62,6 +66,7 @@ def capture_extraction(**arguments):
 
 
 extraction.extract_catalog = capture_extraction
+extraction.load_region_references = lambda country_id: f"{country_id} regions"
 extraction.extract_installed_catalog()
 country_option = next(
     action
@@ -75,6 +80,7 @@ print(
             "extracted_countries": list(extraction.SUPPORTED_COUNTRIES),
             "required_dependencies": list(extraction.REQUIRED_DEPENDENCIES),
             "installed_models": captured_arguments["models"],
+            "installed_region_references": captured_arguments["region_references"],
             "dual_write_countries": sorted(
                 catalog_selection_validation.SUPPORTED_V2_COUNTRY_IDS
             ),
@@ -130,6 +136,11 @@ def test_every_country_list_follows_a_country_added_to_the_one_list() -> None:
             "uk": "uk model",
             "zz": "zz model",
         },
+        "installed_region_references": {
+            "us": "us regions",
+            "uk": "uk regions",
+            "zz": "zz regions",
+        },
         "dual_write_countries": ["uk", "us", "zz"],
         "household_copy_countries": ["us", "uk", "zz"],
         # The v1 routes list countries alphabetically.
@@ -148,9 +159,14 @@ def test_every_country_list_follows_a_country_added_to_the_one_list() -> None:
 
 
 def test_catalog_settings_cover_exactly_the_listed_countries() -> None:
-    # Each listed country needs catalog settings, so adding a country
-    # without them fails here rather than during publication.
+    # Each listed country needs catalog settings, a region reference
+    # file and region scoping rules, so adding a country without them fails
+    # here rather than during publication.
     listed_countries = set(SUPPORTED_COUNTRY_IDS)
 
     assert set(extraction.CURRENT_LAW_IDS) == listed_countries
     assert set(extraction.METADATA_TIME_PERIODS) == listed_countries
+    assert {
+        path.stem for path in REGION_REFERENCE_DIRECTORY.glob("*.csv")
+    } == listed_countries
+    assert {country_id for country_id, _ in REGION_SCOPING_RULES} == listed_countries

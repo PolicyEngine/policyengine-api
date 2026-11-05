@@ -25,7 +25,7 @@ from policyengine_api.services.v2.metadata.services import V2MetadataService
 from tests.fixtures.v2_catalog import POLICYENGINE_VERSION, normalized_catalog
 
 if TYPE_CHECKING:
-    from policyengine_api.services.v2.metadata.selected_catalogs import (
+    from policyengine_api.services.v2.metadata.process_state import (
         SelectedCatalogStore,
     )
 

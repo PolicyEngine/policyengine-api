@@ -1,0 +1,19 @@
+# Proof fixture for rule api.v2.pure-modules-no-session-calls. The guard must
+# accept it: the validator checks a row a connector already loaded, and the
+# package __init__ holds only a docstring.
+
+expected_findings = []
+
+[files]
+"policyengine_api/services/v2/policies/validators.py" = """
+from policyengine_api.data.v2.models import Policy
+
+
+def validate_policy_exists(policy: Policy | None, policy_id):
+    if policy is None:
+        raise LookupError(policy_id)
+    return policy
+"""
+"policyengine_api/services/v2/policies/__init__.py" = """
+\"\"\"Immutable v2 policies.\"\"\"
+"""

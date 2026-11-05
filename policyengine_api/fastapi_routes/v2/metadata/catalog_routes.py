@@ -7,13 +7,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter
 from starlette.responses import JSONResponse, Response
 
-from policyengine_api.fastapi_routes.v2.metadata.common import (
-    METADATA_RESPONSES,
-    CacheableMetadataRoute,
-    read_resource,
-    read_whole_version_resource,
-)
-from policyengine_api.fastapi_routes.v2.metadata.query_dependencies import (
+from policyengine_api.fastapi_routes.v2.metadata.query_support import (
     CatalogParameterQueryDependency,
     CatalogQueryDependency,
 )
@@ -22,6 +16,12 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataCatalogVariablesResponse,
     MetadataModelCatalogResponse,
     MetadataResourceSuccessResponse,
+)
+from policyengine_api.fastapi_routes.v2.metadata.route_support import (
+    METADATA_RESPONSES,
+    CacheableMetadataRoute,
+    read_resource,
+    read_whole_version_resource,
 )
 from policyengine_api.services.v2.metadata.types import (
     MetadataCatalogVariablesResult,
