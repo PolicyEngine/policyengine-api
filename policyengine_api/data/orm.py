@@ -12,6 +12,8 @@ from google.cloud.sql.connector import Connector, IPTypes
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from policyengine_api.data.orm_pool_events import record_pool_events
+
 if TYPE_CHECKING:
     from sqlalchemy.engine.interfaces import DBAPIConnection
 
@@ -95,6 +97,8 @@ def _build_remote_engine() -> Engine:
         max_overflow=DATABASE_POOL_MAX_OVERFLOW,
         pool_timeout=DATABASE_POOL_TIMEOUT_SECONDS,
     )
+    # Record connects and invalidations, with their socket file descriptors.
+    record_pool_events(engine)
     _cloud_sql_state.connector = connector
     return engine
 

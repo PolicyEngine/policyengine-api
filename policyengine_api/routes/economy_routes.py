@@ -7,6 +7,9 @@ from flask import Blueprint, Response, request
 from pydantic import ValidationError
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.libs.simulation_entrypoint_transport import (
+    SimulationEntrypointConnectionError,
+)
 from policyengine_api.query_parameters import (
     BUDGET_WINDOW_MAX_YEARS,
     AnnualEconomyQuery,
@@ -69,6 +72,22 @@ def _bad_request_response(error: str | ValueError) -> Response:
     return _make_error_response(error, 400, result=None, **fields)
 
 
+def _simulation_unreachable_response(
+    error: SimulationEntrypointConnectionError,
+) -> Response:
+    """Return 502 when a request to the simulation service got no response.
+
+    Nothing is stored for the calculation, so the next request tries again, and
+    ``retry_after_seconds`` is null.
+    """
+    return _make_error_response(
+        error,
+        HTTPStatus.BAD_GATEWAY,
+        result=None,
+        retry_after_seconds=None,
+    )
+
+
 def _policy_not_found_response(error: PolicyNotFoundError) -> Response:
     """Return 404 naming each policy that the request's country does not have."""
     policy_ids = " and ".join(f"#{policy_id}" for policy_id in error.policy_ids)
@@ -93,13 +112,19 @@ def get_economic_impact(
     A policy ID of 0 means current law. The result stays ``computing`` until the
     simulation finishes, and while computing the body also carries the stage
     fields the Simulation Entrypoint reports. Invalid query parameters give 400,
-    a policy ID the country does not have gives 404 and a failed calculation
-    gives 502. A 502 body's ``retry_after_seconds`` is how long the Public API
-    keeps returning the stored failure before a request starts a new run, or
-    null when no failure is stored, the next request would answer from a
-    newer job, or the failure's lifetime cannot be read. It is the longest
-    wait: a deploy that changes the versions or worker app a request resolves
-    to lets a request start a new run sooner.
+    a policy ID the country does not have gives 404, and a failed calculation,
+    or a request to the simulation service that gets no response (after one
+    retry if its connection broke), gives 502. One request is an exception:
+    for a finished stored impact, the route asks the simulation service which
+    worker app the request resolves to, to check whether the impact is out of
+    date, and if that request gets no response it answers from the stored
+    impact as it is.
+    A 502 body's ``retry_after_seconds`` is how long the Public API keeps
+    returning the stored failure before a request starts a new run, or null
+    when no failure is stored, the next request would answer from a newer
+    job, or the failure's lifetime cannot be read. It is the longest wait: a
+    deploy that changes the versions or worker app a request resolves to lets
+    a request start a new run sooner.
     """
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
@@ -128,6 +153,8 @@ def get_economic_impact(
         return _bad_request_response(error)
     except PolicyNotFoundError as error:
         return _policy_not_found_response(error)
+    except SimulationEntrypointConnectionError as error:
+        return _simulation_unreachable_response(error)
 
     result_dict: dict[str, str | dict | int | None] = economic_impact_result.to_dict()
 
@@ -166,9 +193,10 @@ def get_budget_window_economic_impact(
 
     The body lists completed, computing and queued years, and the
     ``X-PolicyEngine-Budget-Window-Cache`` header reports the cache outcome when
-    known. Invalid query parameters give 400 and a policy ID the country does
-    not have gives 404; a failed calculation is reported in the body with
-    status 200.
+    known. Invalid query parameters give 400, a policy ID the country does
+    not have gives 404, and a request to the simulation service that gets no
+    response (after one retry if its connection broke) gives 502; a failed
+    calculation is reported in the body with status 200.
     """
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
@@ -198,6 +226,8 @@ def get_budget_window_economic_impact(
         return _bad_request_response(error)
     except PolicyNotFoundError as error:
         return _policy_not_found_response(error)
+    except SimulationEntrypointConnectionError as error:
+        return _simulation_unreachable_response(error)
 
     result_dict = economic_impact_result.to_dict()
 
