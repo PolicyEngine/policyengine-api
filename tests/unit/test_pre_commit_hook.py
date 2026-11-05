@@ -654,6 +654,107 @@ def test_make_install_still_installs_when_git_config_is_locked(tmp_path: Path):
     assert (tmp_path / "uv-calls").read_text() == "sync --frozen --extra dev\n"
 
 
+def test_a_commit_passes_in_a_utf8_locale(tmp_path: Path):
+    # bash 3.2, macOS's /bin/sh, matches uppercase letters with [a-z] in
+    # UTF-8 locales, and git ls-files -v marks every ordinary file H.
+    environment = _environment(tmp_path)
+    environment["LANG"] = environment["LC_ALL"] = "en_US.UTF-8"
+    repository = _repository(tmp_path, environment, PASSING_QUALITY)
+
+    result = _commit_a_change(repository, environment)
+
+    assert result.returncode == 0, result.stderr
+    assert _ran(tmp_path) == 1
+
+
+@pytest.mark.parametrize("name", ["ruff.toml", "mypy.ini", "lib/pyproject.toml"])
+def test_tool_settings_hidden_by_local_excludes_stop_the_commit(name, tmp_path: Path):
+    # ruff and mypy read their settings from these files before
+    # pyproject.toml, whatever git ignores.
+    environment = _environment(tmp_path)
+    repository = _repository(tmp_path, environment, PASSING_QUALITY)
+    settings = repository / name
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    settings.write_text("")
+    (repository / ".git" / "info" / "exclude").write_text(f"{name}\n")
+
+    result = _commit_a_change(repository, environment)
+
+    assert result.returncode != 0
+    assert name.split("/")[0] in result.stderr
+    assert _ran(tmp_path) == 0
+
+
+def test_a_hidden_directory_of_python_files_stops_the_commit(tmp_path: Path):
+    environment = _environment(tmp_path)
+    repository = _repository(tmp_path, environment, PASSING_QUALITY)
+    (repository / "lib").mkdir()
+    (repository / "lib" / "helper.py").write_text("HELPER = 0\n")
+    (repository / ".git" / "info" / "exclude").write_text("lib/\n")
+
+    result = _commit_a_change(repository, environment)
+
+    assert result.returncode != 0
+    assert "lib/" in result.stderr
+
+
+def test_a_hidden_virtual_environment_doesnt_stop_the_commit(tmp_path: Path):
+    # No check reads a virtual environment's files.
+    environment = _environment(tmp_path)
+    repository = _repository(tmp_path, environment, PASSING_QUALITY)
+    (repository / "venv" / "lib").mkdir(parents=True)
+    (repository / "venv" / "pyvenv.cfg").write_text("home = /usr/bin\n")
+    (repository / "venv" / "lib" / "site.py").write_text("SITE = 0\n")
+    (repository / ".git" / "info" / "exclude").write_text("venv/\n")
+
+    result = _commit_a_change(repository, environment)
+
+    assert result.returncode == 0, result.stderr
+    assert _ran(tmp_path) == 1
+
+
+def test_tracked_python_files_local_excludes_match_stop_the_commit(tmp_path: Path):
+    # ruff skips files .git/info/exclude matches, even tracked ones, which
+    # CI checks.
+    environment = _environment(tmp_path)
+    repository = _repository(tmp_path, environment, PASSING_QUALITY)
+    (repository / ".git" / "info" / "exclude").write_text("other.py\n")
+
+    result = _commit_a_change(repository, environment)
+
+    assert result.returncode != 0
+    assert "other.py" in result.stderr
+    assert "ruff" in result.stderr
+    assert _ran(tmp_path) == 0
+
+
+def test_a_case_only_rename_stops_the_commit(tmp_path: Path):
+    # On a file system that ignores case, git status shows nothing, but the
+    # checks would read Module.py while the commit holds module.py.
+    environment = _environment(tmp_path)
+    repository = _repository(tmp_path, environment, PASSING_QUALITY)
+    (repository / "other.py").rename(repository / "Other.py")
+
+    result = _commit_a_change(repository, environment)
+
+    assert result.returncode != 0
+    assert "Other.py" in result.stderr or "other.py" in result.stderr
+    assert _ran(tmp_path) == 0
+
+
+def test_a_commit_of_some_paths_says_how_to_commit_the_rest(tmp_path: Path):
+    environment = _environment(tmp_path)
+    repository = _repository(tmp_path, environment, PASSING_QUALITY)
+    (repository / "other.py").write_text("OTHER = 1\n")
+    _git(repository, environment, "add", "other.py")
+    (repository / "module.py").write_text("VALUE = 2\n")
+
+    result = _git(repository, environment, "commit", "-m", "module", "module.py")
+
+    assert result.returncode != 0
+    assert "without paths" in result.stderr
+
+
 def test_the_hooks_are_executable_in_git(tmp_path: Path):
     environment = _environment(tmp_path)
     listed = _git(
