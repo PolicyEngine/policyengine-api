@@ -1461,6 +1461,37 @@ path = "migrations/*/versions/*.py"
 category = "migration-revision"
 reason = "Alembic revisions stay exactly as Alembic generated them, and an applied revision has already run against a database, so it is never split. Ruff skips the same files (extend-exclude in pyproject.toml)."
 
+[[rule]]
+id = "api.quality.suppressions-explained"
+category = "quality"
+statement = "Every noqa, ruff: disable and type: ignore comment names what it suppresses and says why: a noqa comment, line-level or file-level (ruff: noqa, flake8: noqa), lists its ruff codes, a ruff: disable range suppression lists its ruff codes in brackets, a type: ignore comment lists its mypy error codes in brackets, and the comment also gives a reason in another # part, as # noqa: CODE  # reason or # type: ignore[code]  # reason; apart from the suppressions rules/baselines/suppressions.txt lists."
+rationale = "docs/engineering/skills/rules-registry.md#inline-suppressions"
+scope = ["**/*.py"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "suppressions"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[[rule.ci]]
+workflow = ".github/workflows/push.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.baseline]
+file = "rules/baselines/suppressions.txt"
+count = 29
+[rule.proof]
+bad_fixture = "rules/fixtures/api.quality.suppressions-explained/rejected_module.txt"
+good_fixture = "rules/fixtures/api.quality.suppressions-explained/accepted_module.txt"
+test = "scripts/rules/tests/test_suppressions.py::TestSuppressionsProof::test_rule_proof_suppressions_explained"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
 # --- CI workflows and scripts ----------------------------------------------
 
 [[rule]]
@@ -1888,7 +1919,7 @@ kind = "none"
 [[rule]]
 id = "api.process.agents-suppress-as-last-resort"
 category = "process"
-statement = "Agents add an inline ruff suppression (noqa) only when neither a code change nor a ruff setting removes the finding, and a PR lists every inline suppression it adds, with the reason."
+statement = "Agents add an inline suppression (noqa or type: ignore) only when neither a code change nor a checker setting removes the finding, and a PR lists every inline suppression it adds, with the reason. That each suppression names its code and gives its reason is the mechanical rule api.quality.suppressions-explained."
 rationale = "docs/engineering/skills/rules-registry.md#inline-suppressions"
 scope = ["**/*.py"]
 tier = "judgment"
