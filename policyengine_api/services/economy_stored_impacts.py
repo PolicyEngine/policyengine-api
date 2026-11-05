@@ -13,6 +13,7 @@ from policyengine_api.runtime_cache.reform_impacts import (
     ReformImpactStartClaim,
 )
 from policyengine_api.services.economy_impact_types import (
+    FAILED_IMPACT_DELETE_LOCKOUT_SECONDS,
     LOCAL_AREA_BREAKDOWN_RESULT_SCHEMA_VERSION,
     EconomicImpactResult,
     EconomicImpactSetupOptions,
@@ -382,15 +383,27 @@ class StoredImpactMixin:
 
         Read from the stored failure after it is written, or as it is
         replayed, so a fresh failure and a replayed one both say how long a
-        lookup still finds it. None when no failure was stored.
+        lookup still finds it, and how long until a DELETE may remove it.
+        Both are None when no failure was stored, and the second is None
+        whenever the first is.
         """
         retry_after_seconds = (
             self._reform_impacts.get_reform_impact_seconds_left(stored_failure)
             if stored_failure is not None
             else None
         )
+        delete_after_seconds = (
+            self._reform_impacts.get_reform_impact_seconds_until(
+                stored_failure,
+                seconds_after_end=FAILED_IMPACT_DELETE_LOCKOUT_SECONDS,
+            )
+            if stored_failure is not None and retry_after_seconds is not None
+            else None
+        )
         return EconomicImpactResult.error(
-            message=message, retry_after_seconds=retry_after_seconds
+            message=message,
+            retry_after_seconds=retry_after_seconds,
+            delete_after_seconds=delete_after_seconds,
         )
 
     @observability_runtime.span(

@@ -1,5 +1,6 @@
 """Annual worker failures retain their status when subsequent HTTP polls replay them."""
 
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -34,6 +35,9 @@ WORKER_ERROR = "Worker exhausted available memory"
 STORED_ERROR = f"Simulation entrypoint execution failed: {WORKER_ERROR}"
 # The usual 30-day record lifetime less a fixed jitter, so answers are exact.
 FAILED_RECORD_SECONDS = reform_impacts.REFORM_IMPACT_TTL_SECONDS - 7
+# The service's clock reads the fake cache's clock from this time, so both
+# advance together.
+CLOCK_START = datetime(2026, 11, 5, 12, 0)
 
 
 @pytest.fixture(params=[SELECTION, None], ids=["canonical", "legacy"])
@@ -65,10 +69,11 @@ def _failed_job_harness(monkeypatch, *, selection, region):
     gateway.resolve_app_name.side_effect = resolve_app_name
     gateway.get_execution_by_id.return_value = SimpleNamespace(error=WORKER_ERROR)
     gateway.get_execution_status.return_value = "failed"
-    cache = ReformImpactCache(
-        InMemoryCacheBackend(), CacheNamespace("test", "failed-job-replay")
+    backend = InMemoryCacheBackend()
+    cache = ReformImpactCache(backend, CacheNamespace("test", "failed-job-replay"))
+    impacts = ReformImpactsService(
+        cache, now=lambda: CLOCK_START + timedelta(seconds=backend._now())
     )
-    impacts = ReformImpactsService(cache)
     # Both policies exist, so a request after the failure expires can submit again.
     policies = Mock()
     policies.get_policy_json.return_value = {}
@@ -121,6 +126,7 @@ def test_repeated_failed_polls_replay_failure_without_success_receipts(
         "message": STORED_ERROR,
         "result": None,
         "retry_after_seconds": FAILED_RECORD_SECONDS,
+        "delete_after_seconds": 10,
     }
     assert cache.get_by_execution_id(EXECUTION_ID).message == STORED_ERROR
 
@@ -164,7 +170,9 @@ def test_a_failed_state_run_answers_with_the_seconds_until_a_new_run(
     url = "/us/economy/1/over/2?region=state/ca&time_period=2026&version=1.0.0"
 
     first = client.get(url)
-    cache.client.advance(30.5)
+    cache.client.advance(4.5)
+    inside_the_lockout = client.get(url)
+    cache.client.advance(26)
     replayed = client.get(url)
     cache.client.advance(replayed.json["retry_after_seconds"])
     after_the_wait = client.get(url)
@@ -175,10 +183,21 @@ def test_a_failed_state_run_answers_with_the_seconds_until_a_new_run(
         "message": f"{STORED_ERROR}. {US_STATE_RETRY_NOTE}",
         "result": None,
         "retry_after_seconds": 120,
+        "delete_after_seconds": 10,
     }
-    # The replay counts down from the stored record's own expiry, rounded up.
+    # Both waits count down, rounded up: retry from the stored record's own
+    # expiry, delete from when the failure was recorded.
+    assert inside_the_lockout.json == {
+        **first.json,
+        "retry_after_seconds": 116,
+        "delete_after_seconds": 6,
+    }
     assert replayed.status_code == 502
-    assert replayed.json == {**first.json, "retry_after_seconds": 90}
+    assert replayed.json == {
+        **first.json,
+        "retry_after_seconds": 90,
+        "delete_after_seconds": 0,
+    }
     # Once those seconds have passed, the next request submits a new run.
     assert after_the_wait.status_code == 200
     assert after_the_wait.json["status"] == "computing"
