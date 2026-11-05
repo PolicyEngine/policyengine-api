@@ -184,7 +184,7 @@ invocation = "make test"
 [[rule]]
 id = "api.v2.files-assigned-to-layers"
 category = "v2-layers"
-statement = "Every .py file under services/v2 and fastapi_routes/v2 gets a layer from its file name alone, so the layer rules check it. A file that can't be renamed needs a [[rule.exception]] for this rule in rules/registry.toml; it then gets the route checks under fastapi_routes/v2, or the validator, transformation and types checks under services/v2."
+statement = "Every .py file under services/v2 and fastapi_routes/v2 gets a layer from its file name alone, so the layer rules check it. A file that can't be renamed, outside a database_connectors package, needs a [[rule.exception]] for this rule in rules/registry.toml; it then gets the route checks under fastapi_routes/v2, or the validator, transformation and types checks under services/v2."
 rationale = "docs/engineering/skills/v2-code-organization.md#file-layers"
 scope = ["policyengine_api/services/v2/**/*.py", "policyengine_api/fastapi_routes/v2/**/*.py"]
 tier = "mechanical"
