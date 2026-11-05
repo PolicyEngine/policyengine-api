@@ -1198,9 +1198,9 @@ test = "tests/unit/services/test_microdata_weight_boundaries.py::test_rule_proof
 [[rule]]
 id = "api.quality.pre-commit-hook"
 category = "quality"
-statement = "make install turns on the git hooks in .githooks through core.hooksPath, a setting of the clone that every worktree shares and resolves against its own checkout, unless that would change an enclosing repository, replace another core.hooksPath, or stop the clone's own hooks, which it says. pre-commit runs make quality from the root of the working tree before git commit, and pre-merge-commit runs it before a merge commits without conflicts. Because make quality checks the working tree, the hook stops the commit when the working tree holds unstaged changes to tracked files or untracked files outside .gitignore, when make quality fails, when ruff's fixes changed a file, or when make, uv or the dev environment is missing, naming the files or what to install."
+statement = "make install turns on the git hooks in .githooks through core.hooksPath, a setting of the clone that every worktree shares and resolves against its own checkout, unless that would change an enclosing repository, replace another core.hooksPath, or stop the clone's own hooks (files or symbolic links), which it says; it always exits 0. pre-commit runs make quality from the root of the working tree before git commit, and pre-merge-commit runs it before a merge commits without conflicts, with make's variables from the environment cleared. Because make quality checks the working tree, the hook stops the commit when the working tree holds unstaged changes to tracked files, skip-worktree or assume-unchanged files, untracked files outside the ignore files, or untracked Python files outside the repository's .gitignore files; when make quality fails; when ruff's fixes changed a file; or when make, uv or the dev environment is missing, naming the files or what to install."
 rationale = "docs/engineering/skills/github-prs.md#commit-hygiene"
-scope = [".githooks/pre-commit", "Makefile"]
+scope = [".githooks/pre-commit", ".githooks/pre-merge-commit", ".githooks/turn-on.sh", "Makefile"]
 tier = "mechanical"
 status = "enforced"
 autofix = false

@@ -209,8 +209,13 @@ the files and saying what to do:
   with `git stash push --keep-index`. This covers fixes `make quality` made
   in an earlier run, and `git commit <paths>` while other files are
   changed;
-- when there are untracked files outside `.gitignore`: add them, remove
-  them, or list them in `.git/info/exclude`;
+- when there are untracked files outside the ignore files, or untracked
+  Python files outside the repository's `.gitignore` files: add them or
+  remove them. mypy and Import Linter read Python files on disk even when
+  `.git/info/exclude` or a global excludes file hides them;
+- when tracked files are marked skip-worktree or assume-unchanged, which
+  `git diff` doesn't compare: clear the marks with
+  `git update-index --no-skip-worktree --no-assume-unchanged`;
 - when a check fails;
 - when ruff's fixes changed a file: review the fixes, stage them and
   commit again;
@@ -221,10 +226,11 @@ the files and saying what to do:
 hooks, each from its own checkout; a worktree on a branch from before the
 hooks runs none. `make install` leaves `core.hooksPath` alone, and says
 why, when it would change an enclosing repository, replace another
-`core.hooksPath`, or stop the clone's own hooks in `.git/hooks`. git's
-cherry-pick, revert and rebase make commits without hooks. Don't skip them
-with `git commit --no-verify`; CI's `Quality checks` job runs the same
-checks and blocks the merge anyway.
+`core.hooksPath`, or stop the clone's own hooks in `.git/hooks`, and when
+git can't write the setting; it never stops `make install`. git's
+cherry-pick, revert, rebase and am can make commits without hooks. Don't
+skip them with `git commit --no-verify`; CI's `Quality checks` job runs the
+same checks and blocks the merge anyway.
 
 `make quality` applies ruff's fixes (`ruff check --fix`, then `ruff format`),
 then runs `make quality-check`: `uv lock --check`, `ruff check`,

@@ -4,13 +4,16 @@
 # commits without conflicts, so the checks pull-request CI runs fail here
 # first. make install turns both on with git config core.hooksPath .githooks;
 # every worktree of the clone shares that setting and runs its own checkout's
-# copy. git commit --no-verify skips them, git's cherry-pick, revert and
-# rebase make commits without them, and CI's Quality checks job still runs
-# the same checks.
+# copy. git commit --no-verify skips them, git's cherry-pick, revert, rebase
+# and am can make commits without them, and CI's Quality checks job still
+# runs the same checks.
 #
 # make quality checks the working tree, so the hook first requires it to hold
-# exactly what is being committed: no unstaged changes to tracked files and no
-# untracked files outside .gitignore. The commit stops, saying why, when that
+# exactly what is being committed: no unstaged changes to tracked files, no
+# tracked files git doesn't compare (skip-worktree or assume-unchanged), no
+# untracked files outside .gitignore, and no untracked Python files at all
+# outside the repository's .gitignore files, since mypy and Import Linter read
+# those whatever else git ignores. The commit stops, saying why, when that
 # isn't so, when make quality fails, when ruff's fixes changed a file, or when
 # make, uv or the worktree's dev environment is missing.
 set -u
@@ -25,8 +28,8 @@ root=$(git rev-parse --show-toplevel) ||
 cd "$root" || fail "can't enter $root."
 
 # make's own variables from the environment could make it ignore a failing
-# check or read another Makefile.
-unset MAKEFLAGS MFLAGS GNUMAKEFLAGS MAKEFILES MAKELEVEL
+# check, read another Makefile, or replace $(MAKE) and so skip quality-check.
+unset MAKEFLAGS MFLAGS GNUMAKEFLAGS MAKEFILES MAKELEVEL MAKE MAKE_COMMAND MAKEOVERRIDES
 
 command -v make >/dev/null 2>&1 ||
   fail "make isn't installed, so make quality can't run. Install make, then commit again."
@@ -36,20 +39,57 @@ environment=${UV_PROJECT_ENVIRONMENT:-.venv}
 [ -d "$environment" ] ||
   fail "this worktree has no dev environment ($environment). Run make install here, then commit again."
 
-# Names as they are, not quoted as git quotes names outside ASCII.
-unstaged=$(git -c core.quotePath=false diff --name-only)
+# git -c core.quotePath=false shows names outside ASCII as they are.
+unstaged=$(git -c core.quotePath=false diff --name-only) ||
+  fail "git diff failed, so the hook can't tell what make quality would check."
 [ -z "$unstaged" ] ||
   fail "make quality checks the working tree, which holds changes this commit doesn't. Stage them, or set them aside with git stash push --keep-index, then commit again:
 $unstaged"
-untracked=$(git -c core.quotePath=false ls-files --others --exclude-standard)
-[ -z "$untracked" ] ||
-  fail "make quality checks the working tree, which holds files git doesn't track. Add them, remove them, or list them in .git/info/exclude, then commit again:
-$untracked"
+
+newline='
+'
+# git ls-files -v marks skip-worktree files S and assume-unchanged ones with a
+# lowercase letter. (A loop, not a command substitution: bash 3.2, macOS's
+# /bin/sh, misreads a case pattern's parenthesis inside one.)
+flags=$(git -c core.quotePath=false ls-files -v) ||
+  fail "git ls-files failed, so the hook can't tell what make quality would check."
+uncompared=
+while IFS= read -r entry; do
+  case $entry in
+    [a-zS]\ *) uncompared="$uncompared${uncompared:+$newline}${entry#??}" ;;
+  esac
+done <<EOF
+$flags
+EOF
+[ -z "$uncompared" ] ||
+  fail "git doesn't compare these files with the commit (skip-worktree or assume-unchanged), so make quality could check copies the commit doesn't hold. Run git update-index --no-skip-worktree --no-assume-unchanged on them, then commit again:
+$uncompared"
+
+untracked=$(git -c core.quotePath=false ls-files --others --exclude-standard) ||
+  fail "git ls-files failed, so the hook can't tell what make quality would check."
+# Python files only .git/info/exclude or a global excludes file hides.
+hidden_python=$(git -c core.quotePath=false ls-files --others \
+  --exclude-per-directory=.gitignore -- '*.py' '*.pyi') ||
+  fail "git ls-files failed, so the hook can't tell what make quality would check."
+outside=$untracked
+while IFS= read -r path; do
+  [ -n "$path" ] || continue
+  case "$newline$untracked$newline" in
+    *"$newline$path$newline"*) ;;
+    *) outside="$outside${outside:+$newline}$path" ;;
+  esac
+done <<EOF
+$hidden_python
+EOF
+[ -z "$outside" ] ||
+  fail "make quality checks the working tree, which holds files this commit doesn't: untracked files, and Python files that mypy and Import Linter read even when .git/info/exclude or a global excludes file hides them. Add them or remove them, then commit again:
+$outside"
 
 make quality ||
   fail "make quality failed. Fix what it reported above, then commit again."
 
-fixed=$(git -c core.quotePath=false diff --name-only)
+fixed=$(git -c core.quotePath=false diff --name-only) ||
+  fail "git diff failed, so the hook can't tell whether make quality changed files."
 [ -z "$fixed" ] ||
   fail "make quality changed these files. Review the fixes, stage them, then commit again:
 $fixed"
