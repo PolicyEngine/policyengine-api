@@ -188,14 +188,22 @@ the reason a code change or ruff setting couldn't remove the finding
 
 ## Commit Hygiene
 
-AI agents must run formatting and lint checks before committing their own code
+AI agents must run the quality checks before committing their own code
 changes:
 
 ```bash
-make format
-ruff check <changed Python files>
+make quality
 ```
 
-Commit only after formatting succeeds and changed Python files pass lint. If a
-broader repo-wide lint command fails on unrelated pre-existing issues, include
-that result in the handoff instead of hiding it.
+`make quality` applies ruff's fixes (`ruff check --fix`, then `ruff format`),
+then runs `make quality-check`: `uv lock --check`, `ruff check`,
+`ruff format --check`, Import Linter, mypy and the quality guards
+(`scripts/run_quality_guards.py`), without changing files. Commit the fixes
+it makes with your change. pr.yml's `quality-guards` job runs the same
+command and fails if the fixes changed a file, so a pull request that passes
+it locally passes there too (`api.quality.make-quality`). diff-cover isn't
+part of it: it needs every test shard's coverage report (see the testing
+skill).
+
+Commit only after `make quality` passes. If a check fails on unrelated
+pre-existing issues, include that result in the handoff instead of hiding it.

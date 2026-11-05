@@ -20,8 +20,6 @@ jobs:
     if: ${{ always() }}
     needs:
       - ensure-policyengine-bundle-supported-by-simulation-api
-      - lint
-      - typecheck-v2
       - quality-guards
       - alembic-v1-check
       - alembic-v2-check
@@ -70,44 +68,10 @@ jobs:
       - name: Check the PolicyEngine bundle is the simulation API's latest
         run: bash .github/check-policyengine-bundle-supported.sh
 
-  lint:
-    name: Lint
-    # Full CI runs only on the lowest unmerged pull request in a stack.
-    if: ${{ !github.event.pull_request.stack || github.event.pull_request.stack.base.ref == github.event.pull_request.base.ref }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install ruff (version pinned in uv.lock)
-        run: bash .github/scripts/install_locked_ruff.sh
-      - name: Format check with ruff
-        run: ruff format --check .
-      - name: Lint with ruff
-        run: ruff check .
-  typecheck-v2:
-    name: Type-check API v2
-    # Full CI runs only on the lowest unmerged pull request in a stack.
-    if: ${{ !github.event.pull_request.stack || github.event.pull_request.stack.base.ref == github.event.pull_request.base.ref }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v6
-      - name: Install locked dependencies
-        run: uv sync --frozen --extra dev
-      - name: Type-check API v2
-        run: uv run --frozen --extra dev mypy
   quality-guards:
-    name: Quality guards
+    # make quality, as an agent runs it locally (api.quality.make-quality):
+    # ruff's fixes, then ruff, Import Linter, mypy and the quality guards.
+    name: Quality checks
     # Full CI runs only on the lowest unmerged pull request in a stack.
     if: ${{ !github.event.pull_request.stack || github.event.pull_request.stack.base.ref == github.event.pull_request.base.ref }}
     runs-on: ubuntu-latest
@@ -130,17 +94,18 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.13.4"
-      - name: Check uv.lock matches pyproject.toml
-        run: uv lock --check
-      - name: Test the rules registry tool
-        run: uv run --frozen --extra dev python -m unittest discover -s scripts/rules/tests -t .
-      # The v2 import contracts in [tool.importlinter] in pyproject.toml.
-      - name: Check v2 import contracts with Import Linter
-        run: uv run --frozen --extra dev lint-imports --config pyproject.toml
       - name: Install shellcheck (for the ci-scripts guard)
         run: pip install "shellcheck-py==0.11.0.1"
-      - name: Run quality guards
-        run: python scripts/run_quality_guards.py
+      - name: Test the rules registry tool
+        run: uv run --frozen --extra dev python -m unittest discover -s scripts/rules/tests -t .
+      # uv lock --check, ruff, the v2 import contracts in [tool.importlinter]
+      # in pyproject.toml, mypy and the quality guards, after ruff's fixes.
+      - name: Run make quality
+        run: make quality
+      # Fails, and shows the change, if ruff's fixes changed a file: the
+      # pull request must include them.
+      - name: Check that ruff's fixes changed no file
+        run: git diff --exit-code
 
   alembic-v1-check:
     name: Alembic v1 qualification

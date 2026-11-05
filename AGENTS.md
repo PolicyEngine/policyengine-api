@@ -63,6 +63,10 @@ named `changelog.d/<name>.<type>.md`, where `<type>` is `breaking`, `added`,
 `changed`, `fixed` or `removed` (see "Changelog fragments" in that skill).
 Agents must never bypass branch rules (for example with `gh pr merge --admin`).
 
+Before committing, run `make quality`: it applies ruff's fixes, then runs
+every check pr.yml's `quality-guards` job runs (see "Commit Hygiene" in
+`docs/engineering/skills/github-prs.md`).
+
 Before creating or sharing a migration PR, run the focused migration guards:
 
 ```bash
@@ -118,7 +122,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Code quality and types
 
-- Checked: `api.quality.alembic-revisions-unused-imports`, `api.quality.ci-cd-scripts-ruff-exemptions`, `api.quality.command-line-modules-ruff-exemptions`, `api.quality.command-line-scripts-ruff-exemptions`, `api.quality.environment-variables-load`, `api.quality.file-length`, `api.quality.mypy-v2`, `api.quality.ruff-format`, `api.quality.ruff-lint`, `api.quality.runtime-evaluated-models-resolve`, `api.quality.tests-pass`, `api.quality.tests-ruff-exemptions`, `api.quality.unittest-ruff-exemptions`
+- Checked: `api.quality.alembic-revisions-unused-imports`, `api.quality.ci-cd-scripts-ruff-exemptions`, `api.quality.command-line-modules-ruff-exemptions`, `api.quality.command-line-scripts-ruff-exemptions`, `api.quality.environment-variables-load`, `api.quality.file-length`, `api.quality.make-quality`, `api.quality.mypy-v2`, `api.quality.ruff-format`, `api.quality.ruff-lint`, `api.quality.runtime-evaluated-models-resolve`, `api.quality.tests-pass`, `api.quality.tests-ruff-exemptions`, `api.quality.unittest-ruff-exemptions`
 
 ### Observability
 

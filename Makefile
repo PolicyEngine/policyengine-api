@@ -1,4 +1,4 @@
-.PHONY: install setup-env debug debug-asgi test-env-vars test quality-guards typecheck-v2 debug-test format changelog
+.PHONY: install setup-env debug debug-asgi test-env-vars test quality quality-check quality-guards typecheck-v2 debug-test format changelog
 
 # Install and test in the environment uv.lock defines, on the Python version
 # the Cloud Run image runs (gcp/cloud_run/Dockerfile). .python-version selects
@@ -25,6 +25,23 @@ test-env-vars:
 test:
 	MAX_HOUSEHOLDS=1000 uv run --frozen --extra dev --group telemetry-error-issues coverage run -a --branch -m pytest tests/to_refactor tests/unit tests/contract tests/integration/test_budget_window_in_flight_dedupe.py tests/integration/test_installed_us_model_spm.py --disable-pytest-warnings
 	uv run --frozen --extra dev coverage xml -i
+
+# The quality checks, the same locally and in pr.yml's quality-guards job
+# (api.quality.make-quality): ruff's fixes first, then every check.
+quality:
+	uv run --frozen --extra dev ruff check --fix .
+	uv run --frozen --extra dev ruff format .
+	$(MAKE) quality-check
+
+# Every check, changing no file. diff-cover isn't here: it needs every test
+# shard's coverage report, so pr.yml runs it in a job of its own.
+quality-check:
+	uv lock --check
+	uv run --frozen --extra dev ruff check .
+	uv run --frozen --extra dev ruff format --check .
+	uv run --frozen --extra dev lint-imports --config pyproject.toml
+	uv run --frozen --extra dev mypy
+	uv run --frozen --extra dev python scripts/run_quality_guards.py
 
 quality-guards:
 	python scripts/run_quality_guards.py

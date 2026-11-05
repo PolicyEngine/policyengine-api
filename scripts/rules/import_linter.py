@@ -21,6 +21,7 @@ import re
 import tomllib
 from typing import TYPE_CHECKING, Any
 
+from scripts.rules.makefile import job_make_commands
 from scripts.rules.model import Kind, Rule, Violation
 from scripts.rules.workflows import parse_jobs
 
@@ -233,7 +234,9 @@ def _ci_command_violations(rule: Rule, root: Path, config_name: str) -> list[Vio
     """Require each CI job to run every contract, with failures failing the job.
 
     The registry's invocation check only looks for a substring, which an
-    added ``--contract`` or ``|| true`` would still contain.
+    added ``--contract`` or ``|| true`` would still contain. The commands of
+    the make targets a job runs count as the job's, and a recipe's ``-``
+    prefix, which ignores the command's failure, doesn't match.
     """
     exact = re.compile(
         rf"^(?:uv run .*\s)?lint-imports --config {re.escape(config_name)}$"
@@ -254,7 +257,10 @@ def _ci_command_violations(rule: Rule, root: Path, config_name: str) -> list[Vio
                 f"run exactly 'lint-imports --config {config_name}', optionally "
                 "after 'uv run ...'",
             )
-            for command in (line.strip() for line in job.run_text.splitlines())
+            for command in (
+                *(line.strip() for line in job.run_text.splitlines()),
+                *job_make_commands(root, job.run_text),
+            )
             if "lint-imports" in command and not exact.match(command)
         )
     return violations

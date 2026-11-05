@@ -1195,6 +1195,30 @@ test = "tests/unit/services/test_microdata_weight_boundaries.py::test_rule_proof
 # --- Code quality and types ------------------------------------------------
 
 [[rule]]
+id = "api.quality.make-quality"
+category = "quality"
+statement = "make quality is the one command for the quality checks, locally and in CI: it applies ruff check --fix and ruff format, then runs make quality-check, which runs uv lock --check, ruff check, ruff format --check, Import Linter, mypy and the quality guards without changing files. pr.yml's quality-guards job runs make quality and then fails if the fixes changed a file, and no other pr.yml job runs ruff, mypy, Import Linter or the quality guards itself."
+rationale = "docs/engineering/skills/github-prs.md#commit-hygiene"
+scope = ["Makefile", ".github/workflows/pr.yml"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/test_make_quality.py::test_make_quality_runs_every_check_and_ci_runs_it",
+  "tests/unit/test_make_quality.py::test_the_quality_job_can_run_every_check",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.quality.make-quality/rejected"
+good_fixture = "rules/fixtures/api.quality.make-quality/accepted"
+test = "tests/unit/test_make_quality.py::test_rule_proof_make_quality"
+
+[[rule]]
 id = "api.quality.ruff-format"
 category = "quality"
 statement = "All Python files are formatted with ruff format."
@@ -1208,7 +1232,7 @@ kind = "ruff"
 mode = "format"
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
-job = "lint"
+job = "quality-guards"
 invocation = "ruff format --check"
 
 [[rule]]
@@ -1226,7 +1250,7 @@ mode = "lint"
 codes = ["ALL"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
-job = "lint"
+job = "quality-guards"
 invocation = "ruff check ."
 
 [[rule]]
@@ -1280,7 +1304,7 @@ pattern = "**/tests/**"
 codes = ["ANN", "ARG001", "ARG002", "ARG005", "D1", "DTZ001", "DTZ011", "INP001", "N802", "PLC0415", "PLR2004", "S101", "S105", "S106", "S603", "S607", "S608", "SLF001", "T201", "TID253"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
-job = "lint"
+job = "quality-guards"
 invocation = "ruff check ."
 
 [[rule]]
@@ -1299,7 +1323,7 @@ pattern = ".github/**"
 codes = ["N999", "S310", "S603", "S607", "T201", "TID253"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
-job = "lint"
+job = "quality-guards"
 invocation = "ruff check ."
 
 [[rule]]
@@ -1318,7 +1342,7 @@ pattern = "scripts/**"
 codes = ["DTZ011", "S310", "S311", "S603", "S607", "T201"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
-job = "lint"
+job = "quality-guards"
 invocation = "ruff check ."
 
 [[rule]]
@@ -1344,7 +1368,7 @@ pattern = "policyengine_api/{data/v2/catalog/initialization,data/v2/household_mi
 codes = ["T201"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
-job = "lint"
+job = "quality-guards"
 invocation = "ruff check ."
 
 
@@ -1364,7 +1388,7 @@ pattern = "scripts/rules/tests/**"
 codes = ["PT"]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
-job = "lint"
+job = "quality-guards"
 invocation = "ruff check ."
 [[rule]]
 id = "api.quality.mypy-v2"
@@ -1393,7 +1417,7 @@ paths = [
 ]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
-job = "typecheck-v2"
+job = "quality-guards"
 invocation = "mypy"
 
 [[rule]]

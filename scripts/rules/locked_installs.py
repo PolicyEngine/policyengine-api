@@ -63,7 +63,8 @@ _TEST_COMMAND = re.compile(
     r"|(?:^|\s)(?:tox|nox)(?:\s|$)"
 )
 _SCRIPT_REFERENCE = re.compile(r"\.github/[\w./-]+\.sh")
-_MAKE_TARGET_REFERENCE = re.compile(r"\bmake ([\w-]+)")
+# make, or $(MAKE) as a recipe calls it, then the target it runs.
+_MAKE_TARGET_REFERENCE = re.compile(r"(?:\bmake|\$\(MAKE\)|\$\{MAKE\}) ([\w-]+)")
 _MAKE_TARGET_HEADER = re.compile(r"^([\w-]+)\s*:(?!=)")
 _RUN_KEY = re.compile(r"^(?P<indent>\s*)(?:-\s+)?run:(?P<value>.*)$")
 _PULL_REQUEST_TRIGGERS = {"pull_request", "pull_request_target"}

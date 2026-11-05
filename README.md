@@ -210,13 +210,13 @@ We require that you add tests for any new features or bugfixes. Our tests are wr
 
 ### Step 2: Formatting
 
-In addition to the tests, we use [Black](https://github.com/psf/black) to lint our codebase, so before opening a pull request, Step 2 is to lint the code by running
+In addition to the tests, we check the code with ruff, Import Linter, mypy and the repository's quality guards, so before opening a pull request, Step 2 is to run
 
 ```
-make format
+make quality
 ```
 
-This will automatically format the code for you; no need to do anything else.
+This applies ruff's fixes, then runs every check the pull request's `Quality checks` job runs. Commit the fixes it makes.
 
 ### Step 3: Changelogging
 

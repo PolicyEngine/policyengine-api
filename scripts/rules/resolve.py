@@ -20,6 +20,7 @@ from scripts.rules.file_exceptions import (
     out_of_scope_files,
 )
 from scripts.rules.import_linter import resolve_import_linter
+from scripts.rules.makefile import job_make_commands
 from scripts.rules.model import CiRef, Kind, Rule, Violation
 from scripts.rules.workflows import JobBlock, parse_jobs
 
@@ -412,7 +413,10 @@ def _job_for(
             v(f"no job '{ref.job}' in {ref.workflow}", f"use one of {sorted(jobs)}")
         )
         return None, violations
-    if not job.invokes(ref.invocation):
+    # A make target the job runs counts as the job running its commands.
+    if not job.invokes(ref.invocation) and not any(
+        ref.invocation in command for command in job_make_commands(root, job.run_text)
+    ):
         violations.append(
             v(
                 f"job '{ref.job}' in {ref.workflow} does not run '{ref.invocation}'",

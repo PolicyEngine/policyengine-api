@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 68 | 5 | 1 | 8 | 82 |
+| mechanical | 69 | 5 | 1 | 8 | 83 |
 | metric | 1 | 0 | 0 | 0 | 1 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 74 of 84 rules.
+**Blocking:** 75 of 85 rules.
 
 ## Gaps
 
@@ -366,18 +366,19 @@ flowchart LR
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `api.quality.alembic-revisions-unused-imports` | Ruff neither lints nor formats Alembic revision files (extend-exclude in pyproject.toml), because they must stay exactly as Alembic generates them. | mechanical | advisory | no | nothing | — | — |
-| `api.quality.ci-cd-scripts-ruff-exemptions` | CI/CD scripts under .github may print their results, run other programs, fetch fixed URLs, have hyphenated file names and import the lazily loaded packages at module level (T201, S603, S607, S310, N999, TID253); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of N999, S310, S603, S607, T201, TID253 for `.github/**` | `pr.yml:lint` | — |
-| `api.quality.command-line-modules-ruff-exemptions` | Application modules that also run as command-line programs (if __name__ == "__main__") may print their output (T201); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of T201 for `policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/privilege_reconciliation,data/v2/user_association_migration_qualification,worker_spm_release}.py` | `pr.yml:lint` | — |
-| `api.quality.command-line-scripts-ruff-exemptions` | Command-line scripts under scripts/ may print their output, run other programs, fetch fixed URLs, stamp today's date and pick random samples (T201, S603, S607, S310, DTZ011, S311); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of DTZ011, S310, S311, S603, S607, T201 for `scripts/**` | `pr.yml:lint` | — |
+| `api.quality.ci-cd-scripts-ruff-exemptions` | CI/CD scripts under .github may print their results, run other programs, fetch fixed URLs, have hyphenated file names and import the lazily loaded packages at module level (T201, S603, S607, S310, N999, TID253); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of N999, S310, S603, S607, T201, TID253 for `.github/**` | `pr.yml:quality-guards` | — |
+| `api.quality.command-line-modules-ruff-exemptions` | Application modules that also run as command-line programs (if __name__ == "__main__") may print their output (T201); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of T201 for `policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/privilege_reconciliation,data/v2/user_association_migration_qualification,worker_spm_release}.py` | `pr.yml:quality-guards` | — |
+| `api.quality.command-line-scripts-ruff-exemptions` | Command-line scripts under scripts/ may print their output, run other programs, fetch fixed URLs, stamp today's date and pick random samples (T201, S603, S607, S310, DTZ011, S311); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of DTZ011, S310, S311, S603, S607, T201 for `scripts/**` | `pr.yml:quality-guards` | — |
 | `api.quality.environment-variables-load` | Required environment variables and credentials load in a deployed-like environment. | mechanical | enforced | yes | CI job `test_env_vars` | `pr.yml:test_env_vars` | — |
 | `api.quality.file-length` | A tracked Python file has at most 800 physical lines, or at most 1,500 if it is test code (a file under a tests or fixtures directory, or a conftest.py); a longer file is split by responsibility into modules, and keeps its public import path. | metric | enforced | yes | quality guard `file-length` | `pr.yml:quality-guards` | yes |
-| `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, v2 routes and services, the gzip negotiation, the user sign-in and account-deletion libraries, the country list and its startup check pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:typecheck-v2` | — |
-| `api.quality.ruff-format` | All Python files are formatted with ruff format. | mechanical | enforced | yes | ruff format | `pr.yml:lint` | — |
-| `api.quality.ruff-lint` | All Python code passes ruff check with every ruff rule selected (ALL), with no ratchet, except the ignores in pyproject.toml: COM812 and ISC001, which conflict with ruff format, and D203 and D213, which conflict with the kept D211 and D212. | mechanical | enforced | yes | ruff check (ALL) | `pr.yml:lint` | — |
+| `api.quality.make-quality` | make quality is the one command for the quality checks, locally and in CI: it applies ruff check --fix and ruff format, then runs make quality-check, which runs uv lock --check, ruff check, ruff format --check, Import Linter, mypy and the quality guards without changing files. pr.yml's quality-guards job runs make quality and then fails if the fixes changed a file, and no other pr.yml job runs ruff, mypy, Import Linter or the quality guards itself. | mechanical | enforced | yes | pytest `tests/unit/test_make_quality.py` | `pr.yml:test` | yes |
+| `api.quality.mypy-v2` | Shared query models, FastAPI dependencies, v2 routes and services, the gzip negotiation, the user sign-in and account-deletion libraries, the country list and its startup check pass mypy with untyped definitions disallowed. | mechanical | enforced | yes | mypy | `pr.yml:quality-guards` | — |
+| `api.quality.ruff-format` | All Python files are formatted with ruff format. | mechanical | enforced | yes | ruff format | `pr.yml:quality-guards` | — |
+| `api.quality.ruff-lint` | All Python code passes ruff check with every ruff rule selected (ALL), with no ratchet, except the ignores in pyproject.toml: COM812 and ISC001, which conflict with ruff format, and D203 and D213, which conflict with the kept D211 and D212. | mechanical | enforced | yes | ruff check (ALL) | `pr.yml:quality-guards` | — |
 | `api.quality.runtime-evaluated-models-resolve` | Every package model is one ruff treats as runtime-evaluated (a base resolves, through the import in its own module, to a name in runtime-evaluated-base-classes, or is a same-module class that does), and every Pydantic model and SQLAlchemy mapper resolves its annotations once the package is imported. | mechanical | enforced | yes | pytest `tests/unit/test_runtime_evaluated_annotations.py` | `pr.yml:test` | **unproven** |
 | `api.quality.tests-pass` | The unit, contract and to-refactor test suites pass, each test in exactly one of the shards they run in. | mechanical | enforced | yes | CI job `test`, `check-test-shards` | `pr.yml:test`, `pr.yml:check-test-shards` | — |
-| `api.quality.tests-ruff-exemptions` | Test files may use pytest's bare assert, need no docstrings, annotations or named constants for magic numbers, and may reach into private members, live outside packages and import inside a test (S101, D1, ANN, PLR2004, SLF001, INP001, PLC0415). Their fakes may name methods after the interface they replace, such as a gRPC stub's Export (N802). They may also use fake credentials, naive datetimes, subprocess calls to repository scripts, SQL built from strings and prints (S105, S106, DTZ001, DTZ011, S603, S607, S608, T201), may import the lazily loaded packages at module level (TID253), and may leave a stand-in's arguments unused (ARG001, ARG002, ARG005). Every other ruff rule applies to tests. | mechanical | enforced | yes | ruff per-file ignore of ANN, ARG001, ARG002, ARG005, D1, DTZ001, DTZ011, INP001, N802, PLC0415, PLR2004, S101, S105, S106, S603, S607, S608, SLF001, T201, TID253 for `**/tests/**` | `pr.yml:lint` | — |
-| `api.quality.unittest-ruff-exemptions` | The shared rules tool's tests use unittest, because the tool needs only the standard library, so ruff's pytest-style rules (PT) don't apply to them. | mechanical | enforced | yes | ruff per-file ignore of PT for `scripts/rules/tests/**` | `pr.yml:lint` | — |
+| `api.quality.tests-ruff-exemptions` | Test files may use pytest's bare assert, need no docstrings, annotations or named constants for magic numbers, and may reach into private members, live outside packages and import inside a test (S101, D1, ANN, PLR2004, SLF001, INP001, PLC0415). Their fakes may name methods after the interface they replace, such as a gRPC stub's Export (N802). They may also use fake credentials, naive datetimes, subprocess calls to repository scripts, SQL built from strings and prints (S105, S106, DTZ001, DTZ011, S603, S607, S608, T201), may import the lazily loaded packages at module level (TID253), and may leave a stand-in's arguments unused (ARG001, ARG002, ARG005). Every other ruff rule applies to tests. | mechanical | enforced | yes | ruff per-file ignore of ANN, ARG001, ARG002, ARG005, D1, DTZ001, DTZ011, INP001, N802, PLC0415, PLR2004, S101, S105, S106, S603, S607, S608, SLF001, T201, TID253 for `**/tests/**` | `pr.yml:quality-guards` | — |
+| `api.quality.unittest-ruff-exemptions` | The shared rules tool's tests use unittest, because the tool needs only the standard library, so ruff's pytest-style rules (PT) don't apply to them. | mechanical | enforced | yes | ruff per-file ignore of PT for `scripts/rules/tests/**` | `pr.yml:quality-guards` | — |
 
 ```mermaid
 flowchart LR
@@ -385,7 +386,7 @@ flowchart LR
   gap_unenforced>"not enforced"]
   r_api_quality_ci_cd_scripts_ruff_exemptions("api.quality.ci-cd-scripts-ruff-exemptions (enforced)")
   e_ruff_per_file_ignore_of_N999__S310__S603__S607__T201__TID253_for__github___["ruff per-file ignore of N999, S310, S603, S607, T201, TID253 for .github/**"]
-  j_CI_pr_yml_lint["CI pr.yml:lint"]
+  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
   r_api_quality_command_line_modules_ruff_exemptions("api.quality.command-line-modules-ruff-exemptions (enforced)")
   e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_privilege_reconciliation_data_v2_user_association_migration_qualification_worker_spm_release__py["ruff per-file ignore of T201 for policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/privilege_reconciliation,data/v2/user_association_migration_qualification,worker_spm_release}.py"]
   r_api_quality_command_line_scripts_ruff_exemptions("api.quality.command-line-scripts-ruff-exemptions (enforced)")
@@ -395,17 +396,17 @@ flowchart LR
   j_CI_pr_yml_test_env_vars["CI pr.yml:test_env_vars"]
   r_api_quality_file_length("api.quality.file-length (enforced)")
   e_quality_guard_file_length["quality guard file-length"]
-  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
+  r_api_quality_make_quality("api.quality.make-quality (enforced)")
+  e_pytest_tests_unit_test_make_quality_py["pytest tests/unit/test_make_quality.py"]
+  j_CI_pr_yml_test["CI pr.yml:test"]
   r_api_quality_mypy_v2("api.quality.mypy-v2 (enforced)")
   e_mypy["mypy"]
-  j_CI_pr_yml_typecheck_v2["CI pr.yml:typecheck-v2"]
   r_api_quality_ruff_format("api.quality.ruff-format (enforced)")
   e_ruff_format["ruff format"]
   r_api_quality_ruff_lint("api.quality.ruff-lint (enforced)")
   e_ruff_check__ALL_["ruff check (ALL)"]
   r_api_quality_runtime_evaluated_models_resolve("api.quality.runtime-evaluated-models-resolve (enforced)")
   e_pytest_tests_unit_test_runtime_evaluated_annotations_py["pytest tests/unit/test_runtime_evaluated_annotations.py"]
-  j_CI_pr_yml_test["CI pr.yml:test"]
   r_api_quality_tests_pass("api.quality.tests-pass (enforced)")
   e_CI_job_test__check_test_shards["CI job test, check-test-shards"]
   j_CI_pr_yml_check_test_shards["CI pr.yml:check-test-shards"]
@@ -415,30 +416,32 @@ flowchart LR
   e_ruff_per_file_ignore_of_PT_for_scripts_rules_tests___["ruff per-file ignore of PT for scripts/rules/tests/**"]
   r_api_quality_alembic_revisions_unused_imports -.-> gap_unenforced
   r_api_quality_ci_cd_scripts_ruff_exemptions --> e_ruff_per_file_ignore_of_N999__S310__S603__S607__T201__TID253_for__github___
-  e_ruff_per_file_ignore_of_N999__S310__S603__S607__T201__TID253_for__github___ --> j_CI_pr_yml_lint
+  e_ruff_per_file_ignore_of_N999__S310__S603__S607__T201__TID253_for__github___ --> j_CI_pr_yml_quality_guards
   r_api_quality_command_line_modules_ruff_exemptions --> e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_privilege_reconciliation_data_v2_user_association_migration_qualification_worker_spm_release__py
-  e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_privilege_reconciliation_data_v2_user_association_migration_qualification_worker_spm_release__py --> j_CI_pr_yml_lint
+  e_ruff_per_file_ignore_of_T201_for_policyengine_api__data_v2_catalog_initialization_data_v2_household_migration_qualification_data_v2_policy_migration_qualification_data_v2_privilege_reconciliation_data_v2_user_association_migration_qualification_worker_spm_release__py --> j_CI_pr_yml_quality_guards
   r_api_quality_command_line_scripts_ruff_exemptions --> e_ruff_per_file_ignore_of_DTZ011__S310__S311__S603__S607__T201_for_scripts___
-  e_ruff_per_file_ignore_of_DTZ011__S310__S311__S603__S607__T201_for_scripts___ --> j_CI_pr_yml_lint
+  e_ruff_per_file_ignore_of_DTZ011__S310__S311__S603__S607__T201_for_scripts___ --> j_CI_pr_yml_quality_guards
   r_api_quality_environment_variables_load --> e_CI_job_test_env_vars
   e_CI_job_test_env_vars --> j_CI_pr_yml_test_env_vars
   r_api_quality_file_length --> e_quality_guard_file_length
   e_quality_guard_file_length --> j_CI_pr_yml_quality_guards
+  r_api_quality_make_quality --> e_pytest_tests_unit_test_make_quality_py
+  e_pytest_tests_unit_test_make_quality_py --> j_CI_pr_yml_test
   r_api_quality_mypy_v2 --> e_mypy
-  e_mypy --> j_CI_pr_yml_typecheck_v2
+  e_mypy --> j_CI_pr_yml_quality_guards
   r_api_quality_ruff_format --> e_ruff_format
-  e_ruff_format --> j_CI_pr_yml_lint
+  e_ruff_format --> j_CI_pr_yml_quality_guards
   r_api_quality_ruff_lint --> e_ruff_check__ALL_
-  e_ruff_check__ALL_ --> j_CI_pr_yml_lint
+  e_ruff_check__ALL_ --> j_CI_pr_yml_quality_guards
   r_api_quality_runtime_evaluated_models_resolve --> e_pytest_tests_unit_test_runtime_evaluated_annotations_py
   e_pytest_tests_unit_test_runtime_evaluated_annotations_py --> j_CI_pr_yml_test
   r_api_quality_tests_pass --> e_CI_job_test__check_test_shards
   e_CI_job_test__check_test_shards --> j_CI_pr_yml_test
   e_CI_job_test__check_test_shards --> j_CI_pr_yml_check_test_shards
   r_api_quality_tests_ruff_exemptions --> e_ruff_per_file_ignore_of_ANN__ARG001__ARG002__ARG005__D1__DTZ001__DTZ011__INP001__N802__PLC0415__PLR2004__S101__S105__S106__S603__S607__S608__SLF001__T201__TID253_for____tests___
-  e_ruff_per_file_ignore_of_ANN__ARG001__ARG002__ARG005__D1__DTZ001__DTZ011__INP001__N802__PLC0415__PLR2004__S101__S105__S106__S603__S607__S608__SLF001__T201__TID253_for____tests___ --> j_CI_pr_yml_lint
+  e_ruff_per_file_ignore_of_ANN__ARG001__ARG002__ARG005__D1__DTZ001__DTZ011__INP001__N802__PLC0415__PLR2004__S101__S105__S106__S603__S607__S608__SLF001__T201__TID253_for____tests___ --> j_CI_pr_yml_quality_guards
   r_api_quality_unittest_ruff_exemptions --> e_ruff_per_file_ignore_of_PT_for_scripts_rules_tests___
-  e_ruff_per_file_ignore_of_PT_for_scripts_rules_tests___ --> j_CI_pr_yml_lint
+  e_ruff_per_file_ignore_of_PT_for_scripts_rules_tests___ --> j_CI_pr_yml_quality_guards
 ```
 
 ## Observability
