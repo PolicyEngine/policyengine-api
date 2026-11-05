@@ -26,7 +26,10 @@ _ASSIGNMENT = re.compile(
 )
 # Variables whose value can stop a failing command from failing make: -i in
 # MAKEFLAGS, or a SHELL or .SHELLFLAGS that doesn't run the command.
-_FAILURE_VARIABLES = frozenset({"MAKEFLAGS", "MFLAGS", "SHELL", ".SHELLFLAGS"})
+# GNUMAKEFLAGS works as MAKEFLAGS does, and MAKEFILES reads more Makefiles.
+_FAILURE_VARIABLES = frozenset(
+    {"MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "MAKEFILES", "SHELL", ".SHELLFLAGS"}
+)
 # Special targets that do: .IGNORE ignores errors, and .ONESHELL gives a
 # recipe the exit status of its last command only.
 _FAILURE_TARGETS = {
@@ -41,6 +44,10 @@ _UNFOLLOWED_DIRECTIVE = re.compile(
     r"^\s*(-?include|sinclude|-?load|ifdef|ifndef|ifeq|ifneq|else|endif|define"
     r"|endef|undefine)(?=\s|$)"
 )
+# A special target that hides failures, in a rule of one colon or two.
+_FAILURE_TARGET_RULE = re.compile(r"^\s*(\.IGNORE|\.ONESHELL)\s*::?")
+# A target or variable whose name make computes, such as $(M)FLAGS.
+_COMPUTED_NAME = re.compile(r"^\s*(?:(?:export|override|private)\s+)*[^\s#=:]*\$[({]")
 # $(eval ...), which makes make read text as more of the Makefile.
 _EVAL = re.compile(r"\$[({]\s*eval\b")
 # The Makefile names GNU make reads before Makefile.
@@ -49,8 +56,8 @@ _EARLIER_MAKEFILES = ("GNUmakefile", "makefile")
 _MAKE_CALL = re.compile(r"(?:^|(?<=[\s;&|(]))(?:make|\$\(MAKE\)|\$\{MAKE\})(?=\s|$)")
 # Where one shell command ends and the next begins.
 _COMMAND_END = re.compile(r"[;&|)\n]")
-# MAKEFLAGS or MFLAGS set in a command's environment, before make.
-_FLAGS_PREFIX = re.compile(r"(?:^|\s)M(?:AKE)?FLAGS=")
+# A shell variable assignment, as a word before a command or after make.
+_ASSIGNMENT_WORD = re.compile(r"^([A-Za-z_.][A-Za-z0-9_.]*)=")
 # Long options after which make runs no recipe, or ignores its failures, or
 # only prints something. GNU make also accepts an unambiguous start of one.
 _NO_RUN_OPTIONS = (
@@ -62,17 +69,21 @@ _NO_RUN_OPTIONS = (
     "--ignore-errors",
     "--version",
     "--help",
+    "--old-file",
+    "--assume-old",
+    "--eval",
 )
-# Short options that do the same: -n, -q, -t, -i, -v and -h.
-_NO_RUN_LETTERS = frozenset("nqtivh")
+# Short options that do the same: -n, -q, -t, -i, -v and -h; -o, which
+# treats a target as up to date; and -E, which reads more of the Makefile.
+_NO_RUN_LETTERS = frozenset("nqtivhoE")
 # Long options that read another directory's or file's Makefile.
 _OTHER_MAKEFILE_OPTIONS = ("--directory", "--file", "--makefile")
 # Short options that do the same: -C and -f.
 _OTHER_MAKEFILE_LETTERS = frozenset("Cf")
 # Short options whose value follows, in the same word or the next one.
-_VALUE_LETTERS = frozenset("IjloOW")
+_VALUE_LETTERS = frozenset("IjlOW")
 # make options whose value is the next word, which isn't a target.
-_OPTIONS_WITH_VALUES = frozenset({"-I", "-o", "-W"})
+_OPTIONS_WITH_VALUES = frozenset({"-I", "-W"})
 # Recipe prefixes that change nothing about whether a failure fails make: @
 # stops make printing the command, and + runs it under make -n too. The -
 # prefix, which ignores the command's failure, is kept.
@@ -148,6 +159,16 @@ def makefile_problems(text: str) -> list[str]:
             problems.append("uses $(eval ...), which this reader doesn't follow")
         if line.startswith("\t") or line.lstrip().startswith("#"):
             continue
+        if _COMPUTED_NAME.match(line):
+            problems.append(
+                "uses a computed target or variable name, which this reader "
+                "doesn't follow"
+            )
+            continue
+        special = _FAILURE_TARGET_RULE.match(line)
+        if special:
+            name = special.group(1)
+            problems.append(f"sets {name}, which {_FAILURE_TARGETS[name]}")
         directive = _UNFOLLOWED_DIRECTIVE.match(line)
         if directive:
             problems.append(
@@ -167,7 +188,7 @@ def makefile_problems(text: str) -> list[str]:
         problems += [
             f"sets {name}, which {_FAILURE_TARGETS[name]}"
             for name in match.group(1).split()
-            if name in _FAILURE_TARGETS
+            if name in _FAILURE_TARGETS and not special
         ]
         if not assignment and ";" in rest:
             problems.append(
@@ -202,17 +223,28 @@ def _credits_no_target(word: str) -> bool:
 def make_targets_run(command: str) -> list[str]:
     """Return the targets each ``make`` or ``$(MAKE)`` in a shell command runs.
 
-    A call credits no target when it runs no recipe or ignores its failures
-    (``-n``, ``-q``, ``-t``, ``-i``, their long forms, or MAKEFLAGS set before
-    it), only prints something (``-v``, ``-h``), or reads another Makefile
-    (``-C``, ``-f``).
+    A call credits no target when:
+
+    - it runs no recipe, ignores failures or treats a target as up to date
+      (``-n``, ``-q``, ``-t``, ``-i``, ``-o``, their long forms);
+    - it only prints something (``-v``, ``-h``);
+    - it reads another Makefile or more of one (``-C``, ``-f``, ``-E``);
+    - a variable that can hide failures is set before it or as an argument;
+    - make isn't the command but an argument (``echo make quality``).
     """
     targets = []
     for call in _MAKE_CALL.finditer(command):
-        before = _COMMAND_END.split(command[: call.start()])[-1]
+        before = _COMMAND_END.split(command[: call.start()])[-1].split()
         words = _COMMAND_END.split(command[call.end() :], maxsplit=1)[0].split()
-        if _FLAGS_PREFIX.search(before) or any(
-            _credits_no_target(word) for word in words
+        settings = [
+            match.group(1)
+            for word in (*before, *words)
+            if (match := _ASSIGNMENT_WORD.match(word))
+        ]
+        if (
+            any(not _ASSIGNMENT_WORD.match(word) for word in before)
+            or any(name in _FAILURE_VARIABLES for name in settings)
+            or any(_credits_no_target(word) for word in words)
         ):
             continue
         skip_next = False

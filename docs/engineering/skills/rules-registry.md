@@ -16,7 +16,7 @@ registry, the checkers and the rendered views disagree.
 ```bash
 python -m scripts.rules validate                    # schema and file checks only
 python -m scripts.rules render                      # rewrite rules.md and the AGENTS.md block
-python -m scripts.rules guard --base-ref origin/<default-branch>   # everything CI checks
+python -m scripts.rules guard --base-ref "$(git merge-base HEAD origin/<default-branch>)"   # everything CI checks
 python -m unittest discover -s scripts/rules/tests -t .            # the tool's own tests
 ```
 

@@ -50,7 +50,10 @@ JOB = "quality-guards"
 # A command in make quality-check that changes files instead of checking them.
 CHANGES_FILES = re.compile(r"--fix\b|\b(?:ruff format|uv lock)\b(?!.*--check)")
 # Environment variables whose value can make make ignore failing commands.
-MAKE_FLAG_VARIABLES = ("MAKEFLAGS", "MFLAGS")
+# GNUMAKEFLAGS works as MAKEFLAGS does, and MAKEFILES reads more Makefiles.
+MAKE_FLAG_VARIABLES = ("MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "MAKEFILES")
+# Step settings that can skip a step, ignore its failure, or run it elsewhere.
+STEP_SETTINGS = ("if", "continue-on-error", "shell", "working-directory")
 # Variables of make's own that a test's make runs mustn't inherit.
 MAKE_ENVIRONMENT = frozenset(
     {"MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "MAKEFILES", "MAKELEVEL"}
@@ -104,11 +107,25 @@ def quality_problems(makefile: str, workflow: str) -> list[str]:
     ]
     if "continue-on-error" in job:
         problems.append(f"pr.yml's {JOB} job ignores its failures (continue-on-error)")
+    # A default shell runs every step's commands through another program.
+    problems += [
+        f"{where} sets defaults, which can run make quality in another shell"
+        for where, owner in (("pr.yml", settings), (f"pr.yml's {JOB} job", job))
+        if "defaults" in owner
+    ]
     problems += [
         f"pr.yml's {JOB} job may skip or ignore '{step['run']}'"
-        for step in job.get("steps", [])
+        for step in steps
         if step.get("run") in REQUIRED_STEPS
-        and any(key in step for key in ("if", "continue-on-error", "shell"))
+        and any(key in step for key in STEP_SETTINGS)
+    ]
+    # A step that writes to GITHUB_ENV or GITHUB_PATH sets the environment of
+    # the steps after it, such as MAKEFLAGS.
+    problems += [
+        f"pr.yml's {JOB} job writes to GITHUB_ENV or GITHUB_PATH before "
+        f"make quality: '{run}'"
+        for run in runs[: first if first is not None else len(runs)]
+        if "GITHUB_ENV" in run or "GITHUB_PATH" in run
     ]
     for name, other in jobs.items():
         run_text = "\n".join(step.get("run", "") for step in other.get("steps", []))

@@ -1197,7 +1197,7 @@ test = "tests/unit/services/test_microdata_weight_boundaries.py::test_rule_proof
 [[rule]]
 id = "api.quality.make-quality"
 category = "quality"
-statement = "make quality is the command for the quality checks, locally and in CI: it applies ruff check --fix and ruff format, then runs make quality-check, which runs uv lock --check, ruff check, ruff format --check, Import Linter, mypy and the quality guards without changing files, and make -n agrees. pr.yml's quality-guards job runs make quality and then git diff --exit-code HEAD, with neither step skipped, allowed to fail or run in another shell, and no MAKEFLAGS set for them; the Makefile uses no syntax the rules registry doesn't follow and nothing that hides a failing command (.IGNORE, .ONESHELL, or a MAKEFLAGS, SHELL or .SHELLFLAGS setting); and no other pr.yml job runs ruff, mypy, Import Linter or the quality guards, itself or through a make target."
+statement = "make quality is the command for the quality checks, locally and in CI: it applies ruff check --fix and ruff format, then runs make quality-check, which runs uv lock --check, ruff check, ruff format --check, Import Linter, mypy and the quality guards without changing files. Run with a stand-in uv, make quality runs each of them and fails whenever one fails, and make -n prints the same commands. pr.yml's quality-guards job runs make quality and then git diff --exit-code HEAD, with neither step skipped, allowed to fail, or run in another shell or directory, no MAKEFLAGS, GNUMAKEFLAGS or MAKEFILES set for them, and no earlier step writing to GITHUB_ENV or GITHUB_PATH; the Makefile uses no syntax the rules registry doesn't follow and nothing that hides a failing command; and no other pr.yml job's commands run ruff, mypy, lint-imports or the quality guards, directly or through a make target."
 rationale = "docs/engineering/skills/github-prs.md#commit-hygiene"
 scope = ["Makefile", ".github/workflows/pr.yml"]
 tier = "mechanical"
@@ -1207,6 +1207,8 @@ autofix = false
 kind = "pytest"
 nodes = [
   "tests/unit/test_make_quality.py::test_make_quality_runs_every_check_and_ci_runs_it",
+  "tests/unit/test_make_quality.py::test_make_quality_fails_whenever_a_check_fails",
+  "tests/unit/test_make_quality.py::test_make_itself_runs_the_listed_commands",
   "tests/unit/test_make_quality.py::test_the_quality_job_can_run_every_check",
 ]
 [[rule.ci]]
