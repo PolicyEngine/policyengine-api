@@ -12,4 +12,4 @@ quality-check:
 	uv run --frozen --extra dev ruff check .
 	uv run --frozen --extra dev ruff format --check .
 	uv run --frozen --extra dev lint-imports --config pyproject.toml
-	uv run --frozen --extra dev python scripts/run_quality_guards.py
+	GITHUB_BASE_REF=$${GITHUB_BASE_REF:-master} uv run --frozen --extra dev python -S scripts/run_quality_guards.py

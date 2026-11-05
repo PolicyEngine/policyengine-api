@@ -12,7 +12,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
+
 from scripts.rules.makefile import make_recipes
 
 REPO = Path(__file__).resolve().parents[2]
@@ -26,7 +28,11 @@ CHECKS = (
     f"{LOCKED} ruff format --check .",
     f"{LOCKED} lint-imports --config pyproject.toml",
     f"{LOCKED} mypy",
-    f"{LOCKED} python scripts/run_quality_guards.py",
+    # Without site-packages (-S), so the guards keep to the standard library,
+    # as push.yml runs them; and comparing baselines with the base branch,
+    # as CI does, or with master locally.
+    f"GITHUB_BASE_REF=$${{GITHUB_BASE_REF:-master}} {LOCKED} python -S "
+    "scripts/run_quality_guards.py",
 )
 # The tools that pr.yml may run only through make quality.
 CHECK_TOOLS = ("ruff ", "mypy", "lint-imports", "run_quality_guards.py")
@@ -96,6 +102,67 @@ def test_make_quality_runs_every_check_and_ci_runs_it():
         )
         == []
     )
+
+
+ACCEPTED_MAKEFILE = (FIXTURES / "accepted" / "Makefile").read_text(encoding="utf-8")
+ACCEPTED_WORKFLOW = (FIXTURES / "accepted" / "pr.yml").read_text(encoding="utf-8")
+MAKE_QUALITY_STEP = "      - run: make quality\n"
+
+
+@pytest.mark.parametrize(
+    ("makefile", "workflow", "problem"),
+    [
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW.replace(
+                MAKE_QUALITY_STEP,
+                MAKE_QUALITY_STEP + "        continue-on-error: true\n",
+            ),
+            "may skip or ignore 'make quality'",
+            id="step continue-on-error",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW.replace(
+                MAKE_QUALITY_STEP, MAKE_QUALITY_STEP + "        if: ${{ false }}\n"
+            ),
+            "may skip or ignore 'make quality'",
+            id="step condition",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW.replace(
+                "  quality-guards:\n",
+                "  quality-guards:\n    continue-on-error: true\n",
+            ),
+            "ignores its failures",
+            id="job continue-on-error",
+        ),
+        pytest.param(
+            ".IGNORE: quality-check\n" + ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW,
+            ".IGNORE",
+            id="Makefile ignores failures",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE + "\ntypecheck:\n\tuv run --frozen --extra dev mypy\n",
+            ACCEPTED_WORKFLOW
+            + "  typecheck:\n    steps:\n      - run: make typecheck\n",
+            "pr.yml's typecheck job runs mypy itself",
+            id="another job runs a make target with a check",
+        ),
+        pytest.param(
+            ACCEPTED_MAKEFILE,
+            ACCEPTED_WORKFLOW + "  format:\n    steps:\n      - run: pipx run ruff\n",
+            "pr.yml's format job runs ruff itself",
+            id="ruff at the end of a command",
+        ),
+    ],
+)
+def test_ways_to_skip_or_ignore_a_check_are_rejected(makefile, workflow, problem):
+    problems = quality_problems(makefile, workflow)
+
+    assert any(problem in reported for reported in problems), problems
 
 
 def test_the_quality_job_can_run_every_check():
