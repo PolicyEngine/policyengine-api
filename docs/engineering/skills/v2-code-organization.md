@@ -25,7 +25,14 @@ A file with another name fails the guard (rule
 `api.v2.files-assigned-to-layers`): rename it. A file that can't be renamed
 needs a `[[rule.exception]]` for that rule in `rules/registry.toml`, with its
 `path`, a `reason` and an `expires` date, by which the file should be renamed.
-An exception chooses no layer: the file gets the route checks under
+Write the path as `git ls-files` lists it, for a file git tracks. An exception
+covers the whole file, so it sets no `match`, `category` or `removal`. A module
+in a `database_connectors` package can't be excepted: that package holds only
+connector modules, each named after its operation and placed directly in it
+(rule `api.v2.crud-checks-cover-every-resource` also fails a module directly in
+`services/v2/<resource>/database_connectors` whose name doesn't start with an
+operation). Move a module that isn't a connector out of the package. An
+exception chooses no layer: the file gets the route checks under
 `fastapi_routes/v2`, and the validator, transformation and types checks
 (rule `api.v2.pure-modules-no-session-calls`) under `services/v2`. The guard
 fails on an exception for a file that no longer exists or whose name already
