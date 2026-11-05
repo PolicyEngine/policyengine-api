@@ -148,6 +148,9 @@ def _download_path(job: dict, name: str) -> tuple[bool, object]:
     """
     for step in _steps_using(job, DOWNLOAD_ARTIFACT):
         inputs = _inputs(step)
+        if "artifact-ids" in inputs:
+            # Artifact IDs aren't known before the run.
+            continue
         if "name" in inputs:
             matched = inputs["name"] == name
         elif "pattern" in inputs:
@@ -170,8 +173,17 @@ def _sends(job: dict, artifacts: list[str], flag: str) -> bool:
         if not downloaded:
             return False
         places.append(path)
+    # merge-multiple puts every artifact's files in one directory, so each
+    # shard's coverage.xml replaces the one before.
+    merged = any(
+        _inputs(step).get("merge-multiple") in (True, "true")
+        for step in _steps_using(job, DOWNLOAD_ARTIFACT)
+    )
+    if merged and len(artifacts) > 1:
+        return False
     return any(
         _inputs(step).get("flags") == flag
+        and not _inputs(step).get("disable_search")
         and all(_inputs(step).get("directory") == place for place in places)
         for step in _steps_using(job, CODECOV_ACTION)
     )
@@ -343,6 +355,13 @@ def coverage_problems(
                 problems.extend(_report_problems(workflows, name, job_id, suite=True))
             elif COVERAGE_COMMAND.search(commands) and not uploads:
                 problems.extend(_report_problems(workflows, name, job_id, suite=False))
+            elif COVERAGE_COMMAND.search(commands) and any(
+                _inputs(step).get("flags") != INTEGRATION for step in uploads
+            ):
+                problems.append(
+                    f"{name}:{job_id} uploads its coverage report without the "
+                    f"{INTEGRATION} flag"
+                )
     return problems
 
 

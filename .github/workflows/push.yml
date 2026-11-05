@@ -371,9 +371,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
+      # A pipeline, so that the shell's pipefail fails the step if rev-parse
+      # fails, instead of uploading for an empty commit.
       - name: Find the merge commit the release commit follows
         id: merge_commit
-        run: echo "sha=$(git rev-parse HEAD^)" >> "$GITHUB_OUTPUT"
+        run: git rev-parse --verify HEAD^ | sed 's/^/sha=/' >> "$GITHUB_OUTPUT"
       - name: Download every shard's coverage report
         uses: actions/download-artifact@v4
         with:

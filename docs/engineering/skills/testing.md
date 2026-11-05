@@ -53,10 +53,17 @@ commit's parents have one, which Codecov takes isn't fixed. On `master`:
   measure the merge commit's code too.
 
 Codecov compares a pull request with the `master` commit it branched from or
-last merged in. That is a release commit for about half of pull requests and
-a merge commit for most of the rest, since a merge commit is `master`'s tip
-until its release commit lands. Both then measured both flags on their own
-code.
+last merged in. For 40 recently merged pull requests that was a release
+commit for 21 and a merge commit for 17, since a merge commit is `master`'s
+tip until its release commit lands, and a lower stacked pull request's
+commit for 2. A release commit, and a merge commit followed by its own
+release commit (7 of the 17), measured both flags on their own code. The
+other merge commits never got a release commit: `versioning`'s push fails
+when `master` moves during the merge run, and the next release covers both
+merges. Their `unit` coverage stays carried forward from an earlier commit.
+Codecov also recomputes a pull request's comparison only when the pull
+request gets an upload, so one compared before its base's `unit` upload shows
+the carried-forward figure until its next push.
 
 The release tests run in the `staging` environment, with its variables
 (`SIM_ENTRYPOINT`, `SIMULATION_ENTRYPOINT_URL`,

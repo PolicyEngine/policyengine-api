@@ -20,8 +20,11 @@
 #     the merge commit too, since the release commit changes only the version,
 #     uv.lock and the changelog.
 # A pull request is compared with the master commit it branched from or last
-# merged in, a merge commit or a release commit, and both then measured unit
-# and integration coverage on their own code.
+# merged in. A release commit, and a merge commit followed by its own release
+# commit, measured both flags on their own code. A merge commit whose release
+# never came (versioning's push fails when master moves during the merge run,
+# and the next release covers both merges) keeps unit carried forward from an
+# earlier commit.
 coverage:
   status:
     project:
