@@ -1,0 +1,1 @@
+Catalog publication gives an already-stored catalog version the time-period options (`metadata_time_periods`) of the catalog it stages, instead of failing when they differ, prints a warning naming the country, the version and both lists, and reports them under `updated_time_periods` in its evidence. Every other column and table must still match.

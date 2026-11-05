@@ -111,7 +111,9 @@ def _comparison_pairs(
 
     Without ``with_format_2``, catalog format 2's fields are left out: a
     version published before format 2 keeps them empty, and publication never
-    rewrites a stored version.
+    writes them on a stored version. The model version's
+    ``metadata_time_periods`` are left out too: publication gives a stored
+    version the staged ones (``update_stored_time_periods``).
     """
 
     def format_2(*columns: sa.ColumnElement) -> tuple[sa.ColumnElement, ...]:
@@ -126,7 +128,6 @@ def _comparison_pairs(
     staged_model_version = sa.select(
         STAGE_CATALOG_MODELS.c.version_description,
         STAGE_CATALOG_MODELS.c.current_law_id,
-        STAGE_CATALOG_MODELS.c.metadata_time_periods,
         *format_2(
             STAGE_CATALOG_MODELS.c.catalog_format,
             STAGE_CATALOG_MODELS.c.entities,
@@ -137,7 +138,6 @@ def _comparison_pairs(
         sa.select(
             MODEL_VERSIONS.c.description,
             MODEL_VERSIONS.c.current_law_id,
-            sa.cast(MODEL_VERSIONS.c.metadata_time_periods, JSONB),
             *format_2(
                 MODEL_VERSIONS.c.catalog_format,
                 sa.cast(MODEL_VERSIONS.c.entities, JSONB),
@@ -374,8 +374,10 @@ def assert_country_matches(
     row both fail; the error names the first table that differs, never its
     rows. Without ``include_regions``, region rows are not compared: they come
     from the Public API's reference files, which may change while the
-    PolicyEngine.py version stays the same. A version published before catalog
-    format 2 is compared without format 2's fields.
+    PolicyEngine.py version stays the same. The model version's
+    ``metadata_time_periods`` are never compared, for the same reason: they
+    come from ``policyengine_api.economy_years``. A version published before
+    catalog format 2 is compared without format 2's fields.
     """
     stored = stored_version(connection, country)
     pairs = _comparison_pairs(
@@ -392,6 +394,55 @@ def assert_country_matches(
                 f"in its {table_name}"
             )
             raise CatalogPublicationError(msg)
+
+
+def update_stored_time_periods(
+    connection: Connection, country: CountryCatalog
+) -> tuple[list[int], list[int]] | None:
+    """Give this country's stored version the staged ``metadata_time_periods``.
+
+    They are the years the Public API offers for the version, which come from
+    ``policyengine_api.economy_years`` and so may change while the
+    PolicyEngine.py version stays the same. When the two lists differ, a
+    change of order included, replace the stored list in the publication's
+    transaction and return the stored and staged lists; return None when they
+    are equal. Raise CatalogPublicationError if the version is not stored or
+    the country was not staged.
+    """
+    staged_time_periods = (
+        sa.select(STAGE_CATALOG_MODELS.c.metadata_time_periods)
+        .where(STAGE_CATALOG_MODELS.c.country_id == country.country_id)
+        .scalar_subquery()
+    )
+    row = connection.execute(
+        sa.select(
+            MODEL_VERSIONS.c.id,
+            sa.cast(MODEL_VERSIONS.c.metadata_time_periods, JSONB).label("stored"),
+            staged_time_periods.label("staged"),
+        )
+        .select_from(
+            MODEL_VERSIONS.join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
+        )
+        .where(
+            MODELS.c.name == country.model.name,
+            MODEL_VERSIONS.c.version == country.model_version.version,
+        )
+    ).one_or_none()
+    if row is None or row.staged is None:
+        msg = (
+            f"the {country.country_id} catalog version "
+            f"{country.model_version.version} has no stored or no staged "
+            "time periods"
+        )
+        raise CatalogPublicationError(msg)
+    if row.stored == row.staged:
+        return None
+    connection.execute(
+        sa.update(MODEL_VERSIONS)
+        .where(MODEL_VERSIONS.c.id == row.id)
+        .values(metadata_time_periods=row.staged)
+    )
+    return list(row.stored), list(row.staged)
 
 
 def count_stored_regions(connection: Connection, country: CountryCatalog) -> int:

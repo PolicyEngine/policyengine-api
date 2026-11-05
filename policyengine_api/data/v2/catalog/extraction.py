@@ -48,6 +48,7 @@ from policyengine_api.data.v2.catalog.region_scoping import (
     filtered_artifacts,
     scope_regions,
 )
+from policyengine_api.economy_years import ECONOMY_YEARS
 from policyengine_api.supported_countries import SUPPORTED_COUNTRY_IDS
 
 if TYPE_CHECKING:
@@ -83,10 +84,9 @@ REQUIRED_DEPENDENCIES = (
     *(f"policyengine-{country_id}" for country_id in SUPPORTED_COUNTRY_IDS),
 )
 CURRENT_LAW_IDS = {"us": 2, "uk": 1}
-METADATA_TIME_PERIODS = {
-    "us": tuple(range(2035, 2021, -1)),
-    "uk": tuple(range(2024, 2031)),
-}
+# The years the Public API offers for society-wide calculations, defined once
+# for /{country}/metadata, these catalog versions and the economy routes.
+METADATA_TIME_PERIODS = ECONOMY_YEARS
 PLACEHOLDER_VERSIONS = frozenset({"", "0", "0.0", "0.0.0", "unknown"})
 
 

@@ -93,7 +93,9 @@ transaction is needed, and the database receives no `BEGIN` before the reads
 and no `ROLLBACK` when the session closes. The sessions refuse to flush added
 or changed rows (`ReadOnlySessionError`); a statement passed directly to
 `execute` is not checked, so the metadata connectors keep to `SELECT`. Each process also keeps every catalog version a request has
-selected (`SelectedCatalogStore`), since a published version never changes, so
+selected (`SelectedCatalogStore`), since a published version changes only
+when a release's publication replaces its time-period options, before that
+release's processes start (see "Time-period options"), so
 later requests for the same country and version skip the selection query;
 failed selections are not kept. Measured with statement logging in a local
 database, a page of 500 parameters or one parameter's values took five
@@ -109,7 +111,8 @@ statement per read after the liveness check. The pool's liveness check
 Every successful metadata response carries a strong `ETag`, a hash of its
 exact body, and `Cache-Control: public`. A request that names its catalog with
 `policyengine_version` may be reused for a day (`max-age=86400`): a published
-catalog version never changes, so such a response changes only with the
+catalog version changes only when a release replaces its time-period options
+(see "Time-period options"), so such a response changes only then, with the
 route's response format or with the day it is read on, and the `ETag` lets a
 client revalidate after the day. A request without it selects the running
 version, which changes on deploy, and may be reused for five minutes
@@ -244,10 +247,10 @@ compares every format 2 field for the US and the UK with what
 variable and parameter of the installed models, with their values, and builds
 each country's v1 metadata; set `RUN_V2_CATALOG_METADATA_PARITY=1` to run it.
 
-Publication never rewrites a stored version. A version published before
-format 2 has a null `catalog_format` and null format 2 fields, and later
-publications of the same PolicyEngine.py version compare it without those
-fields. The first PolicyEngine.py version published after format 2 deploys
+Publication never fills in a stored version's format 2 fields. A version
+published before format 2 has a null `catalog_format` and null format 2
+fields, and later publications of the same PolicyEngine.py version compare it
+without those fields. The first PolicyEngine.py version published after format 2 deploys
 carries them.
 
 Parameter extraction requires the PolicyEngine.py public history contract from
@@ -295,8 +298,9 @@ Review the fallback and omitted-region summaries on every new PolicyEngine.py
 release. A changed count may identify an upstream change to the release's
 datasets even when publication otherwise succeeds.
 
-A catalog version is identified by its country and PolicyEngine.py version and
-never changes once published. When the command republishes a stored version
+A catalog version is identified by its country and PolicyEngine.py version.
+Once published, its rows change only in its time-period options (see
+"Time-period options" below). When the command republishes a stored version
 whose staged regions differ from the stored ones, it keeps the stored regions
 unchanged, prints a warning with the country, the version and the counts of
 staged region rows the stored version lacks and of stored rows not staged, and
@@ -306,6 +310,28 @@ counts, and the fallback and omitted-region summaries leave that country out,
 since they describe staged regions that were not published. Every other table
 must still match exactly. Region reference changes therefore take effect in the
 next catalog version that is published.
+
+### Time-period options
+
+A catalog version's time-period options (`metadata_time_periods`), the years
+`/v2/economy-options` offers for it, come from the Public API's code, not from
+PolicyEngine.py: each country's years are defined once in
+`policyengine_api/economy_years.py`, which `/{country}/metadata` offers in
+`economy_options.time_period` and the economy routes accept (US 2024 to 2035,
+newest first; UK 2024 to 2032, oldest first). They can therefore change while
+the PolicyEngine.py version stays the same, so republication does not compare
+them. After every other table and column of a stored version has been
+compared, publication replaces its time-period options with the staged ones
+in the same transaction when the two lists differ, order included. It prints a
+warning with the country, the version and the previous and new years, and the
+evidence's `updated_time_periods` lists the same. Publication stages only the
+installed PolicyEngine.py version, so other stored versions keep the years
+they were published with.
+
+A release publishes its catalog before its own processes start. Processes of
+the previous release keep the years they already read until they stop, and an
+HTTP cache can keep a response with the previous years until it expires (five
+minutes, or a day for a request naming `policyengine_version`).
 
 ### Parameter tree
 
@@ -423,6 +449,8 @@ Successful JSON evidence contains:
 - fallback counts and omitted-region counts by country and region type, and
   the stored and staged region counts of any stored version whose regions were
   kept;
+- the country, version, and previous and new years of any stored version whose
+  time-period options were replaced (`updated_time_periods`);
 - the model, version and row count of each catalog version whose parameter
   tree was written;
 - the model, version and uncompressed and compressed sizes of each parameter
@@ -446,10 +474,12 @@ A failed attempt rolls back all catalog changes. Retry the same artifact only
 after correcting the external failure. A matching retry preserves identifiers,
 content, and row counts. Different normalized content under the same
 PolicyEngine.py version fails for operator review, with an error naming the
-first table that differs; it is never silently replaced. Regions are the
-exception: they come from the Public API's reference files, so a stored version
-keeps the regions it was published with (see "Source and regional dataset
-behavior"). A later PolicyEngine.py version adds a catalog version without
+first table that differs; it is never silently replaced. Regions and
+time-period options are the exceptions, because both come from the Public API
+rather than PolicyEngine.py: a stored version keeps the regions it was
+published with (see "Source and regional dataset behavior"), and takes the
+staged time-period options, with a warning and an evidence entry (see
+"Time-period options"). A later PolicyEngine.py version adds a catalog version without
 deleting or modifying earlier versioned rows, including their logical datasets,
 regions, model descriptions, current-law IDs, and time-period options.
 

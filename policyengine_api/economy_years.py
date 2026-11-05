@@ -1,35 +1,52 @@
-"""The UK years offered for society-wide (economy) calculations.
+"""The years offered for society-wide (economy) calculations, once per country.
 
-The simulation service runs a UK year only from the data year of the UK
-dataset to the last year the UK model projects that dataset to, and answers
-any other year with ``DATASET_YEAR_UNAVAILABLE``. That last year is
-policyengine-uk's ``PROJECTION_END_YEAR``, shortened when the capital gains
-projection in the model's parameters ends earlier: the default end year of
-policyengine-uk's own ``extend_single_year_dataset``. The Public API asks the
-simulation service for the policyengine-uk version it has installed, so
-reading the end year from the installed model keeps this list in step with
-the model the simulation service runs.
+``/{country}/metadata`` offers them in ``economy_options.time_period``, and
+catalog extraction stores them as each v2 catalog version's
+``metadata_time_periods``. The economy routes answer a society-wide request
+for any other year with 400 and the code ``DATASET_YEAR_UNAVAILABLE``, even
+when a result for that year is stored. Household calculations accept other
+years.
+
+Each list keeps the order both responses have always used: the US newest
+first, the UK oldest first.
+
+- The US years start in 2024: 2022 and 2023 are no longer offered.
+- The UK years start with the data year of the UK dataset
+  (microcosm_uk_2024_25), before which the simulation service refuses a UK
+  year, and end with 2032, the last year policyengine-uk 2.151.0 projects
+  that dataset to (``PROJECTION_END_YEAR``), after which it refuses one too.
 """
 
-from typing import TYPE_CHECKING
+from __future__ import annotations
 
-from policyengine_uk.data.economic_assumptions import (
-    CGT_INDEX_PATH,
-    PROJECTION_END_YEAR,
-)
+from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
-    from policyengine_core.parameters import ParameterNode
+    from collections.abc import Mapping
 
-# The year of the data in the UK dataset (microcosm_uk_2024_25). The
-# simulation service reads it from the dataset file and refuses earlier years.
-UK_DATASET_DATA_YEAR = 2024
+US_ECONOMY_YEARS: Final[tuple[int, ...]] = tuple(range(2035, 2023, -1))
+UK_ECONOMY_YEARS: Final[tuple[int, ...]] = tuple(range(2024, 2033))
+
+ECONOMY_YEARS: Final[Mapping[str, tuple[int, ...]]] = {
+    "us": US_ECONOMY_YEARS,
+    "uk": UK_ECONOMY_YEARS,
+}
+
+# The simulation service's code for a year its model and data do not cover,
+# which the Public API also gives a society-wide request for a year outside
+# ECONOMY_YEARS.
+DATASET_YEAR_UNAVAILABLE: Final = "DATASET_YEAR_UNAVAILABLE"
 
 
-def uk_economy_years(parameters: "ParameterNode") -> list[int]:
-    """Return each UK year from the dataset's data year to the last projected one."""
-    projection = parameters.get_child(CGT_INDEX_PATH).metadata.get("projection", {})
-    last_year = min(
-        PROJECTION_END_YEAR, int(projection.get("end_year", PROJECTION_END_YEAR))
+def dataset_year_unavailable_message(country_id: str, year: str) -> str:
+    """Return the message of the 400 for a society-wide request for ``year``.
+
+    It names the country's first and last years and the requested year, in
+    the words the simulation service uses for ``DATASET_YEAR_UNAVAILABLE``.
+    """
+    years = ECONOMY_YEARS[country_id]
+    country = country_id.upper()
+    return (
+        f"{country} results are available for {min(years)} to {max(years)}. "
+        f"{year} is outside the years the current {country} model and data cover."
     )
-    return list(range(UK_DATASET_DATA_YEAR, max(UK_DATASET_DATA_YEAR, last_year) + 1))

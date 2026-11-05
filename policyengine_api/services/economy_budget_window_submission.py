@@ -51,7 +51,10 @@ class BudgetWindowSubmissionMixin:
         failed) so concurrent requests share one batch job; later calls poll it and
         report progress until it finishes. Raise CacheCoordinationError if the cache is
         unavailable or submission ownership keeps changing, and SPMValidationError when
-        the SPM selection or a stored result cannot be certified.
+        the SPM selection or a stored result cannot be certified, or, before any
+        stored state is read, when the start year is outside the country's
+        ``ECONOMY_YEARS`` (``DATASET_YEAR_UNAVAILABLE``). A window that starts in
+        those years may end after them.
         """
         set_runtime_context(
             country_id=impact_request.country_id,
@@ -67,6 +70,9 @@ class BudgetWindowSubmissionMixin:
                 start_year=start_year,
                 window_size=window_size,
                 target=impact_request.target,
+            )
+            self._validate_economy_year(
+                impact_request.country_id, budget_window_setup.start_year
             )
             setup_options = self._build_economic_impact_setup_options(
                 replace(impact_request, options=dict(impact_request.options)),

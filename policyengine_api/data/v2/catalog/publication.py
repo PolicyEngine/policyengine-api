@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
@@ -23,6 +24,7 @@ from policyengine_api.data.v2.catalog.publication_reconciliation import (
     assert_country_matches,
     count_region_differences,
     count_stored_regions,
+    update_stored_time_periods,
     version_exists,
 )
 from policyengine_api.data.v2.catalog.publication_staging import (
@@ -128,6 +130,10 @@ def publish_catalog(
 ) -> PublicationEvidence:
     """Publish one complete catalog atomically and return non-secret evidence.
 
+    A catalog version that is already stored is compared with the staged one
+    and left as it is, apart from two exceptions: it keeps the regions it was
+    published with, and it takes the staged time periods
+    (``metadata_time_periods``), the years the Public API offers for it.
     In the same transaction it writes the parameter tree and the parameter
     search file of each version in the catalog that has none, built from the
     catalog: the versions it publishes, and the installed version when an
@@ -145,7 +151,8 @@ def publish_catalog(
         if checkpoint is not None:
             checkpoint("after_copy", connection)
 
-        existing, kept_region_summaries = _check_stored_versions(connection, catalog)
+        stored_versions = _reconcile_stored_versions(connection, catalog)
+        existing = stored_versions.countries
 
         for country in catalog.countries:
             if country.country_id not in existing:
@@ -174,38 +181,101 @@ def publish_catalog(
 
     return _evidence(
         catalog,
-        kept_region_summaries,
+        stored_versions,
         parameter_trees_written=parameter_trees_written,
         parameter_search_files_written=parameter_search_files_written,
         started=started,
     )
 
 
-def _check_stored_versions(
+@dataclass(frozen=True, slots=True)
+class _StoredVersions:
+    """The catalog's countries whose version was already stored, and what changed.
+
+    ``kept_region_summaries`` and ``time_period_updates`` take the shapes of
+    the evidence fields of the same names.
+    """
+
+    countries: frozenset[str]
+    kept_region_summaries: tuple[tuple[str, str, int, int], ...]
+    time_period_updates: tuple[tuple[str, str, tuple[int, ...], tuple[int, ...]], ...]
+
+
+def _reconcile_stored_versions(
     connection: Connection,
     catalog: NormalizedCatalog,
-) -> tuple[set[str], tuple[tuple[str, str, int, int], ...]]:
-    """Compare each stored catalog version and return its countries and kept regions.
+) -> _StoredVersions:
+    """Compare each stored catalog version, then give it the staged time periods.
 
-    A stored catalog version never changes. Its regions stay as they were
-    published even when the reference files differ now; every other table
-    must still match exactly.
+    A stored version's regions stay as they were published even when the
+    reference files differ now. Its time periods (``metadata_time_periods``)
+    become the staged ones, which come from the Public API's code. Every other
+    table and column must still match exactly, or CatalogPublicationError is
+    raised before anything is changed.
     """
-    existing: set[str] = set()
+    countries: set[str] = set()
     kept_region_summaries: list[tuple[str, str, int, int]] = []
+    time_period_updates: list[tuple[str, str, tuple[int, ...], tuple[int, ...]]] = []
     for country in catalog.countries:
         if version_exists(connection, country):
             assert_country_matches(connection, country, include_regions=False)
             kept = _kept_region_summary(connection, country)
             if kept is not None:
                 kept_region_summaries.append(kept)
-            existing.add(country.country_id)
-    return existing, tuple(kept_region_summaries)
+            countries.add(country.country_id)
+    for country in catalog.countries:
+        if country.country_id in countries:
+            update = _time_period_update(connection, country)
+            if update is not None:
+                time_period_updates.append(update)
+    return _StoredVersions(
+        countries=frozenset(countries),
+        kept_region_summaries=tuple(kept_region_summaries),
+        time_period_updates=tuple(time_period_updates),
+    )
+
+
+def _time_period_update(
+    connection: Connection,
+    country: CountryCatalog,
+) -> tuple[str, str, tuple[int, ...], tuple[int, ...]] | None:
+    """Give a stored version the staged time periods, and log any change.
+
+    Return the country, the version, and the stored and staged time periods
+    when they differed; there is none when they are the same.
+    """
+    update = update_stored_time_periods(connection, country)
+    if update is None:
+        return None
+    stored, staged = update
+    # The seed command configures no logging handler, so the details are in the
+    # message itself; the attributes serve structured handlers.
+    LOGGER.warning(
+        "replaced the time periods of the stored %s catalog version %s: %s became %s",
+        country.country_id,
+        country.model_version.version,
+        stored,
+        staged,
+        extra={
+            "policyengine_attributes": {
+                "country_id": country.country_id,
+                "policyengine_version": country.model_version.version,
+                "stored_time_periods": stored,
+                "staged_time_periods": staged,
+            }
+        },
+    )
+    return (
+        country.country_id,
+        country.model_version.version,
+        tuple(stored),
+        tuple(staged),
+    )
 
 
 def _evidence(
     catalog: NormalizedCatalog,
-    kept_region_summaries: tuple[tuple[str, str, int, int], ...],
+    stored_versions: _StoredVersions,
     *,
     parameter_trees_written: tuple[tuple[str, str, int], ...],
     parameter_search_files_written: tuple[tuple[str, str, int, int], ...],
@@ -216,9 +286,11 @@ def _evidence(
     Every table of a stored version matches the staged catalog except regions
     that were kept: for those countries the evidence counts the stored region
     rows and reports none of the staged fallbacks or omissions, which describe
-    rows that were not published. It also lists the parameter trees and
-    search files publication wrote.
+    rows that were not published. It lists each stored version whose time
+    periods publication replaced, with the previous and new ones, and the
+    parameter trees and search files publication wrote.
     """
+    kept_region_summaries = stored_versions.kept_region_summaries
     kept_countries = {country_id for country_id, *_counts in kept_region_summaries}
     entity_counts = catalog.entity_counts()
     entity_counts["regions"] += sum(
@@ -244,6 +316,7 @@ def _evidence(
             for summary in country.omitted_region_summaries
         ),
         kept_region_summaries=kept_region_summaries,
+        time_period_updates=stored_versions.time_period_updates,
         parameter_trees_written=parameter_trees_written,
         parameter_search_files_written=parameter_search_files_written,
     )
