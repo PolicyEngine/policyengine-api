@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import tempfile
 import textwrap
 import tomllib
@@ -27,6 +28,17 @@ ROUTE = "policyengine_api/fastapi_routes/v2/policies/routes.py"
 SERVICE = "policyengine_api/services/v2/policies/services.py"
 CONNECTOR = "policyengine_api/services/v2/policies/database_connectors/creates.py"
 BASELINE_FILE = "rules/baselines/v2-layers-routes.txt"
+# What the files rule tells a module in a database_connectors package to do.
+CONNECTOR_REMEDY_TEXT = (
+    "if it reads or writes rows, name it after its operation, "
+    "<creates|reads|updates|deletes>[_name].py, and put it directly in "
+    "services/v2/<resource>/database_connectors; otherwise move it out of the "
+    "database_connectors package and name it after its layer"
+)
+CONNECTOR_FIX_TEXT = (
+    f"{CONNECTOR_REMEDY_TEXT}; an exception can't stand in, because a "
+    "database_connectors package holds only connector modules"
+)
 
 
 def _write_files(files: dict[str, str], root: Path) -> None:
@@ -761,11 +773,7 @@ class TestBaselineAndExceptions(unittest.TestCase):
                     messages,
                     [
                         f"[{FILES_RULE}] v2-layers: {unassigned} matches no v2 "
-                        "layer. Fix: name it after its operation, "
-                        "<creates|reads|updates|deletes>[_name].py, and put it "
-                        "directly in services/v2/<resource>/database_connectors; "
-                        "an exception can't stand in, because a "
-                        "database_connectors package holds only connector modules."
+                        f"layer. Fix: {CONNECTOR_FIX_TEXT}."
                     ],
                 )
 
@@ -877,20 +885,13 @@ class TestBaselineAndExceptions(unittest.TestCase):
                             f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts "
                             f"{helper} from {FILES_RULE}, but a database_connectors "
                             "package holds only connector modules (rule "
-                            "api.v2.crud-checks-cover-every-resource also fails "
-                            "any other module directly in "
-                            "services/v2/<resource>/database_connectors). Fix: "
-                            "name it after its operation, "
-                            "<creates|reads|updates|deletes>[_name].py, put it "
-                            "directly in services/v2/<resource>/database_connectors, "
-                            "and remove the exception.",
+                            "api.v2.crud-checks-cover-every-resource also fails a "
+                            "module directly in "
+                            "services/v2/<resource>/database_connectors whose name "
+                            "doesn't start with an operation). Fix: remove the "
+                            f"exception; {CONNECTOR_REMEDY_TEXT}.",
                             f"[{FILES_RULE}] v2-layers: {helper} matches no v2 "
-                            "layer. Fix: name it after its operation, "
-                            "<creates|reads|updates|deletes>[_name].py, and put it "
-                            "directly in services/v2/<resource>/database_connectors; "
-                            "an exception can't stand in, because a "
-                            "database_connectors package holds only connector "
-                            "modules.",
+                            f"layer. Fix: {CONNECTOR_FIX_TEXT}.",
                         ]
                     ),
                 )
@@ -948,12 +949,34 @@ class TestBaselineAndExceptions(unittest.TestCase):
                     f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts "
                     f"{spelling} from {FILES_RULE}, but no file the guard scans "
                     "has that exact path, so the exception would match nothing. "
-                    "Fix: write the path as git ls-files lists it.",
+                    "Fix: write the path as git ls-files lists it, and git add the "
+                    "file if git doesn't track it.",
                     messages,
                 )
                 self.assertTrue(
                     any(message.startswith(unassigned) for message in messages)
                 )
+
+    def test_an_exception_for_a_file_git_does_not_track_is_reported(self) -> None:
+        # In a git checkout the guard scans only the files git tracks, so an
+        # exactly spelled exception for an untracked file would match nothing.
+        client = "policyengine_api/services/v2/household_calculations/client.py"
+        _write_files(
+            {client: "", "rules/registry.toml": self._registry(None, (client,))},
+            self.root,
+        )
+        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+
+        self.assertEqual(
+            self._messages(),
+            [
+                f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts {client} "
+                f"from {FILES_RULE}, but no file the guard scans has that exact "
+                "path, so the exception would match nothing. Fix: write the path "
+                "as git ls-files lists it, and git add the file if git doesn't "
+                "track it."
+            ],
+        )
 
     def test_exceptions_must_name_one_existing_v2_file_without_a_layer(self) -> None:
         named = ROUTE
