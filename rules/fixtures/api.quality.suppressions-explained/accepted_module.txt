@@ -1,0 +1,13 @@
+# Proof fixture for api.quality.suppressions-explained (the accepted case).
+# The proof test scans this text as a Python module. Every suppression below
+# names its code and gives a reason. The string and the prose comment that
+# mention noqa are not suppressions, so the guard reports nothing.
+# The fixture is a .txt file so that ruff doesn't lint these suppressions.
+
+# ruff: noqa: E402  # the path setup must run before these imports
+import os  # noqa: F401  # imported for its side effect
+import sys  # noqa:F401,E401  # see #4182
+VALUE = os.environ  # type: ignore[assignment]  # the stub declares it read-only
+BOTH = sys.argv  # type: ignore[assignment]  # noqa: E501  # a generated name
+TEXT = "x  # noqa"
+NOTE = 1  # the word noqa in prose is not a suppression
