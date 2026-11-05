@@ -153,7 +153,7 @@ def _create_simulation_rows(
     return ids
 
 
-def test_the_simulation_service_creates_rows_but_writes_no_status_or_result(
+def test_the_simulation_service_creates_rows_and_records_only_its_calls(
     connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
 ) -> None:
     _act_as(connection, managed_v2_roles.simulation_service)
@@ -165,10 +165,35 @@ def test_the_simulation_service_creates_rows_but_writes_no_status_or_result(
     connection.execute(text("SELECT count(*) FROM policies")).scalar_one()
 
     assert run_count == 1
+    # The service records a Modal call's ID once Modal accepts the call, and
+    # fails the run when Modal refuses it, while the run is still pending.
+    recorded = connection.execute(
+        text(
+            "UPDATE report_runs SET modal_call_id = 'fc-accepted', "
+            "updated_at = now() WHERE id = :id AND status = 'pending' "
+            "AND modal_call_id IS NULL RETURNING id"
+        ),
+        {"id": ids["report_run"]},
+    ).scalar_one()
+    failed = connection.execute(
+        text(
+            "UPDATE household_jobs SET status = 'failed', error_message = 'refused', "
+            "completed_at = now(), updated_at = now() "
+            "WHERE id = :id AND status = 'pending' RETURNING id"
+        ),
+        {"id": ids["household_job"]},
+    ).scalar_one()
+    assert (recorded, failed) == (ids["report_run"], ids["household_job"])
+    for statement in (
+        "UPDATE simulation_runs SET started_at = now() WHERE id = :id",
+        "UPDATE simulation_runs SET output_uri = 'gs://bucket/run' WHERE id = :id",
+        "UPDATE simulation_runs SET year = 2027 WHERE id = :id",
+    ):
+        _refused(connection, statement, id=ids["run"])
     _refused(
         connection,
-        "UPDATE simulation_runs SET status = 'running' WHERE id = :id",
-        id=ids["run"],
+        "UPDATE report_runs SET baseline_cliff_gap = 1.0 WHERE id = :id",
+        id=ids["report_run"],
     )
     _refused(
         connection,
@@ -213,9 +238,12 @@ def test_modal_workers_write_their_run_status_and_results_only(
     )
     connection.execute(
         text(
-            "UPDATE report_runs SET status = 'running', baseline_cliff_gap = 1.0, "
+            "UPDATE report_runs SET status = 'running', started_at = now(), "
+            "modal_call_id = 'fc-coordinator', baseline_cliff_gap = 1.0, "
             "baseline_cliff_share = 0.1, reform_cliff_gap = 2.0, "
-            "reform_cliff_share = 0.2 WHERE id = :id"
+            "reform_cliff_share = 0.2, data_version = '1.0.0', "
+            "spm_provenance = CAST('{}' AS jsonb), updated_at = now() "
+            "WHERE id = :id"
         ),
         {"id": ids["report_run"]},
     )
@@ -266,6 +294,25 @@ def test_modal_workers_write_their_run_status_and_results_only(
         id=ids["run"],
     )
     _refused(connection, "UPDATE households SET content_hash = content_hash")
+    # What a run is stays as the simulation service wrote it.
+    for statement, run_key in (
+        ("UPDATE simulation_runs SET year = 2027 WHERE id = :id", "run"),
+        (
+            "UPDATE simulation_runs SET simulation_id = simulation_id WHERE id = :id",
+            "run",
+        ),
+        (
+            "UPDATE report_runs SET baseline_simulation_run_id = "
+            "baseline_simulation_run_id WHERE id = :id",
+            "report_run",
+        ),
+        ("UPDATE report_runs SET markdown = 'edited' WHERE id = :id", "report_run"),
+        (
+            "UPDATE household_jobs SET household_id = household_id WHERE id = :id",
+            "household_job",
+        ),
+    ):
+        _refused(connection, statement, id=ids[run_key])
 
 
 def test_the_public_api_reads_runs_and_results_but_writes_neither(

@@ -255,11 +255,15 @@ and a revision runs once per database, so it can't repair drift.
 | `policyengine_v2_runtime` | The Public API on Cloud Run |
 | `policyengine_v2_catalog_writer` | `scripts/publish_v2_metadata_catalog.py` |
 | `policyengine_stage12_<environment>` | The simulation API and its Modal worker, on the temporary comparison-run tables |
-| `policyengine_v2_simulation_service` | The simulation API on Cloud Run: creates simulations, reports, their runs and household jobs, and reads the policy, dynamic, household and catalog rows a run needs |
-| `policyengine_v2_modal_worker` | The simulation API's Modal workers: write their runs' and household jobs' status and results, and read the rows a run needs. Its `UPDATE` is table-level: the workers' code, not the database, limits it to their own run's status and result columns |
+| `policyengine_v2_simulation_service` | The simulation API on Cloud Run: creates simulations, reports, their runs, budget-window runs and household jobs, and reads the policy, dynamic, household and catalog rows a run needs. It updates only the status, Modal call ID, error and completion columns of the runs and household jobs whose Modal calls it starts |
+| `policyengine_v2_modal_worker` | The simulation API's Modal workers: write their runs' and household jobs' status and results, and read the rows a run needs. It updates only a run's status, Modal call ID, error, time and result columns; the workers' code, not the database, keeps a worker to its own run |
 
 Every v2 table has an entry for every role, so "no access" is a decision, not
-an omission. The migration role owns every table and isn't listed. Three rules
+an omission. A privilege is declared on the whole table, or with
+`update_columns(...)` on only the columns it names; PostgreSQL then refuses a
+statement that sets any other column, so neither simulation API role can
+change what a run is. A role never holds both kinds of `UPDATE` on one table:
+the whole-table one would let it set every column. The migration role owns every table and isn't listed. Three rules
 check the declarations:
 
 - `api.v2.runtime-privileges-declared`: a unit test reads each connector
@@ -276,9 +280,12 @@ check the declarations:
   `scripts/reconcile_v2_privileges.py apply` right after the schema upgrade,
   then `verify`, before the catalog is seeded.
 
-`apply` grants each declared privilege a role lacks. It never revokes: it
-reports privileges the file doesn't declare, and the projects' default
-privileges, in the job summary. It grants nothing when a declared role or
+`apply` grants each declared privilege a role lacks, as one `GRANT` per role
+and table and one per column privilege. It never revokes: it reports
+privileges the file doesn't declare, on whole tables or on columns, and the
+projects' default privileges, in the job summary. `verify` checks each
+column of a column privilege with `has_column_privilege`, and fails when a
+role holds the same privilege on the whole table. It grants nothing when a declared role or
 table is missing. The roles themselves are provisioned outside the
 repository; `--create-missing-roles` is accepted only for the disposable test
 database.

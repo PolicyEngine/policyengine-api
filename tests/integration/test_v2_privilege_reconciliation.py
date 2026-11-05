@@ -22,10 +22,11 @@ from policyengine_api.data.v2.privilege_reconciliation import (
     PrivilegeEntry,
     apply_declared_privileges,
     check_declared_privileges,
+    check_table_wide_overrides,
     run,
     skipped_roles,
 )
-from policyengine_api.data.v2.privileges import READ, TablePrivilege
+from policyengine_api.data.v2.privileges import READ, TablePrivilege, update_columns
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 
 if TYPE_CHECKING:
@@ -72,6 +73,82 @@ def _has_privilege(engine: Engine, role: str, table: str, privilege: str) -> boo
                 {"role": role, "table": f"public.{table}", "privilege": privilege},
             ).scalar_one()
         )
+
+
+def _has_column_privilege(
+    engine: Engine, role: str, table: str, column: str, privilege: str
+) -> bool:
+    with engine.connect() as connection:
+        return bool(
+            connection.execute(
+                text("SELECT has_column_privilege(:role, :table, :column, :privilege)"),
+                {
+                    "role": role,
+                    "table": f"public.{table}",
+                    "column": column,
+                    "privilege": privilege,
+                },
+            ).scalar_one()
+        )
+
+
+def test_apply_grants_declared_columns_alone_and_verify_checks_them(
+    superuser_engine, temporary_role
+) -> None:
+    role = temporary_role()
+    declared = {role: {"regions": READ | {update_columns("label")}}}
+    with superuser_engine.begin() as connection:
+        first_plan, _defaults = apply_declared_privileges(connection, declared)
+    with superuser_engine.begin() as connection:
+        second_plan, _defaults = apply_declared_privileges(connection, declared)
+        missing = check_declared_privileges(connection, declared)
+        overrides = check_table_wide_overrides(connection, declared)
+
+    assert first_plan.grants == (
+        PrivilegeEntry(role, "regions", "SELECT"),
+        PrivilegeEntry(role, "regions", "UPDATE", column="label"),
+    )
+    assert (second_plan.grants, second_plan.undeclared) == ((), ())
+    assert (missing, overrides) == ([], [])
+    assert _has_column_privilege(superuser_engine, role, "regions", "label", "UPDATE")
+    assert not _has_column_privilege(
+        superuser_engine, role, "regions", "code", "UPDATE"
+    )
+    assert not _has_privilege(superuser_engine, role, "regions", "UPDATE")
+
+
+def test_verify_fails_when_a_role_can_update_the_whole_table(
+    disposable_v2_database_url, superuser_engine, temporary_role, monkeypatch, tmp_path
+) -> None:
+    """``UPDATE`` on the whole table would let the role change every column."""
+    role = temporary_role()
+    monkeypatch.setattr(
+        privilege_reconciliation,
+        "declared_privileges",
+        lambda _environment: {role: {"regions": READ | {update_columns("label")}}},
+    )
+    monkeypatch.setattr(
+        privilege_reconciliation, "ROLES_AWAITING_PROVISIONING", frozenset()
+    )
+    summary_path = tmp_path / "summary.md"
+    environ = {
+        V2_MIGRATION_DATABASE_URL: disposable_v2_database_url,
+        V2_ALEMBIC_DISPOSABLE_TEST: "1",
+        DEPLOYMENT_ENVIRONMENT: "test",
+        "GITHUB_STEP_SUMMARY": str(summary_path),
+    }
+
+    apply_status = run("apply", environ=environ)
+    with superuser_engine.begin() as connection:
+        connection.execute(text(f'GRANT UPDATE ON TABLE public.regions TO "{role}"'))
+    verify_status = run("verify", environ=environ)
+    summary = summary_path.read_text(encoding="utf-8")
+
+    assert (apply_status, verify_status) == (0, 1)
+    assert (
+        f"`{role}` holds UPDATE on the whole of `regions`, which overrides its "
+        "declared columns"
+    ) in summary
 
 
 def test_apply_grants_nothing_the_second_time_and_verify_passes(

@@ -15,18 +15,25 @@ from policyengine_api.data.v2.privilege_reconciliation import (
     grant_statements,
     plan_reconciliation,
     render_summary,
+    table_wide_overrides,
     verification_failures,
 )
 from policyengine_api.data.v2.privileges import (
     READ,
     READ_WRITE,
     TablePrivilege,
+    update_columns,
 )
 
 PROJECT_ROOT = Path(__file__).parents[3]
 PROOF_FIXTURES = PROJECT_ROOT / "rules/fixtures/api.v2.deployed-privileges-match"
 RUNTIME = "policyengine_v2_runtime"
 STAGE12 = "policyengine_stage12_staging"
+WORKER = "policyengine_v2_modal_worker"
+# The Modal worker may read a run and update two of its columns.
+WORKER_DECLARED = {
+    WORKER: {"simulation_runs": READ | {update_columns("status", "completed_at")}}
+}
 
 
 def _quote(identifier: str) -> str:
@@ -263,6 +270,138 @@ def test_summary_lists_grants_extras_and_default_privileges_without_secrets() ->
     assert "reported, not revoked" in summary
     assert "`policyengine_v2_migrator`" in summary
     assert "postgresql" not in summary.lower().replace("postgresql's", "")
+
+
+def test_missing_declared_column_privileges_become_column_grants() -> None:
+    plan = plan_reconciliation(
+        WORKER_DECLARED,
+        granted={WORKER: {"simulation_runs": {"SELECT"}}},
+        existing_roles={WORKER},
+        existing_tables={"simulation_runs"},
+        granted_columns={WORKER: {"simulation_runs": {"status": {"UPDATE"}}}},
+    )
+
+    assert plan.grants == (
+        PrivilegeEntry(WORKER, "simulation_runs", "UPDATE", column="completed_at"),
+    )
+    assert plan.undeclared == ()
+
+
+def test_column_and_whole_table_privileges_beyond_the_manifest_are_reported() -> None:
+    plan = plan_reconciliation(
+        WORKER_DECLARED,
+        granted={WORKER: {"simulation_runs": {"SELECT", "UPDATE"}}},
+        existing_roles={WORKER},
+        existing_tables={"simulation_runs"},
+        granted_columns={
+            WORKER: {
+                "simulation_runs": {
+                    "status": {"UPDATE"},
+                    "completed_at": {"UPDATE"},
+                    "simulation_id": {"UPDATE"},
+                }
+            }
+        },
+    )
+
+    assert plan.grants == ()
+    assert plan.undeclared == (
+        PrivilegeEntry(WORKER, "simulation_runs", "UPDATE"),
+        PrivilegeEntry(WORKER, "simulation_runs", "UPDATE", column="simulation_id"),
+    )
+
+
+def test_grant_statements_grant_column_privileges_per_role_and_table() -> None:
+    plan = ReconciliationPlan(
+        grants=(
+            PrivilegeEntry(WORKER, "simulation_runs", "SELECT"),
+            PrivilegeEntry(WORKER, "simulation_runs", "UPDATE", column="status"),
+            PrivilegeEntry(WORKER, "simulation_runs", "UPDATE", column="completed_at"),
+        ),
+        undeclared=(),
+        missing_roles=(),
+        missing_tables=(),
+    )
+
+    assert grant_statements(plan, _quote) == [
+        'GRANT SELECT ON TABLE "public"."simulation_runs" '
+        'TO "policyengine_v2_modal_worker"',
+        'GRANT UPDATE ("completed_at", "status") ON TABLE "public"."simulation_runs" '
+        'TO "policyengine_v2_modal_worker"',
+    ]
+
+
+def test_grant_statements_refuse_an_unsafe_column_name() -> None:
+    plan = ReconciliationPlan(
+        grants=(
+            PrivilegeEntry(WORKER, "simulation_runs", "UPDATE", column='status"; --'),
+        ),
+        undeclared=(),
+        missing_roles=(),
+        missing_tables=(),
+    )
+
+    with pytest.raises(privilege_reconciliation.UnsafeIdentifierError):
+        grant_statements(plan, _quote)
+
+
+def test_verification_reports_each_declared_column_the_role_lacks() -> None:
+    failures = verification_failures(
+        WORKER_DECLARED,
+        lambda role, table, privilege: privilege == "SELECT",
+        has_column_privilege=lambda role, table, column, privilege: column == "status",
+    )
+
+    assert failures == [
+        PrivilegeEntry(WORKER, "simulation_runs", "UPDATE", column="completed_at")
+    ]
+
+
+def test_column_privileges_need_a_column_check() -> None:
+    with pytest.raises(ValueError, match="column"):
+        verification_failures(WORKER_DECLARED, lambda role, table, privilege: True)
+
+
+def test_a_whole_table_privilege_overrides_its_declared_columns() -> None:
+    """``UPDATE`` on the whole table lets a role change every column."""
+
+    def has_privilege(role: str, table: str, privilege: str) -> bool:
+        return privilege in {"SELECT", "UPDATE"}
+
+    assert table_wide_overrides(WORKER_DECLARED, has_privilege) == [
+        PrivilegeEntry(WORKER, "simulation_runs", "UPDATE")
+    ]
+    assert (
+        table_wide_overrides(
+            WORKER_DECLARED, lambda role, table, privilege: privilege == "SELECT"
+        )
+        == []
+    )
+
+
+def test_summary_lists_column_grants_with_their_columns() -> None:
+    plan = ReconciliationPlan(
+        grants=(
+            PrivilegeEntry(WORKER, "simulation_runs", "SELECT"),
+            PrivilegeEntry(WORKER, "simulation_runs", "UPDATE", column="status"),
+            PrivilegeEntry(WORKER, "simulation_runs", "UPDATE", column="completed_at"),
+        ),
+        undeclared=(
+            PrivilegeEntry(WORKER, "simulation_runs", "UPDATE", column="year"),
+        ),
+        missing_roles=(),
+        missing_tables=(),
+    )
+
+    summary = render_summary(plan, (), deployment_environment="staging", applied=True)
+
+    assert (
+        "| `policyengine_v2_modal_worker` | `simulation_runs` | "
+        "SELECT, UPDATE (completed_at, status) |"
+    ) in summary
+    assert (
+        "| `policyengine_v2_modal_worker` | `simulation_runs` | UPDATE (year) |"
+    ) in summary
 
 
 def _fixture_privileges(name: str) -> set[tuple[str, str, str]]:

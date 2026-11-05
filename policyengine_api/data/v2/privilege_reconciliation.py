@@ -4,12 +4,16 @@
 connected as the migration role, which owns every table and so may grant on
 it. Two modes:
 
-- ``apply`` reads the managed roles' current grants, grants every declared
-  privilege a role lacks, and reports privileges the manifest doesn't declare.
-  It never revokes, and it changes nothing when a declared role or table is
-  missing. Running it again grants nothing more.
-- ``verify`` checks every declared privilege with ``has_table_privilege``
-  (rule ``api.v2.deployed-privileges-match``) and fails on any that is missing.
+- ``apply`` reads the managed roles' current grants, on whole tables and on
+  columns, grants every declared privilege a role lacks, and reports privileges
+  the manifest doesn't declare. It never revokes, and it changes nothing when a
+  declared role or table is missing. Running it again grants nothing more.
+- ``verify`` checks every declared privilege with ``has_table_privilege``, or
+  ``has_column_privilege`` for each column of a column privilege (rule
+  ``api.v2.deployed-privileges-match``), and fails on any that is missing. It
+  also fails when a role holds on the whole table a privilege the manifest
+  declares for only some of its columns, since that lets the role use it on
+  every column.
 
 Both skip a missing role the manifest lists in ``ROLES_AWAITING_PROVISIONING``,
 and name it in their output, so a pull request can declare a role before an
@@ -48,6 +52,8 @@ from policyengine_api.data.v2.migration_target import (
 from policyengine_api.data.v2.privileges import (
     PERSISTENT_ENVIRONMENTS,
     ROLES_AWAITING_PROVISIONING,
+    ColumnPrivilege,
+    DeclaredPrivilege,
     TablePrivilege,
     declared_privileges,
 )
@@ -74,11 +80,16 @@ class UnsafeIdentifierError(PrivilegeReconciliationError):
 
 @dataclass(frozen=True, order=True)
 class PrivilegeEntry:
-    """One privilege one role holds, or should hold, on one table."""
+    """One privilege one role holds, or should hold, on one table.
+
+    ``column`` names the one column a column privilege is on; it is empty for a
+    privilege on the whole table.
+    """
 
     role: str
     table: str
     privilege: str
+    column: str = ""
 
 
 @dataclass(frozen=True)
@@ -112,44 +123,69 @@ class ReconciliationPlan:
         return not self.missing_roles and not self.missing_tables
 
 
-def plan_reconciliation(
-    declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
+def _declared_entries(
+    role: str, table: str, privileges: Collection[DeclaredPrivilege]
+) -> list[PrivilegeEntry]:
+    """Return one entry per whole-table privilege and per column of a column one."""
+    entries = []
+    for privilege in privileges:
+        if isinstance(privilege, ColumnPrivilege):
+            entries += [
+                PrivilegeEntry(role, table, privilege.privilege.value, column)
+                for column in privilege.columns
+            ]
+        else:
+            entries.append(PrivilegeEntry(role, table, privilege.value))
+    return entries
+
+
+def plan_reconciliation(  # noqa: PLR0913  # the database facts it compares
+    declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
     granted: Mapping[str, Mapping[str, Collection[str]]],
     *,
     existing_roles: Collection[str],
     existing_tables: Collection[str],
     roles_awaiting_creation: Collection[str] = (),
+    granted_columns: Mapping[str, Mapping[str, Mapping[str, Collection[str]]]]
+    | None = None,
 ) -> ReconciliationPlan:
     """Compare declared privileges with what the database grants.
 
-    ``granted`` holds the managed roles' direct grants, by role then table. A
-    missing role in ``roles_awaiting_creation`` is skipped instead of missing.
+    ``granted`` holds the managed roles' direct grants on whole tables, by role
+    then table, and ``granted_columns`` their direct grants on columns, by role,
+    table, then column. A missing role in ``roles_awaiting_creation`` is skipped
+    instead of missing.
     """
+    granted_columns = granted_columns or {}
     absent_roles = set(declared) - set(existing_roles)
     skipped_roles = tuple(sorted(absent_roles & set(roles_awaiting_creation)))
     missing_roles = tuple(sorted(absent_roles - set(skipped_roles)))
     declared_tables = {table for tables in declared.values() for table in tables}
     missing_tables = tuple(sorted(declared_tables - set(existing_tables)))
-    grants = sorted(
-        PrivilegeEntry(role, table, privilege.value)
+    declared_entries = {
+        entry
         for role, tables in declared.items()
-        if role not in absent_roles
         for table, privileges in tables.items()
-        if table not in missing_tables
-        for privilege in privileges
-        if privilege.value not in granted.get(role, {}).get(table, ())
-    )
-    undeclared = sorted(
+        for entry in _declared_entries(role, table, privileges)
+    }
+    granted_entries = {
         PrivilegeEntry(role, table, privilege)
         for role, tables in granted.items()
         for table, privileges in tables.items()
         for privilege in privileges
-        if privilege
-        not in {
-            declared_privilege.value
-            for declared_privilege in declared.get(role, {}).get(table, frozenset())
-        }
+    } | {
+        PrivilegeEntry(role, table, privilege, column)
+        for role, tables in granted_columns.items()
+        for table, columns in tables.items()
+        for column, privileges in columns.items()
+        for privilege in privileges
+    }
+    grants = sorted(
+        entry
+        for entry in declared_entries - granted_entries
+        if entry.role not in absent_roles and entry.table not in missing_tables
     )
+    undeclared = sorted(granted_entries - declared_entries)
     return ReconciliationPlan(
         grants=tuple(grants),
         undeclared=tuple(undeclared),
@@ -161,7 +197,7 @@ def plan_reconciliation(
 
 def _safe(identifier: str) -> str:
     if SAFE_IDENTIFIER.fullmatch(identifier) is None:
-        msg = f"refusing to use {identifier!r} as a role or table name"
+        msg = f"refusing to use {identifier!r} as a role, table or column name"
         raise UnsafeIdentifierError(msg)
     return identifier
 
@@ -169,44 +205,111 @@ def _safe(identifier: str) -> str:
 def grant_statements(
     plan: ReconciliationPlan, quote_identifier: Callable[[str], str]
 ) -> list[str]:
-    """Return one GRANT per role and table, with its privileges in name order."""
-    privileges_by_target: dict[tuple[str, str], set[str]] = defaultdict(set)
+    """Return the GRANTs for a plan, in role and table order.
+
+    Each role and table gets one GRANT of its whole-table privileges, then one
+    per column privilege, naming its columns in name order.
+    """
+    table_privileges: dict[tuple[str, str], set[str]] = defaultdict(set)
+    columns_by_privilege: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     for entry in plan.grants:
-        privileges_by_target[(_safe(entry.role), _safe(entry.table))].add(
-            TablePrivilege(entry.privilege).value
+        target = (_safe(entry.role), _safe(entry.table))
+        privilege = TablePrivilege(entry.privilege).value
+        if entry.column:
+            columns_by_privilege[(*target, privilege)].add(_safe(entry.column))
+        else:
+            table_privileges[target].add(privilege)
+    statements: list[tuple[tuple[str, str, str], str]] = [
+        (
+            (role, table, ""),
+            f"GRANT {', '.join(sorted(privileges))} ON TABLE "
+            f"{quote_identifier(SCHEMA)}.{quote_identifier(table)} "
+            f"TO {quote_identifier(role)}",
         )
-    return [
-        f"GRANT {', '.join(sorted(privileges))} ON TABLE "
-        f"{quote_identifier(SCHEMA)}.{quote_identifier(table)} "
-        f"TO {quote_identifier(role)}"
-        for (role, table), privileges in sorted(
-            privileges_by_target.items(), key=lambda item: (item[0][0], item[0][1])
-        )
+        for (role, table), privileges in table_privileges.items()
     ]
+    statements += [
+        (
+            (role, table, privilege),
+            f"GRANT {privilege} "
+            f"({', '.join(quote_identifier(column) for column in sorted(columns))}) "
+            f"ON TABLE {quote_identifier(SCHEMA)}.{quote_identifier(table)} "
+            f"TO {quote_identifier(role)}",
+        )
+        for (role, table, privilege), columns in columns_by_privilege.items()
+    ]
+    return [statement for _target, statement in sorted(statements)]
 
 
 def verification_failures(
-    declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
+    declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
+    has_privilege: Callable[[str, str, str], bool],
+    has_column_privilege: Callable[[str, str, str, str], bool] | None = None,
+) -> list[PrivilegeEntry]:
+    """Return every declared privilege the role doesn't effectively hold.
+
+    A column privilege is checked on each of its columns with
+    ``has_column_privilege``, which is required when one is declared.
+    """
+    failures = []
+    for role, tables in declared.items():
+        for table, privileges in tables.items():
+            for entry in _declared_entries(role, table, privileges):
+                if not entry.column:
+                    held = has_privilege(role, table, entry.privilege)
+                elif has_column_privilege is None:
+                    msg = "checking a column privilege needs has_column_privilege"
+                    raise ValueError(msg)
+                else:
+                    held = has_column_privilege(
+                        role, table, entry.column, entry.privilege
+                    )
+                if not held:
+                    failures.append(entry)
+    return sorted(failures)
+
+
+def table_wide_overrides(
+    declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
     has_privilege: Callable[[str, str, str], bool],
 ) -> list[PrivilegeEntry]:
-    """Return every declared privilege the role doesn't effectively hold."""
+    """Return each column privilege a role also holds on the whole table.
+
+    Holding it on the whole table lets the role use it on every column, past
+    the columns the manifest declares.
+    """
     return sorted(
-        PrivilegeEntry(role, table, privilege.value)
+        PrivilegeEntry(role, table, privilege.privilege.value)
         for role, tables in declared.items()
         for table, privileges in tables.items()
         for privilege in privileges
-        if not has_privilege(role, table, privilege.value)
+        if isinstance(privilege, ColumnPrivilege)
+        and has_privilege(role, table, privilege.privilege.value)
     )
 
 
 def _privilege_rows(entries: Iterable[PrivilegeEntry]) -> list[str]:
-    rows_by_target: dict[tuple[str, str], list[str]] = defaultdict(list)
+    """Return one row per role and table, naming each column privilege's columns."""
+    table_privileges: dict[tuple[str, str], set[str]] = defaultdict(set)
+    columns_by_privilege: dict[tuple[str, str], dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
     for entry in entries:
-        rows_by_target[(entry.role, entry.table)].append(entry.privilege)
-    return [
-        f"| `{role}` | `{table}` | {', '.join(sorted(privileges))} |"
-        for (role, table), privileges in sorted(rows_by_target.items())
-    ]
+        target = (entry.role, entry.table)
+        if entry.column:
+            columns_by_privilege[target][entry.privilege].add(entry.column)
+        else:
+            table_privileges[target].add(entry.privilege)
+    rows = []
+    for role, table in sorted(set(table_privileges) | set(columns_by_privilege)):
+        described = sorted(table_privileges.get((role, table), ())) + [
+            f"{privilege} ({', '.join(sorted(columns))})"
+            for privilege, columns in sorted(
+                columns_by_privilege.get((role, table), {}).items()
+            )
+        ]
+        rows.append(f"| `{role}` | `{table}` | {', '.join(described)} |")
+    return rows
 
 
 def _skipped_roles_line(roles: Iterable[str]) -> str:
@@ -326,8 +429,32 @@ _DEFAULT_PRIVILEGES = text(
     """
 ).bindparams(bindparam("roles", expanding=True))
 
+_GRANTED_COLUMN_PRIVILEGES = text(
+    """
+    SELECT grantee_role.rolname AS role_name,
+           table_class.relname AS table_name,
+           table_column.attname AS column_name,
+           acl_entry.privilege_type AS privilege
+    FROM pg_attribute AS table_column
+    JOIN pg_class AS table_class ON table_class.oid = table_column.attrelid
+    JOIN pg_namespace AS table_namespace
+      ON table_namespace.oid = table_class.relnamespace
+    CROSS JOIN LATERAL aclexplode(table_column.attacl) AS acl_entry
+    JOIN pg_roles AS grantee_role ON grantee_role.oid = acl_entry.grantee
+    WHERE table_namespace.nspname = :schema
+      AND table_class.relkind IN ('r', 'p', 'v', 'm')
+      AND table_column.attnum > 0
+      AND NOT table_column.attisdropped
+      AND grantee_role.rolname IN :roles
+    """
+).bindparams(bindparam("roles", expanding=True))
+
 _HAS_TABLE_PRIVILEGE = text(
     "SELECT has_table_privilege(:role, :qualified_table, :privilege)"
+)
+
+_HAS_COLUMN_PRIVILEGE = text(
+    "SELECT has_column_privilege(:role, :qualified_table, :column, :privilege)"
 )
 
 
@@ -351,6 +478,23 @@ def read_granted_privileges(
     ):
         granted[row.role_name][row.table_name].add(row.privilege)
     return {role: dict(tables) for role, tables in granted.items()}
+
+
+def read_granted_column_privileges(
+    connection: Connection, roles: Collection[str]
+) -> dict[str, dict[str, dict[str, set[str]]]]:
+    """Return the roles' direct grants on columns of public tables and views."""
+    granted: dict[str, dict[str, dict[str, set[str]]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(set))
+    )
+    for row in connection.execute(
+        _GRANTED_COLUMN_PRIVILEGES, {"schema": SCHEMA, "roles": list(roles)}
+    ):
+        granted[row.role_name][row.table_name][row.column_name].add(row.privilege)
+    return {
+        role: {table: dict(columns) for table, columns in tables.items()}
+        for role, tables in granted.items()
+    }
 
 
 def read_default_privileges(
@@ -387,7 +531,7 @@ def create_missing_roles(connection: Connection, roles: Iterable[str]) -> list[s
 
 def apply_declared_privileges(
     connection: Connection,
-    declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
+    declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
     *,
     roles_awaiting_creation: Collection[str] = (),
 ) -> tuple[ReconciliationPlan, list[DefaultPrivilege]]:
@@ -403,6 +547,7 @@ def apply_declared_privileges(
         existing_roles=read_existing_roles(connection, roles),
         existing_tables=read_public_tables(connection),
         roles_awaiting_creation=roles_awaiting_creation,
+        granted_columns=read_granted_column_privileges(connection, roles),
     )
     if plan.can_apply:
         for statement in grant_statements(
@@ -414,7 +559,7 @@ def apply_declared_privileges(
 
 def skipped_roles(
     connection: Connection,
-    declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
+    declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
     roles_awaiting_creation: Collection[str],
 ) -> tuple[str, ...]:
     """Return the declared roles awaiting creation that don't exist yet."""
@@ -424,16 +569,14 @@ def skipped_roles(
     )
 
 
-def check_declared_privileges(
-    connection: Connection,
-    declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
-) -> list[PrivilegeEntry]:
-    """Return every declared privilege a role doesn't effectively hold.
+def _privilege_checks(
+    connection: Connection, roles: Collection[str]
+) -> tuple[Callable[[str, str, str], bool], Callable[[str, str, str, str], bool]]:
+    """Return checks of a role's effective table and column privileges.
 
-    A missing role or table counts as missing every privilege declared for it;
-    leave out the roles ``skipped_roles`` returns to skip them.
+    A missing role or table holds nothing.
     """
-    existing_roles = read_existing_roles(connection, list(declared))
+    existing_roles = read_existing_roles(connection, roles)
     existing_tables = read_public_tables(connection)
 
     def has_privilege(role: str, table: str, privilege: str) -> bool:
@@ -450,7 +593,46 @@ def check_declared_privileges(
             ).scalar_one()
         )
 
-    return verification_failures(declared, has_privilege)
+    def has_column_privilege(
+        role: str, table: str, column: str, privilege: str
+    ) -> bool:
+        if role not in existing_roles or table not in existing_tables:
+            return False
+        return bool(
+            connection.execute(
+                _HAS_COLUMN_PRIVILEGE,
+                {
+                    "role": role,
+                    "qualified_table": f"{SCHEMA}.{_safe(table)}",
+                    "column": _safe(column),
+                    "privilege": privilege,
+                },
+            ).scalar_one()
+        )
+
+    return has_privilege, has_column_privilege
+
+
+def check_declared_privileges(
+    connection: Connection,
+    declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
+) -> list[PrivilegeEntry]:
+    """Return every declared privilege a role doesn't effectively hold.
+
+    A missing role or table counts as missing every privilege declared for it;
+    leave out the roles ``skipped_roles`` returns to skip them.
+    """
+    has_privilege, has_column_privilege = _privilege_checks(connection, list(declared))
+    return verification_failures(declared, has_privilege, has_column_privilege)
+
+
+def check_table_wide_overrides(
+    connection: Connection,
+    declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
+) -> list[PrivilegeEntry]:
+    """Return each column privilege a role also holds on the whole table."""
+    has_privilege, _has_column_privilege = _privilege_checks(connection, list(declared))
+    return table_wide_overrides(declared, has_privilege)
 
 
 # --- Command-line interface -----------------------------------------------
@@ -480,9 +662,37 @@ def _write_summary(environ: Mapping[str, str], summary: str) -> None:
             summary_file.write(summary)
 
 
+def _failure_row(failure: PrivilegeEntry) -> str:
+    if failure.column:
+        return (
+            f"- `{failure.role}` lacks {failure.privilege} on column "
+            f"`{failure.column}` of `{failure.table}`"
+        )
+    return f"- `{failure.role}` lacks {failure.privilege} on `{failure.table}`"
+
+
+def _verification_report(
+    failures: Sequence[PrivilegeEntry], overrides: Sequence[PrivilegeEntry]
+) -> str:
+    sections = []
+    if failures:
+        rows = "\n".join(_failure_row(failure) for failure in failures)
+        sections.append(f"Declared privileges missing after reconciling:\n\n{rows}\n")
+    if overrides:
+        rows = "\n".join(
+            f"- `{override.role}` holds {override.privilege} on the whole of "
+            f"`{override.table}`, which overrides its declared columns"
+            for override in overrides
+        )
+        sections.append(
+            f"Privileges held on whole tables, past their declared columns:\n\n{rows}\n"
+        )
+    return "\n".join(sections)
+
+
 def _verify(
     connection: Connection,
-    declared: Mapping[str, Mapping[str, frozenset[TablePrivilege]]],
+    declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
     roles_awaiting_creation: Collection[str],
     environment: str,
     environ: Mapping[str, str],
@@ -490,24 +700,21 @@ def _verify(
     """Check every declared privilege, skipping missing roles awaiting creation.
 
     A missing role in ``roles_awaiting_creation`` is skipped; any other missing
-    role counts as missing every privilege declared for it. The roles skipped
-    and the privileges missing are written to stdout and the job summary under
-    one heading.
+    role counts as missing every privilege declared for it. A role holding on a
+    whole table a privilege declared for only some of its columns fails too.
+    The roles skipped, the privileges missing and the whole-table privileges
+    are written to stdout and the job summary under one heading.
     """
     skipped = skipped_roles(connection, declared, roles_awaiting_creation)
     checked = {role: tables for role, tables in declared.items() if role not in skipped}
     failures = check_declared_privileges(connection, checked)
+    overrides = check_table_wide_overrides(connection, checked)
     heading = f"## v2 table privileges ({environment})\n\n"
     skipped_note = f"{_skipped_roles_line(skipped)}\n\n" if skipped else ""
-    if failures:
-        rows = "\n".join(
-            f"- `{failure.role}` lacks {failure.privilege} on `{failure.table}`"
-            for failure in failures
-        )
+    if failures or overrides:
         _write_summary(
             environ,
-            f"{heading}{skipped_note}"
-            f"Declared privileges missing after reconciling:\n\n{rows}\n",
+            f"{heading}{skipped_note}{_verification_report(failures, overrides)}",
         )
         return 1
     if skipped:

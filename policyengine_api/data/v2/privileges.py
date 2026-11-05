@@ -10,7 +10,10 @@ tests run the services as these roles (rule
 ``api.v2.runtime-privileges-tested-as-runtime-role``).
 
 Every table in the v2 SQLModel metadata, plus ``alembic_version``, has an entry
-for every managed role, so "no access" is a decision, not an omission.
+for every managed role, so "no access" is a decision, not an omission. A
+privilege is on the whole table, or a ``ColumnPrivilege`` on the columns it
+names; a role never holds both kinds of the same privilege on one table, since
+the whole-table one would let it change every column.
 
 Roles and what decides their privileges:
 
@@ -25,15 +28,20 @@ Roles and what decides their privileges:
   publication writes and reads; its code isn't organized as connector modules,
   so the deploy check, not the connector analysis, covers it.
 - ``policyengine_v2_simulation_service``: the simulation API on Cloud Run. It
-  creates simulations, reports, their runs and household jobs, and reads the
-  policy, dynamic, household and catalog rows a run needs.
+  creates simulations, reports, their runs, budget-window runs and household
+  jobs, and reads the policy, dynamic, household and catalog rows a run needs.
+  It starts the Modal calls of runs and household jobs, so it may update their
+  status, Modal call ID, error and completion columns: it records a call's ID
+  once Modal accepts the call, and fails the run when Modal refuses it.
 - ``policyengine_v2_modal_worker``: the simulation API's Modal workers. They
   write the status of the runs and household jobs they were given, and their
-  results, and read the rows a run needs. Their ``UPDATE`` is table-level, like
-  every privilege here: the database doesn't limit it to the status and result
-  columns or to the worker's own run, so the workers' code does. Both
-  simulation API roles' code lives in that repository, so the deploy check
-  covers them here.
+  results, and read the rows a run needs.
+
+Both simulation API roles update only the columns ``update_columns`` names, so
+the database refuses any change to what a run is (its simulation or report,
+versions, dataset, region, year, simulation runs or budget-window run). It
+doesn't limit a worker to its own run; the workers' code does. Their code lives
+in the simulation API's repository, so the deploy check covers them here.
 
 The Public API reads the simulation tables it serves, and writes none of them.
 
@@ -78,10 +86,28 @@ class TablePrivilege(StrEnum):
     DELETE = "DELETE"
 
 
+@dataclass(frozen=True)
+class ColumnPrivilege:
+    """A privilege on some of a table's columns instead of the whole table.
+
+    PostgreSQL refuses a statement that uses the privilege on any other column.
+    """
+
+    privilege: TablePrivilege
+    columns: frozenset[str]
+
+
+DeclaredPrivilege = TablePrivilege | ColumnPrivilege
+
+
+def update_columns(*columns: str) -> ColumnPrivilege:
+    """Declare ``UPDATE`` on only the named columns."""
+    return ColumnPrivilege(TablePrivilege.UPDATE, frozenset(columns))
+
+
 NO_ACCESS: Final[frozenset[TablePrivilege]] = frozenset()
 READ: Final = frozenset({TablePrivilege.SELECT})
 READ_INSERT: Final = frozenset({TablePrivilege.SELECT, TablePrivilege.INSERT})
-READ_UPDATE: Final = frozenset({TablePrivilege.SELECT, TablePrivilege.UPDATE})
 READ_INSERT_UPDATE: Final = frozenset(
     {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.UPDATE}
 )
@@ -99,20 +125,20 @@ READ_WRITE: Final = frozenset(
 class TableAccess:
     """What each managed role may do on one table."""
 
-    runtime: frozenset[TablePrivilege]
-    catalog_writer: frozenset[TablePrivilege]
-    stage12: frozenset[TablePrivilege]
-    simulation_service: frozenset[TablePrivilege]
-    modal_worker: frozenset[TablePrivilege]
+    runtime: frozenset[DeclaredPrivilege]
+    catalog_writer: frozenset[DeclaredPrivilege]
+    stage12: frozenset[DeclaredPrivilege]
+    simulation_service: frozenset[DeclaredPrivilege]
+    modal_worker: frozenset[DeclaredPrivilege]
 
 
 def _access(
     *,
-    runtime: frozenset[TablePrivilege] = NO_ACCESS,
-    catalog_writer: frozenset[TablePrivilege] = NO_ACCESS,
-    stage12: frozenset[TablePrivilege] = NO_ACCESS,
-    simulation_service: frozenset[TablePrivilege] = NO_ACCESS,
-    modal_worker: frozenset[TablePrivilege] = NO_ACCESS,
+    runtime: frozenset[DeclaredPrivilege] = NO_ACCESS,
+    catalog_writer: frozenset[DeclaredPrivilege] = NO_ACCESS,
+    stage12: frozenset[DeclaredPrivilege] = NO_ACCESS,
+    simulation_service: frozenset[DeclaredPrivilege] = NO_ACCESS,
+    modal_worker: frozenset[DeclaredPrivilege] = NO_ACCESS,
 ) -> TableAccess:
     return TableAccess(
         runtime=runtime,
@@ -123,14 +149,43 @@ def _access(
     )
 
 
-# The simulation API creates these rows; its Modal workers read them, and write
-# the status of the runs and household jobs among them.
+# The simulation API creates these rows and its Modal workers read them.
 _SIMULATION_DEFINITION = _access(
     runtime=READ, simulation_service=READ_INSERT, modal_worker=READ
 )
-_RUN_STATUS = _access(
-    runtime=READ, simulation_service=READ_INSERT, modal_worker=READ_UPDATE
+# A run's state, which the Modal worker running it writes.
+_RUN_STATE_COLUMNS: Final = (
+    "status",
+    "modal_call_id",
+    "error_message",
+    "started_at",
+    "completed_at",
+    "updated_at",
 )
+# The state the simulation service writes for a run whose Modal call it starts:
+# the call's ID once Modal accepts the call, or the failure when Modal refuses
+# it.
+_CALL_START_COLUMNS: Final = (
+    "status",
+    "modal_call_id",
+    "error_message",
+    "completed_at",
+    "updated_at",
+)
+
+
+def _run_table(
+    *result_columns: str, catalog_writer: frozenset[DeclaredPrivilege] = NO_ACCESS
+) -> TableAccess:
+    """Access to a run table whose Modal worker writes the named result columns."""
+    return _access(
+        runtime=READ,
+        catalog_writer=catalog_writer,
+        simulation_service=READ_INSERT | {update_columns(*_CALL_START_COLUMNS)},
+        modal_worker=READ | {update_columns(*_RUN_STATE_COLUMNS, *result_columns)},
+    )
+
+
 # The Modal workers write results, keyed by run, once each.
 _RESULT = _access(runtime=READ, modal_worker=READ_INSERT)
 # What a run needs from the Public API's policies, dynamics, households and
@@ -149,10 +204,18 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Simulations, reports, their runs and household jobs. The catalog writer
     # checks that publication leaves the rows of three of them untouched.
     "budget_window_runs": _SIMULATION_DEFINITION,
-    "household_jobs": _RUN_STATUS,
-    "report_runs": replace(_RUN_STATUS, catalog_writer=READ),
+    "household_jobs": _run_table("result"),
+    "report_runs": _run_table(
+        "baseline_cliff_gap",
+        "baseline_cliff_share",
+        "reform_cliff_gap",
+        "reform_cliff_share",
+        "spm_provenance",
+        "data_version",
+        catalog_writer=READ,
+    ),
     "reports": replace(_SIMULATION_DEFINITION, catalog_writer=READ),
-    "simulation_runs": _RUN_STATUS,
+    "simulation_runs": _run_table("output_uri", "output_sha256", "household_result"),
     "simulations": replace(_SIMULATION_DEFINITION, catalog_writer=READ),
     # Results of simulation runs and report runs.
     "labor_supply_decile_responses": _RESULT,
@@ -240,7 +303,7 @@ def stage12_role(deployment_environment: str) -> str:
 
 def declared_privileges(
     deployment_environment: str,
-) -> dict[str, dict[str, frozenset[TablePrivilege]]]:
+) -> dict[str, dict[str, frozenset[DeclaredPrivilege]]]:
     """Return each managed role's declared privileges, keyed by role then table."""
     stage12 = stage12_role(deployment_environment)
     return {
