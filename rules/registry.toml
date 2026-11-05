@@ -1492,6 +1492,37 @@ workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
 invocation = "unittest discover -s scripts/rules/tests"
 
+[[rule]]
+id = "api.quality.tests-assert"
+category = "quality"
+statement = "Every test function pytest or unittest collects checks something: its body contains an assert, a raise AssertionError, pytest.raises, pytest.warns, pytest.deprecated_call or pytest.fail, a call to an assert function or method (unittest's self.assertEqual, a mock's assert_called_once_with) or self.fail, or a call to a test helper that does (a function of the same file, a method of the test's class, or a function imported by name from test code); apart from the tests rules/baselines/tests-without-checks.txt lists."
+rationale = "docs/engineering/skills/testing.md#every-test-checks-something"
+scope = ["**/test_*.py"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "asserting-tests"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[[rule.ci]]
+workflow = ".github/workflows/push.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.baseline]
+file = "rules/baselines/tests-without-checks.txt"
+count = 21
+[rule.proof]
+bad_fixture = "rules/fixtures/api.quality.tests-assert/rejected_tests.txt"
+good_fixture = "rules/fixtures/api.quality.tests-assert/accepted_tests.txt"
+test = "scripts/rules/tests/test_asserting_tests.py::TestAssertingTestsProof::test_rule_proof_tests_assert"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
 # --- CI workflows and scripts ----------------------------------------------
 
 [[rule]]
