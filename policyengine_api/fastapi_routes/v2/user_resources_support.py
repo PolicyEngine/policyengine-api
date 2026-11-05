@@ -13,7 +13,7 @@ from fastapi import Request  # noqa: TC002
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.fastapi_routes.v2.errors import (
+from policyengine_api.fastapi_routes.v2.errors_support import (
     BEARER_CHALLENGE,
     V2ErrorResponse,
     V2RequestTooLargeError,

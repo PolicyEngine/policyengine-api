@@ -107,7 +107,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.metadata.database_session import (
         MetadataDatabaseSession,
     )
-    from policyengine_api.services.v2.metadata.selected_catalogs import (
+    from policyengine_api.services.v2.metadata.process_state import (
         SelectedCatalogStore,
     )
 

@@ -18,11 +18,11 @@ from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     UnsupportedPreviewCountryError,
 )
 from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.fastapi_routes.v2.errors import (
+from policyengine_api.fastapi_routes.v2.errors_support import (
     V2ErrorResponse,
     v2_error_response,
 )
-from policyengine_api.fastapi_routes.v2.metadata.response_cache import (
+from policyengine_api.fastapi_routes.v2.metadata.response_cache_support import (
     BuiltResponse,
     KeptResponse,
     body_entity_tag,

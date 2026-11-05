@@ -13,7 +13,7 @@ from policyengine_api.fastapi_routes.dependencies import (
     _default_v2_user_policy_service_factory,
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
-from policyengine_api.fastapi_routes.v2.errors import v2_error_response
+from policyengine_api.fastapi_routes.v2.errors_support import v2_error_response
 from policyengine_api.fastapi_routes.v2.user_policies.request_models import (
     UserPolicyCreateRequest,
     UserPolicyPatchRequest,
@@ -26,7 +26,7 @@ from policyengine_api.fastapi_routes.v2.user_policies.response_models import (
     UserPolicyPageResponse,
     UserPolicyPageResult,
 )
-from policyengine_api.fastapi_routes.v2.user_resources import (
+from policyengine_api.fastapi_routes.v2.user_resources_support import (
     enforce_user_write_request_size,
     user_resource_operation,
 )

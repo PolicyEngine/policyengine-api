@@ -1,0 +1,16 @@
+# Proof fixture for rule api.v2.services-no-sql. The guard must accept it: the
+# service opens a read through its database-session container and passes the
+# session to a connector.
+
+expected_findings = []
+
+[files]
+"policyengine_api/services/v2/policies/services.py" = """
+from policyengine_api.services.v2.policies.database_connectors.reads import read_policy
+
+
+class V2PolicyService:
+    def get_policy(self, policy_id):
+        with self._database_session.read() as session:
+            return read_policy(session, policy_id)
+"""

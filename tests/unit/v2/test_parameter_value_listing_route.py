@@ -17,10 +17,10 @@ from tests.fixtures.v2_metadata_routes import (
 def test_listing_forwards_every_query_parameter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from policyengine_api.fastapi_routes.v2.metadata import common
+    from policyengine_api.fastapi_routes.v2.metadata import route_support
 
     request_instant = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
-    monkeypatch.setattr(common, "utc_now", lambda: request_instant)
+    monkeypatch.setattr(route_support, "utc_now", lambda: request_instant)
     results, ids = resource_results()
     reader = ResourceReader(results)
 

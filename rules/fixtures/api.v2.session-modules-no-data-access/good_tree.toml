@@ -1,0 +1,28 @@
+# Proof fixture for rule api.v2.session-modules-no-data-access. The guard must
+# accept it: the module opens sessions and transactions, commits and rolls
+# back, and leaves reads and writes to the connectors.
+
+expected_findings = []
+
+[files]
+"policyengine_api/services/v2/policies/database_session.py" = """
+from contextlib import contextmanager
+
+
+class PolicyDatabaseSession:
+    @contextmanager
+    def read(self):
+        with self._session_factory() as session:
+            yield session
+
+    @contextmanager
+    def transaction(self):
+        with self._session_factory.begin() as session:
+            savepoint = session.begin_nested()
+            try:
+                yield session
+                savepoint.commit()
+            except Exception:
+                savepoint.rollback()
+                raise
+"""

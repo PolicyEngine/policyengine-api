@@ -1,15 +1,59 @@
 # API v2 Code Organization
 
 Organize API v2 code first by resource and then by one explicit technical
-responsibility. Route modules must not open database sessions or construct SQL.
-Service modules must sequence work but must not construct or execute SQL.
+responsibility. Route modules must not open database sessions or construct SQL
+(rule `api.v2.routes-no-sessions-or-sql`). Service modules must sequence work
+but must not construct or execute SQL (rule `api.v2.services-no-sql`).
+
+
+## File layers
+
+Every `.py` file under `policyengine_api/services/v2` and
+`policyengine_api/fastapi_routes/v2` has a layer, which the `v2-layers` quality
+guard (`scripts/rules/v2_layers.py`) takes from the file's name alone:
+
+- under `services/v2/<resource>/`: `services.py` (service), `validators.py`,
+  `transformations.py`, `types.py`, `process_state.py` (process-wide state),
+  `database_session.py` (directly in the resource package) and
+  `database_connectors/<creates|reads|updates|deletes>[_name].py`;
+- under `fastapi_routes/v2/`: `routes.py` and `<name>_routes.py` (routes),
+  `<name>_models.py` (request, response and document schemas) and
+  `<name>_support.py` (HTTP code the route modules share);
+- `__init__.py` anywhere.
+
+A file with another name fails the guard (rule
+`api.v2.files-assigned-to-layers`): rename it. A file that can't be renamed
+needs a `[[rule.exception]]` for that rule in `rules/registry.toml`, with its
+`path`, a `reason` and an `expires` date, by which the file should be renamed.
+An exception chooses no layer: the file gets the route checks under
+`fastapi_routes/v2`, and the validator, transformation and types checks
+(rule `api.v2.pure-modules-no-session-calls`) under `services/v2`. The guard
+fails on an exception for a file that no longer exists or whose name already
+gives it a layer.
+
+The guard counts a method call as a session call when its receiver is named
+`session` or `<something>_session`, but not a request's `.session` or an HTTP
+or client session (`http_session`, `requests_session`). Route modules and the
+pure layers may call no method on a session at all. In routes, services and
+the pure layers a call into SQLAlchemy or SQLModel counts, except to its
+exception classes and, in services, to a session factory; a builder called on
+a model's `__table__` counts too. A session factory is any call into
+`policyengine_api.data.orm` or `policyengine_api.data.v2.database`,
+SQLAlchemy's `Session`, `sessionmaker` or `create_engine`, or an injected
+`*session_factory` or its `begin()`; only services and `database_session`
+modules may use one. The guard doesn't
+recognise a session bound to another name, an alias of a model's table, or a
+name re-exported through another module. A ratcheted rule's baseline lists one
+line per tolerated occurrence.
 
 ## HTTP adapters
 
 Resource-specific FastAPI code lives under `policyengine_api/fastapi_routes/v2/`:
 
 ```text
-errors.py
+errors_support.py
+user_auth_support.py
+user_resources_support.py
 policies/
   request_models.py
   response_models.py
@@ -20,27 +64,39 @@ user_policies/
   routes.py
 metadata/
   response_models.py
-  common.py
-  query_dependencies.py
-  response_cache.py
+  route_support.py
+  query_support.py
+  response_cache_support.py
+  search_file_support.py
   *_routes.py
 ```
 
-`common.py` also holds the route class that gives metadata responses their
-caching headers. `query_dependencies.py` defines the typed FastAPI
+`route_support.py` runs the metadata reads for the route modules, maps their
+failures to HTTP, and holds the route class that gives metadata responses
+their caching headers. `query_support.py` defines the typed FastAPI
 dependencies for the shared query models once, for every metadata route
-module to import. `response_cache.py` keeps serialized whole-version
+module to import. `response_cache_support.py` keeps serialized whole-version
 responses (bodies and ETags) for the process; it is HTTP-level, so it lives
-with the routes.
+with the routes. `search_file_support.py` serves a stored parameter search
+file with its content encoding.
 
-`errors.py` defines the strict error response and serialization function shared
-by every API v2 resource. Application-wide exception handling distinguishes
+`errors_support.py` defines the strict error response and serialization
+function shared by every API v2 resource. `user_auth_support.py` turns
+request credentials into an account principal, and
+`user_resources_support.py` holds the HTTP conventions the user-owned
+resource routes share. Application-wide exception handling distinguishes
 API v2 from non-v2 requests but must not select error behavior by matching
 individual resource paths.
 
 Request models describe HTTP bodies. Response models describe public response
 response structures and OpenAPI output. Route functions handle HTTP-only conditions,
-invoke one service method, and convert typed failures to HTTP responses.
+invoke one service method, and convert typed failures to HTTP responses. No module
+under `fastapi_routes/v2` imports SQLAlchemy, SQLModel, a connector, a
+`database_session` module, the v1 ORM module `policyengine_api.data.orm` or
+`policyengine_api.data.v2.database`, or calls a SQLAlchemy or SQLModel
+function, a session method or a session factory (rule
+`api.v2.routes-no-sessions-or-sql`; today's `sqlalchemy.exc` imports are in its
+baseline).
 
 ## Resource service packages
 
@@ -61,10 +117,9 @@ services/v2/<resource>/
     deletes.py
 ```
 
-A resource may also add a module for process-wide state its service reuses
-across requests, named for what it keeps, such as the metadata package's
-`selected_catalogs.py` (each catalog version a request has selected, which
-never changes once published). Such a module holds plain data, constructs no
+A resource may also add a `process_state.py` module for process-wide state its
+service reuses across requests, such as the metadata package's (each catalog
+version a request has selected, which never changes once published). Such a module holds plain data, constructs no
 SQL and owns no session; the composition code creates one instance per process
 and injects it into the service.
 
@@ -86,14 +141,20 @@ or more connector functions. A service may expose an entrypoint that accepts an
 existing session when several resources must change atomically in one caller-
 owned transaction.
 
-Do not construct SQL expressions, call `Session.exec`, or define HTTP response
-models in this module.
+Do not construct SQL expressions, call `Session.exec` or another data-access
+session method, or define HTTP response models in this module (rule
+`api.v2.services-no-sql`, which also forbids importing FastAPI or Starlette).
 
 ### `validators.py`
 
 Define functions that inspect already-available values and either return a
 validated value or raise a typed exception. Validators must not load records,
 open sessions, execute SQL, mutate database rows, or construct HTTP responses.
+Validators, transformations, types, process-state modules and package
+`__init__` files import nothing from SQLAlchemy or SQLModel but the `Session`
+type, import no connector or session module, and call no session method,
+SQLAlchemy or SQLModel function or session factory (rule
+`api.v2.pure-modules-no-session-calls`).
 
 When validation depends on stored state, a database connector loads the
 required rows and the service passes those rows to a validator. For example,
@@ -129,7 +190,9 @@ baseline).
 Define the resource's database-session lifetime container. It may open and
 close sessions, begin transactions, commit, or roll back. It must not construct
 SQL, choose records, validate business rules, transform records into response
-types, or determine multi-step operation order.
+types, or determine multi-step operation order. It calls no data-access
+session method (`add`, `get`, `merge`, `exec`, `execute` and so on) and
+imports no connector (rule `api.v2.session-modules-no-data-access`).
 
 Composition code should construct this container and inject it into the
 service. A request-scoped read service may wrap one already-open session; a
@@ -147,7 +210,7 @@ ORM rows belongs in this package. Organize connector files by CRUD operation:
 - `deletes.py` removes rows.
 
 Connector functions receive a session from the service. They do not open,
-commit, roll back, or close it. They do not call route functions, perform
+commit, roll back, or close it (rule `api.v2.connectors-never-commit`). They do not call route functions, perform
 request-level or business validation, or convert rows into public response
 types. Connector modules do not call one another to sequence a workflow; the
 service makes that ordering explicit. They never import one another (rule

@@ -19,7 +19,10 @@ from policyengine_api.fastapi_routes.v2.countries.response_models import (
     CountryListResponse,
     CountryListResult,
 )
-from policyengine_api.fastapi_routes.v2.errors import V2ErrorMapping, run_v2_operation
+from policyengine_api.fastapi_routes.v2.errors_support import (
+    V2ErrorMapping,
+    run_v2_operation,
+)
 from policyengine_api.query_parameters import CountryListQuery
 
 if TYPE_CHECKING:
