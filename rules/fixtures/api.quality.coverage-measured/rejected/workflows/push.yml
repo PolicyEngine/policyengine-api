@@ -1,6 +1,6 @@
 # Proof fixture for api.quality.coverage-measured (the rejected case): the
 # release tests keep no coverage report, and the merge run's upload doesn't
-# fail the run when it fails.
+# fail the run when it fails, and the deploy waits for it.
 on:
   push:
     branches:
@@ -15,3 +15,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: integration
+  deploy:
+    needs: merge-upload
+    steps:
+      - run: echo deploy

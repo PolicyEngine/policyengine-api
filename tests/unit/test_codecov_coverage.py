@@ -216,7 +216,11 @@ def test_rule_proof_coverage_measured():
         "codecov.yml has no patch status",
         "codecov.yml doesn't ignore tests/**",
         "codecov.yml doesn't ignore migrations/*/versions/**",
-        "no job in pr.yml uploads test's coverage.xml flagged unit",
+        "integration.yml:integration uploads coverage without a flag codecov.yml "
+        "carries forward",
+        "integration.yml:integration uploads coverage in a reusable workflow; keep "
+        "the report as an artifact for a job in the calling workflow to upload",
+        "no job in pr.yml uploads all of test's coverage.xml flagged unit",
         "pr.yml:upload-test-coverage uploads coverage without a flag codecov.yml "
         "carries forward",
         "pr.yml:upload-test-coverage doesn't pass the CODECOV_TOKEN secret as the "
@@ -226,8 +230,164 @@ def test_rule_proof_coverage_measured():
         "push.yml:merge-upload uploads coverage without a flag codecov.yml carries "
         "forward",
         "push.yml:merge-upload runs on master but a failed upload doesn't fail the run",
+        "push.yml:merge-upload uploads coverage, and deploy waits for it",
     ]
     assert accepted == []
+
+
+GOOD_CONFIG = yaml.safe_load((FIXTURES / "accepted" / "codecov.yml").read_text())
+SHARDED_SUITE = {
+    "strategy": {"matrix": {"shard_index": [1, 2]}},
+    "steps": [
+        {"run": "make test"},
+        {
+            "uses": "actions/upload-artifact@v4",
+            "with": {"name": "cov-${{ matrix.shard_index }}", "path": "coverage.xml"},
+        },
+    ],
+}
+
+
+def _upload_job(download: dict, *, needs: str = "test", **inputs: object) -> dict:
+    return {
+        "needs": needs,
+        "steps": [
+            {"uses": "actions/download-artifact@v4", "with": download},
+            {
+                "uses": "codecov/codecov-action@v5",
+                "with": {"token": TOKEN, "flags": UNIT, **inputs},
+            },
+        ],
+    }
+
+
+def _master_upload(**job_fields: object) -> dict:
+    upload = _upload_job({}, needs="build", fail_ci_if_error=True)
+    upload.update(job_fields)
+    return {
+        "push.yml": {
+            "on": {"push": {"branches": ["master"]}},
+            "jobs": {"build": {"steps": [{"run": "echo"}]}, "upload": upload},
+        }
+    }
+
+
+def test_every_shard_of_the_suite_must_be_uploaded():
+    one_shard = {
+        "pr.yml": {
+            "on": "pull_request",
+            "jobs": {
+                "test": SHARDED_SUITE,
+                "upload": _upload_job({"pattern": "cov-1"}),
+            },
+        }
+    }
+    every_shard = {
+        "pr.yml": {
+            "on": "pull_request",
+            "jobs": {
+                "test": SHARDED_SUITE,
+                "upload": _upload_job({"pattern": "cov-*"}),
+            },
+        }
+    }
+    everything = {
+        "pr.yml": {
+            "on": "pull_request",
+            "jobs": {"test": SHARDED_SUITE, "upload": _upload_job({})},
+        }
+    }
+
+    assert coverage_problems(one_shard, GOOD_CONFIG) == [
+        "no job in pr.yml uploads all of test's coverage.xml flagged unit"
+    ]
+    assert coverage_problems(every_shard, GOOD_CONFIG) == []
+    assert coverage_problems(everything, GOOD_CONFIG) == []
+
+
+def test_an_unnamed_artifact_and_similar_commands_are_read_correctly():
+    unnamed = {
+        "steps": [
+            {"run": "make test"},
+            {"uses": "actions/upload-artifact@v4", "with": {"path": "coverage.xml"}},
+        ]
+    }
+    workflows = {
+        "pr.yml": {
+            "on": "pull_request",
+            "jobs": {
+                "test": unnamed,
+                "upload": _upload_job({"name": "artifact"}),
+                "env-vars": {"steps": [{"run": "make test-env-vars"}]},
+                "pytest-cov": {"steps": [{"run": "pytest --cov=pkg --cov-report=xml"}]},
+            },
+        }
+    }
+
+    assert coverage_problems(workflows, GOOD_CONFIG) == [
+        "pr.yml:pytest-cov measures coverage but uploads none"
+    ]
+
+
+def test_a_master_upload_that_can_be_skipped_or_ignored_fails_the_check():
+    cases = {
+        "a step that continues on error": {
+            "steps": [
+                {
+                    "uses": "codecov/codecov-action@v5",
+                    "continue-on-error": True,
+                    "with": {"token": TOKEN, "flags": UNIT, "fail_ci_if_error": True},
+                }
+            ]
+        },
+        "a job that continues on error": {"continue-on-error": True},
+        "a step with a condition": {
+            "steps": [
+                {
+                    "uses": "codecov/codecov-action@v5",
+                    "if": "github.event_name == 'schedule'",
+                    "with": {"token": TOKEN, "flags": UNIT, "fail_ci_if_error": True},
+                }
+            ]
+        },
+        "a job with a condition": {"if": "false"},
+    }
+    expected = {
+        "a step that continues on error": "push.yml:upload runs on master but a "
+        "failed upload doesn't fail the run",
+        "a job that continues on error": "push.yml:upload runs on master but a "
+        "failed upload doesn't fail the run",
+        "a step with a condition": "push.yml:upload can skip its upload on master",
+        "a job with a condition": "push.yml:upload can skip its upload on master",
+    }
+    for case, job_fields in cases.items():
+        workflows = _master_upload(**job_fields)
+        assert coverage_problems(workflows, GOOD_CONFIG) == [expected[case]], case
+
+
+def test_codecov_config_details():
+    def problems_with(**changes: object) -> list[str]:
+        config = yaml.safe_load((FIXTURES / "accepted" / "codecov.yml").read_text())
+        for path, value in changes.items():
+            *keys, last = path.split("__")
+            target = config
+            for key in keys:
+                target = target[int(key)] if isinstance(target, list) else target[key]
+            target[last] = value
+        return config_problems(config)
+
+    assert problems_with(coverage__status__patch="off") == [
+        "codecov.yml has no patch status"
+    ]
+    assert problems_with(coverage__status__project__default__threshold="0%") == []
+    assert problems_with(
+        flag_management__individual_flags__0__paths=["policyengine/"]
+    ) == ["codecov.yml's unit flag covers policyengine/, which doesn't exist"]
+    default_rules = yaml.safe_load((FIXTURES / "accepted" / "codecov.yml").read_text())
+    default_rules["flag_management"]["default_rules"] = {"carryforward": True}
+    for flag in default_rules["flag_management"]["individual_flags"]:
+        del flag["carryforward"]
+    assert config_problems(default_rules) == []
 
 
 def test_every_coverage_upload_is_flagged_and_master_uploads_fail_the_run():
@@ -237,15 +397,31 @@ def test_every_coverage_upload_is_flagged_and_master_uploads_fail_the_run():
 
 
 def test_master_and_pull_requests_measure_both_flags():
+    # The integration tests' workflow hands its report over as an artifact,
+    # and a job of each caller uploads it: nothing in a release waits for
+    # Codecov.
     workflows = _load_workflows(WORKFLOWS)
 
-    assert UNIT in _uploaded_flags(workflows["pr.yml"])
-    assert UNIT in _uploaded_flags(workflows["push.yml"])
-    assert _uploaded_flags(workflows["v2-integration-check.yml"]) == {INTEGRATION}
+    assert _uploaded_flags(workflows["pr.yml"]) == {UNIT, INTEGRATION}
+    assert _uploaded_flags(workflows["push.yml"]) == {UNIT, INTEGRATION}
+    assert _uploaded_flags(workflows["v2-integration-check.yml"]) == set()
     for caller in ("pr.yml", "push.yml"):
-        integration = workflows[caller]["jobs"]["v2-integration-check"]
+        jobs = workflows[caller]["jobs"]
+        integration = jobs["v2-integration-check"]
         assert integration["uses"] == "./.github/workflows/v2-integration-check.yml"
-        assert integration["secrets"] == {"CODECOV_TOKEN": TOKEN}
+        assert "secrets" not in integration
+        assert _needs(jobs["upload-integration-coverage"]) == ["v2-integration-check"]
+
+
+def test_no_master_job_waits_for_a_codecov_upload():
+    jobs = _load_workflows(WORKFLOWS)["push.yml"]["jobs"]
+    uploads = {
+        job_id for job_id, job in jobs.items() if _steps_using(job, CODECOV_ACTION)
+    }
+
+    assert uploads == {"upload-release-test-coverage", "upload-integration-coverage"}
+    for job_id, job in jobs.items():
+        assert not uploads & set(_needs(job)), job_id
 
 
 def test_master_uploads_the_release_tests_coverage_in_one_upload():

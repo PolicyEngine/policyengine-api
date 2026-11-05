@@ -1,0 +1,15 @@
+# Proof fixture for api.quality.coverage-measured (the rejected case): a
+# reusable workflow uploads to Codecov itself, so the caller's jobs that wait
+# for the workflow would wait for Codecov.
+on:
+  workflow_call:
+jobs:
+  integration:
+    steps:
+      - run: uv run --frozen --extra dev coverage xml -i -o coverage-v2.xml
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage-v2.xml
+          flags: integration
+          fail_ci_if_error: true
