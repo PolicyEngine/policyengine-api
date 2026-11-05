@@ -533,9 +533,15 @@ model changes:
 - `household_jobs` calculates one household (`household_id`) for one `year`
   under one policy, and records its catalog and package versions and its
   Modal call ID.
-- The foreign keys from the tables the simulation service and its Modal workers
-  write to the tables the Public API writes are dropped; the service that
-  writes a row checks the rows it names.
+- The new columns that name the Public API's rows are foreign keys with the
+  delete rules the same columns have on `simulations`:
+  `simulation_runs.tax_benefit_model_version_id` and `dataset_id` (`RESTRICT`)
+  and `region_id` (`SET NULL`), and `household_jobs.household_id` and
+  `tax_benefit_model_version_id` (`RESTRICT`). `reports.user_id` gains an
+  index, which account deletion's `SET NULL` searches. Each service writes only
+  its own tables, and the foreign keys between them stay: PostgreSQL checks
+  each named row when a row is written, with the privileges of the named
+  table's owner, so a writing role needs no privilege on the named table.
 
 Missing values in the unique keys of `poverty`, `decile_impacts` and
 `program_statistics` count as equal (`NULLS NOT DISTINCT`, which PostgreSQL

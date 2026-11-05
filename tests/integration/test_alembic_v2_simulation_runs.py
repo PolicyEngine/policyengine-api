@@ -28,7 +28,13 @@ from policyengine_api.data.v2.migration_target import (
     load_v2_alembic_settings,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
-from tests.integration.simulation_rows import RUN_VERSIONS, insert_row, refused
+from tests.integration.simulation_rows import (
+    RUN_VERSIONS,
+    PublicApiRows,
+    insert_public_api_rows,
+    insert_row,
+    refused,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -61,6 +67,38 @@ CHANGED_TABLES = frozenset(
 SIMULATION_SIDE_TABLES = (
     CHANGED_TABLES | NEW_TABLES | {"aggregates", "change_aggregates"}
 )
+# The foreign keys from the simulation service's tables to the Public API's
+# rows, with their delete rules.
+PUBLIC_API_FOREIGN_KEYS = {
+    ("simulations", "dataset_id"): ("datasets", "RESTRICT"),
+    ("simulations", "household_id"): ("households", "RESTRICT"),
+    ("simulations", "policy_id"): ("policies", "SET NULL"),
+    ("simulations", "dynamic_id"): ("dynamics", "SET NULL"),
+    ("simulations", "tax_benefit_model_version_id"): (
+        "tax_benefit_model_versions",
+        "RESTRICT",
+    ),
+    ("simulations", "region_id"): ("regions", "SET NULL"),
+    ("reports", "user_id"): ("users", "SET NULL"),
+    ("reports", "tax_benefit_model_id"): ("tax_benefit_models", "RESTRICT"),
+    ("reports", "policy_id"): ("policies", "SET NULL"),
+    ("reports", "household_id"): ("households", "RESTRICT"),
+    ("reports", "dataset_id"): ("datasets", "SET NULL"),
+    ("reports", "region_id"): ("regions", "SET NULL"),
+    ("simulation_runs", "tax_benefit_model_version_id"): (
+        "tax_benefit_model_versions",
+        "RESTRICT",
+    ),
+    ("simulation_runs", "dataset_id"): ("datasets", "RESTRICT"),
+    ("simulation_runs", "region_id"): ("regions", "SET NULL"),
+    ("household_jobs", "household_id"): ("households", "RESTRICT"),
+    ("household_jobs", "policy_id"): ("policies", "SET NULL"),
+    ("household_jobs", "dynamic_id"): ("dynamics", "SET NULL"),
+    ("household_jobs", "tax_benefit_model_version_id"): (
+        "tax_benefit_model_versions",
+        "RESTRICT",
+    ),
+}
 SHA256_HEX = "a" * 64
 COMPLETED_AT = "2026-11-04T00:00:00Z"
 
@@ -198,21 +236,25 @@ def test_the_revision_downgrades_to_its_parent_and_upgrades_again(
     assert "v2_simulation_role" in _enum_type_names(engine)
 
 
-def test_head_has_no_foreign_key_between_the_two_services_tables(
+def test_head_keeps_the_foreign_keys_to_the_public_api_tables(
     config: Config, engine: Engine
 ) -> None:
+    """Each service writes only its own tables; the keys between them stay."""
     command.upgrade(config, "head")
     inspector = inspect(engine)
 
-    cross_service_keys = sorted(
-        f"{table_name}.{key['name']} -> {key['referred_table']}"
-        for table_name in inspector.get_table_names(schema="public")
+    public_api_keys = {
+        (table_name, column_name): (key["referred_table"], key["options"]["ondelete"])
+        for table_name in SIMULATION_SIDE_TABLES
         for key in inspector.get_foreign_keys(table_name)
-        if (table_name in SIMULATION_SIDE_TABLES)
-        != (key["referred_table"] in SIMULATION_SIDE_TABLES)
-    )
+        if key["referred_table"] not in SIMULATION_SIDE_TABLES
+        for column_name in key["constrained_columns"]
+    }
 
-    assert cross_service_keys == []
+    assert public_api_keys == PUBLIC_API_FOREIGN_KEYS
+    assert {"ix_reports_user_id"} <= {
+        index["name"] for index in inspector.get_indexes("reports")
+    }
 
 
 def _count(connection: Connection, table: str, column: str, value: object) -> int:
@@ -222,16 +264,23 @@ def _count(connection: Connection, table: str, column: str, value: object) -> in
     ).scalar_one()
 
 
-def _insert_simulation(connection: Connection) -> object:
-    """Store an economy simulation; its catalog references need no catalog rows."""
+@pytest.fixture
+def public_api_rows(connection: Connection) -> PublicApiRows:
+    return insert_public_api_rows(connection)
+
+
+def _insert_simulation(
+    connection: Connection, public_api_rows: PublicApiRows
+) -> object:
+    """Store an economy simulation of the stored dataset and catalog version."""
     simulation_id = uuid4()
     insert_row(
         connection,
         "simulations",
         id=simulation_id,
         simulation_type="economy",
-        dataset_id=uuid4(),
-        tax_benefit_model_version_id=uuid4(),
+        dataset_id=public_api_rows.dataset_id,
+        tax_benefit_model_version_id=public_api_rows.version_id,
         year=2026,
     )
     return simulation_id
@@ -244,13 +293,18 @@ def _insert_simulation_run(
     status: str = "pending",
     **values: object,
 ) -> object:
+    """Store a run of the simulation on the simulation's catalog version."""
     run_id = uuid4()
+    version_id = connection.execute(
+        text("SELECT tax_benefit_model_version_id FROM simulations WHERE id = :id"),
+        {"id": simulation_id},
+    ).scalar_one()
     insert_row(
         connection,
         "simulation_runs",
         id=run_id,
         simulation_id=simulation_id,
-        tax_benefit_model_version_id=uuid4(),
+        tax_benefit_model_version_id=version_id,
         status=status,
         **RUN_VERSIONS,
         **values,
@@ -258,7 +312,9 @@ def _insert_simulation_run(
     return run_id
 
 
-def _insert_report_run(connection: Connection) -> object:
+def _insert_report_run(
+    connection: Connection, public_api_rows: PublicApiRows
+) -> object:
     report_id, report_run_id = uuid4(), uuid4()
     insert_row(
         connection,
@@ -266,7 +322,7 @@ def _insert_report_run(connection: Connection) -> object:
         id=report_id,
         label="Report",
         country="us",
-        tax_benefit_model_id=uuid4(),
+        tax_benefit_model_id=public_api_rows.model_id,
         inputs="{}",
     )
     insert_row(
@@ -281,10 +337,41 @@ def _insert_report_run(connection: Connection) -> object:
     return report_run_id
 
 
-def test_simulation_runs_need_a_completion_time_and_a_whole_output(
-    connection: Connection,
+def test_rows_naming_a_missing_public_api_row_are_refused(
+    connection: Connection, public_api_rows: PublicApiRows
 ) -> None:
-    simulation_id = _insert_simulation(connection)
+    """PostgreSQL checks each row a simulation-side row names when it is written."""
+    simulation_id = _insert_simulation(connection, public_api_rows)
+
+    with refused(connection, match="foreign key constraint"):
+        insert_row(
+            connection,
+            "simulation_runs",
+            id=uuid4(),
+            simulation_id=simulation_id,
+            tax_benefit_model_version_id=uuid4(),
+            status="pending",
+            **RUN_VERSIONS,
+        )
+    with refused(connection, match="foreign key constraint"):
+        insert_row(
+            connection,
+            "household_jobs",
+            id=uuid4(),
+            country="us",
+            household_id=uuid4(),
+            year=2026,
+            request_data="{}",
+            tax_benefit_model_version_id=public_api_rows.version_id,
+            status="pending",
+            **RUN_VERSIONS,
+        )
+
+
+def test_simulation_runs_need_a_completion_time_and_a_whole_output(
+    connection: Connection, public_api_rows: PublicApiRows
+) -> None:
+    simulation_id = _insert_simulation(connection, public_api_rows)
     run_id = _insert_simulation_run(connection, simulation_id)
 
     with refused(connection):
@@ -328,10 +415,12 @@ def test_simulation_runs_need_a_completion_time_and_a_whole_output(
 
 
 def test_report_run_members_are_unique_and_keep_their_simulation_runs(
-    connection: Connection,
+    connection: Connection, public_api_rows: PublicApiRows
 ) -> None:
-    run_id = _insert_simulation_run(connection, _insert_simulation(connection))
-    report_run_id = _insert_report_run(connection)
+    run_id = _insert_simulation_run(
+        connection, _insert_simulation(connection, public_api_rows)
+    )
+    report_run_id = _insert_report_run(connection, public_api_rows)
     member = {
         "report_run_id": report_run_id,
         "simulation_run_id": run_id,
@@ -355,13 +444,13 @@ def test_report_run_members_are_unique_and_keep_their_simulation_runs(
 
 
 def test_results_are_unique_per_run_and_name_runs_that_exist(
-    connection: Connection,
+    connection: Connection, public_api_rows: PublicApiRows
 ) -> None:
-    simulation_id = _insert_simulation(connection)
+    simulation_id = _insert_simulation(connection, public_api_rows)
     baseline_run_id = _insert_simulation_run(connection, simulation_id)
     reform_run_id = _insert_simulation_run(connection, simulation_id)
     comparison_runs = {
-        "report_run_id": _insert_report_run(connection),
+        "report_run_id": _insert_report_run(connection, public_api_rows),
         "baseline_simulation_run_id": baseline_run_id,
         "reform_simulation_run_id": reform_run_id,
     }
@@ -473,13 +562,13 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
 
 
 def test_household_jobs_take_a_valid_year_and_record_when_they_end(
-    connection: Connection,
+    connection: Connection, public_api_rows: PublicApiRows
 ) -> None:
     household_job = {
         "country": "us",
-        "household_id": uuid4(),
+        "household_id": public_api_rows.household_id,
         "request_data": "{}",
-        "tax_benefit_model_version_id": uuid4(),
+        "tax_benefit_model_version_id": public_api_rows.version_id,
         **RUN_VERSIONS,
     }
     insert_row(

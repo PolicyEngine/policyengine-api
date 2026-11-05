@@ -20,7 +20,13 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.pool import NullPool
 
 from policyengine_api.constants import REPO
-from tests.integration.simulation_rows import RUN_VERSIONS, insert_row, refused
+from tests.integration.simulation_rows import (
+    RUN_VERSIONS,
+    PublicApiRows,
+    insert_public_api_rows,
+    insert_row,
+    refused,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -48,6 +54,12 @@ def connection(disposable_v2_database_url, managed_v2_roles) -> Iterator[Connect
         engine.dispose()
 
 
+@pytest.fixture
+def public_api_rows(connection: Connection) -> PublicApiRows:
+    """Store, as the superuser, the Public API's rows the simulation rows name."""
+    return insert_public_api_rows(connection)
+
+
 def _act_as(connection: Connection, role: str) -> None:
     quoted_role = connection.dialect.identifier_preparer.quote(role)
     connection.execute(text(f"SET LOCAL ROLE {quoted_role}"))
@@ -59,7 +71,9 @@ def _refused(connection: Connection, statement: str, **values: object) -> None:
         connection.execute(text(statement), values)
 
 
-def _create_simulation_rows(connection: Connection) -> dict[str, object]:
+def _create_simulation_rows(
+    connection: Connection, public_api_rows: PublicApiRows
+) -> dict[str, object]:
     """Create what the simulation API creates for one economy report run."""
     ids = {
         name: uuid4()
@@ -70,8 +84,8 @@ def _create_simulation_rows(connection: Connection) -> dict[str, object]:
         "simulations",
         id=ids["simulation"],
         simulation_type="economy",
-        dataset_id=uuid4(),
-        tax_benefit_model_version_id=uuid4(),
+        dataset_id=public_api_rows.dataset_id,
+        tax_benefit_model_version_id=public_api_rows.version_id,
         year=2026,
     )
     insert_row(
@@ -79,7 +93,7 @@ def _create_simulation_rows(connection: Connection) -> dict[str, object]:
         "simulation_runs",
         id=ids["run"],
         simulation_id=ids["simulation"],
-        tax_benefit_model_version_id=uuid4(),
+        tax_benefit_model_version_id=public_api_rows.version_id,
         status="pending",
         **RUN_VERSIONS,
     )
@@ -89,7 +103,7 @@ def _create_simulation_rows(connection: Connection) -> dict[str, object]:
         id=ids["report"],
         label="Report",
         country="us",
-        tax_benefit_model_id=uuid4(),
+        tax_benefit_model_id=public_api_rows.model_id,
         inputs="{}",
     )
     insert_row(
@@ -114,10 +128,10 @@ def _create_simulation_rows(connection: Connection) -> dict[str, object]:
         "household_jobs",
         id=ids["household_job"],
         country="us",
-        household_id=uuid4(),
+        household_id=public_api_rows.household_id,
         year=2026,
         request_data="{}",
-        tax_benefit_model_version_id=uuid4(),
+        tax_benefit_model_version_id=public_api_rows.version_id,
         status="pending",
         **RUN_VERSIONS,
     )
@@ -125,11 +139,11 @@ def _create_simulation_rows(connection: Connection) -> dict[str, object]:
 
 
 def test_the_simulation_service_creates_rows_but_writes_no_status_or_result(
-    connection: Connection, managed_v2_roles
+    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
 ) -> None:
     _act_as(connection, managed_v2_roles.simulation_service)
 
-    ids = _create_simulation_rows(connection)
+    ids = _create_simulation_rows(connection, public_api_rows)
     run_count = connection.execute(
         text("SELECT count(*) FROM simulation_runs WHERE id = :id"), {"id": ids["run"]}
     ).scalar_one()
@@ -162,10 +176,10 @@ def test_the_simulation_service_creates_rows_but_writes_no_status_or_result(
 
 
 def test_modal_workers_write_their_run_status_and_results_only(
-    connection: Connection, managed_v2_roles
+    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
 ) -> None:
     _act_as(connection, managed_v2_roles.simulation_service)
-    ids = _create_simulation_rows(connection)
+    ids = _create_simulation_rows(connection, public_api_rows)
     _act_as(connection, managed_v2_roles.modal_worker)
 
     updated = connection.execute(

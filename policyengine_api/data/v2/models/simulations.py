@@ -9,6 +9,13 @@ import sqlalchemy as sa
 from sqlmodel import Field, Relationship
 
 from policyengine_api.data.v2.models.base import TimestampedModel, enum_type
+from policyengine_api.data.v2.models.households import Household
+from policyengine_api.data.v2.models.metadata import (
+    Dataset,
+    Region,
+    TaxBenefitModelVersion,
+)
+from policyengine_api.data.v2.models.policies import Dynamic, Policy
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.reports import (
@@ -39,9 +46,11 @@ class Simulation(TimestampedModel, table=True):
     """A simulation of exactly one household or one dataset, matching its type.
 
     It defines what to calculate; each calculation of it is a ``SimulationRun``.
-    Its dataset, household, policy, dynamic, catalog version and region are
-    logical references to the Public API's rows, without foreign keys: the
-    simulation service checks them before it writes the simulation.
+    The simulation service writes it, and the Public API the rows it names;
+    each service writes only its own tables, and the foreign keys between them
+    stay. Deleting its policy, dynamic or region clears that reference; its
+    household, input dataset and catalog version cannot be deleted while it
+    exists.
     """
 
     __tablename__ = "simulations"
@@ -67,17 +76,52 @@ class Simulation(TimestampedModel, table=True):
         default=SimulationType.ECONOMY,
         sa_type=enum_type(SimulationType, "v2_simulation_type"),
     )
-    dataset_id: UUID | None = None
-    household_id: UUID | None = None
-    policy_id: UUID | None = None
-    dynamic_id: UUID | None = None
-    tax_benefit_model_version_id: UUID = Field(index=True)
-    region_id: UUID | None = None
+    dataset_id: UUID | None = Field(
+        default=None,
+        foreign_key="datasets.id",
+        ondelete="RESTRICT",
+    )
+    household_id: UUID | None = Field(
+        default=None,
+        foreign_key="households.id",
+        ondelete="RESTRICT",
+    )
+    policy_id: UUID | None = Field(
+        default=None,
+        foreign_key="policies.id",
+        ondelete="SET NULL",
+    )
+    dynamic_id: UUID | None = Field(
+        default=None,
+        foreign_key="dynamics.id",
+        ondelete="SET NULL",
+    )
+    tax_benefit_model_version_id: UUID = Field(
+        foreign_key="tax_benefit_model_versions.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    region_id: UUID | None = Field(
+        default=None,
+        foreign_key="regions.id",
+        ondelete="SET NULL",
+    )
     filter_field: str | None = Field(default=None, max_length=128)
     filter_value: str | None = Field(default=None, max_length=255)
     filter_strategy: str | None = Field(default=None, max_length=64)
     year: int | None = None
 
+    dataset: Dataset | None = Relationship(
+        back_populates="input_simulations",
+        sa_relationship_kwargs={"foreign_keys": "Simulation.dataset_id"},
+    )
+    household: Household | None = Relationship(back_populates="simulations")
+    policy: Policy | None = Relationship(back_populates="simulations")
+    dynamic: Dynamic | None = Relationship(back_populates="simulations")
+    tax_benefit_model_version: TaxBenefitModelVersion = Relationship(
+        back_populates="simulations"
+    )
+    region: Region | None = Relationship(back_populates="simulations")
     baseline_reports: list["Report"] = Relationship(
         back_populates="baseline_simulation",
         sa_relationship_kwargs={"foreign_keys": "Report.baseline_simulation_id"},
@@ -97,9 +141,10 @@ class SimulationRun(TimestampedModel, table=True):
 
     ``tax_benefit_model_version_id``, ``dataset_id`` and ``region_id`` name the
     catalog version, dataset and region the run used, which a run on a newer
-    version resolves again. They are logical references: the catalog belongs to
-    the Public API, and the simulation service checks them before it writes the
-    run. A household simulation's run stores its household in
+    version resolves again. They are foreign keys to the Public API's catalog
+    with the same delete rules as the simulation's: the catalog version and
+    dataset can't be deleted while a run names them, and deleting the region
+    clears the reference. A household simulation's run stores its household in
     ``household_result``; an economy run's output file is ``output_uri``, with
     its SHA-256. Each poverty and inequality result belongs to one run.
     """
@@ -134,11 +179,23 @@ class SimulationRun(TimestampedModel, table=True):
         foreign_key="simulations.id",
         ondelete="CASCADE",
     )
-    tax_benefit_model_version_id: UUID
+    tax_benefit_model_version_id: UUID = Field(
+        foreign_key="tax_benefit_model_versions.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
     country_package_version: str = Field(max_length=128)
     policyengine_version: str = Field(max_length=128)
-    dataset_id: UUID | None = None
-    region_id: UUID | None = None
+    dataset_id: UUID | None = Field(
+        default=None,
+        foreign_key="datasets.id",
+        ondelete="RESTRICT",
+    )
+    region_id: UUID | None = Field(
+        default=None,
+        foreign_key="regions.id",
+        ondelete="SET NULL",
+    )
     status: SimulationStatus = Field(
         default=SimulationStatus.PENDING,
         sa_type=enum_type(SimulationStatus, "v2_simulation_status"),

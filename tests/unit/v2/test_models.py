@@ -436,15 +436,14 @@ def test_regions_have_one_same_model_version_default_logical_dataset() -> None:
     }
 
 
-def test_reports_and_simulations_name_their_selected_dataset() -> None:
-    """The dataset is the Public API's catalog row, named without a foreign key."""
+def test_reports_and_simulations_snapshot_selected_datasets() -> None:
     reports = V2_METADATA.tables["reports"]
     simulations = V2_METADATA.tables["simulations"]
 
     for table in (reports, simulations):
-        assert isinstance(table.c.dataset_id.type, sa.Uuid)
-        assert table.c.dataset_id.nullable
-        assert not table.c.dataset_id.foreign_keys
+        dataset_foreign_key = next(iter(table.c.dataset_id.foreign_keys))
+        assert dataset_foreign_key.target_fullname == "datasets.id"
+        assert dataset_foreign_key.ondelete in {"RESTRICT", "SET NULL"}
 
 
 def test_stage9_adds_no_dataset_version_relationship_to_run_tables() -> None:

@@ -8,7 +8,6 @@ calculates one household for one year under one policy.
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v2.models import (
@@ -18,7 +17,6 @@ from policyengine_api.data.v2.models import (
     ReportRunSimulationRun,
     SimulationRole,
     SimulationRun,
-    User,
 )
 
 RUN_STATUSES = ["pending", "running", "succeeded", "failed"]
@@ -49,31 +47,37 @@ SIMULATION_SIDE_TABLES = frozenset(
         *COMPARISON_RESULT_TABLES,
     }
 )
-# Columns naming the Public API's rows, which the simulation service checks
-# before it writes the row that names them.
-LOGICAL_REFERENCES = {
-    "simulations": (
-        "dataset_id",
-        "household_id",
-        "policy_id",
-        "dynamic_id",
-        "tax_benefit_model_version_id",
-        "region_id",
+# The foreign keys from the simulation service's tables to the Public API's rows,
+# with their delete rules. Each service writes only its own tables, and
+# PostgreSQL checks every row named on insert.
+PUBLIC_API_FOREIGN_KEYS = {
+    ("simulations", "dataset_id"): ("datasets", "RESTRICT"),
+    ("simulations", "household_id"): ("households", "RESTRICT"),
+    ("simulations", "policy_id"): ("policies", "SET NULL"),
+    ("simulations", "dynamic_id"): ("dynamics", "SET NULL"),
+    ("simulations", "tax_benefit_model_version_id"): (
+        "tax_benefit_model_versions",
+        "RESTRICT",
     ),
-    "reports": (
-        "user_id",
-        "tax_benefit_model_id",
-        "policy_id",
-        "household_id",
-        "dataset_id",
-        "region_id",
+    ("simulations", "region_id"): ("regions", "SET NULL"),
+    ("reports", "user_id"): ("users", "SET NULL"),
+    ("reports", "tax_benefit_model_id"): ("tax_benefit_models", "RESTRICT"),
+    ("reports", "policy_id"): ("policies", "SET NULL"),
+    ("reports", "household_id"): ("households", "RESTRICT"),
+    ("reports", "dataset_id"): ("datasets", "SET NULL"),
+    ("reports", "region_id"): ("regions", "SET NULL"),
+    ("simulation_runs", "tax_benefit_model_version_id"): (
+        "tax_benefit_model_versions",
+        "RESTRICT",
     ),
-    "simulation_runs": ("tax_benefit_model_version_id", "dataset_id", "region_id"),
-    "household_jobs": (
-        "household_id",
-        "policy_id",
-        "dynamic_id",
-        "tax_benefit_model_version_id",
+    ("simulation_runs", "dataset_id"): ("datasets", "RESTRICT"),
+    ("simulation_runs", "region_id"): ("regions", "SET NULL"),
+    ("household_jobs", "household_id"): ("households", "RESTRICT"),
+    ("household_jobs", "policy_id"): ("policies", "SET NULL"),
+    ("household_jobs", "dynamic_id"): ("dynamics", "SET NULL"),
+    ("household_jobs", "tax_benefit_model_version_id"): (
+        "tax_benefit_model_versions",
+        "RESTRICT",
     ),
 }
 
@@ -426,41 +430,31 @@ def test_custom_totals_keep_their_simulation_references() -> None:
         )
 
 
-def test_no_foreign_key_joins_tables_that_different_services_write() -> None:
-    """Each service checks the other service's rows its own rows name."""
-    cross_service_keys = sorted(
-        f"{table.name}.{key.parent.name} -> {key.column.table.name}"
+def test_simulation_tables_keep_foreign_keys_to_the_rows_they_name() -> None:
+    """Each service writes only its own tables; the keys between them stay."""
+    public_api_keys = {
+        (table.name, key.parent.name): (key.column.table.name, key.ondelete)
         for table in V2_METADATA.tables.values()
+        if table.name in SIMULATION_SIDE_TABLES
         for key in table.foreign_keys
-        if (table.name in SIMULATION_SIDE_TABLES)
-        != (key.column.table.name in SIMULATION_SIDE_TABLES)
-    )
+        if key.column.table.name not in SIMULATION_SIDE_TABLES
+    }
 
-    assert cross_service_keys == []
+    assert public_api_keys == PUBLIC_API_FOREIGN_KEYS
     assert set(V2_METADATA.tables) >= SIMULATION_SIDE_TABLES
 
 
-def test_references_to_public_api_rows_stay_as_uuid_columns() -> None:
-    for table_name, column_names in LOGICAL_REFERENCES.items():
+def test_reports_index_their_owner_for_account_deletion() -> None:
+    """Deleting a user clears ``reports.user_id``, which an index finds."""
+    reports = V2_METADATA.tables["reports"]
+
+    assert ("user_id",) in _indexes(reports).values()
+
+
+def test_the_catalog_versions_runs_and_jobs_use_are_indexed() -> None:
+    for table_name in ("simulation_runs", "household_jobs"):
         table = V2_METADATA.tables[table_name]
-        for column_name in column_names:
-            column = table.c[column_name]
-            assert isinstance(column.type, sa.Uuid), f"{table_name}.{column_name}"
-            assert not column.foreign_keys, f"{table_name}.{column_name}"
-
-
-def test_no_relationship_joins_models_that_different_services_write() -> None:
-    configure_mappers()
-    cross_service_relationships = sorted(
-        f"{mapper.class_.__name__}.{relationship.key}"
-        for mapper in sa.inspect(User).registry.mappers
-        if mapper.local_table is not None and mapper.local_table.metadata is V2_METADATA
-        for relationship in mapper.relationships
-        if (mapper.local_table.name in SIMULATION_SIDE_TABLES)
-        != (relationship.mapper.local_table.name in SIMULATION_SIDE_TABLES)
-    )
-
-    assert cross_service_relationships == []
+        assert ("tax_benefit_model_version_id",) in _indexes(table).values(), table_name
 
 
 def test_poverty_rows_name_the_group_their_filter_selects() -> None:
