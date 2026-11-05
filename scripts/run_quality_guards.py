@@ -11,11 +11,12 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.guards import migration_contracts  # noqa: E402
-from scripts.rules import (  # noqa: E402
+from scripts.rules import (  # noqa: E402  # the sys.path setup above must run first
     ci_scripts,
     declared_dependencies,
     file_length,
     locked_installs,
+    suppressions,
     v2_layers,
 )
 from scripts.rules import guard as rules_guard  # noqa: E402
@@ -29,6 +30,7 @@ GUARDS: tuple[Guard, ...] = (
     ("locked-installs", locked_installs.check),
     ("file-length", file_length.check),
     ("declared-dependencies", declared_dependencies.check),
+    ("suppressions", suppressions.check),
     ("v2-layers", v2_layers.check),
 )
 

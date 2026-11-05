@@ -190,17 +190,18 @@ entry's pattern like ruff does and fails when the pattern:
 
 ## Inline suppressions
 
-An inline suppression (`# noqa: <CODE>  # reason`) is the last resort for a
-ruff finding, not the usual way to clear one
+An inline suppression (`# noqa: <CODE>  # reason`, or
+`# type: ignore[<code>]  # reason` for mypy) is the last resort for a ruff or
+mypy finding, not the usual way to clear one
 (`api.process.agents-suppress-as-last-resort`). Before adding one, try:
 
 1. **A code change** that removes the finding: narrow an `except` to the
    errors the code expects, pass the missing argument, or route repeated code
    through one helper so a boundary is handled once instead of at every call
    site.
-2. **A ruff setting**, when several findings share a cause: for example,
-   list a lazily loaded package in `banned-module-level-imports` instead of
-   suppressing each deferred import of it.
+2. **A checker setting**, when several findings share a cause: for example,
+   list a lazily loaded package in ruff's `banned-module-level-imports`
+   instead of suppressing each deferred import of it.
 3. **A file-level exception**, only where the section above allows one.
 
 Keep a suppression only when each of these would change behaviour that
@@ -215,6 +216,55 @@ justification as a suppression.
 
 A pull request that adds inline suppressions lists each one in its
 description, with the reason a code change or setting wasn't used.
+
+### The form of a suppression
+
+`api.quality.suppressions-explained`: every `noqa`, `ruff: disable` and
+`type: ignore` comment names what it suppresses and says why. The
+`suppressions` quality guard (`scripts/rules/suppressions.py`) reads every
+tracked `.py` and `.pyi` file with `tokenize`, so only real comments count,
+and fails on a suppression that lacks either:
+
+- **a code**: `# noqa` and its file-level forms `# ruff: noqa` and
+  `# flake8: noqa` list ruff codes (`# noqa: E402`), a range suppression
+  `# ruff: disable[T201]` lists ruff codes in brackets (its closing
+  `# ruff: enable[T201]` needs neither), so does ruff's trailing
+  `# ruff: ignore[E501]` (a preview feature in ruff 0.15), and
+  `# type: ignore` lists mypy error codes (`# type: ignore[arg-type]`).
+  Brackets that hold no code, such as `[]` or `[,]`, name none: mypy then
+  ignores every error on the line. As in mypy, `type: ignore` counts only at
+  the start of a comment and with no space before its colon;
+- **a reason**: another `#` part of the same comment that is neither a
+  suppression nor another tool's directive, such as `fmt: skip`,
+  `pragma: no cover`, `pyright: ignore`, `nosec` or `mypy: ignore-errors`:
+  `# noqa: E402  # the path setup must run first` or
+  `# type: ignore[arg-type]  # the stub's annotation is too narrow`. The
+  guard recognizes a directive only when the whole part is in its tool's
+  syntax, so a reason may start with a tool's name and a colon
+  (`# mypy: the plugin can't see it`, `# fmt: on purpose, the columns line
+  up`). A type comment at the start of the comment (`# type: list[int]`)
+  isn't a reason either. Text after the codes in the same part
+  (`# noqa: E402 path setup`) doesn't count. Put the reason after
+  `type: ignore`, which mypy reads only at the start of a comment.
+
+The rule is ratcheted. `rules/baselines/suppressions.txt` lists today's
+unexplained suppressions as `<path> :: <source line>`, one line per
+occurrence. A suppression not listed there fails, and a listed one that is
+gone or now explained fails as stale, so give it its reason, remove its line
+and lower the rule's baseline `count`. Editing a listed line, or renaming or
+moving its file, also makes it fail, because its entry no longer matches and
+the registry guard rejects an entry the base branch's baseline lacks: add the
+reason in the same change. So does `ruff format` rewriting a listed line.
+
+Ruff's PGH003 and PGH004, selected with every other ruff rule, already reject
+a `type: ignore` or a line-level or file-level `noqa` without a code. PGH003
+accepts `# type: ignore[]`, which mypy treats as ignoring every error on the
+line; this rule rejects it, and `[,]`. What the rule adds is the reason.
+Other tools' comments that switch a check off, such as `# mypy: ignore-errors`
+or `# isort: skip_file`, are not checked, and neither are notebooks
+(`.ipynb`), which the repository has none of. Whether the suppression should exist at
+all is still the judgment rule `api.process.agents-suppress-as-last-resort`
+above.
 
 ## Hidden rules
 

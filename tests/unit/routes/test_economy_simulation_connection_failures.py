@@ -125,13 +125,18 @@ def economy_client(monkeypatch):
     return build
 
 
-def unreachable_body(path):
-    return {
+def unreachable_body(path, *, url=ANNUAL_URL):
+    body = {
         "status": "error",
         "message": f"No response from the simulation service to GET {path}",
         "result": None,
         "retry_after_seconds": None,
     }
+    # Only the annual URL takes a DELETE, so only its 502 says when one would
+    # be accepted.
+    if url == ANNUAL_URL:
+        body["delete_after_seconds"] = None
+    return body
 
 
 def test_runtime_bundle_request_that_breaks_twice_gives_502(economy_client):
@@ -154,7 +159,7 @@ def test_versions_request_that_breaks_twice_gives_502_not_400(economy_client, ur
     response = client.get(url)
 
     assert response.status_code == 502
-    assert response.json == unreachable_body("/versions")
+    assert response.json == unreachable_body("/versions", url=url)
     assert service.requests == [("GET", "/versions")] * 2
 
 
