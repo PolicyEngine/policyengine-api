@@ -1,3 +1,10 @@
+## [5.28.0] - 2026-11-05
+
+### Added
+
+- Registered a rule, checked by a new quality guard that runs deptry on `policyengine_api`, that `pyproject.toml` declares every distribution the package imports and no runtime dependency it never imports; the 16 findings today are listed in a baseline that may only shrink, and gunicorn, uvicorn and pymysql, which the application loads by name, are registered exceptions.
+
+
 ## [5.27.1] - 2026-11-05
 
 ### Fixed
