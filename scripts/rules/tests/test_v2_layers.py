@@ -574,7 +574,10 @@ class TestBaselineAndExceptions(unittest.TestCase):
         self.root = Path(self._directory.name)
 
     def _registry(
-        self, baseline_count: int | None, exceptions: tuple[str, ...] = ()
+        self,
+        baseline_count: int | None,
+        exceptions: tuple[str, ...] = (),
+        exception_fields: str = "expires = 2099-01-01\n",
     ) -> str:
         rules = []
         for rule_id in (FILES_RULE, ROUTES_RULE, SERVICES_RULE, CONNECTORS_RULE):
@@ -586,7 +589,7 @@ class TestBaselineAndExceptions(unittest.TestCase):
             )
             excepted = "".join(
                 f'[[rule.exception]]\npath = "{path}"\nreason = "Generated."\n'
-                "expires = 2099-01-01\n"
+                + exception_fields
                 for path in (exceptions if rule_id == FILES_RULE else ())
             )
             rules.append(
@@ -727,12 +730,32 @@ class TestBaselineAndExceptions(unittest.TestCase):
             [
                 f"[{FILES_RULE}] v2-layers: {unassigned} matches no v2 layer. Fix: "
                 "name it after its layer (services.py, validators.py, "
-                "transformations.py, types.py, process_state.py, "
-                "database_session.py or "
-                "database_connectors/<creates|reads|updates|deletes>[_name].py), "
-                "or, if it can't be renamed, add a [[rule.exception]] for "
+                "transformations.py, types.py or process_state.py in a resource "
+                "package under services/v2, database_session.py directly in "
+                "one, or database_connectors/<creates|reads|updates|deletes>"
+                "[_name].py directly in its database_connectors package), or, "
+                "if it can't be renamed, add a [[rule.exception]] for "
                 "api.v2.files-assigned-to-layers to rules/registry.toml with its "
                 "path, a reason and an expires date."
+            ],
+        )
+
+    def test_an_unassigned_connector_file_must_be_renamed(self) -> None:
+        unassigned = (
+            "policyengine_api/services/v2/policies/database_connectors/helpers.py"
+        )
+        _write_files(
+            {unassigned: "", "rules/registry.toml": self._registry(None)}, self.root
+        )
+
+        self.assertEqual(
+            self._messages(),
+            [
+                f"[{FILES_RULE}] v2-layers: {unassigned} matches no v2 layer. Fix: "
+                "name it after its operation, "
+                "<creates|reads|updates|deletes>[_name].py; an exception can't "
+                "stand in, because rule api.v2.crud-checks-cover-every-resource "
+                "also checks connector names."
             ],
         )
 
@@ -772,6 +795,64 @@ class TestBaselineAndExceptions(unittest.TestCase):
                 "rows; load them in a connector and pass them in from the service "
                 "(docs/engineering/skills/v2-code-organization.md)."
             ],
+        )
+
+    def test_an_exception_ends_on_its_expires_date_and_covers_the_whole_file(
+        self,
+    ) -> None:
+        client = "policyengine_api/services/v2/household_calculations/client.py"
+        prefix = f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts {client}"
+        no_date = (
+            f"{prefix} from {FILES_RULE}, but the exception has no expires date. "
+            "Fix: give it an expires date by which the file is renamed."
+        )
+        unassigned = f"[{FILES_RULE}] v2-layers: {client} matches no v2 layer."
+        for fields, field_name, ends in (
+            ('category = "forever"\n', "category", False),
+            ('removal = "never"\n', "removal", False),
+            ('match = "session.get"\nexpires = 2099-01-01\n', "match", True),
+        ):
+            with self.subTest(field=field_name):
+                _write_files(
+                    {
+                        client: "",
+                        "rules/registry.toml": self._registry(
+                            None, (client,), exception_fields=fields
+                        ),
+                    },
+                    self.root,
+                )
+                expected = [
+                    f"{prefix} from {FILES_RULE}, but the exception sets "
+                    f"{field_name}, which this rule doesn't read. Fix: remove it; "
+                    "a files-rule exception covers the whole file and ends on "
+                    "its expires date."
+                ]
+                if not ends:
+                    expected.append(no_date)
+
+                messages = self._messages()
+
+                self.assertEqual(
+                    sorted(m for m in messages if not m.startswith(unassigned)),
+                    sorted(expected),
+                )
+                self.assertTrue(any(m.startswith(unassigned) for m in messages))
+
+    def test_a_connector_module_cannot_be_excepted(self) -> None:
+        helper = "policyengine_api/services/v2/policies/database_connectors/helpers.py"
+        _write_files(
+            {helper: "", "rules/registry.toml": self._registry(None, (helper,))},
+            self.root,
+        )
+
+        self.assertIn(
+            f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts {helper} from "
+            f"{FILES_RULE}, but a database_connectors module must be named after "
+            "its operation (rule api.v2.crud-checks-cover-every-resource). Fix: "
+            "rename it to <creates|reads|updates|deletes>[_name].py and remove "
+            "the exception.",
+            self._messages(),
         )
 
     def test_exceptions_must_name_one_existing_v2_file_without_a_layer(self) -> None:
