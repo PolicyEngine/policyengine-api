@@ -7,12 +7,12 @@ fails. make test (pr.yml's test job and push.yml's release-tests) uploads
 ``unit``; the cross-database integration tests upload ``integration``.
 
 With both flags carried forward, a commit that uploads one flag carries the
-other forward from its Codecov parent, a git parent with a Codecov report. A
-master merge commit, which uploads only ``integration``, gets ``unit`` from
-the pull request head or the master commit before it; its release commit,
-which uploads ``unit`` measured on the merged code, gets ``integration`` from
-the merge commit. No job waits for an upload, so a Codecov outage can't stop
-a release: a reusable workflow hands its report to its caller as an artifact.
+other forward from its Codecov parent, a git parent with a Codecov report. The
+release run uploads the release tests' ``unit`` coverage for the release
+commit and for the merge commit before it, whose code the release commit
+doesn't change; the merge run uploads ``integration`` for the merge commit.
+No job in a master run waits for an upload, so a Codecov outage can't stop a
+release: a reusable workflow hands its report to its caller as an artifact.
 """
 
 from __future__ import annotations
@@ -37,6 +37,12 @@ INTEGRATION = "integration"
 REQUIRED_FLAGS = (UNIT, INTEGRATION)
 REQUIRED_IGNORES = ("tests/**", "migrations/*/versions/**")
 MAX_PROJECT_THRESHOLD_PERCENT = 1.0
+# push.yml's runs queue in one concurrency group, so a stalled upload would
+# hold up every run after it until GitHub's 360-minute default.
+MAX_UPLOAD_MINUTES = 15
+# Stands for a matrix value the checker can't list, such as one computed with
+# fromJSON: only a download pattern with a wildcard there matches it.
+ANY_MATRIX_VALUE = "\0any\0"
 # Commands that run the whole test suite, which writes coverage.xml, and
 # commands that write some other coverage report.
 SUITE_COMMAND = re.compile(r"\bmake test(?![-\w])|\brun_release_tests\.sh\b")
@@ -85,52 +91,88 @@ def _commands(job: dict) -> str:
     return "\n".join(step.get("run", "") for step in job.get("steps") or [])
 
 
+def _is_report_path(path: object, *, suite: bool) -> bool:
+    path = str(path)
+    if suite:
+        return path == "coverage.xml" or path.endswith("/coverage.xml")
+    return path.endswith(".xml")
+
+
 def _report_artifacts(job: dict, *, suite: bool) -> list[str]:
     """Return the names of the coverage reports a job keeps as artifacts."""
     return [
         _inputs(step).get("name", DEFAULT_ARTIFACT_NAME)
         for step in _steps_using(job, UPLOAD_ARTIFACT)
-        if (
-            _inputs(step).get("path") == "coverage.xml"
-            if suite
-            else str(_inputs(step).get("path", "")).endswith(".xml")
-        )
+        if _is_report_path(_inputs(step).get("path", ""), suite=suite)
     ]
+
+
+def _matrix_values(job: dict, key: str) -> list[str]:
+    """Return a matrix key's values, from its list or its include entries."""
+    matrix = (job.get("strategy") or {}).get("matrix") or {}
+    if not isinstance(matrix, dict):
+        return [ANY_MATRIX_VALUE]
+    values = matrix.get(key)
+    if isinstance(values, list):
+        listed = [str(value) for value in values]
+    elif values is None:
+        listed = []
+    else:
+        return [ANY_MATRIX_VALUE]
+    include = matrix.get("include")
+    if isinstance(include, list):
+        listed += [str(entry[key]) for entry in include if key in entry]
+    elif include is not None:
+        return [ANY_MATRIX_VALUE]
+    return listed or [ANY_MATRIX_VALUE]
 
 
 def _artifact_names(template: str, job: dict) -> list[str]:
     """Return the artifact names a template gives for each matrix value."""
-    matrix = (job.get("strategy") or {}).get("matrix") or {}
     names = [template]
     for key in MATRIX_EXPRESSION.findall(template):
-        values = matrix.get(key) if isinstance(matrix, dict) else None
-        values = values if isinstance(values, list) else ["1"]
+        expression = re.compile(rf"\$\{{\{{\s*matrix\.{re.escape(key)}\s*\}}\}}")
         names = [
-            re.sub(rf"\$\{{\{{\s*matrix\.{key}\s*\}}\}}", str(value), name)
+            expression.sub(value, name)
             for name in names
-            for value in values
+            for value in _matrix_values(job, key)
         ]
     return names
 
 
-def _downloads(job: dict, name: str) -> bool:
-    """Whether ``job`` downloads the artifact called ``name``."""
+def _download_path(job: dict, name: str) -> tuple[bool, object]:
+    """Return whether ``job`` downloads artifact ``name``, and where to.
+
+    download-artifact v4 reads ``pattern`` only when no ``name`` is given, and
+    downloads every artifact when it has neither.
+    """
     for step in _steps_using(job, DOWNLOAD_ARTIFACT):
         inputs = _inputs(step)
-        if "pattern" in inputs and fnmatch.fnmatch(name, inputs["pattern"]):
-            return True
-        if "name" in inputs and inputs["name"] == name:
-            return True
-        if "pattern" not in inputs and "name" not in inputs:
-            return True
-    return False
+        if "name" in inputs:
+            matched = inputs["name"] == name
+        elif "pattern" in inputs:
+            matched = ANY_MATRIX_VALUE not in name or "*" in inputs["pattern"]
+            matched = matched and fnmatch.fnmatch(
+                name.replace(ANY_MATRIX_VALUE, "x"), inputs["pattern"]
+            )
+        else:
+            matched = True
+        if matched:
+            return True, inputs.get("path")
+    return False, None
 
 
-def _uploads_flag(job: dict, flag: str | None) -> bool:
+def _sends(job: dict, artifacts: list[str], flag: str) -> bool:
+    """Whether ``job`` downloads every artifact and uploads them flagged ``flag``."""
+    places = []
+    for artifact in artifacts:
+        downloaded, path = _download_path(job, artifact)
+        if not downloaded:
+            return False
+        places.append(path)
     return any(
         _inputs(step).get("flags") == flag
-        if flag is not None
-        else bool(_inputs(step).get("flags"))
+        and all(_inputs(step).get("directory") == place for place in places)
         for step in _steps_using(job, CODECOV_ACTION)
     )
 
@@ -210,7 +252,8 @@ def _upload_problems(
             )
         if "push" in triggers:
             ignored = job.get("continue-on-error") or step.get("continue-on-error")
-            if inputs.get("fail_ci_if_error") is not True or ignored:
+            failing = str(inputs.get("fail_ci_if_error")).lower() == "true"
+            if not failing or ignored:
                 problems.append(
                     f"{where} runs on master but a failed upload doesn't fail the run"
                 )
@@ -223,6 +266,14 @@ def _upload_problems(
             f"{where} uploads coverage, and {other_id} waits for it"
             for other_id, other in jobs.items()
             if job_id in _needs(other)
+        )
+    timeout = job.get("timeout-minutes")
+    if _steps_using(job, CODECOV_ACTION) and not (
+        isinstance(timeout, int) and 0 < timeout <= MAX_UPLOAD_MINUTES
+    ):
+        problems.append(
+            f"{where} has no timeout-minutes of at most {MAX_UPLOAD_MINUTES}, so a "
+            "stalled upload can hold up the runs after it"
         )
     return problems
 
@@ -257,19 +308,18 @@ def _report_problems(
         places = _callers(workflows, name)
     else:
         places = [(name, job_id)]
+    flag = UNIT if suite else INTEGRATION
     problems = []
     for place, waited_on in places:
         consumers = [
             consumer
             for consumer in (workflows[place].get("jobs") or {}).values()
-            if waited_on in _needs(consumer)
-            and _uploads_flag(consumer, UNIT if suite else None)
-            and all(_downloads(consumer, artifact) for artifact in artifacts)
+            if waited_on in _needs(consumer) and _sends(consumer, artifacts, flag)
         ]
         if not consumers:
-            flagged = f" flagged {UNIT}" if suite else ""
             problems.append(
-                f"no job in {place} uploads all of {waited_on}'s {report}{flagged}"
+                f"no job in {place} uploads all of {waited_on}'s {report} "
+                f"flagged {flag}"
             )
     if not places:
         problems.append(f"no workflow calls {name} to upload {job_id}'s {report}")

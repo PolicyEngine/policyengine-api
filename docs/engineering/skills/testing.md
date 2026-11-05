@@ -41,24 +41,43 @@ forward and both covering `policyengine_api/` (`.coveragerc`'s source):
 
 A commit that uploads one flag carries the other forward from its Codecov
 parent, a git parent that has a Codecov report. When both of a merge
-commit's parents have one, which Codecov takes isn't fixed. So a merge
-commit, which uploads only `integration`, gets `unit` from the pull request
-head or from the `master` commit before it, until its release commit uploads
-`unit` measured on the merged code and gets `integration` from the merge
-commit. The release commit is `master`'s newest commit after each release.
+commit's parents have one, which Codecov takes isn't fixed. On `master`:
 
-The release tests run with the local Redis runtime cache and without GCP
-credentials, while the pull request `Test` job authenticates to GCP and sets
-no runtime-cache settings. Code that branches on those settings is covered
-differently in the two, so `master`'s unit figure and a pull request's can
-differ by those lines even for the same code.
+- the merge run uploads `integration` for the merge commit, which carries
+  `unit` forward from the pull request head or from the `master` commit before
+  it until the release run;
+- the release run uploads the release tests' `unit` coverage for the release
+  commit, which carries `integration` forward from the merge commit, and also
+  for the merge commit (`override_commit`): `versioning`'s release commit
+  changes only the version, `uv.lock` and the changelog, so the release tests
+  measure the merge commit's code too.
 
-Every upload passes the `CODECOV_TOKEN` repository secret as its `token`, and
-an upload on `master` fails the run when it fails (`fail_ci_if_error`). No
-job waits for an upload, so a Codecov outage fails the upload job but can't
-stop a release. `tests/unit/test_codecov_coverage.py` checks the uploads and
-`codecov.yml`: a new job that measures coverage needs an upload, with one of
-the flags, of every shard of its report.
+Codecov compares a pull request with the `master` commit it branched from or
+last merged in. That is a release commit for about half of pull requests and
+a merge commit for most of the rest, since a merge commit is `master`'s tip
+until its release commit lands. Both then measured both flags on their own
+code.
+
+The release tests run in the `staging` environment, with its variables
+(`SIM_ENTRYPOINT`, `SIMULATION_ENTRYPOINT_URL`,
+`POLICYENGINE_DB_INSTANCE_CONNECTION_NAME`,
+`PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET`, the
+`GATEWAY_AUTH_*` secrets) and the local Redis runtime cache, and without GCP
+credentials. The pull request `Test` job authenticates to GCP and sets none
+of those. Code that branches on them is covered differently in the two, so
+`master`'s unit figure and a pull request's can differ by those lines even for
+the same code.
+
+Every upload passes the `CODECOV_TOKEN` repository secret as its `token` and
+runs in a job with a timeout of at most 15 minutes, since the Codecov action
+sets no network timeouts. An upload on `master` fails the run when it fails
+(`fail_ci_if_error`), and no job in a `master` run waits for an upload, so a
+Codecov outage fails the upload job but can't stop a release. On a pull
+request, `CI complete` needs the upload jobs, which don't fail on an upload
+error. `tests/unit/test_codecov_coverage.py` checks the uploads and
+`codecov.yml`: a new job that measures coverage needs an upload of every
+shard of its report, flagged `unit` for the test suite and `integration`
+otherwise.
 
 The project status allows a 0.5% drop. The patch status reports coverage of
 the changed lines without blocking a merge.

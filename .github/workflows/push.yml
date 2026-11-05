@@ -360,12 +360,20 @@ jobs:
     # the run. The staging deploy doesn't wait for it.
     name: Upload the release test coverage to Codecov
     runs-on: ubuntu-latest
+    # The Codecov action sets no network timeouts, so a stalled upload would
+    # otherwise run until GitHub's 360-minute default.
+    timeout-minutes: 10
     needs: release-tests
     permissions:
       contents: read
     steps:
-      - name: Checkout repo
+      - name: Checkout the release commit and its parent
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Find the merge commit the release commit follows
+        id: merge_commit
+        run: echo "sha=$(git rev-parse HEAD^)" >> "$GITHUB_OUTPUT"
       - name: Download every shard's coverage report
         uses: actions/download-artifact@v4
         with:
@@ -380,6 +388,20 @@ jobs:
           # codecov.yml defines the flag and carries it forward.
           flags: unit
           fail_ci_if_error: true
+      # versioning's release commit changes only the version, uv.lock and the
+      # changelog, so these tests also measure the merge commit's code. Pull
+      # requests that branch from the merge commit, before its release commit
+      # lands, then compare with unit coverage measured on that code instead
+      # of coverage carried forward from an earlier commit.
+      - name: Upload the same coverage for the merge commit
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: PolicyEngine/policyengine-api
+          directory: ${{ runner.temp }}/release-test-coverage
+          flags: unit
+          fail_ci_if_error: true
+          override_commit: ${{ steps.merge_commit.outputs.sha }}
 
   upload-integration-coverage:
     # Sends the cross-database integration tests' coverage report, which
@@ -388,6 +410,9 @@ jobs:
     # can't stop a release; a failed upload fails the run.
     name: Upload the integration test coverage to Codecov
     runs-on: ubuntu-latest
+    # The Codecov action sets no network timeouts, so a stalled upload would
+    # otherwise run until GitHub's 360-minute default.
+    timeout-minutes: 10
     needs: v2-integration-check
     permissions:
       contents: read

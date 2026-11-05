@@ -333,6 +333,9 @@ jobs:
     # after each upload and left codecov/patch in progress on #4145.
     name: Upload the test coverage to Codecov
     runs-on: ubuntu-latest
+    # The Codecov action sets no network timeouts, so a stalled upload would
+    # otherwise run until GitHub's 360-minute default.
+    timeout-minutes: 10
     needs: test
     permissions:
       contents: read
@@ -359,6 +362,9 @@ jobs:
     # integration.
     name: Upload the integration test coverage to Codecov
     runs-on: ubuntu-latest
+    # The Codecov action sets no network timeouts, so a stalled upload would
+    # otherwise run until GitHub's 360-minute default.
+    timeout-minutes: 10
     needs: v2-integration-check
     permissions:
       contents: read

@@ -11,12 +11,17 @@
 #
 # A commit that uploads one flag carries the other forward from its Codecov
 # parent: a git parent that has a Codecov report (when both of a merge
-# commit's parents have one, which Codecov takes isn't fixed). A master merge
-# commit, which uploads only integration, gets unit from the pull request head
-# or from the master commit before it; its release commit, which uploads only
-# unit, measured on the merged code, gets integration from the merge commit.
-# The release commit is master's newest commit after each release, so a pull
-# request's project coverage is compared with a base that measured both.
+# commit's parents have one, which Codecov takes isn't fixed). On master:
+#   - the merge run uploads integration for the merge commit, which until the
+#     release run carries unit forward from the pull request head or from the
+#     master commit before it;
+#   - the release run uploads the release tests' unit coverage for the release
+#     commit, which carries integration forward from the merge commit, and for
+#     the merge commit too, since the release commit changes only the version,
+#     uv.lock and the changelog.
+# A pull request is compared with the master commit it branched from or last
+# merged in, a merge commit or a release commit, and both then measured unit
+# and integration coverage on their own code.
 coverage:
   status:
     project:

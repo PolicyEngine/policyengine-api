@@ -96,7 +96,10 @@ jobs:
       # The calling workflow's upload-integration-coverage job sends the report
       # to Codecov, flagged integration. Nothing that waits for these tests,
       # such as push.yml's versioning, then waits for Codecov.
+      # A failure to keep it fails only the caller's upload job, which then
+      # finds no report, not these tests, which push.yml's release waits for.
       - name: Keep the integration coverage report
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: integration-coverage
