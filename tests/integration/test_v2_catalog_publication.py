@@ -515,6 +515,7 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
         session.flush()
         simulation_run = SimulationRun(
             simulation_id=simulation.id,
+            year=2025,
             tax_benefit_model_version_id=model_version.id,
             country_package_version="existing-country-version",
             policyengine_version="existing-policyengine-version",

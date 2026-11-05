@@ -537,6 +537,18 @@ model changes:
   `household_wealth_decile`), and `poverty.filter_group` names the group a
   filter selects (`child` for `age`); both join their table's unique key.
 - `report_runs` gains its Modal call ID.
+- Budget windows: a simulation run calculates one `year`, which joins the
+  index for a simulation's newest successful run, so a budget window compares
+  a report's same two simulations in every year. `reports.budget_window_size`
+  (1 to 75 years, an economy report with a year, ending by 2200) marks a
+  budget-window report. The new `budget_window_runs` holds one row per
+  calculation of one: its report, catalog version, trigger, whether its years
+  calculate their simulations again (`recalculate`), status, error and times.
+  `report_runs.budget_window_run_id` and `year` name the window run and year a
+  report run calculates, at most one report run per year of a window run; a
+  composite foreign key keeps it to a window run of the same report. That key
+  is `NO ACTION`, which PostgreSQL checks at the end of the statement, so
+  deleting a report deletes its window runs and their report runs together.
 - `household_jobs` calculates one household (`household_id`) for one `year`
   under one policy, and records its catalog and package versions and its
   Modal call ID.
@@ -554,11 +566,12 @@ Missing values in the unique keys of `poverty`, `decile_impacts` and
 `program_statistics` count as equal (`NULLS NOT DISTINCT`, which PostgreSQL
 supports from version 15).
 
-It has one post-generation correction, commented in the revision:
-`simulation_runs.status` reuses the `v2_simulation_status` type the baseline
-created for `simulations.status`. The generated `create_table` would create
-the type again and fail, so the column uses
-`postgresql.ENUM(..., create_type=False)`.
+It has three post-generation corrections of one kind, each commented in the
+revision: `simulation_runs.status` reuses the `v2_simulation_status` type the
+baseline created for `simulations.status`, and `budget_window_runs.status` and
+`trigger` reuse the baseline's `v2_report_run_status` and
+`v2_report_run_trigger`. The generated `create_table` would create each type
+again and fail, so each column uses `postgresql.ENUM(..., create_type=False)`.
 
 The upgrade adds required columns without server defaults to `household_jobs`,
 `report_runs` and the result tables, so it needs them empty, as they are while no managed

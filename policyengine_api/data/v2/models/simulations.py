@@ -136,7 +136,10 @@ class Simulation(TimestampedModel, table=True):
 
 
 class SimulationRun(TimestampedModel, table=True):
-    """One run of a simulation on one catalog version and PolicyEngine.py version.
+    """One run of a simulation for one year on one catalog and .py version.
+
+    A simulation has a run per year it is calculated for, so a budget window
+    compares a report's same two simulations in every year of the window.
 
     ``tax_benefit_model_version_id``, ``dataset_id`` and ``region_id`` name the
     catalog version, dataset and region the run used, which a run on a newer
@@ -162,9 +165,14 @@ class SimulationRun(TimestampedModel, table=True):
             "output_sha256 IS NULL OR length(output_sha256) = 64",
             name="ck_simulation_runs_output_sha256_length",
         ),
+        sa.CheckConstraint(
+            "year BETWEEN 1900 AND 2200",
+            name="ck_simulation_runs_year",
+        ),
         sa.Index(
             "ix_simulation_runs_current_output",
             "simulation_id",
+            "year",
             "status",
             "country_package_version",
             "policyengine_version",
@@ -178,6 +186,7 @@ class SimulationRun(TimestampedModel, table=True):
         foreign_key="simulations.id",
         ondelete="CASCADE",
     )
+    year: int
     tax_benefit_model_version_id: UUID = Field(
         foreign_key="tax_benefit_model_versions.id",
         ondelete="RESTRICT",

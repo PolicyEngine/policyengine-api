@@ -43,7 +43,12 @@ if TYPE_CHECKING:
 
 SIMULATION_RUNS_PREVIOUS_REVISION = "c614b6bcccfc"
 NEW_TABLES = frozenset(
-    {"simulation_runs", "labor_supply_responses", "labor_supply_decile_responses"}
+    {
+        "simulation_runs",
+        "budget_window_runs",
+        "labor_supply_responses",
+        "labor_supply_decile_responses",
+    }
 )
 CHANGED_TABLES = frozenset(
     {
@@ -95,6 +100,10 @@ PUBLIC_API_FOREIGN_KEYS = {
     ("household_jobs", "policy_id"): ("policies", "SET NULL"),
     ("household_jobs", "dynamic_id"): ("dynamics", "SET NULL"),
     ("household_jobs", "tax_benefit_model_version_id"): (
+        "tax_benefit_model_versions",
+        "RESTRICT",
+    ),
+    ("budget_window_runs", "tax_benefit_model_version_id"): (
         "tax_benefit_model_versions",
         "RESTRICT",
     ),
@@ -204,7 +213,7 @@ def _enum_type_names(engine: Engine) -> set[str]:
         )
 
 
-def test_the_revision_adds_three_tables_and_changes_only_simulation_side_tables(
+def test_the_revision_adds_its_tables_and_changes_only_simulation_side_tables(
     config: Config, engine: Engine
 ) -> None:
     command.downgrade(config, SIMULATION_RUNS_PREVIOUS_REVISION)
@@ -304,9 +313,10 @@ def _insert_simulation_run(
     simulation_id: object,
     *,
     status: str = "pending",
+    year: int = 2026,
     **values: object,
 ) -> object:
-    """Store a run of the simulation on the simulation's catalog version."""
+    """Store a run of the simulation for ``year`` on its catalog version."""
     run_id = uuid4()
     version_id = connection.execute(
         text("SELECT tax_benefit_model_version_id FROM simulations WHERE id = :id"),
@@ -319,6 +329,7 @@ def _insert_simulation_run(
         simulation_id=simulation_id,
         tax_benefit_model_version_id=version_id,
         status=status,
+        year=year,
         **RUN_VERSIONS,
         **values,
     )
@@ -370,6 +381,7 @@ def test_rows_naming_a_missing_public_api_row_are_refused(
             simulation_id=simulation_id,
             tax_benefit_model_version_id=uuid4(),
             status="pending",
+            year=2026,
             **RUN_VERSIONS,
         )
     with refused(connection, match="foreign key constraint"):
@@ -650,6 +662,99 @@ def test_a_report_runs_labor_supply_and_cliff_impact_are_typed(
     )
     for table in ("labor_supply_responses", "labor_supply_decile_responses"):
         assert _count(connection, table, "report_run_id", report_run_id) == 0
+
+
+def _insert_report(
+    connection: Connection, public_api_rows: PublicApiRows, **values: object
+) -> object:
+    report_id = uuid4()
+    insert_row(
+        connection,
+        "reports",
+        id=report_id,
+        label="Budget window",
+        country="us",
+        tax_benefit_model_id=public_api_rows.model_id,
+        inputs="{}",
+        **values,
+    )
+    return report_id
+
+
+def _insert_budget_window_run(
+    connection: Connection, public_api_rows: PublicApiRows, report_id: object
+) -> object:
+    window_run_id = uuid4()
+    insert_row(
+        connection,
+        "budget_window_runs",
+        id=window_run_id,
+        report_id=report_id,
+        tax_benefit_model_version_id=public_api_rows.version_id,
+        trigger="initial",
+        recalculate=False,
+        status="running",
+    )
+    return window_run_id
+
+
+def test_budget_windows_hold_one_report_run_per_year(
+    connection: Connection, public_api_rows: PublicApiRows
+) -> None:
+    for refused_values in (
+        {"year": 2026, "budget_window_size": 0},
+        {"year": 2026, "budget_window_size": 76},
+        {"year": 2190, "budget_window_size": 12},
+        {"budget_window_size": 3},
+        {"year": 2026, "budget_window_size": 3, "household_id": None},
+    ):
+        values = dict(refused_values)
+        if "household_id" in values:
+            values["household_id"] = public_api_rows.household_id
+        with refused(connection, match="ck_reports_budget_window_size"):
+            _insert_report(connection, public_api_rows, **values)
+    report_id = _insert_report(
+        connection, public_api_rows, year=2026, budget_window_size=3
+    )
+    other_report_id = _insert_report(connection, public_api_rows, year=2026)
+    window_run_id = _insert_budget_window_run(connection, public_api_rows, report_id)
+    simulation_id = _insert_simulation(connection, public_api_rows)
+
+    def insert_year(year: int | None, *, of_report: object = report_id) -> None:
+        insert_row(
+            connection,
+            "report_runs",
+            id=uuid4(),
+            report_id=of_report,
+            budget_window_run_id=window_run_id,
+            year=year,
+            baseline_simulation_run_id=_insert_simulation_run(
+                connection, simulation_id, year=year or 2026
+            ),
+            status="pending",
+            trigger="initial",
+            **RUN_VERSIONS,
+        )
+
+    insert_year(2026)
+    insert_year(2027)
+    with refused(connection, match="uq_report_runs_budget_window_run_id_year"):
+        insert_year(2027)
+    with refused(connection, match="ck_report_runs_budget_window_year"):
+        insert_year(None)
+    with refused(connection, match="foreign key constraint"):
+        insert_year(2028, of_report=other_report_id)
+    with refused(connection, match="ck_simulation_runs_year"):
+        _insert_simulation_run(connection, simulation_id, year=1800)
+    with refused(connection, match="foreign key constraint"):
+        connection.execute(
+            text("DELETE FROM budget_window_runs WHERE id = :id"),
+            {"id": window_run_id},
+        )
+
+    connection.execute(text("DELETE FROM reports WHERE id = :id"), {"id": report_id})
+    assert _count(connection, "budget_window_runs", "report_id", report_id) == 0
+    assert _count(connection, "report_runs", "report_id", report_id) == 0
 
 
 def test_household_jobs_take_a_valid_year_and_record_when_they_end(

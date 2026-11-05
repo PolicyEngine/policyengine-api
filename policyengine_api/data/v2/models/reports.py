@@ -30,6 +30,10 @@ from policyengine_api.data.v2.models.policies import Policy
 from policyengine_api.data.v2.models.simulations import Simulation, SimulationRun
 from policyengine_api.data.v2.models.users import User
 
+# A budget window compares at most this many years, none after LAST_YEAR.
+MAX_BUDGET_WINDOW_YEARS = 75
+LAST_YEAR = 2200
+
 
 class ReportRunStatus(StrEnum):
     """Lifecycle state of a report run; finished runs record a completion time."""
@@ -89,6 +93,12 @@ class Report(TimestampedModel, table=True):
             "year IS NULL OR year BETWEEN 1900 AND 2200",
             name="ck_reports_year",
         ),
+        sa.CheckConstraint(
+            "budget_window_size IS NULL OR (household_id IS NULL "
+            f"AND budget_window_size BETWEEN 1 AND {MAX_BUDGET_WINDOW_YEARS} "
+            f"AND year IS NOT NULL AND year + budget_window_size - 1 <= {LAST_YEAR})",
+            name="ck_reports_budget_window_size",
+        ),
         sa.Index("ix_reports_country_type_created_at", "country", "type", "created_at"),
     )
 
@@ -138,6 +148,7 @@ class Report(TimestampedModel, table=True):
         ondelete="SET NULL",
     )
     year: int | None = None
+    budget_window_size: int | None = None
     inputs: dict[str, Any] = Field(default_factory=dict, sa_type=sa.JSON)
 
     user: User | None = Relationship(back_populates="reports")
@@ -158,6 +169,62 @@ class Report(TimestampedModel, table=True):
         back_populates="report",
         cascade_delete=True,
     )
+    budget_window_runs: list["BudgetWindowRun"] = Relationship(
+        back_populates="report",
+        cascade_delete=True,
+    )
+
+
+class BudgetWindowRun(TimestampedModel, table=True):
+    """One calculation of a budget-window report on one catalog version.
+
+    Each year of the window is a report run of the same report that names this
+    row and its year. ``recalculate`` says whether those years calculate their
+    simulations again instead of reusing successful runs. What starts the later
+    years is decided where the simulation service schedules them.
+    """
+
+    __tablename__ = "budget_window_runs"
+    __table_args__ = (
+        sa.UniqueConstraint("id", "report_id", name="uq_budget_window_runs_id_report"),
+        sa.CheckConstraint(
+            "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL",
+            name="ck_budget_window_runs_terminal_completion",
+        ),
+        sa.Index(
+            "ix_budget_window_runs_report_id_created_at", "report_id", "created_at"
+        ),
+    )
+
+    report_id: UUID = Field(
+        foreign_key="reports.id",
+        ondelete="CASCADE",
+    )
+    tax_benefit_model_version_id: UUID = Field(
+        foreign_key="tax_benefit_model_versions.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    trigger: ReportRunTrigger = Field(
+        default=ReportRunTrigger.INITIAL,
+        sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
+    )
+    recalculate: bool = False
+    status: ReportRunStatus = Field(
+        default=ReportRunStatus.PENDING,
+        sa_type=enum_type(ReportRunStatus, "v2_report_run_status"),
+    )
+    error_message: str | None = None
+    started_at: datetime | None = Field(
+        default=None,
+        sa_type=sa.DateTime(timezone=True),
+    )
+    completed_at: datetime | None = Field(
+        default=None,
+        sa_type=sa.DateTime(timezone=True),
+    )
+
+    report: Report = Relationship(back_populates="budget_window_runs")
 
 
 class ReportRun(TimestampedModel, table=True):
@@ -165,10 +232,12 @@ class ReportRun(TimestampedModel, table=True):
 
     It compares ``baseline_simulation_run_id`` with
     ``reform_simulation_run_id``; a household report with only a baseline has
-    no reform run. An economy comparison's cliff impact is the baseline's and
-    reform's cliff gap and share, stored together or not at all;
-    ``spm_provenance`` is the SPM receipt and ``data_version`` the data release
-    it used. Its labour supply response has its own two tables.
+    no reform run. A year of a budget window names its ``budget_window_run_id``
+    and ``year``, at most one report run per year of a window run. An economy
+    comparison's cliff impact is the baseline's and reform's cliff gap and
+    share, stored together or not at all; ``spm_provenance`` is the SPM receipt
+    and ``data_version`` the data release it used. Its labour supply response
+    has its own two tables.
     """
 
     __tablename__ = "report_runs"
@@ -181,6 +250,27 @@ class ReportRun(TimestampedModel, table=True):
         sa.CheckConstraint(
             "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL",
             name="ck_report_runs_terminal_completion",
+        ),
+        sa.CheckConstraint(
+            "year IS NULL OR year BETWEEN 1900 AND 2200",
+            name="ck_report_runs_year",
+        ),
+        sa.CheckConstraint(
+            "budget_window_run_id IS NULL OR year IS NOT NULL",
+            name="ck_report_runs_budget_window_year",
+        ),
+        sa.UniqueConstraint(
+            "budget_window_run_id",
+            "year",
+            name="uq_report_runs_budget_window_run_id_year",
+        ),
+        # A year's report run belongs to a budget-window run of its own report.
+        # NO ACTION waits for the end of the statement, so deleting the report
+        # deletes the window run and its years together.
+        sa.ForeignKeyConstraint(
+            ["budget_window_run_id", "report_id"],
+            ["budget_window_runs.id", "budget_window_runs.report_id"],
+            name="fk_report_runs_budget_window_run_id_budget_window_runs",
         ),
         sa.CheckConstraint(
             "(baseline_cliff_gap IS NULL) = (baseline_cliff_share IS NULL) "
@@ -215,6 +305,8 @@ class ReportRun(TimestampedModel, table=True):
         ondelete="RESTRICT",
         index=True,
     )
+    budget_window_run_id: UUID | None = None
+    year: int | None = None
     country_package_version: str = Field(max_length=128)
     policyengine_version: str = Field(max_length=128)
     status: ReportRunStatus = Field(

@@ -77,7 +77,14 @@ def _create_simulation_rows(
     """Create what the simulation API creates for one economy report run."""
     ids = {
         name: uuid4()
-        for name in ("simulation", "run", "report", "report_run", "household_job")
+        for name in (
+            "simulation",
+            "run",
+            "report",
+            "budget_window_run",
+            "report_run",
+            "household_job",
+        )
     }
     insert_row(
         connection,
@@ -94,6 +101,7 @@ def _create_simulation_rows(
         id=ids["run"],
         simulation_id=ids["simulation"],
         tax_benefit_model_version_id=public_api_rows.version_id,
+        year=2026,
         status="pending",
         **RUN_VERSIONS,
     )
@@ -104,13 +112,27 @@ def _create_simulation_rows(
         label="Report",
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
+        year=2026,
+        budget_window_size=1,
         inputs="{}",
+    )
+    insert_row(
+        connection,
+        "budget_window_runs",
+        id=ids["budget_window_run"],
+        report_id=ids["report"],
+        tax_benefit_model_version_id=public_api_rows.version_id,
+        trigger="initial",
+        recalculate=False,
+        status="pending",
     )
     insert_row(
         connection,
         "report_runs",
         id=ids["report_run"],
         report_id=ids["report"],
+        budget_window_run_id=ids["budget_window_run"],
+        year=2026,
         baseline_simulation_run_id=ids["run"],
         status="pending",
         trigger="initial",
@@ -228,6 +250,15 @@ def test_modal_workers_write_their_run_status_and_results_only(
     )
     _refused(
         connection, "DELETE FROM poverty WHERE simulation_run_id = :id", id=ids["run"]
+    )
+    _refused(
+        connection,
+        "INSERT INTO budget_window_runs (id, report_id, "
+        "tax_benefit_model_version_id, trigger, recalculate, status) "
+        "VALUES (:id, :report_id, :version_id, 'manual', true, 'pending')",
+        id=uuid4(),
+        report_id=ids["report"],
+        version_id=public_api_rows.version_id,
     )
     _refused(
         connection,

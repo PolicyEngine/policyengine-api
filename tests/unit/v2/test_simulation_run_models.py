@@ -12,6 +12,7 @@ from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v2.models import (
     V2_METADATA,
+    BudgetWindowRun,
     LaborSupplyDecileResponse,
     LaborSupplyResponse,
     ReportRun,
@@ -63,6 +64,7 @@ SIMULATION_SIDE_TABLES = frozenset(
         "simulation_runs",
         "reports",
         "report_runs",
+        "budget_window_runs",
         "labor_supply_responses",
         "labor_supply_decile_responses",
         "household_jobs",
@@ -101,6 +103,10 @@ PUBLIC_API_FOREIGN_KEYS = {
     ("household_jobs", "policy_id"): ("policies", "SET NULL"),
     ("household_jobs", "dynamic_id"): ("dynamics", "SET NULL"),
     ("household_jobs", "tax_benefit_model_version_id"): (
+        "tax_benefit_model_versions",
+        "RESTRICT",
+    ),
+    ("budget_window_runs", "tax_benefit_model_version_id"): (
         "tax_benefit_model_versions",
         "RESTRICT",
     ),
@@ -167,6 +173,7 @@ def test_each_simulation_run_records_its_versions_status_and_output() -> None:
 
     required = {
         "simulation_id",
+        "year",
         "tax_benefit_model_version_id",
         "country_package_version",
         "policyengine_version",
@@ -199,11 +206,13 @@ def test_each_simulation_run_records_its_versions_status_and_output() -> None:
     simulation_key = _foreign_key(simulation_runs, "simulation_id")
     assert simulation_key.target_fullname == "simulations.id"
     assert simulation_key.ondelete == "CASCADE"
-    # The catalog version, dataset and region are the Public API's rows, so a
-    # run refers to them without a foreign key.
     assert {key.target_fullname for key in simulation_runs.foreign_keys} == {
-        "simulations.id"
+        "simulations.id",
+        "tax_benefit_model_versions.id",
+        "datasets.id",
+        "regions.id",
     }
+    assert "ck_simulation_runs_year" in _check_names(simulation_runs)
     assert SimulationRun.__module__.endswith(".simulations")
 
 
@@ -218,9 +227,12 @@ def test_run_tables_require_a_completion_time_and_index_running_runs() -> None:
         "ck_simulation_runs_output_sha256_length",
     } <= _check_names(simulation_runs)
     assert "ck_household_jobs_terminal_completion" in _check_names(household_jobs)
+    # A simulation has a run per year, so its newest successful run is found
+    # per year.
     assert _indexes(simulation_runs) == {
         "ix_simulation_runs_current_output": (
             "simulation_id",
+            "year",
             "status",
             "country_package_version",
             "policyengine_version",
@@ -228,6 +240,9 @@ def test_run_tables_require_a_completion_time_and_index_running_runs() -> None:
             "id",
         ),
         "ix_simulation_runs_status_started_at": ("status", "started_at"),
+        "ix_simulation_runs_tax_benefit_model_version_id": (
+            "tax_benefit_model_version_id",
+        ),
     }
     assert _indexes(report_runs)["ix_report_runs_status_started_at"] == (
         "status",
@@ -374,6 +389,75 @@ def test_report_runs_name_their_baseline_and_reform_simulation_runs() -> None:
     assert "v2_simulation_role" not in enum_type_names
 
 
+def test_budget_window_reports_name_how_many_years_they_compare() -> None:
+    reports = V2_METADATA.tables["reports"]
+
+    assert reports.c.budget_window_size.nullable
+    assert isinstance(reports.c.budget_window_size.type, sa.Integer)
+    assert "ck_reports_budget_window_size" in _check_names(reports)
+
+
+def test_budget_window_runs_record_each_calculation_of_a_window() -> None:
+    windows = V2_METADATA.tables["budget_window_runs"]
+
+    required = {
+        "report_id",
+        "tax_benefit_model_version_id",
+        "trigger",
+        "recalculate",
+        "status",
+        "created_at",
+        "updated_at",
+    }
+    optional = {"error_message", "started_at", "completed_at"}
+    assert set(windows.c.keys()) == {"id"} | required | optional
+    assert all(not windows.c[name].nullable for name in required)
+    assert all(windows.c[name].nullable for name in optional)
+    # A window run has a report run's states and starts for a report run's reasons.
+    assert windows.c.status.type.name == "v2_report_run_status"
+    assert windows.c.trigger.type.name == "v2_report_run_trigger"
+    report_key = _foreign_key(windows, "report_id")
+    assert report_key.target_fullname == "reports.id"
+    assert report_key.ondelete == "CASCADE"
+    version_key = _foreign_key(windows, "tax_benefit_model_version_id")
+    assert version_key.target_fullname == "tax_benefit_model_versions.id"
+    assert version_key.ondelete == "RESTRICT"
+    assert ("id", "report_id") in _unique_column_sets(windows)
+    assert "ck_budget_window_runs_terminal_completion" in _check_names(windows)
+    assert _indexes(windows)["ix_budget_window_runs_report_id_created_at"] == (
+        "report_id",
+        "created_at",
+    )
+    assert BudgetWindowRun.__module__.endswith(".reports")
+
+
+def test_report_runs_hold_one_year_of_a_budget_window_run() -> None:
+    report_runs = V2_METADATA.tables["report_runs"]
+
+    assert report_runs.c.budget_window_run_id.nullable
+    assert report_runs.c.year.nullable
+    (window_key,) = (
+        constraint
+        for constraint in report_runs.foreign_key_constraints
+        if constraint.referred_table.name == "budget_window_runs"
+    )
+    # A year's report run belongs to a window run of the same report. The check
+    # waits for the end of the statement, so deleting the report deletes both.
+    assert [column.name for column in window_key.columns] == [
+        "budget_window_run_id",
+        "report_id",
+    ]
+    assert [element.target_fullname for element in window_key.elements] == [
+        "budget_window_runs.id",
+        "budget_window_runs.report_id",
+    ]
+    assert window_key.ondelete is None
+    assert ("budget_window_run_id", "year") in _unique_column_sets(report_runs)
+    assert {"ck_report_runs_year", "ck_report_runs_budget_window_year"} <= (
+        _check_names(report_runs)
+    )
+
+
 def test_household_jobs_calculate_one_household_year_and_policy() -> None:
     household_jobs = V2_METADATA.tables["household_jobs"]
 
@@ -392,12 +476,12 @@ def test_household_jobs_calculate_one_household_year_and_policy() -> None:
     assert household_jobs.c.modal_call_id.type.length == 255
     assert "ck_household_jobs_year" in _check_names(household_jobs)
     assert "ix_household_jobs_household_id" in _indexes(household_jobs)
-    assert "household_id" not in {
-        key.parent.name for key in household_jobs.foreign_keys
-    }
-    assert "tax_benefit_model_version_id" not in {
-        key.parent.name for key in household_jobs.foreign_keys
-    }
+    assert _foreign_key(household_jobs, "household_id").target_fullname == (
+        "households.id"
+    )
+    assert _foreign_key(
+        household_jobs, "tax_benefit_model_version_id"
+    ).target_fullname == ("tax_benefit_model_versions.id")
 
 
 def test_per_simulation_results_belong_to_one_simulation_run() -> None:

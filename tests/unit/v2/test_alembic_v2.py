@@ -40,6 +40,7 @@ TARGET_ENVIRONMENT = "test-foundation"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 POST_BASELINE_TABLE_NAMES = frozenset(
     {
+        "budget_window_runs",
         "countries",
         "legacy_household_mappings",
         "legacy_policy_mappings",
@@ -1023,11 +1024,12 @@ def _simulation_runs_revision_source() -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_simulation_runs_revision_is_generated_with_one_documented_correction() -> None:
+def test_simulation_runs_revision_is_generated_with_documented_corrections() -> None:
     """One generated revision follows the parameter search file revision.
 
-    Its one correction makes ``simulation_runs.status`` reuse the type the
-    baseline created for ``simulations.status``.
+    Its corrections make new columns reuse enum types the baseline created:
+    ``simulation_runs.status`` reuses ``simulations.status``'s, and
+    ``budget_window_runs.status`` and ``trigger`` reuse the report run's.
     """
     revision = _simulation_runs_revision_source()
     upgrade = revision[
@@ -1043,13 +1045,17 @@ def test_simulation_runs_revision_is_generated_with_one_documented_correction() 
         f'down_revision: Union[str, None] = "{SIMULATION_RUNS_PARENT_REVISION}"'
         in revision
     )
-    assert revision.count("Dialect correction:") == 1
+    assert revision.count("Dialect correction:") == 3
     assert "reversibility correction" not in revision
-    assert 'name="v2_simulation_status",\n                create_type=False,' in (
-        upgrade
-    )
+    for type_name in (
+        "v2_simulation_status",
+        "v2_report_run_status",
+        "v2_report_run_trigger",
+    ):
+        assert f'name="{type_name}",\n                create_type=False,' in upgrade
     for table_name in (
         "simulation_runs",
+        "budget_window_runs",
         "labor_supply_responses",
         "labor_supply_decile_responses",
     ):

@@ -920,6 +920,7 @@ def test_baseline_uses_native_uuid_report_run_idempotency() -> None:
                 id=simulation_run_id,
                 simulation_id=simulation_id,
                 tax_benefit_model_version_id=public_api_rows.version_id,
+                year=2026,
                 status="pending",
                 **RUN_VERSIONS,
             )

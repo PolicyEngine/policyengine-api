@@ -2,11 +2,13 @@
 
 Revision ID: 1356f658347d
 Revises: c614b6bcccfc
-Create Date: 2026-11-05 23:58:34.990506
+Create Date: 2026-11-06 00:03:10.204134
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
 
-One post-generation correction, commented where it is made:
-simulation_runs.status reuses the existing v2_simulation_status type.
+Three post-generation corrections of one kind, each commented where it is
+made: simulation_runs.status reuses the existing v2_simulation_status type,
+and budget_window_runs.status and trigger reuse the existing
+v2_report_run_status and v2_report_run_trigger types.
 
 The upgrade adds required columns without server defaults to household_jobs,
 report_runs and the result tables, so it needs those tables empty, as they are
@@ -46,6 +48,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("simulation_id", sa.Uuid(), nullable=False),
+        sa.Column("year", sa.Integer(), nullable=False),
         sa.Column("tax_benefit_model_version_id", sa.Uuid(), nullable=False),
         sa.Column(
             "country_package_version",
@@ -99,6 +102,9 @@ def upgrade() -> None:
             "output_sha256 IS NULL OR length(output_sha256) = 64",
             name=op.f("ck_simulation_runs_output_sha256_length"),
         ),
+        sa.CheckConstraint(
+            "year BETWEEN 1900 AND 2200", name=op.f("ck_simulation_runs_year")
+        ),
         sa.ForeignKeyConstraint(
             ["dataset_id"],
             ["datasets.id"],
@@ -132,6 +138,7 @@ def upgrade() -> None:
         "simulation_runs",
         [
             "simulation_id",
+            "year",
             "status",
             "country_package_version",
             "policyengine_version",
@@ -149,6 +156,89 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_simulation_runs_tax_benefit_model_version_id"),
         "simulation_runs",
+        ["tax_benefit_model_version_id"],
+        unique=False,
+    )
+    op.create_table(
+        "budget_window_runs",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("report_id", sa.Uuid(), nullable=False),
+        sa.Column("tax_benefit_model_version_id", sa.Uuid(), nullable=False),
+        sa.Column(
+            "trigger",
+            # Dialect correction: a budget-window run starts for the same reasons
+            # as a report run, so the column reuses the baseline's
+            # v2_report_run_trigger type instead of creating it again.
+            postgresql.ENUM(
+                "initial",
+                "manual",
+                "system",
+                name="v2_report_run_trigger",
+                create_type=False,
+            ),
+            nullable=False,
+        ),
+        sa.Column("recalculate", sa.Boolean(), nullable=False),
+        sa.Column(
+            "status",
+            # Dialect correction: a budget-window run has the same states as a
+            # report run, so the column reuses the baseline's v2_report_run_status
+            # type instead of creating it again.
+            postgresql.ENUM(
+                "pending",
+                "running",
+                "succeeded",
+                "failed",
+                name="v2_report_run_status",
+                create_type=False,
+            ),
+            nullable=False,
+        ),
+        sa.Column("error_message", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.CheckConstraint(
+            "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL",
+            name=op.f("ck_budget_window_runs_terminal_completion"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["report_id"],
+            ["reports.id"],
+            name=op.f("fk_budget_window_runs_report_id_reports"),
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["tax_benefit_model_version_id"],
+            ["tax_benefit_model_versions.id"],
+            name=op.f(
+                "fk_budget_window_runs_tax_benefit_model_version_id_tax_benefit_model_versions"
+            ),
+            ondelete="RESTRICT",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_budget_window_runs")),
+        sa.UniqueConstraint("id", "report_id", name="uq_budget_window_runs_id_report"),
+    )
+    op.create_index(
+        "ix_budget_window_runs_report_id_created_at",
+        "budget_window_runs",
+        ["report_id", "created_at"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_budget_window_runs_tax_benefit_model_version_id"),
+        "budget_window_runs",
         ["tax_benefit_model_version_id"],
         unique=False,
     )
@@ -219,28 +309,28 @@ def upgrade() -> None:
         sa.Column("reform_simulation_run_id", sa.Uuid(), nullable=False),
     )
     op.drop_constraint(
-        op.f("fk_budget_summary_baseline_simulation_id_simulations"),
-        "budget_summary",
-        type_="foreignkey",
-    )
-    op.drop_constraint(
         op.f("fk_budget_summary_reform_simulation_id_simulations"),
         "budget_summary",
         type_="foreignkey",
     )
-    op.create_foreign_key(
-        op.f("fk_budget_summary_baseline_simulation_run_id_simulation_runs"),
+    op.drop_constraint(
+        op.f("fk_budget_summary_baseline_simulation_id_simulations"),
         "budget_summary",
-        "simulation_runs",
-        ["baseline_simulation_run_id"],
-        ["id"],
-        ondelete="RESTRICT",
+        type_="foreignkey",
     )
     op.create_foreign_key(
         op.f("fk_budget_summary_reform_simulation_run_id_simulation_runs"),
         "budget_summary",
         "simulation_runs",
         ["reform_simulation_run_id"],
+        ["id"],
+        ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        op.f("fk_budget_summary_baseline_simulation_run_id_simulation_runs"),
+        "budget_summary",
+        "simulation_runs",
+        ["baseline_simulation_run_id"],
         ["id"],
         ondelete="RESTRICT",
     )
@@ -267,12 +357,12 @@ def upgrade() -> None:
         sa.Column("no_change_percentage", sa.Float(), nullable=False),
     )
     op.drop_constraint(
-        op.f("fk_congressional_district_impacts_reform_simulation_id__ca94"),
+        op.f("fk_congressional_district_impacts_baseline_simulation_i_d68d"),
         "congressional_district_impacts",
         type_="foreignkey",
     )
     op.drop_constraint(
-        op.f("fk_congressional_district_impacts_baseline_simulation_i_d68d"),
+        op.f("fk_congressional_district_impacts_reform_simulation_id__ca94"),
         "congressional_district_impacts",
         type_="foreignkey",
     )
@@ -331,28 +421,28 @@ def upgrade() -> None:
         sa.Column("relative_household_income_change_upper", sa.Float(), nullable=True),
     )
     op.drop_constraint(
-        op.f("fk_constituency_impacts_reform_simulation_id_simulations"),
-        "constituency_impacts",
-        type_="foreignkey",
-    )
-    op.drop_constraint(
         op.f("fk_constituency_impacts_baseline_simulation_id_simulations"),
         "constituency_impacts",
         type_="foreignkey",
     )
-    op.create_foreign_key(
-        op.f("fk_constituency_impacts_baseline_simulation_run_id_simulation_runs"),
+    op.drop_constraint(
+        op.f("fk_constituency_impacts_reform_simulation_id_simulations"),
         "constituency_impacts",
-        "simulation_runs",
-        ["baseline_simulation_run_id"],
-        ["id"],
-        ondelete="RESTRICT",
+        type_="foreignkey",
     )
     op.create_foreign_key(
         op.f("fk_constituency_impacts_reform_simulation_run_id_simulation_runs"),
         "constituency_impacts",
         "simulation_runs",
         ["reform_simulation_run_id"],
+        ["id"],
+        ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        op.f("fk_constituency_impacts_baseline_simulation_run_id_simulation_runs"),
+        "constituency_impacts",
+        "simulation_runs",
+        ["baseline_simulation_run_id"],
         ["id"],
         ondelete="RESTRICT",
     )
@@ -475,20 +565,20 @@ def upgrade() -> None:
         unique=False,
     )
     op.create_foreign_key(
-        op.f("fk_household_jobs_household_id_households"),
-        "household_jobs",
-        "households",
-        ["household_id"],
-        ["id"],
-        ondelete="RESTRICT",
-    )
-    op.create_foreign_key(
         op.f(
             "fk_household_jobs_tax_benefit_model_version_id_tax_benefit_model_versions"
         ),
         "household_jobs",
         "tax_benefit_model_versions",
         ["tax_benefit_model_version_id"],
+        ["id"],
+        ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        op.f("fk_household_jobs_household_id_households"),
+        "household_jobs",
+        "households",
+        ["household_id"],
         ["id"],
         ondelete="RESTRICT",
     )
@@ -512,12 +602,12 @@ def upgrade() -> None:
         ["simulation_run_id", "income_variable", "entity"],
     )
     op.drop_constraint(
-        op.f("fk_inequality_report_run_id_report_runs"),
+        op.f("fk_inequality_simulation_id_simulations"),
         "inequality",
         type_="foreignkey",
     )
     op.drop_constraint(
-        op.f("fk_inequality_simulation_id_simulations"),
+        op.f("fk_inequality_report_run_id_report_runs"),
         "inequality",
         type_="foreignkey",
     )
@@ -540,12 +630,12 @@ def upgrade() -> None:
         sa.Column("reform_simulation_run_id", sa.Uuid(), nullable=False),
     )
     op.drop_constraint(
-        op.f("fk_intra_decile_impacts_reform_simulation_id_simulations"),
+        op.f("fk_intra_decile_impacts_baseline_simulation_id_simulations"),
         "intra_decile_impacts",
         type_="foreignkey",
     )
     op.drop_constraint(
-        op.f("fk_intra_decile_impacts_baseline_simulation_id_simulations"),
+        op.f("fk_intra_decile_impacts_reform_simulation_id_simulations"),
         "intra_decile_impacts",
         type_="foreignkey",
     )
@@ -600,28 +690,28 @@ def upgrade() -> None:
         sa.Column("relative_household_income_change_upper", sa.Float(), nullable=True),
     )
     op.drop_constraint(
-        op.f("fk_local_authority_impacts_baseline_simulation_id_simulations"),
-        "local_authority_impacts",
-        type_="foreignkey",
-    )
-    op.drop_constraint(
         op.f("fk_local_authority_impacts_reform_simulation_id_simulations"),
         "local_authority_impacts",
         type_="foreignkey",
     )
-    op.create_foreign_key(
-        op.f("fk_local_authority_impacts_reform_simulation_run_id_simulation_runs"),
+    op.drop_constraint(
+        op.f("fk_local_authority_impacts_baseline_simulation_id_simulations"),
         "local_authority_impacts",
-        "simulation_runs",
-        ["reform_simulation_run_id"],
-        ["id"],
-        ondelete="RESTRICT",
+        type_="foreignkey",
     )
     op.create_foreign_key(
         op.f("fk_local_authority_impacts_baseline_simulation_run_id_simulation_runs"),
         "local_authority_impacts",
         "simulation_runs",
         ["baseline_simulation_run_id"],
+        ["id"],
+        ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        op.f("fk_local_authority_impacts_reform_simulation_run_id_simulation_runs"),
+        "local_authority_impacts",
+        "simulation_runs",
+        ["reform_simulation_run_id"],
         ["id"],
         ondelete="RESTRICT",
     )
@@ -653,10 +743,10 @@ def upgrade() -> None:
         postgresql_nulls_not_distinct=True,
     )
     op.drop_constraint(
-        op.f("fk_poverty_simulation_id_simulations"), "poverty", type_="foreignkey"
+        op.f("fk_poverty_report_run_id_report_runs"), "poverty", type_="foreignkey"
     )
     op.drop_constraint(
-        op.f("fk_poverty_report_run_id_report_runs"), "poverty", type_="foreignkey"
+        op.f("fk_poverty_simulation_id_simulations"), "poverty", type_="foreignkey"
     )
     op.create_foreign_key(
         op.f("fk_poverty_simulation_run_id_simulation_runs"),
@@ -697,28 +787,28 @@ def upgrade() -> None:
         postgresql_nulls_not_distinct=True,
     )
     op.drop_constraint(
-        op.f("fk_program_statistics_reform_simulation_id_simulations"),
-        "program_statistics",
-        type_="foreignkey",
-    )
-    op.drop_constraint(
         op.f("fk_program_statistics_baseline_simulation_id_simulations"),
         "program_statistics",
         type_="foreignkey",
     )
-    op.create_foreign_key(
-        op.f("fk_program_statistics_reform_simulation_run_id_simulation_runs"),
+    op.drop_constraint(
+        op.f("fk_program_statistics_reform_simulation_id_simulations"),
         "program_statistics",
-        "simulation_runs",
-        ["reform_simulation_run_id"],
-        ["id"],
-        ondelete="RESTRICT",
+        type_="foreignkey",
     )
     op.create_foreign_key(
         op.f("fk_program_statistics_baseline_simulation_run_id_simulation_runs"),
         "program_statistics",
         "simulation_runs",
         ["baseline_simulation_run_id"],
+        ["id"],
+        ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        op.f("fk_program_statistics_reform_simulation_run_id_simulation_runs"),
+        "program_statistics",
+        "simulation_runs",
+        ["reform_simulation_run_id"],
         ["id"],
         ondelete="RESTRICT",
     )
@@ -731,6 +821,10 @@ def upgrade() -> None:
     op.add_column(
         "report_runs", sa.Column("reform_simulation_run_id", sa.Uuid(), nullable=True)
     )
+    op.add_column(
+        "report_runs", sa.Column("budget_window_run_id", sa.Uuid(), nullable=True)
+    )
+    op.add_column("report_runs", sa.Column("year", sa.Integer(), nullable=True))
     op.add_column(
         "report_runs",
         sa.Column(
@@ -783,6 +877,11 @@ def upgrade() -> None:
         ["status", "started_at"],
         unique=False,
     )
+    op.create_unique_constraint(
+        "uq_report_runs_budget_window_run_id_year",
+        "report_runs",
+        ["budget_window_run_id", "year"],
+    )
     op.create_foreign_key(
         op.f("fk_report_runs_baseline_simulation_run_id_simulation_runs"),
         "report_runs",
@@ -790,6 +889,13 @@ def upgrade() -> None:
         ["baseline_simulation_run_id"],
         ["id"],
         ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        "fk_report_runs_budget_window_run_id_budget_window_runs",
+        "report_runs",
+        "budget_window_runs",
+        ["budget_window_run_id", "report_id"],
+        ["id", "report_id"],
     )
     op.create_foreign_key(
         op.f("fk_report_runs_reform_simulation_run_id_simulation_runs"),
@@ -800,23 +906,41 @@ def upgrade() -> None:
         ondelete="RESTRICT",
     )
     op.create_check_constraint(
+        op.f("ck_report_runs_budget_window_year"),
+        "report_runs",
+        "budget_window_run_id IS NULL OR year IS NOT NULL",
+    )
+    op.create_check_constraint(
         op.f("ck_report_runs_cliff_impact_complete"),
         "report_runs",
         "(baseline_cliff_gap IS NULL) = (baseline_cliff_share IS NULL) AND (baseline_cliff_gap IS NULL) = (reform_cliff_gap IS NULL) AND (baseline_cliff_gap IS NULL) = (reform_cliff_share IS NULL)",
     )
+    op.create_check_constraint(
+        op.f("ck_report_runs_year"),
+        "report_runs",
+        "year IS NULL OR year BETWEEN 1900 AND 2200",
+    )
+    op.add_column(
+        "reports", sa.Column("budget_window_size", sa.Integer(), nullable=True)
+    )
     op.create_index(op.f("ix_reports_user_id"), "reports", ["user_id"], unique=False)
+    op.create_check_constraint(
+        op.f("ck_reports_budget_window_size"),
+        "reports",
+        "budget_window_size IS NULL OR (household_id IS NULL AND budget_window_size BETWEEN 1 AND 75 AND year IS NOT NULL AND year + budget_window_size - 1 <= 2200)",
+    )
     op.drop_index(op.f("ix_simulations_status_created_at"), table_name="simulations")
     op.drop_constraint(
         op.f("fk_simulations_output_dataset_id_datasets"),
         "simulations",
         type_="foreignkey",
     )
-    op.drop_column("simulations", "output_dataset_id")
-    op.drop_column("simulations", "completed_at")
+    op.drop_column("simulations", "started_at")
+    op.drop_column("simulations", "error_message")
     op.drop_column("simulations", "status")
     op.drop_column("simulations", "household_result")
-    op.drop_column("simulations", "error_message")
-    op.drop_column("simulations", "started_at")
+    op.drop_column("simulations", "completed_at")
+    op.drop_column("simulations", "output_dataset_id")
     # ### end Alembic commands ###
 
 
@@ -824,16 +948,16 @@ def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
     op.add_column(
         "simulations",
+        sa.Column("output_dataset_id", sa.UUID(), autoincrement=False, nullable=True),
+    )
+    op.add_column(
+        "simulations",
         sa.Column(
-            "started_at",
+            "completed_at",
             postgresql.TIMESTAMP(timezone=True),
             autoincrement=False,
             nullable=True,
         ),
-    )
-    op.add_column(
-        "simulations",
-        sa.Column("error_message", sa.VARCHAR(), autoincrement=False, nullable=True),
     )
     op.add_column(
         "simulations",
@@ -857,16 +981,16 @@ def downgrade() -> None:
     )
     op.add_column(
         "simulations",
+        sa.Column("error_message", sa.VARCHAR(), autoincrement=False, nullable=True),
+    )
+    op.add_column(
+        "simulations",
         sa.Column(
-            "completed_at",
+            "started_at",
             postgresql.TIMESTAMP(timezone=True),
             autoincrement=False,
             nullable=True,
         ),
-    )
-    op.add_column(
-        "simulations",
-        sa.Column("output_dataset_id", sa.UUID(), autoincrement=False, nullable=True),
     )
     op.create_foreign_key(
         op.f("fk_simulations_output_dataset_id_datasets"),
@@ -882,9 +1006,15 @@ def downgrade() -> None:
         ["status", "created_at"],
         unique=False,
     )
+    op.drop_constraint(op.f("ck_reports_budget_window_size"), "reports", type_="check")
     op.drop_index(op.f("ix_reports_user_id"), table_name="reports")
+    op.drop_column("reports", "budget_window_size")
+    op.drop_constraint(op.f("ck_report_runs_year"), "report_runs", type_="check")
     op.drop_constraint(
         op.f("ck_report_runs_cliff_impact_complete"), "report_runs", type_="check"
+    )
+    op.drop_constraint(
+        op.f("ck_report_runs_budget_window_year"), "report_runs", type_="check"
     )
     op.drop_constraint(
         op.f("fk_report_runs_reform_simulation_run_id_simulation_runs"),
@@ -892,9 +1022,17 @@ def downgrade() -> None:
         type_="foreignkey",
     )
     op.drop_constraint(
+        "fk_report_runs_budget_window_run_id_budget_window_runs",
+        "report_runs",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
         op.f("fk_report_runs_baseline_simulation_run_id_simulation_runs"),
         "report_runs",
         type_="foreignkey",
+    )
+    op.drop_constraint(
+        "uq_report_runs_budget_window_run_id_year", "report_runs", type_="unique"
     )
     op.drop_index("ix_report_runs_status_started_at", table_name="report_runs")
     op.drop_index(
@@ -910,6 +1048,8 @@ def downgrade() -> None:
     op.drop_column("report_runs", "baseline_cliff_share")
     op.drop_column("report_runs", "baseline_cliff_gap")
     op.drop_column("report_runs", "modal_call_id")
+    op.drop_column("report_runs", "year")
+    op.drop_column("report_runs", "budget_window_run_id")
     op.drop_column("report_runs", "reform_simulation_run_id")
     op.drop_column("report_runs", "baseline_simulation_run_id")
     op.add_column(
@@ -925,28 +1065,28 @@ def downgrade() -> None:
         ),
     )
     op.drop_constraint(
-        op.f("fk_program_statistics_baseline_simulation_run_id_simulation_runs"),
-        "program_statistics",
-        type_="foreignkey",
-    )
-    op.drop_constraint(
         op.f("fk_program_statistics_reform_simulation_run_id_simulation_runs"),
         "program_statistics",
         type_="foreignkey",
     )
-    op.create_foreign_key(
-        op.f("fk_program_statistics_baseline_simulation_id_simulations"),
+    op.drop_constraint(
+        op.f("fk_program_statistics_baseline_simulation_run_id_simulation_runs"),
         "program_statistics",
-        "simulations",
-        ["baseline_simulation_id"],
-        ["id"],
-        ondelete="RESTRICT",
+        type_="foreignkey",
     )
     op.create_foreign_key(
         op.f("fk_program_statistics_reform_simulation_id_simulations"),
         "program_statistics",
         "simulations",
         ["reform_simulation_id"],
+        ["id"],
+        ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        op.f("fk_program_statistics_baseline_simulation_id_simulations"),
+        "program_statistics",
+        "simulations",
+        ["baseline_simulation_id"],
         ["id"],
         ondelete="RESTRICT",
     )
@@ -984,20 +1124,20 @@ def downgrade() -> None:
         type_="foreignkey",
     )
     op.create_foreign_key(
-        op.f("fk_poverty_report_run_id_report_runs"),
-        "poverty",
-        "report_runs",
-        ["report_run_id"],
-        ["id"],
-        ondelete="CASCADE",
-    )
-    op.create_foreign_key(
         op.f("fk_poverty_simulation_id_simulations"),
         "poverty",
         "simulations",
         ["simulation_id"],
         ["id"],
         ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        op.f("fk_poverty_report_run_id_report_runs"),
+        "poverty",
+        "report_runs",
+        ["report_run_id"],
+        ["id"],
+        ondelete="CASCADE",
     )
     op.drop_constraint("uq_poverty_simulation_run_measure", "poverty", type_="unique")
     op.create_index(
@@ -1026,28 +1166,28 @@ def downgrade() -> None:
         type_="check",
     )
     op.drop_constraint(
-        op.f("fk_local_authority_impacts_baseline_simulation_run_id_simulation_runs"),
-        "local_authority_impacts",
-        type_="foreignkey",
-    )
-    op.drop_constraint(
         op.f("fk_local_authority_impacts_reform_simulation_run_id_simulation_runs"),
         "local_authority_impacts",
         type_="foreignkey",
     )
-    op.create_foreign_key(
-        op.f("fk_local_authority_impacts_reform_simulation_id_simulations"),
+    op.drop_constraint(
+        op.f("fk_local_authority_impacts_baseline_simulation_run_id_simulation_runs"),
         "local_authority_impacts",
-        "simulations",
-        ["reform_simulation_id"],
-        ["id"],
-        ondelete="RESTRICT",
+        type_="foreignkey",
     )
     op.create_foreign_key(
         op.f("fk_local_authority_impacts_baseline_simulation_id_simulations"),
         "local_authority_impacts",
         "simulations",
         ["baseline_simulation_id"],
+        ["id"],
+        ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        op.f("fk_local_authority_impacts_reform_simulation_id_simulations"),
+        "local_authority_impacts",
+        "simulations",
+        ["reform_simulation_id"],
         ["id"],
         ondelete="RESTRICT",
     )
@@ -1081,18 +1221,18 @@ def downgrade() -> None:
         type_="foreignkey",
     )
     op.create_foreign_key(
-        op.f("fk_intra_decile_impacts_baseline_simulation_id_simulations"),
-        "intra_decile_impacts",
-        "simulations",
-        ["baseline_simulation_id"],
-        ["id"],
-        ondelete="RESTRICT",
-    )
-    op.create_foreign_key(
         op.f("fk_intra_decile_impacts_reform_simulation_id_simulations"),
         "intra_decile_impacts",
         "simulations",
         ["reform_simulation_id"],
+        ["id"],
+        ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        op.f("fk_intra_decile_impacts_baseline_simulation_id_simulations"),
+        "intra_decile_impacts",
+        "simulations",
+        ["baseline_simulation_id"],
         ["id"],
         ondelete="RESTRICT",
     )
@@ -1112,20 +1252,20 @@ def downgrade() -> None:
         type_="foreignkey",
     )
     op.create_foreign_key(
-        op.f("fk_inequality_simulation_id_simulations"),
-        "inequality",
-        "simulations",
-        ["simulation_id"],
-        ["id"],
-        ondelete="RESTRICT",
-    )
-    op.create_foreign_key(
         op.f("fk_inequality_report_run_id_report_runs"),
         "inequality",
         "report_runs",
         ["report_run_id"],
         ["id"],
         ondelete="CASCADE",
+    )
+    op.create_foreign_key(
+        op.f("fk_inequality_simulation_id_simulations"),
+        "inequality",
+        "simulations",
+        ["simulation_id"],
+        ["id"],
+        ondelete="RESTRICT",
     )
     op.drop_constraint(
         "uq_inequality_simulation_run_measure", "inequality", type_="unique"
@@ -1142,14 +1282,14 @@ def downgrade() -> None:
         op.f("ck_household_jobs_terminal_completion"), "household_jobs", type_="check"
     )
     op.drop_constraint(
-        op.f(
-            "fk_household_jobs_tax_benefit_model_version_id_tax_benefit_model_versions"
-        ),
+        op.f("fk_household_jobs_household_id_households"),
         "household_jobs",
         type_="foreignkey",
     )
     op.drop_constraint(
-        op.f("fk_household_jobs_household_id_households"),
+        op.f(
+            "fk_household_jobs_tax_benefit_model_version_id_tax_benefit_model_versions"
+        ),
         "household_jobs",
         type_="foreignkey",
     )
@@ -1233,28 +1373,28 @@ def downgrade() -> None:
         type_="check",
     )
     op.drop_constraint(
-        op.f("fk_constituency_impacts_reform_simulation_run_id_simulation_runs"),
-        "constituency_impacts",
-        type_="foreignkey",
-    )
-    op.drop_constraint(
         op.f("fk_constituency_impacts_baseline_simulation_run_id_simulation_runs"),
         "constituency_impacts",
         type_="foreignkey",
     )
-    op.create_foreign_key(
-        op.f("fk_constituency_impacts_baseline_simulation_id_simulations"),
+    op.drop_constraint(
+        op.f("fk_constituency_impacts_reform_simulation_run_id_simulation_runs"),
         "constituency_impacts",
-        "simulations",
-        ["baseline_simulation_id"],
-        ["id"],
-        ondelete="RESTRICT",
+        type_="foreignkey",
     )
     op.create_foreign_key(
         op.f("fk_constituency_impacts_reform_simulation_id_simulations"),
         "constituency_impacts",
         "simulations",
         ["reform_simulation_id"],
+        ["id"],
+        ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        op.f("fk_constituency_impacts_baseline_simulation_id_simulations"),
+        "constituency_impacts",
+        "simulations",
+        ["baseline_simulation_id"],
         ["id"],
         ondelete="RESTRICT",
     )
@@ -1292,18 +1432,18 @@ def downgrade() -> None:
         type_="foreignkey",
     )
     op.create_foreign_key(
-        op.f("fk_congressional_district_impacts_baseline_simulation_i_d68d"),
-        "congressional_district_impacts",
-        "simulations",
-        ["baseline_simulation_id"],
-        ["id"],
-        ondelete="RESTRICT",
-    )
-    op.create_foreign_key(
         op.f("fk_congressional_district_impacts_reform_simulation_id__ca94"),
         "congressional_district_impacts",
         "simulations",
         ["reform_simulation_id"],
+        ["id"],
+        ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        op.f("fk_congressional_district_impacts_baseline_simulation_i_d68d"),
+        "congressional_district_impacts",
+        "simulations",
+        ["baseline_simulation_id"],
         ["id"],
         ondelete="RESTRICT",
     )
@@ -1325,22 +1465,14 @@ def downgrade() -> None:
         ),
     )
     op.drop_constraint(
-        op.f("fk_budget_summary_reform_simulation_run_id_simulation_runs"),
-        "budget_summary",
-        type_="foreignkey",
-    )
-    op.drop_constraint(
         op.f("fk_budget_summary_baseline_simulation_run_id_simulation_runs"),
         "budget_summary",
         type_="foreignkey",
     )
-    op.create_foreign_key(
-        op.f("fk_budget_summary_reform_simulation_id_simulations"),
+    op.drop_constraint(
+        op.f("fk_budget_summary_reform_simulation_run_id_simulation_runs"),
         "budget_summary",
-        "simulations",
-        ["reform_simulation_id"],
-        ["id"],
-        ondelete="RESTRICT",
+        type_="foreignkey",
     )
     op.create_foreign_key(
         op.f("fk_budget_summary_baseline_simulation_id_simulations"),
@@ -1350,10 +1482,26 @@ def downgrade() -> None:
         ["id"],
         ondelete="RESTRICT",
     )
+    op.create_foreign_key(
+        op.f("fk_budget_summary_reform_simulation_id_simulations"),
+        "budget_summary",
+        "simulations",
+        ["reform_simulation_id"],
+        ["id"],
+        ondelete="RESTRICT",
+    )
     op.drop_column("budget_summary", "reform_simulation_run_id")
     op.drop_column("budget_summary", "baseline_simulation_run_id")
     op.drop_table("labor_supply_responses")
     op.drop_table("labor_supply_decile_responses")
+    op.drop_index(
+        op.f("ix_budget_window_runs_tax_benefit_model_version_id"),
+        table_name="budget_window_runs",
+    )
+    op.drop_index(
+        "ix_budget_window_runs_report_id_created_at", table_name="budget_window_runs"
+    )
+    op.drop_table("budget_window_runs")
     op.drop_index(
         op.f("ix_simulation_runs_tax_benefit_model_version_id"),
         table_name="simulation_runs",
