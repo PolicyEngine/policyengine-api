@@ -1,0 +1,13 @@
+# Proof fixture for api.quality.suppressions-explained (the rejected case).
+# The proof test scans this text as a Python module. Every suppression below
+# lacks a code, a reason or both, so the guard reports lines 6 to 13.
+# The fixture is a .txt file so that ruff doesn't lint these suppressions.
+
+# ruff: noqa: E402
+# flake8: noqa
+import os  # noqa
+import sys  # noqa: F401
+from typing import Any  # noqa: F401 kept because a plugin reads it
+VALUE: Any = os.environ  # type: ignore
+OTHER: Any = sys.argv  # type: ignore[assignment]
+LAST = 1  # type: ignore[]  # mypy needs it
