@@ -286,13 +286,15 @@ def _exception_violations(
     if path not in scanned:
         if not (root / path).is_file():
             return [violation("but it does not exist", "remove the exception")]
-        # Another spelling of a real file: a '.', '..' or empty segment, a
-        # symlinked directory, or different letter case on macOS.
+        # Another spelling of a real file (a '.', '..' or empty segment, a
+        # symlinked directory, or different letter case on macOS), or a file
+        # git doesn't track.
         return [
             violation(
                 "but no file the guard scans has that exact path, so the "
                 "exception would match nothing",
-                "write the path as git ls-files lists it",
+                "write the path as git ls-files lists it, and git add the file if "
+                "git doesn't track it",
             )
         ]
     if _layer_by_name(path) is not None:
@@ -303,9 +305,10 @@ def _exception_violations(
         return [
             violation(
                 "but a database_connectors package holds only connector modules "
-                "(rule api.v2.crud-checks-cover-every-resource also fails any "
-                "other module directly in services/v2/<resource>/database_connectors)",
-                f"{CONNECTOR_NAME}, {CONNECTOR_PLACE}, and remove the exception",
+                "(rule api.v2.crud-checks-cover-every-resource also fails a module "
+                "directly in services/v2/<resource>/database_connectors whose name "
+                "doesn't start with an operation)",
+                f"remove the exception; {CONNECTOR_REMEDY}",
             )
         ]
     violations = [
@@ -361,16 +364,19 @@ def _occurrences(count: int) -> str:
 
 
 # A connector gets its layer only with an operation's name, directly in a
-# database_connectors package, so the fix names both.
-CONNECTOR_NAME = (
-    "name it after its operation, <creates|reads|updates|deletes>[_name].py"
+# database_connectors package, so the fix names both. It points to the
+# location the CRUD checks cover: deeper connector packages get a layer from
+# this guard but aren't checked by them. A module that isn't a connector
+# belongs outside the package.
+CONNECTOR_REMEDY = (
+    "if it reads or writes rows, name it after its operation, "
+    "<creates|reads|updates|deletes>[_name].py, and put it directly in "
+    "services/v2/<resource>/database_connectors; otherwise move it out of the "
+    "database_connectors package and name it after its layer"
 )
-# The location the CRUD checks cover; deeper connector packages get a layer
-# from this guard but aren't checked by them.
-CONNECTOR_PLACE = "put it directly in services/v2/<resource>/database_connectors"
 CONNECTOR_NAME_FIX = (
-    f"{CONNECTOR_NAME}, and {CONNECTOR_PLACE}; an exception can't stand in, "
-    "because a database_connectors package holds only connector modules"
+    f"{CONNECTOR_REMEDY}; an exception can't stand in, because a "
+    "database_connectors package holds only connector modules"
 )
 
 
