@@ -1,0 +1,6 @@
+# Proof fixture for api.quality.diff-coverage (at the minimum).
+#
+# As below_threshold.toml, with 8 of the 10 changed lines covered: 80%, which
+# diff-cover --fail-under=80 must accept.
+changed_lines = 10
+covered_lines = 8
