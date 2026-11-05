@@ -1514,7 +1514,7 @@ job = "quality-guards"
 invocation = "run_quality_guards.py"
 [rule.baseline]
 file = "rules/baselines/tests-without-checks.txt"
-count = 22
+count = 21
 [rule.proof]
 bad_fixture = "rules/fixtures/api.quality.tests-assert/rejected_tests.txt"
 good_fixture = "rules/fixtures/api.quality.tests-assert/accepted_tests.txt"

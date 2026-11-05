@@ -88,7 +88,7 @@ method of another object) isn't followed, so name it `assert_...` or import
 it by name.
 
 The rule is ratcheted. `rules/baselines/tests-without-checks.txt` lists the
-22 tests that checked nothing when the rule was added, as `<path>::<test>`
+21 tests that checked nothing when the rule was added, as `<path>::<test>`
 (`<test>` is `Class::method` for a method). A test not listed there fails,
 and a listed one that is gone or now checks something fails as stale: remove
 its line and lower the rule's baseline `count`. Renaming or moving a listed

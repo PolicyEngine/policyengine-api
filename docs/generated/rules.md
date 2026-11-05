@@ -63,7 +63,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 - `api.dependencies.declared-and-used`: 16 remaining in `rules/baselines/deptry.txt`
 - `api.quality.suppressions-explained`: 29 remaining in `rules/baselines/suppressions.txt`
-- `api.quality.tests-assert`: 22 remaining in `rules/baselines/tests-without-checks.txt`
+- `api.quality.tests-assert`: 21 remaining in `rules/baselines/tests-without-checks.txt`
 - `api.v2.connectors-no-cross-calls`: 7 remaining in `rules/baselines/import-linter-api-v2-connectors-independent.txt`
 - `api.v2.pure-modules-no-database`: 1 remaining in `rules/baselines/import-linter-api-v2-pure-modules-no-database.txt`
 - `api.v2.routes-no-sessions-or-sql`: 4 remaining in `rules/baselines/v2-layers-routes.txt`
