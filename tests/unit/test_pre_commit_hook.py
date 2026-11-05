@@ -22,11 +22,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[2]
 HOOKS = REPO / ".githooks"
 FIXTURES = REPO / "rules" / "fixtures" / "api.quality.pre-commit-hook"
 # The tools the hooks, make install and these tests run, found through PATH.
-TOOLS = ("git", "make", "sh", "find", "dirname", "env")
+TOOLS = ("git", "make", "sh", "find", "env")
 # A stand-in for uv that records each call when UV_STUB_LOG is set.
 STUB_UV = (
     '#!/bin/sh\nif [ -n "${UV_STUB_LOG:-}" ]; then\n'
@@ -35,6 +37,10 @@ STUB_UV = (
 PASSING_QUALITY = 'quality:\n\t@echo checked >> "$$QUALITY_MARKER"\n'
 FAILING_QUALITY = "quality:\n\t@echo 'mypy: 1 error'\n\t@exit 1\n"
 FIXING_QUALITY = "quality:\n\t@printf 'VALUE = 1\\n' > module.py\n"
+# The real Makefile's shape: quality runs quality-check through $(MAKE).
+RECURSIVE_FAILING_QUALITY = (
+    "quality:\n\t$(MAKE) quality-check\n\nquality-check:\n\t@exit 1\n"
+)
 # Fixes module.py, as ruff check --fix does, then fails, as mypy can after it.
 FIXING_THEN_FAILING_QUALITY = (
     "quality:\n\t@printf 'VALUE = 1\\n' > module.py\n\t@echo 'mypy: 1 error'\n"
@@ -68,6 +74,8 @@ def _environment(tmp_path: Path, *, missing: tuple[str, ...] = ()) -> dict[str, 
         {
             "PATH": str(tools),
             "HOME": str(tmp_path),
+            # git reads $XDG_CONFIG_HOME/git/ignore even without a global config.
+            "XDG_CONFIG_HOME": str(tmp_path / "config"),
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_AUTHOR_NAME": "test",
@@ -170,6 +178,8 @@ def hook_problems(hook: Path, tmp_path: Path) -> list[str]:
             True,
         ),
         ("a missing uv", PASSING_QUALITY, "no uv", True),
+        ("an untracked file", PASSING_QUALITY, "untracked", True),
+        ("a missing dev environment", PASSING_QUALITY, "no venv", True),
         ("passing checks", PASSING_QUALITY, None, False),
     ):
         scenario = tmp_path / name.replace(" ", "-").replace("'", "")
@@ -177,7 +187,11 @@ def hook_problems(hook: Path, tmp_path: Path) -> list[str]:
         environment = _environment(
             scenario, missing=("uv",) if prepare == "no uv" else ()
         )
-        repository = _repository(scenario, environment, recipe, hook)
+        repository = _repository(
+            scenario, environment, recipe, hook, dev_environment=prepare != "no venv"
+        )
+        if prepare == "untracked":
+            (repository / "scratch.py").write_text("SCRATCH = 0\n")
         if prepare == "unstaged":
             (repository / "other.py").write_text("OTHER = 1\n")
         result = _commit_a_change(repository, environment)
@@ -198,6 +212,8 @@ def test_rule_proof_pre_commit_hook(tmp_path: Path):
         "the hook lets a commit through after an unstaged change make quality "
         "would check",
         "the hook lets a commit through after a missing uv",
+        "the hook lets a commit through after an untracked file",
+        "the hook lets a commit through after a missing dev environment",
     ]
     assert accepted == []
 
@@ -526,6 +542,116 @@ def test_make_install_keeps_the_clone_s_own_hooks_running(tmp_path: Path):
     assert "pre-push" in installed.stderr
     hooks_path = _git(repository, environment, "config", "core.hooksPath")
     assert hooks_path.stdout == ""
+
+
+def test_python_files_hidden_by_local_excludes_stop_the_commit(tmp_path: Path):
+    # mypy and Import Linter read every Python file on disk, whatever git
+    # ignores outside the repository's .gitignore files.
+    environment = _environment(tmp_path)
+    repository = _repository(tmp_path, environment, PASSING_QUALITY)
+    (repository / "helper.py").write_text("HELPER = 0\n")
+    (repository / ".git" / "info" / "exclude").write_text("helper.py\n")
+
+    result = _commit_a_change(repository, environment)
+
+    assert result.returncode != 0
+    assert "helper.py" in result.stderr
+    assert _ran(tmp_path) == 0
+
+
+def test_other_files_hidden_by_local_excludes_dont_stop_the_commit(tmp_path: Path):
+    environment = _environment(tmp_path)
+    repository = _repository(tmp_path, environment, PASSING_QUALITY)
+    (repository / "notes.txt").write_text("notes\n")
+    (repository / ".git" / "info" / "exclude").write_text("notes.txt\n")
+
+    result = _commit_a_change(repository, environment)
+
+    assert result.returncode == 0, result.stderr
+    assert _ran(tmp_path) == 1
+
+
+@pytest.mark.parametrize("variable", ["MAKE", "MAKE_COMMAND"])
+def test_make_from_the_environment_cant_skip_the_checks(variable, tmp_path: Path):
+    # make takes $(MAKE) from the environment, so `true` would skip
+    # quality-check.
+    environment = _environment(tmp_path)
+    # An absolute path: the test's PATH has no true.
+    environment[variable] = shutil.which("true") or "/usr/bin/true"
+    repository = _repository(tmp_path, environment, RECURSIVE_FAILING_QUALITY)
+
+    result = _commit_a_change(repository, environment)
+
+    assert result.returncode != 0
+    assert _commits(repository, environment) == 1
+
+
+@pytest.mark.parametrize("flag", ["--skip-worktree", "--assume-unchanged"])
+def test_files_git_doesnt_compare_stop_the_commit(flag, tmp_path: Path):
+    # git diff doesn't compare them with the commit, so make quality could
+    # check a copy the commit doesn't hold.
+    environment = _environment(tmp_path)
+    repository = _repository(tmp_path, environment, PASSING_QUALITY)
+    _git(repository, environment, "update-index", flag, "other.py")
+    (repository / "other.py").write_text("OTHER = 1\n")
+
+    result = _commit_a_change(repository, environment)
+
+    assert result.returncode != 0
+    assert "other.py" in result.stderr
+    assert _ran(tmp_path) == 0
+
+
+def test_make_install_keeps_a_symlinked_hook_running(tmp_path: Path):
+    environment = _environment(tmp_path)
+    repository = _source_tree(tmp_path / "repository")
+    _git(repository, environment, "init", "--quiet")
+    script = tmp_path / "team-pre-push"
+    script.write_text("#!/bin/sh\nexit 0\n")
+    script.chmod(0o755)
+    (repository / ".git" / "hooks" / "pre-push").symlink_to(script)
+
+    installed = _make(repository, environment, "install")
+
+    assert installed.returncode == 0, installed.stderr
+    assert "pre-push" in installed.stderr
+    hooks_path = _git(repository, environment, "config", "core.hooksPath")
+    assert hooks_path.stdout == ""
+
+
+def test_make_install_keeps_a_symlinked_hooks_directory_running(tmp_path: Path):
+    environment = _environment(tmp_path)
+    repository = _source_tree(tmp_path / "repository")
+    _git(repository, environment, "init", "--quiet")
+    team_hooks = tmp_path / "team-hooks"
+    team_hooks.mkdir()
+    (team_hooks / "pre-push").write_text("#!/bin/sh\nexit 0\n")
+    (team_hooks / "pre-push").chmod(0o755)
+    shutil.rmtree(repository / ".git" / "hooks")
+    (repository / ".git" / "hooks").symlink_to(team_hooks)
+
+    installed = _make(repository, environment, "install")
+
+    assert installed.returncode == 0, installed.stderr
+    assert "pre-push" in installed.stderr
+    hooks_path = _git(repository, environment, "config", "core.hooksPath")
+    assert hooks_path.stdout == ""
+
+
+def test_make_install_still_installs_when_git_config_is_locked(tmp_path: Path):
+    # Another git command, or make install in another worktree of the clone,
+    # can hold .git/config's lock.
+    environment = _environment(tmp_path)
+    environment["UV_STUB_LOG"] = str(tmp_path / "uv-calls")
+    repository = _source_tree(tmp_path / "repository")
+    _git(repository, environment, "init", "--quiet")
+    (repository / ".git" / "config.lock").write_text("")
+
+    installed = _make(repository, environment, "install")
+
+    assert installed.returncode == 0, installed.stderr
+    assert "core.hooksPath" in installed.stderr
+    assert (tmp_path / "uv-calls").read_text() == "sync --frozen --extra dev\n"
 
 
 def test_the_hooks_are_executable_in_git(tmp_path: Path):

@@ -1,9 +1,12 @@
 #!/bin/sh
 # Proof fixture for api.quality.pre-commit-hook (accepted): the least a hook
-# must do. It stops the commit when uv is missing, when the working tree holds
-# changes the commit doesn't (make quality would check them instead), when
-# make quality fails, and when make quality changed a file.
+# must do. It stops the commit when uv or the dev environment is missing, when
+# the working tree holds unstaged changes or untracked files (make quality
+# would check them instead of what is committed), when make quality fails,
+# and when make quality changed a file.
 command -v uv >/dev/null 2>&1 || exit 1
+[ -d .venv ] || exit 1
 git diff --quiet || exit 1
+[ -z "$(git ls-files --others --exclude-standard)" ] || exit 1
 make quality || exit 1
 git diff --quiet || exit 1
