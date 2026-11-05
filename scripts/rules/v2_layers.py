@@ -254,11 +254,15 @@ def scan(
     return sorted(findings, key=lambda finding: (finding.rule_id, str(finding)))
 
 
-def _exception_violations(root: Path, exception: RuleException) -> list[Violation]:
+def _exception_violations(
+    root: Path, exception: RuleException, scanned: Collection[str]
+) -> list[Violation]:
     """Report a files-rule exception that doesn't name one unnamed v2 file.
 
-    It must also end on an ``expires`` date and cover the whole file: the
-    guard reads no ``category``, ``removal`` or ``match``.
+    The path must be one of ``scanned``, the paths as git ls-files writes
+    them, because assign_layer compares exceptions with those. The exception
+    must also end on an ``expires`` date and cover the whole file: the guard
+    reads no ``category``, ``removal`` or ``match``.
     """
     path = exception.path
 
@@ -279,17 +283,18 @@ def _exception_violations(root: Path, exception: RuleException) -> list[Violatio
                 "name one file there, or remove the exception",
             )
         ]
-    if any(segment in ("", ".", "..") for segment in path.split("/")):
-        # assign_layer compares paths as git ls-files writes them.
+    if path not in scanned:
+        if not (root / path).is_file():
+            return [violation("but it does not exist", "remove the exception")]
+        # Another spelling of a real file: a '.', '..' or empty segment, a
+        # symlinked directory, or different letter case on macOS.
         return [
             violation(
-                "but its path has a '.', '..' or empty segment, so it matches no "
-                "file the guard scans",
+                "but no file the guard scans has that exact path, so the "
+                "exception would match nothing",
                 "write the path as git ls-files lists it",
             )
         ]
-    if not (root / path).is_file():
-        return [violation("but it does not exist", "remove the exception")]
     if _layer_by_name(path) is not None:
         return [
             violation("but its name already gives it a layer", "remove the exception")
@@ -322,14 +327,19 @@ def _exception_violations(root: Path, exception: RuleException) -> list[Violatio
     return violations
 
 
-def file_exceptions(root: Path, rule: Rule | None) -> tuple[list[str], list[Violation]]:
-    """Return the files the files rule excepts, and its exceptions that don't belong."""
+def file_exceptions(
+    root: Path, rule: Rule | None, scanned: Collection[str]
+) -> tuple[list[str], list[Violation]]:
+    """Return the files the files rule excepts, and its exceptions that don't belong.
+
+    ``scanned`` holds the paths the guard scans.
+    """
     if rule is None:
         return [], []
     excepted = []
     violations = []
     for exception in rule.exceptions:
-        problems = _exception_violations(root, exception)
+        problems = _exception_violations(root, exception, scanned)
         violations += problems
         if not problems:
             excepted.append(exception.path)
@@ -355,7 +365,9 @@ def _occurrences(count: int) -> str:
 CONNECTOR_NAME = (
     "name it after its operation, <creates|reads|updates|deletes>[_name].py"
 )
-CONNECTOR_PLACE = "put it directly in its database_connectors package"
+# The location the CRUD checks cover; deeper connector packages get a layer
+# from this guard but aren't checked by them.
+CONNECTOR_PLACE = "put it directly in services/v2/<resource>/database_connectors"
 CONNECTOR_NAME_FIX = (
     f"{CONNECTOR_NAME}, and {CONNECTOR_PLACE}; an exception can't stand in, "
     "because a database_connectors package holds only connector modules"
@@ -423,8 +435,11 @@ def run_check(root: Path = REPO_ROOT) -> list[Violation]:
     registry, violations = load_registry(root)
     if registry is None:
         return violations
-    excepted, violations = file_exceptions(root, registry.rule(FILES_RULE))
-    findings = scan(root, excepted)
+    scanned = _discovered_files(root)
+    excepted, violations = file_exceptions(
+        root, registry.rule(FILES_RULE), frozenset(scanned)
+    )
+    findings = scan(root, excepted, scanned)
     for rule_id in RULES:
         rule = registry.rule(rule_id)
         baseline_file = rule.baseline.file if rule and rule.baseline else None
