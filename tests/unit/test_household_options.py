@@ -8,7 +8,7 @@ import yaml
 from policyengine_us.data.economic_assumptions import CPI_U_PARAM_PATH
 from spm_calculator.rolling_forecast import load_forecast
 
-from policyengine_api import country as country_module
+from policyengine_api import spm
 from policyengine_api.country import COUNTRIES, PolicyEngineCountry
 from policyengine_api.economy_years import uk_economy_years
 from policyengine_api.household_years import us_household_years
@@ -18,6 +18,11 @@ from policyengine_api.spm import normalize_spm_selection
 # The US society-wide years as master lists them, newest first. This pull
 # request leaves them unchanged.
 US_SOCIETY_WIDE_YEARS = list(range(2035, 2021, -1))
+
+CERTIFIED_SPM_SETTINGS = {
+    "forecast_content_sha256": "a" * 64,
+    "scenario": "baseline",
+}
 
 
 def _metadata(country_id):
@@ -59,29 +64,45 @@ def test_us_household_years_stop_at_the_last_cpi_u_year_newest_first(tmp_path):
     assert years == [2033, 2023, 2022]
 
 
-def test_us_household_years_are_the_society_wide_years_without_a_forecast(
-    monkeypatch,
+def _forecast_that_fails_to_load(_expected_sha256):
+    msg = "Forecast content SHA256 mismatch"
+    raise ValueError(msg)
+
+
+@pytest.mark.parametrize(
+    ("bundle", "model_supports_spm", "selected_forecast"),
+    [
+        pytest.param({}, False, None, id="no-certified-forecast-legacy-model"),
+        pytest.param({}, True, None, id="no-certified-forecast-canonical-model"),
+        pytest.param(
+            {"measurements": {"spm": dict(CERTIFIED_SPM_SETTINGS)}},
+            True,
+            _forecast_that_fails_to_load,
+            id="certified-forecast-fails-to-load",
+        ),
+    ],
+)
+def test_us_household_years_fail_without_a_certified_forecast(
+    monkeypatch, bundle, model_supports_spm, selected_forecast
 ):
-    monkeypatch.setattr(country_module, "certified_spm_forecast_years", lambda: None)
-    economy_time_period = [
-        {"name": year, "label": str(year)} for year in US_SOCIETY_WIDE_YEARS
-    ]
+    """No other years stand in for a certified forecast that is missing."""
+    monkeypatch.setattr(spm, "_current_bundle", lambda: bundle)
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: model_supports_spm)
+    if selected_forecast is not None:
+        monkeypatch.setattr(spm, "_selected_forecast", selected_forecast)
 
-    options = _country_stand_in("us").build_household_options(
-        {"time_period": economy_time_period}
+    with pytest.raises(spm.SPMValidationError) as caught:
+        _country_stand_in("us").build_household_options()
+
+    assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert caught.value.message.startswith(
+        "The certified US SPM forecast is unavailable: "
     )
 
-    assert options == {"time_period": economy_time_period}
 
-
-def test_a_country_without_household_rules_offers_its_society_wide_years():
-    economy_time_period = [{"name": 2026, "label": "2026"}]
-
-    options = _country_stand_in("ca").build_household_options(
-        {"time_period": economy_time_period}
-    )
-
-    assert options == {"time_period": economy_time_period}
+def test_a_country_the_public_api_does_not_serve_has_no_household_years():
+    with pytest.raises(ValueError, match="'ca'"):
+        _country_stand_in("ca").build_household_options()
 
 
 def test_us_household_years_are_the_certified_forecast_years_to_cpi_u():

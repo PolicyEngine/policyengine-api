@@ -739,21 +739,30 @@ def spm_metadata(country_id: str) -> dict:
     }
 
 
-def certified_spm_forecast_years() -> tuple[int, ...] | None:
+def certified_spm_forecast_years() -> tuple[int, ...]:
     """Return the years the bundle's certified US SPM forecast covers.
 
     The US model refuses an SPM calculation in any other year
-    (``SPM_YEAR_UNAVAILABLE``). Return None in the cases in which
+    (``SPM_YEAR_UNAVAILABLE``). Raise SPMValidationError
+    (``SPM_CONFIGURATION_UNAVAILABLE``) in the cases in which
     ``spm_metadata`` reports SPM as unavailable: the bundle certifies no
-    forecast, or the certified one cannot be loaded. The forecast file is read
-    once per process and shared with ``spm_metadata``.
+    forecast, or the certified one cannot be loaded. That is the code the
+    readiness check and US requests already report when a US model that can
+    run canonical SPM has no usable certified forecast. The forecast file is
+    read once per process and shared with ``spm_metadata``.
     """
+    error_code = "SPM_CONFIGURATION_UNAVAILABLE"
     try:
         defaults = normalize_spm_selection("us", None)
-    except SPMValidationError:
-        return None
+    except SPMValidationError as error:
+        msg = f"The certified US SPM forecast is unavailable: {error.message}"
+        raise SPMValidationError(error_code, msg) from error
     if defaults is None:
-        return None
+        msg = (
+            "The certified US SPM forecast is unavailable: the installed bundle "
+            "certifies no SPM measurement configuration"
+        )
+        raise SPMValidationError(error_code, msg)
     forecast = _selected_forecast(defaults["forecast_content_sha256"])
     return tuple(int(year) for year in forecast.years)
 

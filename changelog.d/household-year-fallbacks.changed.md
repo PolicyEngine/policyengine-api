@@ -1,0 +1,1 @@
+The US household years in `household_options.time_period` no longer fall back to the US society-wide years: when the bundle has no certified SPM forecast, or it fails to load, building the US metadata raises an `SPM_CONFIGURATION_UNAVAILABLE` error and the Public API does not start. Household years are built only for the US and the UK. The served US and UK years are unchanged.
