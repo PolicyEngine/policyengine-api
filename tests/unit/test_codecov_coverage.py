@@ -6,11 +6,13 @@ CODECOV_TOKEN secret, and an upload in a master run fails the run when it
 fails. make test (pr.yml's test job and push.yml's release-tests) uploads
 ``unit``; the cross-database integration tests upload ``integration``.
 
-With both flags carried forward, a master merge commit, which uploads only
-``integration``, carries ``unit`` forward from its Codecov parent, the pull
-request head; and the release commit, which uploads only ``unit``, carries
-``integration`` forward from the merge commit. A pull request's project
-coverage is then compared with a base that measured both.
+With both flags carried forward, a commit that uploads one flag carries the
+other forward from its Codecov parent, a git parent with a Codecov report. A
+master merge commit, which uploads only ``integration``, gets ``unit`` from
+the pull request head or the master commit before it; its release commit,
+which uploads ``unit`` measured on the merged code, gets ``integration`` from
+the merge commit. No job waits for an upload, so a Codecov outage can't stop
+a release: a reusable workflow hands its report to its caller as an artifact.
 """
 
 from __future__ import annotations
@@ -28,18 +30,23 @@ FIXTURES = REPO / "rules" / "fixtures" / "api.quality.coverage-measured"
 CODECOV_ACTION = "codecov/codecov-action@"
 UPLOAD_ARTIFACT = "actions/upload-artifact@"
 DOWNLOAD_ARTIFACT = "actions/download-artifact@"
+DEFAULT_ARTIFACT_NAME = "artifact"
 TOKEN = "${{ secrets.CODECOV_TOKEN }}"
-# A reusable workflow fails the run on an upload error only when its caller is
-# a push to master.
-FAIL_ON_PUSH = "${{ github.event_name == 'push' }}"
 UNIT = "unit"
 INTEGRATION = "integration"
 REQUIRED_FLAGS = (UNIT, INTEGRATION)
 REQUIRED_IGNORES = ("tests/**", "migrations/*/versions/**")
 MAX_PROJECT_THRESHOLD_PERCENT = 1.0
-# Commands that run the whole test suite, which writes coverage.xml.
-SUITE_COMMANDS = ("make test", "run_release_tests.sh")
-EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
+# Commands that run the whole test suite, which writes coverage.xml, and
+# commands that write some other coverage report.
+SUITE_COMMAND = re.compile(r"\bmake test(?![-\w])|\brun_release_tests\.sh\b")
+COVERAGE_COMMAND = re.compile(r"\bcoverage xml\b|--cov\b")
+MATRIX_EXPRESSION = re.compile(r"\$\{\{\s*matrix\.(?P<key>[\w-]+)\s*\}\}")
+REGEX_CHARACTERS = frozenset("*?[]()^$+|\\")
+REUSABLE_UPLOAD = (
+    "uploads coverage in a reusable workflow; keep the report as an artifact for "
+    "a job in the calling workflow to upload"
+)
 
 
 def _load_workflows(directory: Path) -> dict[str, dict]:
@@ -62,6 +69,10 @@ def _needs(job: dict) -> list[str]:
     return [needs] if isinstance(needs, str) else list(needs)
 
 
+def _inputs(step: dict) -> dict:
+    return step.get("with") or {}
+
+
 def _steps_using(job: dict, action: str) -> list[dict]:
     return [
         step
@@ -74,33 +85,94 @@ def _commands(job: dict) -> str:
     return "\n".join(step.get("run", "") for step in job.get("steps") or [])
 
 
-def _artifact_matches(pattern: str, name: str) -> bool:
-    """Whether a download ``pattern`` matches an artifact ``name`` template."""
-    return fnmatch.fnmatch(EXPRESSION.sub("1", name), pattern)
-
-
-def carried_forward_flags(config: dict) -> set[str]:
-    """Return the flags codecov.yml defines with paths and carryforward."""
-    flags = (config.get("flag_management") or {}).get("individual_flags") or []
-    return {
-        flag["name"]
-        for flag in flags
-        if flag.get("carryforward") is True and flag.get("paths")
-    }
-
-
-def config_problems(config: dict) -> list[str]:
-    """Report what codecov.yml lacks: flags, statuses or ignored paths."""
-    problems = [
-        f"codecov.yml has no {flag} flag with paths and carryforward: true"
-        for flag in REQUIRED_FLAGS
-        if flag not in carried_forward_flags(config)
+def _report_artifacts(job: dict, *, suite: bool) -> list[str]:
+    """Return the names of the coverage reports a job keeps as artifacts."""
+    return [
+        _inputs(step).get("name", DEFAULT_ARTIFACT_NAME)
+        for step in _steps_using(job, UPLOAD_ARTIFACT)
+        if (
+            _inputs(step).get("path") == "coverage.xml"
+            if suite
+            else str(_inputs(step).get("path", "")).endswith(".xml")
+        )
     ]
+
+
+def _artifact_names(template: str, job: dict) -> list[str]:
+    """Return the artifact names a template gives for each matrix value."""
+    matrix = (job.get("strategy") or {}).get("matrix") or {}
+    names = [template]
+    for key in MATRIX_EXPRESSION.findall(template):
+        values = matrix.get(key) if isinstance(matrix, dict) else None
+        values = values if isinstance(values, list) else ["1"]
+        names = [
+            re.sub(rf"\$\{{\{{\s*matrix\.{key}\s*\}}\}}", str(value), name)
+            for name in names
+            for value in values
+        ]
+    return names
+
+
+def _downloads(job: dict, name: str) -> bool:
+    """Whether ``job`` downloads the artifact called ``name``."""
+    for step in _steps_using(job, DOWNLOAD_ARTIFACT):
+        inputs = _inputs(step)
+        if "pattern" in inputs and fnmatch.fnmatch(name, inputs["pattern"]):
+            return True
+        if "name" in inputs and inputs["name"] == name:
+            return True
+        if "pattern" not in inputs and "name" not in inputs:
+            return True
+    return False
+
+
+def _uploads_flag(job: dict, flag: str | None) -> bool:
+    return any(
+        _inputs(step).get("flags") == flag
+        if flag is not None
+        else bool(_inputs(step).get("flags"))
+        for step in _steps_using(job, CODECOV_ACTION)
+    )
+
+
+def carried_forward_flags(config: dict, root: Path = REPO) -> dict[str, list[str]]:
+    """Return each flag codecov.yml carries forward, with its problems.
+
+    A flag is carried forward when it sets ``carryforward: true``, or leaves it
+    to ``default_rules``. Its paths must be directories that exist.
+    """
+    management = config.get("flag_management") or {}
+    default = (management.get("default_rules") or {}).get("carryforward") is True
+    flags: dict[str, list[str]] = {}
+    for flag in management.get("individual_flags") or []:
+        carried = flag.get("carryforward", default) is True
+        paths = flag.get("paths") or []
+        if not (carried and paths):
+            continue
+        flags[flag["name"]] = [
+            f"codecov.yml's {flag['name']} flag covers {path}, which doesn't exist"
+            for path in paths
+            if not REGEX_CHARACTERS & set(path) and not (root / path).exists()
+        ]
+    return flags
+
+
+def config_problems(config: dict, root: Path = REPO) -> list[str]:
+    """Report what codecov.yml lacks: flags, statuses or ignored paths."""
+    flags = carried_forward_flags(config, root)
+    problems = []
+    for flag in REQUIRED_FLAGS:
+        if flag not in flags:
+            problems.append(
+                f"codecov.yml has no {flag} flag with paths and carryforward: true"
+            )
+        else:
+            problems.extend(flags[flag])
     statuses = (config.get("coverage") or {}).get("status") or {}
     project = (statuses.get("project") or {}).get("default") or {}
     threshold = str(project.get("threshold", "")).rstrip("%")
     try:
-        small = 0 < float(threshold) <= MAX_PROJECT_THRESHOLD_PERCENT
+        small = 0 <= float(threshold) <= MAX_PROJECT_THRESHOLD_PERCENT
     except ValueError:
         small = False
     if not small:
@@ -108,7 +180,7 @@ def config_problems(config: dict) -> list[str]:
             "codecov.yml's project status has no threshold of at most "
             f"{MAX_PROJECT_THRESHOLD_PERCENT}%"
         )
-    if "patch" not in statuses:
+    if not isinstance(statuses.get("patch"), dict):
         problems.append("codecov.yml has no patch status")
     ignored = config.get("ignore") or []
     problems.extend(
@@ -120,74 +192,107 @@ def config_problems(config: dict) -> list[str]:
 
 
 def _upload_problems(
-    name: str, job_id: str, step: dict, triggers: set[str], flags: set[str]
+    name: str, job_id: str, jobs: dict, triggers: set[str], flags: set[str]
 ) -> list[str]:
+    """Report what is wrong with a job's Codecov uploads."""
     where = f"{name}:{job_id}"
-    inputs = step.get("with") or {}
+    job = jobs[job_id]
     problems = []
-    if inputs.get("flags") not in flags:
-        problems.append(
-            f"{where} uploads coverage without a flag codecov.yml carries forward"
-        )
-    if inputs.get("token") != TOKEN:
-        problems.append(f"{where} doesn't pass the CODECOV_TOKEN secret as the token")
-    failing = inputs.get("fail_ci_if_error")
-    if "push" in triggers and failing is not True:
-        problems.append(
-            f"{where} runs on master but a failed upload doesn't fail the run"
-        )
-    if "workflow_call" in triggers and failing not in (True, FAIL_ON_PUSH):
-        problems.append(
-            f"{where} runs in master runs but a failed upload doesn't fail them"
+    for step in _steps_using(job, CODECOV_ACTION):
+        inputs = _inputs(step)
+        if inputs.get("flags") not in flags:
+            problems.append(
+                f"{where} uploads coverage without a flag codecov.yml carries forward"
+            )
+        if inputs.get("token") != TOKEN:
+            problems.append(
+                f"{where} doesn't pass the CODECOV_TOKEN secret as the token"
+            )
+        if "push" in triggers:
+            ignored = job.get("continue-on-error") or step.get("continue-on-error")
+            if inputs.get("fail_ci_if_error") is not True or ignored:
+                problems.append(
+                    f"{where} runs on master but a failed upload doesn't fail the run"
+                )
+            if "if" in job or "if" in step:
+                problems.append(f"{where} can skip its upload on master")
+        if "workflow_call" in triggers:
+            problems.append(f"{where} {REUSABLE_UPLOAD}")
+    if "push" in triggers and _steps_using(job, CODECOV_ACTION):
+        problems.extend(
+            f"{where} uploads coverage, and {other_id} waits for it"
+            for other_id, other in jobs.items()
+            if job_id in _needs(other)
         )
     return problems
 
 
-def _suite_upload_problems(name: str, job_id: str, jobs: dict) -> list[str]:
-    """Report a test-suite job whose coverage.xml no job uploads flagged unit."""
-    job = jobs[job_id]
-    artifacts = [
-        step["with"]["name"]
-        for step in _steps_using(job, UPLOAD_ARTIFACT)
-        if (step.get("with") or {}).get("path") == "coverage.xml"
+def _callers(workflows: dict[str, dict], name: str) -> list[tuple[str, str]]:
+    """Return ``(workflow, job)`` for each job that calls reusable workflow ``name``."""
+    return [
+        (caller, job_id)
+        for caller, workflow in sorted(workflows.items())
+        for job_id, job in (workflow.get("jobs") or {}).items()
+        if str(job.get("uses", "")).endswith(f"/{name}")
     ]
+
+
+def _report_problems(
+    workflows: dict[str, dict], name: str, job_id: str, *, suite: bool
+) -> list[str]:
+    """Report a job's coverage report that no job uploads, every shard of it."""
+    workflow = workflows[name]
+    job = workflow["jobs"][job_id]
+    artifacts = [
+        artifact
+        for template in _report_artifacts(job, suite=suite)
+        for artifact in _artifact_names(template, job)
+    ]
+    report = "coverage.xml" if suite else "coverage report"
     if not artifacts:
-        return [f"{name}:{job_id} runs the test suite but keeps no coverage.xml"]
-    for other in jobs.values():
-        inputs = [
-            step.get("with") or {} for step in _steps_using(other, DOWNLOAD_ARTIFACT)
+        if suite:
+            return [f"{name}:{job_id} runs the test suite but keeps no coverage.xml"]
+        return [f"{name}:{job_id} measures coverage but uploads none"]
+    if "workflow_call" in _triggers(workflow):
+        places = _callers(workflows, name)
+    else:
+        places = [(name, job_id)]
+    problems = []
+    for place, waited_on in places:
+        consumers = [
+            consumer
+            for consumer in (workflows[place].get("jobs") or {}).values()
+            if waited_on in _needs(consumer)
+            and _uploads_flag(consumer, UNIT if suite else None)
+            and all(_downloads(consumer, artifact) for artifact in artifacts)
         ]
-        downloads = [found.get("pattern") or found.get("name", "") for found in inputs]
-        uploads_unit = any(
-            (step.get("with") or {}).get("flags") == UNIT
-            for step in _steps_using(other, CODECOV_ACTION)
-        )
-        downloads_report = any(
-            _artifact_matches(pattern, artifact)
-            for pattern in downloads
-            for artifact in artifacts
-        )
-        if job_id in _needs(other) and uploads_unit and downloads_report:
-            return []
-    return [f"no job in {name} uploads {job_id}'s coverage.xml flagged {UNIT}"]
+        if not consumers:
+            flagged = f" flagged {UNIT}" if suite else ""
+            problems.append(
+                f"no job in {place} uploads all of {waited_on}'s {report}{flagged}"
+            )
+    if not places:
+        problems.append(f"no workflow calls {name} to upload {job_id}'s {report}")
+    return problems
 
 
-def coverage_problems(workflows: dict[str, dict], config: dict) -> list[str]:
+def coverage_problems(
+    workflows: dict[str, dict], config: dict, root: Path = REPO
+) -> list[str]:
     """Report every way the workflows or codecov.yml could leave coverage unmeasured."""
-    flags = carried_forward_flags(config)
-    problems = config_problems(config)
+    flags = set(carried_forward_flags(config, root))
+    problems = config_problems(config, root)
     for name, workflow in sorted(workflows.items()):
         triggers = _triggers(workflow)
         jobs = workflow.get("jobs") or {}
         for job_id, job in jobs.items():
             uploads = _steps_using(job, CODECOV_ACTION)
-            for step in uploads:
-                problems.extend(_upload_problems(name, job_id, step, triggers, flags))
+            problems.extend(_upload_problems(name, job_id, jobs, triggers, flags))
             commands = _commands(job)
-            if any(command in commands for command in SUITE_COMMANDS):
-                problems.extend(_suite_upload_problems(name, job_id, jobs))
-            elif "coverage xml" in commands and not uploads:
-                problems.append(f"{name}:{job_id} measures coverage but uploads none")
+            if SUITE_COMMAND.search(commands):
+                problems.extend(_report_problems(workflows, name, job_id, suite=True))
+            elif COVERAGE_COMMAND.search(commands) and not uploads:
+                problems.extend(_report_problems(workflows, name, job_id, suite=False))
     return problems
 
 

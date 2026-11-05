@@ -5,15 +5,18 @@
 #   unit         make test: pr.yml's upload-test-coverage, and push.yml's
 #                upload-release-test-coverage on each release commit.
 #   integration  the cross-database integration tests in
-#                v2-integration-check.yml, on pull requests and merge commits.
+#                v2-integration-check.yml, uploaded by pr.yml's and push.yml's
+#                upload-integration-coverage wherever those tests run.
 # Both measure policyengine_api (.coveragerc's source), so both have its path.
 #
 # A commit that uploads one flag carries the other forward from its Codecov
-# parent. A master merge commit, which uploads only integration, gets unit
-# from the pull request head (Codecov takes a merge commit's second parent as
-# its parent); the release commit, which uploads only unit, gets integration
-# from the merge commit. A pull request's project coverage is therefore
-# compared with a base that measured both.
+# parent: a git parent that has a Codecov report (when both of a merge
+# commit's parents have one, which Codecov takes isn't fixed). A master merge
+# commit, which uploads only integration, gets unit from the pull request head
+# or from the master commit before it; its release commit, which uploads only
+# unit, measured on the merged code, gets integration from the merge commit.
+# The release commit is master's newest commit after each release, so a pull
+# request's project coverage is compared with a base that measured both.
 coverage:
   status:
     project:
@@ -41,7 +44,9 @@ flag_management:
         - policyengine_api/
       carryforward: true
 
+# .coveragerc measures only policyengine_api, so these are never reported
+# today; the entries keep test code and generated Alembic revisions out if the
+# measured source ever widens.
 ignore:
   - "tests/**"
-  # Alembic revisions stay exactly as Alembic generated them.
   - "migrations/*/versions/**"

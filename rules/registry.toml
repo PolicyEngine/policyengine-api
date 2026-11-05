@@ -59,6 +59,7 @@ title = "Process and repository hygiene"
 workflows = [".github/workflows/pr.yml", ".github/workflows/pr-description.yml"]
 ignore_jobs = [
   { job = "upload-test-coverage", reason = "sends the test shards' coverage reports to Codecov in one upload; it checks nothing" },
+  { job = "upload-integration-coverage", reason = "sends the cross-database integration tests' coverage report to Codecov; it checks nothing" },
 ]
 guard_test_globs = [
   "tests/**/test_*boundar*.py",
@@ -1308,7 +1309,7 @@ invocation = "scripts.release_test_shards check-coverage"
 [[rule]]
 id = "api.quality.coverage-measured"
 category = "quality"
-statement = "Codecov measures the same tests on master as on pull requests: every CI job that measures test coverage sends it to Codecov with a flag that codecov.yml carries forward (unit for make test, in pr.yml and in push.yml's release tests; integration for the cross-database integration tests), passing the CODECOV_TOKEN secret, and an upload in a master run fails the run when it fails."
+statement = "Codecov measures the same tests on master as on pull requests: every CI job that measures test coverage sends it to Codecov with a flag that codecov.yml carries forward (unit for make test, in pr.yml and in push.yml's release tests; integration for the cross-database integration tests), passing the CODECOV_TOKEN secret, from a job that no other job waits for; every shard of a report is uploaded, and an upload in a master run fails the run when it fails."
 rationale = "docs/engineering/skills/testing.md#coverage"
 scope = ["codecov.yml", ".github/workflows/*.yml"]
 tier = "mechanical"

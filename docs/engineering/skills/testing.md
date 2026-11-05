@@ -35,18 +35,30 @@ forward and both covering `policyengine_api/` (`.coveragerc`'s source):
   the same on each release commit, and `upload-release-test-coverage` sends
   them; it is the only run of the unit tests on the merged code.
 - `integration`: the cross-database integration tests in
-  `v2-integration-check.yml`, on pull requests and merge commits.
+  `v2-integration-check.yml`. The reusable workflow keeps its report as an
+  artifact, and `upload-integration-coverage` in `pr.yml` and in `push.yml`
+  sends it, wherever those tests run.
 
 A commit that uploads one flag carries the other forward from its Codecov
-parent. A merge commit, which uploads only `integration`, gets `unit` from
-the pull request head: Codecov takes a merge commit's second parent as its
-parent. The release commit, which uploads only `unit`, gets `integration`
-from the merge commit.
+parent, a git parent that has a Codecov report. When both of a merge
+commit's parents have one, which Codecov takes isn't fixed. So a merge
+commit, which uploads only `integration`, gets `unit` from the pull request
+head or from the `master` commit before it, until its release commit uploads
+`unit` measured on the merged code and gets `integration` from the merge
+commit. The release commit is `master`'s newest commit after each release.
+
+The release tests run with the local Redis runtime cache and without GCP
+credentials, while the pull request `Test` job authenticates to GCP and sets
+no runtime-cache settings. Code that branches on those settings is covered
+differently in the two, so `master`'s unit figure and a pull request's can
+differ by those lines even for the same code.
 
 Every upload passes the `CODECOV_TOKEN` repository secret as its `token`, and
-an upload on `master` fails the run when it fails (`fail_ci_if_error`).
-`tests/unit/test_codecov_coverage.py` checks the uploads and `codecov.yml`:
-a new job that measures coverage needs an upload with one of the flags.
+an upload on `master` fails the run when it fails (`fail_ci_if_error`). No
+job waits for an upload, so a Codecov outage fails the upload job but can't
+stop a release. `tests/unit/test_codecov_coverage.py` checks the uploads and
+`codecov.yml`: a new job that measures coverage needs an upload, with one of
+the flags, of every shard of its report.
 
 The project status allows a 0.5% drop. The patch status reports coverage of
 the changed lines without blocking a merge.
