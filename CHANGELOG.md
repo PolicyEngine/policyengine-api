@@ -1,3 +1,11 @@
+## [5.31.0] - 2026-11-05
+
+### Added
+
+- Registered a rule, checked by a new quality guard, that every `noqa` and `type: ignore` comment names its codes and gives a reason, as `# noqa: CODE  # reason`; the 29 suppressions without a reason today are listed in a baseline that may only shrink.
+- Registered a rule, checked by a new quality guard, that every test function checks something: an `assert`, `pytest.raises` or another check, directly or through a helper; the 21 tests that check nothing today are listed in a baseline that may only shrink.
+
+
 ## [5.30.0] - 2026-11-05
 
 ### Added
