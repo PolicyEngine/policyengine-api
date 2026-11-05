@@ -8,13 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter
 from starlette.responses import JSONResponse
 
-from policyengine_api.fastapi_routes.v2.metadata.common import (
-    METADATA_RESPONSES,
-    PATH_COUNTRY_ERROR_RESPONSES,
-    CacheableMetadataRoute,
-    read_resource,
-)
-from policyengine_api.fastapi_routes.v2.metadata.query_dependencies import (
+from policyengine_api.fastapi_routes.v2.metadata.query_support import (
     CatalogPageQueryDependency,
     CatalogQueryDependency,
     CatalogVersionQueryDependency,
@@ -28,6 +22,12 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataModelVersionPageResponse,
     MetadataVariableDetailResponse,
     MetadataVariablePageResponse,
+)
+from policyengine_api.fastapi_routes.v2.metadata.route_support import (
+    METADATA_RESPONSES,
+    PATH_COUNTRY_ERROR_RESPONSES,
+    CacheableMetadataRoute,
+    read_resource,
 )
 
 if TYPE_CHECKING:

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
+from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorResponse
 
 if TYPE_CHECKING:
     from policyengine_api.services.v2.countries.types import CountryRead

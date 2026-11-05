@@ -183,7 +183,7 @@ invocation = "make test"
 [[rule]]
 id = "api.v2.files-assigned-to-layers"
 category = "v2-layers"
-statement = "Every .py file under services/v2 and fastapi_routes/v2 has a layer, from its file name or from rules/v2-layer-manifest.toml, so the layer rules check it."
+statement = "Every .py file under services/v2 and fastapi_routes/v2 gets a layer from its file name alone, so the layer rules check it; a file that can't be renamed needs a [[rule.exception]] here, which gives it its directory's strictest checks."
 rationale = "docs/engineering/skills/v2-code-organization.md#file-layers"
 scope = ["policyengine_api/services/v2/**/*.py", "policyengine_api/fastapi_routes/v2/**/*.py"]
 tier = "mechanical"
@@ -281,7 +281,7 @@ id = "api.v2.pure-modules-no-session-calls"
 category = "v2-layers"
 statement = "v2 validators, transformations, types, process-state modules and package __init__ files import nothing from SQLAlchemy or SQLModel but the Session type, import no connector, database_session, v1 ORM or v2 database module, and call no session method, SQLAlchemy or SQLModel function or session factory; they work on values and rows a connector loaded."
 rationale = "docs/engineering/skills/v2-code-organization.md#validatorspy"
-scope = ["policyengine_api/services/v2/*/validators.py", "policyengine_api/services/v2/*/transformations.py", "policyengine_api/services/v2/*/types.py", "policyengine_api/services/v2/metadata/selected_catalogs.py", "policyengine_api/services/v2/__init__.py", "policyengine_api/services/v2/*/__init__.py"]
+scope = ["policyengine_api/services/v2/*/validators.py", "policyengine_api/services/v2/*/transformations.py", "policyengine_api/services/v2/*/types.py", "policyengine_api/services/v2/*/process_state.py", "policyengine_api/services/v2/__init__.py", "policyengine_api/services/v2/*/__init__.py"]
 tier = "mechanical"
 status = "enforced"
 autofix = false

@@ -10,17 +10,25 @@ but must not construct or execute SQL (rule `api.v2.services-no-sql`).
 
 Every `.py` file under `policyengine_api/services/v2` and
 `policyengine_api/fastapi_routes/v2` has a layer, which the `v2-layers` quality
-guard (`scripts/rules/v2_layers.py`) takes from the file's name: `services.py`,
-`validators.py`, `transformations.py`, `types.py`, `database_session.py`,
-`database_connectors/<creates|reads|updates|deletes>[_name].py`, `routes.py`,
-`<name>_routes.py`, `request_models.py`, `response_models.py` or `__init__.py`.
-A file with another name needs an entry, with its layer and a reason, in
-`rules/v2-layer-manifest.toml`, or the guard fails (rule
-`api.v2.files-assigned-to-layers`). The manifest can give a file under
-`services/v2` the layer `service`, `validator`, `transformation`, `types` or
-`process-state`, and a file under `fastapi_routes/v2` the layer `route`,
-`http-model` or `http-support`; each layer follows that layer's rules below.
-A `database_session.py` sits directly in its resource package.
+guard (`scripts/rules/v2_layers.py`) takes from the file's name alone:
+
+- under `services/v2/<resource>/`: `services.py` (service), `validators.py`,
+  `transformations.py`, `types.py`, `process_state.py` (process-wide state),
+  `database_session.py` (directly in the resource package) and
+  `database_connectors/<creates|reads|updates|deletes>[_name].py`;
+- under `fastapi_routes/v2/`: `routes.py` and `<name>_routes.py` (routes),
+  `<name>_models.py` (request, response and document schemas) and
+  `<name>_support.py` (HTTP code the route modules share);
+- `__init__.py` anywhere.
+
+A file with another name fails the guard (rule
+`api.v2.files-assigned-to-layers`): rename it. A file that can't be renamed
+needs a `[[rule.exception]]` for that rule in `rules/registry.toml`, with its
+path and a reason. An exception chooses no layer: the file gets its
+directory's strictest checks, the route checks under `fastapi_routes/v2` and
+the validator, transformation and types checks under `services/v2`. The guard
+fails on an exception for a file that no longer exists or whose name already
+gives it a layer.
 
 The guard counts a method call as a session call when its receiver is named
 `session` or `<something>_session`, but not a request's `.session` or an HTTP
@@ -42,7 +50,9 @@ line per tolerated occurrence.
 Resource-specific FastAPI code lives under `policyengine_api/fastapi_routes/v2/`:
 
 ```text
-errors.py
+errors_support.py
+user_auth_support.py
+user_resources_support.py
 policies/
   request_models.py
   response_models.py
@@ -53,21 +63,27 @@ user_policies/
   routes.py
 metadata/
   response_models.py
-  common.py
-  query_dependencies.py
-  response_cache.py
+  route_support.py
+  query_support.py
+  response_cache_support.py
+  search_file_support.py
   *_routes.py
 ```
 
-`common.py` also holds the route class that gives metadata responses their
-caching headers. `query_dependencies.py` defines the typed FastAPI
+`route_support.py` runs the metadata reads for the route modules, maps their
+failures to HTTP, and holds the route class that gives metadata responses
+their caching headers. `query_support.py` defines the typed FastAPI
 dependencies for the shared query models once, for every metadata route
-module to import. `response_cache.py` keeps serialized whole-version
+module to import. `response_cache_support.py` keeps serialized whole-version
 responses (bodies and ETags) for the process; it is HTTP-level, so it lives
-with the routes.
+with the routes. `search_file_support.py` serves a stored parameter search
+file with its content encoding.
 
-`errors.py` defines the strict error response and serialization function shared
-by every API v2 resource. Application-wide exception handling distinguishes
+`errors_support.py` defines the strict error response and serialization
+function shared by every API v2 resource. `user_auth_support.py` turns
+request credentials into an account principal, and
+`user_resources_support.py` holds the HTTP conventions the user-owned
+resource routes share. Application-wide exception handling distinguishes
 API v2 from non-v2 requests but must not select error behavior by matching
 individual resource paths.
 
@@ -100,10 +116,9 @@ services/v2/<resource>/
     deletes.py
 ```
 
-A resource may also add a module for process-wide state its service reuses
-across requests, named for what it keeps, such as the metadata package's
-`selected_catalogs.py` (each catalog version a request has selected, which
-never changes once published). Such a module holds plain data, constructs no
+A resource may also add a `process_state.py` module for process-wide state its
+service reuses across requests, such as the metadata package's (each catalog
+version a request has selected, which never changes once published). Such a module holds plain data, constructs no
 SQL and owns no session; the composition code creates one instance per process
 and injects it into the service.
 

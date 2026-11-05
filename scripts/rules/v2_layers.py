@@ -1,10 +1,13 @@
 """The v2-layers quality guard: every v2 route and service file has a layer.
 
 Every ``.py`` file under ``policyengine_api/services/v2`` and
-``policyengine_api/fastapi_routes/v2`` gets a layer from its file name (see
-``assign_layer``), or from ``rules/v2-layer-manifest.toml`` for the few files
-with other names. A file with neither fails (rule
+``policyengine_api/fastapi_routes/v2`` gets a layer from its file name alone
+(see ``assign_layer``). A file whose name gives none fails (rule
 ``api.v2.files-assigned-to-layers``), so a new file is never left unchecked.
+A file that can't be renamed needs a ``[[rule.exception]]`` for that rule in
+rules/registry.toml. The exception gives it no layer: it gets its directory's
+strictest checks, the route checks under ``fastapi_routes/v2`` and the
+pure-module checks under ``services/v2``.
 
 Then each file's imports and calls are checked against its layer's rule:
 
@@ -57,7 +60,6 @@ only.
 from __future__ import annotations
 
 import ast
-import tomllib
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -68,11 +70,13 @@ from scripts.rules.load import load_registry
 from scripts.rules.model import Violation
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Mapping
+    from collections.abc import Callable, Collection, Iterable, Mapping
+
+    from scripts.rules.model import Rule
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CHECK_NAME = "v2-layers"
-MANIFEST_PATH = "rules/v2-layer-manifest.toml"
+REGISTRY_FILE = "rules/registry.toml"
 SERVICES_DIRECTORY = "policyengine_api/services/v2"
 ROUTES_DIRECTORY = "policyengine_api/fastapi_routes/v2"
 ORGANIZATION_DOC = "docs/engineering/skills/v2-code-organization.md"
@@ -97,21 +101,17 @@ SERVICE_FILE_LAYERS = {
     "validators.py": "validator",
     "transformations.py": "transformation",
     "types.py": "types",
+    "process_state.py": "process-state",
     "database_session.py": "session",
 }
 CONNECTOR_OPERATIONS = ("creates", "reads", "updates", "deletes")
-HTTP_MODEL_FILES = frozenset({"request_models.py", "response_models.py"})
-# Layers the manifest may give, by directory. Connectors, session modules and
-# packages get their layer from their names only.
-MANIFEST_LAYERS = {
-    SERVICES_DIRECTORY: frozenset(
-        {"process-state", "service", "transformation", "types", "validator"}
-    ),
-    ROUTES_DIRECTORY: frozenset({"http-model", "http-support", "route"}),
-}
+# What a [[rule.exception]] for the files rule makes a file: no layer of its
+# own, and its directory's strictest checks.
+EXCEPTED = "excepted"
 PURE_LAYERS = frozenset(
-    {"package", "process-state", "transformation", "types", "validator"}
+    {EXCEPTED, "package", "process-state", "transformation", "types", "validator"}
 )
+GLOB_CHARACTERS = frozenset("*?[")
 
 SQL_PACKAGES = ("sqlalchemy", "sqlmodel")
 DATABASE_PACKAGES = ("policyengine_api.data.orm", "policyengine_api.data.v2.database")
@@ -174,10 +174,11 @@ HTTP_PACKAGES = ("fastapi", "starlette")
 FIXES = {
     FILES_RULE: (
         "name it after its layer (services.py, validators.py, transformations.py, "
-        "types.py, database_session.py, "
+        "types.py, process_state.py, database_session.py, "
         "database_connectors/<creates|reads|updates|deletes>[_name].py, routes.py, "
-        "<name>_routes.py, request_models.py or response_models.py), or add it to "
-        f"{MANIFEST_PATH} with its layer and a reason"
+        "<name>_routes.py, <name>_models.py or <name>_support.py), or, if it "
+        f"can't be renamed, add a [[rule.exception]] for {FILES_RULE} to "
+        f"{REGISTRY_FILE} with its path and a reason"
     ),
     ROUTES_RULE: (
         "v2 route modules call one service method and map its typed failures to "
@@ -237,10 +238,14 @@ def _module_name(path: str) -> tuple[str, bool]:
 # --- layers ---------------------------------------------------------------
 
 
-def assign_layer(path: str, manifest: Mapping[str, str]) -> str | None:
-    """Return the layer of the file at ``path`` (repository-relative), or None."""
-    if path in manifest:
-        return manifest[path]
+def assign_layer(path: str, exceptions: Collection[str] = ()) -> str | None:
+    """Return the layer of the file at ``path`` (repository-relative), or None.
+
+    A path in ``exceptions`` is ``excepted``: it gets its directory's
+    strictest checks.
+    """
+    if path in exceptions:
+        return EXCEPTED
     return _layer_by_name(path)
 
 
@@ -280,7 +285,9 @@ def _route_layer(name: str) -> str | None:
         return "package"
     if name == "routes.py" or name.endswith("_routes.py"):
         return "route"
-    return "http-model" if name in HTTP_MODEL_FILES else None
+    if name.endswith("_models.py"):
+        return "http-model"
+    return "http-support" if name.endswith("_support.py") else None
 
 
 # --- imports --------------------------------------------------------------
@@ -623,12 +630,12 @@ def _discovered_files(root: Path) -> list[str]:
 
 
 def scan(
-    root: Path, manifest: Mapping[str, str], paths: Iterable[str] | None = None
+    root: Path, exceptions: Collection[str] = (), paths: Iterable[str] | None = None
 ) -> list[Finding]:
     """Return every finding for the v2 files under ``root``, one per occurrence."""
     findings = []
     for path in paths if paths is not None else _discovered_files(root):
-        layer = assign_layer(path, manifest)
+        layer = assign_layer(path, exceptions)
         if layer is None:
             findings.append(Finding(FILES_RULE, path, "matches no v2 layer"))
             continue
@@ -640,71 +647,47 @@ def scan(
     return sorted(findings, key=lambda finding: (finding.rule_id, str(finding)))
 
 
-def _manifest_violation(message: str, fix: str) -> Violation:
-    return Violation(FILES_RULE, CHECK_NAME, message, fix)
+def _exception_violations(root: Path, path: str) -> list[Violation]:
+    """Report a files-rule exception that names no unnamed v2 file."""
 
+    def violation(problem: str, fix: str) -> Violation:
+        return Violation(
+            FILES_RULE,
+            CHECK_NAME,
+            f"{REGISTRY_FILE} excepts {path} from {FILES_RULE}, {problem}",
+            fix,
+        )
 
-def _manifest_entry_violations(root: Path, path: str, entry: object) -> list[Violation]:
-    layer = entry.get("layer") if isinstance(entry, dict) else None
-    reason = entry.get("reason") if isinstance(entry, dict) else None
-    directory = next(
-        (folder for folder in MANIFEST_LAYERS if path.startswith(f"{folder}/")), None
-    )
-    if directory is None:
+    in_v2 = path.startswith((f"{SERVICES_DIRECTORY}/", f"{ROUTES_DIRECTORY}/"))
+    if not in_v2 or GLOB_CHARACTERS & set(path) or not path.endswith(".py"):
         return [
-            _manifest_violation(
-                f"{MANIFEST_PATH} lists {path}, which is not under "
-                f"{SERVICES_DIRECTORY} or {ROUTES_DIRECTORY}",
-                "remove the entry",
+            violation(
+                f"which is not one file under {SERVICES_DIRECTORY} or "
+                f"{ROUTES_DIRECTORY}",
+                "name one file there, or remove the exception",
             )
         ]
-    violations = []
     if not (root / path).is_file():
-        violations.append(
-            _manifest_violation(
-                f"{MANIFEST_PATH} lists {path}, which does not exist",
-                "remove the entry",
-            )
-        )
-    elif _layer_by_name(path) is not None:
-        violations.append(
-            _manifest_violation(
-                f"{MANIFEST_PATH} lists {path}, which its name already assigns to "
-                "a layer",
-                "remove the entry",
-            )
-        )
-    if layer not in MANIFEST_LAYERS[directory]:
-        violations.append(
-            _manifest_violation(
-                f"{MANIFEST_PATH} gives {path} the layer '{layer}', which a file "
-                f"under {directory} can't have from the manifest",
-                f"use one of {', '.join(sorted(MANIFEST_LAYERS[directory]))}",
-            )
-        )
-    if not isinstance(reason, str) or not reason.strip():
-        violations.append(
-            _manifest_violation(
-                f"{MANIFEST_PATH} gives {path} no reason",
-                "say why the file has that layer",
-            )
-        )
-    return violations
+        return [violation("but it does not exist", "remove the exception")]
+    if _layer_by_name(path) is not None:
+        return [
+            violation("but its name already gives it a layer", "remove the exception")
+        ]
+    return []
 
 
-def load_manifest(root: Path) -> tuple[dict[str, str], list[Violation]]:
-    """Read the manifest's file layers, and report entries that don't belong."""
-    manifest_file = root / MANIFEST_PATH
-    if not manifest_file.is_file():
-        return {}, []
-    entries = tomllib.loads(manifest_file.read_text()).get("files", {})
-    manifest = {}
+def file_exceptions(root: Path, rule: Rule | None) -> tuple[list[str], list[Violation]]:
+    """Return the files the files rule excepts, and its exceptions that don't belong."""
+    if rule is None:
+        return [], []
+    excepted = []
     violations = []
-    for path, entry in sorted(entries.items()):
-        layer = entry.get("layer") if isinstance(entry, dict) else None
-        manifest[path] = str(layer)
-        violations.extend(_manifest_entry_violations(root, path, entry))
-    return manifest, violations
+    for exception in rule.exceptions:
+        problems = _exception_violations(root, exception.path)
+        violations += problems
+        if not problems:
+            excepted.append(exception.path)
+    return excepted, violations
 
 
 def _baseline_entries(root: Path, baseline_file: str | None) -> Counter[str]:
@@ -764,8 +747,8 @@ def run_check(root: Path = REPO_ROOT) -> list[Violation]:
     registry, violations = load_registry(root)
     if registry is None:
         return violations
-    manifest, violations = load_manifest(root)
-    findings = scan(root, manifest)
+    excepted, violations = file_exceptions(root, registry.rule(FILES_RULE))
+    findings = scan(root, excepted)
     for rule_id in RULES:
         rule = registry.rule(rule_id)
         baseline_file = rule.baseline.file if rule and rule.baseline else None

@@ -207,8 +207,8 @@ def test_a_kept_response_is_served_without_hashing_its_body_again(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from policyengine_api.fastapi_routes.v2.metadata import (
-        route_support,
         response_cache_support,
+        route_support,
     )
 
     hashed_bodies: list[int] = []

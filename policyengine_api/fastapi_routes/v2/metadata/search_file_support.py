@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, Final
 from starlette.responses import Response
 
 from policyengine_api.content_encoding import accepts_gzip
-from policyengine_api.fastapi_routes.v2.metadata.common import (
+from policyengine_api.fastapi_routes.v2.metadata.route_support import (
     CACHE_HEADER_DESCRIPTIONS,
 )
 

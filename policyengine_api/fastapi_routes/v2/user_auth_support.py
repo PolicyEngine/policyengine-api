@@ -21,7 +21,7 @@ Failures map to the shared API v2 error envelope:
 
 from __future__ import annotations
 
-from policyengine_api.fastapi_routes.v2.errors import (
+from policyengine_api.fastapi_routes.v2.errors_support import (
     V2AuthenticationRequiredError,
     V2AuthenticationUnavailableError,
     V2PermissionDeniedError,
