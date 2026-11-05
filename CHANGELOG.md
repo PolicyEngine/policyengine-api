@@ -1,3 +1,17 @@
+## [5.27.1] - 2026-11-05
+
+### Fixed
+
+- A read-only request to the simulation service whose connection breaks is sent once more on a new connection, with timeouts of at most 10 seconds. The economy routes answer 502, not 400 or 500, when a request still gets no response, except for the check of whether a finished stored impact is out of date, which then answers from the stored impact. Each request to the simulation service, and each v1 database connect, invalidation, close and error, is recorded with its connection's socket details. The database access check's exceptions now live in rules/registry.toml, and Ruff no longer lints or formats the Alembic revisions.
+
+
+## [5.27.0] - 2026-11-05
+
+### Added
+
+- Check the v2 import architecture with Import Linter in the quality-guards CI job: v2 routes, services and data import each other in one direction only, v2 validators, transformations and types reach no database code except the table models, v2 routes import no connector or session module, types and transformations import no validators, and connectors import no other connector. Today's exceptions are listed as shrink-only baselines.
+
+
 ## [5.26.0] - 2026-11-04
 
 ### Added

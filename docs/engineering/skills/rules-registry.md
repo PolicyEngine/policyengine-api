@@ -21,7 +21,10 @@ python -m unittest discover -s scripts/rules/tests -t .            # the tool's 
 ```
 
 All commands use only the standard library, so they run without installing the
-project.
+project, except the `declared-dependencies` guard and its tests in the tool's
+tests. They run deptry through `uv run --frozen --extra dev`, so they need uv,
+and uv first syncs `.venv` to `uv.lock` on Python 3.12
+([dependencies.md](dependencies.md#we-declare-what-we-import)).
 
 ## Adding or changing a rule
 
@@ -57,7 +60,7 @@ gap is visible, rather than leaving it out.
 | `[[rule.ci]]` | `workflow`, `job`, and an `invocation` string that must appear in that job's `run:` text (or its reusable-workflow `uses:`). |
 | `[rule.proof]` | Optional; see "Proof". |
 | `[rule.baseline]` | Only for `ratcheted` rules: `file` listing tolerated violations, and their `count`. |
-| `[[rule.exception]]` | Carve-out: `path`, `reason`, and `expires`; or, for rules whose guard reads them, `match` (one site), `removal`, `issue` and `category` ([dependencies.md](dependencies.md#exceptions)). |
+| `[[rule.exception]]` | Carve-out: `path`, `reason`, and `expires`; or, for rules whose guard reads them, `match` (one site), `removal`, `issue` and `category` ([dependencies.md](dependencies.md#exceptions); for `api.data.sqlalchemy-and-alembic-only`, `match` is the exact construct and `category` is `driver-access`, `schema-change` or `migration-revision`: [alembic-migrations.md](alembic-migrations.md#declared-exceptions)). |
 | `[rule.downgrade]` | Required `reason` when a rule moves from enforced/ratcheted to advisory/doc-only. |
 
 `blocking` is derived, never declared: a rule blocks merges when its status is
@@ -124,7 +127,12 @@ fail the guard yet.
   `# noqa: CODE  # reason`, except in the files below.
 - Other enforcers (mypy, Pyright, Import Linter, custom guards) may start
   `ratcheted` with a baseline file of tolerated violations. Baselines may only
-  shrink: the guard compares counts against the base branch.
+  shrink: the guard compares each baseline's count and its entries against the
+  base branch, so an entry can't be swapped for a new one at the same count.
+  Entries are counted, so a baseline that lists an entry once per tolerated
+  occurrence can't gain another copy of one either.
+  Each entry is therefore a stable key, such as a path or a code and a module,
+  never a count or a line number, which would change as violations are fixed.
 - **Import Linter** tolerates a violation through the contract's
   `ignore_imports` in `pyproject.toml`. The rule's baseline file lists the same
   entries, one per line, so adding one needs a change under the code-owned

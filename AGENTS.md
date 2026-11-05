@@ -70,6 +70,10 @@ python scripts/run_quality_guards.py
 python scripts/export_migration_contracts.py
 ```
 
+The quality guards need `uv`: the `declared-dependencies` guard runs deptry
+through `uv run --frozen --extra dev`, which first syncs `.venv` to `uv.lock`
+on Python 3.12 (see `docs/engineering/skills/dependencies.md`).
+
 ## Safety Boundaries
 
 Do not claim a route, database table, compute path, or deployment surface has
@@ -127,7 +131,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Dependencies and uv.lock
 
-- Checked: `api.dependencies.install-from-lock`, `api.dependencies.lock-committed`, `api.dependencies.scheduled-relock`, `api.dependencies.test-from-lock`
+- Checked: `api.dependencies.declared-and-used`, `api.dependencies.install-from-lock`, `api.dependencies.lock-committed`, `api.dependencies.scheduled-relock`, `api.dependencies.test-from-lock`
 
 ### Process and repository hygiene
 

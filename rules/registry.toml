@@ -565,6 +565,7 @@ nodes = [
   "tests/unit/data/test_database_access_boundaries.py::test_non_test_code_reaches_database_drivers_only_where_declared",
   "tests/unit/data/test_database_access_boundaries.py::test_non_test_code_changes_schema_only_through_alembic",
   "tests/unit/data/test_database_access_boundaries.py::test_publication_staging_tables_are_temporary_and_dropped_at_commit",
+  "tests/unit/data/test_database_access_boundaries.py::test_rule_exceptions_name_a_known_category_and_what_they_allow",
 ]
 [[rule.ci]]
 workflow = ".github/workflows/pr.yml"
@@ -574,6 +575,44 @@ invocation = "make test"
 bad_fixture = "rules/fixtures/api.data.sqlalchemy-and-alembic-only/bad_database_access.py"
 good_fixture = "rules/fixtures/api.data.sqlalchemy-and-alembic-only/good_database_access.py"
 test = "tests/unit/data/test_database_access_boundaries.py::test_rule_proof_sqlalchemy_and_alembic_only"
+# Each exception names a module and, in match, the one construct the check
+# reports there (category driver-access or schema-change), or a path pattern
+# the check doesn't scan (category migration-revision). The check fails on an
+# exception that no longer matches anything.
+[[rule.exception]]
+path = "policyengine_api/data/v2/catalog/publication_staging.py"
+match = "import psycopg.sql"
+category = "driver-access"
+reason = "Catalog publication streams rows with Postgres COPY ... FROM STDIN, which SQLAlchemy has no API for, and composes the COPY statement with psycopg's SQL composition."
+
+[[rule.exception]]
+path = "policyengine_api/data/v2/catalog/publication_staging.py"
+match = "import psycopg.types.json.Jsonb"
+category = "driver-access"
+reason = "Catalog publication's COPY sends JSON values with psycopg's JSONB adapter."
+
+[[rule.exception]]
+path = "policyengine_api/data/v2/catalog/publication_staging.py"
+match = "attribute .driver_connection"
+category = "driver-access"
+reason = "Catalog publication runs COPY through the psycopg connection beneath a SQLAlchemy Connection that SQLAlchemy opened and still manages, so the transaction stays SQLAlchemy's."
+
+[[rule.exception]]
+path = "policyengine_api/data/v2/catalog/publication_staging.py"
+match = "call STAGING_METADATA.create_all()"
+category = "schema-change"
+reason = "The publication staging tables are TEMPORARY with ON COMMIT DROP, so Postgres drops them when the publishing transaction commits and they are not persistent schema; test_publication_staging_tables_are_temporary_and_dropped_at_commit checks every table."
+
+[[rule.exception]]
+path = "policyengine_api/data/orm_pool_events.py"
+match = "attribute ._sock"
+category = "driver-access"
+reason = "The v1 pool's diagnostics read the file descriptor and local port of pymysql's socket from the driver connection a SQLAlchemy pool event passes them, because SQLAlchemy has no API for a connection's socket. They never read or write through the socket or the driver connection, and import no driver."
+
+[[rule.exception]]
+path = "migrations/*/versions/*.py"
+category = "migration-revision"
+reason = "Alembic generates the revisions, and they are where schema changes belong, so the check doesn't scan them. Ruff skips the same files (extend-exclude in pyproject.toml)."
 
 [[rule]]
 id = "api.legacy.removed-layers-stay-removed"
@@ -1216,7 +1255,7 @@ invocation = "make test"
 [[rule]]
 id = "api.quality.alembic-revisions-unused-imports"
 category = "quality"
-statement = "Ruff doesn't lint Alembic revision files (lint.exclude in pyproject.toml), because they must stay exactly as Alembic generates them."
+statement = "Ruff neither lints nor formats Alembic revision files (extend-exclude in pyproject.toml), because they must stay exactly as Alembic generates them."
 rationale = "docs/engineering/skills/alembic-migrations.md#mandatory-generation-rule"
 scope = ["migrations/*/versions/*.py"]
 tier = "mechanical"
@@ -1420,7 +1459,7 @@ invocation = "unittest discover -s scripts/rules/tests"
 [[rule.exception]]
 path = "migrations/*/versions/*.py"
 category = "migration-revision"
-reason = "Alembic revisions stay exactly as Alembic generated them, and an applied revision has already run against a database, so it is never split. Ruff excludes the same files (lint.exclude in pyproject.toml)."
+reason = "Alembic revisions stay exactly as Alembic generated them, and an applied revision has already run against a database, so it is never split. Ruff skips the same files (extend-exclude in pyproject.toml)."
 
 # --- CI workflows and scripts ----------------------------------------------
 
@@ -1633,6 +1672,55 @@ test = "scripts/rules/tests/test_locked_installs.py::TestScheduledRelockProof::t
 workflow = ".github/workflows/pr.yml"
 job = "quality-guards"
 invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule]]
+id = "api.dependencies.declared-and-used"
+category = "dependencies"
+statement = "pyproject.toml declares what policyengine_api imports and nothing else: deptry finds no import that no declared distribution provides (DEP001), no declared runtime dependency the package never imports (DEP002), no import of a module installed only as another package's dependency (DEP003), no import of a package declared only as a development dependency (DEP004) and no declared standard-library module (DEP005), apart from the findings rules/baselines/deptry.txt lists and the rule's not-imported-package exceptions."
+rationale = "docs/engineering/skills/dependencies.md#we-declare-what-we-import"
+scope = ["pyproject.toml", "policyengine_api/**/*.py"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "quality-guard"
+name = "declared-dependencies"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[[rule.ci]]
+workflow = ".github/workflows/push.yml"
+job = "quality-guards"
+invocation = "run_quality_guards.py"
+[rule.baseline]
+file = "rules/baselines/deptry.txt"
+count = 16
+[rule.proof]
+bad_fixture = "rules/fixtures/api.dependencies.declared-and-used/rejected"
+good_fixture = "rules/fixtures/api.dependencies.declared-and-used/accepted"
+test = "scripts/rules/tests/test_declared_dependencies.py::TestDeclaredDependenciesProof::test_rule_proof_declared_and_used"
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "unittest discover -s scripts/rules/tests"
+
+[[rule.exception]]
+path = "gcp/cloud_run/start.sh"
+match = "gunicorn"
+category = "not-imported-package"
+reason = "The Cloud Run start command runs gunicorn as the server process; no module imports it."
+
+[[rule.exception]]
+path = "gcp/cloud_run/start.sh"
+match = "uvicorn"
+category = "not-imported-package"
+reason = "gunicorn loads uvicorn's worker class by name (--worker-class uvicorn.workers.UvicornWorker); no module imports it."
+
+[[rule.exception]]
+path = "policyengine_api/data/orm.py"
+match = "pymysql"
+category = "not-imported-package"
+reason = "The Cloud SQL connector loads the MySQL driver by name (driver=\"pymysql\"), as SQLAlchemy's mysql+pymysql dialect does; no module imports it."
 
 # --- Process and repository hygiene ----------------------------------------
 

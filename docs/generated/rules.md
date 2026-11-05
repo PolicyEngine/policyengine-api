@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 68 | 4 | 1 | 8 | 81 |
+| mechanical | 68 | 5 | 1 | 8 | 82 |
 | metric | 1 | 0 | 0 | 0 | 1 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 73 of 83 rules.
+**Blocking:** 74 of 84 rules.
 
 ## Gaps
 
@@ -30,7 +30,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Advisory (checked but not blocking)
 
-- `api.quality.alembic-revisions-unused-imports`: Ruff doesn't lint Alembic revision files (lint.exclude in pyproject.toml), because they must stay exactly as Alembic generates them.
+- `api.quality.alembic-revisions-unused-imports`: Ruff neither lints nor formats Alembic revision files (extend-exclude in pyproject.toml), because they must stay exactly as Alembic generates them.
 
 ### Unproven (no proof that the checker rejects a bad example)
 
@@ -61,6 +61,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Ratcheted (existing violations still tolerated)
 
+- `api.dependencies.declared-and-used`: 16 remaining in `rules/baselines/deptry.txt`
 - `api.v2.connectors-no-cross-calls`: 7 remaining in `rules/baselines/import-linter-api-v2-connectors-independent.txt`
 - `api.v2.pure-modules-no-database`: 1 remaining in `rules/baselines/import-linter-api-v2-pure-modules-no-database.txt`
 - `api.v2.routes-no-sessions-or-sql`: 4 remaining in `rules/baselines/v2-layers-routes.txt`
@@ -68,13 +69,22 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Exceptions and review dates
 
+- `api.data.sqlalchemy-and-alembic-only`: exception for `migrations/*/versions/*.py` allowed as a migration-revision (Alembic generates the revisions, and they are where schema changes belong, so the check doesn't scan them. Ruff skips the same files (extend-exclude in pyproject.toml).)
+- `api.data.sqlalchemy-and-alembic-only`: exception for `policyengine_api/data/orm_pool_events.py` (`attribute ._sock`) allowed as a driver-access (The v1 pool's diagnostics read the file descriptor and local port of pymysql's socket from the driver connection a SQLAlchemy pool event passes them, because SQLAlchemy has no API for a connection's socket. They never read or write through the socket or the driver connection, and import no driver.)
+- `api.data.sqlalchemy-and-alembic-only`: exception for `policyengine_api/data/v2/catalog/publication_staging.py` (`attribute .driver_connection`) allowed as a driver-access (Catalog publication runs COPY through the psycopg connection beneath a SQLAlchemy Connection that SQLAlchemy opened and still manages, so the transaction stays SQLAlchemy's.)
+- `api.data.sqlalchemy-and-alembic-only`: exception for `policyengine_api/data/v2/catalog/publication_staging.py` (`call STAGING_METADATA.create_all()`) allowed as a schema-change (The publication staging tables are TEMPORARY with ON COMMIT DROP, so Postgres drops them when the publishing transaction commits and they are not persistent schema; test_publication_staging_tables_are_temporary_and_dropped_at_commit checks every table.)
+- `api.data.sqlalchemy-and-alembic-only`: exception for `policyengine_api/data/v2/catalog/publication_staging.py` (`import psycopg.sql`) allowed as a driver-access (Catalog publication streams rows with Postgres COPY ... FROM STDIN, which SQLAlchemy has no API for, and composes the COPY statement with psycopg's SQL composition.)
+- `api.data.sqlalchemy-and-alembic-only`: exception for `policyengine_api/data/v2/catalog/publication_staging.py` (`import psycopg.types.json.Jsonb`) allowed as a driver-access (Catalog publication's COPY sends JSON values with psycopg's JSONB adapter.)
+- `api.dependencies.declared-and-used`: exception for `gcp/cloud_run/start.sh` (`gunicorn`) allowed as a not-imported-package (The Cloud Run start command runs gunicorn as the server process; no module imports it.)
+- `api.dependencies.declared-and-used`: exception for `gcp/cloud_run/start.sh` (`uvicorn`) allowed as a not-imported-package (gunicorn loads uvicorn's worker class by name (--worker-class uvicorn.workers.UvicornWorker); no module imports it.)
+- `api.dependencies.declared-and-used`: exception for `policyengine_api/data/orm.py` (`pymysql`) allowed as a not-imported-package (The Cloud SQL connector loads the MySQL driver by name (driver="pymysql"), as SQLAlchemy's mysql+pymysql dialect does; no module imports it.)
 - `api.dependencies.install-from-lock`: exception for `.github/scripts/install_locked_ruff.sh` (`pip install "ruff==`) allowed as a pinned-tool (Installs the ruff version uv.lock pins, read from uv.lock, without installing the whole project for the lint job.)
 - `api.dependencies.install-from-lock`: exception for `.github/scripts/verify_observability_collector.sh` (`uv run --no-project --with grpcio --with opentelemetry-proto`) until the deploy job syncs the project with uv sync --frozen and the check runs through uv run --frozen (The collector check runs in the deploy job without installing the project; grpcio and opentelemetry-proto are locked only as transitive dependencies of the project.)
 - `api.dependencies.install-from-lock`: exception for `.github/workflows/pr.yml` (`pip install "shellcheck-py==`) allowed as a pinned-tool (shellcheck is a command-line tool the ci-scripts guard runs; it is not a dependency of the project.)
 - `api.dependencies.install-from-lock`: exception for `.github/workflows/push.yml` (`pip install "shellcheck-py==`) allowed as a pinned-tool (shellcheck is a command-line tool the ci-scripts guard runs; it is not a dependency of the project.)
 - `api.dependencies.install-from-lock`: exception for `.github/workflows/update-policyengine-bundle.yaml` (`pip install requests uv`) until the workflow installs uv with astral-sh/setup-uv at a pinned version and runs its Python through uv run --frozen (The bundle updater changes uv.lock, so it runs before a matching lock exists; it installs uv itself and requests for its inline Python with setup-python's interpreter.)
 - `api.dependencies.install-from-lock`: exception for `docker/Dockerfile` (`pip install "policyengine[models]==`) until the image installs from uv.lock (uv sync --frozen, or uv export --frozen piped to pip install --no-deps), or is removed (The image packages the PolicyEngine .py bundle for interactive use, not this project; uv.lock locks this project. The bundle updater keeps the pin equal to pyproject.toml's, but ipython and the bundle's own dependencies are not pinned.)
-- `api.quality.file-length`: exception for `migrations/*/versions/*.py` allowed as a migration-revision (Alembic revisions stay exactly as Alembic generated them, and an applied revision has already run against a database, so it is never split. Ruff excludes the same files (lint.exclude in pyproject.toml).)
+- `api.quality.file-length`: exception for `migrations/*/versions/*.py` allowed as a migration-revision (Alembic revisions stay exactly as Alembic generated them, and an applied revision has already run against a database, so it is never split. Ruff skips the same files (extend-exclude in pyproject.toml).)
 
 ## API v2 layer boundaries
 
@@ -355,7 +365,7 @@ flowchart LR
 
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `api.quality.alembic-revisions-unused-imports` | Ruff doesn't lint Alembic revision files (lint.exclude in pyproject.toml), because they must stay exactly as Alembic generates them. | mechanical | advisory | no | nothing | — | — |
+| `api.quality.alembic-revisions-unused-imports` | Ruff neither lints nor formats Alembic revision files (extend-exclude in pyproject.toml), because they must stay exactly as Alembic generates them. | mechanical | advisory | no | nothing | — | — |
 | `api.quality.ci-cd-scripts-ruff-exemptions` | CI/CD scripts under .github may print their results, run other programs, fetch fixed URLs, have hyphenated file names and import the lazily loaded packages at module level (T201, S603, S607, S310, N999, TID253); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of N999, S310, S603, S607, T201, TID253 for `.github/**` | `pr.yml:lint` | — |
 | `api.quality.command-line-modules-ruff-exemptions` | Application modules that also run as command-line programs (if __name__ == "__main__") may print their output (T201); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of T201 for `policyengine_api/{data/v2/catalog/initialization,data/v2/household_migration_qualification,data/v2/policy_migration_qualification,data/v2/privilege_reconciliation,data/v2/user_association_migration_qualification,worker_spm_release}.py` | `pr.yml:lint` | — |
 | `api.quality.command-line-scripts-ruff-exemptions` | Command-line scripts under scripts/ may print their output, run other programs, fetch fixed URLs, stamp today's date and pick random samples (T201, S603, S607, S310, DTZ011, S311); every other ruff rule applies to them. | mechanical | enforced | yes | ruff per-file ignore of DTZ011, S310, S311, S603, S607, T201 for `scripts/**` | `pr.yml:lint` | — |
@@ -472,6 +482,7 @@ flowchart LR
 
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| `api.dependencies.declared-and-used` | pyproject.toml declares what policyengine_api imports and nothing else: deptry finds no import that no declared distribution provides (DEP001), no declared runtime dependency the package never imports (DEP002), no import of a module installed only as another package's dependency (DEP003), no import of a package declared only as a development dependency (DEP004) and no declared standard-library module (DEP005), apart from the findings rules/baselines/deptry.txt lists and the rule's not-imported-package exceptions. | mechanical | ratcheted | yes | quality guard `declared-dependencies` | `pr.yml:quality-guards`, `push.yml:quality-guards` | yes |
 | `api.dependencies.install-from-lock` | Every install of Python packages in a workflow, a shell script, a Makefile, a Dockerfile or a Modal image installs exactly what uv.lock pins (uv sync --frozen, uv run --frozen), unless it is a registered exception. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards` | yes |
 | `api.dependencies.lock-committed` | Every directory with a pyproject.toml has a committed uv.lock beside it, and a pull request CI job runs uv lock --check for it. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards`, `pr.yml:quality-guards` | yes |
 | `api.dependencies.scheduled-relock` | A workflow on a schedule relocks every uv.lock with upgrades and opens or updates a pull request with the result. | mechanical | enforced | yes | quality guard `locked-installs` | `pr.yml:quality-guards` | yes |
@@ -479,12 +490,18 @@ flowchart LR
 
 ```mermaid
 flowchart LR
+  r_api_dependencies_declared_and_used("api.dependencies.declared-and-used (ratcheted)")
+  e_quality_guard_declared_dependencies["quality guard declared-dependencies"]
+  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
+  j_CI_push_yml_quality_guards["CI push.yml:quality-guards"]
   r_api_dependencies_install_from_lock("api.dependencies.install-from-lock (enforced)")
   e_quality_guard_locked_installs["quality guard locked-installs"]
-  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
   r_api_dependencies_lock_committed("api.dependencies.lock-committed (enforced)")
   r_api_dependencies_scheduled_relock("api.dependencies.scheduled-relock (enforced)")
   r_api_dependencies_test_from_lock("api.dependencies.test-from-lock (enforced)")
+  r_api_dependencies_declared_and_used --> e_quality_guard_declared_dependencies
+  e_quality_guard_declared_dependencies --> j_CI_pr_yml_quality_guards
+  e_quality_guard_declared_dependencies --> j_CI_push_yml_quality_guards
   r_api_dependencies_install_from_lock --> e_quality_guard_locked_installs
   e_quality_guard_locked_installs --> j_CI_pr_yml_quality_guards
   r_api_dependencies_lock_committed --> e_quality_guard_locked_installs
