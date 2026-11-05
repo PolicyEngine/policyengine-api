@@ -763,9 +763,9 @@ class TestBaselineAndExceptions(unittest.TestCase):
                         f"[{FILES_RULE}] v2-layers: {unassigned} matches no v2 "
                         "layer. Fix: name it after its operation, "
                         "<creates|reads|updates|deletes>[_name].py, and put it "
-                        "directly in its database_connectors package; an "
-                        "exception can't stand in, because a database_connectors "
-                        "package holds only connector modules."
+                        "directly in services/v2/<resource>/database_connectors; "
+                        "an exception can't stand in, because a "
+                        "database_connectors package holds only connector modules."
                     ],
                 )
 
@@ -807,7 +807,7 @@ class TestBaselineAndExceptions(unittest.TestCase):
             ],
         )
 
-    def test_an_exception_ends_on_its_expires_date_and_covers_the_whole_file(
+    def test_an_exception_needs_an_expires_date_and_covers_the_whole_file(
         self,
     ) -> None:
         client = "policyengine_api/services/v2/household_calculations/client.py"
@@ -867,17 +867,32 @@ class TestBaselineAndExceptions(unittest.TestCase):
                     self.root,
                 )
 
-                self.assertIn(
-                    f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts "
-                    f"{helper} from {FILES_RULE}, but a database_connectors "
-                    "package holds only connector modules (rule "
-                    "api.v2.crud-checks-cover-every-resource also fails any other "
-                    "module directly in services/v2/<resource>/database_connectors)"
-                    ". Fix: name it after its operation, "
-                    "<creates|reads|updates|deletes>[_name].py, put it directly "
-                    "in its database_connectors package, and remove the "
-                    "exception.",
-                    self._messages(),
+                messages = self._messages()
+                (self.root / helper).unlink()
+
+                self.assertEqual(
+                    sorted(messages),
+                    sorted(
+                        [
+                            f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts "
+                            f"{helper} from {FILES_RULE}, but a database_connectors "
+                            "package holds only connector modules (rule "
+                            "api.v2.crud-checks-cover-every-resource also fails "
+                            "any other module directly in "
+                            "services/v2/<resource>/database_connectors). Fix: "
+                            "name it after its operation, "
+                            "<creates|reads|updates|deletes>[_name].py, put it "
+                            "directly in services/v2/<resource>/database_connectors, "
+                            "and remove the exception.",
+                            f"[{FILES_RULE}] v2-layers: {helper} matches no v2 "
+                            "layer. Fix: name it after its operation, "
+                            "<creates|reads|updates|deletes>[_name].py, and put it "
+                            "directly in services/v2/<resource>/database_connectors; "
+                            "an exception can't stand in, because a "
+                            "database_connectors package holds only connector "
+                            "modules.",
+                        ]
+                    ),
                 )
 
     def test_an_exception_with_no_readable_expires_date_is_reported(self) -> None:
@@ -906,7 +921,12 @@ class TestBaselineAndExceptions(unittest.TestCase):
                 )
 
     def test_an_exception_path_must_be_written_as_git_lists_it(self) -> None:
+        # Each spelling names the real file, so is_file() accepts it, but the
+        # guard compares exceptions with the paths it scans.
         client = "policyengine_api/services/v2/household_calculations/client.py"
+        _write_files(
+            {"policyengine_api/services/v2/policies/services.py": ""}, self.root
+        )
         unassigned = f"[{FILES_RULE}] v2-layers: {client} matches no v2 layer."
         for spelling in (
             "policyengine_api/services/v2/household_calculations/./client.py",
@@ -926,8 +946,8 @@ class TestBaselineAndExceptions(unittest.TestCase):
 
                 self.assertIn(
                     f"[{FILES_RULE}] v2-layers: rules/registry.toml excepts "
-                    f"{spelling} from {FILES_RULE}, but its path has a '.', '..' "
-                    "or empty segment, so it matches no file the guard scans. "
+                    f"{spelling} from {FILES_RULE}, but no file the guard scans "
+                    "has that exact path, so the exception would match nothing. "
                     "Fix: write the path as git ls-files lists it.",
                     messages,
                 )
