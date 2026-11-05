@@ -278,7 +278,8 @@ class TestEconomyService:
             expected_message = (
                 "Simulation entrypoint execution failed: out of memory. "
                 "A new run for this state can be requested 2 minutes after this "
-                "failure."
+                "failure, or 10 seconds after it by first sending DELETE to this "
+                "URL."
             )
             # The stored error expires, so the log keeps the failure's reason.
             # Checked first: building the expected result below logs too.

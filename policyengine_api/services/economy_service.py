@@ -230,9 +230,9 @@ class EconomyService(
         removed: removal happens only if the record still holds the failure
         that was checked, and a record that changed in between is selected
         and checked again. Raise ValueError for an invalid request, and
-        CacheCoordinationError when the cache cannot be read or written (an
-        unreadable cache is never reported as holding nothing) or the record
-        keeps changing.
+        CacheCoordinationError when the cache cannot be reached or a record
+        cannot be read from it (never reported as nothing stored), or when the
+        record keeps changing.
         """
         set_runtime_context(
             country_id=impact_request.country_id,

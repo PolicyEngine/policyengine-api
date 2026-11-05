@@ -403,8 +403,11 @@ GET submits a new job, only when the record is a failure recorded at least
 removed only if it still holds the failure that was checked, so a job a GET
 submits meanwhile is left alone, and a late poll of the failed job cannot
 write the removed failure back. 404 means nothing is stored that the GET
-would answer from, so the next GET starts a new run; when the cache, or any
-record the selection reads, cannot be read, the answer is 500, never 404.
+would answer from, so the next GET submits a new job (or answers `computing`
+while another request is submitting one). A record whose stored value cannot
+be decoded counts as nothing stored, for the DELETE as for the GET; when the
+cache cannot be reached, or a record cannot be read from it, the answer is
+500, never 404.
 Invalid query parameters give
 the GET's 400, and a request to the simulation service that gets no response
 gives 502 with only `status`, `message` and `result`.

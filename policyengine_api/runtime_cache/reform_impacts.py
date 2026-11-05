@@ -514,10 +514,11 @@ class ReformImpactCache:
         """Make index lookups inside this block raise when the cache cannot be read.
 
         A lookup normally reads a cache it cannot reach, or a record it cannot
-        read, as holding no impacts. Inside this block it raises
+        read from it, as holding no impacts. Inside this block it raises
         CacheCoordinationError instead, so a caller for whom "nothing stored"
-        must mean exactly that can select with the usual lookups. Only the
-        current context is affected.
+        must not hide an outage can select with the usual lookups. A record
+        that is read but cannot be decoded is still skipped, as it is outside
+        the block. Only the current context is affected.
         """
         token = _LOOKUPS_FAIL_CLOSED.set(True)
         try:

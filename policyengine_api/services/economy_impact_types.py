@@ -49,19 +49,25 @@ LOCAL_AREA_BREAKDOWN_REFUSAL_STATUS_CODES = frozenset({400, 422})
 # run on that dataset each time. Every other failed job's error is kept for the
 # cache lifetime of 30 days.
 RETRYABLE_FAILURE_SECONDS = 120
-LOCAL_AREA_BREAKDOWN_RETRY_NOTE = (
-    "A new local-area breakdown can be requested "
-    f"{RETRYABLE_FAILURE_SECONDS // 60} minutes after this failure."
-)
-US_STATE_RETRY_NOTE = (
-    "A new run for this state can be requested "
-    f"{RETRYABLE_FAILURE_SECONDS // 60} minutes after this failure."
-)
 # How long after a failure is recorded a DELETE on the economy URL may remove
 # it, so the next request submits a new job. Any stored failure can be
 # removed, but not at once: a client that deletes and requests again on every
 # failed answer would otherwise start a new run each time.
 FAILED_IMPACT_DELETE_LOCKOUT_SECONDS = 10
+_DELETE_RETRY_NOTE = (
+    f"or {FAILED_IMPACT_DELETE_LOCKOUT_SECONDS} seconds after it by first sending "
+    "DELETE to this URL."
+)
+LOCAL_AREA_BREAKDOWN_RETRY_NOTE = (
+    "A new local-area breakdown can be requested "
+    f"{RETRYABLE_FAILURE_SECONDS // 60} minutes after this failure, "
+    f"{_DELETE_RETRY_NOTE}"
+)
+US_STATE_RETRY_NOTE = (
+    "A new run for this state can be requested "
+    f"{RETRYABLE_FAILURE_SECONDS // 60} minutes after this failure, "
+    f"{_DELETE_RETRY_NOTE}"
+)
 # How many times a DELETE selects the stored record again when that record
 # changed between being selected and being removed.
 FAILED_IMPACT_DELETE_ATTEMPTS = 3

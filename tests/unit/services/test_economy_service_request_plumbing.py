@@ -807,7 +807,8 @@ def _finish_jobs_with(
 
 
 BREAKDOWN_RETRY_NOTE = (
-    "A new local-area breakdown can be requested 2 minutes after this failure."
+    "A new local-area breakdown can be requested 2 minutes after this failure, "
+    "or 10 seconds after it by first sending DELETE to this URL."
 )
 
 
@@ -980,7 +981,8 @@ def test_a_failed_national_job_is_still_replayed(
 
 
 US_STATE_RETRY_NOTE = (
-    "A new run for this state can be requested 2 minutes after this failure."
+    "A new run for this state can be requested 2 minutes after this failure, "
+    "or 10 seconds after it by first sending DELETE to this URL."
 )
 
 

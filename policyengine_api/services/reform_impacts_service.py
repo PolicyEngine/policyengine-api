@@ -209,9 +209,10 @@ class ReformImpactsService:
     def reads_fail_closed(self) -> AbstractContextManager[None]:
         """Return a block inside which lookups raise when the cache cannot be read.
 
-        Lookups otherwise read an unreachable cache, or an unreadable record,
-        as holding nothing. Inside the block they raise
-        CacheCoordinationError instead.
+        Lookups otherwise read an unreachable cache, or a record the cache
+        cannot return, as holding nothing. Inside the block they raise
+        CacheCoordinationError instead; a record that cannot be decoded is
+        skipped either way.
         """
         return self._cache.reads_fail_closed()
 

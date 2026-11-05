@@ -673,3 +673,54 @@ def test_a_delete_that_cannot_read_the_cache_answers_500(
         "message": "reform-impact lookups cannot read the cache",
         "result": None,
     }
+
+
+def test_an_undecodable_record_is_nothing_stored_for_the_delete_as_for_the_get(
+    harness: Harness,
+) -> None:
+    harness.client.get(harness.url)
+    harness.clock.advance(10)
+    record_key = harness.cache._record_key(FAILED_JOB)
+    harness.cache.client.set(record_key, harness.cache.client.get(record_key)[:20])
+
+    deleted = harness.client.delete(harness.url)
+    next_get = harness.client.get(harness.url)
+
+    # The GET reads the record as absent and starts a new run, so the DELETE
+    # finds nothing it would answer from.
+    assert deleted.status_code == 404
+    assert deleted.json == NOT_FOUND_BODY
+    assert next_get.status_code == 200
+    assert next_get.json["status"] == "computing"
+
+
+def test_a_delete_just_inside_the_lockout_is_still_refused(harness: Harness) -> None:
+    harness.client.get(harness.url)
+    harness.clock.advance(9.5)
+
+    almost = harness.client.delete(harness.url)
+    harness.clock.advance(0.5)
+    at_ten_seconds = harness.client.delete(harness.url)
+
+    assert almost.status_code == 409
+    assert almost.json == _locked_body(1)
+    assert at_ten_seconds.status_code == 204
+
+
+def test_a_delete_leaves_a_failure_from_a_worker_app_the_get_no_longer_uses(
+    harness: Harness,
+) -> None:
+    harness.client.get(harness.url)
+    harness.clock.advance(10)
+    # A deploy changes the worker app the request resolves to, so the GET
+    # would no longer answer from the stored failure.
+    harness.gateway.resolve_app_name.side_effect = lambda _country, version=None, **_: (
+        "newer-worker",
+        version,
+    )
+
+    response = harness.client.delete(harness.url)
+
+    assert response.status_code == 404
+    assert response.json == NOT_FOUND_BODY
+    assert [impact.status for impact in harness.stored()] == ["error"]
