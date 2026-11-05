@@ -1197,7 +1197,7 @@ test = "tests/unit/services/test_microdata_weight_boundaries.py::test_rule_proof
 [[rule]]
 id = "api.quality.make-quality"
 category = "quality"
-statement = "make quality is the one command for the quality checks, locally and in CI: it applies ruff check --fix and ruff format, then runs make quality-check, which runs uv lock --check, ruff check, ruff format --check, Import Linter, mypy and the quality guards without changing files. pr.yml's quality-guards job runs make quality and then fails if the fixes changed a file, with neither step skipped nor allowed to fail; the Makefile has nothing that hides a failing command (.IGNORE, .ONESHELL, or a MAKEFLAGS, SHELL or .SHELLFLAGS setting); and no other pr.yml job runs ruff, mypy, Import Linter or the quality guards, itself or through a make target."
+statement = "make quality is the command for the quality checks, locally and in CI: it applies ruff check --fix and ruff format, then runs make quality-check, which runs uv lock --check, ruff check, ruff format --check, Import Linter, mypy and the quality guards without changing files, and make -n agrees. pr.yml's quality-guards job runs make quality and then git diff --exit-code HEAD, with neither step skipped, allowed to fail or run in another shell, and no MAKEFLAGS set for them; the Makefile uses no syntax the rules registry doesn't follow and nothing that hides a failing command (.IGNORE, .ONESHELL, or a MAKEFLAGS, SHELL or .SHELLFLAGS setting); and no other pr.yml job runs ruff, mypy, Import Linter or the quality guards, itself or through a make target."
 rationale = "docs/engineering/skills/github-prs.md#commit-hygiene"
 scope = ["Makefile", ".github/workflows/pr.yml"]
 tier = "mechanical"

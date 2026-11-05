@@ -201,14 +201,23 @@ then runs `make quality-check`: `uv lock --check`, `ruff check`,
 (`scripts/run_quality_guards.py`), without changing files. Commit the fixes
 it makes with your change. pr.yml's `quality-guards` job runs the same
 command and fails if the fixes changed a file (`api.quality.make-quality`).
+Keep the Makefile to rules, recipes and variables: the rules registry
+reads it to see which checks the job runs, and gives no credit to a
+Makefile that uses `include`, a conditional, `define`, `$(eval ...)`, a
+recipe after `;`, a setting that can hide failures (`.IGNORE`,
+`.ONESHELL`, `MAKEFLAGS`, `SHELL`, `.SHELLFLAGS`), or that has a
+`GNUmakefile` or `makefile` beside it.
 
 A local run can still differ from CI's:
 
 - The job also runs the rules registry tool's own tests
   (`scripts/rules/tests`), which `make quality` leaves out.
-- The rules guard compares baselines and rule statuses with the branch in
-  `GITHUB_BASE_REF`: CI sets it to the pull request's base branch, and
-  `make quality-check` defaults it to `master`. Fetch `origin` first.
+- The rules guard compares baselines and rule statuses with
+  `RULES_BASE_REF`, which `make quality-check` sets to the commit `HEAD`
+  shares with `origin/<base branch>`: CI's `GITHUB_BASE_REF`, or `master`
+  locally. A branch is compared with where it left `master`; CI compares
+  its merge with `master` with the commit that merge is built on. Without
+  `origin/master` the local comparison is skipped, so fetch `origin` first.
 - Without `shellcheck` installed, the ci-scripts guard skips that check
   locally; CI installs it and fails without it.
 - `uv lock --check` runs your uv; CI pins uv 0.13.4.

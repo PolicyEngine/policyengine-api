@@ -47,6 +47,10 @@ CHECK_TOOLS = re.compile(r"\b(ruff|mypy|lint-imports|run_quality_guards\.py)\b")
 # The quality job's steps, which may not be skipped or allowed to fail.
 REQUIRED_STEPS = ("make quality", "git diff --exit-code HEAD")
 JOB = "quality-guards"
+# A command in make quality-check that changes files instead of checking them.
+CHANGES_FILES = re.compile(r"--fix\b|\b(?:ruff format|uv lock)\b(?!.*--check)")
+# Environment variables whose value can make make ignore failing commands.
+MAKE_FLAG_VARIABLES = ("MAKEFLAGS", "MFLAGS")
 
 
 def quality_problems(makefile: str, workflow: str) -> list[str]:
@@ -66,25 +70,41 @@ def quality_problems(makefile: str, workflow: str) -> list[str]:
     problems += [
         f"make quality-check changes files: '{command}'"
         for command in check_commands
-        if "--fix" in command or command == FIXES[1]
+        if CHANGES_FILES.search(command)
     ]
-    jobs = yaml.safe_load(workflow)["jobs"]
+    settings = yaml.safe_load(workflow)
+    jobs = settings["jobs"]
     job = jobs.get(JOB, {})
-    runs = [step.get("run", "") for step in job.get("steps", [])]
-    if (
-        "make quality" not in runs
-        or "git diff --exit-code" not in runs[runs.index("make quality") + 1 :]
-    ):
+    steps = job.get("steps", [])
+    runs = [step.get("run", "") for step in steps]
+    first = runs.index(REQUIRED_STEPS[0]) if REQUIRED_STEPS[0] in runs else None
+    if first is None or runs[first + 1 : first + 2] != [REQUIRED_STEPS[1]]:
         problems.append(
-            f"pr.yml's {JOB} job must run make quality, then git diff --exit-code"
+            f"pr.yml's {JOB} job must run make quality, then "
+            f"{REQUIRED_STEPS[1]} right after it"
         )
+    environments = [
+        ("pr.yml", settings.get("env") or {}),
+        (f"pr.yml's {JOB} job", job.get("env") or {}),
+        *(
+            (f"pr.yml's '{step['run']}' step", step.get("env") or {})
+            for step in steps
+            if step.get("run") in REQUIRED_STEPS
+        ),
+    ]
+    problems += [
+        f"{where} sets {name}, which can make make ignore failing commands"
+        for where, environment in environments
+        for name in MAKE_FLAG_VARIABLES
+        if name in environment
+    ]
     if "continue-on-error" in job:
         problems.append(f"pr.yml's {JOB} job ignores its failures (continue-on-error)")
     problems += [
         f"pr.yml's {JOB} job may skip or ignore '{step['run']}'"
         for step in job.get("steps", [])
         if step.get("run") in REQUIRED_STEPS
-        and ("if" in step or "continue-on-error" in step)
+        and any(key in step for key in ("if", "continue-on-error", "shell"))
     ]
     for name, other in jobs.items():
         run_text = "\n".join(step.get("run", "") for step in other.get("steps", []))

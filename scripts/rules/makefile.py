@@ -35,22 +35,44 @@ _FAILURE_TARGETS = {
         "runs each recipe in one shell, whose exit status is its last command's"
     ),
 }
+# Directives that change what make reads or runs in ways this reader doesn't
+# follow: other files, conditionals and multi-line variables.
+_UNFOLLOWED_DIRECTIVE = re.compile(
+    r"^\s*(-?include|sinclude|-?load|ifdef|ifndef|ifeq|ifneq|else|endif|define"
+    r"|endef|undefine)(?=\s|$)"
+)
+# $(eval ...), which makes make read text as more of the Makefile.
+_EVAL = re.compile(r"\$[({]\s*eval\b")
+# The Makefile names GNU make reads before Makefile.
+_EARLIER_MAKEFILES = ("GNUmakefile", "makefile")
 # make, or the $(MAKE) a recipe calls it as, as a word of a shell command.
 _MAKE_CALL = re.compile(r"(?:^|(?<=[\s;&|(]))(?:make|\$\(MAKE\)|\$\{MAKE\})(?=\s|$)")
 # Where one shell command ends and the next begins.
 _COMMAND_END = re.compile(r"[;&|)\n]")
-# Long options after which make runs no recipe, or ignores its failures.
-_NO_RUN_OPTIONS = frozenset(
-    {"--dry-run", "--just-print", "--recon", "--question", "--touch", "--ignore-errors"}
+# MAKEFLAGS or MFLAGS set in a command's environment, before make.
+_FLAGS_PREFIX = re.compile(r"(?:^|\s)M(?:AKE)?FLAGS=")
+# Long options after which make runs no recipe, or ignores its failures, or
+# only prints something. GNU make also accepts an unambiguous start of one.
+_NO_RUN_OPTIONS = (
+    "--dry-run",
+    "--just-print",
+    "--recon",
+    "--question",
+    "--touch",
+    "--ignore-errors",
+    "--version",
+    "--help",
 )
-# Short options that do the same: -n, -q, -t and -i.
-_NO_RUN_LETTERS = frozenset("nqti")
+# Short options that do the same: -n, -q, -t, -i, -v and -h.
+_NO_RUN_LETTERS = frozenset("nqtivh")
+# Long options that read another directory's or file's Makefile.
+_OTHER_MAKEFILE_OPTIONS = ("--directory", "--file", "--makefile")
+# Short options that do the same: -C and -f.
+_OTHER_MAKEFILE_LETTERS = frozenset("Cf")
 # Short options whose value follows, in the same word or the next one.
-_VALUE_LETTERS = frozenset("CfIjloOW")
+_VALUE_LETTERS = frozenset("IjloOW")
 # make options whose value is the next word, which isn't a target.
-_OPTIONS_WITH_VALUES = frozenset(
-    {"-C", "-f", "-I", "-o", "-W", "--directory", "--file", "--makefile"}
-)
+_OPTIONS_WITH_VALUES = frozenset({"-I", "-o", "-W"})
 # Recipe prefixes that change nothing about whether a failure fails make: @
 # stops make printing the command, and + runs it under make -n too. The -
 # prefix, which ignores the command's failure, is kept.
@@ -115,37 +137,62 @@ def make_recipes(text: str) -> Recipes:
 
 
 def makefile_problems(text: str) -> list[str]:
-    """Return what in a Makefile can let a failing command pass, if anything."""
-    problems = []
+    """Return what in a Makefile can let a failing command pass, if anything.
+
+    That is a setting that hides failures, or syntax this reader doesn't
+    follow, which could change what make runs without the reader seeing it.
+    """
+    problems: list[str] = []
     for line in _logical_lines(text):
+        if _EVAL.search(line):
+            problems.append("uses $(eval ...), which this reader doesn't follow")
         if line.startswith("\t") or line.lstrip().startswith("#"):
             continue
+        directive = _UNFOLLOWED_DIRECTIVE.match(line)
+        if directive:
+            problems.append(
+                f"uses '{directive.group(1)}', which this reader doesn't follow"
+            )
+            continue
         match = _RULE.match(line)
-        assignment = _ASSIGNMENT.match(
-            match.group(2).split("#", 1)[0] if match else line
-        )
+        rest = match.group(2).split("#", 1)[0] if match else line
+        assignment = _ASSIGNMENT.match(rest)
         if assignment and assignment.group(1) in _FAILURE_VARIABLES:
             problems.append(
                 f"sets {assignment.group(1)}, which can stop a failing command "
                 "from failing make"
             )
-        if match:
-            problems += [
-                f"sets {name}, which {_FAILURE_TARGETS[name]}"
-                for name in match.group(1).split()
-                if name in _FAILURE_TARGETS
-            ]
-    return problems
+        if not match:
+            continue
+        problems += [
+            f"sets {name}, which {_FAILURE_TARGETS[name]}"
+            for name in match.group(1).split()
+            if name in _FAILURE_TARGETS
+        ]
+        if not assignment and ";" in rest:
+            problems.append(
+                f"gives {match.group(1).strip()} a recipe after ';', which this "
+                "reader doesn't follow"
+            )
+    return list(dict.fromkeys(problems))
 
 
-def _runs_no_recipe(word: str) -> bool:
-    """Whether a make option makes make run no recipe or ignore its failures."""
-    if word in _NO_RUN_OPTIONS:
-        return True
-    if not word.startswith("-") or word.startswith("--"):
+def _credits_no_target(word: str) -> bool:
+    """Whether a make option means the root Makefile's targets don't count.
+
+    That is an option after which make runs no recipe, ignores its failures,
+    only prints something, or reads another directory's or file's Makefile.
+    """
+    if word.startswith("--"):
+        name = word.split("=", 1)[0]
+        return name != "--" and any(
+            option.startswith(name)
+            for option in (*_NO_RUN_OPTIONS, *_OTHER_MAKEFILE_OPTIONS)
+        )
+    if not word.startswith("-"):
         return False
     for letter in word[1:]:
-        if letter in _NO_RUN_LETTERS:
+        if letter in _NO_RUN_LETTERS or letter in _OTHER_MAKEFILE_LETTERS:
             return True
         if letter in _VALUE_LETTERS:
             return False
@@ -155,13 +202,18 @@ def _runs_no_recipe(word: str) -> bool:
 def make_targets_run(command: str) -> list[str]:
     """Return the targets each ``make`` or ``$(MAKE)`` in a shell command runs.
 
-    A call with ``-n``, ``-q``, ``-t`` or ``-i`` (or their long forms) runs no
-    recipe or ignores its failures, so its targets don't count.
+    A call credits no target when it runs no recipe or ignores its failures
+    (``-n``, ``-q``, ``-t``, ``-i``, their long forms, or MAKEFLAGS set before
+    it), only prints something (``-v``, ``-h``), or reads another Makefile
+    (``-C``, ``-f``).
     """
     targets = []
     for call in _MAKE_CALL.finditer(command):
+        before = _COMMAND_END.split(command[: call.start()])[-1]
         words = _COMMAND_END.split(command[call.end() :], maxsplit=1)[0].split()
-        if any(_runs_no_recipe(word) for word in words):
+        if _FLAGS_PREFIX.search(before) or any(
+            _credits_no_target(word) for word in words
+        ):
             continue
         skip_next = False
         for word in words:
@@ -214,19 +266,25 @@ def root_makefile_problems(root: Path) -> list[str]:
     makefile = root / "Makefile"
     if not makefile.is_file():
         return []
-    return makefile_problems(makefile.read_text(encoding="utf-8"))
+    # Exact names: a file system that ignores case finds makefile as Makefile.
+    names = {path.name for path in root.iterdir()}
+    return [
+        f"has {name} beside it, which GNU make reads instead"
+        for name in _EARLIER_MAKEFILES
+        if name in names
+    ] + makefile_problems(makefile.read_text(encoding="utf-8"))
 
 
 def job_make_commands(root: Path, run_text: str) -> list[str]:
     """Return the commands the make targets in a job's run text run.
 
     They come from ``root``'s Makefile. There are none without one, or when
-    the Makefile can hide a failing command (``makefile_problems``).
+    make could run something else or hide a failing command
+    (``root_makefile_problems``).
     """
     makefile = root / "Makefile"
-    if not makefile.is_file():
+    if not makefile.is_file() or root_makefile_problems(root):
         return []
-    text = makefile.read_text(encoding="utf-8")
-    if makefile_problems(text):
-        return []
-    return make_commands(text, job_make_targets(run_text))
+    return make_commands(
+        makefile.read_text(encoding="utf-8"), job_make_targets(run_text)
+    )

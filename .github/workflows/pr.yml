@@ -70,7 +70,8 @@ jobs:
 
   quality-guards:
     # make quality, as an agent runs it locally (api.quality.make-quality):
-    # ruff's fixes, then ruff, Import Linter, mypy and the quality guards.
+    # ruff's fixes, then uv lock --check, ruff, Import Linter, mypy and the
+    # quality guards.
     name: Quality checks
     # Full CI runs only on the lowest unmerged pull request in a stack.
     if: ${{ !github.event.pull_request.stack || github.event.pull_request.stack.base.ref == github.event.pull_request.base.ref }}
@@ -103,9 +104,9 @@ jobs:
       - name: Run make quality
         run: make quality
       # Fails, and shows the change, if ruff's fixes changed a file: the
-      # pull request must include them.
+      # pull request must include them. HEAD, so staged changes count too.
       - name: Check that ruff's fixes changed no file
-        run: git diff --exit-code
+        run: git diff --exit-code HEAD
 
   alembic-v1-check:
     name: Alembic v1 qualification
