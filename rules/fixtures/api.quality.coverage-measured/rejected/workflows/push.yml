@@ -1,0 +1,17 @@
+# Proof fixture for api.quality.coverage-measured (the rejected case): the
+# release tests keep no coverage report, and the merge run's upload doesn't
+# fail the run when it fails.
+on:
+  push:
+    branches:
+      - master
+jobs:
+  release-tests:
+    steps:
+      - run: bash .github/scripts/run_release_tests.sh
+  merge-upload:
+    steps:
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: integration

@@ -1,0 +1,13 @@
+# Proof fixture for api.quality.coverage-measured (the rejected case): the unit
+# flag isn't carried forward, there is no integration flag, the project
+# threshold is large, and there is no patch status or ignore list.
+coverage:
+  status:
+    project:
+      default:
+        threshold: 5%
+flag_management:
+  individual_flags:
+    - name: unit
+      paths:
+        - policyengine_api/

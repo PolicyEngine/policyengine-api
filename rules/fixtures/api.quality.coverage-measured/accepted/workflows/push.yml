@@ -1,0 +1,24 @@
+# Proof fixture for api.quality.coverage-measured (the accepted case).
+on:
+  push:
+    branches:
+      - master
+jobs:
+  release-tests:
+    steps:
+      - run: bash .github/scripts/run_release_tests.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-test-coverage-shard-${{ matrix.shard_index }}
+          path: coverage.xml
+  upload-release-test-coverage:
+    needs: release-tests
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-test-coverage-shard-*
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: unit
+          fail_ci_if_error: true

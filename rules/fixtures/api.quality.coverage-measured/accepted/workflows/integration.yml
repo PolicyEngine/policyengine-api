@@ -1,0 +1,17 @@
+# Proof fixture for api.quality.coverage-measured (the accepted case): a
+# reusable workflow that pr.yml and push.yml both call.
+on:
+  workflow_call:
+    secrets:
+      CODECOV_TOKEN:
+        required: false
+jobs:
+  integration:
+    steps:
+      - run: uv run --frozen --extra dev coverage xml -i -o coverage-v2.xml
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage-v2.xml
+          flags: integration
+          fail_ci_if_error: ${{ github.event_name == 'push' }}
