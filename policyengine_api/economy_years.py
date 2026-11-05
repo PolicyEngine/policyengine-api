@@ -11,10 +11,10 @@ Each list keeps the order both responses have always used: the US newest
 first, the UK oldest first.
 
 - The US years start in 2024: 2022 and 2023 are no longer offered.
-- The UK years start with the data year of the UK dataset
-  (microcosm_uk_2024_25), before which the simulation service refuses a UK
-  year, and end with 2032, the last year policyengine-uk 2.151.0 projects
-  that dataset to (``PROJECTION_END_YEAR``), after which it refuses one too.
+- The UK years start with 2024, the data year of the UK dataset
+  (microcosm_uk_2024_25), and end with 2032, the last year policyengine-uk
+  2.151.0 projects that dataset to (``PROJECTION_END_YEAR``). The simulation
+  service fails for a later UK year.
 """
 
 from __future__ import annotations
@@ -32,17 +32,17 @@ ECONOMY_YEARS: Final[Mapping[str, tuple[int, ...]]] = {
     "uk": UK_ECONOMY_YEARS,
 }
 
-# The simulation service's code for a year its model and data do not cover,
-# which the Public API also gives a society-wide request for a year outside
-# ECONOMY_YEARS.
+# The Public API's code for a society-wide request for a year outside
+# ECONOMY_YEARS. The app reads it to tell such a 400 from other failures.
 DATASET_YEAR_UNAVAILABLE: Final = "DATASET_YEAR_UNAVAILABLE"
 
 
 def dataset_year_unavailable_message(country_id: str, year: str) -> str:
     """Return the message of the 400 for a society-wide request for ``year``.
 
-    It names the country's first and last years and the requested year, in
-    the words the simulation service uses for ``DATASET_YEAR_UNAVAILABLE``.
+    It names the country's first and last years and the requested year. It
+    follows the message the app expects with ``DATASET_YEAR_UNAVAILABLE``,
+    from PolicyEngine/policyengine-app-v2#1452.
     """
     years = ECONOMY_YEARS[country_id]
     country = country_id.upper()
