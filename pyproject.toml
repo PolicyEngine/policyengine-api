@@ -74,6 +74,9 @@ dev = [
     # (api.dependencies.declared-and-used); its findings and report format can
     # change between minor versions, so an upgrade is its own change.
     "deptry>=0.25.1,<0.26",
+    # pr.yml's diff-coverage job runs it (api.quality.diff-coverage). 11.0 is
+    # newer than two weeks; moving to it is its own change.
+    "diff-cover>=10.6,<11",
     "mypy>=1.15,<2",
     "pytest",
     "pytest-snapshot",
@@ -115,8 +118,9 @@ allow-direct-references = true
 # Directories with no __init__.py on purpose (INP001). Ruff treats each one, and
 # every directory below it, as a package when it resolves modules.
 # - policyengine_api is a namespace package, which mypy reads with
-#   explicit_package_bases. This also covers its routes and libs directories,
-#   which have no __init__.py either.
+#   explicit_package_bases. Its subdirectories still need an __init__.py:
+#   coverage.py leaves out the modules no test imports in one that lacks
+#   it (tests/unit/test_diff_coverage.py checks this).
 # - .github (with .github/scripts) and migrations/v1 and v2 hold standalone
 #   scripts and Alembic environments, run but never imported.
 # - rules/fixtures holds rule proof fixtures, which tests read as source.
