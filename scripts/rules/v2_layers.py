@@ -279,6 +279,15 @@ def _exception_violations(root: Path, exception: RuleException) -> list[Violatio
                 "name one file there, or remove the exception",
             )
         ]
+    if any(segment in ("", ".", "..") for segment in path.split("/")):
+        # assign_layer compares paths as git ls-files writes them.
+        return [
+            violation(
+                "but its path has a '.', '..' or empty segment, so it matches no "
+                "file the guard scans",
+                "write the path as git ls-files lists it",
+            )
+        ]
     if not (root / path).is_file():
         return [violation("but it does not exist", "remove the exception")]
     if _layer_by_name(path) is not None:
@@ -288,10 +297,10 @@ def _exception_violations(root: Path, exception: RuleException) -> list[Violatio
     if _in_connector_package(path):
         return [
             violation(
-                "but a database_connectors module must be named after its "
-                "operation (rule api.v2.crud-checks-cover-every-resource)",
-                "rename it to <creates|reads|updates|deletes>[_name].py and remove "
-                "the exception",
+                "but a database_connectors package holds only connector modules "
+                "(rule api.v2.crud-checks-cover-every-resource also fails any "
+                "other module directly in services/v2/<resource>/database_connectors)",
+                f"{CONNECTOR_NAME}, {CONNECTOR_PLACE}, and remove the exception",
             )
         ]
     violations = [
@@ -341,10 +350,15 @@ def _occurrences(count: int) -> str:
     return f"{count} occurrence" if count == 1 else f"{count} occurrences"
 
 
+# A connector gets its layer only with an operation's name, directly in a
+# database_connectors package, so the fix names both.
+CONNECTOR_NAME = (
+    "name it after its operation, <creates|reads|updates|deletes>[_name].py"
+)
+CONNECTOR_PLACE = "put it directly in its database_connectors package"
 CONNECTOR_NAME_FIX = (
-    "name it after its operation, <creates|reads|updates|deletes>[_name].py; an "
-    "exception can't stand in, because rule "
-    "api.v2.crud-checks-cover-every-resource also checks connector names"
+    f"{CONNECTOR_NAME}, and {CONNECTOR_PLACE}; an exception can't stand in, "
+    "because a database_connectors package holds only connector modules"
 )
 
 
