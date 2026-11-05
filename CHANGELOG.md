@@ -1,3 +1,10 @@
+## [5.27.0] - 2026-11-05
+
+### Added
+
+- Check the v2 import architecture with Import Linter in the quality-guards CI job: v2 routes, services and data import each other in one direction only, v2 validators, transformations and types reach no database code except the table models, v2 routes import no connector or session module, types and transformations import no validators, and connectors import no other connector. Today's exceptions are listed as shrink-only baselines.
+
+
 ## [5.26.0] - 2026-11-04
 
 ### Added
