@@ -544,3 +544,27 @@ class TestEconomyService:
             mock_reform_impacts_service.get_reform_impact_seconds_left.assert_called_once_with(
                 stored_failure
             )
+
+        @pytest.mark.usefixtures("mock_logger")
+        def test__given_a_stored_failure_whose_lifetime_is_unreadable__gives_no_waits(
+            self,
+            economy_service,
+            mock_reform_impacts_service,
+        ):
+            # Given: the failure is replayed, but its expiry cannot be read.
+            stored_failure = create_mock_reform_impact(
+                status="error",
+                message="Simulation entrypoint execution failed: out of memory",
+            )
+            seconds_left = mock_reform_impacts_service.get_reform_impact_seconds_left
+            seconds_left.return_value = None
+            seconds_until = mock_reform_impacts_service.get_reform_impact_seconds_until
+            seconds_until.return_value = 4
+
+            # When
+            result = economy_service._handle_failed_impact(stored_failure)
+
+            # Then: no wait at all, since nothing says when a new run can start.
+            assert result.retry_after_seconds is None
+            assert result.delete_after_seconds is None
+            seconds_until.assert_not_called()

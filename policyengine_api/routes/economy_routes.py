@@ -78,18 +78,22 @@ def _bad_request_response(error: str | ValueError) -> Response:
 
 def _simulation_unreachable_response(
     error: SimulationEntrypointConnectionError,
+    *,
+    deletable: bool,
 ) -> Response:
     """Return 502 when a request to the simulation service got no response.
 
     Nothing is stored for the calculation, so the next request tries again, and
-    ``retry_after_seconds`` and ``delete_after_seconds`` are null.
+    ``retry_after_seconds`` is null. ``deletable`` marks a URL that takes a
+    DELETE, whose 502 also has a null ``delete_after_seconds``.
     """
+    deletion_fields = {"delete_after_seconds": None} if deletable else {}
     return _make_error_response(
         error,
         HTTPStatus.BAD_GATEWAY,
         result=None,
         retry_after_seconds=None,
-        delete_after_seconds=None,
+        **deletion_fields,
     )
 
 
@@ -172,7 +176,7 @@ def get_economic_impact(
     except PolicyNotFoundError as error:
         return _policy_not_found_response(error)
     except SimulationEntrypointConnectionError as error:
-        return _simulation_unreachable_response(error)
+        return _simulation_unreachable_response(error, deletable=True)
 
     result_dict: dict[str, str | dict | int | None] = economic_impact_result.to_dict()
 
@@ -215,8 +219,9 @@ def delete_failed_economic_impact(
     at least 10 seconds ago and is now removed, so the next GET submits a new
     job. 409 when it is a more recent failure, with ``delete_after_seconds``
     until it may be removed, or when it is computing or complete, with
-    ``delete_after_seconds`` null. 404 when nothing is stored; a cache that
-    cannot be read gives 500, never 404. Invalid query parameters give 400,
+    ``delete_after_seconds`` null. 404 when nothing is stored that the GET
+    would answer from; a cache, or a record, that cannot be read gives 500,
+    never 404. Invalid query parameters give 400,
     as for the GET, and a request to the simulation service that gets no
     response gives 502.
     """
@@ -291,7 +296,7 @@ def get_budget_window_economic_impact(
     except PolicyNotFoundError as error:
         return _policy_not_found_response(error)
     except SimulationEntrypointConnectionError as error:
-        return _simulation_unreachable_response(error)
+        return _simulation_unreachable_response(error, deletable=False)
 
     result_dict = economic_impact_result.to_dict()
 

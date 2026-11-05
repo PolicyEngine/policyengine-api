@@ -4,6 +4,7 @@ import contextlib
 import datetime
 import math
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Any
 
@@ -205,13 +206,14 @@ class ReformImpactsService:
         """
         return self._cache.delete_failure(failure)
 
-    def confirm_reform_impacts_readable(self) -> None:
-        """Raise CacheCoordinationError unless the reform-impact cache can be read.
+    def reads_fail_closed(self) -> AbstractContextManager[None]:
+        """Return a block inside which lookups raise when the cache cannot be read.
 
-        Lookups read an unreachable cache as holding nothing; this tells the
-        two apart.
+        Lookups otherwise read an unreachable cache, or an unreadable record,
+        as holding nothing. Inside the block they raise
+        CacheCoordinationError instead.
         """
-        self._cache.confirm_readable()
+        return self._cache.reads_fail_closed()
 
     def get_reform_impact_seconds_until(
         self, impact: CachedReformImpact, *, seconds_after_end: int
@@ -221,9 +223,10 @@ class ReformImpactsService:
         Counted from the impact's ``end_time`` on this service's clock and
         rounded up, so by this clock a caller that waits this long is not
         early. 0 once they have passed, or when the impact has no end time.
-        Never more than ``seconds_after_end``: when the end time is later than
-        this clock's time (another instance's clock ran ahead), the answer is
-        capped there, and a caller may be early by that difference.
+        Never more than ``seconds_after_end``. The end time may come from
+        another instance's clock: when that clock ran ahead of this one, the
+        answer is capped and a caller may still be early by the difference;
+        when it ran behind, the seconds pass sooner than they say.
         """
         if impact.end_time is None:
             return 0

@@ -381,9 +381,15 @@ one replaced), or when the cache cannot be read. It is the longest wait: a deplo
 versions or worker app a request resolves to starts a new run sooner. The
 502 also carries `delete_after_seconds`: the whole seconds, rounded up, until
 a `DELETE` on the same URL may remove that failure; 0 once it may, and null
-whenever `retry_after_seconds` is null. It is never more than 10, so if the
-instance that recorded the failure has a clock ahead of the one answering, a
-`DELETE` sent after that wait can still get a 409 with the seconds left.
+whenever `retry_after_seconds` is null. Each instance counts the 10 seconds
+on its own clock from the failure's recorded time, and the value is never
+more than 10: if the instance that recorded the failure has a clock ahead of
+the one answering, a `DELETE` sent after that wait can still get a 409 with
+the seconds left, and if it is behind, a `DELETE` is accepted sooner. Like
+`retry_after_seconds`, it assumes the next request answers from this failure:
+after a deploy that changes the versions or worker app a request resolves
+to, the `DELETE` finds nothing to remove (404) and the next GET starts a new
+run anyway.
 
 `DELETE /<country_id>/economy/<policy_id>/over/<baseline_policy_id>` takes
 the GET's query parameters, parsed by the same model, and acts on the stored
@@ -396,8 +402,10 @@ GET submits a new job, only when the record is a failure recorded at least
 409 with `delete_after_seconds` null and is never removed: the record is
 removed only if it still holds the failure that was checked, so a job a GET
 submits meanwhile is left alone, and a late poll of the failed job cannot
-write the removed failure back. 404 means nothing is stored; when the cache
-cannot be read the answer is 500, never 404. Invalid query parameters give
+write the removed failure back. 404 means nothing is stored that the GET
+would answer from, so the next GET starts a new run; when the cache, or any
+record the selection reads, cannot be read, the answer is 500, never 404.
+Invalid query parameters give
 the GET's 400, and a request to the simulation service that gets no response
 gives 502 with only `status`, `message` and `result`.
 

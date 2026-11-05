@@ -17,7 +17,8 @@ from policyengine_api.libs.simulation_entrypoint_transport import (
     SimulationEntrypointConnectionError,
 )
 from policyengine_api.query_parameters import AnnualEconomyQuery, parse_multidict_query
-from policyengine_api.routes import economy_routes
+from policyengine_api.routes import economy_routes, error_routes
+from policyengine_api.routes.error_routes import error_bp
 from policyengine_api.runtime_cache import reform_impacts
 from policyengine_api.runtime_cache.core import CacheCoordinationError, CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
@@ -507,8 +508,9 @@ def test_a_delete_normalizes_a_bare_state_code_as_the_get_does(
         "/us/economy/1/over/2?region=state/ca&time_period=2027&version=1.0.0",
         "/us/economy/3/over/2?region=state/ca&time_period=2026&version=1.0.0",
         "/us/economy/1/over/3?region=state/ca&time_period=2026&version=1.0.0",
+        "/us/economy/1/over/2?region=state/ca&time_period=2026&version=1.0.1",
     ],
-    ids=["region", "year", "policy", "baseline"],
+    ids=["region", "year", "policy", "baseline", "version"],
 )
 def test_a_delete_for_another_request_leaves_this_failure(
     harness: Harness, url: str
@@ -621,3 +623,53 @@ def test_after_a_204_a_late_poll_cannot_bring_the_failure_back(
     assert next_get.status_code == 200
     assert next_get.json["status"] == "computing"
     harness.gateway.run.assert_called_once()
+
+
+def test_a_delete_does_not_report_nothing_stored_when_one_record_cannot_be_read(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    harness.client.get(harness.url)
+    harness.clock.advance(10)
+    backend = harness.cache.client
+    read = backend.get
+    failure_key = harness.cache._record_key(FAILED_JOB)
+
+    def time_out_on_the_failure(key: str) -> str | None:
+        if key == failure_key:
+            raise TimeoutError
+        return read(key)
+
+    monkeypatch.setattr(backend, "get", time_out_on_the_failure)
+
+    with pytest.raises(CacheCoordinationError):
+        harness.client.delete(harness.url)
+    # A GET reads the same failed read as nothing stored, as before.
+    monkeypatch.setattr(backend, "get", read)
+    assert [impact.status for impact in harness.stored()] == ["error"]
+
+
+def test_a_delete_that_cannot_read_the_cache_answers_500(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The deployed application's error handlers, without test propagation.
+    app = Flask(__name__)
+    app.register_blueprint(error_bp)
+    app.register_blueprint(economy_routes.economy_bp)
+    client = app.test_client()
+    harness.client.get(harness.url)
+    harness.clock.advance(10)
+
+    def unreachable(*_args: object, **_kwargs: object) -> object:
+        raise ConnectionError
+
+    monkeypatch.setattr(harness.cache.client, "zrevrange", unreachable)
+    monkeypatch.setattr(error_routes, "record_unhandled_exception", Mock())
+
+    response = client.delete(harness.url)
+
+    assert response.status_code == 500
+    assert response.json == {
+        "status": "error",
+        "message": "reform-impact lookups cannot read the cache",
+        "result": None,
+    }

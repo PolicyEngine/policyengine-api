@@ -314,6 +314,11 @@ def test_real_failure_delete_removes_only_the_unchanged_failure(redis_pair) -> N
     assert writer.get_by_execution_id("failed-job") is None
     assert writer.matching(identity) == [newer_job]
     assert writer.recent(10) == [newer_job]
+    # The script removes the failure's own index entries, not only the record.
+    failure_key = writer._record_key("failed-job")
+    for index in (writer._scope_index(failure), writer._recent_index()):
+        assert failure_key not in first.zrange(index, 0, -1)
+        assert writer._record_key("newer-job") in first.zrange(index, 0, -1)
 
 
 def test_real_failure_delete_refuses_a_record_rewritten_before_the_script_runs(

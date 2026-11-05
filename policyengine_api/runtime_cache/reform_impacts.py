@@ -4,6 +4,9 @@ import hashlib
 import math
 import re
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
@@ -28,6 +31,11 @@ REFORM_IMPACT_TTL_SECONDS = 2_592_000
 REFORM_IMPACT_INDEX_LIMIT = 1_000
 REFORM_IMPACT_START_CLAIM_TTL_SECONDS = 300
 REFORM_IMPACT_START_CLAIM_FAMILY = "reform-impact-start-claim"
+# Whether index lookups in the current context raise, rather than read as
+# empty, when the cache cannot be read (see ReformImpactCache.reads_fail_closed).
+_LOOKUPS_FAIL_CLOSED: ContextVar[bool] = ContextVar(
+    "reform_impact_lookups_fail_closed", default=False
+)
 # Remove a record (KEYS[1]) and its entries in the scope and recent indexes
 # (KEYS[2], KEYS[3]) only if the record still holds exactly ARGV[1], the value
 # the caller read and checked. One script, so nothing can rewrite the record
@@ -500,11 +508,41 @@ class ReformImpactCache:
             )
         )
 
+    @staticmethod
+    @contextmanager
+    def reads_fail_closed() -> Iterator[None]:
+        """Make index lookups inside this block raise when the cache cannot be read.
+
+        A lookup normally reads a cache it cannot reach, or a record it cannot
+        read, as holding no impacts. Inside this block it raises
+        CacheCoordinationError instead, so a caller for whom "nothing stored"
+        must mean exactly that can select with the usual lookups. Only the
+        current context is affected.
+        """
+        token = _LOOKUPS_FAIL_CLOSED.set(True)
+        try:
+            yield
+        finally:
+            _LOOKUPS_FAIL_CLOSED.reset(token)
+
     def _from_index(self, index: str, limit: int) -> list[CachedReformImpact]:
+        started_at = time.perf_counter()
         try:
             entries = self._read_index(index, limit)
-        except Exception:  # noqa: BLE001  # a cache outage reads as empty, never a failed request
-            return []
+        except Exception as error:
+            # A cache outage reads as empty, never a failed request, unless
+            # the caller asked lookups to fail closed.
+            if not _LOOKUPS_FAIL_CLOSED.get():
+                return []
+            record_cache_event(
+                family=self.family,
+                event="coordination-failed",
+                operation="index-read",
+                started_at=started_at,
+                severity="WARNING",
+            )
+            msg = "reform-impact lookups cannot read the cache"
+            raise CacheCoordinationError(msg) from error
         impacts = [self._decode_impact(value) for _key, value in entries]
         return [impact for impact in impacts if impact is not None]
 
@@ -597,27 +635,6 @@ class ReformImpactCache:
             only_if_present=True,
         )
         return updated if stored else None
-
-    def confirm_readable(self) -> None:
-        """Raise CacheCoordinationError unless the recent index can be read.
-
-        A lookup reads a cache it cannot reach as holding no impacts. A caller
-        for whom "nothing stored" must mean exactly that checks with this read
-        before saying so.
-        """
-        started_at = time.perf_counter()
-        try:
-            self.client.zrevrange(self._recent_index(), 0, 0)  # type: ignore[attr-defined]
-        except Exception as error:
-            record_cache_event(
-                family=self.family,
-                event="coordination-failed",
-                operation="read-check",
-                started_at=started_at,
-                severity="WARNING",
-            )
-            msg = "the reform-impact cache cannot be read"
-            raise CacheCoordinationError(msg) from error
 
     def delete_failure(self, failure: CachedReformImpact) -> bool:
         """Remove a stored failure and its index entries, if its record still holds it.

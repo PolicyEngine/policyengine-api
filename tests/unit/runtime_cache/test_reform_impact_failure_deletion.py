@@ -267,22 +267,6 @@ def test_a_late_write_never_puts_back_a_failure_that_was_deleted(
     assert cache.recent(10) == []
 
 
-def test_confirm_readable_raises_only_when_the_cache_cannot_be_read(
-    cache: ReformImpactCache,
-    backend: InMemoryCacheBackend,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    cache.confirm_readable()
-
-    def unreachable(*_args: object, **_kwargs: object) -> object:
-        raise ConnectionError
-
-    monkeypatch.setattr(backend, "zrevrange", unreachable)
-
-    with pytest.raises(CacheCoordinationError):
-        cache.confirm_readable()
-
-
 def test_an_ordinary_write_keeps_its_result_when_the_record_is_new_or_disabled(
     cache: ReformImpactCache,
 ) -> None:
@@ -294,3 +278,25 @@ def test_an_ordinary_write_keeps_its_result_when_the_record_is_new_or_disabled(
 
     assert cache.set(_computing(FAILED_JOB, day=1)) is True
     assert disabled.set(_computing(FAILED_JOB, day=1)) is True
+
+
+def test_lookups_fail_closed_only_inside_reads_fail_closed(
+    cache: ReformImpactCache,
+    backend: InMemoryCacheBackend,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _store_failure(cache)
+
+    def unreachable(*_args: object, **_kwargs: object) -> object:
+        raise ConnectionError
+
+    monkeypatch.setattr(backend, "get", unreachable)
+
+    outside = cache.matching(IDENTITY)
+    with cache.reads_fail_closed(), pytest.raises(CacheCoordinationError):
+        cache.matching(IDENTITY)
+    after = cache.recent(10)
+
+    # Ordinary lookups still read an unreachable cache as holding nothing.
+    assert outside == []
+    assert after == []

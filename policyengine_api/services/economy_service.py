@@ -247,10 +247,11 @@ class EconomyService(
         for _attempt in range(FAILED_IMPACT_DELETE_ATTEMPTS):
             # Selection resolves the worker app into the options it is given,
             # so each attempt starts from the request's own options, as a GET
-            # does.
-            stored = self._get_reusable_impact(setup_options.model_copy(deep=True))
+            # does. Unlike the GET's, it raises when the cache cannot be read,
+            # so an outage is never reported as nothing stored.
+            with self._reform_impacts.reads_fail_closed():
+                stored = self._get_reusable_impact(setup_options.model_copy(deep=True))
             if stored is None:
-                self._reform_impacts.confirm_reform_impacts_readable()
                 return FailedImpactDeletion.not_found()
             if stored.status != ImpactStatus.ERROR.value:
                 return FailedImpactDeletion.not_a_failure(stored.status)
