@@ -1,0 +1,15 @@
+# Fixture for rule api.v2.routes-import-no-database-access: a route module
+# imports a connector only under TYPE_CHECKING, for an annotation. Imports made
+# only under TYPE_CHECKING count (decided 2026-11-04), so the contract must
+# reject it.
+
+[modules]
+"fixture_api/fastapi_routes/v2/policies/routes.py" = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fixture_api.services.v2.policies.database_connectors.reads import PolicyRow
+"""
+"fixture_api/services/v2/policies/database_connectors/reads.py" = """
+from sqlmodel import Session, select
+"""

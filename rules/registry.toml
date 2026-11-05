@@ -240,14 +240,168 @@ kind = "none"
 [[rule]]
 id = "api.v2.connectors-no-cross-calls"
 category = "v2-layers"
-statement = "v2 connector modules never call one another to sequence a workflow; the service does the sequencing."
+statement = "v2 connector modules never import one another, so they cannot call one another to sequence a workflow; the service does the sequencing."
 rationale = "docs/engineering/skills/v2-code-organization.md#database_connectors"
 scope = ["policyengine_api/services/v2/*/database_connectors/*.py"]
 tier = "mechanical"
-status = "doc-only"
+status = "ratcheted"
 autofix = false
 [rule.enforcer]
-kind = "none"
+kind = "import-linter"
+config = "pyproject.toml"
+contract = "api-v2-connectors-independent"
+contract_sha256 = "6da44212adfe1bc6110ebb9651d282269f353639ae8f644b575c25ace4749de9"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "lint-imports --config pyproject.toml"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.connectors-no-cross-calls/bad_package.toml"
+good_fixture = "rules/fixtures/api.v2.connectors-no-cross-calls/good_package.toml"
+test = "tests/unit/v2/test_import_linter_contracts.py::test_rule_proof_connectors_no_cross_calls"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.baseline]
+file = "rules/baselines/import-linter-api-v2-connectors-independent.txt"
+count = 7
+
+[[rule]]
+id = "api.v2.import-layers"
+category = "v2-layers"
+statement = "v2 route modules may import v2 services and v2 data modules, and v2 services may import v2 data modules, never the reverse, directly or through other modules."
+rationale = "docs/engineering/skills/v2-code-organization.md#dependency-direction"
+scope = ["policyengine_api/fastapi_routes/v2/**/*.py", "policyengine_api/services/v2/**/*.py", "policyengine_api/data/v2/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "import-linter"
+config = "pyproject.toml"
+contract = "api-v2-layers"
+contract_sha256 = "d91c05303198345699ff66356881f18d5bb3ea5bbf44cd9a86346ee7ff5f17b7"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "lint-imports --config pyproject.toml"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.import-layers/bad_package.toml"
+good_fixture = "rules/fixtures/api.v2.import-layers/good_package.toml"
+test = "tests/unit/v2/test_import_linter_contracts.py::test_rule_proof_import_layers"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.v2.pure-modules-no-database"
+category = "v2-layers"
+statement = "v2 validators, transformations and types never reach SQLAlchemy, SQLModel, a connector, a database_session module or the v2 database module, directly or through other modules, except through the v2 table models; imports under TYPE_CHECKING count."
+rationale = "docs/engineering/skills/v2-code-organization.md#dependency-direction"
+scope = ["policyengine_api/services/v2/*/validators.py", "policyengine_api/services/v2/*/transformations.py", "policyengine_api/services/v2/*/types.py"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "import-linter"
+config = "pyproject.toml"
+contract = "api-v2-pure-modules-no-database"
+contract_sha256 = "b5317b97f5680dc5f38b16fe33bd4dc29715a8fb97f52f9da56585069994565d"
+allowed_ignore_imports = [
+  "policyengine_api.data.v2.models -> sqlmodel",
+  "policyengine_api.data.v2.models.associations -> sqlalchemy",
+  "policyengine_api.data.v2.models.associations -> sqlmodel",
+  "policyengine_api.data.v2.models.base -> sqlalchemy",
+  "policyengine_api.data.v2.models.base -> sqlmodel",
+  "policyengine_api.data.v2.models.comparison_runs -> sqlalchemy",
+  "policyengine_api.data.v2.models.comparison_runs -> sqlmodel",
+  "policyengine_api.data.v2.models.countries -> sqlalchemy",
+  "policyengine_api.data.v2.models.countries -> sqlmodel",
+  "policyengine_api.data.v2.models.household_mappings -> sqlalchemy",
+  "policyengine_api.data.v2.models.household_mappings -> sqlmodel",
+  "policyengine_api.data.v2.models.households -> sqlalchemy",
+  "policyengine_api.data.v2.models.households -> sqlmodel",
+  "policyengine_api.data.v2.models.metadata -> sqlalchemy",
+  "policyengine_api.data.v2.models.metadata -> sqlmodel",
+  "policyengine_api.data.v2.models.policies -> sqlalchemy",
+  "policyengine_api.data.v2.models.policies -> sqlmodel",
+  "policyengine_api.data.v2.models.policy_mappings -> sqlalchemy",
+  "policyengine_api.data.v2.models.policy_mappings -> sqlmodel",
+  "policyengine_api.data.v2.models.reports -> sqlalchemy",
+  "policyengine_api.data.v2.models.reports -> sqlmodel",
+  "policyengine_api.data.v2.models.simulations -> sqlalchemy",
+  "policyengine_api.data.v2.models.simulations -> sqlmodel",
+  "policyengine_api.data.v2.models.users -> sqlalchemy",
+  "policyengine_api.data.v2.models.users -> sqlmodel",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "lint-imports --config pyproject.toml"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.pure-modules-no-database/bad_package.toml"
+good_fixture = "rules/fixtures/api.v2.pure-modules-no-database/good_package.toml"
+test = "tests/unit/v2/test_import_linter_contracts.py::test_rule_proof_pure_modules_no_database"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.baseline]
+file = "rules/baselines/import-linter-api-v2-pure-modules-no-database.txt"
+count = 1
+
+[[rule]]
+id = "api.v2.routes-import-no-database-access"
+category = "v2-layers"
+statement = "v2 route modules never import a connector, a database_session module or the v2 database module; they call a service, which does."
+rationale = "docs/engineering/skills/v2-code-organization.md#http-adapters"
+scope = ["policyengine_api/fastapi_routes/v2/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "import-linter"
+config = "pyproject.toml"
+contract = "api-v2-routes-no-database-access"
+contract_sha256 = "03fe42ee3a3fa858932ff92cc6d1df4bf60db0d75dd99344e52c2167391c074b"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "lint-imports --config pyproject.toml"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.routes-import-no-database-access/bad_package.toml"
+good_fixture = "rules/fixtures/api.v2.routes-import-no-database-access/good_package.toml"
+test = "tests/unit/v2/test_import_linter_contracts.py::test_rule_proof_routes_import_no_database_access"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+
+[[rule]]
+id = "api.v2.types-transformations-no-validators"
+category = "v2-layers"
+statement = "v2 types and transformations modules never import a validators module, directly or through other modules; validators import types, not the reverse."
+rationale = "docs/engineering/skills/v2-code-organization.md#typespy"
+scope = ["policyengine_api/services/v2/*/types.py", "policyengine_api/services/v2/*/transformations.py"]
+tier = "mechanical"
+status = "ratcheted"
+autofix = false
+[rule.enforcer]
+kind = "import-linter"
+config = "pyproject.toml"
+contract = "api-v2-types-transformations-no-validators"
+contract_sha256 = "22a4a86fefa71f6097c03ab55eb513a9df045676414b410216ddcd7295e8f711"
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "quality-guards"
+invocation = "lint-imports --config pyproject.toml"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.v2.types-transformations-no-validators/bad_package.toml"
+good_fixture = "rules/fixtures/api.v2.types-transformations-no-validators/good_package.toml"
+test = "tests/unit/v2/test_import_linter_contracts.py::test_rule_proof_types_transformations_no_validators"
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.baseline]
+file = "rules/baselines/import-linter-api-v2-types-transformations-no-validators.txt"
+count = 4
 
 [[rule]]
 id = "api.routes.shared-query-parameters"

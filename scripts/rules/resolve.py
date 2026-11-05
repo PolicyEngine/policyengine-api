@@ -19,6 +19,7 @@ from scripts.rules.file_exceptions import (
     matching_files,
     out_of_scope_files,
 )
+from scripts.rules.import_linter import resolve_import_linter
 from scripts.rules.model import CiRef, Kind, Rule, Violation
 from scripts.rules.workflows import JobBlock, parse_jobs
 
@@ -369,7 +370,7 @@ RESOLVERS: dict[Kind, Callable[[Rule, Path], list[Violation]]] = {
     Kind.RUFF: _resolve_ruff,
     Kind.MYPY: _resolve_mypy,
     Kind.PYRIGHT: _resolve_file_field("config"),
-    Kind.IMPORT_LINTER: _resolve_file_field("config"),
+    Kind.IMPORT_LINTER: resolve_import_linter,
     Kind.WORKFLOW_JOB: _resolve_workflow_job,
     Kind.DOCS_GUARD: _resolve_file_field("doc"),
     Kind.LLM_REVIEW: _resolve_file_field("prompt"),
