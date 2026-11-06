@@ -22,9 +22,13 @@ class SelectedCatalogStore:
 
     A published catalog version changes only when a release's catalog
     publication replaces its time-period options, before that release's
-    processes start, so once a request has found it, later requests for the
-    same country and version need not query for it again; a process of the
-    previous release keeps the time-period options it read. Only
+    processes start, or prunes its current-law values (which publishing it
+    again restores identically from the same packages), so once a request has
+    found it, later requests for the same country and version need not query
+    for it again; a process of the previous release keeps the time-period
+    options it read. A kept selection's ``catalog_values_pruned_at`` may
+    predate a pruning, so the service reads it again whenever a read finds no
+    current-law values. Only
     successful selections are kept: an unsupported country, an invalid
     version or an absent catalog is looked up, and fails, each time.
     The kept records are detached, fully loaded rows that are only read.

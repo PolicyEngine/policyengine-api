@@ -88,16 +88,22 @@ still returns HTTP 400.
 
 Metadata reads use sessions in autocommit mode on the shared v2 pool
 (`get_v2_read_session_factory`), which only the metadata reader opens: each
-read is one statement on rows a published catalog version never changes, so no
+read is one statement on a published catalog version's rows, which change
+only in its time-period options and when catalog pruning deletes or restores
+its current-law values (see "Catalog pruning"). A read that finds none of
+those values reads the version's `catalog_values_pruned_at` again, so no
 transaction is needed, and the database receives no `BEGIN` before the reads
 and no `ROLLBACK` when the session closes. The sessions refuse to flush added
 or changed rows (`ReadOnlySessionError`); a statement passed directly to
 `execute` is not checked, so the metadata connectors keep to `SELECT`. Each process also keeps every catalog version a request has
 selected (`SelectedCatalogStore`), since a published version changes only
 when a release's publication replaces its time-period options, before that
-release's processes start (see "Time-period options"), so
+release's processes start (see "Time-period options"), or prunes or restores
+its current-law values, so
 later requests for the same country and version skip the selection query;
-failed selections are not kept. Measured with statement logging in a local
+failed selections are not kept. A kept selection's
+`catalog_values_pruned_at` can be out of date, which is why a read that finds
+no values reads it again. Measured with statement logging in a local
 database, a page of 500 parameters or one parameter's values took five
 statements per request before (the pool's liveness check, `BEGIN`, the catalog
 selection, the read and `ROLLBACK`) and two after, once the process has
@@ -114,7 +120,10 @@ exact body, and `Cache-Control: public`. A request that names its catalog with
 catalog version changes only when a release replaces its time-period options
 (see "Time-period options"), so such a response changes only then, with the
 route's response format or with the day it is read on, and the `ETag` lets a
-client revalidate after the day. A request without it selects the running
+client revalidate after the day. Catalog pruning doesn't change a successful
+response: it deletes rows, which restoring writes back identically, and a
+pruned version's 503 carries `Cache-Control: no-store` (see "Catalog
+pruning"). A request without it selects the running
 version, which changes on deploy, and may be reused for five minutes
 (`max-age=300`). A response that depends on the request's UTC day, which is
 `GET /v2/parameter-values?current=true` (the values in effect today), takes
@@ -123,7 +132,8 @@ response may be reused only until the UTC midnight after that instant,
 whichever lifetime would otherwise apply (`max-age=0` if its headers are
 written after that midnight). A request whose `If-None-Match` names the current `ETag` (strong or
 weak form, alone or in a list) gets HTTP 304 with no body. Error responses
-carry neither header. Every cacheable response, and every 304, carries
+carry neither header; a pruned version's 503 carries `Cache-Control: no-store`
+instead. Every cacheable response, and every 304, carries
 `Vary: Origin, Accept-Encoding`, each value once: the API reflects every
 origin in `Access-Control-Allow-Origin` and a request without `Origin` gets no
 such header, so a shared cache must keep responses apart by `Origin`, and gzip
@@ -300,7 +310,10 @@ datasets even when publication otherwise succeeds.
 
 A catalog version is identified by its country and PolicyEngine.py version.
 Once published, its rows change only in its time-period options (see
-"Time-period options" below). When the command republishes a stored version
+"Time-period options" below), and when catalog pruning deletes its current-law
+parameter values, parameter tree and search file, which publishing the version
+again restores identically from the same packages (see "Catalog pruning"
+below). When the command republishes a stored version
 whose staged regions differ from the stored ones, it keeps the stored regions
 unchanged, prints a warning with the country, the version and the counts of
 staged region rows the stored version lacks and of stored rows not staged, and
@@ -439,6 +452,63 @@ cache lifetime, `Vary` and the 304 for a matching `If-None-Match` are those of
 every metadata route. A version without a file of the current format returns
 503.
 
+### Catalog pruning
+
+Each stored catalog version costs about 550 MB per environment, mostly its
+current-law parameter values (about 1.2 million rows) and its parameter tree.
+After the publication transaction commits, publication keeps, for each
+country's model, the installed version (the one it published or republished)
+and the most recently created other stored version, which is the previous
+release's, and prunes every other stored version of that model that isn't
+pruned already. The first publication in an environment after this was added
+therefore prunes every stored version older than the previous release's;
+later ones prune one version per country, the one that has just stopped being
+the previous release's. The code is
+`policyengine_api/data/v2/catalog/publication_pruning.py`.
+
+Pruning a version runs one transaction that deletes its current-law
+`parameter_values` (rows of its parameters with neither a `policy_id` nor a
+`dynamic_id`), its `parameter_tree_children` rows and its
+`parameter_search_files` rows, and sets its `catalog_values_pruned_at`. It
+never deletes `parameters` rows, whose deletion would cascade to saved
+reforms' values, and keeps the version's model version row, parameter nodes,
+variables, regions and datasets, and every policy, dynamic and value a
+policy or dynamic owns. This is the one exception to the Alembic skill's rule
+that the catalog seeder deletes no retained domain data; its scope is in
+`docs/engineering/skills/alembic-migrations.md` ("Catalog pruning").
+
+A version whose transaction fails is rolled back alone and the others are
+still pruned. Each failure is listed in the evidence's
+`catalog_pruning_failures` with the country, version, exception type and a
+message naming the database's error class and SQLSTATE, and printed to stderr;
+the command still succeeds, because the publication has committed, and the
+next publication tries again. A failure to read the stored versions prunes
+nothing and is listed once per country, with no version.
+
+Publishing a pruned version again, as a release that installs it again does,
+restores it inside the publication transaction: it inserts the version's
+current-law values from the installed packages, with the same IDs, clears
+`catalog_values_pruned_at`, compares the stored version with the staged
+catalog as for any stored version, and writes its parameter tree and search
+file as for a version that has none. The restored rows equal what the
+version's first publication wrote.
+
+For a pruned version, every metadata route that serves the deleted rows
+answers 503 with `Cache-Control: no-store` and a message naming the country
+and version and saying that its current-law values return when that
+PolicyEngine.py version is installed again: `/v2/parameter-values`,
+`/v2/parameter-values/{value_id}`, `/v2/parameters/children`,
+`/v2/parameters/search-file` (also when revalidated with `If-None-Match`),
+and `/v2/model-catalog/variables` and `/v2/model-catalog/parameters`, which
+embed current-law values. The other metadata routes, which serve kept rows,
+answer as before. A process that selected a version before it was pruned
+reads `catalog_values_pruned_at` again whenever a read finds none of those
+rows, so it answers 503 rather than an empty result.
+
+Deleted rows free space inside the tables for later publications to reuse;
+PostgreSQL returns it to the operating system only after a `VACUUM FULL` or
+an equivalent rewrite, which pruning doesn't run.
+
 ## Validation evidence and retry
 
 Successful JSON evidence contains:
@@ -455,6 +525,12 @@ Successful JSON evidence contains:
   tree was written;
 - the model, version and uncompressed and compressed sizes of each parameter
   search file written;
+- the country, version and number of current-law values written back for
+  each pruned version publication restored (`restored_catalog_versions`);
+- the country, version and deleted row counts per table of each version
+  pruned after the publication committed (`pruned_catalog_versions`), and the
+  country, version, exception type and message of each pruning that failed
+  (`catalog_pruning_failures`; see "Catalog pruning");
 - elapsed publication time; and
 - a success outcome.
 
@@ -480,8 +556,12 @@ rather than PolicyEngine.py: a stored version keeps the regions it was
 published with (see "Source and regional dataset behavior"), and takes the
 staged time-period options, with a warning and an evidence entry (see
 "Time-period options"). A later PolicyEngine.py version adds a catalog version without
-deleting or modifying earlier versioned rows, including their logical datasets,
-regions, model descriptions, current-law IDs, and time-period options.
+modifying earlier versioned rows, including their logical datasets,
+regions, model descriptions, current-law IDs, and time-period options. The
+only earlier rows it deletes are the current-law values, parameter trees and
+search files of versions older than the previous release's, after its own
+publication has committed; publishing such a version again restores them
+identically (see "Catalog pruning").
 
 ## Production-scale qualification record
 
@@ -563,3 +643,11 @@ installed PolicyEngine.py version, a preceding artifact reads its existing
 snapshot without a database-wide current-version setting. If that snapshot is
 absent, run that artifact's compatible explicit initializer before making its
 candidate eligible for traffic.
+
+Catalog pruning keeps the installed PolicyEngine.py version and the most
+recently created other one, which the preceding revision runs, so traffic
+moved back to the preceding revision reads a complete snapshot. A revision
+that runs any other stored version reads a pruned one: its parameter value,
+parameter tree, search file and model catalog variables and parameters routes
+answer 503 until a publication that installs its PolicyEngine.py version
+runs, which restores them (see "Catalog pruning").

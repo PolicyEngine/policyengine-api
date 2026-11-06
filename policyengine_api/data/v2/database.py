@@ -99,11 +99,13 @@ def build_v2_read_session_factory(engine: Engine) -> sessionmaker[Session]:
     The sessions share ``engine``'s pool in autocommit mode, so psycopg sends
     each statement on its own: no BEGIN before the first read and no ROLLBACK
     when the session closes. Only the metadata reader uses them: each of its
-    reads is one statement on a published catalog version, which never
-    changes, so no common snapshot is needed. The sessions refuse to flush
-    added or changed rows; statements passed directly to ``execute`` are not
-    checked, so they must stay reads. The pool restores the ordinary mode
-    when a connection returns.
+    reads is one statement on a published catalog version, whose rows change
+    only in its time-period options and when catalog pruning deletes or
+    restores its current-law values; a read that finds none of those values
+    reads the version's ``catalog_values_pruned_at`` again, so no common
+    snapshot is needed. The sessions refuse to flush added or changed rows;
+    statements passed directly to ``execute`` are not checked, so they must
+    stay reads. The pool restores the ordinary mode when a connection returns.
     """
     factory = sessionmaker(
         bind=engine.execution_options(isolation_level="AUTOCOMMIT"),
