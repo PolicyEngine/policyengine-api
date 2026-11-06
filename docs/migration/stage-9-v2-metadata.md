@@ -216,6 +216,31 @@ Any schema-upgrade, revision-check, extraction, compatibility, publication, or
 post-publication validation failure stops the workflow before candidate
 creation. The currently serving revision remains unchanged.
 
+Step 4 also prunes older catalog versions once the publication has committed
+(see "Catalog pruning"), while the previous revision still serves traffic.
+From the second release that includes pruning on, that revision reads
+`catalog_values_pruned_at` and answers 503 with `Cache-Control: no-store` for
+a pruned version. The previous revision of the first such release doesn't. From
+that release's seed job until its promotion, and until the next successful
+release if promotion fails, it answers a request that names a pruned version
+in `policyengine_version` with:
+
+- a 200 holding no current-law values from `/v2/parameter-values`, and
+  parameters or variables without their values from
+  `/v2/model-catalog/parameters` and `/v2/model-catalog/variables`, each with
+  `Cache-Control: public, max-age=86400` and an `ETag`, so a client or shared
+  cache can keep that empty answer for a day;
+- a 503 from `/v2/parameters/children` and `/v2/parameters/search-file`, as
+  for a version without a tree or search file, and a 404 from
+  `/v2/parameter-values/{value_id}`.
+
+Requests without `policyengine_version` read the running version, which is
+kept, and are not affected. The maintainers accepted this window for that one
+release, as an exception to the rule that the serving revision works with the
+database changed on its own (`docs/engineering/skills/alembic-migrations.md`),
+because nothing in production calls these routes with an older version until
+the v3 switch.
+
 Initialization is an explicit deployment operation, once per target and
 deployment artifact. It must never be called by a module import, an individual
 web or worker process startup, a readiness check, an HTTP request, or an
@@ -456,11 +481,26 @@ every metadata route. A version without a file of the current format returns
 
 Each stored catalog version costs about 550 MB per environment, mostly its
 current-law parameter values (about 1.2 million rows) and its parameter tree.
-After the publication transaction commits, publication keeps, for each
-country's model, the installed version (the one it published or republished)
-and the most recently created other stored version, which is the previous
-release's, and chooses every other stored version of that model that isn't
-pruned already. One publication prunes at most two of the chosen versions
+Every publication records, in its transaction, when it published each version
+it publishes, whether it inserted it, found it unchanged or restored it
+(`catalog_last_published_at`). After the publication transaction commits,
+publication keeps, for each country's model, the installed version (the one it
+published or republished) and the two most recently published other stored
+versions, and chooses every other stored version of that model that isn't
+pruned already. Versions are ordered by `catalog_last_published_at`, or by
+`created_at` for a version no publication has recorded since the column was
+added, with ties ordered by `created_at` and then version text.
+
+Two others are kept so that the version the serving revision runs is kept.
+The release workflow seeds before it deploys and promotes a release, and puts
+the previous revision back when promotion fails. After one failed promotion
+the serving version is therefore the second most recently published other
+one, and after a rollback to an older version, the rollback's own
+publication made that version the most recently published. The rule still
+fails in one case: two consecutive releases whose promotions fail, followed by
+a third release, can prune the version that is still serving.
+
+One publication prunes at most two of the chosen versions
 (`MAX_CATALOG_VERSIONS_PRUNED_PER_RUN`), the oldest created first; a
 release's US and UK versions are created together, so two are one release's.
 The evidence's `catalog_versions_left_to_prune` counts the chosen versions it
@@ -591,9 +631,10 @@ staged time-period options, with a warning and an evidence entry (see
 modifying earlier versioned rows, including their logical datasets,
 regions, model descriptions, current-law IDs, and time-period options. The
 only earlier rows it deletes are the current-law values, parameter trees and
-search files of versions older than the previous release's, after its own
-publication has committed; publishing such a version again restores them
-identically (see "Catalog pruning").
+search files of versions other than the installed one and the two most
+recently published others, after its own publication has committed, and it
+records that in their `catalog_values_pruned_at`; publishing such a version
+again restores them identically (see "Catalog pruning").
 
 ## Production-scale qualification record
 
@@ -676,16 +717,18 @@ snapshot without a database-wide current-version setting. If that snapshot is
 absent, run that artifact's compatible explicit initializer before making its
 candidate eligible for traffic.
 
-Catalog pruning keeps the installed PolicyEngine.py version and the most
-recently created other one, which the preceding revision runs, so traffic
-moved back to the preceding revision reads a complete snapshot. A revision
-that runs any other stored version reads a pruned one: its parameter value,
+Catalog pruning keeps the installed PolicyEngine.py version and the two most
+recently published others, which include the version the preceding revision
+runs, also after one failed promotion, so traffic moved back to the preceding
+revision reads a complete snapshot. A revision that runs any other stored
+version may read a pruned one: its parameter value,
 parameter tree, search file and model catalog variables and parameters routes
 answer 503 until a publication that installs its PolicyEngine.py version
 runs, which restores them (see "Catalog pruning").
 
-A schema downgrade past revision `ca12427ceb63` drops
-`catalog_values_pruned_at`. A pruned version then looks complete, but holds
+A schema downgrade past revision `334859ef4fec` drops
+`catalog_last_published_at` and `catalog_values_pruned_at`. A pruned version
+then looks complete, but holds
 no current-law values, parameter tree or search file: the parent revision's
 code has no restoration, so its routes serve that version with empty values,
 and its publication of that version fails the exact comparison of parameter

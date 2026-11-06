@@ -52,11 +52,11 @@ class ParameterTreeUnavailableError(MetadataCatalogUnavailableError):
 class CatalogValuesPrunedError(MetadataCatalogUnavailableError):
     """Raised when catalog pruning removed the selected version's current-law data.
 
-    Catalog publication prunes stored versions older than the installed one
-    and the previous release's: it deletes their current-law parameter values,
-    parameter tree rows and parameter search file, which publishing the
-    version again restores. The message names the country and the version and
-    is safe to return to the caller.
+    Catalog publication prunes the stored versions other than the installed
+    one and the two most recently published others: it deletes their
+    current-law parameter values, parameter tree rows and parameter search
+    file, which publishing the version again restores. The message names the
+    country and the version and is safe to return to the caller.
     """
 
 

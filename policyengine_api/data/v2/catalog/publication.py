@@ -26,6 +26,7 @@ from policyengine_api.data.v2.catalog.publication_pruning import (
     prune_catalog_version,
     pruning_failure,
     read_stored_catalog_versions,
+    record_catalog_publication,
     restore_pruned_catalog_versions,
 )
 from policyengine_api.data.v2.catalog.publication_reconciliation import (
@@ -187,6 +188,7 @@ def publish_catalog(
         parameter_search_files_written = write_parameter_search_files(
             connection, catalog.countries
         )
+        record_catalog_publication(connection, catalog.countries)
         if checkpoint is not None:
             checkpoint("after_reconciliation", connection)
 

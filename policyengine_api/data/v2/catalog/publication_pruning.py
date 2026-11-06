@@ -1,12 +1,16 @@
 """Prune older stored catalog versions, and restore a pruned version.
 
 Each stored catalog version costs about 550 MB, mostly its current-law
-parameter values and its parameter tree rows. After a publication commits,
-catalog publication keeps, for each model of the catalog it published, the
-installed version and the most recently created other version (the previous
-release's), and prunes every other stored version of that model that is not
-pruned already, at most ``MAX_CATALOG_VERSIONS_PRUNED_PER_RUN`` per
-publication, oldest first. Pruning a version deletes exactly:
+parameter values and its parameter tree rows. Every publication records when
+it published each version it publishes (``catalog_last_published_at``). After
+a publication commits, catalog publication keeps, for each model of the
+catalog it published, the installed version and the
+``KEPT_OTHER_CATALOG_VERSIONS`` most recently published other versions, and
+prunes every other stored version of that model that is not pruned already,
+at most ``MAX_CATALOG_VERSIONS_PRUNED_PER_RUN`` per publication, oldest first.
+Keeping two others keeps the version the serving revision runs after a
+release whose promotion failed, or a rollback to an older version, since the
+release workflow seeds before it deploys. Pruning a version deletes exactly:
 
 - its current-law parameter values: those of its parameters with neither a
   policy nor a dynamic;
@@ -60,6 +64,15 @@ if TYPE_CHECKING:
 PARAMETER_TREE_CHILDREN = V2_METADATA.tables["parameter_tree_children"]
 PARAMETER_SEARCH_FILES = V2_METADATA.tables["parameter_search_files"]
 
+KEPT_OTHER_CATALOG_VERSIONS = 2
+"""How many most recently published versions, besides the installed one, are kept.
+
+The release workflow publishes a release's version before it deploys and
+promotes the release, and puts the previous revision back when promotion
+fails. After one failed promotion, or a rollback to an older version, the
+version still serving is then the second most recently published other one.
+"""
+
 MAX_CATALOG_VERSIONS_PRUNED_PER_RUN = 2
 """The most stored catalog versions one publication prunes.
 
@@ -72,13 +85,32 @@ are one release's US and UK versions; the next publications prune the rest.
 
 @dataclass(frozen=True, slots=True)
 class StoredCatalogVersion:
-    """One stored catalog version of a model, as pruning chooses among them."""
+    """One stored catalog version of a model, as pruning chooses among them.
+
+    ``last_published_at`` is None for a version no publication has published
+    since ``catalog_last_published_at`` was added.
+    """
 
     id: UUID
     model_name: str
     version: str
     created_at: datetime
     values_pruned: bool
+    last_published_at: datetime | None = None
+
+    @property
+    def publication_order(self) -> tuple[datetime, datetime, str]:
+        """Sort key from the least to the most recently published version.
+
+        A version without a publication time stands in its creation time; ties
+        are ordered by creation time, then version text.
+        """
+        published = (
+            self.created_at
+            if self.last_published_at is None
+            else self.last_published_at
+        )
+        return (published, self.created_at, self.version)
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,12 +130,15 @@ def catalog_versions_to_prune(
 
     ``installed_versions`` maps each model of the published catalog, one per
     country, to the version the publication published or republished. For
-    each of those models the installed version and the most recently created
-    other version are kept, whether or not that one was pruned before; every
-    other version of the model not pruned already is returned. Versions of a
-    model the catalog doesn't name are never returned. The result is in model
-    name order, oldest first within a model; versions created at the same
-    instant are ordered by their version text.
+    each of those models the installed version and the
+    ``KEPT_OTHER_CATALOG_VERSIONS`` most recently published other versions are
+    kept (``StoredCatalogVersion.publication_order``), whether or not they
+    were pruned before; every other version of the model not pruned already is
+    returned. Versions of a model the catalog doesn't name are never returned.
+    The result is in model name order, least recently published first within
+    a model. This is the one place the rule is decided: publication applies
+    it to choose, and again under the publication lock before pruning each
+    version.
     """
     versions_by_model: dict[str, list[StoredCatalogVersion]] = defaultdict(list)
     for stored in stored_versions:
@@ -117,10 +152,14 @@ def catalog_versions_to_prune(
                 for stored in versions_by_model[model_name]
                 if stored.version != installed_versions[model_name]
             ),
-            key=lambda stored: (stored.created_at, stored.version),
+            key=lambda stored: stored.publication_order,
         )
-        # others[-1] is the most recently created other version: it is kept.
-        chosen.extend(stored for stored in others[:-1] if not stored.values_pruned)
+        # The last KEPT_OTHER_CATALOG_VERSIONS are the most recently published.
+        chosen.extend(
+            stored
+            for stored in others[:-KEPT_OTHER_CATALOG_VERSIONS]
+            if not stored.values_pruned
+        )
     return tuple(chosen)
 
 
@@ -153,6 +192,7 @@ def read_stored_catalog_versions(
             MODEL_VERSIONS.c.version,
             MODEL_VERSIONS.c.created_at,
             MODEL_VERSIONS.c.catalog_values_pruned_at,
+            MODEL_VERSIONS.c.catalog_last_published_at,
         )
         .select_from(
             MODEL_VERSIONS.join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
@@ -166,9 +206,33 @@ def read_stored_catalog_versions(
             version=row.version,
             created_at=row.created_at,
             values_pruned=row.catalog_values_pruned_at is not None,
+            last_published_at=row.catalog_last_published_at,
         )
         for row in rows
     )
+
+
+def record_catalog_publication(
+    connection: Connection, countries: Sequence[CountryCatalog]
+) -> None:
+    """Record that this publication published each catalog country's version.
+
+    Sets ``catalog_last_published_at`` to the publication transaction's start
+    time for the stored version of each country, whether the publication
+    inserted it, found it unchanged or restored it. Runs inside publication's
+    transaction, after the versions are stored.
+    """
+    for country in countries:
+        connection.execute(
+            sa.update(MODEL_VERSIONS)
+            .where(
+                MODEL_VERSIONS.c.version == country.model_version.version,
+                MODEL_VERSIONS.c.model_id.in_(
+                    sa.select(MODELS.c.id).where(MODELS.c.name == country.model.name)
+                ),
+            )
+            .values(catalog_last_published_at=sa.func.current_timestamp())
+        )
 
 
 def prune_catalog_version(
