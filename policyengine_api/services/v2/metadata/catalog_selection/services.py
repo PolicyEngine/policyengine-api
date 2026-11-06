@@ -51,14 +51,41 @@ class MetadataCatalogSelection:
         self._selected_catalogs = selected_catalogs
 
     def select(
-        self, country_id: str, policyengine_version: str | None
+        self,
+        country_id: str,
+        policyengine_version: str | None,
+        *,
+        reads_current_law: bool = False,
     ) -> SelectedCatalog:
-        """Return the country's catalog for the version, or the running one."""
+        """Return the country's catalog for the version, or the running one.
+
+        ``reads_current_law`` marks a read of the rows catalog pruning deletes
+        (current-law values, parameter tree rows, the search file): it raises
+        CatalogValuesPrunedError before that read when the version is pruned.
+        A selection the process kept while the version was pruned may predate
+        a publication that restored it, so the version's
+        ``catalog_values_pruned_at`` is read again first, one more query made
+        only then; once it is clear, the version is selected again and kept.
+        """
         key = (country_id, policyengine_version)
-        if self._selected_catalogs is not None:
-            kept = self._selected_catalogs.get(key)
-            if kept is not None:
+        kept = (
+            None
+            if self._selected_catalogs is None
+            else self._selected_catalogs.get(key)
+        )
+        if kept is not None:
+            if (
+                not reads_current_law
+                or kept.model_version.catalog_values_pruned_at is None
+            ):
                 return kept
+            require_current_law_values(
+                kept,
+                pruned_at=read_catalog_values_pruned_at(
+                    self._database_session.session,
+                    model_version_id=kept.model_version.id,
+                ),
+            )
         selected = read_metadata_catalog(
             self._database_session.session,
             country_id=country_id,
@@ -67,13 +94,18 @@ class MetadataCatalogSelection:
         )
         if self._selected_catalogs is not None:
             self._selected_catalogs.keep(key, selected)
+        if reads_current_law:
+            require_current_law_values(
+                selected, pruned_at=selected.model_version.catalog_values_pruned_at
+            )
         return selected
 
     def require_unpruned(self, selected: SelectedCatalog, *, rows_found: bool) -> None:
         """Raise CatalogValuesPrunedError if pruning removed the version's data."""
         # Raise CatalogValuesPrunedError if pruning removed the version's
         # current-law data. A selection kept for the process may predate the
-        # pruning, so a read that found nothing reads the marker again.
+        # pruning, so a read that found nothing reads the marker again; one
+        # that found rows answers with them.
         pruned_at = selected.model_version.catalog_values_pruned_at
         if pruned_at is None and not rows_found:
             pruned_at = read_catalog_values_pruned_at(
@@ -89,7 +121,10 @@ class MetadataCatalogSelection:
         *,
         offset: int,
         limit: int,
+        reads_current_law: bool = False,
     ) -> SelectedCatalog:
         """Validate a page's offset and limit, then select as ``select`` does."""
         validate_metadata_page(offset, limit)
-        return self.select(country_id, policyengine_version)
+        return self.select(
+            country_id, policyengine_version, reads_current_law=reads_current_law
+        )

@@ -345,7 +345,11 @@ class V2MetadataService:
         """
         selected_level = level if level is not None else ParameterTreeLevel()
         selected = self._catalogs.select_page(
-            country_id, policyengine_version, offset=offset, limit=limit
+            country_id,
+            policyengine_version,
+            offset=offset,
+            limit=limit,
+            reads_current_law=True,
         )
         session = self._database_session.session
         rows = read_parameter_children(
@@ -378,7 +382,9 @@ class V2MetadataService:
         of the current format: publication writes one only for the versions it
         publishes.
         """
-        selected = self._catalogs.select(country_id, policyengine_version)
+        selected = self._catalogs.select(
+            country_id, policyengine_version, reads_current_law=True
+        )
         search_file = metadata_parameter_search_file(
             selected,
             read_parameter_search_file(
@@ -403,7 +409,9 @@ class V2MetadataService:
         the file. Raise ParameterSearchFileUnavailableError as
         ``get_parameter_search_file`` does.
         """
-        selected = self._catalogs.select(country_id, policyengine_version)
+        selected = self._catalogs.select(
+            country_id, policyengine_version, reads_current_law=True
+        )
         rows = read_parameter_search_file_hash(
             self._database_session.session,
             model_version_id=selected.model_version.id,
@@ -432,7 +440,11 @@ class V2MetadataService:
         on the UTC day of now (today by default). No filter lists them all.
         """
         selected = self._catalogs.select_page(
-            country_id, policyengine_version, offset=offset, limit=limit
+            country_id,
+            policyengine_version,
+            offset=offset,
+            limit=limit,
+            reads_current_law=True,
         )
         rows = read_parameter_values(
             self._database_session.session,
@@ -461,7 +473,9 @@ class V2MetadataService:
 
         Values belonging to a reform or dynamic are never returned.
         """
-        selected = self._catalogs.select(country_id, policyengine_version)
+        selected = self._catalogs.select(
+            country_id, policyengine_version, reads_current_law=True
+        )
         value_row = read_parameter_value(
             self._database_session.session,
             model_version_id=selected.model_version.id,
@@ -665,7 +679,9 @@ class V2MetadataService:
         It also returns the current-law values of each parameter a variable's
         adds or subtracts names, so a client can pick the list for any year.
         """
-        selected = self._catalogs.select(country_id, policyengine_version)
+        selected = self._catalogs.select(
+            country_id, policyengine_version, reads_current_law=True
+        )
         session = self._database_session.session
         variables = read_all_variables(
             session, model_version_id=selected.model_version.id
@@ -699,7 +715,9 @@ class V2MetadataService:
         labels of their ancestor nodes and the requested names the version
         lacks. Repeated names count once.
         """
-        selected = self._catalogs.select(country_id, policyengine_version)
+        selected = self._catalogs.select(
+            country_id, policyengine_version, reads_current_law=True
+        )
         session = self._database_session.session
         model_version_id = selected.model_version.id
         requested_names = set(names)

@@ -76,6 +76,8 @@ class PublicationEvidence:
     # whose pruning failed and was rolled back; the next publication retries.
     pruned_catalog_versions: tuple[PrunedCatalogVersion, ...] = ()
     catalog_pruning_failures: tuple[CatalogPruningFailure, ...] = ()
+    # Chosen versions beyond the run's limit, which the next publications prune.
+    catalog_versions_left_to_prune: int = 0
 
     def as_dict(self) -> dict[str, object]:
         """Return the evidence as the JSON object printed after a publication."""
@@ -164,5 +166,6 @@ class PublicationEvidence:
                 }
                 for failure in self.catalog_pruning_failures
             ],
+            "catalog_versions_left_to_prune": self.catalog_versions_left_to_prune,
             "elapsed_seconds": round(self.elapsed_seconds, 3),
         }

@@ -28,7 +28,9 @@ class SelectedCatalogStore:
     for it again; a process of the previous release keeps the time-period
     options it read. A kept selection's ``catalog_values_pruned_at`` may
     predate a pruning, so the service reads it again whenever a read finds no
-    current-law values. Only
+    current-law values, or a restoration, so a read of those values reads it
+    again first when the kept selection has it set, and replaces the
+    selection once it is clear (``MetadataCatalogSelection``). Only
     successful selections are kept: an unsupported country, an invalid
     version or an absent catalog is looked up, and fails, each time.
     The kept records are detached, fully loaded rows that are only read.

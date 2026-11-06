@@ -5,7 +5,8 @@ parameter values and its parameter tree rows. After a publication commits,
 catalog publication keeps, for each model of the catalog it published, the
 installed version and the most recently created other version (the previous
 release's), and prunes every other stored version of that model that is not
-pruned already. Pruning a version deletes exactly:
+pruned already, at most ``MAX_CATALOG_VERSIONS_PRUNED_PER_RUN`` per
+publication, oldest first. Pruning a version deletes exactly:
 
 - its current-law parameter values: those of its parameters with neither a
   policy nor a dynamic;
@@ -31,6 +32,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
+from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.catalog.publication_inserts import (
     INSERT_PARAMETER_VALUES,
@@ -52,12 +54,20 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from sqlalchemy import Connection
-    from sqlalchemy.exc import SQLAlchemyError
 
     from policyengine_api.data.v2.catalog.records import CountryCatalog
 
 PARAMETER_TREE_CHILDREN = V2_METADATA.tables["parameter_tree_children"]
 PARAMETER_SEARCH_FILES = V2_METADATA.tables["parameter_search_files"]
+
+MAX_CATALOG_VERSIONS_PRUNED_PER_RUN = 2
+"""The most stored catalog versions one publication prunes.
+
+Pruning one PolicyEngine.py version deletes about 1.2 million current-law
+value rows across both countries' stored versions, after a publication that
+may itself have taken most of the seed job's time limit. Two stored versions
+are one release's US and UK versions; the next publications prune the rest.
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +122,24 @@ def catalog_versions_to_prune(
         # others[-1] is the most recently created other version: it is kept.
         chosen.extend(stored for stored in others[:-1] if not stored.values_pruned)
     return tuple(chosen)
+
+
+def catalog_versions_to_prune_now(
+    chosen: Iterable[StoredCatalogVersion],
+    limit: int = MAX_CATALOG_VERSIONS_PRUNED_PER_RUN,
+) -> tuple[tuple[StoredCatalogVersion, ...], int]:
+    """Return the chosen versions this run prunes, and how many are left.
+
+    A run prunes at most ``limit`` versions, the oldest created first; versions
+    created at the same instant, as one publication creates every country's,
+    are ordered by model name and then version. The next publications prune
+    the ones left.
+    """
+    ordered = sorted(
+        chosen,
+        key=lambda stored: (stored.created_at, stored.model_name, stored.version),
+    )
+    return tuple(ordered[:limit]), max(len(ordered) - limit, 0)
 
 
 def read_stored_catalog_versions(
@@ -192,7 +220,7 @@ def prune_catalog_version(
 
 
 def pruning_failure(
-    country_id: str, version: str | None, error: SQLAlchemyError
+    country_id: str, version: str | None, error: Exception
 ) -> CatalogPruningFailure:
     """Describe a failed pruning without its statement, parameters or row data.
 
@@ -200,13 +228,18 @@ def pruning_failure(
     version was chosen. SQLAlchemy's message quotes the statement and its
     parameters, and the database's own message may quote values, so only the
     class name and SQLSTATE of the error the database driver raised are
-    reported.
+    reported. Of any other exception only the class name is, since its
+    message may hold row data too.
     """
-    driver_error = getattr(error, "orig", None)
-    reported = type(error if driver_error is None else driver_error).__name__
-    sqlstate = getattr(driver_error, "sqlstate", None)
-    if isinstance(sqlstate, str) and sqlstate:
-        reported = f"{reported} (SQLSTATE {sqlstate})"
+    if isinstance(error, SQLAlchemyError):
+        driver_error = getattr(error, "orig", None)
+        reported = type(error if driver_error is None else driver_error).__name__
+        sqlstate = getattr(driver_error, "sqlstate", None)
+        if isinstance(sqlstate, str) and sqlstate:
+            reported = f"{reported} (SQLSTATE {sqlstate})"
+        cause = f"the database reported {reported}"
+    else:
+        cause = f"it raised {type(error).__name__}"
     failed = (
         f"reading the stored {country_id} catalog versions to choose which to "
         "prune failed"
@@ -220,7 +253,7 @@ def pruning_failure(
         country_id=country_id,
         policyengine_version=version,
         error_type=type(error).__name__,
-        message=f"{failed}: the database reported {reported}",
+        message=f"{failed}: {cause}",
     )
 
 
