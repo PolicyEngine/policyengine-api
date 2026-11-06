@@ -135,7 +135,7 @@ and injects it into the service.
 
 A service may also hand one group of its work to a class in a subpackage's
 `services.py`, whose files take the same layer names: the metadata service
-builds `MetadataCatalogSelection` from `metadata/catalog_selection/services.py`,
+builds `MetadataCatalogSelection` from `metadata/catalog_version_selection/services.py`,
 which selects the catalog version each read uses, with the process's kept
 selections and the check for a pruned version.
 

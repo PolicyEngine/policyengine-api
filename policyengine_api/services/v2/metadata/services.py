@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from policyengine_api.data.v2.catalog.parameter_search_file import (
     PARAMETER_SEARCH_FILE_FORMAT,
 )
-from policyengine_api.services.v2.metadata.catalog_selection.services import (
+from policyengine_api.services.v2.metadata.catalog_version_selection.services import (
     MetadataCatalogSelection,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_datasets import (
