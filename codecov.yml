@@ -34,9 +34,13 @@ coverage:
         threshold: 0.5%
     patch:
       default:
-        target: auto
-        # Reported but not blocking until the minimum for changed lines is
-        # decided and enforced.
+        # pr.yml's diff-coverage job enforces this minimum for the changed
+        # lines (api.quality.diff-coverage); Codecov only shows a figure. It
+        # can differ from the job's: Codecov compares with the master commit
+        # the branch left from or last merged in, not the merge commit's
+        # first parent, counts a line with a branch that never ran as not
+        # covered, and includes flags carried forward from earlier commits.
+        target: 80%
         informational: true
 
 flag_management:

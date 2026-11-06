@@ -34,6 +34,7 @@ jobs:
       - check-test-shards
       - upload-test-coverage
       - upload-integration-coverage
+      - diff-coverage
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -384,6 +385,53 @@ jobs:
           directory: ${{ runner.temp }}/integration-coverage
           # codecov.yml defines the flag and carries it forward.
           flags: integration
+
+  diff-coverage:
+    # Rule api.quality.diff-coverage: at least 80% of the lines a pull request
+    # changes in policyengine_api (.coveragerc's source) that coverage.py
+    # measures run in the unit or integration tests. diff-cover reads every
+    # test shard's report and the integration tests' report, and counts a line
+    # as covered if any of them covers it. Its log lists the uncovered lines.
+    name: Check the coverage of the changed lines
+    runs-on: ubuntu-latest
+    needs:
+      - test
+      - v2-integration-check
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
+      # that .python-version selects.
+      UV_PYTHON: "3.12"
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # diff-cover compares with the merge commit's first parent,
+          # which a depth-1 clone lacks.
+          fetch-depth: 0
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+      - name: Download every test shard's coverage report
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-coverage-shard-*
+          path: ${{ runner.temp }}/coverage
+      - name: Download the integration coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: integration-coverage
+          path: ${{ runner.temp }}/coverage/integration-coverage
+      # The checkout is the merge commit GitHub builds for the pull request,
+      # so HEAD^1 is the commit that merge is built on: the base branch, or
+      # for a pull request stacked on another, the lower one's merge commit
+      # (this job is skipped there). Either way the diff holds only the pull
+      # request's changes. The event's base.sha can be older: it often stays
+      # where the branch left master, and comparing with it would count
+      # master's later changes too.
+      - name: Check the coverage of the changed lines
+        run: uv run --frozen --extra dev diff-cover "$RUNNER_TEMP"/coverage/*/coverage*.xml --compare-branch=HEAD^1 --fail-under=80
 
   check-test-shards:
     # Fails unless every shard collected the same tests and each test ran in
