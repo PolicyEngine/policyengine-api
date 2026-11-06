@@ -189,11 +189,54 @@ the reason a code change or ruff setting couldn't remove the finding
 ## Commit Hygiene
 
 AI agents must run the quality checks before committing their own code
-changes:
+changes. Run `make install` once per clone: it turns on the git hooks in
+`.githooks` (through `git config core.hooksPath .githooks`), which run them
+before each `git commit` and each merge commit
+(`api.quality.pre-commit-hook`):
 
 ```bash
-make quality
+make install   # once per clone, and once in each new worktree for its .venv
+make quality   # what the hook runs; run it yourself to check sooner
 ```
+
+`.githooks/pre-commit` runs `make quality` from the root of the working
+tree, and `.githooks/pre-merge-commit` runs it for a merge that commits
+without conflicts. `make quality` checks the working tree, not the commit,
+so the hook first requires the two to match. It stops the commit, naming
+the files and saying what to do:
+
+- when tracked files have unstaged changes: stage exactly what the commit
+  needs and run `git commit` without paths, or set the rest aside with
+  `git stash push --keep-index`. This covers fixes `make quality` made in an
+  earlier run, `git commit <paths>` while other files are changed, and a
+  rename that changes only a name's case;
+- when there are untracked files outside the ignore files: add them, remove
+  them, or list them in `.git/info/exclude`;
+- when Python files or tool settings (`pyproject.toml`, `setup.cfg`,
+  `mypy.ini`, `ruff.toml`, `.importlinter`) are hidden only by
+  `.git/info/exclude` or a global excludes file: ruff, mypy and Import
+  Linter can read them anyway, so add them or remove them. A virtual
+  environment (a directory with `pyvenv.cfg`) doesn't count;
+- when those excludes match tracked Python files, which ruff then skips
+  but CI checks: remove the pattern;
+- when tracked files are marked skip-worktree or assume-unchanged, which
+  `git diff` doesn't compare: clear the marks with
+  `git update-index --no-skip-worktree --no-assume-unchanged`;
+- when a check fails;
+- when ruff's fixes changed a file: review the fixes, stage them and
+  commit again;
+- when `make`, `uv` or the worktree's dev environment (`.venv`, or
+  `UV_PROJECT_ENVIRONMENT`) is missing.
+
+`core.hooksPath` is a setting of the clone, so every worktree runs the
+hooks, each from its own checkout; a worktree on a branch from before the
+hooks runs none. `make install` leaves `core.hooksPath` alone, and says
+why, when it would change an enclosing repository, replace another
+`core.hooksPath`, or stop the clone's own hooks in `.git/hooks`, and when
+git can't write the setting; it never stops `make install`. git's
+cherry-pick, revert, rebase and am can make commits without hooks. Don't
+skip them with `git commit --no-verify`; CI's `Quality checks` job runs the
+same checks and blocks the merge anyway.
 
 `make quality` applies ruff's fixes (`ruff check --fix`, then `ruff format`),
 then runs `make quality-check`: `uv lock --check`, `ruff check`,

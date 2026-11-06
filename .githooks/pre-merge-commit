@@ -1,0 +1,5 @@
+#!/bin/sh
+# git runs this hook, not pre-commit, before a merge that commits without
+# conflicts (api.quality.pre-commit-hook). It runs the same checks. ${0%/*} is
+# this hook's directory, without needing dirname.
+exec "${0%/*}/pre-commit"

@@ -1196,6 +1196,64 @@ test = "tests/unit/services/test_microdata_weight_boundaries.py::test_rule_proof
 # --- Code quality and types ------------------------------------------------
 
 [[rule]]
+id = "api.quality.pre-commit-hook"
+category = "quality"
+statement = "make install turns on the git hooks in .githooks through core.hooksPath, a setting of the clone that every worktree shares and resolves against its own checkout, unless that would change an enclosing repository, replace another core.hooksPath, or stop the clone's own hooks (files or symbolic links), which .githooks/turn-on.sh says, always exiting 0. pre-commit runs make quality from the root of the working tree before git commit, and pre-merge-commit runs it before a merge commits without conflicts, with make's variables from the environment cleared. Because make quality checks the working tree, the hook stops the commit, naming the files or what to install, when the working tree holds unstaged changes to tracked files (case-only renames included), skip-worktree or assume-unchanged files, untracked files outside the ignore files, Python files or tool settings that only local or global excludes hide (outside virtual environments), or tracked Python files those excludes match; when make quality fails; when ruff's fixes changed a file; or when make, uv or the dev environment is missing."
+rationale = "docs/engineering/skills/github-prs.md#commit-hygiene"
+scope = [".githooks/pre-commit", ".githooks/pre-merge-commit", ".githooks/turn-on.sh", "Makefile"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/test_pre_commit_hook.py::test_the_repository_s_hook_stops_what_it_should",
+  "tests/unit/test_pre_commit_hook.py::test_a_commit_runs_make_quality",
+  "tests/unit/test_pre_commit_hook.py::test_a_failing_check_stops_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_fixes_that_need_staging_stop_the_commit_and_are_named",
+  "tests/unit/test_pre_commit_hook.py::test_fixes_from_an_earlier_failed_run_stop_the_next_commit",
+  "tests/unit/test_pre_commit_hook.py::test_unstaged_changes_stop_the_commit_and_are_named",
+  "tests/unit/test_pre_commit_hook.py::test_untracked_files_stop_the_commit_and_are_named",
+  "tests/unit/test_pre_commit_hook.py::test_commit_all_runs_make_quality",
+  "tests/unit/test_pre_commit_hook.py::test_a_merge_without_conflicts_runs_the_hook",
+  "tests/unit/test_pre_commit_hook.py::test_make_flags_from_the_environment_cant_hide_a_failure",
+  "tests/unit/test_pre_commit_hook.py::test_a_missing_uv_stops_the_commit_with_a_message",
+  "tests/unit/test_pre_commit_hook.py::test_a_missing_make_stops_the_commit_with_a_message",
+  "tests/unit/test_pre_commit_hook.py::test_a_missing_dev_environment_stops_the_commit_with_a_message",
+  "tests/unit/test_pre_commit_hook.py::test_the_dev_environment_can_be_where_uv_project_environment_says",
+  "tests/unit/test_pre_commit_hook.py::test_each_worktree_runs_its_own_checkout_s_hook",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_turns_the_hook_on",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_in_a_linked_worktree_turns_the_hook_on",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_outside_a_git_repository_still_installs",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_leaves_an_enclosing_repository_alone",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_keeps_another_hooks_path",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_keeps_the_clone_s_own_hooks_running",
+  "tests/unit/test_pre_commit_hook.py::test_python_files_hidden_by_local_excludes_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_other_files_hidden_by_local_excludes_dont_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_make_from_the_environment_cant_skip_the_checks",
+  "tests/unit/test_pre_commit_hook.py::test_files_git_doesnt_compare_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_keeps_a_symlinked_hook_running",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_keeps_a_symlinked_hooks_directory_running",
+  "tests/unit/test_pre_commit_hook.py::test_make_install_still_installs_when_git_config_is_locked",
+  "tests/unit/test_pre_commit_hook.py::test_a_commit_passes_in_a_utf8_locale",
+  "tests/unit/test_pre_commit_hook.py::test_tool_settings_hidden_by_local_excludes_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_a_hidden_directory_of_python_files_stops_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_a_hidden_virtual_environment_doesnt_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_tracked_python_files_local_excludes_match_stop_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_a_case_only_rename_stops_the_commit",
+  "tests/unit/test_pre_commit_hook.py::test_a_commit_of_some_paths_says_how_to_commit_the_rest",
+  "tests/unit/test_pre_commit_hook.py::test_the_hooks_are_executable_in_git",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.quality.pre-commit-hook/rejected"
+good_fixture = "rules/fixtures/api.quality.pre-commit-hook/accepted"
+test = "tests/unit/test_pre_commit_hook.py::test_rule_proof_pre_commit_hook"
+
+[[rule]]
 id = "api.quality.make-quality"
 category = "quality"
 statement = "make quality is the command for the quality checks, locally and in CI: it applies ruff check --fix and ruff format, then runs make quality-check, which runs uv lock --check, ruff check, ruff format --check, Import Linter, mypy and the quality guards without changing files. Run with a stand-in uv, make quality runs each of them and fails whenever one fails, and make -n prints the same commands. pr.yml's quality-guards job runs make quality and then git diff --exit-code HEAD, with neither step skipped, allowed to fail, or run in another shell or directory, no MAKEFLAGS, GNUMAKEFLAGS or MAKEFILES set for them, and no earlier step writing to GITHUB_ENV or GITHUB_PATH; the Makefile uses no syntax the rules registry doesn't follow and nothing that hides a failing command; and no other pr.yml job's commands run ruff, mypy, lint-imports or the quality guards, directly or through a make target."

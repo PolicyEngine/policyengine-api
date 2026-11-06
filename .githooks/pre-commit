@@ -1,0 +1,140 @@
+#!/bin/sh
+# The repository's pre-commit hook (api.quality.pre-commit-hook). It runs
+# make quality before git commit, and pre-merge-commit runs it before a merge
+# commits without conflicts, so the checks pull-request CI runs fail here
+# first. make install turns both on with git config core.hooksPath .githooks;
+# every worktree of the clone shares that setting and runs its own checkout's
+# copy. git commit --no-verify skips them, git's cherry-pick, revert, rebase
+# and am can make commits without them, and CI's Quality checks job still
+# runs the same checks.
+#
+# make quality checks the working tree, so the hook first requires it to hold
+# exactly what is being committed: no unstaged changes to tracked files
+# (including case-only renames), no tracked files git doesn't compare
+# (skip-worktree or assume-unchanged), no untracked files outside the ignore
+# files, no Python files or tool settings that only .git/info/exclude or a
+# global excludes file hides (virtual environments aside), and no tracked
+# Python files those excludes match, which ruff would skip. The commit stops,
+# saying why, when that isn't so, when make quality fails, when ruff's fixes
+# changed a file, or when make, uv or the worktree's dev environment is
+# missing.
+set -u
+
+fail() {
+  printf 'pre-commit: %s\n' "$1" >&2
+  exit 1
+}
+
+root=$(git rev-parse --show-toplevel) ||
+  fail "can't find the root of this working tree."
+cd "$root" || fail "can't enter $root."
+
+# make's own variables from the environment could make it ignore a failing
+# check, read another Makefile, or replace $(MAKE) and so skip quality-check.
+unset MAKEFLAGS MFLAGS GNUMAKEFLAGS MAKEFILES MAKELEVEL MAKE MAKE_COMMAND MAKEOVERRIDES
+
+command -v make >/dev/null 2>&1 ||
+  fail "make isn't installed, so make quality can't run. Install make, then commit again."
+command -v uv >/dev/null 2>&1 ||
+  fail "uv isn't installed, so make quality can't run. Install uv (https://docs.astral.sh/uv/), run make install, then commit again."
+environment=${UV_PROJECT_ENVIRONMENT:-.venv}
+[ -d "$environment" ] ||
+  fail "this worktree has no dev environment ($environment). Run make install here, then commit again."
+
+# git -c core.quotePath=false shows names outside ASCII as they are, and
+# core.ignorecase=false shows a case-only rename on a file system that ignores
+# case as an untracked file.
+names='git -c core.quotePath=false -c core.ignorecase=false'
+newline='
+'
+
+unstaged=$($names diff --name-only) ||
+  fail "git diff failed, so the hook can't tell what make quality would check."
+[ -z "$unstaged" ] ||
+  fail "make quality checks the working tree, which holds changes this commit doesn't. Stage exactly what this commit needs and run git commit without paths, or set the rest aside with git stash push --keep-index, then commit again:
+$unstaged"
+
+# git ls-files -v marks skip-worktree files S and assume-unchanged ones with a
+# lowercase letter. [[:lower:]], not [a-z]: bash 3.2, macOS's /bin/sh, matches
+# uppercase letters with [a-z] in UTF-8 locales. (A loop, not a command
+# substitution: bash 3.2 misreads a case pattern's parenthesis inside one.)
+flags=$($names ls-files -v) ||
+  fail "git ls-files failed, so the hook can't tell what make quality would check."
+uncompared=
+while IFS= read -r entry; do
+  case $entry in
+    [[:lower:]S]\ *) uncompared="$uncompared${uncompared:+$newline}${entry#??}" ;;
+  esac
+done <<EOF
+$flags
+EOF
+[ -z "$uncompared" ] ||
+  fail "git doesn't compare these files with the commit (skip-worktree or assume-unchanged), so make quality could check copies the commit doesn't hold. Run git update-index --no-skip-worktree --no-assume-unchanged on them, then commit again:
+$uncompared"
+
+untracked=$($names ls-files --others --exclude-standard) ||
+  fail "git ls-files failed, so the hook can't tell what make quality would check."
+[ -z "$untracked" ] ||
+  fail "make quality checks the working tree, which holds files git doesn't track. Add them, remove them, or list them in .git/info/exclude (Python files and tool settings aside, which the checks read even then), then commit again:
+$untracked"
+
+# Python files and tool settings that only .git/info/exclude or a global
+# excludes file hides: the checks read them all the same. --directory lists a
+# wholly untracked directory once: a virtual environment (with pyvenv.cfg) is
+# left out, and another counts if it holds Python files or tool settings.
+entries=$($names ls-files --others --directory --exclude-per-directory=.gitignore) ||
+  fail "git ls-files failed, so the hook can't tell what make quality would check."
+hidden=
+while IFS= read -r path; do
+  case $path in
+    '') continue ;;
+    */)
+      [ -f "${path}pyvenv.cfg" ] && continue
+      [ -n "$(find "$path" \( -name '*.py' -o -name '*.pyi' -o -name pyproject.toml \
+        -o -name setup.cfg -o -name mypy.ini -o -name .mypy.ini -o -name ruff.toml \
+        -o -name .ruff.toml -o -name .importlinter \) -print 2>/dev/null)" ] ||
+        continue
+      ;;
+    *.py | *.pyi | pyproject.toml | */pyproject.toml | setup.cfg | */setup.cfg | \
+      mypy.ini | */mypy.ini | .mypy.ini | */.mypy.ini | ruff.toml | */ruff.toml | \
+      .ruff.toml | */.ruff.toml | .importlinter | */.importlinter) ;;
+    *) continue ;;
+  esac
+  hidden="$hidden${hidden:+$newline}$path"
+done <<EOF
+$entries
+EOF
+[ -z "$hidden" ] ||
+  fail "these Python files or tool settings are hidden only by .git/info/exclude or a global excludes file, but ruff, mypy and Import Linter can read them, so the checks wouldn't see what the commit holds. Add them or remove them, then commit again:
+$hidden"
+
+# Tracked Python files that .git/info/exclude or a global excludes file
+# matches: ruff skips them, but CI, which has neither, checks them.
+excluded=$($names ls-files --cached --ignored --exclude-standard -- '*.py' '*.pyi') ||
+  fail "git ls-files failed, so the hook can't tell what make quality would check."
+if [ -n "$excluded" ]; then
+  ignored_by_repository=$($names ls-files --cached --ignored \
+    --exclude-per-directory=.gitignore -- '*.py' '*.pyi') ||
+    fail "git ls-files failed, so the hook can't tell what make quality would check."
+  skipped=
+  while IFS= read -r path; do
+    case "$newline$ignored_by_repository$newline" in
+      *"$newline$path$newline"*) ;;
+      *) skipped="$skipped${skipped:+$newline}$path" ;;
+    esac
+  done <<EOF
+$excluded
+EOF
+  [ -z "$skipped" ] ||
+    fail "ruff would skip these tracked files, which .git/info/exclude or a global excludes file matches, but CI checks them. Remove the pattern that matches them, then commit again:
+$skipped"
+fi
+
+make quality ||
+  fail "make quality failed. Fix what it reported above, then commit again."
+
+fixed=$($names diff --name-only) ||
+  fail "git diff failed, so the hook can't tell whether make quality changed files."
+[ -z "$fixed" ] ||
+  fail "make quality changed these files. Review the fixes, stage them, then commit again:
+$fixed"

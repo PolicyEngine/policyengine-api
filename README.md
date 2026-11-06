@@ -39,7 +39,11 @@ make install
 make setup-env
 ```
 
-`make install` runs `uv sync --frozen --extra dev`, which creates `.venv` with
+Run `make install` once per clone, and in each new worktree to create its
+`.venv`. It turns on the git hooks in `.githooks/`,
+which run `make quality` before each `git commit` and each merge commit in
+every worktree of the clone (`git config core.hooksPath .githooks`), and runs
+`uv sync --frozen --extra dev`, which creates `.venv` with
 exactly the versions in `uv.lock` on Python 3.12, the version the Cloud Run
 image runs. `make test`, `make test-env-vars`, `make debug-test`, `make debug`,
 `make debug-asgi`, `make typecheck-v2` and the towncrier step of

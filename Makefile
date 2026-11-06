@@ -5,7 +5,13 @@
 # 3.14 for other uv commands; set UV_PYTHON to test another version.
 export UV_PYTHON ?= 3.12
 
+# Turns on the hooks in .githooks, which run make quality before each commit
+# (api.quality.pre-commit-hook), then installs the locked dev environment.
+# core.hooksPath is shared by every worktree of the clone. .githooks/turn-on.sh
+# says why it changes nothing outside the root of a git working tree, when
+# core.hooksPath is already set, or when the clone has hooks of its own.
 install:
+	sh .githooks/turn-on.sh
 	uv sync --frozen --extra dev
 
 setup-env:
