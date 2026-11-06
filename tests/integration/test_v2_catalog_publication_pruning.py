@@ -11,6 +11,8 @@ pruned version again restores those rows from the installed packages.
 from __future__ import annotations
 
 import os
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -28,6 +30,9 @@ from sqlmodel import Session, select
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog import publication as publication_module
 from policyengine_api.data.v2.catalog.publication import publish_catalog
+from policyengine_api.data.v2.catalog.publication_pruning import (
+    read_stored_catalog_versions,
+)
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPruningFailure,
     PrunedCatalogVersion,
@@ -1016,3 +1021,216 @@ def test_every_publication_records_when_it_published_the_version(
             _last_published_at(publication_engine, model_name, INSTALLED_VERSION)
             == installed_before[model_name]
         )
+
+
+# Waiting for the pruning thread to block is bounded so a hang fails the test.
+LOCK_WAIT_LIMIT_SECONDS = 30
+
+
+def _wait_until_blocked_on_an_advisory_lock_or_done(
+    engine: Engine, pruning: Future
+) -> None:
+    """Return once ``pruning`` waits for an advisory lock, or has finished.
+
+    The disposable database's only advisory lock is the publication lock, so
+    an advisory lock that isn't granted is the pruning thread's. The sleep only
+    paces the polling of ``pg_locks``; the state read decides when to return.
+    """
+    deadline = time.monotonic() + LOCK_WAIT_LIMIT_SECONDS
+    with engine.connect() as observer:
+        while not pruning.done():
+            waiting = observer.execute(
+                text(
+                    "SELECT count(*) FROM pg_locks "
+                    "WHERE locktype = 'advisory' AND NOT granted"
+                )
+            ).scalar_one()
+            if waiting:
+                return
+            if time.monotonic() > deadline:
+                pytest.fail("the pruning neither waited for the lock nor finished")
+            time.sleep(0.01)
+
+
+def test_a_pruning_transaction_chooses_again_after_waiting_for_the_lock(
+    publication_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A version another publisher keeps while pruning waits for the lock stays.
+
+    Another connection holds the publication lock. The pruning of the old US
+    version starts in a thread and waits for it. Holding the lock, the other
+    connection sets the old version's publication time, as a publication of it
+    does, then commits, releasing the lock. The pruning then reads the stored
+    versions, finds the rule keeps the version, and deletes nothing.
+    """
+    monkeypatch.setattr(
+        publication_module,
+        "catalog_versions_to_prune",
+        lambda stored_versions, installed_versions: (),
+    )
+    for version in (
+        OLD_VERSION,
+        EARLIER_KEPT_VERSION,
+        PREVIOUS_VERSION,
+        INSTALLED_VERSION,
+    ):
+        _publish(publication_engine, version)
+    monkeypatch.undo()
+    with publication_engine.connect() as connection:
+        us_old = next(
+            stored
+            for stored in read_stored_catalog_versions(connection, [US_MODEL])
+            if stored.version == OLD_VERSION
+        )
+    us_old_before = _prunable_rows(publication_engine, US_MODEL, OLD_VERSION)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with publication_engine.connect() as other_publisher, other_publisher.begin():
+            other_publisher.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_key)"),
+                {"lock_key": publication_module.PUBLICATION_ADVISORY_LOCK_KEY},
+            )
+            pruning = executor.submit(
+                publication_module._prune_if_still_chosen,
+                publication_engine,
+                us_old,
+                INSTALLED_VERSION,
+            )
+            _wait_until_blocked_on_an_advisory_lock_or_done(publication_engine, pruning)
+            other_publisher.execute(
+                text(
+                    "UPDATE tax_benefit_model_versions "
+                    "SET catalog_last_published_at = now() + interval '1 day' "
+                    "WHERE id = :version_id"
+                ),
+                {"version_id": us_old.id},
+            )
+        deleted = pruning.result(timeout=LOCK_WAIT_LIMIT_SECONDS)
+
+    assert deleted is None
+    assert _pruned_at(publication_engine, US_MODEL, OLD_VERSION) is None
+    assert _prunable_rows(publication_engine, US_MODEL, OLD_VERSION) == us_old_before
+
+
+class _InjectedPublicationError(RuntimeError):
+    """Raised by a test's checkpoint to fail a publication part way."""
+
+
+def test_a_failed_republish_of_a_pruned_version_leaves_it_pruned(
+    publication_engine: Engine,
+) -> None:
+    """Restoring is part of the publication transaction, and rolls back with it.
+
+    The republish of the pruned version fails after it restored the values,
+    wrote the tree and search file, cleared the pruning time and recorded the
+    publication time. The version is then as pruning left it.
+    """
+    for version in (
+        OLD_VERSION,
+        EARLIER_KEPT_VERSION,
+        PREVIOUS_VERSION,
+        INSTALLED_VERSION,
+    ):
+        _publish(publication_engine, version)
+    before = {
+        model_name: (
+            _prunable_rows(publication_engine, model_name, OLD_VERSION),
+            _pruned_at(publication_engine, model_name, OLD_VERSION),
+            _last_published_at(publication_engine, model_name, OLD_VERSION),
+        )
+        for model_name in MODEL_NAMES
+    }
+    restored_inside_the_transaction: list[int] = []
+
+    def fail_after_restoring(stage: str, connection) -> None:
+        if stage != "after_reconciliation":
+            return
+        restored_inside_the_transaction.append(
+            connection.execute(
+                text(
+                    "SELECT count(*) FROM tax_benefit_model_versions "
+                    "WHERE version = :version AND catalog_values_pruned_at IS NULL"
+                ),
+                {"version": OLD_VERSION},
+            ).scalar_one()
+        )
+        raise _InjectedPublicationError(stage)
+
+    with pytest.raises(_InjectedPublicationError):
+        publish_catalog(
+            publication_engine,
+            normalized_catalog(policyengine_version=OLD_VERSION),
+            checkpoint=fail_after_restoring,
+        )
+
+    assert restored_inside_the_transaction == [len(MODEL_NAMES)]
+    for model_name in MODEL_NAMES:
+        prunable_rows, pruned_at, last_published_at = before[model_name]
+        assert prunable_rows == {
+            "parameter_values": [],
+            "tree_rows": [],
+            "search_files": [],
+        }
+        assert pruned_at is not None
+        assert (
+            _prunable_rows(publication_engine, model_name, OLD_VERSION) == prunable_rows
+        )
+        assert _pruned_at(publication_engine, model_name, OLD_VERSION) == pruned_at
+        assert (
+            _last_published_at(publication_engine, model_name, OLD_VERSION)
+            == last_published_at
+        )
+
+
+def test_restoring_a_version_stored_before_catalog_format_2_writes_values_only(
+    publication_engine: Engine,
+) -> None:
+    """A version stored before catalog format 2 gets back only its values.
+
+    Such a version (``catalog_format`` null) never had a parameter tree or a
+    search file, and publication compares it without the format 2 fields and
+    writes neither for it. Restoring it writes back its current-law values
+    alone, equal to those it had.
+    """
+    _publish(publication_engine, OLD_VERSION)
+    with publication_engine.begin() as connection:
+        for model_name in MODEL_NAMES:
+            version_id = _version_id(publication_engine, model_name, OLD_VERSION)
+            for statement in (
+                "UPDATE tax_benefit_model_versions SET catalog_format = NULL, "
+                "entities = NULL, basic_inputs = NULL WHERE id = :version_id",
+                "DELETE FROM parameter_tree_children "
+                "WHERE tax_benefit_model_version_id = :version_id",
+                "DELETE FROM parameter_search_files "
+                "WHERE tax_benefit_model_version_id = :version_id",
+            ):
+                connection.execute(text(statement), {"version_id": version_id})
+    before = {
+        model_name: _prunable_rows(publication_engine, model_name, OLD_VERSION)
+        for model_name in MODEL_NAMES
+    }
+    for version in (EARLIER_KEPT_VERSION, PREVIOUS_VERSION, INSTALLED_VERSION):
+        _publish(publication_engine, version)
+    assert all(
+        _pruned_at(publication_engine, model_name, OLD_VERSION) is not None
+        for model_name in MODEL_NAMES
+    )
+
+    restoring = _publish(publication_engine, OLD_VERSION)
+
+    for model_name in MODEL_NAMES:
+        assert before[model_name]["parameter_values"]
+        assert before[model_name]["tree_rows"] == []
+        assert before[model_name]["search_files"] == []
+        assert (
+            _prunable_rows(publication_engine, model_name, OLD_VERSION)
+            == before[model_name]
+        )
+        assert _pruned_at(publication_engine, model_name, OLD_VERSION) is None
+    assert {
+        (country_id, version)
+        for country_id, version, _values in restoring.restored_catalog_versions
+    } == {("us", OLD_VERSION), ("uk", OLD_VERSION)}
+    assert restoring.parameter_trees_written == ()
+    assert restoring.parameter_search_files_written == ()
