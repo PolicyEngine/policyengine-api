@@ -28,6 +28,9 @@ from policyengine_api.services.economy_impact_types import (
     ImpactPolicies,
     SimulationOptions,
 )
+from policyengine_api.services.economy_request_failures import (
+    log_economy_request_failure,
+)
 from policyengine_api.utils import budget_window as budget_window_utils
 
 
@@ -54,8 +57,11 @@ class BudgetWindowSubmissionMixin:
         the SPM selection or a stored result cannot be certified, or, before any
         stored state is read, when the start year is outside the country's
         ``ECONOMY_YEARS`` (``DATASET_YEAR_UNAVAILABLE``). A window that starts in
-        those years may end after them.
+        those years may end after them. Every exception is logged and re-raised:
+        a refused request at WARNING, any other failure at ERROR (see
+        ``log_economy_request_failure``).
         """
+        setup_options: EconomicImpactSetupOptions | None = None
         set_runtime_context(
             country_id=impact_request.country_id,
             policy_id=impact_request.policy_id,
@@ -101,13 +107,12 @@ class BudgetWindowSubmissionMixin:
                 budget_window_setup,
                 max_active_years=max_active_years,
             )
-        except Exception as e:
-            logger.log_struct(
-                {
-                    "message": "Error getting budget-window economic impact",
-                    "error_type": type(e).__name__,
-                },
-                severity="ERROR",
+        except Exception as error:
+            log_economy_request_failure(
+                error,
+                request_validated=setup_options is not None,
+                failure_message="Error getting budget-window economic impact",
+                refusal_message="Refused budget-window economic impact request",
             )
             raise
 
