@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, replace
+from functools import partial
+from typing import TYPE_CHECKING, TypeVar
 
 import sqlalchemy as sa
 from sqlalchemy import Connection, Engine
@@ -18,6 +19,15 @@ from policyengine_api.data.v2.catalog.publication_parameter_search_file import (
 from policyengine_api.data.v2.catalog.publication_parameter_tree import (
     assert_parameter_trees_written,
     write_parameter_trees,
+)
+from policyengine_api.data.v2.catalog.publication_pruning import (
+    catalog_versions_to_prune,
+    catalog_versions_to_prune_now,
+    prune_catalog_version,
+    pruning_failure,
+    read_stored_catalog_versions,
+    record_catalog_publication,
+    restore_pruned_catalog_versions,
 )
 from policyengine_api.data.v2.catalog.publication_reconciliation import (
     assert_canonical_value_uniqueness,
@@ -32,7 +42,9 @@ from policyengine_api.data.v2.catalog.publication_staging import (
     stage_catalog,
 )
 from policyengine_api.data.v2.catalog.publication_types import (
+    CatalogPruningFailure,
     CatalogPublicationError,
+    PrunedCatalogVersion,
     PublicationEvidence,
 )
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
@@ -44,8 +56,12 @@ from policyengine_api.data.v2.models import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
+    from policyengine_api.data.v2.catalog.publication_pruning import (
+        PrunedRows,
+        StoredCatalogVersion,
+    )
     from policyengine_api.data.v2.catalog.records import (
         CountryCatalog,
         NormalizedCatalog,
@@ -66,6 +82,7 @@ PROTECTED_TABLES = (
 )
 
 LOGGER = logging.getLogger(__name__)
+ResultT = TypeVar("ResultT")
 
 __all__ = [
     "CatalogPublicationError",
@@ -139,7 +156,14 @@ def publish_catalog(
     catalog: the versions it publishes, and the installed version when an
     earlier release stored it with catalog format 2 but without them. Other
     stored versions, and an installed version stored before catalog format 2,
-    keep having none.
+    keep having none. A stored version that pruning removed current-law data
+    from gets its values back from the staged catalog, before the comparison,
+    and its tree and search file from those writers.
+
+    After the transaction commits, it prunes the older stored versions of the
+    catalog's models (``publication_pruning``), at most two per run, one
+    transaction each; a failure of any kind rolls back only that version and
+    is reported in the evidence.
     """
     started = time.monotonic()
     with engine.begin() as connection:
@@ -151,6 +175,9 @@ def publish_catalog(
         if checkpoint is not None:
             checkpoint("after_copy", connection)
 
+        restored_versions = restore_pruned_catalog_versions(
+            connection, catalog.countries
+        )
         stored_versions = _reconcile_stored_versions(connection, catalog)
         existing = stored_versions.countries
 
@@ -161,6 +188,7 @@ def publish_catalog(
         parameter_search_files_written = write_parameter_search_files(
             connection, catalog.countries
         )
+        record_catalog_publication(connection, catalog.countries)
         if checkpoint is not None:
             checkpoint("after_reconciliation", connection)
 
@@ -179,13 +207,139 @@ def publish_catalog(
         if checkpoint is not None:
             checkpoint("after_validation", connection)
 
-    return _evidence(
-        catalog,
-        stored_versions,
-        parameter_trees_written=parameter_trees_written,
-        parameter_search_files_written=parameter_search_files_written,
-        started=started,
+    pruning = _prune_older_versions(engine, catalog)
+    return replace(
+        _evidence(
+            catalog,
+            stored_versions,
+            parameter_trees_written=parameter_trees_written,
+            parameter_search_files_written=parameter_search_files_written,
+            started=started,
+        ),
+        restored_catalog_versions=restored_versions,
+        pruned_catalog_versions=pruning.pruned,
+        catalog_pruning_failures=pruning.failures,
+        catalog_versions_left_to_prune=pruning.left_to_prune,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _PruningRun:
+    """What pruning did after a publication committed.
+
+    ``left_to_prune`` counts the chosen versions beyond this run's limit, which
+    the next publications prune.
+    """
+
+    pruned: tuple[PrunedCatalogVersion, ...]
+    failures: tuple[CatalogPruningFailure, ...]
+    left_to_prune: int
+
+
+def _prune_older_versions(engine: Engine, catalog: NormalizedCatalog) -> _PruningRun:
+    """Prune the catalog models' older versions, one transaction each.
+
+    Runs after the publication committed, so an exception, of any kind, never
+    fails the command: it is recorded and the next publication retries. Of
+    the chosen versions (``catalog_versions_to_prune``), a run prunes at most
+    ``MAX_CATALOG_VERSIONS_PRUNED_PER_RUN``, oldest first
+    (``catalog_versions_to_prune_now``). Each version's transaction takes the
+    publication lock, so it waits for any other publisher, chooses again from
+    the stored versions it then reads, and deletes and marks the version
+    together (``_prune_if_still_chosen``). An exception rolls back that version
+    alone, and the others are still pruned. An exception reading the stored
+    versions prunes nothing and is recorded for each model, with no version.
+    """
+    installed_versions = {
+        country.model.name: country.model_version.version
+        for country in catalog.countries
+    }
+    country_ids = {
+        country.model.name: country.country_id for country in catalog.countries
+    }
+    stored_versions = _returned_or_raised(
+        partial(_read_stored_versions, engine, installed_versions)
+    )
+    if isinstance(stored_versions, Exception):
+        return _PruningRun(
+            pruned=(),
+            failures=tuple(
+                pruning_failure(country_ids[model_name], None, stored_versions)
+                for model_name in sorted(country_ids)
+            ),
+            left_to_prune=0,
+        )
+    pruned_now, left_to_prune = catalog_versions_to_prune_now(
+        catalog_versions_to_prune(stored_versions, installed_versions)
+    )
+    pruned: list[PrunedCatalogVersion] = []
+    failures: list[CatalogPruningFailure] = []
+    for stored in pruned_now:
+        country_id = country_ids[stored.model_name]
+        deleted = _returned_or_raised(
+            partial(
+                _prune_if_still_chosen,
+                engine,
+                stored,
+                installed_versions[stored.model_name],
+            )
+        )
+        if isinstance(deleted, Exception):
+            failures.append(pruning_failure(country_id, stored.version, deleted))
+        elif deleted is not None:
+            pruned.append(
+                PrunedCatalogVersion(
+                    country_id=country_id,
+                    policyengine_version=stored.version,
+                    parameter_values=deleted.parameter_values,
+                    parameter_tree_children=deleted.parameter_tree_children,
+                    parameter_search_files=deleted.parameter_search_files,
+                )
+            )
+    return _PruningRun(
+        pruned=tuple(pruned), failures=tuple(failures), left_to_prune=left_to_prune
+    )
+
+
+def _read_stored_versions(
+    engine: Engine, installed_versions: Mapping[str, str]
+) -> tuple[StoredCatalogVersion, ...]:
+    with engine.connect() as connection:
+        return read_stored_catalog_versions(connection, installed_versions)
+
+
+def _prune_if_still_chosen(
+    engine: Engine, stored: StoredCatalogVersion, installed_version: str
+) -> PrunedRows | None:
+    """Prune one version in its own transaction, if the rule still chooses it.
+
+    The choice was made from versions read without the publication lock; a
+    publisher that committed since may have changed which versions the rule
+    keeps. Under the lock this reads the model's stored versions again and
+    returns None, deleting nothing, when ``catalog_versions_to_prune`` no
+    longer chooses the version, or when it was pruned meanwhile.
+    """
+    with engine.begin() as connection:
+        _acquire_publication_lock(connection)
+        current_versions = read_stored_catalog_versions(connection, [stored.model_name])
+        chosen = catalog_versions_to_prune(
+            current_versions, {stored.model_name: installed_version}
+        )
+        if all(version.id != stored.id for version in chosen):
+            return None
+        return prune_catalog_version(connection, stored.id)
+
+
+def _returned_or_raised(action: Callable[[], ResultT]) -> ResultT | Exception:
+    """Return what ``action`` returns, or the exception it raised.
+
+    Pruning runs after the publication committed, so an exception while
+    pruning is recorded rather than raised, whatever its kind.
+    """
+    try:
+        return action()
+    except Exception as error:  # noqa: BLE001  # pruning failures are recorded, never raised
+        return error
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,7 +442,8 @@ def _evidence(
     rows and reports none of the staged fallbacks or omissions, which describe
     rows that were not published. It lists each stored version whose time
     periods publication replaced, with the previous and new ones, and the
-    parameter trees and search files publication wrote.
+    parameter trees and search files publication wrote. The caller adds the
+    pruned versions publication restored and the older versions it pruned.
     """
     kept_region_summaries = stored_versions.kept_region_summaries
     kept_countries = {country_id for country_id, *_counts in kept_region_summaries}

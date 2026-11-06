@@ -23,6 +23,7 @@ from policyengine_api.data.v2.catalog import (
     publication_reconciliation,
     publication_staging,
     publication_tables,
+    publication_types,
 )
 from policyengine_api.data.v2.catalog.publication_parameter_tree import (
     catalog_parameter_tree,
@@ -298,6 +299,28 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         time_period_updates=(("us", "6.7.5", (2035, 2034, 2023, 2022), (2035, 2034)),),
         parameter_trees_written=(("policyengine-uk", "6.7.5", 2_430),),
         parameter_search_files_written=(("policyengine-uk", "6.7.5", 412_000, 61_000),),
+        restored_catalog_versions=(("uk", "6.7.4", 1_172_130),),
+        pruned_catalog_versions=(
+            publication_types.PrunedCatalogVersion(
+                country_id="us",
+                policyengine_version="6.6.0",
+                parameter_values=1_172_130,
+                parameter_tree_children=101_000,
+                parameter_search_files=1,
+            ),
+        ),
+        catalog_pruning_failures=(
+            publication_types.CatalogPruningFailure(
+                country_id="uk",
+                policyengine_version="6.6.0",
+                error_type="OperationalError",
+                message=(
+                    "pruning the uk catalog version 6.6.0 failed and was rolled "
+                    "back: the database reported QueryCanceled (SQLSTATE 57014)"
+                ),
+            ),
+        ),
+        catalog_versions_left_to_prune=3,
     ).as_dict()
 
     assert evidence == {
@@ -342,6 +365,36 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
                 "compressed_bytes": 61_000,
             }
         ],
+        "restored_catalog_versions": [
+            {
+                "country_id": "uk",
+                "policyengine_version": "6.7.4",
+                "parameter_values": 1_172_130,
+            }
+        ],
+        "pruned_catalog_versions": [
+            {
+                "country_id": "us",
+                "policyengine_version": "6.6.0",
+                "deleted_rows": {
+                    "parameter_values": 1_172_130,
+                    "parameter_tree_children": 101_000,
+                    "parameter_search_files": 1,
+                },
+            }
+        ],
+        "catalog_pruning_failures": [
+            {
+                "country_id": "uk",
+                "policyengine_version": "6.6.0",
+                "error_type": "OperationalError",
+                "message": (
+                    "pruning the uk catalog version 6.6.0 failed and was rolled "
+                    "back: the database reported QueryCanceled (SQLSTATE 57014)"
+                ),
+            }
+        ],
+        "catalog_versions_left_to_prune": 3,
         "elapsed_seconds": 2.346,
     }
     assert (

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 
 import pytest
 
-from policyengine_api.data.v2.catalog import initialization
+from policyengine_api.data.v2.catalog import initialization, publication_types
 from policyengine_api.data.v2.catalog.errors import CatalogExtractionError
 from policyengine_api.data.v2.catalog.publication import PublicationEvidence
 from policyengine_api.data.v2.catalog.region_data_verification import (
@@ -251,6 +252,89 @@ def test_main_emits_typed_success_and_redacted_unexpected_failure(
     assert '"outcome": "error"' in failure.err
     assert "do-not-print" not in failure.err
     assert "secret-host" not in failure.err
+
+
+def test_main_succeeds_and_prints_each_pruning_failure_to_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A pruning failure leaves the committed publication's command successful.
+
+    The failure is in the evidence on stdout and is printed to stderr, one line
+    each, with the country, version, exception type and message.
+    """
+    message = (
+        "pruning the us catalog version 5.0.1 failed and was rolled back: the "
+        "database reported InsufficientPrivilege (SQLSTATE 42501)"
+    )
+    failure = publication_types.CatalogPruningFailure(
+        country_id="us",
+        policyengine_version="5.0.1",
+        error_type="ProgrammingError",
+        message=message,
+    )
+    evidence = PublicationEvidence(
+        policyengine_version=POLICYENGINE_VERSION,
+        dependency_versions=(),
+        entity_counts={"models": 2},
+        fallback_summaries=(),
+        elapsed_seconds=1.0,
+        catalog_pruning_failures=(failure,),
+    )
+    monkeypatch.setattr(initialization, "initialize_catalog", lambda: evidence)
+
+    assert initialization.main() == 0
+
+    output = capsys.readouterr()
+    assert json.loads(output.out)["catalog_pruning_failures"] == [
+        {
+            "country_id": "us",
+            "policyengine_version": "5.0.1",
+            "error_type": "ProgrammingError",
+            "message": message,
+        }
+    ]
+    assert output.err.splitlines() == [
+        f"catalog pruning failed for us 5.0.1: ProgrammingError: {message}"
+    ]
+
+
+def test_main_prints_a_pruning_failure_that_chose_no_version_to_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A failure to read the stored versions names the country but no version."""
+    message = (
+        "reading the stored uk catalog versions to choose which to prune failed: "
+        "the database reported QueryCanceled (SQLSTATE 57014)"
+    )
+    evidence = PublicationEvidence(
+        policyengine_version=POLICYENGINE_VERSION,
+        dependency_versions=(),
+        entity_counts={"models": 2},
+        fallback_summaries=(),
+        elapsed_seconds=1.0,
+        catalog_pruning_failures=(
+            publication_types.CatalogPruningFailure(
+                country_id="uk",
+                policyengine_version=None,
+                error_type="OperationalError",
+                message=message,
+            ),
+        ),
+    )
+    monkeypatch.setattr(initialization, "initialize_catalog", lambda: evidence)
+
+    assert initialization.main() == 0
+
+    output = capsys.readouterr()
+    assert (
+        json.loads(output.out)["catalog_pruning_failures"][0]["policyengine_version"]
+        is None
+    )
+    assert output.err.splitlines() == [
+        f"catalog pruning failed for uk: OperationalError: {message}"
+    ]
 
 
 def test_initializer_is_not_imported_by_application_startup_modules() -> None:

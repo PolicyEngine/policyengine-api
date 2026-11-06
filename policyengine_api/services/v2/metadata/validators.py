@@ -9,6 +9,8 @@ from policyengine_api.data.v2.catalog.catalog_selection_validation import (
 )
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from policyengine_api.data.v2.catalog.catalog_selection_validation import (
         SelectedCatalog,
     )
@@ -45,6 +47,62 @@ class ParameterTreeUnavailableError(MetadataCatalogUnavailableError):
     catalog format 2 but without one; any other version has none. The message
     names the version and is safe to return to the caller.
     """
+
+
+class CatalogValuesPrunedError(MetadataCatalogUnavailableError):
+    """Raised when catalog pruning removed the selected version's current-law data.
+
+    Catalog publication prunes the stored versions other than the installed
+    one and the two most recently published others: it deletes their
+    current-law parameter values, parameter tree rows and parameter search
+    file, which publishing the version again restores. The message names the
+    country and the version and is safe to return to the caller.
+    """
+
+
+def parameter_tree_unavailable_error(
+    selected: SelectedCatalog,
+) -> ParameterTreeUnavailableError:
+    """Return the error for a selected version that has no parameter tree."""
+    msg = (
+        f"catalog version {selected.policyengine_version} has no parameter "
+        "tree: catalog publication writes trees only for the versions it "
+        "publishes and for the installed version with catalog format 2"
+    )
+    return ParameterTreeUnavailableError(msg)
+
+
+def parameter_search_file_unavailable_error(
+    selected: SelectedCatalog,
+) -> ParameterSearchFileUnavailableError:
+    """Return the error for a selected version that has no parameter search file."""
+    msg = (
+        f"catalog version {selected.policyengine_version} has no parameter search "
+        "file: only catalog format 2 versions that catalog publication has "
+        "published, or run with installed, since search files were added have one"
+    )
+    return ParameterSearchFileUnavailableError(msg)
+
+
+def require_current_law_values(
+    selected: SelectedCatalog, *, pruned_at: datetime | None
+) -> None:
+    """Raise CatalogValuesPrunedError if the selected version was pruned.
+
+    ``pruned_at`` is the version's ``catalog_values_pruned_at``: when catalog
+    publication removed its current-law values, tree rows and search file, or
+    None while they are stored.
+    """
+    if pruned_at is None:
+        return
+    version = selected.policyengine_version
+    msg = (
+        f"PolicyEngine.py {version}'s current-law parameter values for "
+        f"{selected.country_id} were removed from the catalog, with its "
+        "parameter tree and search file; they return when PolicyEngine.py "
+        f"{version} is installed again"
+    )
+    raise CatalogValuesPrunedError(msg)
 
 
 def validate_metadata_page(offset: int, limit: int) -> tuple[int, int]:

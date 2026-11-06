@@ -42,10 +42,15 @@ class KeptResponse:
 
 @dataclass(frozen=True)
 class FailedRead:
-    """A failed whole-version read, given to the requests that waited on it."""
+    """A failed whole-version read, given to the requests that waited on it.
+
+    ``cache_control`` is the failure's own Cache-Control header, if it set one,
+    such as the no-store of a version that catalog pruning removed values from.
+    """
 
     status_code: int
     body: bytes
+    cache_control: str | None = None
 
     def response(self) -> Response:
         """Return a new error response for one waiting request.
@@ -57,6 +62,11 @@ class FailedRead:
             content=self.body,
             status_code=self.status_code,
             media_type="application/json",
+            headers=(
+                None
+                if self.cache_control is None
+                else {"Cache-Control": self.cache_control}
+            ),
         )
 
 
@@ -72,11 +82,16 @@ class _InFlightRead:
 class MetadataResponseCache:
     """Keep whole-version responses, built once each per process.
 
-    A published catalog version changes only when a release's catalog
-    publication replaces its time-period options, before that release's
-    processes start, so a body built for a route, country and version stays
-    valid for the life of the process; a process of the previous release keeps
-    serving the time-period options it read. Responses
+    Of what these bodies hold, a published catalog version changes only when
+    a release's catalog publication replaces its time-period options, before
+    that release's processes start, or when pruning deletes its current-law
+    values, which restoration writes back identically; publication also sets
+    the version's ``catalog_last_published_at`` and pruning its
+    ``catalog_values_pruned_at``, which no body holds. So a body built for a
+    route, country and version stays valid for the life of the process; a
+    process of the previous release keeps serving the time-period options and
+    values it read. A read that fails, such as one of a version pruned since,
+    is never kept. Responses
     are kept under the exact version they were read from: a request without a
     version (the running version, fixed for the process) and one naming that
     version share one response. The most recently used ``capacity`` responses
@@ -158,7 +173,9 @@ class MetadataResponseCache:
                 built = build()
                 if not isinstance(built, BuiltResponse):
                     in_flight.outcome = FailedRead(
-                        status_code=built.status_code, body=bytes(built.body)
+                        status_code=built.status_code,
+                        body=bytes(built.body),
+                        cache_control=built.headers.get("cache-control"),
                     )
                     return built
                 kept = self._keep(route, country_id, requested_version, built)

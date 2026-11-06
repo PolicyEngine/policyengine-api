@@ -18,6 +18,7 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataResourceSuccessResponse,
 )
 from policyengine_api.fastapi_routes.v2.metadata.route_support import (
+    CURRENT_LAW_VALUE_ERROR_RESPONSES,
     METADATA_RESPONSES,
     CacheableMetadataRoute,
     read_resource,
@@ -75,6 +76,7 @@ def build_v2_model_catalog_router(
     @router.get(
         "/model-catalog/variables",
         response_model=MetadataCatalogVariablesResponse,
+        responses=CURRENT_LAW_VALUE_ERROR_RESPONSES,
         summary="Get every variable of one PolicyEngine.py catalog version",
         description=(
             "Returns all of the selected catalog version's variables in name "
@@ -100,6 +102,7 @@ def build_v2_model_catalog_router(
     @router.get(
         "/model-catalog/parameters",
         response_model=MetadataCatalogParametersResponse,
+        responses=CURRENT_LAW_VALUE_ERROR_RESPONSES,
         summary="Get several parameters of one catalog version by name",
         description=(
             "Returns the named parameters (repeat name for each, at most 100) "
