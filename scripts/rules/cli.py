@@ -74,7 +74,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", type=Path, default=REPO_ROOT, help="repository root")
     parser.add_argument(
         "--base-ref",
-        help="git ref to compare baselines against (default: origin/$GITHUB_BASE_REF)",
+        help=(
+            "git ref to compare baselines against (default: $RULES_BASE_REF, "
+            "else origin/$GITHUB_BASE_REF)"
+        ),
     )
     parser.add_argument(
         "--write-baselines",

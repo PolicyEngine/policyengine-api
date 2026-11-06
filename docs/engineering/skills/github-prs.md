@@ -188,14 +188,56 @@ the reason a code change or ruff setting couldn't remove the finding
 
 ## Commit Hygiene
 
-AI agents must run formatting and lint checks before committing their own code
+AI agents must run the quality checks before committing their own code
 changes:
 
 ```bash
-make format
-ruff check <changed Python files>
+make quality
 ```
 
-Commit only after formatting succeeds and changed Python files pass lint. If a
-broader repo-wide lint command fails on unrelated pre-existing issues, include
-that result in the handoff instead of hiding it.
+`make quality` applies ruff's fixes (`ruff check --fix`, then `ruff format`),
+then runs `make quality-check`: `uv lock --check`, `ruff check`,
+`ruff format --check`, Import Linter, mypy and the quality guards
+(`scripts/run_quality_guards.py`), without changing files. Commit the fixes
+it makes with your change. pr.yml's `quality-guards` job runs the same
+command and fails if the fixes changed a file (`api.quality.make-quality`).
+Keep the Makefile to rules, recipes and variables. The rules registry
+reads it to see which checks the job runs, and gives no credit to a
+Makefile that:
+
+- uses `include`, a conditional, `define`, `$(eval ...)`, a recipe after
+  `;`, or a computed target or variable name;
+- sets something that can hide failures (`.IGNORE`, `.ONESHELL`,
+  `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `SHELL`, `.SHELLFLAGS`);
+- or has a `GNUmakefile` or `makefile` beside it.
+
+`tests/unit/test_make_quality.py` also runs `make quality` with a stand-in
+for uv, and fails unless make runs every check and fails whenever one of
+them fails.
+
+A local run can still differ from CI's:
+
+- The job also runs the rules registry tool's own tests
+  (`scripts/rules/tests`), which `make quality` leaves out.
+- The rules guard compares baselines and rule statuses with
+  `RULES_BASE_REF`, which `make quality-check` sets to the commit `HEAD`
+  shares with `origin/<base branch>`: CI's `GITHUB_BASE_REF`, or `master`
+  locally. A branch is compared with where it left `master`; CI compares
+  its merge with `master` with the commit that merge is built on. Without
+  `origin/master`, or in a shallow clone without the merge base, git
+  reports an error and the local comparison is skipped, so fetch `origin`
+  with its history first.
+- `uv run --frozen --extra dev` installs what the `dev` extra needs but
+  removes nothing, so packages `make test` added for other groups stay in
+  `.venv` and mypy, Import Linter and deptry can see them locally.
+- Without `shellcheck` installed, the ci-scripts guard skips that check
+  locally; CI installs it and fails without it.
+- `uv lock --check` runs your uv; CI pins uv 0.13.4.
+- `make quality` stops at the first failing check, so fix it and run it
+  again to see the next one.
+
+diff-cover isn't part of it: it needs every test shard's coverage report
+(see the testing skill).
+
+Commit only after `make quality` passes. If a check fails on unrelated
+pre-existing issues, include that result in the handoff instead of hiding it.

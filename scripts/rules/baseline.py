@@ -20,7 +20,15 @@ class BaseUnavailableError(Exception):
 
 
 def default_base_ref() -> str | None:
-    """Return ``origin/<GITHUB_BASE_REF>`` on a pull-request run, otherwise None."""
+    """Return the git revision to compare with, if there is one.
+
+    That is RULES_BASE_REF as given, which make quality-check sets to the
+    commit the branch shares with its base branch; otherwise
+    ``origin/<GITHUB_BASE_REF>`` on a pull-request run; otherwise None.
+    """
+    explicit = os.environ.get("RULES_BASE_REF")
+    if explicit:
+        return explicit
     base = os.environ.get("GITHUB_BASE_REF")
     return f"origin/{base}" if base else None
 

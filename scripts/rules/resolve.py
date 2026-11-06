@@ -20,6 +20,11 @@ from scripts.rules.file_exceptions import (
     out_of_scope_files,
 )
 from scripts.rules.import_linter import resolve_import_linter
+from scripts.rules.makefile import (
+    job_make_commands,
+    job_make_targets,
+    root_makefile_problems,
+)
 from scripts.rules.model import CiRef, Kind, Rule, Violation
 from scripts.rules.workflows import JobBlock, parse_jobs
 
@@ -412,10 +417,25 @@ def _job_for(
             v(f"no job '{ref.job}' in {ref.workflow}", f"use one of {sorted(jobs)}")
         )
         return None, violations
-    if not job.invokes(ref.invocation):
+    # A make target the job runs counts as the job running its commands, but
+    # not a command with the - prefix, whose failure make ignores.
+    if not job.invokes(ref.invocation) and not any(
+        ref.invocation in command and not command.startswith("-")
+        for command in job_make_commands(root, job.run_text)
+    ):
+        problems = (
+            root_makefile_problems(root) if job_make_targets(job.run_text) else []
+        )
+        reason = (
+            f" (the Makefile {'; '.join(problems)}, so the commands of the make "
+            "targets it runs don't count)"
+            if problems
+            else ""
+        )
         violations.append(
             v(
-                f"job '{ref.job}' in {ref.workflow} does not run '{ref.invocation}'",
+                f"job '{ref.job}' in {ref.workflow} does not run "
+                f"'{ref.invocation}'{reason}",
                 f"correct {field}.invocation, or make the job run it",
             )
         )
