@@ -20,6 +20,12 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.pool import NullPool
 
 from policyengine_api.constants import REPO
+from policyengine_api.data.v2.models import V2_METADATA
+from policyengine_api.data.v2.privileges import (
+    ColumnPrivilege,
+    TablePrivilege,
+    declared_privileges,
+)
 from tests.integration.simulation_rows import (
     RUN_VERSIONS,
     PublicApiRows,
@@ -331,3 +337,35 @@ def test_the_public_api_reads_runs_and_results_but_writes_neither(
         report_id=uuid4(),
         run_id=uuid4(),
     )
+
+
+@pytest.mark.parametrize("role_kind", ["simulation_service", "modal_worker"])
+def test_each_simulation_role_updates_exactly_its_declared_columns(
+    connection: Connection, managed_v2_roles, role_kind: str
+) -> None:
+    """Every column of the run tables is updatable exactly when it is declared."""
+    role = getattr(managed_v2_roles, role_kind)
+    declared = declared_privileges(managed_v2_roles.deployment_environment)[role]
+    _act_as(connection, role)
+
+    for table in (
+        "simulation_runs",
+        "report_runs",
+        "household_jobs",
+        "budget_window_runs",
+    ):
+        updatable = {
+            column
+            for privilege in declared[table]
+            if isinstance(privilege, ColumnPrivilege)
+            and privilege.privilege is TablePrivilege.UPDATE
+            for column in privilege.columns
+        }
+        for column in V2_METADATA.tables[table].c:
+            # The privilege is checked when the statement starts, so no row is
+            # needed.
+            statement = f"UPDATE {table} SET {column.name} = {column.name} WHERE false"
+            if column.name in updatable:
+                connection.execute(text(statement))
+            else:
+                _refused(connection, statement)

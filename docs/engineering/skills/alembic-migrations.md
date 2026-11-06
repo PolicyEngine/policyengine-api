@@ -283,12 +283,12 @@ check the declarations:
 `apply` grants each declared privilege a role lacks, as one `GRANT` per role
 and table and one per column privilege. It never revokes: it reports
 privileges the file doesn't declare, on whole tables or on columns, and the
-projects' default privileges, in the job summary. `verify` checks each
-column of a column privilege with `has_column_privilege`, and fails when a
-role holds the same privilege on the whole table. It grants nothing when a declared role or
-table is missing. The roles themselves are provisioned outside the
-repository; `--create-missing-roles` is accepted only for the disposable test
-database.
+projects' default privileges, in the job summary. It grants nothing when a
+declared role or table is missing. `verify` checks each column of a column
+privilege with `has_column_privilege`, and fails when a role holds the same
+privilege on the whole table. The roles themselves are provisioned outside
+the repository; `--create-missing-roles` is accepted only for the disposable
+test database.
 
 A pull request may declare a role before an operator creates it by listing it
 in `ROLES_AWAITING_PROVISIONING` in `privileges.py`. While a listed role is

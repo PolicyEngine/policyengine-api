@@ -2,8 +2,9 @@
 
 ``set_report_type`` and ``create_report_run`` lock ``reports`` rows with
 ``SELECT ... FOR UPDATE``, which needs ``UPDATE`` on ``reports``; no managed
-role holds it, so none can run them. The simulation API creates reports and
-report runs with its own code.
+role holds it, so none can run them. ``complete_report_run`` sets
+``markdown``, which no managed role may update either. The simulation API
+creates and completes reports and report runs with its own code.
 """
 
 from __future__ import annotations
