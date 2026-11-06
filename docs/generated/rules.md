@@ -61,7 +61,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Ratcheted (existing violations still tolerated)
 
-- `api.dependencies.declared-and-used`: 16 remaining in `rules/baselines/deptry.txt`
+- `api.dependencies.declared-and-used`: 15 remaining in `rules/baselines/deptry.txt`
 - `api.quality.suppressions-explained`: 29 remaining in `rules/baselines/suppressions.txt`
 - `api.quality.tests-assert`: 21 remaining in `rules/baselines/tests-without-checks.txt`
 - `api.v2.connectors-no-cross-calls`: 7 remaining in `rules/baselines/import-linter-api-v2-connectors-independent.txt`

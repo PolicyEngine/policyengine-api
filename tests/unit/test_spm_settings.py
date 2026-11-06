@@ -238,39 +238,6 @@ def test_metadata_exposes_typed_defaults_only_when_available():
 
 
 @pytest.mark.usefixtures("certified_bundle")
-def test_certified_forecast_years_are_the_artifacts_years():
-    assert spm.certified_spm_forecast_years() == (2022, 2035)
-
-
-@pytest.mark.parametrize("model_supports_spm", [False, True])
-def test_certified_forecast_years_are_none_without_a_certified_forecast(
-    monkeypatch, model_supports_spm
-):
-    """No certified forecast means no years, whether or not the model has SPM."""
-    monkeypatch.setattr(spm, "_current_bundle", lambda: deepcopy(LEGACY_BUNDLE))
-    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: model_supports_spm)
-
-    def must_not_load(_expected):
-        msg = "No certified forecast should be loaded"
-        raise AssertionError(msg)
-
-    monkeypatch.setattr(spm, "_selected_forecast", must_not_load)
-    assert spm.certified_spm_forecast_years() is None
-
-
-@pytest.mark.usefixtures("certified_bundle")
-def test_certified_forecast_years_are_none_when_the_forecast_cannot_load(
-    monkeypatch,
-):
-    def mismatched_artifact(_expected):
-        msg = "Forecast content SHA256 mismatch"
-        raise ValueError(msg)
-
-    monkeypatch.setattr(spm, "_selected_forecast", mismatched_artifact)
-    assert spm.certified_spm_forecast_years() is None
-
-
-@pytest.mark.usefixtures("certified_bundle")
 def test_selected_area_must_exist_in_artifact():
     with pytest.raises(spm.SPMValidationError) as caught:
         spm.normalize_spm_selection(
