@@ -1807,7 +1807,7 @@ job = "quality-guards"
 invocation = "run_quality_guards.py"
 [rule.baseline]
 file = "rules/baselines/deptry.txt"
-count = 16
+count = 15
 [rule.proof]
 bad_fixture = "rules/fixtures/api.dependencies.declared-and-used/rejected"
 good_fixture = "rules/fixtures/api.dependencies.declared-and-used/accepted"
