@@ -62,6 +62,23 @@ def _add_us_tree_search_file_and_part_variable(session: Session) -> None:
     variables catalog carries that parameter's current-law values.
     """
     model_version = stored_model_version(session, "policyengine-us")
+    _add_us_tree_row_and_search_file(session)
+    session.add(
+        Variable(
+            id=uuid4(),
+            tax_benefit_model_version_id=model_version.id,
+            name="total_income",
+            label="Total income",
+            entity="person",
+            default_value=0,
+            adds_parameter_path="gov.example.rate",
+        )
+    )
+    session.commit()
+
+
+def _add_us_tree_row_and_search_file(session: Session) -> None:
+    model_version = stored_model_version(session, "policyengine-us")
     encoded = encode_parameter_search_file(country_search_file(US_CATALOG))
     session.add(
         ParameterTreeChild(
@@ -84,17 +101,25 @@ def _add_us_tree_search_file_and_part_variable(session: Session) -> None:
             compressed_size=encoded.compressed_size,
         )
     )
-    session.add(
-        Variable(
-            id=uuid4(),
-            tax_benefit_model_version_id=model_version.id,
-            name="total_income",
-            label="Total income",
-            entity="person",
-            default_value=0,
-            adds_parameter_path="gov.example.rate",
+
+
+def _restore_us_version(session: Session) -> None:
+    """Do to the pruned US version what publishing it again does."""
+    model_version = stored_model_version(session, "policyengine-us")
+    session.add_all(
+        ParameterValue(
+            id=value.id,
+            parameter_id=value.parameter_id,
+            value_json=value.value_json,
+            start_date=value.start_date,
+            end_date=value.end_date,
         )
+        for parameter in US_CATALOG.parameters
+        for value in parameter.values
     )
+    _add_us_tree_row_and_search_file(session)
+    model_version.catalog_values_pruned_at = None
+    session.add(model_version)
     session.commit()
 
 
@@ -278,3 +303,76 @@ def test_a_read_that_finds_rows_does_not_read_the_marker(
     # The catalog selection and the values read only.
     assert len(statements) == 2
     assert "catalog_values_pruned_at" not in statements[-1]
+
+
+def _kept_pruned_selection(session: Session) -> SelectedCatalogStore:
+    """Return a store holding the US selection made while the version was pruned.
+
+    The request's session is then done with its rows, so the kept selection
+    holds detached rows, as a closed request session leaves them in production.
+    """
+    _add_us_tree_search_file_and_part_variable(session)
+    _prune_us_version(session)
+    selected_catalogs = SelectedCatalogStore()
+    with pytest.raises(CatalogValuesPrunedError):
+        catalog_service(
+            session, selected_catalogs=selected_catalogs
+        ).list_parameter_values("us", POLICYENGINE_VERSION)
+    session.expunge_all()
+    kept_selection = selected_catalogs.get(("us", POLICYENGINE_VERSION))
+    assert kept_selection is not None
+    assert kept_selection.model_version.catalog_values_pruned_at is not None
+    return selected_catalogs
+
+
+def test_a_selection_kept_while_pruned_reads_only_the_marker_before_answering(
+    catalog_session: Session,
+) -> None:
+    """A kept pruned selection is checked against the database first.
+
+    The version is still pruned, so the request answers after reading its
+    marker alone, without reading the rows pruning removed.
+    """
+    selected_catalogs = _kept_pruned_selection(catalog_session)
+    service = catalog_service(catalog_session, selected_catalogs=selected_catalogs)
+
+    def read_values() -> None:
+        with pytest.raises(CatalogValuesPrunedError, match="were removed"):
+            service.list_parameter_values("us", POLICYENGINE_VERSION)
+
+    _result, statements = recorded_statements(catalog_session, read_values)
+
+    assert len(statements) == 1
+    assert "catalog_values_pruned_at" in statements[0]
+    assert "parameter_values" not in statements[0]
+
+
+def test_a_selection_kept_while_pruned_serves_the_version_once_restored(
+    catalog_session: Session,
+) -> None:
+    """Publishing the version again restores it for a process that kept it pruned.
+
+    The first read after the restoration reads the marker, finds it cleared and
+    keeps a new selection, so later reads read neither the marker nor the
+    selection again.
+    """
+    selected_catalogs = _kept_pruned_selection(catalog_session)
+    _restore_us_version(catalog_session)
+    service = catalog_service(catalog_session, selected_catalogs=selected_catalogs)
+
+    restored = service.list_parameter_values("us", POLICYENGINE_VERSION)
+    for read_name in sorted(PRUNED_DATA_READS):
+        PRUNED_DATA_READS[read_name](service)
+    later, statements = recorded_statements(
+        catalog_session,
+        lambda: service.list_parameter_values("us", POLICYENGINE_VERSION),
+    )
+
+    assert len(restored.items) == 2
+    kept_selection = selected_catalogs.get(("us", POLICYENGINE_VERSION))
+    assert kept_selection is not None
+    assert kept_selection.model_version.catalog_values_pruned_at is None
+    assert len(later.items) == 2
+    # The values read only.
+    assert len(statements) == 1
+    assert "catalog_values_pruned_at" not in statements[0]

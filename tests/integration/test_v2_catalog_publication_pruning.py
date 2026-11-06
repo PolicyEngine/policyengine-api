@@ -659,7 +659,9 @@ def test_a_process_that_selected_a_version_before_its_pruning_answers_503(
     A process of the previous release selected the old version before the
     next release's publication pruned it. Its later requests read the marker
     again when they find no values, so they answer 503 rather than an empty
-    result that a cache could keep for a day.
+    result that a cache could keep for a day. The variables catalog body it
+    built before the pruning stays kept: it answers 200 with that body, and
+    304 to its ETag, which equal what restoring the version writes.
     """
     _publish(publication_engine, OLD_VERSION)
     _publish(publication_engine, PREVIOUS_VERSION)
@@ -673,7 +675,18 @@ def test_a_process_that_selected_a_version_before_its_pruning_answers_503(
             response_cache=MetadataResponseCache(),
         )
         before_pruning = client.get("/v2/parameter-values", params=old_query)
+        variables_before_pruning = client.get(
+            "/v2/model-catalog/variables", params=old_query
+        )
         _publish(publication_engine, INSTALLED_VERSION)
+        variables_after_pruning = client.get(
+            "/v2/model-catalog/variables", params=old_query
+        )
+        variables_revalidated = client.get(
+            "/v2/model-catalog/variables",
+            params=old_query,
+            headers={"If-None-Match": variables_before_pruning.headers["etag"]},
+        )
         after_pruning = {
             path: client.get(path, params=old_query)
             for path in (
@@ -694,3 +707,221 @@ def test_a_process_that_selected_a_version_before_its_pruning_answers_503(
         assert response.status_code == 503, path
         assert response.json()["message"] == _pruned_message("us", OLD_VERSION)
         assert response.headers["cache-control"] == "no-store", path
+    assert variables_before_pruning.status_code == 200
+    assert variables_after_pruning.status_code == 200
+    assert variables_after_pruning.content == variables_before_pruning.content
+    assert (
+        variables_after_pruning.headers["etag"]
+        == variables_before_pruning.headers["etag"]
+    )
+    assert variables_revalidated.status_code == 304
+
+
+def test_a_process_that_selected_a_pruned_version_serves_it_once_restored(
+    publication_engine: Engine,
+    managed_v2_roles,
+    v2_engine_as_role,
+) -> None:
+    """A selection kept while the version was pruned doesn't outlive restoration.
+
+    A process selected the old version while it was pruned and answered 503.
+    A rollback's publication then restores it, and the same process serves
+    its values, tree and search file again.
+    """
+    for version in (OLD_VERSION, PREVIOUS_VERSION, INSTALLED_VERSION):
+        _publish(publication_engine, version)
+    old_query = {"country_id": "us", "policyengine_version": OLD_VERSION}
+    selected_catalogs = SelectedCatalogStore()
+    runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
+    try:
+        client = _runtime_client(
+            runtime_engine,
+            selected_catalogs=selected_catalogs,
+            response_cache=MetadataResponseCache(),
+        )
+        while_pruned = client.get("/v2/parameter-values", params=old_query)
+        _publish(publication_engine, OLD_VERSION)
+        after_restoration = {
+            path: client.get(path, params=old_query)
+            for path in (
+                "/v2/parameter-values",
+                "/v2/parameters/children",
+                "/v2/parameters/search-file",
+            )
+        }
+    finally:
+        runtime_engine.dispose()
+
+    assert while_pruned.status_code == 503
+    for path, response in after_restoration.items():
+        assert response.status_code == 200, (path, response.text)
+    values = after_restoration["/v2/parameter-values"].json()["result"]["items"]
+    assert len(values) == 2
+    kept_selection = selected_catalogs.get(("us", OLD_VERSION))
+    assert kept_selection is not None
+    assert kept_selection.model_version.catalog_values_pruned_at is None
+
+
+def test_a_version_kept_by_the_time_its_transaction_runs_is_not_pruned(
+    publication_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each pruning transaction chooses again, under the publication lock.
+
+    Between the read that chose the old US version and its transaction, the
+    stored versions change so that the rule keeps it: here its creation time
+    becomes the latest of the versions other than the installed one. Its
+    transaction then skips it, and nothing reports it as pruned or failed.
+    """
+    _publish(publication_engine, OLD_VERSION)
+    _publish(publication_engine, PREVIOUS_VERSION)
+    kept_meanwhile = _version_id(publication_engine, US_MODEL, OLD_VERSION)
+    us_old_before = _prunable_rows(publication_engine, US_MODEL, OLD_VERSION)
+    read_stored_catalog_versions = publication_module.read_stored_catalog_versions
+    reads: list[str] = []
+
+    def read_then_change_the_stored_versions(connection, model_names):
+        stored_versions = read_stored_catalog_versions(connection, model_names)
+        if not reads:
+            with publication_engine.begin() as other_publisher:
+                other_publisher.execute(
+                    text(
+                        "UPDATE tax_benefit_model_versions "
+                        "SET created_at = now() + interval '1 day' "
+                        "WHERE id = :version_id"
+                    ),
+                    {"version_id": kept_meanwhile},
+                )
+        reads.append("read")
+        return stored_versions
+
+    monkeypatch.setattr(
+        publication_module,
+        "read_stored_catalog_versions",
+        read_then_change_the_stored_versions,
+    )
+    evidence = _publish(publication_engine, INSTALLED_VERSION)
+    monkeypatch.undo()
+
+    assert evidence.pruned_catalog_versions == (_fixture_pruned("uk", OLD_VERSION),)
+    assert evidence.catalog_pruning_failures == ()
+    assert _prunable_rows(publication_engine, US_MODEL, OLD_VERSION) == us_old_before
+    assert _pruned_at(publication_engine, US_MODEL, OLD_VERSION) is None
+    assert _pruned_at(publication_engine, US_MODEL, PREVIOUS_VERSION) is None
+
+
+def test_a_non_database_error_rolls_back_that_version_and_publication_succeeds(
+    publication_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Any exception pruning one version is reported, not only a database error.
+
+    It comes after that version's deletes and marker, so they roll back; the
+    other version is still pruned and publication returns its evidence.
+    """
+    _publish(publication_engine, OLD_VERSION)
+    _publish(publication_engine, PREVIOUS_VERSION)
+    failing_version_id = _version_id(publication_engine, US_MODEL, OLD_VERSION)
+    us_old_before = _prunable_rows(publication_engine, US_MODEL, OLD_VERSION)
+    prune_catalog_version = publication_module.prune_catalog_version
+
+    def prune_then_raise_for_one_version(connection, version_id):
+        deleted = prune_catalog_version(connection, version_id)
+        if version_id == failing_version_id:
+            missing_name = "gov.example.rate"
+            raise KeyError(missing_name)
+        return deleted
+
+    monkeypatch.setattr(
+        publication_module, "prune_catalog_version", prune_then_raise_for_one_version
+    )
+    evidence = _publish(publication_engine, INSTALLED_VERSION)
+    monkeypatch.undo()
+
+    assert evidence.catalog_pruning_failures == (
+        CatalogPruningFailure(
+            country_id="us",
+            policyengine_version=OLD_VERSION,
+            error_type="KeyError",
+            message=(
+                f"pruning the us catalog version {OLD_VERSION} failed and was "
+                "rolled back: it raised KeyError"
+            ),
+        ),
+    )
+    assert evidence.pruned_catalog_versions == (_fixture_pruned("uk", OLD_VERSION),)
+    assert _prunable_rows(publication_engine, US_MODEL, OLD_VERSION) == us_old_before
+    assert _pruned_at(publication_engine, US_MODEL, OLD_VERSION) is None
+
+
+def test_a_run_prunes_at_most_two_versions_and_the_next_run_the_rest(
+    publication_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The first run after many releases prunes the two oldest versions only.
+
+    Four versions are chosen (5.0.1 and 5.0.2, in both countries). The first
+    run prunes both countries' 5.0.1 and reports two left; the next prunes
+    the rest.
+    """
+    monkeypatch.setattr(
+        publication_module,
+        "catalog_versions_to_prune",
+        lambda stored_versions, installed_versions: (),
+    )
+    for version in ("5.0.1", "5.0.2", "5.0.3"):
+        _publish(publication_engine, version)
+    monkeypatch.undo()
+
+    first = _publish(publication_engine, "5.0.4")
+    second = _publish(publication_engine, "5.0.4")
+    third = _publish(publication_engine, "5.0.4")
+
+    assert first.pruned_catalog_versions == (
+        _fixture_pruned("uk", "5.0.1"),
+        _fixture_pruned("us", "5.0.1"),
+    )
+    assert first.as_dict()["catalog_versions_left_to_prune"] == 2
+    assert second.pruned_catalog_versions == (
+        _fixture_pruned("uk", "5.0.2"),
+        _fixture_pruned("us", "5.0.2"),
+    )
+    assert second.as_dict()["catalog_versions_left_to_prune"] == 0
+    assert third.pruned_catalog_versions == ()
+    for model_name in MODEL_NAMES:
+        assert _pruned_at(publication_engine, model_name, "5.0.3") is None
+
+
+def test_a_version_without_current_law_rows_is_marked_pruned_with_zero_counts(
+    publication_engine: Engine,
+) -> None:
+    """Pruning a version that holds none of the rows it deletes still marks it."""
+    _publish(publication_engine, OLD_VERSION)
+    us_old_id = _version_id(publication_engine, US_MODEL, OLD_VERSION)
+    with publication_engine.begin() as connection:
+        for statement in (
+            "DELETE FROM parameter_values WHERE policy_id IS NULL "
+            "AND dynamic_id IS NULL AND parameter_id IN (SELECT id FROM parameters "
+            "WHERE tax_benefit_model_version_id = :version_id)",
+            "DELETE FROM parameter_tree_children "
+            "WHERE tax_benefit_model_version_id = :version_id",
+            "DELETE FROM parameter_search_files "
+            "WHERE tax_benefit_model_version_id = :version_id",
+        ):
+            connection.execute(text(statement), {"version_id": us_old_id})
+    _publish(publication_engine, PREVIOUS_VERSION)
+
+    evidence = _publish(publication_engine, INSTALLED_VERSION)
+
+    assert evidence.pruned_catalog_versions == (
+        _fixture_pruned("uk", OLD_VERSION),
+        PrunedCatalogVersion(
+            country_id="us",
+            policyengine_version=OLD_VERSION,
+            parameter_values=0,
+            parameter_tree_children=0,
+            parameter_search_files=0,
+        ),
+    )
+    assert evidence.catalog_pruning_failures == ()
+    assert _pruned_at(publication_engine, US_MODEL, OLD_VERSION) is not None

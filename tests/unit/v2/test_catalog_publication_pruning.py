@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import sqlalchemy as sa
 
+from policyengine_api.data.v2.catalog import publication_pruning
 from policyengine_api.data.v2.catalog.publication_pruning import (
     StoredCatalogVersion,
     catalog_versions_to_prune,
@@ -169,3 +170,44 @@ def test_a_failure_before_any_version_is_chosen_names_no_version() -> None:
         "reading the stored uk catalog versions to choose which to prune "
         "failed: the database reported QueryCanceled (SQLSTATE 57014)"
     )
+
+
+def test_a_failure_that_is_not_a_database_error_names_only_its_class() -> None:
+    error = KeyError("gov.example.rate = 0.25")
+
+    failure = pruning_failure("us", "5.0.1", error)
+
+    assert failure.error_type == "KeyError"
+    assert failure.message == (
+        "pruning the us catalog version 5.0.1 failed and was rolled back: it "
+        "raised KeyError"
+    )
+    for row_data in ("gov.example.rate", "0.25"):
+        assert row_data not in failure.message
+
+
+def test_a_run_prunes_at_most_two_versions_oldest_first() -> None:
+    chosen = (
+        _stored(UK_MODEL, "5.0.2", days_after_first=10),
+        _stored(UK_MODEL, "5.0.1", days_after_first=0),
+        _stored(US_MODEL, "5.0.1", days_after_first=0),
+        _stored(US_MODEL, "5.0.2", days_after_first=10),
+        _stored(US_MODEL, "5.0.3", days_after_first=30),
+    )
+
+    this_run, left_to_prune = publication_pruning.catalog_versions_to_prune_now(chosen)
+
+    assert publication_pruning.MAX_CATALOG_VERSIONS_PRUNED_PER_RUN == 2
+    # Versions created at the same instant, as one publication creates both
+    # countries' versions, are ordered by model name.
+    assert _versions(this_run) == [(UK_MODEL, "5.0.1"), (US_MODEL, "5.0.1")]
+    assert left_to_prune == 3
+
+
+def test_a_run_with_no_more_than_the_limit_prunes_them_all() -> None:
+    chosen = (_stored(US_MODEL, "5.0.1", days_after_first=0),)
+
+    this_run, left_to_prune = publication_pruning.catalog_versions_to_prune_now(chosen)
+
+    assert _versions(this_run) == [(US_MODEL, "5.0.1")]
+    assert left_to_prune == 0

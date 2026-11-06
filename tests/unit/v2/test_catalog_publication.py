@@ -320,6 +320,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
                 ),
             ),
         ),
+        catalog_versions_left_to_prune=3,
     ).as_dict()
 
     assert evidence == {
@@ -393,6 +394,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
                 ),
             }
         ],
+        "catalog_versions_left_to_prune": 3,
         "elapsed_seconds": 2.346,
     }
     assert (
