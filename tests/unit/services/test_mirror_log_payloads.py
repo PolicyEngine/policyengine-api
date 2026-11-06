@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 from uuid import UUID
@@ -25,6 +26,9 @@ from policyengine_api.services.user_policy_mirroring import (
     mirror_user_policy_after_commit,
 )
 from policyengine_api.services.user_policy_service import PendingUserPolicyMirrorEvent
+from policyengine_api.services.v2.households.transformations import (
+    translate_legacy_household,
+)
 from policyengine_api.services.v2.households.types import (
     LegacyHouseholdPersistenceResult,
     LegacyHouseholdSnapshot,
@@ -51,23 +55,29 @@ def _logged(logger: MagicMock) -> tuple[dict[str, object], str]:
     return payload, logger.log_struct.call_args.kwargs["severity"]
 
 
-def _household_snapshot() -> LegacyHouseholdSnapshot:
+def _household_snapshot(
+    household_json: dict[str, object] | None = None,
+) -> LegacyHouseholdSnapshot:
     return LegacyHouseholdSnapshot(
         country_id="us",
         legacy_household_id=42,
         api_version="1.0.0",
-        household_json={"people": {}},
+        household_json=household_json or {"people": {}},
         source_household_hash="source-hash",
     )
 
 
-def _household_event_service(*, fail_after_destination: bool) -> MagicMock:
+def _household_event_service(
+    *,
+    fail_after_destination: bool,
+    snapshot: LegacyHouseholdSnapshot | None = None,
+) -> MagicMock:
     service = MagicMock()
 
     def process(_country_id, _legacy_household_id, **callbacks):
         event = PendingHouseholdMirrorEvent(
             event_id=7,
-            snapshot=_household_snapshot(),
+            snapshot=snapshot or _household_snapshot(),
             source_fingerprint_sha256="f" * 64,
             was_processed=False,
         )
@@ -94,6 +104,8 @@ def _household_record(**changes: object) -> dict[str, object]:
         "destination_household_id": str(DESTINATION_ID),
         "outcome": "ok",
         "failure_category": None,
+        "error_type": None,
+        "failure_reason": None,
         "household_created": True,
         "mapping_created": False,
         "pending_event": False,
@@ -109,17 +121,23 @@ def _household_record(**changes: object) -> dict[str, object]:
         (
             "source",
             _household_record(
-                outcome="error", failure_category="database", pending_event=True
+                message="V1 household immediate copy failed",
+                outcome="error",
+                failure_category="database",
+                error_type="OperationalError",
+                pending_event=True,
             ),
             "ERROR",
         ),
         (
             "destination",
             _household_record(
+                message="V1 household immediate copy failed",
                 actual_write_sources=["cloud_sql"],
                 destination_household_id=None,
                 outcome="error",
                 failure_category="database",
+                error_type="OperationalError",
                 household_created=None,
                 mapping_created=None,
                 pending_event=True,
@@ -168,6 +186,70 @@ def test_household_copy_logs_one_complete_record(
     assert list(payload) == list(expected)
     assert payload == expected
     assert logged_severity == severity
+
+
+# v1 households that the v2 copy cannot translate. The person's name is
+# personal data the log must not hold, although some messages include it.
+PERSON_NAME = "Jane Example"
+UNTRANSLATABLE_HOUSEHOLDS = {
+    # The person is in no family, tax unit, SPM unit or marital unit, so the
+    # translated document breaks the v2 rule that every person belongs to one
+    # record of each.
+    "incomplete_memberships": {
+        "people": {PERSON_NAME: {"age": {"2026": 40}}},
+        "households": {"home": {"members": [PERSON_NAME]}},
+    },
+    "legacy_person_in_multiple_groups": {
+        "people": {PERSON_NAME: {"age": {"2026": 40}}},
+        "households": {
+            "first": {"members": [PERSON_NAME]},
+            "second": {"members": [PERSON_NAME]},
+        },
+    },
+}
+
+
+@pytest.mark.parametrize("failure_reason", list(UNTRANSLATABLE_HOUSEHOLDS))
+def test_household_translation_failure_logs_its_type_and_reason_only(
+    failure_reason: str,
+) -> None:
+    """A failed translation logs the exception's type and fixed reason.
+
+    The record holds neither the error message nor the household's names.
+    """
+    snapshot = _household_snapshot(UNTRANSLATABLE_HOUSEHOLDS[failure_reason])
+    mirror = MagicMock()
+    mirror.mirror_legacy_household.side_effect = translate_legacy_household
+
+    with (
+        patch("policyengine_api.services.household_mirroring.logger") as logger,
+        pytest.raises(HouseholdMirrorUnavailableError) as raised,
+    ):
+        process_household_event_after_commit(
+            "us",
+            42,
+            event_service=_household_event_service(
+                fail_after_destination=False, snapshot=snapshot
+            ),
+            mirror_factory=lambda: mirror,
+        )
+
+    payload, severity = _logged(logger)
+    assert payload == _household_record(
+        message="V1 household immediate copy failed",
+        actual_write_sources=["cloud_sql"],
+        destination_household_id=None,
+        outcome="error",
+        failure_category="translation",
+        error_type="LegacyHouseholdTranslationError",
+        failure_reason=failure_reason,
+        household_created=None,
+        mapping_created=None,
+        pending_event=True,
+    )
+    assert severity == "ERROR"
+    assert "Jane" not in json.dumps(payload)
+    assert str(raised.value.__cause__) not in json.dumps(payload)
 
 
 def _policy_snapshot() -> LegacyPolicySnapshot:
