@@ -12,6 +12,7 @@ from policyengine_api.data.v2.catalog.parameter_search_file import (
     PARAMETER_SEARCH_FILE_FORMAT,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads import (
+    read_catalog_values_pruned_at,
     read_metadata_catalog,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_datasets import (
@@ -92,8 +93,9 @@ from policyengine_api.services.v2.metadata.types import (
     ParameterValueFilter,
 )
 from policyengine_api.services.v2.metadata.validators import (
-    ParameterSearchFileUnavailableError,
-    ParameterTreeUnavailableError,
+    parameter_search_file_unavailable_error,
+    parameter_tree_unavailable_error,
+    require_current_law_values,
     require_metadata_resource,
     validate_economy_options,
     validate_metadata_page,
@@ -112,17 +114,6 @@ if TYPE_CHECKING:
     )
 
 
-def _parameter_search_file_unavailable(
-    selected: SelectedCatalog,
-) -> ParameterSearchFileUnavailableError:
-    msg = (
-        f"catalog version {selected.policyengine_version} has no parameter search "
-        "file: only catalog format 2 versions that catalog publication has "
-        "published, or run with installed, since search files were added have one"
-    )
-    return ParameterSearchFileUnavailableError(msg)
-
-
 class V2MetadataService:
     """Sequence metadata reads through a request-scoped database session.
 
@@ -130,6 +121,8 @@ class V2MetadataService:
     version, or for the running version when none is given. List methods page
     with offset and a limit of 1-500 and report has_more; get methods raise
     MetadataResourceNotFoundError when the selected catalog lacks the item.
+    Reads of current-law values, the parameter tree or the search file raise
+    CatalogValuesPrunedError for a version catalog pruning removed them from.
     """
 
     def __init__(
@@ -171,6 +164,18 @@ class V2MetadataService:
         if self._selected_catalogs is not None:
             self._selected_catalogs.keep(key, selected)
         return selected
+
+    def _require_unpruned(self, selected: SelectedCatalog, *, rows_found: bool) -> None:
+        # Raise CatalogValuesPrunedError if pruning removed the version's
+        # current-law data. A selection kept for the process may predate the
+        # pruning, so a read that found nothing reads the marker again.
+        pruned_at = selected.model_version.catalog_values_pruned_at
+        if pruned_at is None and not rows_found:
+            pruned_at = read_catalog_values_pruned_at(
+                self._database_session.session,
+                model_version_id=selected.model_version.id,
+            )
+        require_current_law_values(selected, pruned_at=pruned_at)
 
     def _select_paginated_catalog(
         self,
@@ -394,15 +399,11 @@ class V2MetadataService:
             offset=offset,
             limit=limit,
         )
+        self._require_unpruned(selected, rows_found=bool(rows))
         if not rows and not read_parameter_tree_written(
             session, model_version_id=selected.model_version.id
         ):
-            msg = (
-                f"catalog version {selected.policyengine_version} has no parameter "
-                "tree: catalog publication writes trees only for the versions it "
-                "publishes and for the installed version with catalog format 2"
-            )
-            raise ParameterTreeUnavailableError(msg)
+            raise parameter_tree_unavailable_error(selected)
         return page_result(
             selected,
             metadata_parameter_children(rows),
@@ -430,8 +431,9 @@ class V2MetadataService:
                 file_format=PARAMETER_SEARCH_FILE_FORMAT,
             ),
         )
+        self._require_unpruned(selected, rows_found=search_file is not None)
         if search_file is None:
-            raise _parameter_search_file_unavailable(selected)
+            raise parameter_search_file_unavailable_error(selected)
         return search_file
 
     def get_parameter_search_file_hash(
@@ -451,8 +453,9 @@ class V2MetadataService:
             model_version_id=selected.model_version.id,
             file_format=PARAMETER_SEARCH_FILE_FORMAT,
         )
+        self._require_unpruned(selected, rows_found=bool(rows))
         if not rows:
-            raise _parameter_search_file_unavailable(selected)
+            raise parameter_search_file_unavailable_error(selected)
         content_sha256: str = rows[0].content_sha256
         return content_sha256
 
@@ -484,6 +487,7 @@ class V2MetadataService:
             offset=offset,
             limit=limit,
         )
+        self._require_unpruned(selected, rows_found=bool(rows))
         return page_result(
             selected,
             [metadata_parameter_value(row) for row in rows],
@@ -502,13 +506,14 @@ class V2MetadataService:
         Values belonging to a reform or dynamic are never returned.
         """
         selected = self._select_catalog(country_id, policyengine_version)
+        value_row = read_parameter_value(
+            self._database_session.session,
+            model_version_id=selected.model_version.id,
+            value_id=value_id,
+        )
+        self._require_unpruned(selected, rows_found=value_row is not None)
         row = require_metadata_resource(
-            read_parameter_value(
-                self._database_session.session,
-                model_version_id=selected.model_version.id,
-                value_id=value_id,
-            ),
-            description=f"parameter value {value_id}",
+            value_row, description=f"parameter value {value_id}"
         )
         return MetadataDetailResult(
             policyengine_version=selected.policyengine_version,
@@ -715,6 +720,7 @@ class V2MetadataService:
             model_version_id=selected.model_version.id,
             parameter_names=part_paths,
         )
+        self._require_unpruned(selected, rows_found=bool(part_values) or not part_paths)
         return metadata_catalog_variables(
             selected,
             variables=variables,
@@ -746,6 +752,7 @@ class V2MetadataService:
         value_rows = read_current_law_values_by_parameter_name(
             session, model_version_id=model_version_id, parameter_names=found_names
         )
+        self._require_unpruned(selected, rows_found=bool(value_rows) or not found_names)
         node_rows = read_parameter_node_labels(
             session,
             model_version_id=model_version_id,

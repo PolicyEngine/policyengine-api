@@ -23,6 +23,7 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataParameterValuePageResponse,
 )
 from policyengine_api.fastapi_routes.v2.metadata.route_support import (
+    CURRENT_LAW_VALUE_ERROR_RESPONSES,
     METADATA_RESPONSES,
     PARAMETER_SEARCH_FILE_ERROR_RESPONSES,
     PARAMETER_TREE_ERROR_RESPONSES,
@@ -204,6 +205,7 @@ def build_v2_metadata_parameter_router(
     @router.get(
         "/parameter-values",
         response_model=MetadataParameterValuePageResponse,
+        responses=CURRENT_LAW_VALUE_ERROR_RESPONSES,
         summary="List canonical values from a selected PolicyEngine.py catalog",
     )
     def list_parameter_values(
@@ -237,6 +239,7 @@ def build_v2_metadata_parameter_router(
     @router.get(
         "/parameter-values/{value_id}",
         response_model=MetadataParameterValueDetailResponse,
+        responses=CURRENT_LAW_VALUE_ERROR_RESPONSES,
         summary="Get one canonical value from a selected PolicyEngine.py catalog",
     )
     def get_parameter_value(

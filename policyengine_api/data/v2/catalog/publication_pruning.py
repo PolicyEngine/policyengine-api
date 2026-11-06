@@ -1,0 +1,272 @@
+"""Prune older stored catalog versions, and restore a pruned version.
+
+Each stored catalog version costs about 550 MB, mostly its current-law
+parameter values and its parameter tree rows. After a publication commits,
+catalog publication keeps, for each model of the catalog it published, the
+installed version and the most recently created other version (the previous
+release's), and prunes every other stored version of that model that is not
+pruned already. Pruning a version deletes exactly:
+
+- its current-law parameter values: those of its parameters with neither a
+  policy nor a dynamic;
+- its parameter tree rows;
+- its parameter search files;
+
+and sets its ``catalog_values_pruned_at``, all in one transaction. It never
+deletes parameters (their values cascade with them, saved reforms' included),
+the model version row, its parameter nodes, variables, regions or datasets, or
+any value a policy or dynamic owns.
+
+These rows are package-derived: publishing a pruned version again, as a
+rollback that installs it does, restores them from the installed packages
+inside the publication's transaction. The values are inserted from the staged
+catalog here, before the stored version is compared with it, and the tree and
+search file are written by the usual writers for a version that has none.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+import sqlalchemy as sa
+
+from policyengine_api.data.v2.catalog.publication_inserts import (
+    INSERT_PARAMETER_VALUES,
+)
+from policyengine_api.data.v2.catalog.publication_tables import (
+    MODEL_VERSIONS,
+    MODELS,
+    PARAMETER_VALUES,
+    PARAMETERS,
+)
+from policyengine_api.data.v2.catalog.publication_types import (
+    CatalogPruningFailure,
+)
+from policyengine_api.data.v2.models import V2_METADATA
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping, Sequence
+    from datetime import datetime
+    from uuid import UUID
+
+    from sqlalchemy import Connection
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from policyengine_api.data.v2.catalog.records import CountryCatalog
+
+PARAMETER_TREE_CHILDREN = V2_METADATA.tables["parameter_tree_children"]
+PARAMETER_SEARCH_FILES = V2_METADATA.tables["parameter_search_files"]
+
+
+@dataclass(frozen=True, slots=True)
+class StoredCatalogVersion:
+    """One stored catalog version of a model, as pruning chooses among them."""
+
+    id: UUID
+    model_name: str
+    version: str
+    created_at: datetime
+    values_pruned: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PrunedRows:
+    """The rows pruning deleted from one catalog version, per table."""
+
+    parameter_values: int
+    parameter_tree_children: int
+    parameter_search_files: int
+
+
+def catalog_versions_to_prune(
+    stored_versions: Iterable[StoredCatalogVersion],
+    installed_versions: Mapping[str, str],
+) -> tuple[StoredCatalogVersion, ...]:
+    """Return the stored versions pruning removes current-law data from.
+
+    ``installed_versions`` maps each model of the published catalog, one per
+    country, to the version the publication published or republished. For
+    each of those models the installed version and the most recently created
+    other version are kept, whether or not that one was pruned before; every
+    other version of the model not pruned already is returned. Versions of a
+    model the catalog doesn't name are never returned. The result is in model
+    name order, oldest first within a model; versions created at the same
+    instant are ordered by their version text.
+    """
+    versions_by_model: dict[str, list[StoredCatalogVersion]] = defaultdict(list)
+    for stored in stored_versions:
+        if stored.model_name in installed_versions:
+            versions_by_model[stored.model_name].append(stored)
+    chosen: list[StoredCatalogVersion] = []
+    for model_name in sorted(versions_by_model):
+        others = sorted(
+            (
+                stored
+                for stored in versions_by_model[model_name]
+                if stored.version != installed_versions[model_name]
+            ),
+            key=lambda stored: (stored.created_at, stored.version),
+        )
+        # others[-1] is the most recently created other version: it is kept.
+        chosen.extend(stored for stored in others[:-1] if not stored.values_pruned)
+    return tuple(chosen)
+
+
+def read_stored_catalog_versions(
+    connection: Connection, model_names: Iterable[str]
+) -> tuple[StoredCatalogVersion, ...]:
+    """Return every stored version of the named models."""
+    rows = connection.execute(
+        sa.select(
+            MODEL_VERSIONS.c.id,
+            MODELS.c.name,
+            MODEL_VERSIONS.c.version,
+            MODEL_VERSIONS.c.created_at,
+            MODEL_VERSIONS.c.catalog_values_pruned_at,
+        )
+        .select_from(
+            MODEL_VERSIONS.join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
+        )
+        .where(MODELS.c.name.in_(list(model_names)))
+    )
+    return tuple(
+        StoredCatalogVersion(
+            id=row.id,
+            model_name=row.name,
+            version=row.version,
+            created_at=row.created_at,
+            values_pruned=row.catalog_values_pruned_at is not None,
+        )
+        for row in rows
+    )
+
+
+def prune_catalog_version(
+    connection: Connection, version_id: UUID
+) -> PrunedRows | None:
+    """Delete one version's current-law values, tree rows and search files.
+
+    Sets the version's ``catalog_values_pruned_at`` first, only if it is
+    unset, and returns None without deleting anything when it was set already,
+    as by a publisher that ran meanwhile. Runs in the caller's transaction,
+    which holds the publication lock, so the deletes and the marker commit or
+    roll back together.
+    """
+    marked = connection.execute(
+        sa.update(MODEL_VERSIONS)
+        .where(
+            MODEL_VERSIONS.c.id == version_id,
+            MODEL_VERSIONS.c.catalog_values_pruned_at.is_(None),
+        )
+        .values(catalog_values_pruned_at=sa.func.current_timestamp())
+    )
+    if marked.rowcount == 0:
+        return None
+    version_parameter_ids = sa.select(PARAMETERS.c.id).where(
+        PARAMETERS.c.tax_benefit_model_version_id == version_id
+    )
+    parameter_values = connection.execute(
+        sa.delete(PARAMETER_VALUES).where(
+            PARAMETER_VALUES.c.parameter_id.in_(version_parameter_ids),
+            PARAMETER_VALUES.c.policy_id.is_(None),
+            PARAMETER_VALUES.c.dynamic_id.is_(None),
+        )
+    ).rowcount
+    tree_rows = connection.execute(
+        sa.delete(PARAMETER_TREE_CHILDREN).where(
+            PARAMETER_TREE_CHILDREN.c.tax_benefit_model_version_id == version_id
+        )
+    ).rowcount
+    search_files = connection.execute(
+        sa.delete(PARAMETER_SEARCH_FILES).where(
+            PARAMETER_SEARCH_FILES.c.tax_benefit_model_version_id == version_id
+        )
+    ).rowcount
+    return PrunedRows(
+        parameter_values=parameter_values,
+        parameter_tree_children=tree_rows,
+        parameter_search_files=search_files,
+    )
+
+
+def pruning_failure(
+    country_id: str, version: str | None, error: SQLAlchemyError
+) -> CatalogPruningFailure:
+    """Describe a failed pruning without its statement, parameters or row data.
+
+    ``version`` is None when reading the stored versions failed, before any
+    version was chosen. SQLAlchemy's message quotes the statement and its
+    parameters, and the database's own message may quote values, so only the
+    class name and SQLSTATE of the error the database driver raised are
+    reported.
+    """
+    driver_error = getattr(error, "orig", None)
+    reported = type(error if driver_error is None else driver_error).__name__
+    sqlstate = getattr(driver_error, "sqlstate", None)
+    if isinstance(sqlstate, str) and sqlstate:
+        reported = f"{reported} (SQLSTATE {sqlstate})"
+    failed = (
+        f"reading the stored {country_id} catalog versions to choose which to "
+        "prune failed"
+        if version is None
+        else (
+            f"pruning the {country_id} catalog version {version} failed and was "
+            "rolled back"
+        )
+    )
+    return CatalogPruningFailure(
+        country_id=country_id,
+        policyengine_version=version,
+        error_type=type(error).__name__,
+        message=f"{failed}: the database reported {reported}",
+    )
+
+
+def _pruned_version_id(connection: Connection, country: CountryCatalog) -> UUID | None:
+    pruned_id: UUID | None = connection.execute(
+        sa.select(MODEL_VERSIONS.c.id)
+        .select_from(
+            MODEL_VERSIONS.join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
+        )
+        .where(
+            MODELS.c.name == country.model.name,
+            MODEL_VERSIONS.c.version == country.model_version.version,
+            MODEL_VERSIONS.c.catalog_values_pruned_at.is_not(None),
+        )
+    ).scalar_one_or_none()
+    return pruned_id
+
+
+def restore_pruned_catalog_versions(
+    connection: Connection, countries: Sequence[CountryCatalog]
+) -> tuple[tuple[str, str, int], ...]:
+    """Write back the current-law values of each staged version that was pruned.
+
+    Inserts the staged catalog's values, with their catalog IDs, for the
+    stored parameters of the same names, as publishing a new version does, and
+    clears the version's marker. Returns the country, version and values
+    written for each, in catalog order. Runs inside publication's transaction,
+    after staging and before the stored versions are compared with the staged
+    catalog, which then checks the restored values like every other table.
+    """
+    restored = []
+    for country in countries:
+        version_id = _pruned_version_id(connection, country)
+        if version_id is None:
+            continue
+        # SQLAlchemy keeps an INSERT's row count only when asked to.
+        parameter_values = connection.execute(
+            INSERT_PARAMETER_VALUES.execution_options(preserve_rowcount=True),
+            {"country_id": country.country_id},
+        ).rowcount
+        connection.execute(
+            sa.update(MODEL_VERSIONS)
+            .where(MODEL_VERSIONS.c.id == version_id)
+            .values(catalog_values_pruned_at=None)
+        )
+        restored.append(
+            (country.country_id, country.model_version.version, parameter_values)
+        )
+    return tuple(restored)

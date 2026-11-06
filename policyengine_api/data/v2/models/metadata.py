@@ -88,7 +88,10 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
 
     Owns its variables, parameters and parameter nodes, which are deleted with it,
     and records the country's current-law policy id and the years its metadata
-    covers.
+    covers. ``catalog_values_pruned_at`` records when catalog publication pruned
+    the version: it deleted the version's current-law parameter values,
+    parameter tree rows and parameter search file, which publishing the version
+    again restores from the installed packages, clearing the marker.
     """
 
     __tablename__ = "tax_benefit_model_versions"
@@ -114,6 +117,11 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
     catalog_format: int | None = None
     entities: list[CatalogEntity] | None = Field(default=None, sa_type=sa.JSON)
     basic_inputs: list[str] | None = Field(default=None, sa_type=sa.JSON)
+    # Null while the version's current-law values, tree and search file are
+    # stored; set in the same transaction that prunes them.
+    catalog_values_pruned_at: datetime | None = Field(
+        default=None, sa_type=sa.DateTime(timezone=True)
+    )
 
     model: TaxBenefitModel = Relationship(back_populates="versions")
     variables: list["Variable"] = Relationship(

@@ -141,13 +141,29 @@ def _error_payload(error: Exception) -> dict[str, object]:
 
 
 def main() -> int:
-    """Run explicit initialization and return a shell-compatible status."""
+    """Run explicit initialization and return a shell-compatible status.
+
+    A failure to prune an older catalog version leaves the status successful,
+    since the publication had committed; each one is in the evidence and is
+    also printed to stderr.
+    """
     try:
         evidence = initialize_catalog()
     except Exception as error:  # noqa: BLE001  # command must return safe evidence
         print(json.dumps(_error_payload(error), sort_keys=True), file=sys.stderr)
         return 1
     print(json.dumps(evidence.as_dict(), sort_keys=True))
+    for failure in evidence.catalog_pruning_failures:
+        country_and_version = " ".join(
+            part
+            for part in (failure.country_id, failure.policyengine_version)
+            if part is not None
+        )
+        print(
+            f"catalog pruning failed for {country_and_version}: "
+            f"{failure.error_type}: {failure.message}",
+            file=sys.stderr,
+        )
     return 0
 
 

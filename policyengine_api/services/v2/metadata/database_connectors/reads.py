@@ -5,14 +5,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import col, select
 
 from policyengine_api.data.v2.catalog.catalog_selection_reads import select_catalog
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
     SelectedCatalog,
 )
+from policyengine_api.data.v2.models import TaxBenefitModelVersion
 
 if TYPE_CHECKING:
+    from datetime import datetime
+    from uuid import UUID
+
     from sqlmodel import Session
 
 
@@ -49,3 +54,21 @@ def read_rows(
     except SQLAlchemyError as error:
         msg = "the v2 metadata catalog cannot be queried"
         raise MetadataCatalogUnavailableError(msg) from error
+
+
+def read_catalog_values_pruned_at(
+    session: Session, *, model_version_id: UUID
+) -> datetime | None:
+    """Return when catalog pruning removed the version's current-law data, or None.
+
+    It reads the version's ``catalog_values_pruned_at`` from the database, not
+    from a selection the process may have kept since before the pruning.
+    """
+    rows = read_rows(
+        session,
+        select(col(TaxBenefitModelVersion.catalog_values_pruned_at)).where(
+            col(TaxBenefitModelVersion.id) == model_version_id
+        ),
+    )
+    pruned_at: datetime | None = rows[0] if rows else None
+    return pruned_at

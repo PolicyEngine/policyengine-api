@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from sqlalchemy import Connection, Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.catalog.publication_inserts import publish_new_country
 from policyengine_api.data.v2.catalog.publication_parameter_search_file import (
@@ -18,6 +19,13 @@ from policyengine_api.data.v2.catalog.publication_parameter_search_file import (
 from policyengine_api.data.v2.catalog.publication_parameter_tree import (
     assert_parameter_trees_written,
     write_parameter_trees,
+)
+from policyengine_api.data.v2.catalog.publication_pruning import (
+    catalog_versions_to_prune,
+    prune_catalog_version,
+    pruning_failure,
+    read_stored_catalog_versions,
+    restore_pruned_catalog_versions,
 )
 from policyengine_api.data.v2.catalog.publication_reconciliation import (
     assert_canonical_value_uniqueness,
@@ -32,7 +40,9 @@ from policyengine_api.data.v2.catalog.publication_staging import (
     stage_catalog,
 )
 from policyengine_api.data.v2.catalog.publication_types import (
+    CatalogPruningFailure,
     CatalogPublicationError,
+    PrunedCatalogVersion,
     PublicationEvidence,
 )
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
@@ -139,7 +149,13 @@ def publish_catalog(
     catalog: the versions it publishes, and the installed version when an
     earlier release stored it with catalog format 2 but without them. Other
     stored versions, and an installed version stored before catalog format 2,
-    keep having none.
+    keep having none. A stored version that pruning removed current-law data
+    from gets its values back from the staged catalog, before the comparison,
+    and its tree and search file from those writers.
+
+    After the transaction commits, it prunes the older stored versions of the
+    catalog's models (``publication_pruning``), one transaction each; a
+    failure rolls back only that version and is reported in the evidence.
     """
     started = time.monotonic()
     with engine.begin() as connection:
@@ -151,6 +167,9 @@ def publish_catalog(
         if checkpoint is not None:
             checkpoint("after_copy", connection)
 
+        restored_versions = restore_pruned_catalog_versions(
+            connection, catalog.countries
+        )
         stored_versions = _reconcile_stored_versions(connection, catalog)
         existing = stored_versions.countries
 
@@ -179,13 +198,74 @@ def publish_catalog(
         if checkpoint is not None:
             checkpoint("after_validation", connection)
 
-    return _evidence(
-        catalog,
-        stored_versions,
-        parameter_trees_written=parameter_trees_written,
-        parameter_search_files_written=parameter_search_files_written,
-        started=started,
+    pruned_versions, pruning_failures = _prune_older_versions(engine, catalog)
+    return replace(
+        _evidence(
+            catalog,
+            stored_versions,
+            parameter_trees_written=parameter_trees_written,
+            parameter_search_files_written=parameter_search_files_written,
+            started=started,
+        ),
+        restored_catalog_versions=restored_versions,
+        pruned_catalog_versions=pruned_versions,
+        catalog_pruning_failures=pruning_failures,
     )
+
+
+def _prune_older_versions(
+    engine: Engine, catalog: NormalizedCatalog
+) -> tuple[tuple[PrunedCatalogVersion, ...], tuple[CatalogPruningFailure, ...]]:
+    """Prune the catalog models' older versions, one transaction each.
+
+    Returns the versions pruned and those whose pruning failed. Runs after the
+    publication committed. Each version's transaction takes the
+    publication lock, so it waits for any other publisher, and deletes and
+    marks the version together (``prune_catalog_version``). A database error
+    rolls back that version alone and is recorded, and the others are still
+    pruned; the next publication retries it. A database error reading the
+    stored versions prunes nothing and is recorded for each model, with no
+    version.
+    """
+    installed_versions = {
+        country.model.name: country.model_version.version
+        for country in catalog.countries
+    }
+    country_ids = {
+        country.model.name: country.country_id for country in catalog.countries
+    }
+    try:
+        with engine.connect() as connection:
+            stored_versions = read_stored_catalog_versions(
+                connection, installed_versions
+            )
+    except SQLAlchemyError as error:
+        return (), tuple(
+            pruning_failure(country_ids[model_name], None, error)
+            for model_name in sorted(country_ids)
+        )
+    pruned: list[PrunedCatalogVersion] = []
+    failures: list[CatalogPruningFailure] = []
+    for stored in catalog_versions_to_prune(stored_versions, installed_versions):
+        country_id = country_ids[stored.model_name]
+        try:
+            with engine.begin() as connection:
+                _acquire_publication_lock(connection)
+                deleted = prune_catalog_version(connection, stored.id)
+        except SQLAlchemyError as error:
+            failures.append(pruning_failure(country_id, stored.version, error))
+            continue
+        if deleted is not None:
+            pruned.append(
+                PrunedCatalogVersion(
+                    country_id=country_id,
+                    policyengine_version=stored.version,
+                    parameter_values=deleted.parameter_values,
+                    parameter_tree_children=deleted.parameter_tree_children,
+                    parameter_search_files=deleted.parameter_search_files,
+                )
+            )
+    return tuple(pruned), tuple(failures)
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,7 +368,8 @@ def _evidence(
     rows and reports none of the staged fallbacks or omissions, which describe
     rows that were not published. It lists each stored version whose time
     periods publication replaced, with the previous and new ones, and the
-    parameter trees and search files publication wrote.
+    parameter trees and search files publication wrote. The caller adds the
+    pruned versions publication restored and the older versions it pruned.
     """
     kept_region_summaries = stored_versions.kept_region_summaries
     kept_countries = {country_id for country_id, *_counts in kept_region_summaries}
