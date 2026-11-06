@@ -1,3 +1,19 @@
+## [5.33.0] - 2026-11-06
+
+### Added
+
+- Added `make quality`, which applies ruff's fixes and then runs every quality check (`uv lock --check`, ruff, Import Linter, mypy and the quality guards); pull request CI now runs the same command in one job and fails if the fixes changed a file.
+
+### Changed
+
+- Catalog publication gives an already-stored catalog version the time-period options (`metadata_time_periods`) of the catalog it stages, instead of failing when they differ, prints a warning naming the country, the version and both lists, and reports them under `updated_time_periods` in its evidence. Every other column and table must still match.
+
+### Removed
+
+- Remove `household_options` from the `/{country}/metadata` response, added in 5.22.0. No client read it, and household and society-wide calculations will offer the same years, from `economy_options.time_period`.
+- US 2022 and 2023 are no longer offered for society-wide calculations: `economy_options.time_period` in `/us/metadata` and the v2 catalog list US 2024 to 2035, and the UK years are 2024 to 2032 in both, each defined once in `policyengine_api/economy_years.py`. A society-wide request for a year outside its country's years (an annual `time_period`, or a budget window's `start_year`) returns 400 with the code `DATASET_YEAR_UNAVAILABLE` in `errors`, even when a result for that year is stored. Household calculations are unchanged.
+
+
 ## [5.32.1] - 2026-11-05
 
 ### Changed

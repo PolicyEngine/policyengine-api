@@ -1,1 +1,0 @@
-Remove `household_options` from the `/{country}/metadata` response, added in 5.22.0. No client read it, and household and society-wide calculations will offer the same years, from `economy_options.time_period`.
