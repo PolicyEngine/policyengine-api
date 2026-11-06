@@ -8,7 +8,7 @@ again and its values return.
 
 from __future__ import annotations
 
-from uuid import uuid4
+from uuid import UUID
 
 import pytest
 
@@ -27,11 +27,13 @@ PRUNED_MESSAGE = (
     f"return when PolicyEngine.py {PRUNED_VERSION} is installed again"
 )
 VERSION_QUERY = f"country_id=us&policyengine_version={PRUNED_VERSION}"
+# A fixed value, so every collection gives the parametrized test the same ID.
+PRUNED_VALUE_ID = UUID("6f1d5c2e-3b8a-4e7f-9a40-1c2d3e4f5a6b")
 
 # Each route that serves data pruning removes, and the reader method it calls.
 PRUNED_DATA_ROUTES = [
     (f"/v2/parameter-values?{VERSION_QUERY}", "list_parameter_values"),
-    (f"/v2/parameter-values/{uuid4()}?{VERSION_QUERY}", "get_parameter_value"),
+    (f"/v2/parameter-values/{PRUNED_VALUE_ID}?{VERSION_QUERY}", "get_parameter_value"),
     (f"/v2/parameters/children?{VERSION_QUERY}", "list_parameter_children"),
     (f"/v2/parameters/search-file?{VERSION_QUERY}", "get_parameter_search_file"),
     (f"/v2/model-catalog/variables?{VERSION_QUERY}", "get_catalog_variables"),
