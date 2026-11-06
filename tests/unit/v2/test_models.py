@@ -1,6 +1,7 @@
 """Structural contract tests for the complete reviewed v2 SQLModel schema."""
 
 from typing import Literal
+from uuid import uuid4
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -933,3 +934,28 @@ def test_parameter_search_files_hold_one_compressed_file_per_version() -> None:
     assert foreign_keys == {
         "tax_benefit_model_version_id": ("tax_benefit_model_versions", "CASCADE"),
     }
+
+
+def test_catalog_pruning_marker_is_a_nullable_timezone_aware_timestamp() -> None:
+    """A model version records when catalog publication pruned its values.
+
+    The column is null for a version whose current-law values, parameter tree
+    and search file are stored, and holds the time pruning removed them. It
+    has no default, so a version is published unpruned.
+    """
+    column = V2_METADATA.tables["tax_benefit_model_versions"].c[
+        "catalog_values_pruned_at"
+    ]
+
+    assert column.nullable
+    assert column.server_default is None
+    assert column.default is None
+    assert isinstance(column.type, sa.DateTime)
+    assert column.type.timezone is True
+    unpruned_version = TaxBenefitModelVersion(
+        model_id=uuid4(),
+        version="5.0.1",
+        current_law_id=2,
+        metadata_time_periods=[2026],
+    )
+    assert unpruned_version.catalog_values_pruned_at is None

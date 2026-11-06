@@ -236,6 +236,53 @@ def test_waiting_requests_receive_the_outcome_of_the_one_read(
     assert key not in cache._builds
 
 
+def test_waiting_requests_receive_a_failed_read_s_cache_control() -> None:
+    """A failure that no cache may keep reaches every waiting request as such.
+
+    The 503 for a version whose current-law values pruning removed carries
+    ``Cache-Control: no-store``; each waiting request's copy carries it too.
+    """
+    cache = MetadataResponseCache()
+    builds: list[str] = []
+    release = threading.Event()
+    key = ("variables", "us", "5.0.1")
+
+    def blocked_build() -> JSONResponse:
+        builds.append("built")
+        release.wait()
+        return JSONResponse(
+            {"status": "error"},
+            status_code=503,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    results: list[object] = []
+
+    def request() -> None:
+        results.append(cache.get_or_build(*key, blocked_build))
+
+    owner = threading.Thread(target=request, daemon=True)
+    waiters = [threading.Thread(target=request, daemon=True) for _ in range(3)]
+    try:
+        owner.start()
+        while not builds:
+            time.sleep(0.001)
+        for thread in waiters:
+            thread.start()
+        _wait_for_waiters(cache, key, 3)
+    finally:
+        release.set()
+    for thread in [owner, *waiters]:
+        thread.join(timeout=10)
+
+    assert builds == ["built"]
+    assert len(results) == 4
+    assert all(result.status_code == 503 for result in results)
+    assert [result.headers.get("cache-control") for result in results] == [
+        "no-store"
+    ] * 4
+
+
 def test_a_finished_read_leaves_a_newer_reads_entry_in_place() -> None:
     cache = MetadataResponseCache()
     building = threading.Event()

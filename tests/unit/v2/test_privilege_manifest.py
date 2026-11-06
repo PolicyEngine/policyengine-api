@@ -145,3 +145,29 @@ def test_rule_proof_runtime_privileges_declared() -> None:
         for missing in undeclared_requirements(bad, runtime_before_3977)
     ] == [("legacy_policy_mappings", TablePrivilege.SELECT)]
     assert undeclared_requirements(good, runtime_before_3977) == []
+
+
+def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> None:
+    """Catalog pruning deletes from three tables and marks the pruned version.
+
+    It removes an older version's current-law parameter values, parameter tree
+    rows and parameter search file, and records the pruning on the version's
+    row, so the catalog writer holds DELETE on those three tables only and
+    UPDATE on the model versions. It never deletes parameters, model versions
+    or anything a policy or dynamic owns.
+    """
+    catalog_writer = declared_privileges(TEST_ENVIRONMENT)[CATALOG_WRITER_ROLE]
+
+    assert {
+        table
+        for table, privileges in catalog_writer.items()
+        if TablePrivilege.DELETE in privileges
+    } == {"parameter_values", "parameter_tree_children", "parameter_search_files"}
+    assert TablePrivilege.UPDATE in catalog_writer["tax_benefit_model_versions"]
+    assert catalog_writer["parameter_tree_children"] == frozenset(
+        {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.DELETE}
+    )
+    assert catalog_writer["parameter_search_files"] == frozenset(
+        {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.DELETE}
+    )
+    assert catalog_writer["parameter_values"] == READ_WRITE

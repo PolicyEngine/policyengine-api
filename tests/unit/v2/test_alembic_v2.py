@@ -62,6 +62,7 @@ CATALOG_FORMAT_2_PARENT_REVISION = "fb1a3e40d3d6"
 CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
 AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
 PARAMETER_TREE_REVISION = "3869eb814a90"
+PARAMETER_SEARCH_FILE_REVISION = "c614b6bcccfc"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -243,6 +244,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        PARAMETER_SEARCH_FILE_REVISION,
         PARAMETER_TREE_REVISION,
         AREA_IMPACT_COORDINATE_REVISION,
         CATALOG_FORMAT_2_REVISION,
@@ -989,7 +991,7 @@ def test_parameter_search_file_revision_creates_only_the_files_table() -> None:
         if revision.down_revision == PARAMETER_TREE_REVISION
     ]
     assert len(children) == 1
-    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    assert children[0].revision == PARAMETER_SEARCH_FILE_REVISION
     revision = Path(children[0].path).read_text(encoding="utf-8")
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")
@@ -1009,3 +1011,45 @@ def test_parameter_search_file_revision_creates_only_the_files_table() -> None:
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body
         assert "op.add_column(" not in body
+
+
+def test_catalog_pruning_marker_revision_adds_only_one_nullable_column() -> None:
+    """The revision after the search file adds the catalog pruning marker.
+
+    It is generated, adds the nullable, timezone-aware
+    ``catalog_values_pruned_at`` column to ``tax_benefit_model_versions`` and
+    drops it on downgrade, and writes no data: catalog publication sets and
+    clears the marker.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == PARAMETER_SEARCH_FILE_REVISION
+    ]
+    assert len(children) == 1
+    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert upgrade.count("op.add_column(") == 1
+    assert '"tax_benefit_model_versions"' in upgrade
+    assert re.search(
+        r'sa\.Column\(\s*"catalog_values_pruned_at",\s*'
+        r"sa\.DateTime\(timezone=True\),\s*nullable=True,?\s*\)",
+        upgrade,
+    )
+    assert downgrade.count("op.drop_column(") == 1
+    assert '"catalog_values_pruned_at"' in downgrade
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "op.create_table(" not in body
+        assert "op.drop_table(" not in body

@@ -349,3 +349,87 @@ def test_parameter_search_file_table_is_created_empty_and_dropped_without_loss()
                 )
             )
         engine.dispose()
+
+
+CATALOG_PRUNING_MARKER_PARENT_REVISION = "c614b6bcccfc"
+
+
+def _pruning_marker(connection: sa.Connection, version_id: UUID) -> object:
+    return connection.execute(
+        text(
+            "SELECT catalog_values_pruned_at FROM tax_benefit_model_versions "
+            "WHERE id = :version_id"
+        ),
+        {"version_id": version_id},
+    ).scalar_one()
+
+
+def test_catalog_pruning_marker_is_added_null_and_dropped_without_loss() -> None:
+    """The marker revision adds a null column and downgrades cleanly.
+
+    A stored version starts unpruned (null), the column takes a timestamp,
+    and downgrading drops only the column: the version and its rows stay.
+    Upgrading again gives every version a null marker.
+    """
+    config = alembic_v2_config()
+    engine = create_engine(disposable_v2_url())
+    try:
+        command.downgrade(config, CATALOG_PRUNING_MARKER_PARENT_REVISION)
+        assert "catalog_values_pruned_at" not in table_columns(
+            engine, "tax_benefit_model_versions"
+        )
+        with engine.begin() as connection:
+            version_id = _catalog_version_published_before_format_2(connection)
+
+        command.upgrade(config, "head")
+
+        with engine.begin() as connection:
+            assert _pruning_marker(connection, version_id) is None
+            connection.execute(
+                text(
+                    "UPDATE tax_benefit_model_versions "
+                    "SET catalog_values_pruned_at = now() WHERE id = :version_id"
+                ),
+                {"version_id": version_id},
+            )
+            assert _pruning_marker(connection, version_id) is not None
+
+        command.downgrade(config, CATALOG_PRUNING_MARKER_PARENT_REVISION)
+
+        assert "catalog_values_pruned_at" not in table_columns(
+            engine, "tax_benefit_model_versions"
+        )
+        with engine.connect() as connection:
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT version FROM tax_benefit_model_versions "
+                        "WHERE id = :version_id"
+                    ),
+                    {"version_id": version_id},
+                ).scalar_one()
+                == "0.0.1-probe"
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT count(*) FROM parameters "
+                        "WHERE tax_benefit_model_version_id = :version_id"
+                    ),
+                    {"version_id": version_id},
+                ).scalar_one()
+                == 1
+            )
+
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            assert _pruning_marker(connection, version_id) is None
+    finally:
+        command.upgrade(config, "head")
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "DELETE FROM tax_benefit_models WHERE name = 'catalog-format-probe'"
+                )
+            )
+        engine.dispose()
