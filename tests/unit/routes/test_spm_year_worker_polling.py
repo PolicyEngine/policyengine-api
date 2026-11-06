@@ -31,6 +31,10 @@ SELECTION = {
     "county_vintage": "2020",
     "as_of": None,
 }
+# The annual requests ask for 2035, the last US year the Public API accepts,
+# so they reach the worker, which may still refuse the year. The budget windows
+# run from 2035 to 2036: they start in a US year, so they reach it too.
+ANNUAL_YEAR = "2035"
 YEAR_ERROR = {
     "code": "SPM_YEAR_UNAVAILABLE",
     "message": "Forecast has no entry for 2036",
@@ -164,7 +168,7 @@ def _typed_failure(
             ],
         }
         if budget_window
-        else segmented_result("2036", side)
+        else segmented_result(ANNUAL_YEAR, side)
     )
     typed_error = {
         "code": "SPM_CONFIGURATION_UNAVAILABLE",
@@ -232,7 +236,7 @@ def _setup_options(service: EconomyService, *, budget_window: bool) -> Any:
             options={},
             api_version="1.0.0",
         ),
-        time_period="budget_window:2035:2" if budget_window else "2036",
+        time_period="budget_window:2035:2" if budget_window else ANNUAL_YEAR,
     )
 
 
@@ -261,7 +265,7 @@ def _economy_request(*, budget_window: bool) -> tuple[str, dict[str, str]]:
             "start_year": "2035",
             "window_size": "2",
         }
-    return "/us/economy/1/over/2", {"time_period": "2036"}
+    return "/us/economy/1/over/2", {"time_period": ANNUAL_YEAR}
 
 
 def _get_economy(app: Flask, url: str, query: dict[str, str]) -> Any:
@@ -498,7 +502,7 @@ def test_an_uncertifiable_stored_result_becomes_terminal_instead_of_repeating(
                 stack,
                 setup,
                 status="ok",
-                reform_impact_json=segmented_result("2036", "reform"),
+                reform_impact_json=segmented_result(ANNUAL_YEAR, "reform"),
                 execution_id=job_id,
             )
         url, query = _economy_request(budget_window=budget_window)

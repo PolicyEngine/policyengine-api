@@ -171,7 +171,9 @@ class EconomyService(
 
         Return a result whose status is "ok" with the impact JSON in ``data``,
         "computing" while the calculation runs, or "error" with a ``message``.
-        Unexpected failures are logged and re-raised.
+        A year outside the country's ``ECONOMY_YEARS`` raises
+        SPMValidationError (``DATASET_YEAR_UNAVAILABLE``) before any stored
+        result is read. Unexpected failures are logged and re-raised.
         """
         set_runtime_context(
             country_id=impact_request.country_id,
@@ -181,6 +183,7 @@ class EconomyService(
         )
         economic_impact_setup_options: EconomicImpactSetupOptions | None = None
         try:
+            self._validate_economy_year(impact_request.country_id, time_period)
             # Normalize region early for US; this allows us to accommodate legacy
             # regions that don't contain a region prefix.
             impact_request = self._with_normalized_region(impact_request)
@@ -240,6 +243,7 @@ class EconomyService(
             baseline_policy_id=impact_request.baseline_policy_id,
             simulation_year=time_period,
         )
+        self._validate_economy_year(impact_request.country_id, time_period)
         setup_options = self._build_economic_impact_setup_options(
             self._with_normalized_region(impact_request),
             time_period=time_period,

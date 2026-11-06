@@ -20,6 +20,5 @@ DEP003 dpath
 DEP003 jsonschema
 DEP003 numpy
 DEP003 policyengine_core
-DEP003 policyengine_uk
 DEP003 spm_calculator
 DEP003 starlette

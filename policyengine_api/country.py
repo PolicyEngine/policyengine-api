@@ -37,7 +37,7 @@ from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
 )
 from policyengine_api.data.uk_regions import uk_areas
-from policyengine_api.economy_years import uk_economy_years
+from policyengine_api.economy_years import ECONOMY_YEARS
 from policyengine_api.services.household_calculation_service import CalculationResult
 from policyengine_api.spm import (
     SPM_INPUT_ERROR_CODES,
@@ -206,7 +206,8 @@ class PolicyEngineCountry:
     def build_microsimulation_options(self) -> dict:
         """Build the regions, time periods and datasets offered for economy runs."""
         # Shape: { region: [{ name: "uk", label: "the UK" }],
-        #   time_period: [{ name: 2022, label: "2022", ... }] }
+        #   time_period: [{ name: 2024, label: "2024", ... }] }
+        # The years are each country's ECONOMY_YEARS, in their order.
         options = {}
         if self.country_id == "uk":
             region = [
@@ -229,8 +230,7 @@ class PolicyEngineCountry:
                 for area in sorted(uk_areas(area_type), key=attrgetter("name"))
             )
             time_period = [
-                {"name": year, "label": str(year)}
-                for year in uk_economy_years(self.tax_benefit_system.parameters)
+                {"name": year, "label": str(year)} for year in ECONOMY_YEARS["uk"]
             ]
             datasets = [get_bundle_default_dataset_option("uk")]
             options["region"] = region
@@ -294,20 +294,7 @@ class PolicyEngineCountry:
             # Add all 436 congressional districts (435 voting + DC)
             region.extend(build_congressional_district_metadata())
             time_period = [
-                {"name": 2035, "label": "2035"},
-                {"name": 2034, "label": "2034"},
-                {"name": 2033, "label": "2033"},
-                {"name": 2032, "label": "2032"},
-                {"name": 2031, "label": "2031"},
-                {"name": 2030, "label": "2030"},
-                {"name": 2029, "label": "2029"},
-                {"name": 2028, "label": "2028"},
-                {"name": 2027, "label": "2027"},
-                {"name": 2026, "label": "2026"},
-                {"name": 2025, "label": "2025"},
-                {"name": 2024, "label": "2024"},
-                {"name": 2023, "label": "2023"},
-                {"name": 2022, "label": "2022"},
+                {"name": year, "label": str(year)} for year in ECONOMY_YEARS["us"]
             ]
             datasets = [get_bundle_default_dataset_option("us")]
             options["region"] = region

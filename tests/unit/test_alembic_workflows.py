@@ -235,6 +235,7 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert "test_alembic_v2_lifecycle.sh" not in workflow
     assert "test_v2_catalog_installed_folders.py" in workflow
     assert "test_v2_catalog_publication.py" in workflow
+    assert "test_v2_catalog_publication_time_periods.py" in workflow
     assert "test_v2_metadata_routes.py" in workflow
     assert "test_v2_country_routes.py" in workflow
     assert "test_v2_policy_persistence.py" in workflow

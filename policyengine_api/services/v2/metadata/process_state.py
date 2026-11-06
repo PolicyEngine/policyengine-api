@@ -20,10 +20,13 @@ A version of None means the running version, which is fixed for the process.
 class SelectedCatalogStore:
     """Keep each catalog version a request has selected, for the process's life.
 
-    A published catalog version never changes, so once a request has found it,
-    later requests for the same country and version need not query for it
-    again. Only successful selections are kept: an unsupported country, an
-    invalid version or an absent catalog is looked up, and fails, each time.
+    A published catalog version changes only when a release's catalog
+    publication replaces its time-period options, before that release's
+    processes start, so once a request has found it, later requests for the
+    same country and version need not query for it again; a process of the
+    previous release keeps the time-period options it read. Only
+    successful selections are kept: an unsupported country, an invalid
+    version or an absent catalog is looked up, and fails, each time.
     The kept records are detached, fully loaded rows that are only read.
     """
 

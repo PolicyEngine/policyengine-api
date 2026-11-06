@@ -169,9 +169,10 @@ CatalogResultT = TypeVar("CatalogResultT", bound=CatalogVersionResult)
 EXPLICIT_VERSION_MAX_AGE_SECONDS = 86_400
 """How long a response for a named catalog version may be reused (a day).
 
-A published catalog version never changes, so such a response stays valid
-until its code's response format changes; the ETag lets a client revalidate
-it cheaply after that.
+A published catalog version changes only when a release's publication
+replaces its time-period options, so such a response stays valid until then
+or until its code's response format changes; the ETag lets a client
+revalidate it cheaply after that.
 """
 RUNNING_VERSION_MAX_AGE_SECONDS = 300
 """How long a response for the running catalog version may be reused.

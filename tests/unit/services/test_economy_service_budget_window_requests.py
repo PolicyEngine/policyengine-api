@@ -10,7 +10,10 @@ from policyengine_api.services.economy_service import (
     BUDGET_WINDOW_MAX_YEARS,
     ImpactStatus,
 )
-from tests.fixtures.services.economy_service import MOCK_OBSERVABILITY_ID
+from tests.fixtures.services.economy_service import (
+    MOCK_OBSERVABILITY_ID,
+    create_mock_budget_window_batch_execution,
+)
 from tests.fixtures.services.economy_service_helpers import (
     GetBudgetWindowEconomicImpactFixtures,
     complete_budget_window_result,
@@ -60,6 +63,37 @@ class TestEconomyService:
                 ),
             ):
                 economy_service.get_budget_window_economic_impact(**base_params)
+
+        def test__given_window_ending_after_the_countrys_years__still_submits_it(
+            self,
+            economy_service,
+            base_params,
+            mock_simulation_entrypoint,
+            mock_budget_window_cache,
+        ):
+            """Only the start year must be one of the country's years.
+
+            2034 is a US year, so the window from 2034 to 2038 is submitted as
+            before, although 2036 to 2038 are after the last US year (2035).
+            """
+            base_params["start_year"] = "2034"
+            base_params["window_size"] = 5
+            mock_simulation_entrypoint.run_budget_window_batch.return_value = (
+                create_mock_budget_window_batch_execution(
+                    batch_job_id="fc-budget-after-2035", status="submitted"
+                )
+            )
+
+            result = economy_service.get_budget_window_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.COMPUTING
+            assert result.queued_years == ["2034", "2035", "2036", "2037", "2038"]
+            submitted_payload = (
+                mock_simulation_entrypoint.run_budget_window_batch.call_args.args[0]
+            )
+            assert submitted_payload["start_year"] == "2034"
+            assert submitted_payload["window_size"] == 5
+            mock_budget_window_cache.store_submitted.assert_called_once()
 
         @pytest.mark.usefixtures(
             "mock_country_package_versions",

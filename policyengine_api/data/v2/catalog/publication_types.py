@@ -22,6 +22,12 @@ class PublicationEvidence:
     # Stored catalog versions whose region rows were kept although the staged
     # regions differ: country, version, stored and staged region counts.
     kept_region_summaries: tuple[tuple[str, str, int, int], ...] = ()
+    # Stored catalog versions whose time periods (metadata_time_periods)
+    # publication replaced with the staged ones: country, version, and the
+    # previous and new years, each in the order stored.
+    time_period_updates: tuple[
+        tuple[str, str, tuple[int, ...], tuple[int, ...]], ...
+    ] = ()
     # The catalog's versions whose parameter tree this publication wrote:
     # model, version and tree rows. Empty when none needed one: each already
     # has its tree, or was stored before catalog format 2 and gets none.
@@ -61,6 +67,15 @@ class PublicationEvidence:
                     "staged_regions": staged,
                 }
                 for country_id, version, stored, staged in self.kept_region_summaries
+            ],
+            "updated_time_periods": [
+                {
+                    "country_id": country_id,
+                    "policyengine_version": version,
+                    "previous_time_periods": list(previous),
+                    "time_periods": list(current),
+                }
+                for country_id, version, previous, current in self.time_period_updates
             ],
             "parameter_trees_written": [
                 {"model": model_name, "version": version, "rows": rows}

@@ -295,6 +295,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         elapsed_seconds=2.3456,
         omitted_region_summaries=(("us", "place", 333),),
         kept_region_summaries=(("uk", "6.7.5", 5, 1_015),),
+        time_period_updates=(("us", "6.7.5", (2035, 2034, 2023, 2022), (2035, 2034)),),
         parameter_trees_written=(("policyengine-uk", "6.7.5", 2_430),),
         parameter_search_files_written=(("policyengine-uk", "6.7.5", 412_000, 61_000),),
     ).as_dict()
@@ -316,6 +317,14 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
                 "policyengine_version": "6.7.5",
                 "stored_regions": 5,
                 "staged_regions": 1_015,
+            }
+        ],
+        "updated_time_periods": [
+            {
+                "country_id": "us",
+                "policyengine_version": "6.7.5",
+                "previous_time_periods": [2035, 2034, 2023, 2022],
+                "time_periods": [2035, 2034],
             }
         ],
         "parameter_trees_written": [
@@ -445,3 +454,73 @@ def test_matching_kept_regions_log_nothing(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     assert _kept_region_records(monkeypatch, caplog, (0, 0)) == []
+
+
+def test_stored_versions_are_compared_without_their_time_periods() -> None:
+    """Publication replaces them instead (``update_stored_time_periods``)."""
+    dialect = postgresql.dialect()
+    country = normalized_catalog().country("us")
+    for with_format_2 in (False, True):
+        [(table_name, staged, stored), *_others] = (
+            publication_reconciliation._comparison_pairs(
+                country, with_format_2=with_format_2
+            )
+        )
+        assert table_name == "model version"
+        for statement in (staged, stored):
+            assert "current_law_id" in str(statement.compile(dialect=dialect))
+            assert "metadata_time_periods" not in str(
+                statement.compile(dialect=dialect)
+            )
+
+
+def _time_period_update_records(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    update: tuple[list[int], list[int]] | None,
+) -> tuple[object, list[logging.LogRecord]]:
+    monkeypatch.setattr(
+        publication,
+        "update_stored_time_periods",
+        lambda _connection, _country: update,
+    )
+    # An earlier test's Alembic logging setup may have disabled existing loggers.
+    monkeypatch.setattr(publication.LOGGER, "disabled", False)
+    us = normalized_catalog().country("us")
+    with caplog.at_level(logging.WARNING, logger=publication.LOGGER.name):
+        summary = publication._time_period_update(object(), us)
+    return summary, [
+        record for record in caplog.records if record.name == publication.LOGGER.name
+    ]
+
+
+def test_time_period_update_warning_prints_country_version_and_years(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    summary, [record] = _time_period_update_records(
+        monkeypatch, caplog, ([2025, 2024, 2023, 2022], [2025, 2024])
+    )
+
+    assert summary == ("us", "5.0.4", (2025, 2024, 2023, 2022), (2025, 2024))
+    # The seed command configures no logging, so Python's last-resort handler
+    # prints the record; this is the text the job output shows.
+    assert logging.lastResort is not None
+    assert logging.lastResort.format(record) == (
+        "replaced the time periods of the stored us catalog version 5.0.4: "
+        "[2025, 2024, 2023, 2022] became [2025, 2024]"
+    )
+    assert record.levelno == logging.WARNING
+    assert record.policyengine_attributes == {
+        "country_id": "us",
+        "policyengine_version": "5.0.4",
+        "stored_time_periods": [2025, 2024, 2023, 2022],
+        "staged_time_periods": [2025, 2024],
+    }
+
+
+def test_matching_time_periods_log_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    assert _time_period_update_records(monkeypatch, caplog, None) == (None, [])
