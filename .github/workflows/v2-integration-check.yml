@@ -94,10 +94,12 @@ jobs:
       - name: Export v2 integration coverage
         run: uv run --frozen --extra dev coverage xml -i -o coverage-v2.xml
       # The calling workflow's upload-integration-coverage job sends the report
-      # to Codecov, flagged integration. Nothing that waits for these tests,
-      # such as push.yml's versioning, then waits for Codecov.
-      # A failure to keep it fails only the caller's upload job, which then
-      # finds no report, not these tests, which push.yml's release waits for.
+      # to Codecov, flagged integration, and pr.yml's diff-coverage job reads
+      # it. Nothing that waits for these tests, such as push.yml's versioning,
+      # then waits for Codecov. A failure to keep it fails the jobs that read
+      # it, which then find no report (in pr.yml, diff-coverage's failure
+      # fails CI complete), not these tests, which push.yml's release waits
+      # for.
       - name: Keep the integration coverage report
         continue-on-error: true
         uses: actions/upload-artifact@v4
