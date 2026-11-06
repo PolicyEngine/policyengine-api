@@ -459,11 +459,16 @@ current-law parameter values (about 1.2 million rows) and its parameter tree.
 After the publication transaction commits, publication keeps, for each
 country's model, the installed version (the one it published or republished)
 and the most recently created other stored version, which is the previous
-release's, and prunes every other stored version of that model that isn't
-pruned already. The first publication in an environment after this was added
-therefore prunes every stored version older than the previous release's;
-later ones prune one version per country, the one that has just stopped being
-the previous release's. The code is
+release's, and chooses every other stored version of that model that isn't
+pruned already. One publication prunes at most two of the chosen versions
+(`MAX_CATALOG_VERSIONS_PRUNED_PER_RUN`), the oldest created first; a
+release's US and UK versions are created together, so two are one release's.
+The evidence's `catalog_versions_left_to_prune` counts the chosen versions it
+left, which the next publications prune. The first publication in an
+environment after this was added therefore prunes the oldest release's
+versions and leaves the rest, two per later publication, so that pruning
+adds at most about 1.2 million deleted rows to a seed job whose publication
+may already take most of its 30 minutes. The code is
 `policyengine_api/data/v2/catalog/publication_pruning.py`.
 
 Pruning a version runs one transaction that deletes its current-law
@@ -477,13 +482,19 @@ policy or dynamic owns. This is the one exception to the Alembic skill's rule
 that the catalog seeder deletes no retained domain data; its scope is in
 `docs/engineering/skills/alembic-migrations.md` ("Catalog pruning").
 
-A version whose transaction fails is rolled back alone and the others are
-still pruned. Each failure is listed in the evidence's
-`catalog_pruning_failures` with the country, version, exception type and a
-message naming the database's error class and SQLSTATE, and printed to stderr;
-the command still succeeds, because the publication has committed, and the
-next publication tries again. A failure to read the stored versions prunes
-nothing and is listed once per country, with no version.
+Each version's transaction takes the publication advisory lock, so it waits
+for any other publisher, and then reads the model's stored versions again
+and chooses again: a version that another publication committed meanwhile
+made the rule keep is skipped, and reported neither as pruned nor as failed.
+
+A version whose transaction raises an exception, of any kind, is rolled back
+alone and the others are still pruned. Each failure is listed in the
+evidence's `catalog_pruning_failures` with the country, version, exception
+type and a message naming the database's error class and SQLSTATE, or for
+any other exception only its class, and printed to stderr; the command still
+succeeds, because the publication has committed, and the next publication
+tries again. A failure to read the stored versions prunes nothing and is
+listed once per country, with no version.
 
 Publishing a pruned version again, as a release that installs it again does,
 restores it inside the publication transaction: it inserts the version's
@@ -501,9 +512,28 @@ PolicyEngine.py version is installed again: `/v2/parameter-values`,
 `/v2/parameters/search-file` (also when revalidated with `If-None-Match`),
 and `/v2/model-catalog/variables` and `/v2/model-catalog/parameters`, which
 embed current-law values. The other metadata routes, which serve kept rows,
-answer as before. A process that selected a version before it was pruned
-reads `catalog_values_pruned_at` again whenever a read finds none of those
-rows, so it answers 503 rather than an empty result.
+answer as before.
+
+A process keeps each catalog version it has selected, with its
+`catalog_values_pruned_at` as read then (`SelectedCatalogStore`), and the
+whole-version bodies it has built (see "Response caching"), so a process
+running while a version is pruned or restored answers as follows:
+
+- **It selected the version before the pruning.** A read of the deleted rows
+  that finds none reads `catalog_values_pruned_at` again and answers 503. A
+  read that finds rows, possible only before the pruning committed, answers
+  with them.
+- **It built the version's `/v2/model-catalog/variables` body before the
+  pruning.** It keeps serving that body, with a 200, and answers 304 to its
+  `ETag`, for the life of the process. The body holds the values the version
+  had, which are also what restoring the version writes, so it stays correct;
+  it is never rebuilt from the pruned rows.
+- **It selected the version while it was pruned.** Each read of the deleted
+  rows first reads `catalog_values_pruned_at` again, one more query, and
+  answers 503 without reading the rows while it is set. Once a publication
+  has restored the version, the first such read finds it clear, selects the
+  version again, keeps the new selection and answers 200; later reads need no
+  extra query.
 
 Deleted rows free space inside the tables for later publications to reuse;
 PostgreSQL returns it to the operating system only after a `VACUUM FULL` or
@@ -531,6 +561,8 @@ Successful JSON evidence contains:
   pruned after the publication committed (`pruned_catalog_versions`), and the
   country, version, exception type and message of each pruning that failed
   (`catalog_pruning_failures`; see "Catalog pruning");
+- the number of chosen versions left for later publications
+  (`catalog_versions_left_to_prune`);
 - elapsed publication time; and
 - a success outcome.
 
@@ -651,3 +683,21 @@ that runs any other stored version reads a pruned one: its parameter value,
 parameter tree, search file and model catalog variables and parameters routes
 answer 503 until a publication that installs its PolicyEngine.py version
 runs, which restores them (see "Catalog pruning").
+
+A schema downgrade past revision `ca12427ceb63` drops
+`catalog_values_pruned_at`. A pruned version then looks complete, but holds
+no current-law values, parameter tree or search file: the parent revision's
+code has no restoration, so its routes serve that version with empty values,
+and its publication of that version fails the exact comparison of parameter
+values, which stops the seed job. Downgrade past that revision only while no
+version is pruned, which this query confirms by returning 0:
+
+```sql
+SELECT count(*) FROM tax_benefit_model_versions
+WHERE catalog_values_pruned_at IS NOT NULL;
+```
+
+Otherwise first restore each pruned version that the revisions you return to
+may install or serve, by running this revision's publication with that
+PolicyEngine.py version installed, and accept that any version still pruned
+serves empty values after the downgrade.
