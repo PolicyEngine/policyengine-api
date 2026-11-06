@@ -1,4 +1,8 @@
-"""Pin each structural failure of v2 household documents and v1 translation."""
+"""Pin each structural failure of v2 household documents and v1 translation.
+
+Each failure has its message and a fixed ``reason``. Copy failure logs record
+the reason, never the message, which can hold a household's names and values.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +15,8 @@ from policyengine_api.services.v2.households.transformations import (
 )
 from policyengine_api.services.v2.households.types import LegacyHouseholdSnapshot
 from policyengine_api.services.v2.households.validators import (
+    MAXIMUM_HOUSEHOLD_ENTITIES,
+    MAXIMUM_HOUSEHOLD_RECORD_VALUES,
     HouseholdValidationError,
     LegacyHouseholdTranslationError,
     normalize_household_document,
@@ -38,35 +44,81 @@ def _uk_document(**changes: object) -> dict[str, object]:
 
 
 @pytest.mark.parametrize(
-    ("country_id", "document", "message"),
+    ("country_id", "document", "message", "reason"),
     [
-        ("fr", _uk_document(), "unsupported country_id 'fr'"),
-        ("uk", [], "household_data must be an object"),
+        ("fr", _uk_document(), "unsupported country_id 'fr'", "unsupported_country"),
+        ("uk", [], "household_data must be an object", "document_not_object"),
         (
             "uk",
             _uk_document(spm={}),
             "household_data contains unsupported collections: ['spm']",
+            "unsupported_collections",
         ),
-        ("uk", {"household": [], "benunit": []}, "household_data must contain people"),
-        ("us", {"people": [], "spm": []}, "spm must be an object"),
-        ("us", {"people": [], "spm": {"unknown": 1}}, "spm selection is invalid"),
-        ("uk", _uk_document(household={}), "household must be a list"),
-        ("uk", _uk_document(people=["person-1"]), "people records must be objects"),
+        (
+            "uk",
+            {"household": [], "benunit": []},
+            "household_data must contain people",
+            "people_missing",
+        ),
+        ("us", {"people": [], "spm": []}, "spm must be an object", "spm_not_object"),
+        (
+            "us",
+            {"people": [], "spm": {"unknown": 1}},
+            "spm selection is invalid",
+            "spm_selection_invalid",
+        ),
+        (
+            "uk",
+            _uk_document(household={}),
+            "household must be a list",
+            "collection_not_list",
+        ),
+        (
+            "uk",
+            _uk_document(
+                household=[
+                    {"id": f"household-{index}", "values": {}}
+                    for index in range(MAXIMUM_HOUSEHOLD_ENTITIES + 1)
+                ]
+            ),
+            f"household must contain at most {MAXIMUM_HOUSEHOLD_ENTITIES} records",
+            "too_many_records",
+        ),
+        (
+            "uk",
+            _uk_document(
+                household=[
+                    {"id": "household-1", "values": {}},
+                    {"id": "household-1", "values": {}},
+                ]
+            ),
+            "household contains duplicate id 'household-1'",
+            "duplicate_record_id",
+        ),
+        (
+            "uk",
+            _uk_document(people=["person-1"]),
+            "people records must be objects",
+            "record_not_object",
+        ),
         (
             "uk",
             _uk_document(household=[{"id": "household-1", "colour": "blue"}]),
             "household record fields are invalid: missing=['values'], "
             "unsupported=['colour']",
+            "record_fields_invalid",
         ),
         (
             "uk",
             _uk_document(household=[{"id": " ", "values": {}}]),
             "household id must be a non-empty string of at most 255 characters",
+            "invalid_identifier",
         ),
         (
             "uk",
             _uk_document(household=[{"id": "h" * 256, "values": {}}]),
             "household id must be a non-empty string of at most 255 characters",
+            "invalid_identifier",
         ),
         (
             "uk",
@@ -75,16 +127,45 @@ def _uk_document(**changes: object) -> dict[str, object]:
             ),
             "household source_name must be a non-empty string of at most 255 "
             "characters",
+            "invalid_identifier",
         ),
         (
             "uk",
             _uk_document(household=[{"id": "household-1", "values": []}]),
             "household record values must be an object",
+            "values_not_object",
+        ),
+        (
+            "uk",
+            _uk_document(
+                household=[
+                    {
+                        "id": "household-1",
+                        "values": {
+                            f"variable_{index}": index
+                            for index in range(MAXIMUM_HOUSEHOLD_RECORD_VALUES + 1)
+                        },
+                    }
+                ]
+            ),
+            f"household records must contain at most "
+            f"{MAXIMUM_HOUSEHOLD_RECORD_VALUES} variable values",
+            "too_many_values",
         ),
         (
             "uk",
             _uk_document(people=[{**UK_PERSON, "memberships": []}]),
             "people record memberships must be an object",
+            "memberships_not_object",
+        ),
+        (
+            "uk",
+            _uk_document(
+                people=[{**UK_PERSON, "memberships": {"household": "household-1"}}]
+            ),
+            "people record memberships must identify every country-supported "
+            "entity collection",
+            "incomplete_memberships",
         ),
         (
             "uk",
@@ -93,16 +174,38 @@ def _uk_document(**changes: object) -> dict[str, object]:
             ),
             "person household membership must be a non-empty string of at most 255 "
             "characters",
+            "invalid_identifier",
+        ),
+        (
+            "uk",
+            _uk_document(
+                people=[
+                    {
+                        **UK_PERSON,
+                        "memberships": {
+                            "household": "household-1",
+                            "benunit": "benunit-2",
+                        },
+                    }
+                ]
+            ),
+            "person membership references absent benunit id 'benunit-2'",
+            "absent_membership_target",
         ),
     ],
 )
-def test_invalid_documents_fail_with_their_specific_message(
+def test_invalid_documents_fail_with_their_specific_message_and_reason(
     country_id: str,
     document: object,
     message: str,
+    reason: str,
 ) -> None:
-    with pytest.raises(HouseholdValidationError, match=rf"^{re.escape(message)}$"):
+    """Each rule has its own message and a fixed reason that logs can record."""
+    with pytest.raises(
+        HouseholdValidationError, match=rf"^{re.escape(message)}$"
+    ) as raised:
         normalize_household_document(country_id, document)
+    assert raised.value.reason == reason
 
 
 def test_normalized_documents_list_spm_first_then_people_and_entities() -> None:
@@ -175,21 +278,32 @@ def _snapshot(household_json: object) -> LegacyHouseholdSnapshot:
 
 
 @pytest.mark.parametrize(
-    ("household_json", "message"),
+    ("household_json", "message", "reason"),
     [
         (
             {"people": {}, "households": {}, "families": {}},
             "legacy household contains unsupported collections: ['families']",
+            "legacy_unsupported_collections",
         ),
-        ({"people": []}, "legacy people must be an object"),
-        ({"people": {}, "benunits": []}, "legacy benunits must be an object"),
+        (
+            {"people": []},
+            "legacy people must be an object",
+            "legacy_people_not_object",
+        ),
+        (
+            {"people": {}, "benunits": []},
+            "legacy benunits must be an object",
+            "legacy_groups_not_object",
+        ),
         (
             {"people": {}, "households": {"home": []}},
             "legacy households records must be objects",
+            "legacy_group_not_object",
         ),
         (
             {"people": {"adult": {}}, "households": {"home": {"members": "adult"}}},
             "legacy households members must reference named people",
+            "legacy_members_not_named_people",
         ),
         (
             {
@@ -200,22 +314,66 @@ def _snapshot(household_json: object) -> LegacyHouseholdSnapshot:
                 },
             },
             "legacy person 'adult' belongs to multiple benunits records",
+            "legacy_person_in_multiple_groups",
         ),
-        ({"people": {"adult": []}}, "legacy person records must be objects"),
+        (
+            {"people": {"adult": []}},
+            "legacy person records must be objects",
+            "legacy_person_not_object",
+        ),
+        (
+            {
+                "people": {"adult": {"age": {"2026": 40, "2027": 41}}},
+                "households": {"home": {"members": ["adult"], "rent": 1}},
+                "benunits": {"unit": {"members": ["adult"]}},
+            },
+            "legacy household has values without explicit periods and no "
+            "unambiguous default year",
+            "legacy_ambiguous_default_year",
+        ),
         (
             {"people": {"a" * 256: {}}},
             "people source_name must be a non-empty string of at most 255 characters",
+            "invalid_identifier",
+        ),
+        (
+            # A person in no benunit, as some v1 households leave people out
+            # of a group collection: the translated document breaks the v2
+            # rule that every person belongs to one record of each.
+            {
+                "people": {"adult": {"age": {"2026": 40}}},
+                "households": {"home": {"members": ["adult"]}},
+            },
+            "people record memberships must identify every country-supported "
+            "entity collection",
+            "incomplete_memberships",
+        ),
+        (
+            {
+                "people": {"adult": {"age": {"2026": float("inf")}}},
+                "households": {"home": {"members": ["adult"]}},
+                "benunits": {"unit": {"members": ["adult"]}},
+            },
+            "JSON numbers must be finite",
+            "value_not_json",
         ),
     ],
 )
-def test_untranslatable_v1_documents_fail_with_their_specific_message(
+def test_untranslatable_v1_documents_fail_with_their_specific_message_and_reason(
     household_json: dict[str, object],
     message: str,
+    reason: str,
 ) -> None:
+    """Each failure has its own message and a fixed reason that logs can record.
+
+    A translation whose result breaks a v2 document rule takes that rule's
+    reason.
+    """
     with pytest.raises(
         LegacyHouseholdTranslationError, match=rf"^{re.escape(message)}$"
-    ):
+    ) as raised:
         translate_legacy_household(_snapshot(household_json))
+    assert raised.value.reason == reason
 
 
 def test_non_object_v1_document_is_a_type_error() -> None:
