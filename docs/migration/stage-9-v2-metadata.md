@@ -517,7 +517,8 @@ left, which the next publications prune. The first publication in an
 environment after this was added therefore prunes the oldest release's
 versions and leaves the rest, two per later publication, so that pruning
 adds at most about 1.2 million deleted rows to a seed job whose publication
-may already take most of its 30 minutes. The code is
+of a new version took 17 to 20 minutes in production, inside the job's
+60-minute limit (`timeout-minutes` in `seed-v2-database.yml`). The code is
 `policyengine_api/data/v2/catalog/publication_pruning.py`.
 
 Pruning a version runs one transaction that deletes its current-law
