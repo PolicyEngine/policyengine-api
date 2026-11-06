@@ -440,6 +440,8 @@ allowed_ignore_imports = [
   "policyengine_api.data.v2.models.policy_mappings -> sqlmodel",
   "policyengine_api.data.v2.models.reports -> sqlalchemy",
   "policyengine_api.data.v2.models.reports -> sqlmodel",
+  "policyengine_api.data.v2.models.run_results -> sqlalchemy",
+  "policyengine_api.data.v2.models.run_results -> sqlmodel",
   "policyengine_api.data.v2.models.simulations -> sqlalchemy",
   "policyengine_api.data.v2.models.simulations -> sqlmodel",
   "policyengine_api.data.v2.models.users -> sqlalchemy",
@@ -1018,7 +1020,7 @@ invocation = "v2-integration-check.yml"
 [[rule]]
 id = "api.v2.runtime-privileges-declared"
 category = "migration"
-statement = "Every v2 table has an entry for each managed database role in policyengine_api/data/v2/privileges.py, and every privilege a v2 connector module needs (from its reads, creates, updates or deletes module name and its row locks) is declared for the role that runs it."
+statement = "Every v2 table has an entry for each managed database role in policyengine_api/data/v2/privileges.py; a privilege declared on only some of a table's columns names columns of that table and is never also declared on the whole table; and every privilege a v2 connector module needs (from its reads, creates, updates or deletes module name and its row locks) is declared for the role that runs it, on the whole table."
 rationale = "docs/engineering/skills/alembic-migrations.md#table-privileges"
 scope = ["policyengine_api/data/v2/privileges.py", "policyengine_api/data/v2/models/*.py", "policyengine_api/services/v2/*/database_connectors/*.py"]
 tier = "mechanical"
@@ -1028,6 +1030,7 @@ autofix = false
 kind = "pytest"
 nodes = [
   "tests/unit/v2/test_privilege_manifest.py::test_every_v2_table_has_an_entry_for_every_managed_role",
+  "tests/unit/v2/test_privilege_manifest.py::test_column_privileges_name_their_tables_columns_alone",
   "tests/unit/v2/test_privilege_manifest.py::test_v2_schema_has_no_sequences_the_manifest_would_need_to_cover",
   "tests/unit/v2/test_privilege_manifest.py::test_runtime_connectors_need_only_declared_runtime_privileges",
   "tests/unit/v2/test_privilege_manifest.py::test_stage12_connectors_need_only_declared_stage12_privileges",
@@ -1044,9 +1047,9 @@ test = "tests/unit/v2/test_privilege_manifest.py::test_rule_proof_runtime_privil
 [[rule]]
 id = "api.v2.runtime-privileges-tested-as-runtime-role"
 category = "migration"
-statement = "The cross-database integration tests run the v2 user services and the parameter tree read as policyengine_v2_runtime, catalog publication as policyengine_v2_catalog_writer, and the comparison-run services as policyengine_stage12_<environment>, holding only their declared privileges, so a statement those privileges don't allow fails CI."
+statement = "The cross-database integration tests run the v2 user services and the parameter tree read as policyengine_v2_runtime, catalog publication as policyengine_v2_catalog_writer, the comparison-run services as policyengine_stage12_<environment>, and the simulation API's table writes as policyengine_v2_simulation_service and policyengine_v2_modal_worker, holding only their declared privileges, so a statement those privileges don't allow fails CI."
 rationale = "docs/engineering/skills/alembic-migrations.md#table-privileges"
-scope = ["tests/integration/conftest.py", "tests/integration/test_v2_user_identity_persistence.py", "tests/integration/test_v2_stage12_comparison_persistence.py", "tests/integration/test_v2_metadata_routes.py", "tests/integration/test_v2_catalog_publication.py"]
+scope = ["tests/integration/conftest.py", "tests/integration/test_v2_user_identity_persistence.py", "tests/integration/test_v2_stage12_comparison_persistence.py", "tests/integration/test_v2_metadata_routes.py", "tests/integration/test_v2_catalog_publication.py", "tests/integration/test_v2_simulation_role_privileges.py"]
 tier = "mechanical"
 status = "enforced"
 autofix = false
@@ -1064,9 +1067,9 @@ invocation = "reconcile_v2_privileges.py apply --create-missing-roles"
 [[rule]]
 id = "api.v2.deployed-privileges-match"
 category = "migration"
-statement = "Every v2 deploy grants the managed roles each privilege policyengine_api/data/v2/privileges.py declares right after the schema upgrade, reports privileges it doesn't declare without revoking them, and stops before the catalog is seeded if a declared privilege is still missing."
+statement = "Every v2 deploy grants the managed roles each privilege policyengine_api/data/v2/privileges.py declares, on the whole table or on the columns it names, right after the schema upgrade, reports privileges it doesn't declare without revoking them, and stops before the catalog is seeded if a declared privilege is still missing or a role holds on a whole table a privilege declared for only some of its columns. A declared role listed in ROLES_AWAITING_PROVISIONING that doesn't exist yet is named in the job summary and skipped instead."
 rationale = "docs/engineering/skills/alembic-migrations.md#table-privileges"
-scope = ["policyengine_api/data/v2/privileges.py", "policyengine_api/data/v2/privilege_reconciliation.py", "scripts/reconcile_v2_privileges.py", ".github/workflows/seed-v2-database.yml"]
+scope = ["policyengine_api/data/v2/privileges.py", "policyengine_api/data/v2/privilege_plans.py", "policyengine_api/data/v2/privilege_reconciliation.py", "scripts/reconcile_v2_privileges.py", ".github/workflows/seed-v2-database.yml"]
 tier = "mechanical"
 status = "enforced"
 autofix = false

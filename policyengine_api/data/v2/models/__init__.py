@@ -66,6 +66,13 @@ from policyengine_api.data.v2.models.policy_mappings import (  # noqa: E402
     LegacyUserPolicyMapping,
 )
 from policyengine_api.data.v2.models.reports import (  # noqa: E402
+    BudgetWindowRun,
+    Report,
+    ReportRun,
+    ReportRunStatus,
+    ReportRunTrigger,
+)
+from policyengine_api.data.v2.models.run_results import (  # noqa: E402  # tables declared after the naming convention above
     AggregateOutput,
     AggregateType,
     BudgetSummary,
@@ -76,17 +83,16 @@ from policyengine_api.data.v2.models.reports import (  # noqa: E402
     DecileType,
     Inequality,
     IntraDecileImpact,
+    LaborSupplyDecileResponse,
+    LaborSupplyResponse,
     LocalAuthorityImpact,
     OutputStatus,
     Poverty,
     ProgramStatistics,
-    Report,
-    ReportRun,
-    ReportRunStatus,
-    ReportRunTrigger,
 )
 from policyengine_api.data.v2.models.simulations import (  # noqa: E402
     Simulation,
+    SimulationRun,
     SimulationStatus,
     SimulationType,
 )
@@ -104,6 +110,7 @@ __all__ = [
     "AggregateOutput",
     "AggregateType",
     "BudgetSummary",
+    "BudgetWindowRun",
     "CatalogEntity",
     "CatalogEnumValue",
     "ChangeAggregate",
@@ -120,6 +127,8 @@ __all__ = [
     "HouseholdJobStatus",
     "Inequality",
     "IntraDecileImpact",
+    "LaborSupplyDecileResponse",
+    "LaborSupplyResponse",
     "LegacyHouseholdMapping",
     "LegacyPolicyMapping",
     "LegacyUserMapping",
@@ -141,6 +150,7 @@ __all__ = [
     "ReportRunStatus",
     "ReportRunTrigger",
     "Simulation",
+    "SimulationRun",
     "SimulationStatus",
     "SimulationType",
     "Stage12AggregationStatus",

@@ -36,6 +36,7 @@ from policyengine_api.data.v2.models import (
     Report,
     ReportRun,
     Simulation,
+    SimulationRun,
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
@@ -500,7 +501,6 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
         )
         simulation = Simulation(
             dataset_id=input_dataset.id,
-            output_dataset_id=output_dataset.id,
             tax_benefit_model_version_id=model_version.id,
             region_id=region.id,
         )
@@ -513,8 +513,18 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
         )
         session.add_all((dataset_version, simulation, report))
         session.flush()
+        simulation_run = SimulationRun(
+            simulation_id=simulation.id,
+            year=2025,
+            tax_benefit_model_version_id=model_version.id,
+            country_package_version="existing-country-version",
+            policyengine_version="existing-policyengine-version",
+        )
+        session.add(simulation_run)
+        session.flush()
         report_run = ReportRun(
             report_id=report.id,
+            baseline_simulation_run_id=simulation_run.id,
             country_package_version="existing-country-version",
             policyengine_version="existing-policyengine-version",
         )
@@ -526,8 +536,8 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
             report.id,
             report_run.id,
             simulation.dataset_id,
-            simulation.output_dataset_id,
             report.dataset_id,
+            dataset_version.dataset_id,
         )
 
     publish_catalog(publication_engine, catalog)
@@ -542,8 +552,23 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
         assert persisted_report is not None
         assert persisted_report_run is not None
         assert persisted_simulation.dataset_id == protected_ids[4]
-        assert persisted_simulation.output_dataset_id == protected_ids[5]
-        assert persisted_report.dataset_id == protected_ids[6]
+        assert persisted_report.dataset_id == protected_ids[5]
+        assert persisted_dataset_version.dataset_id == protected_ids[6]
+        # Republishing keeps every catalog row the simulation and report name.
+        for dataset_id in (
+            persisted_simulation.dataset_id,
+            persisted_report.dataset_id,
+        ):
+            assert session.get(Dataset, dataset_id) is not None
+        for region_id in (persisted_simulation.region_id, persisted_report.region_id):
+            assert session.get(Region, region_id) is not None
+        assert (
+            session.get(
+                TaxBenefitModelVersion,
+                persisted_simulation.tax_benefit_model_version_id,
+            )
+            is not None
+        )
 
 
 def test_new_version_is_additive_and_concurrent_retries_serialize(

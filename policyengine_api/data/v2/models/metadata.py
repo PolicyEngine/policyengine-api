@@ -249,10 +249,6 @@ class Dataset(TimestampedModel, table=True):
         back_populates="dataset",
         sa_relationship_kwargs={"foreign_keys": "Simulation.dataset_id"},
     )
-    output_simulations: list["Simulation"] = Relationship(
-        back_populates="output_dataset",
-        sa_relationship_kwargs={"foreign_keys": "Simulation.output_dataset_id"},
-    )
     reports: list["Report"] = Relationship(back_populates="dataset")
 
 

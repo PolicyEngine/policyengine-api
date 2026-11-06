@@ -208,6 +208,7 @@ def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     assert "test_alembic_v2.py" in lifecycle_script
     assert "test_alembic_v2_lifecycle.py" in lifecycle_script
     assert "test_alembic_v2_catalog_tables.py" in lifecycle_script
+    assert "test_alembic_v2_simulation_runs.py" in lifecycle_script
     assert "redis:7.2-alpine" not in workflow
     assert "RUNTIME_CACHE_TEST_URL" not in workflow
     assert "test_v2_catalog_installed.py" not in workflow
@@ -246,6 +247,7 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert "test_v2_user_identity_persistence.py" in workflow
     assert "test_v2_stage12_comparison_persistence.py" in workflow
     assert "test_v2_privilege_reconciliation.py" in workflow
+    assert "test_v2_simulation_role_privileges.py" in workflow
     assert "test_v2_household_persistence.py" in workflow
     assert "test_v1_household_dual_write.py" in workflow
     assert "test_mysql_household_spm_dual_write.py" in workflow

@@ -69,6 +69,8 @@ class ManagedV2Roles:
     deployment_environment: str
     runtime: str
     stage12: str
+    simulation_service: str
+    modal_worker: str
 
 
 @pytest.fixture(scope="session")
@@ -87,7 +89,9 @@ def managed_v2_roles(disposable_v2_database_url: str) -> ManagedV2Roles:
         create_missing_roles,
     )
     from policyengine_api.data.v2.privileges import (
+        MODAL_WORKER_ROLE,
         RUNTIME_ROLE,
+        SIMULATION_SERVICE_ROLE,
         declared_privileges,
         stage12_role,
     )
@@ -112,6 +116,8 @@ def managed_v2_roles(disposable_v2_database_url: str) -> ManagedV2Roles:
         deployment_environment=deployment_environment,
         runtime=RUNTIME_ROLE,
         stage12=stage12_role(deployment_environment),
+        simulation_service=SIMULATION_SERVICE_ROLE,
+        modal_worker=MODAL_WORKER_ROLE,
     )
 
 
