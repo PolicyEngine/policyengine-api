@@ -82,10 +82,13 @@ class _InFlightRead:
 class MetadataResponseCache:
     """Keep whole-version responses, built once each per process.
 
-    A published catalog version changes only when a release's catalog
-    publication replaces its time-period options, or prunes or restores its
-    current-law values, before that release's processes start, so a body built
-    for a route, country and version stays valid for the life of the process; a
+    Of what these bodies hold, a published catalog version changes only when
+    a release's catalog publication replaces its time-period options, before
+    that release's processes start, or when pruning deletes its current-law
+    values, which restoration writes back identically; publication also sets
+    the version's ``catalog_last_published_at`` and pruning its
+    ``catalog_values_pruned_at``, which no body holds. So a body built for a
+    route, country and version stays valid for the life of the process; a
     process of the previous release keeps serving the time-period options and
     values it read. A read that fails, such as one of a version pruned since,
     is never kept. Responses

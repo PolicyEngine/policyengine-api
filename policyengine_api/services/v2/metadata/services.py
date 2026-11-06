@@ -349,7 +349,7 @@ class V2MetadataService:
             policyengine_version,
             offset=offset,
             limit=limit,
-            reads_current_law=True,
+            reads_pruned_data=True,
         )
         session = self._database_session.session
         rows = read_parameter_children(
@@ -383,7 +383,7 @@ class V2MetadataService:
         publishes.
         """
         selected = self._catalogs.select(
-            country_id, policyengine_version, reads_current_law=True
+            country_id, policyengine_version, reads_pruned_data=True
         )
         search_file = metadata_parameter_search_file(
             selected,
@@ -410,7 +410,7 @@ class V2MetadataService:
         ``get_parameter_search_file`` does.
         """
         selected = self._catalogs.select(
-            country_id, policyengine_version, reads_current_law=True
+            country_id, policyengine_version, reads_pruned_data=True
         )
         rows = read_parameter_search_file_hash(
             self._database_session.session,
@@ -444,7 +444,7 @@ class V2MetadataService:
             policyengine_version,
             offset=offset,
             limit=limit,
-            reads_current_law=True,
+            reads_pruned_data=True,
         )
         rows = read_parameter_values(
             self._database_session.session,
@@ -474,7 +474,7 @@ class V2MetadataService:
         Values belonging to a reform or dynamic are never returned.
         """
         selected = self._catalogs.select(
-            country_id, policyengine_version, reads_current_law=True
+            country_id, policyengine_version, reads_pruned_data=True
         )
         value_row = read_parameter_value(
             self._database_session.session,
@@ -680,7 +680,7 @@ class V2MetadataService:
         adds or subtracts names, so a client can pick the list for any year.
         """
         selected = self._catalogs.select(
-            country_id, policyengine_version, reads_current_law=True
+            country_id, policyengine_version, reads_pruned_data=True
         )
         session = self._database_session.session
         variables = read_all_variables(
@@ -716,7 +716,7 @@ class V2MetadataService:
         lacks. Repeated names count once.
         """
         selected = self._catalogs.select(
-            country_id, policyengine_version, reads_current_law=True
+            country_id, policyengine_version, reads_pruned_data=True
         )
         session = self._database_session.session
         model_version_id = selected.model_version.id

@@ -127,8 +127,9 @@ services/v2/<resource>/
 A resource may also add a `process_state.py` module for process-wide state its
 service reuses across requests, such as the metadata package's (each catalog
 version a request has selected; after publication its row changes only in
-its time-period options and its `catalog_values_pruned_at`, which the service
-reads again whenever a read finds no current-law values). Such a module holds plain data, constructs no
+its time-period options, its `catalog_last_published_at`, which no read uses,
+and its `catalog_values_pruned_at`, which the service checks again before or
+after the reads of the rows pruning deletes). Such a module holds plain data, constructs no
 SQL and owns no session; the composition code creates one instance per process
 and injects it into the service.
 

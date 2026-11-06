@@ -55,17 +55,20 @@ class MetadataCatalogSelection:
         country_id: str,
         policyengine_version: str | None,
         *,
-        reads_current_law: bool = False,
+        reads_pruned_data: bool = False,
     ) -> SelectedCatalog:
         """Return the country's catalog for the version, or the running one.
 
-        ``reads_current_law`` marks a read of the rows catalog pruning deletes
+        ``reads_pruned_data`` marks a read of the rows catalog pruning deletes
         (current-law values, parameter tree rows, the search file): it raises
         CatalogValuesPrunedError before that read when the version is pruned.
         A selection the process kept while the version was pruned may predate
         a publication that restored it, so the version's
         ``catalog_values_pruned_at`` is read again first, one more query made
         only then; once it is clear, the version is selected again and kept.
+        A selection kept from before a pruning has the column clear and is
+        returned; ``require_unpruned`` then reads the column again after the
+        read, if the read found none of the rows it needs.
         """
         key = (country_id, policyengine_version)
         kept = (
@@ -75,7 +78,7 @@ class MetadataCatalogSelection:
         )
         if kept is not None:
             if (
-                not reads_current_law
+                not reads_pruned_data
                 or kept.model_version.catalog_values_pruned_at is None
             ):
                 return kept
@@ -94,7 +97,7 @@ class MetadataCatalogSelection:
         )
         if self._selected_catalogs is not None:
             self._selected_catalogs.keep(key, selected)
-        if reads_current_law:
+        if reads_pruned_data:
             require_current_law_values(
                 selected, pruned_at=selected.model_version.catalog_values_pruned_at
             )
@@ -121,10 +124,10 @@ class MetadataCatalogSelection:
         *,
         offset: int,
         limit: int,
-        reads_current_law: bool = False,
+        reads_pruned_data: bool = False,
     ) -> SelectedCatalog:
         """Validate a page's offset and limit, then select as ``select`` does."""
         validate_metadata_page(offset, limit)
         return self.select(
-            country_id, policyengine_version, reads_current_law=reads_current_law
+            country_id, policyengine_version, reads_pruned_data=reads_pruned_data
         )

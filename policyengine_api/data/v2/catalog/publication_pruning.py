@@ -241,10 +241,9 @@ def prune_catalog_version(
     """Delete one version's current-law values, tree rows and search files.
 
     Sets the version's ``catalog_values_pruned_at`` first, only if it is
-    unset, and returns None without deleting anything when it was set already,
-    as by a publisher that ran meanwhile. Runs in the caller's transaction,
-    which holds the publication lock, so the deletes and the marker commit or
-    roll back together.
+    unset, and returns None without deleting anything when it was set already.
+    Runs in the caller's transaction, which holds the publication lock, so the
+    deletes and the marker commit or roll back together.
     """
     marked = connection.execute(
         sa.update(MODEL_VERSIONS)
@@ -254,6 +253,11 @@ def prune_catalog_version(
         )
         .values(catalog_values_pruned_at=sa.func.current_timestamp())
     )
+    # A guard publication can't reach: every writer of the column (pruning
+    # and restoration) holds the publication lock, and the caller checks under
+    # it that the version is unpruned. It costs nothing in the UPDATE, and
+    # keeps a writer that doesn't take the lock, such as an operator's SQL,
+    # from having a version's time replaced or its rows deleted twice.
     if marked.rowcount == 0:
         return None
     version_parameter_ids = sa.select(PARAMETERS.c.id).where(
