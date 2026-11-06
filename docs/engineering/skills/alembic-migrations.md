@@ -586,8 +586,9 @@ The upgrade adds required columns without server defaults to `household_jobs`,
 `report_runs` and the result tables, so it needs them empty, as they are while no managed
 role holds a write privilege on them; on a table with rows it fails, and the
 deploy stops before anything changes. The downgrade restores required columns
-the same way, so it needs `simulations`, `household_jobs` and the result
-tables empty. The previous Public API revision keeps working at this revision:
+of `simulations` and the result tables the same way, so it needs
+`simulations` empty, which leaves no run or result row either; it drops
+`household_jobs`' new columns with their values. The previous Public API revision keeps working at this revision:
 none of its roles can read or write a table the revision changes, except the
 catalog writer, which only counts the rows of `simulations`, `reports` and
 `report_runs`.

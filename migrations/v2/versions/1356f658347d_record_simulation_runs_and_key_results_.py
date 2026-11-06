@@ -13,8 +13,9 @@ v2_report_run_status and v2_report_run_trigger types.
 The upgrade adds required columns without server defaults to household_jobs,
 report_runs and the result tables, so it needs those tables empty, as they are
 while no managed role can write them. The downgrade restores required columns
-the same way, so it needs simulations, household_jobs and the result tables
-empty.
+of simulations and the result tables the same way, so it needs simulations
+empty, which leaves no run or result row either; it drops household_jobs' new
+columns with their values.
 """
 
 from typing import Sequence, Union
