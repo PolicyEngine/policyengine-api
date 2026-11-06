@@ -1,8 +1,8 @@
 """Disposable-Postgres coverage: catalog publication prunes older catalog versions.
 
 After the publication transaction commits, catalog publication keeps, for each
-country's model, the installed version and the most recently created other
-version, and prunes every other stored version: one transaction per version
+country's model, the installed version and the two most recently published
+other versions, and prunes every other stored version: one transaction per version
 deletes its current-law parameter values, parameter tree rows and parameter
 search file and records when (``catalog_values_pruned_at``). Publishing a
 pruned version again restores those rows from the installed packages.
@@ -63,8 +63,10 @@ from tests.fixtures.v2_catalog import normalized_catalog
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
 OLD_VERSION = "5.0.1"
-PREVIOUS_VERSION = "5.0.2"
-INSTALLED_VERSION = "5.0.3"
+# The earlier of the two other versions pruning keeps, with the previous one.
+EARLIER_KEPT_VERSION = "5.0.2"
+PREVIOUS_VERSION = "5.0.3"
+INSTALLED_VERSION = "5.0.4"
 US_MODEL = "policyengine-us"
 UK_MODEL = "policyengine-uk"
 MODEL_NAMES = (US_MODEL, UK_MODEL)
@@ -292,7 +294,7 @@ def _fixture_pruned(country_id: str, version: str) -> PrunedCatalogVersion:
     )
 
 
-def test_publication_prunes_versions_before_the_previous_release_as_the_writer(
+def test_publication_prunes_versions_older_than_the_kept_ones_as_the_writer(
     publication_engine: Engine,
     managed_v2_roles,
     v2_engine_as_role,
@@ -308,6 +310,7 @@ def test_publication_prunes_versions_before_the_previous_release_as_the_writer(
     try:
         _publish(writer_engine, OLD_VERSION)
         _add_saved_reform_and_dynamic(publication_engine, OLD_VERSION)
+        _publish(writer_engine, EARLIER_KEPT_VERSION)
         second = _publish(writer_engine, PREVIOUS_VERSION)
         before = {
             (model_name, version): (
@@ -315,7 +318,7 @@ def test_publication_prunes_versions_before_the_previous_release_as_the_writer(
                 _prunable_rows(publication_engine, model_name, version),
             )
             for model_name in MODEL_NAMES
-            for version in (OLD_VERSION, PREVIOUS_VERSION)
+            for version in (OLD_VERSION, EARLIER_KEPT_VERSION, PREVIOUS_VERSION)
         }
         owned_before = _owned_rows(publication_engine)
 
@@ -341,11 +344,12 @@ def test_publication_prunes_versions_before_the_previous_release_as_the_writer(
             "search_files": [],
         }
         assert _pruned_at(publication_engine, model_name, OLD_VERSION) is not None
-        assert (
-            _kept_rows(publication_engine, model_name, PREVIOUS_VERSION),
-            _prunable_rows(publication_engine, model_name, PREVIOUS_VERSION),
-        ) == before[(model_name, PREVIOUS_VERSION)]
-        for version in (PREVIOUS_VERSION, INSTALLED_VERSION):
+        for version in (EARLIER_KEPT_VERSION, PREVIOUS_VERSION):
+            assert (
+                _kept_rows(publication_engine, model_name, version),
+                _prunable_rows(publication_engine, model_name, version),
+            ) == before[(model_name, version)]
+        for version in (EARLIER_KEPT_VERSION, PREVIOUS_VERSION, INSTALLED_VERSION):
             assert _pruned_at(publication_engine, model_name, version) is None
         installed = _prunable_rows(publication_engine, model_name, INSTALLED_VERSION)
         assert {name: len(rows) for name, rows in installed.items()} == (
@@ -362,8 +366,8 @@ def test_republishing_a_pruned_version_restores_what_its_publication_wrote(
 
     The restored current-law values, tree rows and search file equal those
     the version's own first publication wrote. The rollback then keeps the
-    installed version and the most recently created other one, so it prunes
-    the version in between.
+    installed version and the two most recently published other ones, so it
+    prunes the earliest of the versions released after it.
     """
     writer_engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
     try:
@@ -372,6 +376,7 @@ def test_republishing_a_pruned_version_restores_what_its_publication_wrote(
             model_name: _prunable_rows(publication_engine, model_name, OLD_VERSION)
             for model_name in MODEL_NAMES
         }
+        _publish(writer_engine, EARLIER_KEPT_VERSION)
         _publish(writer_engine, PREVIOUS_VERSION)
         _publish(writer_engine, INSTALLED_VERSION)
         assert all(
@@ -390,8 +395,11 @@ def test_republishing_a_pruned_version_restores_what_its_publication_wrote(
             == first_published[model_name]
         )
         assert _pruned_at(publication_engine, model_name, OLD_VERSION) is None
-        assert _pruned_at(publication_engine, model_name, PREVIOUS_VERSION) is not None
-        assert _pruned_at(publication_engine, model_name, INSTALLED_VERSION) is None
+        assert (
+            _pruned_at(publication_engine, model_name, EARLIER_KEPT_VERSION) is not None
+        )
+        for version in (PREVIOUS_VERSION, INSTALLED_VERSION):
+            assert _pruned_at(publication_engine, model_name, version) is None
     assert rollback.restored_catalog_versions == (
         ("us", OLD_VERSION, FIXTURE_PRUNED_ROWS["parameter_values"]),
         ("uk", OLD_VERSION, FIXTURE_PRUNED_ROWS["parameter_values"]),
@@ -405,8 +413,8 @@ def test_republishing_a_pruned_version_restores_what_its_publication_wrote(
         for model_name, version, *_sizes in rollback.parameter_search_files_written
     ] == [(UK_MODEL, OLD_VERSION), (US_MODEL, OLD_VERSION)]
     assert rollback.pruned_catalog_versions == (
-        _fixture_pruned("uk", PREVIOUS_VERSION),
-        _fixture_pruned("us", PREVIOUS_VERSION),
+        _fixture_pruned("uk", EARLIER_KEPT_VERSION),
+        _fixture_pruned("us", EARLIER_KEPT_VERSION),
     )
     assert rollback.as_dict()["restored_catalog_versions"] == [
         {
@@ -435,6 +443,7 @@ def test_a_pruning_failure_rolls_back_that_version_and_publication_succeeds(
     evidence, which reports the failure, and the next run prunes the version.
     """
     _publish(publication_engine, OLD_VERSION)
+    _publish(publication_engine, EARLIER_KEPT_VERSION)
     _publish(publication_engine, PREVIOUS_VERSION)
     failing_version_id = _version_id(publication_engine, US_MODEL, OLD_VERSION)
     us_old_before = _prunable_rows(publication_engine, US_MODEL, OLD_VERSION)
@@ -493,6 +502,7 @@ def test_a_failure_to_read_the_stored_versions_is_reported_and_publication_succe
     without a version, since none was chosen; the next run prunes them.
     """
     _publish(publication_engine, OLD_VERSION)
+    _publish(publication_engine, EARLIER_KEPT_VERSION)
     _publish(publication_engine, PREVIOUS_VERSION)
 
     def fail_to_read_stored_versions(connection, model_names):
@@ -583,7 +593,12 @@ def test_routes_answer_503_for_a_pruned_version_and_serve_its_kept_rows(
     v2_engine_as_role,
 ) -> None:
     """Read as the Public API's runtime role, with its declared privileges."""
-    for version in (OLD_VERSION, PREVIOUS_VERSION, INSTALLED_VERSION):
+    for version in (
+        OLD_VERSION,
+        EARLIER_KEPT_VERSION,
+        PREVIOUS_VERSION,
+        INSTALLED_VERSION,
+    ):
         _publish(publication_engine, version)
     old_catalog = normalized_catalog(policyengine_version=OLD_VERSION).country("us")
     old_query = {"country_id": "us", "policyengine_version": OLD_VERSION}
@@ -664,6 +679,7 @@ def test_a_process_that_selected_a_version_before_its_pruning_answers_503(
     304 to its ETag, which equal what restoring the version writes.
     """
     _publish(publication_engine, OLD_VERSION)
+    _publish(publication_engine, EARLIER_KEPT_VERSION)
     _publish(publication_engine, PREVIOUS_VERSION)
     old_query = {"country_id": "us", "policyengine_version": OLD_VERSION}
     selected_catalogs = SelectedCatalogStore()
@@ -728,7 +744,12 @@ def test_a_process_that_selected_a_pruned_version_serves_it_once_restored(
     A rollback's publication then restores it, and the same process serves
     its values, tree and search file again.
     """
-    for version in (OLD_VERSION, PREVIOUS_VERSION, INSTALLED_VERSION):
+    for version in (
+        OLD_VERSION,
+        EARLIER_KEPT_VERSION,
+        PREVIOUS_VERSION,
+        INSTALLED_VERSION,
+    ):
         _publish(publication_engine, version)
     old_query = {"country_id": "us", "policyengine_version": OLD_VERSION}
     selected_catalogs = SelectedCatalogStore()
@@ -768,12 +789,14 @@ def test_a_version_kept_by_the_time_its_transaction_runs_is_not_pruned(
 ) -> None:
     """Each pruning transaction chooses again, under the publication lock.
 
-    Between the read that chose the old US version and its transaction, the
-    stored versions change so that the rule keeps it: here its creation time
-    becomes the latest of the versions other than the installed one. Its
-    transaction then skips it, and nothing reports it as pruned or failed.
+    Between the read that chose the old US version and its transaction, a
+    publication that republished it commits, so the rule keeps it: its
+    ``catalog_last_published_at`` becomes the latest of the versions other than
+    the installed one, as that publication sets it. Its transaction then skips
+    it, and nothing reports it as pruned or failed.
     """
     _publish(publication_engine, OLD_VERSION)
+    _publish(publication_engine, EARLIER_KEPT_VERSION)
     _publish(publication_engine, PREVIOUS_VERSION)
     kept_meanwhile = _version_id(publication_engine, US_MODEL, OLD_VERSION)
     us_old_before = _prunable_rows(publication_engine, US_MODEL, OLD_VERSION)
@@ -787,7 +810,7 @@ def test_a_version_kept_by_the_time_its_transaction_runs_is_not_pruned(
                 other_publisher.execute(
                     text(
                         "UPDATE tax_benefit_model_versions "
-                        "SET created_at = now() + interval '1 day' "
+                        "SET catalog_last_published_at = now() + interval '1 day' "
                         "WHERE id = :version_id"
                     ),
                     {"version_id": kept_meanwhile},
@@ -807,7 +830,8 @@ def test_a_version_kept_by_the_time_its_transaction_runs_is_not_pruned(
     assert evidence.catalog_pruning_failures == ()
     assert _prunable_rows(publication_engine, US_MODEL, OLD_VERSION) == us_old_before
     assert _pruned_at(publication_engine, US_MODEL, OLD_VERSION) is None
-    assert _pruned_at(publication_engine, US_MODEL, PREVIOUS_VERSION) is None
+    # The rule now chooses the US 5.0.2, which this run's first choice didn't.
+    assert _pruned_at(publication_engine, US_MODEL, EARLIER_KEPT_VERSION) is None
 
 
 def test_a_non_database_error_rolls_back_that_version_and_publication_succeeds(
@@ -820,6 +844,7 @@ def test_a_non_database_error_rolls_back_that_version_and_publication_succeeds(
     other version is still pruned and publication returns its evidence.
     """
     _publish(publication_engine, OLD_VERSION)
+    _publish(publication_engine, EARLIER_KEPT_VERSION)
     _publish(publication_engine, PREVIOUS_VERSION)
     failing_version_id = _version_id(publication_engine, US_MODEL, OLD_VERSION)
     us_old_before = _prunable_rows(publication_engine, US_MODEL, OLD_VERSION)
@@ -860,22 +885,22 @@ def test_a_run_prunes_at_most_two_versions_and_the_next_run_the_rest(
 ) -> None:
     """The first run after many releases prunes the two oldest versions only.
 
-    Four versions are chosen (5.0.1 and 5.0.2, in both countries). The first
-    run prunes both countries' 5.0.1 and reports two left; the next prunes
-    the rest.
+    Four versions are chosen (5.0.1 and 5.0.2, in both countries; 5.0.3 and
+    5.0.4 are kept). The first run prunes both countries' 5.0.1 and reports
+    two left; the next prunes the rest.
     """
     monkeypatch.setattr(
         publication_module,
         "catalog_versions_to_prune",
         lambda stored_versions, installed_versions: (),
     )
-    for version in ("5.0.1", "5.0.2", "5.0.3"):
+    for version in ("5.0.1", "5.0.2", "5.0.3", "5.0.4"):
         _publish(publication_engine, version)
     monkeypatch.undo()
 
-    first = _publish(publication_engine, "5.0.4")
-    second = _publish(publication_engine, "5.0.4")
-    third = _publish(publication_engine, "5.0.4")
+    first = _publish(publication_engine, "5.0.5")
+    second = _publish(publication_engine, "5.0.5")
+    third = _publish(publication_engine, "5.0.5")
 
     assert first.pruned_catalog_versions == (
         _fixture_pruned("uk", "5.0.1"),
@@ -889,7 +914,8 @@ def test_a_run_prunes_at_most_two_versions_and_the_next_run_the_rest(
     assert second.as_dict()["catalog_versions_left_to_prune"] == 0
     assert third.pruned_catalog_versions == ()
     for model_name in MODEL_NAMES:
-        assert _pruned_at(publication_engine, model_name, "5.0.3") is None
+        for kept_version in ("5.0.3", "5.0.4"):
+            assert _pruned_at(publication_engine, model_name, kept_version) is None
 
 
 def test_a_version_without_current_law_rows_is_marked_pruned_with_zero_counts(
@@ -909,6 +935,7 @@ def test_a_version_without_current_law_rows_is_marked_pruned_with_zero_counts(
             "WHERE tax_benefit_model_version_id = :version_id",
         ):
             connection.execute(text(statement), {"version_id": us_old_id})
+    _publish(publication_engine, EARLIER_KEPT_VERSION)
     _publish(publication_engine, PREVIOUS_VERSION)
 
     evidence = _publish(publication_engine, INSTALLED_VERSION)
@@ -925,3 +952,67 @@ def test_a_version_without_current_law_rows_is_marked_pruned_with_zero_counts(
     )
     assert evidence.catalog_pruning_failures == ()
     assert _pruned_at(publication_engine, US_MODEL, OLD_VERSION) is not None
+
+
+def _last_published_at(engine: Engine, model_name: str, version: str) -> datetime:
+    with engine.connect() as connection:
+        return connection.execute(
+            text(
+                "SELECT catalog_last_published_at FROM tax_benefit_model_versions "
+                "WHERE id = :version_id"
+            ),
+            {"version_id": _version_id(engine, model_name, version)},
+        ).scalar_one()
+
+
+def test_every_publication_records_when_it_published_the_version(
+    publication_engine: Engine,
+) -> None:
+    """A new version, a republish with no change and a restoring one all record it.
+
+    Each publication sets ``catalog_last_published_at`` of the versions it
+    publishes, in its own transaction, and no other version's. Pruning leaves
+    it as it was.
+    """
+    _publish(publication_engine, OLD_VERSION)
+    first = {
+        model_name: _last_published_at(publication_engine, model_name, OLD_VERSION)
+        for model_name in MODEL_NAMES
+    }
+    _publish(publication_engine, OLD_VERSION)
+    unchanged_republish = {
+        model_name: _last_published_at(publication_engine, model_name, OLD_VERSION)
+        for model_name in MODEL_NAMES
+    }
+    for version in (EARLIER_KEPT_VERSION, PREVIOUS_VERSION, INSTALLED_VERSION):
+        _publish(publication_engine, version)
+    while_pruned = {
+        model_name: _last_published_at(publication_engine, model_name, OLD_VERSION)
+        for model_name in MODEL_NAMES
+    }
+    installed_before = {
+        model_name: _last_published_at(
+            publication_engine, model_name, INSTALLED_VERSION
+        )
+        for model_name in MODEL_NAMES
+    }
+
+    restoring = _publish(publication_engine, OLD_VERSION)
+
+    assert {
+        (country_id, version)
+        for country_id, version, _values in restoring.restored_catalog_versions
+    } == {("us", OLD_VERSION), ("uk", OLD_VERSION)}
+    for model_name in MODEL_NAMES:
+        assert first[model_name] is not None
+        assert unchanged_republish[model_name] > first[model_name]
+        assert _pruned_at(publication_engine, model_name, OLD_VERSION) is None
+        assert while_pruned[model_name] == unchanged_republish[model_name]
+        assert (
+            _last_published_at(publication_engine, model_name, OLD_VERSION)
+            > while_pruned[model_name]
+        )
+        assert (
+            _last_published_at(publication_engine, model_name, INSTALLED_VERSION)
+            == installed_before[model_name]
+        )

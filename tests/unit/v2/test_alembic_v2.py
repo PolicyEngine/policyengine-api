@@ -1013,13 +1013,13 @@ def test_parameter_search_file_revision_creates_only_the_files_table() -> None:
         assert "op.add_column(" not in body
 
 
-def test_catalog_pruning_marker_revision_adds_only_one_nullable_column() -> None:
-    """The revision after the search file adds the catalog pruning marker.
+def test_catalog_pruning_revision_adds_only_two_nullable_columns() -> None:
+    """The revision after the search file adds the catalog pruning columns.
 
     It is generated, adds the nullable, timezone-aware
-    ``catalog_values_pruned_at`` column to ``tax_benefit_model_versions`` and
-    drops it on downgrade, and writes no data: catalog publication sets and
-    clears the marker.
+    ``catalog_last_published_at`` and ``catalog_values_pruned_at`` columns to
+    ``tax_benefit_model_versions`` and drops them on downgrade, and writes no
+    data: catalog publication sets both.
     """
     script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
     children = [
@@ -1039,15 +1039,16 @@ def test_catalog_pruning_marker_revision_adds_only_one_nullable_column() -> None
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
     )
-    assert upgrade.count("op.add_column(") == 1
-    assert '"tax_benefit_model_versions"' in upgrade
-    assert re.search(
-        r'sa\.Column\(\s*"catalog_values_pruned_at",\s*'
-        r"sa\.DateTime\(timezone=True\),\s*nullable=True,?\s*\)",
-        upgrade,
-    )
-    assert downgrade.count("op.drop_column(") == 1
-    assert '"catalog_values_pruned_at"' in downgrade
+    assert upgrade.count("op.add_column(") == 2
+    assert upgrade.count('"tax_benefit_model_versions"') == 2
+    assert downgrade.count("op.drop_column(") == 2
+    for column_name in ("catalog_last_published_at", "catalog_values_pruned_at"):
+        assert re.search(
+            rf'sa\.Column\(\s*"{column_name}",\s*'
+            r"sa\.DateTime\(timezone=True\),\s*nullable=True,?\s*\)",
+            upgrade,
+        ), column_name
+        assert f'"{column_name}"' in downgrade
     for body in (upgrade, downgrade):
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body

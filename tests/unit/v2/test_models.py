@@ -959,3 +959,21 @@ def test_catalog_pruning_marker_is_a_nullable_timezone_aware_timestamp() -> None
         metadata_time_periods=[2026],
     )
     assert unpruned_version.catalog_values_pruned_at is None
+
+
+def test_catalog_publication_time_is_a_nullable_timezone_aware_timestamp() -> None:
+    """A model version records when catalog publication last published it.
+
+    Every publication sets it for the versions it publishes; catalog pruning
+    keeps the most recently published versions. It is null for a version no
+    publication has recorded since the column was added, and has no default.
+    """
+    column = V2_METADATA.tables["tax_benefit_model_versions"].c[
+        "catalog_last_published_at"
+    ]
+
+    assert column.nullable
+    assert column.server_default is None
+    assert column.default is None
+    assert isinstance(column.type, sa.DateTime)
+    assert column.type.timezone is True
