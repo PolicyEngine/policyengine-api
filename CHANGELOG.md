@@ -1,3 +1,10 @@
+## [5.34.0] - 2026-11-06
+
+### Added
+
+- Added git hooks, turned on by `make install`, that run `make quality` before each `git commit` and each merge commit in every worktree of the clone, and stop the commit when the working tree holds changes the commit doesn't, when a check fails, when ruff's fixes still need staging, or when `uv` or the dev environment is missing.
+
+
 ## [5.33.0] - 2026-11-06
 
 ### Added
