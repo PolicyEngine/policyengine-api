@@ -1,0 +1,1 @@
+A v2 deploy now fails when the simulation API's database roles, policyengine_v2_simulation_service and policyengine_v2_modal_worker, are missing, as it does for every other declared role; both exist in staging and production.
