@@ -1,4 +1,8 @@
-"""Inbound authentication for user-owned Public API routes.
+"""Inbound bearer-token authentication for the Public API.
+
+User-owned routes authenticate signed-in users with it, and
+:mod:`policyengine_api.libs.server_credentials` uses it to check the server
+credentials of PolicyEngine's own servers.
 
 The Public API accepts RS256 access tokens issued by the PolicyEngine Auth0
 tenant for the Public API resource server. The decoder is ported from the

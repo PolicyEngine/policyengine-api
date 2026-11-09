@@ -265,6 +265,7 @@ async def _call_route(
     call_next: Callable[[Request], Awaitable[Response]],
     telemetry: _NativeRouteTelemetry | None,
     context_tokens: _RequestContextTokens,
+    request_runtime: ObservabilityRuntime,
 ) -> Response:
     """Check the request's credential, then call the route.
 
@@ -274,7 +275,7 @@ async def _call_route(
     raises, or a check that raises, is recorded as a server error.
     """
     try:
-        caller = await check_request_caller(request)
+        caller = await check_request_caller(request, request_runtime)
         if isinstance(caller, Response):
             return caller
         context_tokens.bind_caller(caller)
@@ -337,7 +338,9 @@ async def _serve_with_request_context(
         request_id = telemetry.begin(request_id, context_tokens)
 
     try:
-        response = await _call_route(request, call_next, telemetry, context_tokens)
+        response = await _call_route(
+            request, call_next, telemetry, context_tokens, request_runtime
+        )
         return _finish_response(response, request_id, telemetry)
     finally:
         context_tokens.reset()

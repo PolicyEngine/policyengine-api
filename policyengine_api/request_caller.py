@@ -11,11 +11,16 @@ into their thread.
 
 Both frameworks add :func:`caller_attributes` to the request's observability
 record: ``caller.kind`` (``none``, ``server`` or ``user``) and, for a server,
-``caller.client_id``. While enforcement is off, a request without a
-credential is served as before and logs nothing of its own; its record
-carries ``caller.kind=none``. Refusals are logged at INFO as
-``public_api_credential_refused``, with their reason, the method and the
-path, never the header.
+``caller.client_id``. A request without a credential is served as before and
+records nothing of its own; its record carries ``caller.kind=none``.
+
+Each refusal is a runtime event at INFO, ``public_api_credential_refused``,
+with its reason, the method, the path and the request ID the response
+returns, never the header. A refused request to a Flask route never reaches
+Flask, so this event is its only record. A token that cannot be checked is a
+WARNING event, ``public_api_credential_check_unavailable``. They are runtime
+events rather than standard-library log records because the deployed process
+leaves the root logger at WARNING, which drops INFO records.
 
 With enforcement on (``PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=1``), every
 request that is not from a server is refused here too, before route
@@ -23,12 +28,13 @@ matching, so ``/`` and unknown paths are refused as well, unless
 :func:`is_public_request`: ``GET`` and ``HEAD /health``, ``GET
 /v2/openapi.json`` and CORS preflights. They are exempted here, not only at
 the load balancer, because Cloud Run's startup probe calls ``/health`` on the
-container directly.
+container directly. Each such refusal is the same INFO event, with
+``refusal_reason=credential_required`` and the caller's kind.
 """
 
 from __future__ import annotations
 
-import logging
+import contextlib
 from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING
 
@@ -52,6 +58,7 @@ from policyengine_api.libs.user_auth import (
 )
 
 if TYPE_CHECKING:
+    from policyengine_observability import ObservabilityRuntime
     from starlette.requests import Request
 
 AUTHORIZATION_HEADER = "authorization"
@@ -67,8 +74,8 @@ PUBLIC_ROUTES = frozenset(
 )
 CORS_PREFLIGHT_METHOD = "OPTIONS"
 CORS_PREFLIGHT_HEADER = "access-control-request-method"
-
-logger = logging.getLogger(__name__)
+REFUSAL_EVENT = "public_api_credential_refused"
+UNAVAILABLE_EVENT = "public_api_credential_check_unavailable"
 
 _request_caller: ContextVar[RequestCaller | None] = ContextVar(
     "policyengine_api_request_caller",
@@ -137,7 +144,25 @@ def _identify(authorization: str) -> RequestCaller:
     )
 
 
-def _log_refusal(
+def _request_id_attributes(request: Request) -> dict[str, str]:
+    request_id = getattr(request.state, "policyengine_request_id", None)
+    return {"request.id": request_id} if isinstance(request_id, str) else {}
+
+
+def _record_event(
+    runtime: ObservabilityRuntime,
+    name: str,
+    *,
+    severity: str,
+    attributes: dict[str, str],
+) -> None:
+    # Telemetry must never fail the request.
+    with contextlib.suppress(Exception):
+        runtime.event(name, severity=severity, attributes=attributes)
+
+
+def _record_refusal(
+    runtime: ObservabilityRuntime,
     request: Request,
     reason: RefusalReason,
     *,
@@ -151,20 +176,28 @@ def _log_refusal(
         attributes[CALLER_KIND_ATTRIBUTE] = caller_kind.value
     attributes["http.request.method"] = request.method
     attributes["url.path"] = request.url.path
-    logger.info(
-        "public_api_credential_refused",
-        extra={"policyengine_attributes": attributes},
-    )
+    attributes.update(_request_id_attributes(request))
+    _record_event(runtime, REFUSAL_EVENT, severity="INFO", attributes=attributes)
 
 
-async def check_request_caller(request: Request) -> RequestCaller | Response:
+def _record_unavailable(
+    runtime: ObservabilityRuntime, request: Request, error: Exception
+) -> None:
+    attributes = {"error_type": type(error).__name__}
+    attributes.update(_request_id_attributes(request))
+    _record_event(runtime, UNAVAILABLE_EVENT, severity="WARNING", attributes=attributes)
+
+
+async def check_request_caller(
+    request: Request, runtime: ObservabilityRuntime
+) -> RequestCaller | Response:
     """Return the request's caller, or the response that refuses it.
 
     A credential that fails validation is refused whether or not enforcement
     is on; with enforcement on, so is any non-public request that is not from
     a server.
     """
-    caller = await _checked_credential(request)
+    caller = await _checked_credential(request, runtime)
     if isinstance(caller, Response) or caller.kind is CallerKind.SERVER:
         return caller
     if is_public_request(request):
@@ -173,24 +206,22 @@ async def check_request_caller(request: Request) -> RequestCaller | Response:
         required = load_server_credential_requirement()
     except UserAuthConfigurationError as error:
         # Without a valid setting, whether to refuse is unknown: fail closed.
-        _log_unavailable(error)
+        _record_unavailable(runtime, request, error)
         return authentication_unavailable_response()
     if required:
-        _log_refusal(
-            request, RefusalReason.CREDENTIAL_REQUIRED, caller_kind=caller.kind
+        _record_refusal(
+            runtime,
+            request,
+            RefusalReason.CREDENTIAL_REQUIRED,
+            caller_kind=caller.kind,
         )
         return authentication_required_response()
     return caller
 
 
-def _log_unavailable(error: Exception) -> None:
-    logger.warning(
-        "public_api_credential_check_unavailable",
-        extra={"policyengine_attributes": {"error_type": type(error).__name__}},
-    )
-
-
-async def _checked_credential(request: Request) -> RequestCaller | Response:
+async def _checked_credential(
+    request: Request, runtime: ObservabilityRuntime
+) -> RequestCaller | Response:
     """Return the caller the request's credential shows, or its refusal.
 
     A request without ``Authorization``, or with a blank one, has no
@@ -200,7 +231,7 @@ async def _checked_credential(request: Request) -> RequestCaller | Response:
     """
     authorization_values = request.headers.getlist(AUTHORIZATION_HEADER)
     if len(authorization_values) > 1:
-        _log_refusal(request, RefusalReason.DUPLICATE_HEADER)
+        _record_refusal(runtime, request, RefusalReason.DUPLICATE_HEADER)
         return authentication_required_response()
     authorization = authorization_values[0] if authorization_values else ""
     if not authorization.strip():
@@ -208,8 +239,8 @@ async def _checked_credential(request: Request) -> RequestCaller | Response:
     try:
         return await run_in_threadpool(_identify, authorization)
     except CredentialRefusedError as refusal:
-        _log_refusal(request, refusal.reason, client_id=refusal.client_id)
+        _record_refusal(runtime, request, refusal.reason, client_id=refusal.client_id)
         return authentication_required_response()
     except (CredentialCheckUnavailableError, UserAuthConfigurationError) as error:
-        _log_unavailable(error)
+        _record_unavailable(runtime, request, error)
         return authentication_unavailable_response()
