@@ -22,6 +22,7 @@ from policyengine_api.services.economy_impact_types import (
     FailedImpactDeletion,
     FailedImpactDeletionOutcome,
 )
+from policyengine_api.services.economy_policy_values import UnreadablePolicies
 from policyengine_api.services.economy_service import (
     BudgetWindowEconomicImpactResult,
     EconomicImpactResult,
@@ -108,6 +109,21 @@ def _policy_not_found_response(error: PolicyNotFoundError) -> Response:
     )
 
 
+def _unreadable_policies_response(unreadable_policies: UnreadablePolicies) -> Response:
+    """Return 422 naming each stored policy entry that simulations can't read.
+
+    ``errors`` lists each refused period key or value with its parameter, its
+    path in the policy's data and the policy's ID. No job was started and no
+    stored failure was replayed.
+    """
+    return _make_error_response(
+        unreadable_policies.message,
+        HTTPStatus.UNPROCESSABLE_ENTITY,
+        result=None,
+        errors=unreadable_policies.error_entries,
+    )
+
+
 def _annual_impact_request(
     country_id: str,
     policy_id: int,
@@ -147,8 +163,11 @@ def get_economic_impact(
     fields the Simulation Entrypoint reports. Invalid query parameters give 400,
     as does a ``time_period`` outside the country's ``ECONOMY_YEARS``, with
     the code ``DATASET_YEAR_UNAVAILABLE`` in ``errors``, even when a result for
-    it is stored. A policy ID the country does not have gives 404, and a
-    failed calculation, or a request to the simulation service that gets no
+    it is stored. A policy ID the country does not have gives 404. A stored
+    reform or baseline policy with period keys or values simulations can't
+    read gives 422 naming each one in ``errors``, before any job starts or
+    any stored failure is replayed. A failed calculation, or a request to the
+    simulation service that gets no
     response (after one retry if its connection broke), gives 502. One
     request is an exception: for a finished stored impact, the route asks the
     simulation service which worker app the request resolves to, to check
@@ -179,6 +198,9 @@ def get_economic_impact(
         return _policy_not_found_response(error)
     except SimulationEntrypointConnectionError as error:
         return _simulation_unreachable_response(error, deletable=True)
+
+    if economic_impact_result.unreadable_policies is not None:
+        return _unreadable_policies_response(economic_impact_result.unreadable_policies)
 
     result_dict: dict[str, str | dict | int | None] = economic_impact_result.to_dict()
 
@@ -269,7 +291,10 @@ def get_budget_window_economic_impact(
     outside the country's ``ECONOMY_YEARS``, with the code
     ``DATASET_YEAR_UNAVAILABLE`` in ``errors``; a window that starts in those
     years may end after them. A policy ID the country does
-    not have gives 404, and a request to the simulation service that gets no
+    not have gives 404, and a stored policy with period keys or values
+    simulations can't read gives 422 naming each one in ``errors``, before
+    any batch starts or any stored failure is replayed. A request to the
+    simulation service that gets no
     response (after one retry if its connection broke) gives 502; a failed
     calculation is reported in the body with status 200.
     """
@@ -303,6 +328,9 @@ def get_budget_window_economic_impact(
         return _policy_not_found_response(error)
     except SimulationEntrypointConnectionError as error:
         return _simulation_unreachable_response(error, deletable=False)
+
+    if economic_impact_result.unreadable_policies is not None:
+        return _unreadable_policies_response(economic_impact_result.unreadable_policies)
 
     result_dict = economic_impact_result.to_dict()
 

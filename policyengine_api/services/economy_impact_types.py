@@ -9,8 +9,29 @@ from pydantic import BaseModel, Field
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_entrypoint import SimulationRunProgress
 from policyengine_api.services.economic_impact_request import LocalAreaBreakdown
+from policyengine_api.services.economy_policy_values import UnreadablePolicies
 from policyengine_api.spm import SPMSelection
 from policyengine_api.utils import budget_window as budget_window_utils
+
+UNREADABLE_POLICY_LOG_MESSAGE = (
+    "Refused economic impact request for a stored policy that simulations can't read"
+)
+"""Logged at WARNING when a request is refused for an unreadable stored policy.
+
+The daily telemetry error report groups records at ERROR or above. The routes
+answer such a request with 422, a client error, so it forms no error group.
+"""
+
+
+def _log_unreadable_policies(unreadable_policies: UnreadablePolicies) -> None:
+    logger.log_struct(
+        {
+            "message": UNREADABLE_POLICY_LOG_MESSAGE,
+            "policy_ids": ", ".join(map(str, unreadable_policies.policy_ids)),
+            "invalid_entries": unreadable_policies.invalid_entry_count,
+        },
+        severity="WARNING",
+    )
 
 
 class ImpactAction(Enum):
@@ -180,6 +201,9 @@ class EconomicImpactResult(BaseModel):
     would answer from a newer job, or the failure's lifetime cannot be read.
     ``delete_after_seconds`` is how long until a DELETE may remove the stored
     failure, 0 once it may; it is None whenever ``retry_after_seconds`` is.
+    ``unreadable_policies`` is set when the request was refused, with no job
+    started and no stored failure replayed, because a stored policy holds
+    period keys or values simulations can't read; the route answers 422.
     """
 
     status: ImpactStatus
@@ -187,6 +211,7 @@ class EconomicImpactResult(BaseModel):
     message: str | None = None
     retry_after_seconds: int | None = None
     delete_after_seconds: int | None = None
+    unreadable_policies: UnreadablePolicies | None = None
     # Stage fields relayed from the Simulation Entrypoint while computing.
     # Kept out of to_dict(); the route adds them only when present.
     run_progress: SimulationRunProgress | None = None
@@ -231,6 +256,21 @@ class EconomicImpactResult(BaseModel):
             message=message,
             retry_after_seconds=retry_after_seconds,
             delete_after_seconds=delete_after_seconds,
+        )
+
+    @classmethod
+    def refused_for_unreadable_policies(
+        cls, unreadable_policies: UnreadablePolicies
+    ) -> "EconomicImpactResult":
+        """Refuse a request whose stored policies simulations can't read.
+
+        Logged at WARNING, not ERROR: the route answers 422, a client error.
+        """
+        _log_unreadable_policies(unreadable_policies)
+        return cls(
+            status=ImpactStatus.ERROR,
+            message=unreadable_policies.message,
+            unreadable_policies=unreadable_policies,
         )
 
 
@@ -305,11 +345,17 @@ class BudgetWindowEconomicImpactResult(BaseModel):
     message: str | None = None
     error: str | None = None
     cache_status: str | None = None
+    # Set when the request was refused for an unreadable stored policy; the
+    # route answers 422 (see EconomicImpactResult).
+    unreadable_policies: UnreadablePolicies | None = None
 
     model_config = {"frozen": True}
 
     def to_dict(self) -> dict[str, Any]:
-        """Return the response body; ``cache_status`` is internal and is left out."""
+        """Return the response body, without the internal fields.
+
+        ``cache_status`` and ``unreadable_policies`` are left out.
+        """
         return {
             "status": self.status.value,
             "data": self.data,
@@ -375,4 +421,20 @@ class BudgetWindowEconomicImpactResult(BaseModel):
             message=message,
             error=message,
             cache_status=cache_status,
+        )
+
+    @classmethod
+    def refused_for_unreadable_policies(
+        cls, unreadable_policies: UnreadablePolicies
+    ) -> "BudgetWindowEconomicImpactResult":
+        """Refuse a request whose stored policies simulations can't read.
+
+        Logged at WARNING, not ERROR: the route answers 422, a client error.
+        """
+        _log_unreadable_policies(unreadable_policies)
+        return cls(
+            status=ImpactStatus.ERROR,
+            message=unreadable_policies.message,
+            error=unreadable_policies.message,
+            unreadable_policies=unreadable_policies,
         )

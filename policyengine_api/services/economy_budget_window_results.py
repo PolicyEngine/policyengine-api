@@ -31,10 +31,17 @@ class BudgetWindowResultsMixin:
     ) -> BudgetWindowEconomicImpactResult | None:
         """Answer from this report's stored state, or None if it gives no answer.
 
-        A failure is replayed, a completed result is certified and returned, a
-        submitted batch is polled, and a starting claim reports every year queued.
+        A failure is replayed, unless a stored policy holds period keys or
+        values simulations can't read, which refuses the request instead; a
+        completed result is certified and returned, a submitted batch is
+        polled, and a starting claim reports every year queued.
         """
         if cached_state.status == "failed":
+            unreadable_policies = self._unreadable_stored_policies(setup_options)
+            if unreadable_policies is not None:
+                return BudgetWindowEconomicImpactResult.refused_for_unreadable_policies(
+                    unreadable_policies
+                )
             return self._replay_budget_window_failure(cached_state)
 
         if cached_state.status == "completed":
